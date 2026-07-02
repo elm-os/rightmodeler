@@ -1,0 +1,4 @@
+.cheaper-models/
+.claude/skills/cheaper-models/.venv/
+__pycache__/
+*.pyc
