@@ -1,0 +1,11 @@
+{
+  "name": "@repo/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./schemas/*": "./schemas/*"
+  },
+  "scripts": {
+    "check": "node scripts/check.mjs"
+  }
+}
