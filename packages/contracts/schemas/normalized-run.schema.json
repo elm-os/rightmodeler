@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.dev/schemas/normalized-run.schema.json",
+  "title": "Normalized Run Set",
+  "type": "object",
+  "required": ["version", "bundle_id", "runs"],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "bundle_id": {
+      "type": "string"
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "task_family",
+          "model",
+          "prompt_excerpt",
+          "evidence_signals"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "task_family": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "prompt_excerpt": {
+            "type": "string"
+          },
+          "evidence_signals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
