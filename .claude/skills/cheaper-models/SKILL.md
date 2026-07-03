@@ -10,10 +10,6 @@ description: >-
   Use when the user wants to cut model spend, right-size models per task, benchmark
   cheaper model substitutions, or analyze an agentic pipeline (LangGraph, Codex,
   Claude Code, raw SDK) for cost optimization.
-argument-hint: "[path-to-traces] [--codebase <dir>]"
-allowed-tools: >-
-  Bash(python3 *) Bash(pip *) Bash(uv *) Bash(git worktree *) Bash(git rev-parse *)
-  Read Write Edit Glob Grep
 ---
 
 # Cheaper Models
@@ -50,8 +46,10 @@ The premise (from the user):
 
 ## Prerequisites (check first)
 
+Run all commands below from the skill root (`cheaper-models`).
+
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/preflight.py
+python3 scripts/preflight.py
 ```
 
 This verifies: `OPENROUTER_API_KEY` is set (and has credits), Python deps are
@@ -60,11 +58,11 @@ installable, and prints what's missing. If the key is absent, ask the user to
 deps into an isolated venv:
 
 ```bash
-python3 -m venv ${CLAUDE_SKILL_DIR}/.venv
-${CLAUDE_SKILL_DIR}/.venv/bin/pip install -r ${CLAUDE_SKILL_DIR}/requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
-Use `${CLAUDE_SKILL_DIR}/.venv/bin/python` for every script call below.
+Use `.venv/bin/python` for every script call below.
 
 ## Workflow
 
@@ -89,9 +87,9 @@ are already on a cheap/mixed model, warn the user the baseline is weak.
 ### Phase 1 — Analyze (map the pipeline)
 
 ```bash
-${CLAUDE_SKILL_DIR}/.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/ingest.py \
+.venv/bin/python scripts/ingest.py \
   <traces-path> --out .cheaper-models/normalized.json
-${CLAUDE_SKILL_DIR}/.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/analyze.py \
+.venv/bin/python scripts/analyze.py \
   .cheaper-models/normalized.json --codebase <dir> --out .cheaper-models/pipeline.json
 ```
 
@@ -106,7 +104,7 @@ the user before spending money.
 For each step/task family, shortlist candidate cheaper models and test them:
 
 ```bash
-${CLAUDE_SKILL_DIR}/.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/orchestrate.py \
+.venv/bin/python scripts/orchestrate.py \
   .cheaper-models/pipeline.json \
   --quality-floor 0.9 \
   --candidates auto \
@@ -134,9 +132,9 @@ Run this in the background if the fleet is large; stream progress to the user.
 Launch the interactive per-step approval TUI, then export:
 
 ```bash
-${CLAUDE_SKILL_DIR}/.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/tui.py \
+.venv/bin/python scripts/tui.py \
   .cheaper-models/results.json
-${CLAUDE_SKILL_DIR}/.venv/bin/python ${CLAUDE_SKILL_DIR}/scripts/report.py \
+.venv/bin/python scripts/report.py \
   .cheaper-models/results.json --out .cheaper-models/report.md
 ```
 
