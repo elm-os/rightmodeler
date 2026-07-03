@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.dev/schemas/recommendation-report.schema.json",
+  "title": "Recommendation Report",
+  "type": "object",
+  "required": [
+    "version",
+    "generated_at",
+    "summary",
+    "recommendations",
+    "task_families",
+    "risk_flags"
+  ],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "task_family_count",
+        "evaluated_run_count",
+        "estimated_savings_usd"
+      ],
+      "properties": {
+        "task_family_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evaluated_run_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_savings_usd": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "task_families": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "risk_flags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
