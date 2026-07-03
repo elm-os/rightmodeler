@@ -1,0 +1,15 @@
+{
+  "name": "pipeline",
+  "private": true,
+  "scripts": {
+    "build": "mkdir -p build && uv run python -m compileall src && printf ok > build/pipeline-build.txt",
+    "format": "uv run ruff format src",
+    "lint": "uv run ruff check src",
+    "check": "uv run ruff check src && uv run python -m compileall src && uv run python -m pipeline smoke",
+    "check-types": "uv run python -m compileall src",
+    "ingest": "uv run python -m pipeline ingest",
+    "analyze": "uv run python -m pipeline analyze",
+    "report": "uv run python -m pipeline report",
+    "smoke": "uv run python -m pipeline smoke"
+  }
+}
