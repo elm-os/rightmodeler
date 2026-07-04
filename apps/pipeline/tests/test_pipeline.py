@@ -1,6 +1,6 @@
 import json
 
-from pipeline.__main__ import analyze, infer_task_family, normalize_run
+from pipeline.__main__ import analyze, infer_task_family, normalize_run, validate_schema
 
 
 # --- infer_task_family: unambiguous inputs only ---------------------------
@@ -107,3 +107,43 @@ def test_analyze_success_rate_mixed(tmp_path):
 def test_analyze_success_rate_all_true(tmp_path):
     families = _analyze_families(tmp_path, [_run(1, True), _run(2, True)])
     assert families["custom"]["success_rate"] == 1.0
+
+
+def test_analyze_handles_null_success_and_cost(tmp_path):
+    """A run missing optional success/cost_usd must not crash analyze.
+
+    Regression for the jsonschema "None is not of type 'boolean'" abort:
+    normalize_run emits success/cost_usd as null when the source run omits
+    them, and the normalized-run schema must accept null for both.
+    """
+    bundle = {
+        "version": "1",
+        "bundle_id": "null-fields-bundle",
+        "runs": [
+            {"id": "r1", "prompt": "do a thing", "model": "gpt-4o"},
+            {
+                "id": "r2",
+                "prompt": "Summarize this PR for the team.",
+                "model": "gpt-4o",
+                "success": True,
+                "cost_usd": 0.5,
+            },
+        ],
+    }
+    input_path = tmp_path / "bundle.json"
+    normalized_path = tmp_path / "normalized.json"
+    analysis_path = tmp_path / "analysis.json"
+    input_path.write_text(json.dumps(bundle))
+
+    # Must not raise jsonschema.ValidationError.
+    analyze(str(input_path), str(normalized_path), str(analysis_path))
+
+    normalized = json.loads(normalized_path.read_text())
+    run_r1 = next(run for run in normalized["runs"] if run["id"] == "r1")
+    assert run_r1["success"] is None
+    assert run_r1["cost_usd"] is None
+
+    # Both produced artifacts re-validate against their schemas.
+    validate_schema(normalized, "normalized-run")
+    analysis = json.loads(analysis_path.read_text())
+    validate_schema(analysis, "task-family-summary")
