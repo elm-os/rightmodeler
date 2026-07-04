@@ -1,11 +1,13 @@
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
 from jsonschema import validate
+from pipeline.evaluate import evaluate
 
 ROOT = Path(__file__).resolve().parents[4]
 ARTIFACTS = ROOT / ".cheaper-models"
@@ -37,18 +39,26 @@ def infer_task_family(run):
     if label:
         return label
     prompt = (run.get("prompt") or "").lower()
+    tokens = set(re.findall(r"[a-z0-9']+", prompt))
+    # Ordered by intentional first-match precedence: when a prompt matches more
+    # than one family, the earlier entry wins. Single-word keywords must match a
+    # whole-word token; multi-word keywords (containing a space) stay phrase
+    # substring checks against the raw lowercased prompt.
     heuristics = [
         ("pr-summary", ("pull request", "pr summary", "summarize this pr")),
         ("bug-fix", ("bug", "fix", "stack trace")),
         ("docs-rewrite", ("rewrite", "documentation", "docs")),
         ("support-draft", ("customer", "support", "reply")),
-        ("general", ()),
     ]
+
+    def matches(keyword):
+        return keyword in prompt if " " in keyword else keyword in tokens
+
     return next(
         (
             family
             for family, keywords in heuristics
-            if keywords and any(keyword in prompt for keyword in keywords)
+            if any(matches(keyword) for keyword in keywords)
         ),
         "general",
     )
@@ -119,8 +129,14 @@ def analyze(input_path, normalized_output, analysis_output):
     return write_json(analysis_output, task_families)
 
 
-def report(analysis_path, output_path):
+def report(analysis_path, output_path, evaluation_path=None):
     task_families = validate_schema(load_json(analysis_path), "task-family-summary")
+    recommendations = []
+    risk_flags = ["No model substitutions are computed in this bootstrap branch."]
+    if evaluation_path and Path(evaluation_path).exists():
+        evaluation = load_json(evaluation_path)
+        recommendations = evaluation.get("recommendations", [])
+        risk_flags = evaluation.get("risk_flags", risk_flags)
     report_payload = {
         "version": "1",
         "generated_at": datetime.now(UTC).isoformat(),
@@ -131,9 +147,9 @@ def report(analysis_path, output_path):
             ),
             "estimated_savings_usd": 0,
         },
-        "recommendations": [],
+        "recommendations": recommendations,
         "task_families": task_families["task_families"],
-        "risk_flags": ["No model substitutions are computed in this bootstrap branch."],
+        "risk_flags": risk_flags,
     }
     validate_schema(report_payload, "recommendation-report")
     return write_json(output_path, report_payload)
@@ -162,16 +178,27 @@ def smoke():
                 "notes": "Accepted by human reviewer",
                 "cost_usd": 0.42,
             },
+            {
+                "id": "run-3",
+                "prompt": "Extract the ticket fields as JSON.",
+                "model": "gpt-4o",
+                "final_output": '{"ticket": 42, "status": "open"}',
+                "success": True,
+                "task_family_label": "json-extraction",
+                "cost_usd": 0.10,
+            },
         ],
     }
     ingested = ARTIFACTS / "input" / "smoke-bundle.json"
     normalized = ARTIFACTS / "normalized" / "smoke-normalized.json"
     analysis = ARTIFACTS / "analysis" / "smoke-task-families.json"
+    evaluation = ARTIFACTS / "evaluation" / "smoke-evaluation.json"
     report_path = ARTIFACTS / "reports" / "smoke-report.json"
     write_json(ingested, sample)
     ingest(ingested, ingested)
     analyze(ingested, normalized, analysis)
-    report(analysis, report_path)
+    evaluate(ingested, evaluation)
+    report(analysis, report_path, evaluation)
     print(report_path)
     return 0
 
@@ -208,6 +235,19 @@ def build_parser():
         )[1]
     )
 
+    evaluate_parser = subparsers.add_parser("evaluate")
+    evaluate_parser.add_argument(
+        "--input",
+        default=str(ARTIFACTS / "input" / "historical-run-bundle.json"),
+    )
+    evaluate_parser.add_argument(
+        "--output",
+        default=str(ARTIFACTS / "evaluation" / "evaluation.json"),
+    )
+    evaluate_parser.set_defaults(
+        handler=lambda args: (print(evaluate(args.input, args.output)), 0)[1]
+    )
+
     report_parser = subparsers.add_parser("report")
     report_parser.add_argument(
         "--analysis-input",
@@ -217,8 +257,15 @@ def build_parser():
         "--output",
         default=str(ARTIFACTS / "reports" / "recommendation-report.json"),
     )
+    report_parser.add_argument(
+        "--evaluation-input",
+        default=str(ARTIFACTS / "evaluation" / "evaluation.json"),
+    )
     report_parser.set_defaults(
-        handler=lambda args: (print(report(args.analysis_input, args.output)), 0)[1]
+        handler=lambda args: (
+            print(report(args.analysis_input, args.output, args.evaluation_input)),
+            0,
+        )[1]
     )
 
     smoke_parser = subparsers.add_parser("smoke")
