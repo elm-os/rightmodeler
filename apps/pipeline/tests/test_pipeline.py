@@ -147,3 +147,56 @@ def test_analyze_handles_null_success_and_cost(tmp_path):
     validate_schema(normalized, "normalized-run")
     analysis = json.loads(analysis_path.read_text())
     validate_schema(analysis, "task-family-summary")
+
+
+# --- infer_task_family: whole-word matching (plan 003) ---
+
+
+def test_task_family_substring_prefix_is_general():
+    # "fix" must not match inside "prefix"
+    assert infer_task_family({"prompt": "Update the prefix config"}) == "general"
+
+
+def test_task_family_substring_docstring_is_general():
+    # "docs" must not match inside "docstring"
+    assert infer_task_family({"prompt": "Improve the docstring"}) == "general"
+
+
+def test_task_family_substring_debugger_is_general():
+    # "bug" must not match inside "debugger"
+    assert infer_task_family({"prompt": "The debugger crashed"}) == "general"
+
+
+def test_task_family_true_positive_bug_fix():
+    assert infer_task_family({"prompt": "Fix the login bug"}) == "bug-fix"
+
+
+def test_task_family_true_positive_pr_summary():
+    # multi-word keyword "pull request" is a phrase match
+    assert infer_task_family({"prompt": "Summarize this pull request"}) == "pr-summary"
+
+
+def test_task_family_true_positive_support_draft():
+    assert infer_task_family({"prompt": "Draft a support reply"}) == "support-draft"
+
+
+def test_task_family_precedence_earlier_family_wins():
+    # "fix" (bug-fix) and "customer"/"support" (support-draft) both match as
+    # whole words; the earlier heuristic entry (bug-fix) must win.
+    assert infer_task_family({"prompt": "Fix the customer support ticket"}) == "bug-fix"
+
+
+def test_task_family_explicit_label_passthrough():
+    # an explicit task_family_label short-circuits keyword inference
+    run = {"task_family_label": "custom", "prompt": "Fix the login bug"}
+    assert infer_task_family(run) == "custom"
+
+
+def test_task_family_inflection_recall_tradeoff():
+    # DOCUMENTED precision/recall trade of whole-word matching (plan 003):
+    # inflected forms the old substring check happened to catch now fall to
+    # "general". This pins the deliberate decision so it is not a silent
+    # regression; a curated inflection list / semantic classifier is deferred
+    # to the DIR-05 classifier redesign.
+    assert infer_task_family({"prompt": "Squash these bugs"}) == "general"
+    assert infer_task_family({"prompt": "Fixing the flaky tests"}) == "general"
