@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -37,18 +38,26 @@ def infer_task_family(run):
     if label:
         return label
     prompt = (run.get("prompt") or "").lower()
+    tokens = set(re.findall(r"[a-z0-9']+", prompt))
+    # Ordered by intentional first-match precedence: when a prompt matches more
+    # than one family, the earlier entry wins. Single-word keywords must match a
+    # whole-word token; multi-word keywords (containing a space) stay phrase
+    # substring checks against the raw lowercased prompt.
     heuristics = [
         ("pr-summary", ("pull request", "pr summary", "summarize this pr")),
         ("bug-fix", ("bug", "fix", "stack trace")),
         ("docs-rewrite", ("rewrite", "documentation", "docs")),
         ("support-draft", ("customer", "support", "reply")),
-        ("general", ()),
     ]
+
+    def matches(keyword):
+        return keyword in prompt if " " in keyword else keyword in tokens
+
     return next(
         (
             family
             for family, keywords in heuristics
-            if keywords and any(keyword in prompt for keyword in keywords)
+            if any(matches(keyword) for keyword in keywords)
         ),
         "general",
     )
