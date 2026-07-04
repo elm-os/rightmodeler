@@ -43,7 +43,57 @@
     "recommendations": {
       "type": "array",
       "items": {
-        "type": "object"
+        "type": "object",
+        "required": [
+          "task_family",
+          "current_model",
+          "recommended_model",
+          "estimated_cost_reduction_pct",
+          "quality_score",
+          "confidence",
+          "evidence_type",
+          "examples_evaluated",
+          "risks",
+          "rollout_plan"
+        ],
+        "properties": {
+          "task_family": {
+            "type": "string"
+          },
+          "current_model": {
+            "type": "string"
+          },
+          "recommended_model": {
+            "type": ["string", "null"]
+          },
+          "estimated_cost_reduction_pct": {
+            "type": "number"
+          },
+          "quality_score": {
+            "type": "number"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low", "abstain"]
+          },
+          "evidence_type": {
+            "type": "string"
+          },
+          "examples_evaluated": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rollout_plan": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
       }
     },
     "task_families": {
