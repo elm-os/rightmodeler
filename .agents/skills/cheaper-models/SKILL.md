@@ -14,11 +14,12 @@ description: >-
 
 # Cheaper Models
 
-Prove, from the user's *own* runs, where a cheaper model can replace an expensive
+Prove, from the user's _own_ runs, where a cheaper model can replace an expensive
 one without hurting task quality — then hand them an approved swap plan and the
 dollar savings.
 
 The premise (from the user):
+
 > User uploads agent trace logs + an OpenRouter API key + codebase access. For each
 > successful logged step, re-run the system prompt + logged input through a cheaper
 > model and use LLM-as-judge to check the output is similar. Some pipelines are
@@ -28,7 +29,7 @@ The premise (from the user):
 ## Golden rules
 
 1. **The original run is the reference, not ground truth from a benchmark.** Judge
-   the cheap model against the user's *accepted* output for that exact step.
+   the cheap model against the user's _accepted_ output for that exact step.
 2. **Never let the judge be the same model family as either candidate** — self-preference
    bias inflates the expensive model. Use a neutral third-family judge.
 3. **Prefer the strongest available signal per step**, in this order: deterministic
@@ -71,6 +72,7 @@ Four phases, matching the design: **detect → analyze → brute-force → resul
 ### Phase 0 — Detect & gather inputs
 
 Establish the baseline. Confirm with the user (ask, don't assume):
+
 - **Traces**: path to the uploaded agent trace logs. Autodetect format with
   `scripts/ingest.py --detect <path>` (supports LangSmith, OTel GenAI, OpenInference,
   OpenAI JSONL, Braintrust, Langfuse, Claude Code, Codex — see
@@ -112,13 +114,14 @@ For each step/task family, shortlist candidate cheaper models and test them:
 ```
 
 `orchestrate.py` runs the two-stage strategy the user chose:
+
 1. **Per-step shortlist** — for single-shot steps, replay the step's system prompt +
    input through each candidate (`replay_step.py`), judge vs the accepted output
    (`judge.py`), keep the cheapest model above the quality floor.
 2. **E2E confirm (code-execution)** — for multi-step/tool/loop steps, or to confirm a
    shortlisted swap doesn't cascade, re-run the real pipeline with the model swapped
    at that step (`run_pipeline.py`, in a sandboxed worktree) and judge the trajectory
-   + final output. This is what catches "small drop at A breaks E."
+   - final output. This is what catches "small drop at A breaks E."
 
 Candidate shortlisting is automatic (`scripts/shortlist.py`): pull OpenRouter
 `/models`, filter to models that support the step's needs (tool calling, structured
@@ -146,7 +149,7 @@ machine-readable JSON (total savings, per-family recommendations, risks, abstent
 
 ## Guardrails & failure modes
 
-- **Cascading failure**: flag the *earliest* step whose quality drops below floor even
+- **Cascading failure**: flag the _earliest_ step whose quality drops below floor even
   if the final output still looks OK — that's the cascade seed. Weight early-step
   regressions higher. Always E2E-confirm before recommending a swap on a step that
   feeds others.
