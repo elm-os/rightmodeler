@@ -40,3 +40,62 @@ changing any UI, and derive every color, type, and motion decision from its toke
 - Do not use Tailwind line-spacing (`leading-*`) utilities or ad-hoc tracking
   values — leading and tracking live in the type tokens.
 - If tracking must be set directly, use only `tracking-normal`, `tracking-tight`, or `tracking-tighter`.
+
+# Ways of working
+
+Any instruction that references `CLAUDE.md` means `AGENTS.md`.
+
+## Think before coding
+
+- State assumptions explicitly. Uncertain? Ask.
+- Multiple interpretations? Present them - don't pick silently.
+- See a simpler approach? Say so. Push back when warranted.
+- Something unclear? Stop, name the confusion, ask.
+
+## Plan before building
+
+- Enter plan mode for any non-trivial task - 3+ steps or an architectural decision - verification work included. Trivial, obvious fixes skip the ceremony, never the verification.
+- Turn the task into verifiable goals: "fix the bug" -> a test that reproduces it; "add validation" -> tests for invalid inputs, then make them pass; "refactor X" -> tests pass before and after. Strong criteria let you loop independently; weak ones ("make it work") force constant clarification.
+- Write the plan to `tasks/todo.md` as `[Step] -> verify: [check]` items. Check in before implementing, mark items done as you go, end with a review section.
+- If something goes sideways, stop and re-plan.
+
+## Delegate to subagents
+
+- Offload research, exploration, and parallel analysis to subagents - one task each - to keep the main context clean.
+- Hard problem? Throw more compute at it: fan out.
+
+## API docs first
+
+- Before implementing against any API, pull the latest docs and read them. Never code against an API from memory.
+
+## Simplicity first
+
+- Minimum code that solves the problem. Nothing speculative: no features beyond the ask, no abstractions for single-use code, no unrequested flexibility, no error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+- Gut check: would a senior engineer call this overcomplicated? If yes, simplify.
+
+## Surgical changes
+
+- Touch only what you must. Every changed line traces to the request.
+- Don't "improve" adjacent code, comments, or formatting. Don't refactor what isn't broken. Match existing style, even if you'd do it differently.
+- Remove imports/variables/functions your change orphaned. Leave pre-existing dead code alone - mention it, don't delete it.
+
+## Demand elegance
+
+- For non-trivial changes, pause: is there a more elegant way? If a fix feels hacky, it is - fix the root cause. No temporary patches.
+- Elegant means simpler, not fancier.
+
+## Own bugs end to end
+
+- Given a bug report or failing CI, fix it directly - zero hand-holding, zero context switching for the user.
+- Chase the logs, errors, and failing tests yourself, through to resolution.
+
+## Verify before done
+
+- Loop until the success criteria pass: run tests, check logs, diff behavior against main when relevant.
+- Challenge your own work before presenting it. Never mark a task complete without proof it works.
+
+## Learn from corrections
+
+- After any correction, capture the pattern in `tasks/lessons.md` as a rule that prevents the repeat.
+- Review lessons at session start. Iterate until the mistake rate drops.

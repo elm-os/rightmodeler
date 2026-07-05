@@ -21,3 +21,6 @@ __pycache__/
 # Local advisor plans (kept out of version control)
 plans/
 advisor-plans/
+
+# Agent working notes — todo.md / lessons.md (not version controlled)
+tasks/
