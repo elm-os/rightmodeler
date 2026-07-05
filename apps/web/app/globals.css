@@ -1,26 +1,126 @@
 @import "tailwindcss";
 
+/*
+  rightmodeler design tokens — see docs/design.md for the full system.
+
+  Warm, paper-toned, editorial. Interactive UI is strictly monochrome; the two
+  accent hues (Void Violet, Ember Orange) are decorative/illustration only and
+  never appear on buttons, links, or state. Light theme only — no dark variant.
+*/
+@theme {
+  /* Colors */
+  --color-parchment-white: #fdfcfc; /* page canvas — dominant background */
+  --color-warm-sand: #f5f3f1; /* card / feature / section surfaces */
+  --color-ash-border: #e5e5e5; /* hairline borders, inputs, dividers */
+  --color-midnight-ink: #000000; /* primary text, filled buttons, icon fills */
+  --color-driftwood: #777169; /* secondary body text, muted links, icon strokes */
+  --color-fog: #a59f97; /* tertiary / helper text, light icon strokes */
+  --color-silver-mist: #b1b0b0; /* subtle washes, mid-level dividers */
+  --color-void-violet: #0447ff; /* decorative accent — illustration only */
+  --color-ember-orange: #ff4704; /* decorative accent — illustration only */
+
+  /* Font families — loaded via next/font in app/layout.tsx. The licensed brand
+     face leads each stack; the free substitute follows, so dropping in real
+     Waldenburg / WaldenburgFH files later needs no code change here. */
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display:
+    "Waldenburg", var(--font-dm-sans), ui-sans-serif, system-ui, -apple-system,
+    sans-serif;
+  --font-wordmark:
+    "WaldenburgFH", var(--font-space-grotesk), ui-sans-serif, system-ui,
+    sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+
+  /* Type scale — each size carries its own line-height and letter-spacing (and
+     weight, for the display sizes). Use the semantic text-* utilities so leading
+     and tracking never need ad-hoc values. */
+  --text-caption: 10px;
+  --text-caption--line-height: 1.4;
+  --text-caption--letter-spacing: 0.1px;
+
+  --text-body: 16px;
+  --text-body--line-height: 1.5;
+  --text-body--letter-spacing: 0.16px;
+
+  --text-subheading: 18px;
+  --text-subheading--line-height: 1.44;
+  --text-subheading--letter-spacing: 0.18px;
+
+  --text-heading-sm: 20px;
+  --text-heading-sm--line-height: 1.4;
+  --text-heading-sm--letter-spacing: 0.2px;
+
+  --text-heading: 32px;
+  --text-heading--line-height: 1.17;
+  --text-heading--letter-spacing: -0.64px;
+  --text-heading--font-weight: 300;
+
+  --text-heading-lg: 36px;
+  --text-heading-lg--line-height: 1.13;
+  --text-heading-lg--letter-spacing: -0.72px;
+  --text-heading-lg--font-weight: 300;
+
+  --text-display: 48px;
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.96px;
+  --text-display--font-weight: 300;
+
+  /* Motion — strong custom easings for deliberate/signature motion (see
+     docs/design.md § Motion & interaction). Exposed both as utilities
+     (ease-out-strong / ease-in-out-strong / ease-drawer) and as var(--ease-*).
+     Tailwind's built-in ease-out / ease-in-out utilities are untouched.
+     UI motion stays crisp and under 300ms; never use ease-in for UI. */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* In-page anchor links land below the sticky nav; smooth only when motion is welcome. */
+:target {
+  scroll-margin-top: 5rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), sans-serif;
+  background-color: var(--color-parchment-white);
+  color: var(--color-midnight-ink);
+  font-family: var(--font-sans);
+}
+
+/* Brand wordmark — logo / brand mark only. Never body copy, labels, or buttons. */
+@utility wordmark {
+  font-family: var(--font-wordmark);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.1;
+  letter-spacing: 0.05em;
+}
+
+/* Continuous marquee for the "works-with" source row. Duplicate the content and
+   translate by -50% so the loop is seamless. Decorative — pauses on hover and
+   is disabled under reduced-motion. */
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none !important;
+    transform: none !important;
+  }
 }

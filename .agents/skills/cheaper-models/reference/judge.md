@@ -8,7 +8,7 @@ evaluator; only fall through to the judge when nothing stronger exists.
 1. **Deterministic verifier** (highest confidence): unit tests pass, build/typecheck/lint
    succeeds, JSON-schema valid, required fields present, tool call is well-formed, no
    runtime error, latency/retries within threshold. Use whenever the task is verifiable.
-2. **Reference-based comparison**: we *have* the accepted original output — compare the
+2. **Reference-based comparison**: we _have_ the accepted original output — compare the
    candidate against it for semantic match, not lexical overlap. This is the default for
    this product because every logged successful step is a reference.
 3. **Agent trajectory evaluation**: correct tool selection, correct args, constraint
@@ -25,8 +25,9 @@ Ask for `equivalent | minor_drift | divergent` + a one-line justification. Struc
 JSON output, temperature 0.
 
 For tool calls / structured outputs, decompose — don't hand the blob to a prose judge:
-- **Deterministic pre-check first.** Compare tool name and arg *keys* with set logic;
-  compare arg *values* with typed rules (numeric tolerance, unit/format normalization,
+
+- **Deterministic pre-check first.** Compare tool name and arg _keys_ with set logic;
+  compare arg _values_ with typed rules (numeric tolerance, unit/format normalization,
   order-insensitive lists, commutativity). Only escalate genuinely semantic values
   (free-text args, paraphrasable strings) to the LLM.
 - Score **per argument**, not per call — that granularity feeds cascade detection.
@@ -36,11 +37,11 @@ For tool calls / structured outputs, decompose — don't hand the blob to a pros
 
 ## Bias mitigations (mandatory)
 
-| Bias | Mitigation |
-| --- | --- |
-| **Position** (favors slot A/B) | Run both orderings; keep only order-consistent verdicts; randomize order. |
-| **Verbosity/length** | Penalize length in rubric; require per-criterion justification; structured JSON verdict. |
-| **Self-preference** | Judge must be a **different family** than both candidates. Never judge the expensive model with its own family. |
+| Bias                           | Mitigation                                                                                                      |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| **Position** (favors slot A/B) | Run both orderings; keep only order-consistent verdicts; randomize order.                                       |
+| **Verbosity/length**           | Penalize length in rubric; require per-criterion justification; structured JSON verdict.                        |
+| **Self-preference**            | Judge must be a **different family** than both candidates. Never judge the expensive model with its own family. |
 
 Grading scale: use the small ordinal scale above (or 0–5). Avoid 0–100 — human alignment
 is best on coarse scales. For important swaps require **two independent judges to agree**
@@ -49,7 +50,8 @@ before accepting a step verdict (cuts label noise materially).
 ## Cascade detection
 
 Errors compound: a weak early step can pass its own check yet break a downstream step, and
-the *visible* failure is far from the root cause. So:
+the _visible_ failure is far from the root cause. So:
+
 - Run reference-guided per-step scoring across the whole trajectory.
 - Flag the **earliest** step whose semantic-equivalence score drops below the floor — even
   if the final output still looks OK. That early sub-threshold step is the cascade seed.
