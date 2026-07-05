@@ -17,3 +17,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Local advisor plans (kept out of version control)
+plans/
+advisor-plans/
