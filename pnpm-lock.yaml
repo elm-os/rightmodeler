@@ -56,6 +56,8 @@ importers:
 
   packages/contracts: {}
 
+  skills/cheaper-models: {}
+
 packages:
 
   '@alloc/quick-lru@5.2.0':

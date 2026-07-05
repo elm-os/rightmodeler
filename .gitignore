@@ -1,5 +1,5 @@
 .cheaper-models/
-.agents/skills/cheaper-models/.venv/
+.agents/skills/cheaper-models/
 .next/
 .turbo/
 .vercel/
@@ -10,10 +10,12 @@ coverage/
 .ruff_cache/
 .venv/
 apps/pipeline/.venv/
-.claude/skills/cheaper-models/.venv/
+.claude/skills/cheaper-models/
+skills/cheaper-models/.venv/
 __pycache__/
 *.pyc
 .DS_Store
 .env
 .env.*
 !.env.example
+skills-lock.json

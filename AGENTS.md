@@ -7,6 +7,7 @@
 - Prefer root `pnpm` commands for shared lifecycle tasks: `format`, `check`, `lint`, `build`, `check-types`.
 - Keep app-specific runtime commands local to the owning app or run them via `pnpm --filter`.
 - Treat `packages/contracts` and `.cheaper-models/` as the current pipeline contract boundary.
+- Edit `skills/cheaper-models` as the canonical skill source. `.agents/skills/` and `.claude/skills/` are generated install targets.
 - Run `pnpm format` and `pnpm check` after changes.
 
 ## Web
