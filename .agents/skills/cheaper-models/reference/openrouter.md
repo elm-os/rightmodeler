@@ -5,13 +5,13 @@ OpenAI-compatible — the OpenAI SDK works by setting `base_url` to the above.
 
 ## Endpoints we use
 
-| Purpose | Call |
-| --- | --- |
-| Chat completion | `POST /chat/completions` |
-| List models + pricing | `GET /models` |
-| Model's provider endpoints | `GET /models/{author}/{slug}/endpoints` |
-| Per-generation cost/stats | `GET /generation?id=<id>` |
-| Remaining credits / key info | `GET /key` |
+| Purpose                      | Call                                    |
+| ---------------------------- | --------------------------------------- |
+| Chat completion              | `POST /chat/completions`                |
+| List models + pricing        | `GET /models`                           |
+| Model's provider endpoints   | `GET /models/{author}/{slug}/endpoints` |
+| Per-generation cost/stats    | `GET /generation?id=<id>`               |
+| Remaining credits / key info | `GET /key`                              |
 
 Model slug: `provider/model`, e.g. `anthropic/claude-opus-4`, `openai/gpt-4o-mini`,
 `meta-llama/llama-3.3-70b-instruct`. Suffixes: `:free`, `:nitro` (throughput), `:floor`
@@ -31,6 +31,7 @@ current model per `usage.cost`; test the cheapest N.
 ## Cost accounting (critical)
 
 `usage` is returned automatically on every response (legacy include-flags are no-ops):
+
 ```json
 "usage": {
   "prompt_tokens": 194,
@@ -40,6 +41,7 @@ current model per `usage.cost`; test the cheapest N.
   "cost_details": { "upstream_inference_cost": 0 }  // BYOK only
 }
 ```
+
 **Compare `usage.cost`, never token counts** — every model uses its own tokenizer.
 Audit path: `GET /generation?id=<response.id>` → `total_cost`, native token counts, latency.
 

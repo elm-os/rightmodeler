@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <style>
+    rect { fill: #000000; }
+    @media (prefers-color-scheme: dark) { rect { fill: #fdfcfc; } }
+  </style>
+  <g transform="translate(91.27 51.20) scale(0.40675)">
+    <rect x="0" y="0" width="381" height="1007"/>
+    <rect x="444" y="352" width="366" height="655"/>
+  </g>
+</svg>
