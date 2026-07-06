@@ -2,7 +2,7 @@
   "name": "rightmodeler",
   "private": true,
   "description": "Replay real agent traces through cheaper models to prove which swaps are safe.",
-  "homepage": "https://rightmodeler.com",
+  "homepage": "https://www.rightmodeler.com",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/elm-os/rightmodeler.git"
