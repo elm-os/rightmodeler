@@ -3,6 +3,7 @@
 // past the absolute bottom of the page (the whole page eases up to expose it), then snaps back.
 // Server component: it composes client primitives only.
 
+import Link from "next/link";
 import { Reveal } from "../Reveal";
 import { GitHubIcon, LogoMark } from "../icons";
 
@@ -30,7 +31,13 @@ export function Footer() {
             <LogoMark height={18} />
             <span className="wordmark">rightmodeler</span>
           </span>
-          <nav aria-label="Footer" className="text-body">
+          <nav
+            aria-label="Footer"
+            className="flex items-center gap-6 text-body"
+          >
+            <Link href="/blog" className={linkClass}>
+              Blog
+            </Link>
             <a
               href="https://github.com/elm-os/rightmodeler"
               target="_blank"
