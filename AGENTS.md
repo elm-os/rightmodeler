@@ -21,8 +21,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ## Web
 
 The visual identity is defined in `docs/design.md` (color, typography, motion) and
-implemented as tokens in `apps/web/app/globals.css` (Tailwind v4 `@theme`) with
-fonts loaded in `apps/web/app/layout.tsx`. Read `docs/design.md` before building or
+implemented as tokens in `apps/web/src/app/globals.css` (Tailwind v4 `@theme`) with
+fonts loaded in `apps/web/src/app/layout.tsx`. Read `docs/design.md` before building or
 changing any UI, and derive every color, type, and motion decision from its tokens.
 
 - Use the design skills for UI work: `frontend-design` for visual direction,
@@ -38,6 +38,7 @@ changing any UI, and derive every color, type, and motion decision from its toke
   which bake in line-height and letter-spacing. Use `font-display` for headlines
   (≥ 32px), `font-sans` for UI/body, `font-mono` for code, and the `wordmark`
   utility for the logo only.
+- In `apps/web`, keep app code under `src/`, keep shared non-route code out of `src/app`, use `@/*` imports, and rename PascalCase source files to kebab-case.
 - Do not use Tailwind line-spacing (`leading-*`) utilities or ad-hoc tracking
   values — leading and tracking live in the type tokens.
 - If tracking must be set directly, use only `tracking-normal`, `tracking-tight`, or `tracking-tighter`.
