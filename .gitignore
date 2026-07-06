@@ -19,3 +19,10 @@ __pycache__/
 .env.*
 !.env.example
 skills-lock.json
+
+# Local advisor plans (kept out of version control)
+plans/
+advisor-plans/
+
+# Agent working notes — todo.md / lessons.md (not version controlled)
+tasks/
