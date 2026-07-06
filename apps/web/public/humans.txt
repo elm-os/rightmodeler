@@ -1,0 +1,26 @@
+/* TEAM */
+
+	rightmodeler is built by the team at ELM-OS.
+
+	GitHub: @00-Aakash-00
+	GitHub: @ameyalambat128
+	GitHub: @Chaitanya-Chaurasia
+	GitHub: @Piyussh01
+
+	Repository: https://github.com/elm-os/rightmodeler
+
+/* THANKS */
+
+	Our early users and design partners, who lent us their real agent traces.
+	The open-source community whose tools we build on.
+
+/* SITE */
+
+	Last update: 2026/07/05
+	Language: English
+	Doctype: HTML5
+	Standards: HTML5, CSS3, ES2023
+	Components: Next.js, React, TypeScript, Tailwind CSS, Motion
+	Software: pnpm, Turborepo, Python, uv
+
+	# Prove which models you can safely downgrade. https://rightmodeler.com
