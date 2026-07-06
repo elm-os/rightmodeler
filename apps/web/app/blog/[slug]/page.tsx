@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { BlogShell } from "../../components/blog/blog_shell";
-import { PostHeader } from "../../components/blog/post_header";
-import { BlogCta } from "../../components/blog/blog_cta";
+import { BlogShell } from "../../components/blog/blog-shell";
+import { PostHeader } from "../../components/blog/post-header";
+import { BlogCta } from "../../components/blog/blog-cta";
 import { getAllSlugs, getPost } from "../posts";
 import { SITE_AUTHOR, SITE_NAME, SITE_URL } from "../../lib/site";
 
