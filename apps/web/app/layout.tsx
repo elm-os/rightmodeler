@@ -39,6 +39,13 @@ export const metadata: Metadata = {
   description,
   alternates: {
     canonical: "/",
+    // Discovery hints for the plain-text sidecars (also reachable at their well-known root paths).
+    types: {
+      "text/plain": [
+        { url: "/llms.txt", title: "llms.txt" },
+        { url: "/humans.txt", title: "humans.txt" },
+      ],
+    },
   },
   openGraph: {
     title: "rightmodeler",

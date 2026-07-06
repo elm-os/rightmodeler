@@ -6,7 +6,11 @@ import type { Post } from "./types";
 import * as whyWeBuiltRightmodeler from "./why-we-built-rightmodeler";
 
 const posts: Post[] = [
-  { meta: whyWeBuiltRightmodeler.meta, Body: whyWeBuiltRightmodeler.Body },
+  {
+    meta: whyWeBuiltRightmodeler.meta,
+    Body: whyWeBuiltRightmodeler.Body,
+    markdown: whyWeBuiltRightmodeler.markdown,
+  },
 ];
 
 export function getAllPosts(): Post[] {
