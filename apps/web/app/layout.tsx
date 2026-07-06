@@ -27,17 +27,16 @@ const geistMono = Geist_Mono({
 });
 
 const description =
-  "rightmodeler replays your real agent traces through cheaper models, judges each output against what you already shipped, and shows exactly where you can cut cost — with evidence and confidence on every recommendation.";
+  "Replay real agent traces through cheaper models, judge each output against what you already shipped, and prove which swaps are safe.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://rightmodeler.dev"),
+  metadataBase: new URL("https://rightmodeler.com"),
   title: "rightmodeler — prove which models you can safely downgrade",
   description,
   openGraph: {
     title: "rightmodeler",
-    description:
-      "Prove which models you can safely downgrade — on your own runs.",
-    url: "https://rightmodeler.dev",
+    description,
+    url: "https://rightmodeler.com",
     siteName: "rightmodeler",
     locale: "en_US",
     type: "website",
@@ -45,8 +44,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary",
     title: "rightmodeler",
-    description:
-      "Prove which models you can safely downgrade — on your own runs.",
+    description,
   },
 };
 
