@@ -3,7 +3,7 @@
 Polyglot monorepo for analyzing historical model runs and producing cheaper-model
 recommendation reports.
 
-Site: [rightmodeler.com](https://rightmodeler.com)
+Site: [rightmodeler.com](https://www.rightmodeler.com)
 
 ## Overview
 
