@@ -2,8 +2,8 @@
 // `Body` composed from the prose primitives. Registered in ./index. Voice matches the landing page:
 // measured, honest, evidence-driven. No accent hues in the copy; the accents live in the hero art.
 
-import { Prose, Lead, P, PullQuote, A } from "../../components/blog/Prose";
-import { H2 } from "../../components/blog/Prose";
+import { Prose, Lead, P, PullQuote, A } from "../../components/blog/prose";
+import { H2 } from "../../components/blog/prose";
 import type { PostMeta } from "./types";
 
 export const meta: PostMeta = {

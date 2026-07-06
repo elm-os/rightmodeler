@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { HeroGradient } from "../components/HeroGradient";
-import { BlogShell } from "../components/blog/BlogShell";
-import { PostCard } from "../components/blog/PostCard";
+import { BlogShell } from "../components/blog/blog_shell";
+import { PostCard } from "../components/blog/post_card";
 import { Reveal } from "../components/Reveal";
 import { getAllPosts } from "./posts";
 import { SITE_NAME, SITE_URL } from "../lib/site";

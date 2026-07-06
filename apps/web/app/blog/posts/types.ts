@@ -1,5 +1,5 @@
 // The shape every blog post module exports: a typed data record (`meta`) plus a `Body` component
-// authored with the prose primitives (components/blog/Prose.tsx). The registry (./index) collects
+// authored with the prose primitives (components/blog/prose.tsx). The registry (./index) collects
 // them, so the /blog index and each /blog/[slug] route resolve from one source. Add a post = add a
 // file next to this one + one line in ./index.
 
