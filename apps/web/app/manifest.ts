@@ -9,7 +9,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "rightmodeler",
     short_name: "rightmodeler",
     description:
-      "Prove which models you can safely downgrade — on your own runs.",
+      "Replay real agent traces through cheaper models and prove which swaps are safe.",
     start_url: "/",
     display: "standalone",
     background_color: "#fdfcfc",
