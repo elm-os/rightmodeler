@@ -17,10 +17,11 @@
 // motion is transform/opacity only; passive listeners READ wheel/touch deltas and move two elements,
 // never touching or blocking page scroll.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { DiaGradient } from "./DiaGradient";
 
+const DESKTOP_BREAKPOINT = "(min-width: 640px)";
 const TRAVEL_FRACTION = 0.62; // reveal maxes at this fraction of the viewport height…
 const TRAVEL_MAX = 620; // …capped here (px), so it stays dramatic but bounded on tall screens
 const GAIN = 1.5; // pull responsiveness — px of target per px of pull, before rubber-band resistance
@@ -30,9 +31,22 @@ const RELEASE = { k: 220, c: 30 }; // ζ ≈ 1.0 — crisp but softened for the 
 export function OverscrollSpring() {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
-    if (reduce) return;
+    const media = window.matchMedia(DESKTOP_BREAKPOINT);
+    const sync = () => setEnabled(media.matches);
+
+    sync();
+    media.addEventListener("change", sync);
+
+    return () => {
+      media.removeEventListener("change", sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (reduce || !enabled) return;
     const el = ref.current;
     if (!el) return;
     // The page content that eases up. It's a sibling of this component; we translate it directly.
@@ -181,16 +195,20 @@ export function OverscrollSpring() {
       ro?.disconnect();
       if (rafId) cancelAnimationFrame(rafId);
       if (idle) clearTimeout(idle);
+      el.style.willChange = "";
+      el.style.transform = "scale3d(1, 0, 1)";
+      el.style.opacity = "0";
       if (content) {
         content.style.transform = ""; // leave the page clean if we tore down mid-stretch
         content.style.willChange = "";
       }
     };
-  }, [reduce]);
+  }, [enabled, reduce]);
 
-  // Render the same tree on server and client (collapsed); the effect gates all behavior on reduced
-  // motion (and bails there), so there is no render-time `reduce` branch to cause a hydration
-  // mismatch. Height is set from the measured travel once mounted.
+  if (!enabled) return null;
+
+  // Mobile never mounts this decorative band. Desktop renders it collapsed, then the effect measures
+  // travel after mount so the spring stays hydration-safe.
   return (
     <div
       ref={ref}
