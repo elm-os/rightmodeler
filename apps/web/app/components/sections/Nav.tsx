@@ -4,6 +4,7 @@
 // (logo icon), and the product's real first step docked as a copy-able command. Monochrome
 // throughout; hover states are quiet color fades.
 
+import Link from "next/link";
 import { CopyCommand } from "../CopyCommand";
 import { GitHubIcon, LogoMark } from "../icons";
 
@@ -17,7 +18,9 @@ const NAV_CSS = `
 .rm-focus:focus-visible { outline: 2px solid var(--color-midnight-ink); outline-offset: 2px; }
 `;
 
-export function Nav() {
+// homeHref: the brand lockup points at "#top" on the landing page (smooth scroll to top) but at "/"
+// on nested routes like the blog, where "home" means navigating back to the landing page.
+export function Nav({ homeHref = "#top" }: { homeHref?: string }) {
   return (
     <header className="sticky top-0 z-50 border-b border-ash-border bg-parchment-white/80 backdrop-blur">
       <style>{NAV_CSS}</style>
@@ -27,7 +30,7 @@ export function Nav() {
         className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6"
       >
         <a
-          href="#top"
+          href={homeHref}
           aria-label="rightmodeler — home"
           className="rm-focus inline-flex items-center gap-2 self-stretch text-midnight-ink"
         >
@@ -36,6 +39,14 @@ export function Nav() {
         </a>
 
         <div className="flex items-center gap-6 sm:gap-8">
+          {/* Writing — the blog index. */}
+          <Link
+            href="/blog"
+            className="rm-focus inline-flex items-center text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink"
+          >
+            Blog
+          </Link>
+
           {/* Repo link — an engineer's first click, shown on every breakpoint. */}
           <a
             href={REPO_URL}

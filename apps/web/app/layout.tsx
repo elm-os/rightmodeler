@@ -31,8 +31,15 @@ const description =
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rightmodeler.com"),
-  title: "rightmodeler — prove which models you can safely downgrade",
+  title: {
+    default: "rightmodeler — prove which models you can safely downgrade",
+    // Child pages set a short title; this appends the brand (e.g. "Blog — rightmodeler").
+    template: "%s — rightmodeler",
+  },
   description,
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     title: "rightmodeler",
     description,
