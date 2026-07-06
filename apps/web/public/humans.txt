@@ -23,4 +23,4 @@
 	Components: Next.js, React, TypeScript, Tailwind CSS, Motion
 	Software: pnpm, Turborepo, Python, uv
 
-	# Prove which models you can safely downgrade. https://rightmodeler.com
+	# Prove which models you can safely downgrade. https://www.rightmodeler.com

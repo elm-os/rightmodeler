@@ -1,7 +1,7 @@
 // Site-wide constants — one source of truth for the production origin (metadata, sitemap, robots,
 // canonical URLs), the house byline, and the two links that recur across the marketing surface.
 
-export const SITE_URL = "https://rightmodeler.com";
+export const SITE_URL = "https://www.rightmodeler.com";
 export const SITE_NAME = "rightmodeler";
 export const SITE_AUTHOR = "The rightmodeler team";
 
