@@ -20,11 +20,11 @@ pinned to `light`.
 Tokens are implemented as **Tailwind v4** theme variables. There is no
 `tailwind.config.js`; the system lives in CSS.
 
-| Concern                    | Where                                           |
-| -------------------------- | ----------------------------------------------- |
-| Color / type / font tokens | `apps/web/app/globals.css` (`@theme` + `:root`) |
-| Font loading               | `apps/web/app/layout.tsx` (`next/font/google`)  |
-| This document              | `docs/design.md`                                |
+| Concern                    | Where                                               |
+| -------------------------- | --------------------------------------------------- |
+| Color / type / font tokens | `apps/web/src/app/globals.css` (`@theme` + `:root`) |
+| Font loading               | `apps/web/src/app/layout.tsx` (`next/font/google`)  |
+| This document              | `docs/design.md`                                    |
 
 Because tokens are declared in `@theme`, each one generates a matching Tailwind
 utility automatically — `--color-warm-sand` → `bg-warm-sand` / `text-warm-sand`
@@ -234,7 +234,7 @@ For any non-trivial UI work, lean on the installed skills:
 The stacks are already ordered `Waldenburg → DM Sans` and `WaldenburgFH → Space
 Grotesk`, so once you have licensed files:
 
-1. Add the font files under `apps/web/app/fonts/`.
+1. Add the font files under `apps/web/src/app/fonts/`.
 2. Load them with `next/font/local`, exposing `--font-waldenburg` /
    `--font-waldenburg-fh`, and add those variables to the `<html>` className in
    `layout.tsx`.
