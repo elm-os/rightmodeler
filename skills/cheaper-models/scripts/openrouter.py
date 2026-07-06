@@ -11,6 +11,7 @@ CLI:
     python openrouter.py models              # dump catalog as json
     python openrouter.py key                 # credits / key info
 """
+
 from __future__ import annotations
 
 import json

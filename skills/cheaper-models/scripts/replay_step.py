@@ -8,6 +8,7 @@ Use as a module:
 Only valid for steps classified 'single_shot' by analyze.py. Multi-step/tool/loop
 steps must go through run_pipeline.py.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -40,11 +41,17 @@ def to_openai_tools(step: dict) -> list[dict] | None:
     for t in step.get("available_tools") or []:
         if not t.get("name"):
             continue
-        tools.append({"type": "function", "function": {
-            "name": t["name"],
-            "description": t.get("description") or "",
-            "parameters": t.get("parameters_schema") or {"type": "object", "properties": {}},
-        }})
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": t["name"],
+                    "description": t.get("description") or "",
+                    "parameters": t.get("parameters_schema")
+                    or {"type": "object", "properties": {}},
+                },
+            }
+        )
     return tools or None
 
 
@@ -58,8 +65,14 @@ def replay_step(orr, step: dict, candidate_model: str, runs: int = 1) -> dict:
         if resp.get("error"):
             return {"model": candidate_model, "error": resp["error"], "samples": samples}
         total_cost += resp.get("cost") or 0.0
-        samples.append({"text": resp.get("text"), "tool_calls": resp.get("tool_calls"),
-                        "cost": resp.get("cost"), "served_by": resp.get("model")})
+        samples.append(
+            {
+                "text": resp.get("text"),
+                "tool_calls": resp.get("tool_calls"),
+                "cost": resp.get("cost"),
+                "served_by": resp.get("model"),
+            }
+        )
     # pick the first sample as representative; caller may inspect all
     rep = samples[0]
     return {

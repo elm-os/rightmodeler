@@ -4,6 +4,7 @@ pick the strongest evaluator, and estimate current cost.
 CLI:
     python analyze.py normalized.json --codebase ./repo --out pipeline.json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -13,7 +14,9 @@ from collections import defaultdict
 from common import dump_json, eprint, load_json
 
 # high-risk families we always abstain on unless the user overrides
-HIGH_RISK = re.compile(r"auth|login|password|payment|billing|migrat|delete|drop|prod|deploy|secret", re.I)
+HIGH_RISK = re.compile(
+    r"auth|login|password|payment|billing|migrat|delete|drop|prod|deploy|secret", re.I
+)
 
 FAMILY_HINTS = [
     ("pr_summary", r"pull request|pr summary|summari[sz]e.*(diff|change)"),
@@ -36,13 +39,16 @@ def classify_step(step: dict, steps: list[dict]) -> dict:
     sid = step.get("step_id")
     feeds = any(s.get("parent_id") == sid for s in steps)
     multi = has_tools or repeats or feeds or step.get("kind") in ("agent", "chain")
-    return {"replay_mode": "e2e" if multi else "single_shot",
-            "has_tools": has_tools, "in_loop": repeats, "feeds_downstream": feeds}
+    return {
+        "replay_mode": "e2e" if multi else "single_shot",
+        "has_tools": has_tools,
+        "in_loop": repeats,
+        "feeds_downstream": feeds,
+    }
 
 
 def pick_evaluator(step: dict, cls: dict) -> str:
     """Strongest available signal for this step."""
-    text = (step.get("output_text") or "").lower()
     if cls["has_tools"]:
         return "trajectory"  # correct tool selection/args, deterministic pre-check first
     if step.get("success", {}).get("scores"):
@@ -53,11 +59,13 @@ def pick_evaluator(step: dict, cls: dict) -> str:
 
 
 def infer_family(step: dict) -> str:
-    hay = " ".join([
-        step.get("system_prompt") or "",
-        " ".join(str(m.get("content", "")) for m in step.get("input_messages") or []),
-        step.get("name") or "",
-    ]).lower()
+    hay = " ".join(
+        [
+            step.get("system_prompt") or "",
+            " ".join(str(m.get("content", "")) for m in step.get("input_messages") or []),
+            step.get("name") or "",
+        ]
+    ).lower()
     for label, pat in FAMILY_HINTS:
         if re.search(pat, hay):
             return label
@@ -72,10 +80,15 @@ def analyze(normalized: dict, codebase: str | None) -> dict:
         cls = classify_step(step, steps)
         fam = infer_family(step)
         evaluator = pick_evaluator(step, cls)
-        risk = "high" if HIGH_RISK.search(
-            (step.get("system_prompt") or "") + (step.get("name") or "")
-            + " ".join(str(m.get("content", "")) for m in step.get("input_messages") or [])
-        ) else "normal"
+        risk = (
+            "high"
+            if HIGH_RISK.search(
+                (step.get("system_prompt") or "")
+                + (step.get("name") or "")
+                + " ".join(str(m.get("content", "")) for m in step.get("input_messages") or [])
+            )
+            else "normal"
+        )
         entry = {
             "step_id": step.get("step_id"),
             "order": step.get("order"),
@@ -98,9 +111,15 @@ def analyze(normalized: dict, codebase: str | None) -> dict:
         f["cost_usd"] += step.get("cost_usd", 0.0)
         f["n"] += 1
 
-    fam_out = {k: {"n": v["n"], "models": sorted(v["models"]),
-                   "cost_usd": round(v["cost_usd"], 6), "steps": v["steps"]}
-               for k, v in families.items()}
+    fam_out = {
+        k: {
+            "n": v["n"],
+            "models": sorted(v["models"]),
+            "cost_usd": round(v["cost_usd"], 6),
+            "steps": v["steps"],
+        }
+        for k, v in families.items()
+    }
 
     return {
         "source_format": normalized.get("source_format"),
@@ -122,8 +141,10 @@ def main() -> int:
     args = ap.parse_args()
 
     result = analyze(load_json(args.normalized), args.codebase)
-    eprint(f"steps: {result['total_steps']}  single-shot: {result['single_shot_steps']}  "
-           f"e2e: {result['e2e_steps']}  families: {len(result['task_families'])}")
+    eprint(
+        f"steps: {result['total_steps']}  single-shot: {result['single_shot_steps']}  "
+        f"e2e: {result['e2e_steps']}  families: {len(result['task_families'])}"
+    )
     for fam, info in result["task_families"].items():
         eprint(f"  - {fam}: {info['n']} steps, models={info['models']}")
     if args.out:
