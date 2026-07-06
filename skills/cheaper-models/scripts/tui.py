@@ -12,6 +12,7 @@ CLI:
     python tui.py results.json
 Fallback (no TTY / textual missing): prints a Rich table summary instead.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,23 +43,32 @@ def _rows(results: dict) -> list[dict]:
             default = "proposed"
         else:
             default = "rejected"
-        rows.append({
-            "step_id": s["step_id"],
-            "name": s.get("name") or s["step_id"],
-            "family": s.get("family", ""),
-            "current": s.get("current_model") or "—",
-            "candidate": (best or {}).get("model") or (
-                (s.get("candidates") or [{}])[0].get("id") or (s.get("candidates") or [{}])[0].get("model") or "—"),
-            "savings": (best or {}).get("est_savings"),
-            "score": (best or {}).get("score"),
-            "verdict": (best or {}).get("verdict", ""),
-            "evidence": s.get("evaluator", ""),
-            "risk": s.get("risk", "normal"),
-            "cascade": s.get("needs_e2e", False),
-            "justification": (best or {}).get("justification") or s.get("note") or s.get("abstain_reason") or "",
-            "candidate_output": (best or {}).get("candidate_output", ""),
-            "decision": default,
-        })
+        rows.append(
+            {
+                "step_id": s["step_id"],
+                "name": s.get("name") or s["step_id"],
+                "family": s.get("family", ""),
+                "current": s.get("current_model") or "—",
+                "candidate": (best or {}).get("model")
+                or (
+                    (s.get("candidates") or [{}])[0].get("id")
+                    or (s.get("candidates") or [{}])[0].get("model")
+                    or "—"
+                ),
+                "savings": (best or {}).get("est_savings"),
+                "score": (best or {}).get("score"),
+                "verdict": (best or {}).get("verdict", ""),
+                "evidence": s.get("evaluator", ""),
+                "risk": s.get("risk", "normal"),
+                "cascade": s.get("needs_e2e", False),
+                "justification": (best or {}).get("justification")
+                or s.get("note")
+                or s.get("abstain_reason")
+                or "",
+                "candidate_output": (best or {}).get("candidate_output", ""),
+                "decision": default,
+            }
+        )
     return rows
 
 
@@ -80,13 +90,23 @@ def run_rich_fallback(results: dict, rows: list[dict]) -> int:
         t.add_column(col, overflow="fold")
     for r in rows:
         flag = "CASCADE-E2E" if r["cascade"] else ("HIGH-RISK" if r["risk"] == "high" else "")
-        t.add_row(r["name"], r["family"], r["current"], r["candidate"],
-                  _fmt_pct(r["savings"]), _fmt_score(r["score"]), r["evidence"], flag)
+        t.add_row(
+            r["name"],
+            r["family"],
+            r["current"],
+            r["candidate"],
+            _fmt_pct(r["savings"]),
+            _fmt_score(r["score"]),
+            r["evidence"],
+            flag,
+        )
     c.print(t)
     swappable = sum(1 for r in rows if r["score"] and not r["cascade"])
-    c.print(f"[bold]Swappable single-shot:[/] {swappable}   "
-            f"[cyan]needs E2E:[/] {sum(1 for r in rows if r['cascade'])}   "
-            f"[dim]run in a real terminal for the interactive approval TUI[/]")
+    c.print(
+        f"[bold]Swappable single-shot:[/] {swappable}   "
+        f"[cyan]needs E2E:[/] {sum(1 for r in rows if r['cascade'])}   "
+        f"[dim]run in a real terminal for the interactive approval TUI[/]"
+    )
     return 0
 
 
@@ -132,8 +152,9 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
         def on_mount(self):
             self.title = "cheaper-models · per-step approval"
             table = self.query_one(DataTable)
-            table.add_columns("", "Step", "Family", "Current → Candidate",
-                              "Save", "Quality", "Evidence", "Flag")
+            table.add_columns(
+                "", "Step", "Family", "Current → Candidate", "Save", "Quality", "Evidence", "Flag"
+            )
             for i, r in enumerate(self.rows):
                 table.add_row(*self._render_row(r), key=str(i))
             self._ncols = 8
@@ -151,9 +172,13 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
             swap = f"{r['current']} → {r['candidate']}"
             return (
                 Text(label, style=style),
-                r["name"], r["family"], swap,
-                _fmt_pct(r["savings"]), _fmt_score(r["score"]),
-                r["evidence"], flag,
+                r["name"],
+                r["family"],
+                swap,
+                _fmt_pct(r["savings"]),
+                _fmt_score(r["score"]),
+                r["evidence"],
+                flag,
             )
 
         def _current_index(self) -> int:
@@ -168,12 +193,17 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
             body.append(f"[{r['family']}]\n\n", style="dim")
             body.append(f"current:   {r['current']}\n")
             body.append(f"candidate: {r['candidate']}\n")
-            body.append(f"savings:   {_fmt_pct(r['savings'])}    quality: {_fmt_score(r['score'])} "
-                        f"({r['verdict']})\n")
+            body.append(
+                f"savings:   {_fmt_pct(r['savings'])}    quality: {_fmt_score(r['score'])} "
+                f"({r['verdict']})\n"
+            )
             body.append(f"evidence:  {r['evidence']}    risk: {r['risk']}\n")
             if r["cascade"]:
-                body.append("\n⚙ multi-step/tool/loop — confirm with run_pipeline.py "
-                            "before swapping (cascade risk)\n", style="cyan")
+                body.append(
+                    "\n⚙ multi-step/tool/loop — confirm with run_pipeline.py "
+                    "before swapping (cascade risk)\n",
+                    style="cyan",
+                )
             body.append("\njudge / note:\n", style="bold")
             body.append((r["justification"] or "—") + "\n")
             if r["candidate_output"]:
@@ -200,14 +230,16 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
             savings = [r["savings"] for r in approved if isinstance(r["savings"], (int, float))]
             avg = sum(savings) / len(savings) if savings else 0
             s = self.query_one("#summary", Static)
-            s.update(Text.from_markup(
-                f"[green]approved {len(approved)}[/]  "
-                f"[yellow]hold {sum(1 for r in self.rows if r['decision']=='hold')}[/]  "
-                f"[red]rejected {sum(1 for r in self.rows if r['decision']=='rejected')}[/]  "
-                f"[cyan]E2E {sum(1 for r in self.rows if r['decision']=='needs_e2e')}[/]   "
-                f"avg savings on approved: [bold]{avg:.0%}[/]   "
-                f"[dim](a)pprove (r)eject (h)old (e)2e (s)ave (q)uit[/]"
-            ))
+            s.update(
+                Text.from_markup(
+                    f"[green]approved {len(approved)}[/]  "
+                    f"[yellow]hold {sum(1 for r in self.rows if r['decision'] == 'hold')}[/]  "
+                    f"[red]rejected {sum(1 for r in self.rows if r['decision'] == 'rejected')}[/]  "
+                    f"[cyan]E2E {sum(1 for r in self.rows if r['decision'] == 'needs_e2e')}[/]   "
+                    f"avg savings on approved: [bold]{avg:.0%}[/]   "
+                    f"[dim](a)pprove (r)eject (h)old (e)2e (s)ave (q)uit[/]"
+                )
+            )
 
         def action_save(self):
             decisions = {r["step_id"]: r["decision"] for r in self.rows}

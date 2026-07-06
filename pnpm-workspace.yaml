@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - skills/*
 allowBuilds:
   sharp: true
   unrs-resolver: true

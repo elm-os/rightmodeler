@@ -1,0 +1,12 @@
+{
+  "name": "@rightmodeler/cheaper-models-skill",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build": "mkdir -p build && uv run python -m compileall scripts && printf ok > build/skill-build.txt",
+    "format": "uv run ruff format scripts && prettier --write SKILL.md package.json reference/*.md",
+    "lint": "uv run ruff check scripts && prettier --check SKILL.md package.json reference/*.md",
+    "check": "pnpm run lint && uv run python -m compileall scripts && uv run python scripts/smoke.py",
+    "check-types": "uv run python -m compileall scripts"
+  }
+}

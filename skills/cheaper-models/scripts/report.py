@@ -6,10 +6,10 @@ TUI's approve/reject). Produces report.md and recommendations.json.
 CLI:
     python report.py results.json --out report.md
 """
+
 from __future__ import annotations
 
 import argparse
-import json
 import os
 
 from common import dump_json, load_json
@@ -33,12 +33,12 @@ def confidence(step: dict) -> str:
 def render(results: dict, decisions: dict | None) -> str:
     steps = results["steps"]
     decisions = decisions or {}
-    approved = [s for s in steps if decisions.get(s["step_id"]) == "approved" or
-                (decisions == {} and s.get("best"))]
 
     lines = ["# Cheaper Models — Recommendation Report", ""]
-    lines.append(f"_Generated {results.get('generated_at','')}, quality floor "
-                 f"{results.get('quality_floor')}._")
+    lines.append(
+        f"_Generated {results.get('generated_at', '')}, quality floor "
+        f"{results.get('quality_floor')}._"
+    )
     lines.append("")
     lines.append("## Executive summary")
     lines.append(f"- Steps analyzed: **{results['total_steps']}**")
@@ -47,13 +47,17 @@ def render(results: dict, decisions: dict | None) -> str:
     lines.append(f"- Abstained (high risk / no candidate): **{results['abstained']}**")
     avg_save = [s["best"].get("est_savings") or 0 for s in steps if s.get("best")]
     if avg_save:
-        lines.append(f"- Avg estimated per-step cost reduction on swappable steps: "
-                     f"**{sum(avg_save)/len(avg_save):.0%}**")
+        lines.append(
+            f"- Avg estimated per-step cost reduction on swappable steps: "
+            f"**{sum(avg_save) / len(avg_save):.0%}**"
+        )
     lines.append("")
 
     lines.append("## Recommended substitutions")
     lines.append("")
-    lines.append("| Step | Family | Current | → Recommended | Savings | Quality | Evidence | Confidence |")
+    lines.append(
+        "| Step | Family | Current | → Recommended | Savings | Quality | Evidence | Confidence |"
+    )
     lines.append("|---|---|---|---|---|---|---|---|")
     for s in steps:
         best = s.get("best")
@@ -69,8 +73,10 @@ def render(results: dict, decisions: dict | None) -> str:
     e2e = [s for s in steps if s.get("needs_e2e")]
     if e2e:
         lines.append("## Needs code-execution confirmation (cascade risk)")
-        lines.append("These steps are multi-step / tool-calling / looping. Single-shot replay is "
-                     "not trustworthy — confirm with `run_pipeline.py` before swapping.")
+        lines.append(
+            "These steps are multi-step / tool-calling / looping. Single-shot replay is "
+            "not trustworthy — confirm with `run_pipeline.py` before swapping."
+        )
         lines.append("")
         for s in e2e:
             cands = ", ".join(f"`{c['id']}`" for c in s.get("candidates", [])[:3])
@@ -86,11 +92,15 @@ def render(results: dict, decisions: dict | None) -> str:
         lines.append("")
 
     lines.append("## Methodology & caveats")
-    lines.append("- Judge is reference-guided, cross-family, position-swapped; tool calls get a "
-                 "deterministic pre-check. Verdicts: equivalent / minor_drift / divergent.")
+    lines.append(
+        "- Judge is reference-guided, cross-family, position-swapped; tool calls get a "
+        "deterministic pre-check. Verdicts: equivalent / minor_drift / divergent."
+    )
     lines.append("- Costs compared via OpenRouter `usage.cost` (never raw token counts).")
-    lines.append("- Savings are per-step estimates from blended token pricing; real savings depend "
-                 "on traffic mix. Confirm E2E-flagged steps before rollout.")
+    lines.append(
+        "- Savings are per-step estimates from blended token pricing; real savings depend "
+        "on traffic mix. Confirm E2E-flagged steps before rollout."
+    )
     return "\n".join(lines)
 
 
@@ -100,14 +110,20 @@ def machine_json(results: dict, decisions: dict | None) -> dict:
         best = s.get("best")
         if not best:
             continue
-        recs.append({
-            "step_id": s["step_id"], "family": s["family"],
-            "current_model": s["current_model"], "recommended_model": best["model"],
-            "estimated_savings": best.get("est_savings"), "quality_score": best["score"],
-            "verdict": best["verdict"], "evidence": s["evaluator"],
-            "confidence": confidence(s),
-            "decision": (decisions or {}).get(s["step_id"], "proposed"),
-        })
+        recs.append(
+            {
+                "step_id": s["step_id"],
+                "family": s["family"],
+                "current_model": s["current_model"],
+                "recommended_model": best["model"],
+                "estimated_savings": best.get("est_savings"),
+                "quality_score": best["score"],
+                "verdict": best["verdict"],
+                "evidence": s["evaluator"],
+                "confidence": confidence(s),
+                "decision": (decisions or {}).get(s["step_id"], "proposed"),
+            }
+        )
     return {"generated_at": results.get("generated_at"), "recommendations": recs}
 
 
