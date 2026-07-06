@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rightmodeler.dev/schemas/normalized-run.schema.json",
+  "$id": "https://rightmodeler.com/schemas/normalized-run.schema.json",
   "title": "Normalized Run Set",
   "type": "object",
   "required": ["version", "bundle_id", "runs"],

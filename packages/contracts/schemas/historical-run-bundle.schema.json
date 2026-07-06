@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rightmodeler.dev/schemas/historical-run-bundle.schema.json",
+  "$id": "https://rightmodeler.com/schemas/historical-run-bundle.schema.json",
   "title": "Historical Run Bundle",
   "type": "object",
   "required": ["version", "bundle_id", "runs"],

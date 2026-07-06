@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rightmodeler.dev/schemas/recommendation-report.schema.json",
+  "$id": "https://rightmodeler.com/schemas/recommendation-report.schema.json",
   "title": "Recommendation Report",
   "type": "object",
   "required": [
