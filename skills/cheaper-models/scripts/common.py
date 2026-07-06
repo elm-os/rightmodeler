@@ -1,4 +1,5 @@
 """Shared helpers for the cheaper-models skill scripts."""
+
 from __future__ import annotations
 
 import json

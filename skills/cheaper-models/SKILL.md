@@ -50,20 +50,23 @@ The premise (from the user):
 Run all commands below from the skill root (`cheaper-models`).
 
 ```bash
-python3 scripts/preflight.py
+uv sync
+uv run python scripts/preflight.py
 ```
 
 This verifies: `OPENROUTER_API_KEY` is set (and has credits), Python deps are
 installable, and prints what's missing. If the key is absent, ask the user to
-`export OPENROUTER_API_KEY=...` (or run `! export ...` in this session). Install
-deps into an isolated venv:
+`export OPENROUTER_API_KEY=...` (or run `! export ...` in this session).
+
+If `uv` is unavailable, fall back to a plain venv install:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-Use `.venv/bin/python` for every script call below.
+Use `uv run python` for every script call below, or `.venv/bin/python` if you
+used the fallback install.
 
 ## Workflow
 

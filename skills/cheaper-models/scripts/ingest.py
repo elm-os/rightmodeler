@@ -8,6 +8,7 @@ CLI:
     python ingest.py <path> --out normalized.json      # normalize
     python ingest.py --detect <path>                   # just print detected format
 """
+
 from __future__ import annotations
 
 import argparse
@@ -64,7 +65,9 @@ def detect_format(records: list[dict]) -> str:
     r = records[0]
     keys = set(r.keys())
     # Claude Code
-    if "parentUuid" in keys or (r.get("type") in {"user", "assistant"} and "message" in keys and "sessionId" in keys):
+    if "parentUuid" in keys or (
+        r.get("type") in {"user", "assistant"} and "message" in keys and "sessionId" in keys
+    ):
         return "claude_code"
     # Codex
     if keys >= {"timestamp", "type", "payload"} and isinstance(r.get("payload"), dict):
@@ -213,9 +216,15 @@ def adapt_codex(records: list[dict]) -> list[dict]:
                     name="message",
                     model=model,
                     provider=payload.get("model_provider"),
-                    input_messages=[{"role": payload.get("role", "assistant"),
-                                     "content": _content_to_text(payload.get("content"))}],
-                    output_text=_content_to_text(payload.get("content")) if payload.get("role") == "assistant" else None,
+                    input_messages=[
+                        {
+                            "role": payload.get("role", "assistant"),
+                            "content": _content_to_text(payload.get("content")),
+                        }
+                    ],
+                    output_text=_content_to_text(payload.get("content"))
+                    if payload.get("role") == "assistant"
+                    else None,
                     raw=rec,
                 )
             )
@@ -234,10 +243,14 @@ def adapt_codex(records: list[dict]) -> list[dict]:
                     kind="tool",
                     name=payload.get("name"),
                     model=model,
-                    tool_calls=[{
-                        "id": cid, "name": payload.get("name"), "arguments": args,
-                        "result": {"content": outputs.get(cid), "is_error": False},
-                    }],
+                    tool_calls=[
+                        {
+                            "id": cid,
+                            "name": payload.get("name"),
+                            "arguments": args,
+                            "result": {"content": outputs.get(cid), "is_error": False},
+                        }
+                    ],
                     raw=rec,
                 )
             )
@@ -262,8 +275,14 @@ def adapt_openai_jsonl(records: list[dict]) -> list[dict]:
                     args = json.loads(args)
                 except json.JSONDecodeError:
                     pass
-            tool_calls.append({"id": tc.get("id"), "name": fn.get("name"), "arguments": args,
-                               "result": {"content": None, "is_error": False}})
+            tool_calls.append(
+                {
+                    "id": tc.get("id"),
+                    "name": fn.get("name"),
+                    "arguments": args,
+                    "result": {"content": None, "is_error": False},
+                }
+            )
         usage = rec.get("usage") or resp.get("usage") or {}
         steps.append(
             _step(
@@ -273,15 +292,21 @@ def adapt_openai_jsonl(records: list[dict]) -> list[dict]:
                 model=rec.get("model") or resp.get("model"),
                 system_prompt=system,
                 input_messages=[m for m in messages if m.get("role") != "system"],
-                available_tools=[{"name": t.get("function", {}).get("name"),
-                                  "description": t.get("function", {}).get("description"),
-                                  "parameters_schema": t.get("function", {}).get("parameters")}
-                                 for t in rec.get("tools") or []],
+                available_tools=[
+                    {
+                        "name": t.get("function", {}).get("name"),
+                        "description": t.get("function", {}).get("description"),
+                        "parameters_schema": t.get("function", {}).get("parameters"),
+                    }
+                    for t in rec.get("tools") or []
+                ],
                 tool_calls=tool_calls,
                 output_text=out_msg.get("content"),
-                usage={"input_tokens": usage.get("prompt_tokens", 0),
-                       "output_tokens": usage.get("completion_tokens", 0),
-                       "total_tokens": usage.get("total_tokens", 0)},
+                usage={
+                    "input_tokens": usage.get("prompt_tokens", 0),
+                    "output_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                },
                 raw=rec,
             )
         )
@@ -297,7 +322,9 @@ def adapt_langsmith(records: list[dict]) -> list[dict]:
         meta = extra.get("metadata") or {}
         inputs = run.get("inputs") or {}
         outputs = run.get("outputs") or {}
-        usage = extra.get("token_usage") or (outputs.get("llm_output") or {}).get("token_usage") or {}
+        usage = (
+            extra.get("token_usage") or (outputs.get("llm_output") or {}).get("token_usage") or {}
+        )
         steps.append(
             _step(
                 order_ref[0],
@@ -305,17 +332,24 @@ def adapt_langsmith(records: list[dict]) -> list[dict]:
                 parent_id=run.get("parent_run_id"),
                 kind={"llm": "llm", "tool": "tool", "retriever": "retriever"}.get(rt, "chain"),
                 name=run.get("name", rt),
-                model=meta.get("ls_model_name") or (extra.get("invocation_params") or {}).get("model"),
-                input_messages=inputs.get("messages", []) if isinstance(inputs.get("messages"), list) else [],
+                model=meta.get("ls_model_name")
+                or (extra.get("invocation_params") or {}).get("model"),
+                input_messages=inputs.get("messages", [])
+                if isinstance(inputs.get("messages"), list)
+                else [],
                 output_text=_content_to_text(outputs.get("output") or outputs.get("generations")),
-                usage={"input_tokens": usage.get("prompt_tokens", 0),
-                       "output_tokens": usage.get("completion_tokens", 0),
-                       "total_tokens": usage.get("total_tokens", 0)},
-                success={"status": "error" if run.get("error") else "ok",
-                         "error": run.get("error"),
-                         "accepted": not run.get("error"),
-                         "scores": run.get("feedback_stats") or {},
-                         "source_signal": "feedback_stats"},
+                usage={
+                    "input_tokens": usage.get("prompt_tokens", 0),
+                    "output_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                },
+                success={
+                    "status": "error" if run.get("error") else "ok",
+                    "error": run.get("error"),
+                    "accepted": not run.get("error"),
+                    "scores": run.get("feedback_stats") or {},
+                    "source_signal": "feedback_stats",
+                },
                 raw=run,
             )
         )
@@ -342,16 +376,20 @@ def adapt_spans(records: list[dict], flavor: str) -> list[dict]:
             model = attrs.get("gen_ai.request.model") or attrs.get("gen_ai.response.model")
             in_msgs = attrs.get("gen_ai.input.messages") or attrs.get("gen_ai.prompt")
             out_msgs = attrs.get("gen_ai.output.messages") or attrs.get("gen_ai.completion")
-            usage = {"input_tokens": attrs.get("gen_ai.usage.input_tokens", 0),
-                     "output_tokens": attrs.get("gen_ai.usage.output_tokens", 0)}
+            usage = {
+                "input_tokens": attrs.get("gen_ai.usage.input_tokens", 0),
+                "output_tokens": attrs.get("gen_ai.usage.output_tokens", 0),
+            }
             system = attrs.get("gen_ai.system_instructions")
         else:  # openinference
             model = attrs.get("llm.model_name")
             in_msgs = _collect_indexed(attrs, "llm.input_messages")
             out_msgs = _collect_indexed(attrs, "llm.output_messages")
-            usage = {"input_tokens": attrs.get("llm.token_count.prompt", 0),
-                     "output_tokens": attrs.get("llm.token_count.completion", 0),
-                     "total_tokens": attrs.get("llm.token_count.total", 0)}
+            usage = {
+                "input_tokens": attrs.get("llm.token_count.prompt", 0),
+                "output_tokens": attrs.get("llm.token_count.completion", 0),
+                "total_tokens": attrs.get("llm.token_count.total", 0),
+            }
             system = None
         if isinstance(in_msgs, str):
             try:
@@ -379,7 +417,7 @@ def _collect_indexed(attrs: dict, prefix: str) -> list[dict]:
     for k, v in attrs.items():
         if not k.startswith(prefix + "."):
             continue
-        rest = k[len(prefix) + 1:]
+        rest = k[len(prefix) + 1 :]
         try:
             idx = int(rest.split(".", 1)[0])
         except ValueError:

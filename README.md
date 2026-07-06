@@ -24,6 +24,8 @@ work.
 ├── docs/           # Product and project docs
 ├── packages/
 │   └── contracts/  # Shared JSON Schema contracts
+├── skills/
+│   └── cheaper-models/  # Publishable agent skill source
 ├── package.json
 ├── pnpm-workspace.yaml
 └── turbo.json
@@ -52,7 +54,15 @@ uv sync
 cd ../..
 ```
 
-3. Run the standard repo checks:
+3. Sync the skill environment if you are working on `cheaper-models`:
+
+```bash
+cd skills/cheaper-models
+uv sync
+cd ../..
+```
+
+4. Run the standard repo checks:
 
 ```bash
 pnpm format
@@ -87,6 +97,7 @@ pnpm --filter ./apps/pipeline run smoke
 pnpm --filter ./apps/pipeline run ingest -- --input .cheaper-models/input/foo.json
 pnpm --filter ./apps/pipeline run analyze -- --input .cheaper-models/input/foo.json
 pnpm --filter ./apps/pipeline run report -- --analysis-input .cheaper-models/analysis/task-families.json
+pnpm --filter ./skills/cheaper-models run check
 ```
 
 ### 3. Native Python commands
@@ -135,6 +146,20 @@ pnpm --filter ./apps/pipeline run smoke
 pnpm --filter ./apps/pipeline run ingest -- --input .cheaper-models/input/source.json
 pnpm --filter ./apps/pipeline run analyze -- --input .cheaper-models/input/historical-run-bundle.json
 pnpm --filter ./apps/pipeline run report -- --analysis-input .cheaper-models/analysis/task-families.json
+```
+
+### `skills/cheaper-models`
+
+The cheaper-models skill is the canonical publishable source for agent installs.
+Do not edit generated copies under `.agents/skills/` or `.claude/skills/`.
+
+Useful commands:
+
+```bash
+pnpm --filter ./skills/cheaper-models run format
+pnpm --filter ./skills/cheaper-models run check
+pnpm dlx skills add . --skill cheaper-models --agent codex --yes --copy
+pnpm dlx skills add . --skill cheaper-models --agent claude-code --yes --copy
 ```
 
 ## Shared Contracts
@@ -196,6 +221,7 @@ pnpm check
 - Put product and design docs in `docs/`
 - Prefer root `pnpm` commands for shared validation
 - Keep app-specific runtime commands inside the owning app
+- Edit `skills/cheaper-models` as the source of truth for the skill
 
 ### When adding scripts
 

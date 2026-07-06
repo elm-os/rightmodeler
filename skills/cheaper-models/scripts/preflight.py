@@ -1,11 +1,10 @@
 """Check the environment before running the skill. Prints a readiness report."""
+
 from __future__ import annotations
 
 import os
 import shutil
 import sys
-
-from common import eprint
 
 
 def main() -> int:
@@ -30,8 +29,12 @@ def main() -> int:
             print(f"[MISSING] {mod} — pip install -r requirements.txt")
             ok = False
 
-    print(f"[info] git: {'found' if shutil.which('git') else 'NOT FOUND (needed for sandboxed E2E replay)'}")
-    print(f"[info] docker: {'found' if shutil.which('docker') else 'absent (optional, stronger sandbox)'}")
+    print(
+        f"[info] git: {'found' if shutil.which('git') else 'NOT FOUND (needed for sandboxed E2E replay)'}"
+    )
+    print(
+        f"[info] docker: {'found' if shutil.which('docker') else 'absent (optional, stronger sandbox)'}"
+    )
 
     # live credit check
     if key:
@@ -40,7 +43,9 @@ def main() -> int:
 
             info = OpenRouter(key).key_info()
             rem = info.get("limit_remaining")
-            print(f"[ok] OpenRouter reachable. credits remaining: {rem if rem is not None else 'unlimited/unknown'}")
+            print(
+                f"[ok] OpenRouter reachable. credits remaining: {rem if rem is not None else 'unlimited/unknown'}"
+            )
             if info.get("is_free_tier"):
                 print("[warn] key is free-tier — expect rate limits; avoid for large fleets")
         except Exception as e:  # noqa: BLE001

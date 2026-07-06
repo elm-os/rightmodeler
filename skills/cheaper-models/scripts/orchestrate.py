@@ -13,6 +13,7 @@ CLI:
     python orchestrate.py pipeline.json --normalized normalized.json \
         --quality-floor 0.9 --candidates auto --top 4 --out results.json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,7 +38,7 @@ def _task_text(step: dict) -> str:
     if step.get("system_prompt"):
         parts.append(f"[system] {step['system_prompt'][:1000]}")
     for m in (step.get("input_messages") or [])[-4:]:
-        parts.append(f"[{m.get('role','user')}] {str(m.get('content',''))[:1000]}")
+        parts.append(f"[{m.get('role', 'user')}] {str(m.get('content', ''))[:1000]}")
     return "\n".join(parts) or step.get("name", "task")
 
 
@@ -52,8 +53,9 @@ def evaluate_candidate(orr, step, cand, floor, runs) -> dict:
         candidate=rep.get("text") or "",
         candidate_family=model_family(cand["id"]),
         reference_family=model_family(step.get("model")),
-        reference_tool_calls=[{"name": c["name"], "arguments": c["arguments"]}
-                              for c in step.get("tool_calls") or []],
+        reference_tool_calls=[
+            {"name": c["name"], "arguments": c["arguments"]} for c in step.get("tool_calls") or []
+        ],
         candidate_tool_calls=rep.get("tool_calls") or [],
     )
     return {
@@ -72,8 +74,9 @@ def evaluate_candidate(orr, step, cand, floor, runs) -> dict:
     }
 
 
-def run(pipeline: dict, normalized: dict, floor: float, top: int,
-        allow, deny, runs, max_workers: int) -> dict:
+def run(
+    pipeline: dict, normalized: dict, floor: float, top: int, allow, deny, runs, max_workers: int
+) -> dict:
     orr = OpenRouter()
     steps_by_id = {s["step_id"]: s for s in normalized["steps"]}
     results = []
@@ -82,22 +85,31 @@ def run(pipeline: dict, normalized: dict, floor: float, top: int,
         sid = pstep["step_id"]
         step = steps_by_id.get(sid, {})
         entry = {
-            "step_id": sid, "name": pstep.get("name"), "family": pstep.get("family"),
-            "current_model": pstep.get("model"), "replay_mode": pstep.get("replay_mode"),
-            "evaluator": pstep.get("evaluator"), "risk": pstep.get("risk"),
-            "candidates": [], "best": None, "needs_e2e": pstep["replay_mode"] == "e2e",
+            "step_id": sid,
+            "name": pstep.get("name"),
+            "family": pstep.get("family"),
+            "current_model": pstep.get("model"),
+            "replay_mode": pstep.get("replay_mode"),
+            "evaluator": pstep.get("evaluator"),
+            "risk": pstep.get("risk"),
+            "candidates": [],
+            "best": None,
+            "needs_e2e": pstep["replay_mode"] == "e2e",
             "abstain": pstep.get("risk") == "high",
         }
 
         if entry["abstain"]:
-            entry["abstain_reason"] = "high-risk task family — recommend no swap without human review"
+            entry["abstain_reason"] = (
+                "high-risk task family — recommend no swap without human review"
+            )
             results.append(entry)
             eprint(f"[abstain] {sid} ({pstep.get('name')}) high-risk")
             continue
 
         needs_tools = bool(step.get("tool_calls") or step.get("available_tools"))
-        cands = shortlist(orr, pstep.get("model") or "", need_tools=needs_tools,
-                          top=top, allow=allow, deny=deny)
+        cands = shortlist(
+            orr, pstep.get("model") or "", need_tools=needs_tools, top=top, allow=allow, deny=deny
+        )
         if not cands:
             entry["abstain_reason"] = "no cheaper candidate with required capabilities"
             results.append(entry)
@@ -106,9 +118,13 @@ def run(pipeline: dict, normalized: dict, floor: float, top: int,
         # e2e steps: don't single-shot replay (misleading). Shortlist only; flag for E2E.
         if entry["needs_e2e"]:
             entry["candidates"] = cands
-            entry["note"] = "multi-step/tool/loop — confirm via run_pipeline.py E2E replay before swapping"
+            entry["note"] = (
+                "multi-step/tool/loop — confirm via run_pipeline.py E2E replay before swapping"
+            )
             results.append(entry)
-            eprint(f"[e2e]     {sid} ({pstep.get('name')}) shortlisted {len(cands)} for E2E confirm")
+            eprint(
+                f"[e2e]     {sid} ({pstep.get('name')}) shortlisted {len(cands)} for E2E confirm"
+            )
             continue
 
         # single-shot: replay + judge each candidate in parallel
@@ -154,16 +170,26 @@ def main() -> int:
     ap.add_argument("--out")
     args = ap.parse_args()
 
-    result = run(load_json(args.pipeline), load_json(args.normalized),
-                 args.quality_floor, args.top, args.allow, args.deny,
-                 args.runs, args.max_workers)
-    eprint(f"\nswappable: {result['swappable']}/{result['total_steps']}  "
-           f"needs-e2e: {result['needs_e2e']}  abstained: {result['abstained']}")
+    result = run(
+        load_json(args.pipeline),
+        load_json(args.normalized),
+        args.quality_floor,
+        args.top,
+        args.allow,
+        args.deny,
+        args.runs,
+        args.max_workers,
+    )
+    eprint(
+        f"\nswappable: {result['swappable']}/{result['total_steps']}  "
+        f"needs-e2e: {result['needs_e2e']}  abstained: {result['abstained']}"
+    )
     if args.out:
         dump_json(result, args.out)
         eprint(f"wrote {args.out}")
     else:
         import json
+
         print(json.dumps(result, indent=2, default=str))
     return 0
 

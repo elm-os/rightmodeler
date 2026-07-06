@@ -8,6 +8,7 @@ A candidate qualifies if it:
 CLI:
     python shortlist.py --current openai/gpt-4o --need-tools --min-context 32000 --top 5
 """
+
 from __future__ import annotations
 
 import argparse
