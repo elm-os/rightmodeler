@@ -34,8 +34,8 @@ class OpenRouter:
             timeout=timeout,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
-                "HTTP-Referer": "https://github.com/cheaper-models",
-                "X-Title": "cheaper-models",
+                "HTTP-Referer": "https://github.com/elm-os/rightmodeler",
+                "X-Title": "rightmodeler",
             },
         )
         self._catalog: list[dict] | None = None

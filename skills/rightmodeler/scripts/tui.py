@@ -85,7 +85,7 @@ def run_rich_fallback(results: dict, rows: list[dict]) -> int:
     from rich.table import Table
 
     c = Console()
-    t = Table(title="cheaper-models — recommendations (read-only; no TTY for interactive TUI)")
+    t = Table(title="rightmodeler - recommendations (read-only; no TTY for interactive TUI)")
     for col in ("Step", "Family", "Current", "→ Candidate", "Save", "Quality", "Evidence", "Flag"):
         t.add_column(col, overflow="fold")
     for r in rows:
@@ -150,7 +150,7 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
             yield Footer()
 
         def on_mount(self):
-            self.title = "cheaper-models · per-step approval"
+            self.title = "rightmodeler · per-step approval"
             table = self.query_one(DataTable)
             table.add_columns(
                 "", "Step", "Family", "Current → Candidate", "Save", "Quality", "Evidence", "Flag"

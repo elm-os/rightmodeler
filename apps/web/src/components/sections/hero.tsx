@@ -2,7 +2,7 @@
 
 // The hero — a thesis, not a claim. The most characteristic artifact in rightmodeler's world is
 // the per-step approval TUI where a human ratifies each downgrade against evidence, so THAT is the
-// hero: a faithful, monochrome `cheaper-models · per-step approval` ledger on an opaque warm-sand
+// hero: a faithful, monochrome `rightmodeler · per-step approval` ledger on an opaque warm-sand
 // window, with the HeroGradient reduced to paper matting in the gutters. One bold move only — an
 // ink "reading head" caret that walks the pipeline as the ledger fills and comes to rest on the
 // abstain row (Step 5), making the product's most honest behaviour ("it tells you when NOT to
@@ -182,7 +182,7 @@ export function Hero() {
 
               {/* CTA row — the trivial first step (a copy-able command) plus a quiet repo link. */}
               <div className="mt-8 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
-                <CopyCommand command="uv run python -m pipeline ingest" />
+                <CopyCommand command="npx skills add elm-os/rightmodeler --skill rightmodeler" />
                 <a
                   href="https://github.com/elm-os/rightmodeler"
                   target="_blank"
@@ -227,7 +227,7 @@ function ApprovalTable() {
           quality floor, which explains why Row 2 at 0.88 is held rather than approved. */}
       <div className="flex items-center justify-between gap-4 border-b border-ash-border px-4 py-3">
         <span className="min-w-0 truncate font-mono text-caption text-driftwood">
-          cheaper-models · per-step approval
+          rightmodeler · per-step approval
         </span>
         <span className="shrink-0 font-mono text-caption text-fog">
           5 steps · quality floor 0.90

@@ -1,4 +1,6 @@
+.rightmodeler/
 .cheaper-models/
+.agents/skills/rightmodeler/
 .agents/skills/cheaper-models/
 .next/
 .turbo/
@@ -10,8 +12,9 @@ coverage/
 .ruff_cache/
 .venv/
 apps/pipeline/.venv/
+.claude/skills/rightmodeler/
 .claude/skills/cheaper-models/
-skills/cheaper-models/.venv/
+skills/rightmodeler/.venv/
 __pycache__/
 *.pyc
 .DS_Store

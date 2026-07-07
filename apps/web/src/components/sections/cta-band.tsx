@@ -38,7 +38,7 @@ export function CtaBand() {
             className="mt-8 flex w-full flex-col items-start gap-4"
           >
             <CopyCommand
-              command="uv run python -m pipeline ingest"
+              command="npx skills add elm-os/rightmodeler --skill rightmodeler"
               className="w-full sm:w-auto"
             />
 
