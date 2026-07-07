@@ -1,4 +1,4 @@
-"""Shared helpers for the cheaper-models skill scripts."""
+"""Shared helpers for the rightmodeler skill scripts."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-WORKDIR = Path(".cheaper-models")
+WORKDIR = Path(".rightmodeler")
+ENV_KEY = "OPENROUTER_API_KEY"
 
 
 def eprint(*args: Any) -> None:
@@ -40,10 +41,48 @@ def read_jsonl(path: str | Path) -> list[dict]:
     return out
 
 
+def _parse_env_value(raw: str) -> str:
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
+def resolve_openrouter_key() -> tuple[str | None, str | None]:
+    key = os.environ.get(ENV_KEY)
+    if key:
+        return key, "environment"
+
+    for base in (Path.cwd().resolve(), *Path.cwd().resolve().parents):
+        env_path = base / ".env"
+        if not env_path.is_file():
+            continue
+        for line in env_path.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.startswith("export "):
+                stripped = stripped[7:].strip()
+            if "=" not in stripped:
+                continue
+            name, raw = stripped.split("=", 1)
+            if name.strip() != ENV_KEY:
+                continue
+            key = _parse_env_value(raw)
+            if not key:
+                break
+            os.environ[ENV_KEY] = key
+            return key, str(env_path)
+    return None, None
+
+
 def require_api_key() -> str:
-    key = os.environ.get("OPENROUTER_API_KEY")
+    key, _ = resolve_openrouter_key()
     if not key:
-        eprint("ERROR: OPENROUTER_API_KEY is not set. `export OPENROUTER_API_KEY=...`")
+        eprint(
+            "ERROR: OPENROUTER_API_KEY is not set. Add `OPENROUTER_API_KEY=...` "
+            "to your project root `.env` or export it before running rightmodeler."
+        )
         sys.exit(2)
     return key
 

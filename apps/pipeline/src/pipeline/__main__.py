@@ -10,7 +10,7 @@ from jsonschema import validate
 from pipeline.evaluate import evaluate
 
 ROOT = Path(__file__).resolve().parents[4]
-ARTIFACTS = ROOT / ".cheaper-models"
+ARTIFACTS = ROOT / ".rightmodeler"
 CONTRACTS = ROOT / "packages" / "contracts" / "schemas"
 
 

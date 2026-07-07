@@ -1,5 +1,5 @@
 ---
-name: cheaper-models
+name: rightmodeler
 description: >-
   Find where an agent pipeline can swap frontier models for cheaper ones without
   losing quality. Ingests the user's agent trace logs, replays successful steps
@@ -12,7 +12,7 @@ description: >-
   Claude Code, raw SDK) for cost optimization.
 ---
 
-# Cheaper Models
+# rightmodeler
 
 Prove, from the user's _own_ runs, where a cheaper model can replace an expensive
 one without hurting task quality — then hand them an approved swap plan and the
@@ -47,7 +47,7 @@ The premise (from the user):
 
 ## Prerequisites (check first)
 
-Run all commands below from the skill root (`cheaper-models`).
+Run all commands below from the skill root (`rightmodeler`).
 
 ```bash
 uv sync
@@ -55,8 +55,16 @@ uv run python scripts/preflight.py
 ```
 
 This verifies: `OPENROUTER_API_KEY` is set (and has credits), Python deps are
-installable, and prints what's missing. If the key is absent, ask the user to
-`export OPENROUTER_API_KEY=...` (or run `! export ...` in this session).
+installable, and prints what's missing. First look for `OPENROUTER_API_KEY` in the
+process environment, then in the user's project root `.env`. If the key is still
+absent, ask the user to add:
+
+```env
+OPENROUTER_API_KEY=...
+```
+
+to their project root `.env` or `export OPENROUTER_API_KEY=...` in this session,
+then continue after they reply instead of making them invoke the skill again.
 
 If `uv` is unavailable, fall back to a plain venv install:
 
@@ -85,6 +93,9 @@ Establish the baseline. Confirm with the user (ask, don't assume):
 - **Constraints**: model allowlist/denylist, quality floor, providers to avoid,
   high-risk task families to always abstain on.
 
+Only ask for what is missing. If the API key, trace path, or codebase path is
+already available, keep going in the same run.
+
 The uploaded traces should be runs on a **high-quality model** (that's the whole
 point — we're trying to match a good baseline with a cheaper model). If the traces
 are already on a cheap/mixed model, warn the user the baseline is weak.
@@ -93,9 +104,9 @@ are already on a cheap/mixed model, warn the user the baseline is weak.
 
 ```bash
 .venv/bin/python scripts/ingest.py \
-  <traces-path> --out .cheaper-models/normalized.json
+  <traces-path> --out .rightmodeler/normalized.json
 .venv/bin/python scripts/analyze.py \
-  .cheaper-models/normalized.json --codebase <dir> --out .cheaper-models/pipeline.json
+  .rightmodeler/normalized.json --codebase <dir> --out .rightmodeler/pipeline.json
 ```
 
 `analyze.py` produces the pipeline map: ordered steps, the model used per step,
@@ -110,10 +121,10 @@ For each step/task family, shortlist candidate cheaper models and test them:
 
 ```bash
 .venv/bin/python scripts/orchestrate.py \
-  .cheaper-models/pipeline.json \
+  .rightmodeler/pipeline.json \
   --quality-floor 0.9 \
   --candidates auto \
-  --out .cheaper-models/results.json
+  --out .rightmodeler/results.json
 ```
 
 `orchestrate.py` runs the two-stage strategy the user chose:
@@ -139,15 +150,15 @@ Launch the interactive per-step approval TUI, then export:
 
 ```bash
 .venv/bin/python scripts/tui.py \
-  .cheaper-models/results.json
+  .rightmodeler/results.json
 .venv/bin/python scripts/report.py \
-  .cheaper-models/results.json --out .cheaper-models/report.md
+  .rightmodeler/results.json --out .rightmodeler/report.md
 ```
 
 The TUI shows, per step: current model, best cheaper candidate, cost delta, quality
 score, evidence type, confidence, and a cascade-risk flag — and lets the user
 **approve / reject / hold** each swap. Approved swaps are written to
-`.cheaper-models/decisions.json`; `report.py` renders the final Markdown report +
+`.rightmodeler/decisions.json`; `report.py` renders the final Markdown report +
 machine-readable JSON (total savings, per-family recommendations, risks, abstentions).
 
 ## Guardrails & failure modes
@@ -171,7 +182,7 @@ machine-readable JSON (total savings, per-family recommendations, risks, abstent
   `run_pipeline`, `orchestrate`, `tui`, `report`.
 - `reference/` — deep docs loaded on demand: `trace-formats.md`, `replay.md`,
   `judge.md`, `openrouter.md`.
-- Working output lives under `.cheaper-models/` in the user's project (gitignore it).
+- Working output lives under `.rightmodeler/` in the user's project (gitignore it).
 
 Full product context (task-family detection, confidence bands, non-goals) is in the
 repo's `PRD.md` — consult it when scoping recommendations.

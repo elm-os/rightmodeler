@@ -131,7 +131,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("results")
     ap.add_argument("--decisions")
-    ap.add_argument("--out", default=".cheaper-models/report.md")
+    ap.add_argument("--out", default=".rightmodeler/report.md")
     args = ap.parse_args()
 
     results = load_json(args.results)

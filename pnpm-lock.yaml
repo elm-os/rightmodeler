@@ -65,7 +65,7 @@ importers:
 
   packages/contracts: {}
 
-  skills/cheaper-models: {}
+  skills/rightmodeler: {}
 
 packages:
 

@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import sys
+
+from common import resolve_openrouter_key
 
 
 def main() -> int:
     ok = True
-    print("cheaper-models preflight")
+    print("rightmodeler preflight")
     print("-" * 40)
 
-    key = os.environ.get("OPENROUTER_API_KEY")
+    key, source = resolve_openrouter_key()
     if key:
-        print(f"[ok] OPENROUTER_API_KEY set (…{key[-4:]})")
+        where = "environment" if source == "environment" else source
+        print(f"[ok] OPENROUTER_API_KEY loaded from {where} (…{key[-4:]})")
     else:
-        print("[MISSING] OPENROUTER_API_KEY — export it or run `! export OPENROUTER_API_KEY=...`")
+        print(
+            "[MISSING] OPENROUTER_API_KEY — add `OPENROUTER_API_KEY=...` to your "
+            "project root `.env` or export it in this session"
+        )
         ok = False
 
     print(f"[info] python {sys.version.split()[0]}")
