@@ -1,5 +1,5 @@
 // ExampleRecommendation — the payoff artifact. One task family's full recommendation, rendered
-// as the file cheaper-models actually emits: a warm-sand report on the parchment canvas, mono for
+// as the file rightmodeler actually emits: a warm-sand report on the parchment canvas, mono for
 // machine data, sans for human advice, monochrome throughout. Signature: a discrete-node evidence
 // ladder that makes "medium confidence" legible as provenance (the top rung stays n/a, so it's
 // medium not high; abstain is drawn-but-not-taken). Every figure is an illustrative example.
@@ -63,7 +63,7 @@ export function ExampleRecommendation() {
             {/* Header bar — machine identity + persistent honesty label */}
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-6 py-4 sm:px-8">
               <p className="font-mono text-caption text-driftwood">
-                cheaper-models · recommendation · pr_summary
+                rightmodeler · recommendation · pr_summary
               </p>
               <p className="font-mono text-caption text-fog">
                 [ illustrative example ]
@@ -257,7 +257,7 @@ export function ExampleRecommendation() {
             {/* Footer — report-not-router, from your own runs */}
             <div className="px-6 py-4 sm:px-8">
               <p className="font-mono text-caption text-fog">
-                cheaper-models — generated from your own runs, not benchmarks. A
+                rightmodeler - generated from your own runs, not benchmarks. A
                 report, not a router: every swap waits for your approval.
               </p>
             </div>

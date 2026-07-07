@@ -1,11 +1,34 @@
 from __future__ import annotations
 
+import os
+import tempfile
+from pathlib import Path
+
 from analyze import analyze
+from common import resolve_openrouter_key
 from ingest import detect_format
 from report import render
 
 
 def main():
+    previous_key = os.environ.pop("OPENROUTER_API_KEY", None)
+    original_cwd = Path.cwd()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            skill_root = root / ".agents" / "skills" / "rightmodeler"
+            skill_root.mkdir(parents=True)
+            (root / ".env").write_text('OPENROUTER_API_KEY="smoke-key"\n')
+            os.chdir(skill_root)
+            key, source = resolve_openrouter_key()
+            assert key == "smoke-key", key
+            assert Path(source).resolve() == (root / ".env").resolve(), source
+    finally:
+        os.chdir(original_cwd)
+        os.environ.pop("OPENROUTER_API_KEY", None)
+        if previous_key is not None:
+            os.environ["OPENROUTER_API_KEY"] = previous_key
+
     detected = detect_format(
         [{"timestamp": "2026-01-01T00:00:00Z", "type": "event", "payload": {"type": "message"}}]
     )

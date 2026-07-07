@@ -1,5 +1,5 @@
 {
-  "name": "@rightmodeler/cheaper-models-skill",
+  "name": "@rightmodeler/rightmodeler-skill",
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "scripts": {
