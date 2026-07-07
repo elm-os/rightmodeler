@@ -3,8 +3,6 @@
 rightmodeler proves, from your own agent traces, where a cheaper model can replace
 an expensive one without breaking quality.
 
-Site: [rightmodeler.com](https://www.rightmodeler.com)
-
 ## Install the skill
 
 ```bash
