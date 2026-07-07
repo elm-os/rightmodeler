@@ -69,7 +69,7 @@ const ROWS: LedgerRow[] = [
     key: "tool_agent",
     glyph: "⚙",
     status: "pending",
-    srStatus: "Pending — cascade risk",
+    srStatus: "Pending, cascade risk",
     step: "2",
     family: "tool_agent",
     from: "claude-opus-4",
@@ -161,7 +161,7 @@ export function Hero() {
               <p className="mt-6 max-w-2xl text-subheading text-driftwood">
                 rightmodeler replays your real agent traces through cheaper
                 models, judges each output against what you already shipped, and
-                shows exactly where you can cut cost — with evidence and
+                shows exactly where you can cut cost, with evidence and
                 confidence on every call.
               </p>
 
@@ -175,7 +175,7 @@ export function Hero() {
                   className="font-display text-heading text-midnight-ink sm:text-heading-lg"
                 />
                 <p className="mt-1.5 font-mono text-caption text-fog">
-                  cost reduction · PR summary · medium confidence — illustrative
+                  cost reduction · PR summary · medium confidence · illustrative
                   example
                 </p>
               </div>
@@ -201,7 +201,7 @@ export function Hero() {
           <div className="mt-14 sm:mt-16">
             <div className="mb-3 flex justify-end">
               <span className="font-mono text-caption text-fog">
-                Illustrative — not measured results
+                Illustrative, not measured results
               </span>
             </div>
             <ApprovalTable />

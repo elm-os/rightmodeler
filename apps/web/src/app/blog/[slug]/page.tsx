@@ -32,7 +32,7 @@ export async function generateMetadata({
   // Keep the brand in the <title> exactly once, even if a headline already contains it.
   const branded = meta.title.toLowerCase().includes(SITE_NAME.toLowerCase())
     ? meta.title
-    : `${meta.title} — ${SITE_NAME}`;
+    : `${meta.title} · ${SITE_NAME}`;
 
   return {
     title: { absolute: branded },
