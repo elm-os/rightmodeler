@@ -57,7 +57,7 @@ export function Footer() {
             measured savings.
           </p>
           <p className="font-mono text-caption text-fog">
-            cheaper-models · © 2026 rightmodeler · an ELM-OS project
+            rightmodeler · © 2026 rightmodeler · an ELM-OS project
           </p>
         </Reveal>
       </div>

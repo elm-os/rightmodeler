@@ -112,7 +112,7 @@ export function HowItWorks() {
       substance: (
         <div className="font-mono text-[13px]">
           <div className="border-b border-ash-border px-1 pb-2 text-driftwood">
-            cheaper-models · per-step approval
+            rightmodeler · per-step approval
           </div>
           <div className="overflow-x-auto">
             <div className="min-w-max whitespace-nowrap pt-2">
