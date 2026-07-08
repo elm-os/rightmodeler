@@ -33,6 +33,49 @@ Run it on your own traces:
 
 Source: ${REPO_URL}`;
 
+// Marketing / SEO pages, listed so language models can discover and cite them alongside the posts.
+const PAGES: { path: string; title: string; description: string }[] = [
+  {
+    path: "/how-it-works",
+    title: "How it works",
+    description:
+      "Detect, prove, fix: how rightmodeler replays your traces through cheaper models, judges each output against what you already shipped, and applies the safe swaps.",
+  },
+  {
+    path: "/use-cases/reduce-llm-costs",
+    title: "Reduce LLM costs",
+    description:
+      "Cut your agent's model bill without guessing: prove which steps can move to cheaper models on your own traces.",
+  },
+  {
+    path: "/manifesto",
+    title: "Manifesto",
+    description:
+      "Prove it, don't guess: the case for evidence-backed model downgrading.",
+  },
+  {
+    path: "/glossary",
+    title: "Glossary",
+    description:
+      "Plain definitions for the model-downgrade vocabulary: quality floor, cascade risk, abstain, LLM-as-judge, and more.",
+  },
+  {
+    path: "/crucible",
+    title: "Crucible (coming soon)",
+    description:
+      "rightmodeler hosted and always-on: continuous, evidence-backed downgrades over MCP.",
+  },
+  {
+    path: "/about",
+    title: "About",
+    description: "What rightmodeler is and the mission behind it.",
+  },
+];
+
+const pageLinks = PAGES.map(
+  (page) => `- [${page.title}](${SITE_URL}${page.path}): ${page.description}`,
+).join("\n");
+
 // /llms.txt — curated index: H1, blockquote summary, a non-heading context line, then annotated
 // link sections. The reserved "## Optional" section points at the full-content file.
 export function buildLlmsTxt(): string {
@@ -53,6 +96,10 @@ ${SITE_NAME} is a developer tool from ELM-OS for teams running multi-agent LLM s
 
 - [${SITE_NAME}](${SITE_URL}): Home. What it does, how the evidence-backed downgrade report works, and the first command to run.
 - [GitHub repository](${REPO_URL}): Source code and the pipeline you run on your own traces.
+
+## Pages
+
+${pageLinks}
 
 ## Blog
 
@@ -81,6 +128,10 @@ export function buildLlmsFull(): string {
 Source: ${SITE_URL}
 
 ${OVERVIEW}
+
+## Pages
+
+${pageLinks}
 
 ---
 

@@ -21,14 +21,14 @@ export const metadata: Metadata = {
   alternates: { canonical: "/blog" },
   openGraph: {
     type: "website",
-    title: `Blog — ${SITE_NAME}`,
+    title: `Blog · ${SITE_NAME}`,
     description,
     url: `${SITE_URL}/blog`,
     siteName: SITE_NAME,
   },
   twitter: {
     card: "summary_large_image",
-    title: `Blog — ${SITE_NAME}`,
+    title: `Blog · ${SITE_NAME}`,
     description,
   },
 };
