@@ -19,6 +19,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
     images: [`${SITE_URL}${post.meta.hero.src}`],
   }));
 
+  // Static marketing / SEO pages. Priority ranks the core explainer highest; all share the site's
+  // freshness date since they're maintained alongside it.
+  const pageEntries: MetadataRoute.Sitemap = (
+    [
+      ["/how-it-works", 0.9],
+      ["/use-cases/reduce-llm-costs", 0.8],
+      ["/manifesto", 0.7],
+      ["/glossary", 0.7],
+      ["/crucible", 0.6],
+      ["/about", 0.6],
+    ] as const
+  ).map(([path, priority]) => ({
+    url: `${SITE_URL}${path}`,
+    lastModified: latest,
+    changeFrequency: "monthly",
+    priority,
+  }));
+
   return [
     {
       url: SITE_URL,
@@ -32,6 +50,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 0.7,
     },
+    ...pageEntries,
     ...postEntries,
   ];
 }

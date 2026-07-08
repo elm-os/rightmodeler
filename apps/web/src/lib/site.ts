@@ -10,6 +10,10 @@ export const SITE_AUTHOR = "The rightmodeler team";
 export const REPO_URL = "https://github.com/elm-os/rightmodeler";
 export const RUN_COMMAND = "uv run python -m pipeline ingest";
 
+// Public profiles — used for the About page links and the Organization `sameAs` (app/about/page.tsx).
+export const GITHUB_ORG_URL = "https://github.com/elm-os";
+export const LINKEDIN_URL = "https://www.linkedin.com/company/rightmodeler";
+
 // Format an ISO date (YYYY-MM-DD) as a readable byline date. Pinned to UTC so the day never drifts
 // across the reader's timezone.
 export function formatPostDate(iso: string): string {
