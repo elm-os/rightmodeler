@@ -33,9 +33,9 @@ const description =
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.rightmodeler.com"),
   title: {
-    default: "rightmodeler — prove which models you can safely downgrade",
-    // Child pages set a short title; this appends the brand (e.g. "Blog — rightmodeler").
-    template: "%s — rightmodeler",
+    default: "rightmodeler: prove which models you can safely downgrade",
+    // Child pages set a short title; this appends the brand (e.g. "Blog · rightmodeler").
+    template: "%s · rightmodeler",
   },
   description,
   alternates: {

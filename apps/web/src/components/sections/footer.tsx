@@ -4,8 +4,9 @@
 // Server component: it composes client primitives only.
 
 import Link from "next/link";
-import { GitHubIcon, LogoMark } from "@/components/icons";
+import { LogoMark } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
+import { SocialLinks } from "@/components/sections/social-links";
 
 const linkClass =
   "rounded-sm text-driftwood transition-colors duration-150 ease-out hover:text-midnight-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midnight-ink focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white";
@@ -19,7 +20,7 @@ export function Footer() {
             A recommendation report, not a runtime gateway.
           </h2>
           <p className="mt-5 max-w-md text-body text-driftwood">
-            Proven on your own traces — you decide what to swap, and when.
+            Proven on your own traces. You decide what to swap, and when.
           </p>
         </Reveal>
 
@@ -33,27 +34,36 @@ export function Footer() {
           </span>
           <nav
             aria-label="Footer"
-            className="flex items-center gap-6 text-body"
+            className="flex flex-wrap items-center gap-x-6 gap-y-3 text-body"
           >
+            <Link href="/how-it-works" className={linkClass}>
+              How it works
+            </Link>
+            <Link href="/use-cases/reduce-llm-costs" className={linkClass}>
+              Use cases
+            </Link>
+            <Link href="/manifesto" className={linkClass}>
+              Manifesto
+            </Link>
+            <Link href="/glossary" className={linkClass}>
+              Glossary
+            </Link>
+            <Link href="/crucible" className={linkClass}>
+              Crucible
+            </Link>
+            <Link href="/about" className={linkClass}>
+              About
+            </Link>
             <Link href="/blog" className={linkClass}>
               Blog
             </Link>
-            <a
-              href="https://github.com/elm-os/rightmodeler"
-              target="_blank"
-              rel="noreferrer"
-              className={`${linkClass} inline-flex items-center gap-1.5`}
-            >
-              <GitHubIcon size={16} />
-              GitHub
-              <span aria-hidden>↗</span>
-            </a>
+            <SocialLinks className="-ml-2" />
           </nav>
         </Reveal>
 
         <Reveal delay={0.14} className="mt-10 space-y-1.5">
           <p className="font-mono text-caption text-driftwood">
-            Every figure shown on this page is an illustrative example — not
+            Every figure shown on this page is an illustrative example, not
             measured savings.
           </p>
           <p className="font-mono text-caption text-fog">

@@ -14,7 +14,7 @@ const REPO_URL = "https://github.com/elm-os/rightmodeler";
 const RUN_COMMAND = "npx skills add elm-os/rightmodeler --skill rightmodeler";
 
 const NAV_CSS = `
-/* Monochrome keyboard focus — never a colored ring. */
+/* Monochrome keyboard focus, never a colored ring. */
 .rm-focus:focus-visible { outline: 2px solid var(--color-midnight-ink); outline-offset: 2px; }
 `;
 
@@ -31,7 +31,7 @@ export function Nav({ homeHref = "#top" }: { homeHref?: string }) {
       >
         <a
           href={homeHref}
-          aria-label="rightmodeler — home"
+          aria-label="rightmodeler, home"
           className="rm-focus inline-flex items-center gap-2 self-stretch text-midnight-ink"
         >
           <LogoMark height={18} />
@@ -39,6 +39,15 @@ export function Nav({ homeHref = "#top" }: { homeHref?: string }) {
         </a>
 
         <div className="flex items-center gap-6 sm:gap-8">
+          {/* The core explainer — hidden on the smallest screens so the mobile masthead stays quiet
+              (still reachable from the footer). */}
+          <Link
+            href="/how-it-works"
+            className="rm-focus hidden items-center text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink sm:inline-flex"
+          >
+            How it works
+          </Link>
+
           {/* Writing — the blog index. */}
           <Link
             href="/blog"
