@@ -62,14 +62,13 @@ function UsageMockup() {
     { step: "route", cost: "$1,180" },
     { step: "extract", cost: "$940" },
     { step: "summarize", cost: "$2,310" },
-    { step: "judge", cost: "$860" },
   ];
   return (
-    <div className="relative mx-5 -mb-12 mt-6 sm:mx-7">
+    <div className="relative mx-5 -mb-14 mt-4 sm:mx-6">
       <div
         className={`rounded-xl border border-ash-border bg-parchment-white ${MOCKUP_SHADOW}`}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-ash-border px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-ash-border px-4 py-2.5">
           <span className="flex min-w-0 items-center gap-2.5">
             <AvatarSeat />
             <span className="truncate font-sans text-[13px] font-medium text-midnight-ink">
@@ -84,7 +83,7 @@ function UsageMockup() {
           {rows.map((row) => (
             <div
               key={row.step}
-              className="flex items-baseline justify-between gap-3 px-4 py-2.5 font-mono text-[12px]"
+              className="flex items-baseline justify-between gap-3 px-4 py-2 font-mono text-[12px]"
             >
               <span className="min-w-0 truncate">
                 <span className="text-midnight-ink">{row.step}</span>
@@ -97,7 +96,7 @@ function UsageMockup() {
             </div>
           ))}
         </div>
-        <div className="flex items-baseline justify-between gap-3 border-t border-ash-border px-4 py-3">
+        <div className="flex items-baseline justify-between gap-3 border-t border-ash-border px-4 py-2.5">
           <span className="font-mono text-caption text-fog">month to date</span>
           <span className="font-sans text-[13px] font-medium text-midnight-ink tabular-nums">
             $5,290 and climbing
@@ -113,7 +112,7 @@ function UsageMockup() {
 // land on opposite branches.
 function FlowMockup() {
   return (
-    <div className="relative mx-2 mb-4 mt-4 sm:mx-4">
+    <div className="relative mx-auto mb-3 mt-2 w-full max-w-[380px] px-2">
       <svg
         viewBox="0 0 480 310"
         className="h-auto w-full"
@@ -306,9 +305,9 @@ function FlowMockup() {
 // right edge, so the ink button sits against the clip like the reference.
 function ReviewMockup() {
   return (
-    <div className="relative -mr-5 mb-6 ml-5 mt-6 sm:-mr-7 sm:ml-7">
+    <div className="relative -mr-5 mb-5 ml-5 mt-3 sm:-mr-6 sm:ml-6">
       <div
-        className={`rounded-xl border border-ash-border bg-parchment-white p-4 pr-10 sm:p-5 sm:pr-12 ${MOCKUP_SHADOW}`}
+        className={`rounded-xl border border-ash-border bg-parchment-white p-4 pr-9 sm:pr-10 ${MOCKUP_SHADOW}`}
       >
         <div className="flex items-center justify-between gap-3">
           <p className="font-sans text-[15px] font-medium text-midnight-ink">
@@ -333,8 +332,7 @@ function ReviewMockup() {
         </div>
 
         <p className="mt-3 font-sans text-[13px] text-driftwood">
-          Replays, scores, and confidence attached. Merge when you agree, close
-          when you don&rsquo;t.
+          Replays, scores, and confidence attached. The merge stays yours.
         </p>
 
         <div className="mt-4 flex items-center justify-end gap-2">
@@ -416,7 +414,7 @@ export default function ManifestoPage() {
             {CLAIMS.map((claim, i) => (
               <Reveal key={claim.title} delay={i * 0.06} className="h-full">
                 <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand">
-                  <div className="p-6 sm:p-7">
+                  <div className="p-5 sm:p-6">
                     <h2 className="font-sans text-heading-sm text-midnight-ink">
                       {claim.title}
                     </h2>
@@ -450,7 +448,7 @@ export default function ManifestoPage() {
                   <span className="flex size-11 items-center justify-center rounded-xl border border-ash-border bg-parchment-white text-driftwood">
                     <pillar.Icon size={20} />
                   </span>
-                  <h2 className="mt-14 font-sans text-heading-sm text-midnight-ink sm:mt-20">
+                  <h2 className="mt-10 font-sans text-heading-sm text-midnight-ink sm:mt-14">
                     {pillar.title}
                   </h2>
                   <p className="mt-2 max-w-sm text-body text-driftwood">
