@@ -43,42 +43,35 @@ export function AgentShowcase() {
       {/* ── The two feature panels: same size, equal-height columns on desktop. ── */}
       <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
         <Reveal className="h-full">
-          <div className="relative isolate flex h-full min-h-[30rem] flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand">
+          <div className="relative isolate flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand lg:aspect-square">
             {/* Grainy brand-gradient backdrop (decorative; the only place the accents live). */}
             <Image
-              src="/agent/grain.jpg"
+              src="/agent/showcase-grain.jpg"
               alt=""
               fill
               aria-hidden
               className="-z-10 object-cover object-left-bottom"
               sizes="(min-width: 1024px) 50vw, 100vw"
             />
-            {/* Legibility scrim for the caption band, fading up into the artifact. */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-44 bg-gradient-to-t from-midnight-ink/25 to-transparent"
-            />
-
             {/* The artifact — inset left so the grain shows as a sliver, flush to the top, and
                 bleeding off the right edge on desktop like a window onto a wider screen. */}
             <div className="ml-4 sm:ml-8 lg:-mr-16">
               <AgentPrCard />
             </div>
 
-            <div className="mt-auto max-w-md p-5 pt-12 sm:p-7">
-              <p className="font-mono text-caption uppercase text-parchment-white/85">
+            <div className="mt-auto max-w-lg p-4 pt-6 sm:p-5">
+              <p className="font-mono text-caption uppercase text-driftwood">
                 The deliverable
               </p>
-              <p className="mt-2 text-body text-parchment-white">
-                A one-line diff with the receipts attached, opened as a pull
-                request in your repo.
+              <p className="mt-1.5 text-body text-midnight-ink">
+                A one-line diff with the receipts attached.
               </p>
             </div>
           </div>
         </Reveal>
 
         <Reveal delay={0.06} className="h-full">
-          <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-4 sm:p-5">
+          <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-4 sm:p-5 lg:aspect-square">
             <div className="rounded-xl border border-ash-border bg-parchment-white p-5 sm:p-7">
               <p className="font-mono text-caption uppercase text-fog">TL;DR</p>
               <p className="mt-3 text-subheading text-driftwood">
@@ -92,7 +85,7 @@ export function AgentShowcase() {
               </p>
             </div>
 
-            <div className="mt-auto max-w-md p-1 pt-12 sm:p-2 sm:pt-16">
+            <div className="mt-auto max-w-md p-1 pt-10 sm:p-2">
               <p className="font-mono text-caption uppercase text-driftwood">
                 The loop
               </p>
@@ -109,11 +102,13 @@ export function AgentShowcase() {
       <div className="mt-4 grid gap-4 sm:mt-5 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
         {STEPS.map((step, i) => (
           <Reveal key={step.n} delay={i * 0.06} className="h-full">
-            <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-5 sm:p-6 lg:aspect-square lg:h-auto">
+            <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-5 sm:p-6 lg:aspect-square">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-ash-border bg-parchment-white font-mono text-body text-driftwood">
                 {step.n}
               </span>
-              <div className="mt-10 lg:mt-auto">
+              {/* Fixed offset from the chip (not bottom-anchored) so the four titles sit on the
+                  same line across the row regardless of body length. */}
+              <div className="mt-8 sm:mt-10">
                 <h3 className="font-sans text-heading-sm text-midnight-ink">
                   {step.name}
                 </h3>

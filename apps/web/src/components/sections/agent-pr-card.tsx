@@ -82,7 +82,7 @@ export function AgentPrCard() {
       viewport={{ once: true, margin: "-64px" }}
     >
       {/* Title bar — artifact name (left), honesty stamp (right). Same grammar as the hero ledger. */}
-      <div className="flex items-center justify-between gap-4 border-b border-ash-border px-4 py-3 sm:px-5">
+      <div className="flex items-center justify-between gap-4 border-b border-ash-border px-4 py-2">
         <span className="min-w-0 truncate font-mono text-caption text-driftwood">
           rightmodeler agent · pull request
         </span>
@@ -92,59 +92,37 @@ export function AgentPrCard() {
       </div>
 
       <div className="divide-y divide-ash-border">
-        {/* Branch + author line. */}
-        <motion.div
-          variants={block}
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-4 sm:px-5"
-        >
-          <span className="inline-flex items-center rounded-md border border-ash-border bg-parchment-white px-2.5 py-1 font-mono text-caption text-midnight-ink">
-            agent/swap-summarize-step
-          </span>
-          <span className="font-mono text-caption text-fog">
-            opened by rightmodeler-agent
-          </span>
-        </motion.div>
-
-        {/* PR title + one-line body. */}
-        <motion.div variants={block} className="px-4 py-4 sm:px-5">
-          <p className="font-sans text-heading-sm text-midnight-ink">
+        {/* PR title. */}
+        <motion.div variants={block} className="px-4 py-3">
+          <p className="font-sans text-body font-medium text-midnight-ink">
             swap: summarize step to gpt-5.4-mini
-          </p>
-          <p className="mt-1 text-body text-driftwood">
-            gpt-5.6 is doing work gpt-5.4-mini can hold. Evidence below; merging
-            is yours.
           </p>
         </motion.div>
 
         {/* Evidence rows — the case, before the verdict. */}
         <motion.div
           variants={block}
-          className="flex flex-col gap-y-2 px-4 py-4 sm:px-5"
+          className="flex flex-col gap-y-1.5 px-4 py-3"
         >
           <Row label="quality">
             <span className="text-midnight-ink">0.94</span> vs 0.95 shipped ·
-            floor 0.90
+            floor 0.90 · medium
           </Row>
           <Row label="p95 latency">
             <span className="text-midnight-ink">-38%</span> vs current
           </Row>
           <Row label="list price">
             <span className="text-midnight-ink">$5.00 → $0.75</span> in ·{" "}
-            <span className="text-midnight-ink">$30.00 → $4.50</span> out · per
-            1M tokens
+            <span className="text-midnight-ink">$30.00 → $4.50</span> out · /1M
           </Row>
-          <Row label="confidence">medium · judged, position-swapped</Row>
         </motion.div>
 
         {/* The diff itself — recessed mono slab, glyphs and ink only (no red/green, ever). */}
-        <motion.div variants={block} className="px-4 py-4 sm:px-5">
-          <div className="overflow-x-auto rounded-lg border border-ash-border bg-midnight-ink/5 p-4 font-mono text-[13px]">
+        <motion.div variants={block} className="px-4 py-3">
+          <div className="overflow-x-auto rounded-lg border border-ash-border bg-midnight-ink/5 p-2.5 font-mono text-[13px]">
             <div className="min-w-max">
               <p className="text-driftwood">steps/summarize.ts</p>
-              <p className="mt-2 whitespace-pre text-fog">
-                {'   step: "summarize",'}
-              </p>
-              <p className="whitespace-pre text-fog">
+              <p className="mt-1 whitespace-pre text-fog">
                 {'-  model: "gpt-5.6",'}
               </p>
               <p className="whitespace-pre text-midnight-ink">
@@ -154,21 +132,11 @@ export function AgentPrCard() {
           </div>
         </motion.div>
 
-        {/* Checks — what ran before this PR existed. */}
-        <motion.div
-          variants={block}
-          className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-4 sm:px-5"
-        >
-          <Check>replay: 214 traces</Check>
-          <Check>judge: pass</Check>
-          <Check>cascade: clear</Check>
-        </motion.div>
-
         {/* The verdict number — counts up only once it is actually in view. The invisible twin
             reserves the final width so the line never reflows as digits grow. */}
-        <motion.div variants={block} className="px-4 py-5 sm:px-5">
+        <motion.div variants={block} className="px-4 py-3">
           <div ref={numberRef}>
-            <span className="relative inline-block font-display text-heading text-midnight-ink sm:text-heading-lg">
+            <span className="relative inline-block font-display text-heading text-midnight-ink">
               <span aria-hidden className="invisible">
                 85%
               </span>
@@ -180,19 +148,18 @@ export function AgentPrCard() {
                 />
               )}
             </span>
-            <p className="mt-1.5 font-mono text-caption text-fog">
+            <p className="mt-1 font-mono text-caption text-fog">
               cheaper per token · gpt-5.6 to gpt-5.4-mini · list prices
             </p>
           </div>
         </motion.div>
       </div>
 
-      {/* Footer — the ethos, stated where the artifact ends. */}
-      <div className="border-t border-ash-border px-4 py-3 sm:px-5">
-        <p className="font-mono text-caption text-driftwood">
-          Every pull request ships with the evidence behind it. Merging stays
-          your call.
-        </p>
+      {/* Footer — the checks that ran before this PR existed. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-ash-border px-4 py-2">
+        <Check>replay: 214 traces</Check>
+        <Check>judge: pass</Check>
+        <Check>cascade: clear</Check>
       </div>
     </motion.article>
   );
