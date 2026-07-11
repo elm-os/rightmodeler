@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Lead, P, PullQuote } from "@/components/blog/prose";
 import { JsonLd } from "@/components/json-ld";
 import { Faq, type FaqItem } from "@/components/sections/faq";
 import { GithubButton } from "@/components/sections/github-button";
 import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
-import { Tldr } from "@/components/sections/tldr";
+import { Reveal } from "@/components/reveal";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
@@ -32,6 +31,236 @@ const FAQ: FaqItem[] = [
   },
 ];
 
+// ── Right-cell artifacts. The two code cards bookend the argument (every step at frontier price,
+// then the same file after the audit); the middle row is a hand-drawn SVG where the manifesto line
+// clears past the faded reasons teams actually switch. Monochrome throughout, all decorative.
+
+function CodeCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="h-full w-full rounded-2xl border border-ash-border bg-warm-sand p-6 sm:p-8">
+      <div className="space-y-1.5 font-mono text-[12px] sm:text-sm">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const Ln = ({ children }: { children?: React.ReactNode }) =>
+  children ? (
+    <div className="whitespace-pre text-driftwood">{children}</div>
+  ) : (
+    <div aria-hidden className="h-4" />
+  );
+const C = ({ children }: { children: React.ReactNode }) => (
+  <span className="text-fog">{children}</span>
+);
+const V = ({ children }: { children: React.ReactNode }) => (
+  <span className="text-midnight-ink">{children}</span>
+);
+
+function BeforeArtifact() {
+  return (
+    <CodeCard>
+      <Ln>
+        <C>{"// models.ts · before the audit"}</C>
+      </Ln>
+      <Ln />
+      <Ln>
+        {"route:      "}
+        <V>{'"gpt-5.6"'}</V>
+        {","}
+      </Ln>
+      <Ln>
+        {"extract:    "}
+        <V>{'"gpt-5.6"'}</V>
+        {","}
+      </Ln>
+      <Ln>
+        {"summarize:  "}
+        <V>{'"gpt-5.6"'}</V>
+        {","}
+      </Ln>
+      <Ln />
+      <Ln>
+        <C>{"// every step at frontier price"}</C>
+      </Ln>
+    </CodeCard>
+  );
+}
+
+function AfterArtifact() {
+  return (
+    <CodeCard>
+      <Ln>
+        <C>{"// models.ts · after the audit"}</C>
+      </Ln>
+      <Ln />
+      <Ln>
+        {"route:      "}
+        <V>{'"gpt-5.4-nano"'}</V>
+        {",  "}
+        <C>{"// 96% cheaper"}</C>
+      </Ln>
+      <Ln>
+        {"extract:    "}
+        <V>{'"gpt-5.4-mini"'}</V>
+        {",  "}
+        <C>{"// Q 1.00"}</C>
+      </Ln>
+      <Ln>
+        {"summarize:  "}
+        <V>{'"gpt-5.4-mini"'}</V>
+        {",  "}
+        <C>{"// Q 0.94"}</C>
+      </Ln>
+      <Ln />
+      <Ln>
+        <C>{"// frontier only where it earns it"}</C>
+      </Ln>
+    </CodeCard>
+  );
+}
+
+// The manifesto line, drawn: the reasons teams actually switch fade into the background while the
+// only proof that counts clears past them.
+function VibesArtifact() {
+  return (
+    <svg
+      viewBox="0 0 560 380"
+      preserveAspectRatio="xMidYMid slice"
+      className="absolute inset-0 h-full w-full"
+      aria-hidden
+    >
+      <defs>
+        <filter
+          id="vibes-pill-shadow"
+          x="-20%"
+          y="-40%"
+          width="140%"
+          height="200%"
+        >
+          <feDropShadow
+            dx="0"
+            dy="6"
+            stdDeviation="10"
+            floodColor="#000000"
+            floodOpacity="0.09"
+          />
+        </filter>
+      </defs>
+
+      <line
+        x1="360"
+        y1="-30"
+        x2="720"
+        y2="330"
+        className="stroke-ash-border"
+        strokeWidth="1"
+      />
+
+      <g transform="rotate(-30 280 190)">
+        <line
+          x1="-300"
+          y1="48"
+          x2="900"
+          y2="48"
+          className="stroke-ash-border"
+          strokeWidth="1"
+        />
+
+        <g opacity="0.32">
+          <rect
+            x="-300"
+            y="268"
+            width="1200"
+            height="66"
+            rx="18"
+            className="fill-silver-mist"
+          />
+        </g>
+        <text
+          x="250"
+          y="309"
+          textAnchor="end"
+          className="fill-fog font-sans"
+          fontSize="16"
+          fontWeight="500"
+        >
+          top of a leaderboard
+        </text>
+
+        <g opacity="0.45">
+          <rect
+            x="-300"
+            y="178"
+            width="1200"
+            height="66"
+            rx="18"
+            className="fill-silver-mist"
+          />
+        </g>
+        <text
+          x="360"
+          y="219"
+          textAnchor="end"
+          className="fill-fog font-sans"
+          fontSize="16"
+          fontWeight="500"
+        >
+          loud on the timeline
+        </text>
+
+        <rect
+          x="-300"
+          y="86"
+          width="770"
+          height="70"
+          rx="35"
+          className="fill-parchment-white"
+          filter="url(#vibes-pill-shadow)"
+        />
+        <text
+          x="446"
+          y="129"
+          textAnchor="end"
+          className="fill-midnight-ink font-sans"
+          fontSize="17"
+          fontWeight="500"
+        >
+          proven on your own traces
+        </text>
+      </g>
+    </svg>
+  );
+}
+
+// The argument, row by row: each principle on the left, the artifact that shows it on the right.
+const ROWS: {
+  title: string;
+  intro: string;
+  body: string;
+  artifact: "before" | "vibes" | "after";
+}[] = [
+  {
+    title: "The default is over-provisioned.",
+    intro: "The biggest model on every step feels safe.",
+    body: "Then the bill compounds, call by call, and a quiet regression ships where nobody is watching. The cost is real; the slip is invisible.",
+    artifact: "before",
+  },
+  {
+    title: "Evidence beats vibes.",
+    intro: "Leaderboards are not your workload.",
+    body: "You should not downgrade because a chart liked a model, or stay expensive because switching feels risky. The only proof that counts is your own traces, judged against the output you already shipped.",
+    artifact: "vibes",
+  },
+  {
+    title: "A category, not a feature.",
+    intro: "Evidence-backed model downgrading.",
+    body: "Detect the inefficient call, prove the safe swap on your data, apply the fix in your repo. The skill does it today as a report you run. The agent will ship it as a pull request. Crucible will do it continuously.",
+    artifact: "after",
+  },
+];
+
 export default function ManifestoPage() {
   return (
     <PageShell>
@@ -45,47 +274,61 @@ export default function ManifestoPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      <section className="bg-parchment-white py-16 sm:py-20">
-        <div className="mx-auto max-w-2xl space-y-8 px-6 sm:px-8">
-          <Tldr>
-            Nobody should downgrade a model on vibes. Prove it on{" "}
-            <span className="text-midnight-ink">your own traces</span>:
-            replayed, judged against what you shipped, and applied only when the
-            evidence holds.
-          </Tldr>
+      {/* The argument as catalog rows: full-bleed between the frame's side rules, split by a
+          center hairline with a junction dot where the rules cross. */}
+      <section className="bg-parchment-white">
+        <div className="divide-y divide-ash-border">
+          {ROWS.map((row, i) => (
+            <div
+              key={row.title}
+              className="relative grid lg:grid-cols-2 lg:divide-x lg:divide-ash-border"
+            >
+              {i > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute left-1/2 top-0 z-10 hidden size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-driftwood lg:block"
+                />
+              )}
 
-          <div className="space-y-6">
-            <Lead>
-              Frontier models are the default, and the default is
-              over-provisioned. Teams reach for the biggest model on every step
-              because it feels like the safe choice, then a quiet downgrade
-              ships and quality slips where no one is watching. The cost is
-              real; the regression is invisible.
-            </Lead>
+              <div className="p-6 sm:p-10 lg:p-12">
+                <Reveal>
+                  <h2 className="font-display text-heading text-midnight-ink">
+                    {row.title}
+                  </h2>
+                  <p className="mt-3 max-w-md text-subheading text-driftwood">
+                    {row.intro}
+                  </p>
+                  <p className="mt-6 max-w-md text-body text-driftwood">
+                    {row.body}
+                  </p>
+                </Reveal>
+              </div>
 
-            <P>
-              Evidence beats vibes. You shouldn&apos;t downgrade because a
-              leaderboard liked a model, or keep an expensive one because
-              switching feels risky. The only proof that counts is your own
-              traces: the same inputs you already ran, judged against the output
-              you already shipped.
-            </P>
+              {row.artifact === "vibes" ? (
+                <div className="relative min-h-72 overflow-hidden border-t border-ash-border lg:min-h-0 lg:border-t-0">
+                  <VibesArtifact />
+                </div>
+              ) : (
+                <div className="border-t border-ash-border p-6 sm:p-10 lg:border-t-0 lg:p-12">
+                  <Reveal delay={0.06} className="h-full w-full">
+                    {row.artifact === "before" ? (
+                      <BeforeArtifact />
+                    ) : (
+                      <AfterArtifact />
+                    )}
+                  </Reveal>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
 
-            <PullQuote>Nobody should downgrade a model on vibes.</PullQuote>
+      <div aria-hidden className="h-px w-full bg-ash-border" />
 
-            <P>
-              So we&apos;re building a category:{" "}
-              <span className="font-medium text-midnight-ink">
-                evidence-backed model downgrading
-              </span>
-              . Detect the inefficient call, prove the safe swap on your data,
-              apply the fix in your repo. rightmodeler does it as a report you
-              run today; Crucible will do it continuously, as your traces
-              arrive.
-            </P>
-          </div>
-
-          <div className="flex flex-col items-start gap-5 border-t border-ash-border pt-8 sm:flex-row sm:items-center">
+      <section className="bg-parchment-white">
+        <div className="mx-auto max-w-3xl px-6 py-12 sm:px-10">
+          <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
             <GithubButton />
             <Link
               href="/how-it-works"
@@ -94,8 +337,7 @@ export default function ManifestoPage() {
               See how it works
             </Link>
           </div>
-
-          <div className="border-t border-ash-border pt-8">
+          <div className="mt-10 border-t border-ash-border pt-8">
             <RelatedLinks
               links={[
                 { href: "/how-it-works", label: "How it works" },
