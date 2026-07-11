@@ -44,6 +44,21 @@ export function Nav({ homeHref = "#top" }: { homeHref?: string }) {
             How it works
           </Link>
 
+          {/* The two product pages — desktop only (lg+) so the masthead never crowds or wraps at
+              tablet widths where the docked command already fills the row. */}
+          <Link
+            href="/agent"
+            className="rm-focus hidden items-center text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink lg:inline-flex"
+          >
+            Agent
+          </Link>
+          <Link
+            href="/crucible"
+            className="rm-focus hidden items-center text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink lg:inline-flex"
+          >
+            Crucible
+          </Link>
+
           {/* Writing — the blog index. */}
           <Link
             href="/blog"

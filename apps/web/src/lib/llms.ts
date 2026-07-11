@@ -79,6 +79,24 @@ const PAGES: { path: string; title: string; description: string }[] = [
     title: "About",
     description: "What rightmodeler is and the mission behind it.",
   },
+  {
+    path: "/feedback",
+    title: "Feedback",
+    description:
+      "Send the team feedback: what to build, what broke, and what the agent should handle next.",
+  },
+  {
+    path: "/privacy",
+    title: "Privacy policy",
+    description:
+      "What the site collects (very little), how it is used, and how to reach us.",
+  },
+  {
+    path: "/terms",
+    title: "Terms of service",
+    description:
+      "The terms that govern use of the rightmodeler website, in plain English.",
+  },
 ];
 
 const pageLinks = PAGES.map(

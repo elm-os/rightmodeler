@@ -30,6 +30,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
       ["/manifesto", 0.7],
       ["/glossary", 0.7],
       ["/about", 0.6],
+      ["/feedback", 0.4],
+      ["/privacy", 0.3],
+      ["/terms", 0.3],
     ] as const
   ).map(([path, priority]) => ({
     url: `${SITE_URL}${path}`,

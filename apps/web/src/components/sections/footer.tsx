@@ -61,11 +61,31 @@ export function Footer() {
             <Link href="/blog" className={linkClass}>
               Blog
             </Link>
+            <Link href="/feedback" className={linkClass}>
+              Feedback
+            </Link>
             <SocialLinks className="-ml-2" />
           </nav>
         </Reveal>
 
         <Reveal delay={0.14} className="mt-10 space-y-1.5">
+          <nav
+            aria-label="Legal"
+            className="flex flex-wrap gap-x-5 gap-y-2 pb-1"
+          >
+            <Link
+              href="/privacy"
+              className={`font-mono text-caption ${linkClass}`}
+            >
+              Privacy policy
+            </Link>
+            <Link
+              href="/terms"
+              className={`font-mono text-caption ${linkClass}`}
+            >
+              Terms of service
+            </Link>
+          </nav>
           <p className="font-mono text-caption text-driftwood">
             Every figure shown on this page is an illustrative example, not
             measured savings.
