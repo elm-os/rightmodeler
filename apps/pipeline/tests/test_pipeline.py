@@ -6,6 +6,7 @@ import pytest
 from pipeline.__main__ import (
     analyze,
     build_corpus,
+    evaluate_freeform,
     evaluate_structured,
     infer_task_family,
     normalize_run,
@@ -253,7 +254,8 @@ def _structured_corpus_and_candidate(tmp_path, results=None, cases=None):
         "corpus_version_id": "sha256:" + "a" * 64,
         "source_bundle_id": "bundle-1",
         "cases": cases
-        or [
+        if cases is not None
+        else [
             {
                 "case_id": "case-1",
                 "source_run_id": "run-1",
@@ -480,6 +482,175 @@ def test_benchmark_evaluate_command_writes_snapshot(tmp_path, monkeypatch, capsy
 
     assert main() == 0
     assert output_path.exists()
+    assert str(output_path) in capsys.readouterr().out
+
+
+_DEFAULT_FREEFORM_REFERENCE = {
+    "type": "frozen-human-verdict",
+    "refs": ["review-1/case-1"],
+    "verdict": "pass",
+    "agreement": "unanimous",
+}
+
+
+def _freeform_corpus_and_candidate(
+    tmp_path, reference=_DEFAULT_FREEFORM_REFERENCE, results=None
+):
+    case = {
+        "case_id": "case-1",
+        "source_run_id": "run-1",
+        "pipeline_family": "reference-freeform",
+        "workload_label": "support-draft",
+        "split": "working",
+        "risk": "normal",
+        "required_evidence": "reference",
+        "checks": {},
+    }
+    if results is None:
+        result = {
+            "case_id": "case-1",
+            "output_text": "A clear and helpful reply.",
+            "cost_usd": 0.04,
+            "duration_ms": 125,
+            "evidence_refs": ["candidate-1/case-1"],
+        }
+        if reference is not None:
+            result["reference"] = reference
+        results = [result]
+    return _structured_corpus_and_candidate(tmp_path, results=results, cases=[case])
+
+
+def test_freeform_evaluation_uses_frozen_human_verdict(tmp_path):
+    corpus_path, candidate_path, output_path = _freeform_corpus_and_candidate(tmp_path)
+
+    result = evaluate_freeform(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    verdict = snapshot["case_verdicts"][0]
+    assert result == output_path
+    assert verdict["terminal_verdict"] == "pass"
+    assert verdict["evidence_type"] == "frozen-human-verdict"
+    assert verdict["evaluator"] == "frozen-human-verdict"
+    assert verdict["reference"]["refs"] == ["review-1/case-1"]
+    assert snapshot["summary"]["coverage"] == 1.0
+    validate_schema(snapshot, "benchmark-snapshot")
+
+
+def test_freeform_evaluation_preserves_rejected_human_verdict(tmp_path):
+    reference = {
+        "type": "frozen-human-verdict",
+        "refs": ["review-1/case-1"],
+        "verdict": "fail",
+        "agreement": "unanimous",
+    }
+    corpus_path, candidate_path, output_path = _freeform_corpus_and_candidate(
+        tmp_path, reference
+    )
+
+    evaluate_freeform(corpus_path, candidate_path, output_path)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "fail"
+    assert verdict["failure_code"] == "frozen_human_verdict_fail"
+    assert verdict["evaluator"] == "frozen-human-verdict"
+
+
+def test_freeform_evaluation_abstains_for_uncalibrated_reference_evidence(tmp_path):
+    reference = {
+        "type": "reference-evidence",
+        "refs": ["reference-docs/case-1"],
+    }
+    corpus_path, candidate_path, output_path = _freeform_corpus_and_candidate(
+        tmp_path, reference
+    )
+
+    evaluate_freeform(corpus_path, candidate_path, output_path)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "abstain"
+    assert verdict["evidence_type"] == "reference-evidence"
+    assert verdict["evaluator"] == "abstain"
+    assert verdict["abstention_reason"] == "uncalibrated_reference_evidence"
+
+
+def test_freeform_evaluation_abstains_for_disputed_human_verdict(tmp_path):
+    reference = {
+        "type": "frozen-human-verdict",
+        "refs": ["review-1/case-1", "review-2/case-1"],
+        "verdict": None,
+        "agreement": "disputed",
+    }
+    corpus_path, candidate_path, output_path = _freeform_corpus_and_candidate(
+        tmp_path, reference
+    )
+
+    evaluate_freeform(corpus_path, candidate_path, output_path)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "abstain"
+    assert verdict["evidence_type"] == "frozen-human-verdict"
+    assert verdict["evaluator"] == "abstain"
+    assert verdict["abstention_reason"] == "reference_disagreement"
+
+
+def test_freeform_evaluation_abstains_without_reference(tmp_path):
+    corpus_path, candidate_path, output_path = _freeform_corpus_and_candidate(
+        tmp_path, reference=None
+    )
+
+    evaluate_freeform(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    verdict = snapshot["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "abstain"
+    assert verdict["abstention_reason"] == "missing_reference_evidence"
+    assert snapshot["summary"] == {
+        "total_cases": 1,
+        "pass_count": 0,
+        "fail_count": 0,
+        "abstain_count": 1,
+        "coverage": 0.0,
+    }
+
+
+def test_freeform_evaluation_preserves_missing_case_coverage(tmp_path):
+    corpus_path, candidate_path, output_path = _freeform_corpus_and_candidate(
+        tmp_path, results=[]
+    )
+
+    evaluate_freeform(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    assert snapshot["case_verdicts"][0]["abstention_reason"] == "missing_candidate_result"
+    assert snapshot["summary"]["coverage"] == 0.0
+
+
+def test_benchmark_evaluate_command_selects_freeform_family(tmp_path, monkeypatch, capsys):
+    corpus_path, candidate_path, output_path = _freeform_corpus_and_candidate(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pipeline",
+            "benchmark",
+            "evaluate",
+            "--cases",
+            str(corpus_path),
+            "--candidate",
+            str(candidate_path),
+            "--family",
+            "reference-freeform",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    from pipeline.__main__ import main
+
+    assert main() == 0
+    assert json.loads(output_path.read_text())["case_verdicts"][0]["evaluator"] == (
+        "frozen-human-verdict"
+    )
     assert str(output_path) in capsys.readouterr().out
 
 
