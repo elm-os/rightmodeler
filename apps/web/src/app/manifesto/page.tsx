@@ -63,9 +63,11 @@ function UsageMockup() {
     { step: "extract", cost: "$940" },
     { step: "summarize", cost: "$2,310" },
     { step: "judge", cost: "$860" },
+    { step: "rerank", cost: "$1,040" },
+    { step: "embed", cost: "$620" },
   ];
   return (
-    <div className="relative mx-4 -mb-10 mt-4 sm:mx-5">
+    <div className="relative mx-4 -mb-14 mt-4 sm:mx-5">
       <div
         className={`rounded-xl border border-ash-border bg-parchment-white ${MOCKUP_SHADOW}`}
       >
@@ -113,9 +115,9 @@ function UsageMockup() {
 // land on opposite branches.
 function FlowMockup() {
   return (
-    <div className="relative mx-3 mb-4 mt-2 sm:mx-4">
+    <div className="relative mx-2 mb-4 mt-2 sm:mx-3">
       <svg
-        viewBox="0 0 480 310"
+        viewBox="24 0 432 292"
         className="h-auto w-full"
         aria-hidden
         fill="none"
