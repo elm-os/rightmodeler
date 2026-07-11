@@ -16,11 +16,11 @@
 
 /* SITE */
 
-	Last update: 2026/07/05
+	Last update: 2026/07/10
 	Language: English
 	Doctype: HTML5
 	Standards: HTML5, CSS3, ES2023
 	Components: Next.js, React, TypeScript, Tailwind CSS, Motion
 	Software: pnpm, Turborepo, Python, uv
 
-	# Prove which models you can safely downgrade. https://www.rightmodeler.com
+	# Every step, on the right model. Proven, not guessed. https://www.rightmodeler.com
