@@ -5,9 +5,10 @@
 // button, no traffic-light hues). The one bold move is the assembly order — the card builds its
 // case the way the agent does, evidence rows before the verdict number — via a single staggered
 // whileInView cascade. The savings figure is gated by useInView so the count-up runs when seen,
-// not on mount, with an invisible twin reserving the final width. Every figure is stamped
-// illustrative; the illustrative story (summarize step, gpt-4.1 → gpt-4o-mini, 72% · 0.94)
-// deliberately rhymes with the landing hero's ledger so the whole site tells one example.
+// not on mount, with an invisible twin reserving the final width. The model pair and the 85% are
+// factual: OpenAI list prices as of July 2026 put gpt-5.6 at $5/$30 per 1M tokens and
+// gpt-5.4-mini at $0.75/$4.50, an 85% per-token cut on both input and output. Quality, latency,
+// and trace-count figures remain illustrative and the title bar stamps them as such.
 
 import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
@@ -86,7 +87,7 @@ export function AgentPrCard() {
           rightmodeler agent · pull request
         </span>
         <span className="shrink-0 font-mono text-caption text-fog">
-          illustrative example
+          illustrative
         </span>
       </div>
 
@@ -107,10 +108,10 @@ export function AgentPrCard() {
         {/* PR title + one-line body. */}
         <motion.div variants={block} className="px-4 py-4 sm:px-5">
           <p className="font-sans text-heading-sm text-midnight-ink">
-            swap: summarize step to gpt-4o-mini
+            swap: summarize step to gpt-5.4-mini
           </p>
           <p className="mt-1 text-body text-driftwood">
-            gpt-4.1 is doing work gpt-4o-mini can hold. Evidence below; merging
+            gpt-5.6 is doing work gpt-5.4-mini can hold. Evidence below; merging
             is yours.
           </p>
         </motion.div>
@@ -127,6 +128,11 @@ export function AgentPrCard() {
           <Row label="p95 latency">
             <span className="text-midnight-ink">-38%</span> vs current
           </Row>
+          <Row label="list price">
+            <span className="text-midnight-ink">$5.00 → $0.75</span> in ·{" "}
+            <span className="text-midnight-ink">$30.00 → $4.50</span> out · per
+            1M tokens
+          </Row>
           <Row label="confidence">medium · judged, position-swapped</Row>
         </motion.div>
 
@@ -139,10 +145,10 @@ export function AgentPrCard() {
                 {'   step: "summarize",'}
               </p>
               <p className="whitespace-pre text-fog">
-                {'-  model: "gpt-4.1",'}
+                {'-  model: "gpt-5.6",'}
               </p>
               <p className="whitespace-pre text-midnight-ink">
-                {'+  model: "gpt-4o-mini",'}
+                {'+  model: "gpt-5.4-mini",'}
               </p>
             </div>
           </div>
@@ -164,18 +170,18 @@ export function AgentPrCard() {
           <div ref={numberRef}>
             <span className="relative inline-block font-display text-heading text-midnight-ink sm:text-heading-lg">
               <span aria-hidden className="invisible">
-                72%
+                85%
               </span>
               {numberInView && (
                 <AnimatedNumber
-                  value={72}
+                  value={85}
                   suffix="%"
                   className="absolute inset-0"
                 />
               )}
             </span>
             <p className="mt-1.5 font-mono text-caption text-fog">
-              cost reduction on this step · illustrative example
+              cheaper per token · gpt-5.6 to gpt-5.4-mini · list prices
             </p>
           </div>
         </motion.div>
