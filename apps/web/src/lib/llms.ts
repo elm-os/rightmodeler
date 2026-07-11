@@ -72,7 +72,7 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/crucible",
     title: "Crucible (coming soon)",
     description:
-      "rightmodeler hosted and always-on: continuous, evidence-backed downgrades over MCP.",
+      "The analytics and optimization suite for AI agents: cost per layer, speed per step, failures as they happen, and continuous right-sizing, connected over MCP.",
   },
   {
     path: "/about",
