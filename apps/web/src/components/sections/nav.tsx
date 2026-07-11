@@ -35,26 +35,18 @@ export function Nav({ homeHref = "#top" }: { homeHref?: string }) {
         </a>
 
         <div className="flex items-center gap-6 sm:gap-8">
-          {/* The core explainer — hidden on the smallest screens so the mobile masthead stays quiet
-              (still reachable from the footer). */}
-          <Link
-            href="/how-it-works"
-            className="rm-focus hidden items-center text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink sm:inline-flex"
-          >
-            How it works
-          </Link>
-
-          {/* The two product pages — desktop only (lg+) so the masthead never crowds or wraps at
-              tablet widths where the docked command already fills the row. */}
+          {/* The two product pages — hidden on the smallest screens so the mobile masthead stays
+              quiet ("How it works" lives in the footer; adding it here alongside these would wrap
+              the masthead once the docked command is visible). */}
           <Link
             href="/agent"
-            className="rm-focus hidden items-center text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink lg:inline-flex"
+            className="rm-focus hidden items-center whitespace-nowrap text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink sm:inline-flex"
           >
             Agent
           </Link>
           <Link
             href="/crucible"
-            className="rm-focus hidden items-center text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink lg:inline-flex"
+            className="rm-focus hidden items-center whitespace-nowrap text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink sm:inline-flex"
           >
             Crucible
           </Link>
