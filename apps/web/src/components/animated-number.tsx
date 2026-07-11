@@ -22,10 +22,8 @@ export function AnimatedNumber({
   const [display, setDisplay] = useState(reduce ? value : 0);
 
   useEffect(() => {
-    if (reduce) {
-      setDisplay(value);
-      return;
-    }
+    // Under reduced motion the render below shows `value` directly; nothing to animate.
+    if (reduce) return;
 
     const controls = animate(0, value, {
       duration: durationMs / 1000,
@@ -37,7 +35,7 @@ export function AnimatedNumber({
 
   return (
     <span ref={ref} className={`tabular-nums ${className ?? ""}`}>
-      {Math.round(display)}
+      {Math.round(reduce ? value : display)}
       {suffix}
     </span>
   );

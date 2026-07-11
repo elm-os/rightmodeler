@@ -5,10 +5,14 @@ export const SITE_URL = "https://www.rightmodeler.com";
 export const SITE_NAME = "rightmodeler";
 export const SITE_AUTHOR = "The rightmodeler team";
 
-// The engineer's first click and first command — kept identical to the landing page CTA so the blog
-// closes on the same note (see components/sections/nav.tsx, hero.tsx, cta-band.tsx).
+// The engineer's first click and first command — imported everywhere they appear (nav, hero,
+// CTA band, blog CTA) so the strings can never drift between surfaces.
 export const REPO_URL = "https://github.com/elm-os/rightmodeler";
-export const RUN_COMMAND = "uv run python -m pipeline ingest";
+export const RUN_COMMAND =
+  "npx skills add elm-os/rightmodeler --skill rightmodeler";
+
+// Public contact for the legal pages (privacy policy, terms of service).
+export const CONTACT_EMAIL = "rightmodeler@gmail.com";
 
 // Public profiles — used for the About page links and the Organization `sameAs` (app/about/page.tsx).
 export const GITHUB_ORG_URL = "https://github.com/elm-os";

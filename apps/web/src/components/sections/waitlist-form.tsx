@@ -1,11 +1,14 @@
 "use client";
 
-// Crucible waitlist capture — a single email field + submit that POSTs to /api/waitlist, which sends
-// the team a real notification via Resend. No fake success: the confirmation renders only after the
+// Waitlist capture — a single email field + submit that POSTs to /api/waitlist, which sends the
+// team a real notification via Resend. No fake success: the confirmation renders only after the
 // API responds ok. Monochrome per docs/design.md — parchment field with an ash-border hairline, ink
 // button with press-scale; state is communicated through copy, not colour (no green/red).
+// `product` tags which waitlist the signup belongs to (Crucible by default, or the agent).
 
 import { useState } from "react";
+
+export type WaitlistProduct = "crucible" | "agent";
 
 type State =
   | { status: "idle" }
@@ -13,7 +16,11 @@ type State =
   | { status: "success" }
   | { status: "error"; message: string };
 
-export function WaitlistForm() {
+export function WaitlistForm({
+  product = "crucible",
+}: {
+  product?: WaitlistProduct;
+}) {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<State>({ status: "idle" });
 
@@ -25,7 +32,7 @@ export function WaitlistForm() {
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, product }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as {
@@ -60,11 +67,11 @@ export function WaitlistForm() {
   return (
     <form onSubmit={onSubmit} className="flex w-full max-w-md flex-col gap-3">
       <div className="flex flex-col gap-3 sm:flex-row">
-        <label htmlFor="waitlist-email" className="sr-only">
+        <label htmlFor={`waitlist-email-${product}`} className="sr-only">
           Email address
         </label>
         <input
-          id="waitlist-email"
+          id={`waitlist-email-${product}`}
           type="email"
           required
           value={email}

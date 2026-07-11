@@ -8,6 +8,7 @@ import { CopyCommand } from "@/components/copy-command";
 import { HeroGradient } from "@/components/hero-gradient";
 import { GitHubIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
+import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 
 // Legibility veil — parchment densest behind the top-left copy, fading into the gradient. Same
 // treatment as the hero, so it never reads as a card.
@@ -37,10 +38,7 @@ export function CtaBand() {
             delay={0.08}
             className="mt-8 flex w-full flex-col items-start gap-4"
           >
-            <CopyCommand
-              command="npx skills add elm-os/rightmodeler --skill rightmodeler"
-              className="w-full sm:w-auto"
-            />
+            <CopyCommand command={RUN_COMMAND} className="w-full sm:w-auto" />
 
             <p className="max-w-[34rem] pl-4 font-mono text-body text-driftwood">
               <span aria-hidden className="select-none text-fog">
@@ -53,7 +51,7 @@ export function CtaBand() {
 
           <Reveal delay={0.16} className="mt-10">
             <a
-              href="https://github.com/elm-os/rightmodeler"
+              href={REPO_URL}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-midnight-ink px-5 py-3 text-body font-medium text-parchment-white transition-transform duration-150 ease-out-strong active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white sm:w-auto"
             >
               <GitHubIcon />

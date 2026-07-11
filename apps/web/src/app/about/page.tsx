@@ -28,7 +28,7 @@ const organizationLd = {
   url: SITE_URL,
   logo: `${SITE_URL}/icon.png`,
   description:
-    "rightmodeler proves which models you can safely downgrade. It detects inefficient model calls, proves safe swaps on your own traces, and applies the fix in your repo.",
+    "rightmodeler keeps AI agents on the right model: it proves safe swaps on your real traces, ships model upgrades as evidence-backed pull requests, and watches every layer with Crucible.",
   sameAs: [LINKEDIN_URL, REPO_URL, GITHUB_ORG_URL],
 };
 
@@ -39,7 +39,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Is it open source?",
-    a: "Yes. The engine is open source and available today on GitHub. Crucible, the hosted, always-on version, is coming next.",
+    a: "Yes. The rightmodeler skill is on GitHub and free to run on your own traces today. rightmodeler agent, which opens evidence-backed swap PRs, and Crucible, the analytics and optimization suite, are the products being built on top of it.",
   },
   {
     q: "How is it different from observability or a gateway?",
@@ -78,9 +78,10 @@ export default function AboutPage() {
             fix in your repo. A report and an edit, never a runtime gateway.
           </p>
           <p className="text-body text-driftwood">
-            rightmodeler is an ELM-OS project. The engine is open source and
-            available today; Crucible, the hosted, always-on version, is coming
-            next.
+            rightmodeler is an ELM-OS project. The skill is available today;
+            rightmodeler agent, which ships swaps as pull requests, and
+            Crucible, the analytics and optimization suite, are built on the
+            same proof loop and coming next.
           </p>
 
           <div className="pt-2">
@@ -93,7 +94,8 @@ export default function AboutPage() {
               links={[
                 { href: "/how-it-works", label: "How it works" },
                 { href: "/manifesto", label: "Read the manifesto" },
-                { href: "/crucible", label: "Crucible (coming soon)" },
+                { href: "/agent", label: "rightmodeler agent" },
+                { href: "/crucible", label: "Crucible" },
               ]}
             />
           </div>

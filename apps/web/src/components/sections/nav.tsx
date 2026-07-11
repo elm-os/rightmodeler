@@ -7,11 +7,7 @@
 import Link from "next/link";
 import { CopyCommand } from "@/components/copy-command";
 import { GitHubIcon, LogoMark } from "@/components/icons";
-
-// Placeholder repo URL — point at the real repository before shipping.
-const REPO_URL = "https://github.com/elm-os/rightmodeler";
-// Real entrypoint from README.md: install the skill into the current agent.
-const RUN_COMMAND = "npx skills add elm-os/rightmodeler --skill rightmodeler";
+import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 
 const NAV_CSS = `
 /* Monochrome keyboard focus, never a colored ring. */
@@ -39,13 +35,20 @@ export function Nav({ homeHref = "#top" }: { homeHref?: string }) {
         </a>
 
         <div className="flex items-center gap-6 sm:gap-8">
-          {/* The core explainer — hidden on the smallest screens so the mobile masthead stays quiet
-              (still reachable from the footer). */}
+          {/* The two product pages — hidden on the smallest screens so the mobile masthead stays
+              quiet ("How it works" lives in the footer; adding it here alongside these would wrap
+              the masthead once the docked command is visible). */}
           <Link
-            href="/how-it-works"
-            className="rm-focus hidden items-center text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink sm:inline-flex"
+            href="/agent"
+            className="rm-focus hidden items-center whitespace-nowrap text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink sm:inline-flex"
           >
-            How it works
+            Agent
+          </Link>
+          <Link
+            href="/crucible"
+            className="rm-focus hidden items-center whitespace-nowrap text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink sm:inline-flex"
+          >
+            Crucible
           </Link>
 
           {/* Writing — the blog index. */}
