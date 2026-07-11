@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
+import {
+  LogoMark,
+  PullRequestIcon,
+  QualityFloorIcon,
+  ReplayLoopIcon,
+} from "@/components/icons";
 import { Faq, type FaqItem } from "@/components/sections/faq";
 import { GithubButton } from "@/components/sections/github-button";
 import { PageHero } from "@/components/sections/page-hero";
@@ -31,239 +37,362 @@ const FAQ: FaqItem[] = [
   },
 ];
 
-// ── Right-cell artifacts. The two code cards bookend the argument (every step at frontier price,
-// then the same file after the audit); the middle row is a hand-drawn SVG where the manifesto line
-// clears past the faded reasons teams actually switch. Monochrome throughout, all decorative.
+// ── The three mockups, layer by layer, in house tokens only. Each one is a still of the product's
+// world (a bill with no author, the audit's decision tree, the review that ends it) tucked into
+// its card and clipped by the card edge, the way the reference clips its windows. Every figure is
+// stamped illustrative on the artifact that shows one. Soft shadows are illustration-only.
 
-function CodeCard({ children }: { children: React.ReactNode }) {
+const MOCKUP_SHADOW = "shadow-[0_12px_32px_rgba(41,36,31,0.08)]";
+
+// A tiny identity seat for mockup headers: the brand mark in a bordered square.
+function AvatarSeat({ size = 7 }: { size?: 6 | 7 }) {
   return (
-    <div className="h-full w-full rounded-2xl border border-ash-border bg-warm-sand p-6 sm:p-8">
-      <div className="space-y-1.5 font-mono text-[12px] sm:text-sm">
-        {children}
+    <span
+      className={`flex ${size === 7 ? "size-7" : "size-6"} shrink-0 items-center justify-center rounded-md border border-ash-border bg-warm-sand text-midnight-ink`}
+    >
+      <LogoMark height={size === 7 ? 11 : 9} />
+    </span>
+  );
+}
+
+// Card one — the bill: four steps, one frontier model, a total that keeps climbing. The window
+// runs off the bottom of the card mid-ledger.
+function UsageMockup() {
+  const rows: { step: string; cost: string }[] = [
+    { step: "route", cost: "$1,180" },
+    { step: "extract", cost: "$940" },
+    { step: "summarize", cost: "$2,310" },
+    { step: "judge", cost: "$860" },
+  ];
+  return (
+    <div className="relative mx-5 -mb-12 mt-6 sm:mx-7">
+      <div
+        className={`rounded-xl border border-ash-border bg-parchment-white ${MOCKUP_SHADOW}`}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-ash-border px-4 py-3">
+          <span className="flex min-w-0 items-center gap-2.5">
+            <AvatarSeat />
+            <span className="truncate font-sans text-[13px] font-medium text-midnight-ink">
+              model usage · June
+            </span>
+          </span>
+          <span className="shrink-0 font-mono text-caption text-fog">
+            illustrative
+          </span>
+        </div>
+        <div className="divide-y divide-ash-border">
+          {rows.map((row) => (
+            <div
+              key={row.step}
+              className="flex items-baseline justify-between gap-3 px-4 py-2.5 font-mono text-[12px]"
+            >
+              <span className="min-w-0 truncate">
+                <span className="text-midnight-ink">{row.step}</span>
+                <span className="text-fog"> · </span>
+                <span className="text-driftwood">gpt-5.6</span>
+              </span>
+              <span className="shrink-0 text-driftwood tabular-nums">
+                {row.cost}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-baseline justify-between gap-3 border-t border-ash-border px-4 py-3">
+          <span className="font-mono text-caption text-fog">month to date</span>
+          <span className="font-sans text-[13px] font-medium text-midnight-ink tabular-nums">
+            $5,290 and climbing
+          </span>
+        </div>
       </div>
     </div>
   );
 }
 
-const Ln = ({ children }: { children?: React.ReactNode }) =>
-  children ? (
-    <div className="whitespace-pre text-driftwood">{children}</div>
-  ) : (
-    <div aria-hidden className="h-4" />
-  );
-const C = ({ children }: { children: React.ReactNode }) => (
-  <span className="text-fog">{children}</span>
-);
-const V = ({ children }: { children: React.ReactNode }) => (
-  <span className="text-midnight-ink">{children}</span>
-);
-
-function BeforeArtifact() {
+// Card two — the audit's decision tree, drawn as one SVG so nodes, capsules, and connectors stay
+// perfectly registered at every width: a trace comes in, candidates replay, and the two verdicts
+// land on opposite branches.
+function FlowMockup() {
   return (
-    <CodeCard>
-      <Ln>
-        <C>{"// models.ts · before the audit"}</C>
-      </Ln>
-      <Ln />
-      <Ln>
-        {"route:      "}
-        <V>{'"gpt-5.6"'}</V>
-        {","}
-      </Ln>
-      <Ln>
-        {"extract:    "}
-        <V>{'"gpt-5.6"'}</V>
-        {","}
-      </Ln>
-      <Ln>
-        {"summarize:  "}
-        <V>{'"gpt-5.6"'}</V>
-        {","}
-      </Ln>
-      <Ln />
-      <Ln>
-        <C>{"// every step at frontier price"}</C>
-      </Ln>
-    </CodeCard>
-  );
-}
-
-function AfterArtifact() {
-  return (
-    <CodeCard>
-      <Ln>
-        <C>{"// models.ts · after the audit"}</C>
-      </Ln>
-      <Ln />
-      <Ln>
-        {"route:      "}
-        <V>{'"gpt-5.4-nano"'}</V>
-        {",  "}
-        <C>{"// 96% cheaper"}</C>
-      </Ln>
-      <Ln>
-        {"extract:    "}
-        <V>{'"gpt-5.4-mini"'}</V>
-        {",  "}
-        <C>{"// Q 1.00"}</C>
-      </Ln>
-      <Ln>
-        {"summarize:  "}
-        <V>{'"gpt-5.4-mini"'}</V>
-        {",  "}
-        <C>{"// Q 0.94"}</C>
-      </Ln>
-      <Ln />
-      <Ln>
-        <C>{"// frontier only where it earns it"}</C>
-      </Ln>
-    </CodeCard>
-  );
-}
-
-// The manifesto line, drawn: the reasons teams actually switch fade into the background while the
-// only proof that counts clears past them.
-function VibesArtifact() {
-  return (
-    <svg
-      viewBox="0 0 700 460"
-      preserveAspectRatio="xMidYMid slice"
-      className="absolute inset-0 h-full w-full"
-      aria-hidden
-    >
-      <defs>
-        <filter
-          id="vibes-pill-shadow"
-          x="-20%"
-          y="-40%"
-          width="140%"
-          height="200%"
-        >
-          <feDropShadow
-            dx="0"
-            dy="6"
-            stdDeviation="10"
-            floodColor="#000000"
-            floodOpacity="0.09"
-          />
-        </filter>
-      </defs>
-
-      <g transform="translate(70 40)">
-        <line
-          x1="360"
-          y1="-70"
-          x2="760"
-          y2="330"
-          className="stroke-ash-border"
-          strokeWidth="1"
-        />
-
-        <g transform="rotate(-30 280 190)">
-          <line
-            x1="-300"
-            y1="48"
-            x2="900"
-            y2="48"
-            className="stroke-ash-border"
-            strokeWidth="1"
-          />
-
-          <g opacity="0.5">
-            <rect
-              x="-300"
-              y="268"
-              width="1200"
-              height="66"
-              rx="18"
-              className="fill-none stroke-silver-mist"
-              strokeWidth="1.5"
-              strokeDasharray="5 7"
+    <div className="relative mx-2 mb-4 mt-4 sm:mx-4">
+      <svg
+        viewBox="0 0 480 310"
+        className="h-auto w-full"
+        aria-hidden
+        fill="none"
+      >
+        <defs>
+          <filter
+            id="mf-node-shadow"
+            x="-30%"
+            y="-40%"
+            width="160%"
+            height="220%"
+          >
+            <feDropShadow
+              dx="0"
+              dy="4"
+              stdDeviation="7"
+              floodColor="#29241f"
+              floodOpacity="0.1"
             />
-          </g>
-          <text
-            x="250"
-            y="309"
-            textAnchor="end"
-            className="fill-fog font-sans"
-            fontSize="16"
-            fontWeight="500"
-          >
-            top of a leaderboard
-          </text>
+          </filter>
+        </defs>
 
-          <g opacity="0.7">
-            <rect
-              x="-300"
-              y="178"
-              width="1200"
-              height="66"
-              rx="18"
-              className="fill-none stroke-silver-mist"
-              strokeWidth="1.5"
-              strokeDasharray="5 7"
-            />
-          </g>
-          <text
-            x="360"
-            y="219"
-            textAnchor="end"
-            className="fill-fog font-sans"
-            fontSize="16"
-            fontWeight="500"
-          >
-            loud on the timeline
-          </text>
-
-          <rect
-            x="-300"
-            y="86"
-            width="770"
-            height="70"
-            rx="35"
-            className="fill-parchment-white"
-            filter="url(#vibes-pill-shadow)"
-          />
-          <text
-            x="446"
-            y="129"
-            textAnchor="end"
-            className="fill-midnight-ink font-sans"
-            fontSize="17"
-            fontWeight="500"
-          >
-            proven on your own traces
-          </text>
+        {/* connectors first, so every node sits above its own line */}
+        <g className="stroke-fog" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M240 46 v30" />
+          <path d="M240 120 C 240 156, 128 152, 128 186" />
+          <path d="M240 120 C 240 156, 352 152, 352 186" />
+          <path d="M128 216 v22" />
+          <path d="M352 216 v22" />
         </g>
-      </g>
-    </svg>
+
+        {/* start node */}
+        <rect
+          x="181"
+          y="4"
+          width="118"
+          height="42"
+          rx="21"
+          className="fill-parchment-white stroke-ash-border"
+          filter="url(#mf-node-shadow)"
+        />
+        <path
+          d="M200 18 v16 M200 19 h9 l-2.5 3.5 2.5 3.5 h-9"
+          className="stroke-driftwood"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <text
+          x="217"
+          y="30"
+          className="fill-midnight-ink font-sans"
+          fontSize="14"
+          fontWeight="500"
+        >
+          new trace
+        </text>
+
+        {/* replay node */}
+        <rect
+          x="132"
+          y="78"
+          width="216"
+          height="42"
+          rx="21"
+          className="fill-parchment-white stroke-ash-border"
+          filter="url(#mf-node-shadow)"
+        />
+        <path
+          d="M152 94 h10 a4.5 4.5 0 0 1 0 9 h-7 m2.4 -2.4 -2.4 2.4 2.4 2.4"
+          className="stroke-driftwood"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <text
+          x="172"
+          y="104"
+          className="fill-midnight-ink font-sans"
+          fontSize="14"
+          fontWeight="500"
+        >
+          replay the candidates
+        </text>
+
+        {/* verdict capsules — ink, like the reference's black pills */}
+        <rect
+          x="59"
+          y="186"
+          width="138"
+          height="30"
+          rx="15"
+          className="fill-midnight-ink"
+        />
+        <text
+          x="128"
+          y="205"
+          textAnchor="middle"
+          className="fill-parchment-white font-sans"
+          fontSize="12.5"
+          fontWeight="500"
+        >
+          clears the floor
+        </text>
+
+        <rect
+          x="286"
+          y="186"
+          width="132"
+          height="30"
+          rx="15"
+          className="fill-midnight-ink"
+        />
+        <text
+          x="352"
+          y="205"
+          textAnchor="middle"
+          className="fill-parchment-white font-sans"
+          fontSize="12.5"
+          fontWeight="500"
+        >
+          below the floor
+        </text>
+
+        {/* leaf nodes */}
+        <rect
+          x="34"
+          y="238"
+          width="188"
+          height="42"
+          rx="21"
+          className="fill-parchment-white stroke-ash-border"
+          filter="url(#mf-node-shadow)"
+        />
+        <text
+          x="56"
+          y="264"
+          className="fill-midnight-ink font-sans"
+          fontSize="14"
+          fontWeight="500"
+        >
+          ✓
+        </text>
+        <text
+          x="74"
+          y="264"
+          className="fill-midnight-ink font-sans"
+          fontSize="14"
+          fontWeight="500"
+        >
+          swap: gpt-5.4-mini
+        </text>
+
+        <rect
+          x="254"
+          y="238"
+          width="196"
+          height="42"
+          rx="21"
+          className="fill-parchment-white stroke-ash-border"
+          filter="url(#mf-node-shadow)"
+        />
+        <text
+          x="276"
+          y="264"
+          className="fill-fog font-sans"
+          fontSize="14"
+          fontWeight="500"
+        >
+          ✕
+        </text>
+        <text
+          x="294"
+          y="264"
+          className="fill-midnight-ink font-sans"
+          fontSize="14"
+          fontWeight="500"
+        >
+          abstain · keep gpt-5.6
+        </text>
+      </svg>
+    </div>
   );
 }
 
-// The argument, row by row: each principle on the left, the artifact that shows it on the right.
-const ROWS: {
+// Card three — the review that ends the argument: the agent's finding quoted inside a review
+// panel, evidence named, and the only two buttons that matter. The panel runs off the card's
+// right edge, so the ink button sits against the clip like the reference.
+function ReviewMockup() {
+  return (
+    <div className="relative -mr-5 mb-6 ml-5 mt-6 sm:-mr-7 sm:ml-7">
+      <div
+        className={`rounded-xl border border-ash-border bg-parchment-white p-4 pr-10 sm:p-5 sm:pr-12 ${MOCKUP_SHADOW}`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-sans text-[15px] font-medium text-midnight-ink">
+            Review the evidence
+          </p>
+          <span className="font-mono text-caption text-fog">illustrative</span>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-ash-border bg-warm-sand p-3.5">
+          <div className="flex items-center gap-2.5">
+            <AvatarSeat size={6} />
+            <span className="font-sans text-[13px] font-medium text-midnight-ink">
+              rightmodeler-agent
+            </span>
+          </div>
+          <p className="mt-2 font-mono text-[12px] text-driftwood">
+            swap: summarize step to gpt-5.4-mini
+          </p>
+          <p className="mt-1 font-mono text-[12px] text-fog">
+            Q 0.94 · 85% cheaper · 214 traces replayed
+          </p>
+        </div>
+
+        <p className="mt-3 font-sans text-[13px] text-driftwood">
+          Replays, scores, and confidence attached. Merge when you agree, close
+          when you don&rsquo;t.
+        </p>
+
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <span className="rounded-lg border border-ash-border bg-parchment-white px-3.5 py-1.5 font-sans text-[13px] text-midnight-ink">
+            Close
+          </span>
+          <span className="rounded-lg bg-midnight-ink px-3.5 py-1.5 font-sans text-[13px] font-medium text-parchment-white">
+            Merge
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The argument, one card per claim, each with its mockup tucked into the card edge.
+const CLAIMS: {
   title: string;
-  intro: string;
   body: string;
-  artifact: "before" | "vibes" | "after";
+  Mockup: React.ComponentType;
 }[] = [
   {
     title: "The default is over-provisioned.",
-    intro: "The biggest model on every step feels safe.",
-    body: "Then the bill compounds, call by call, and a quiet regression ships where nobody is watching. The cost is real; the slip is invisible.",
-    artifact: "before",
+    body: "The biggest model on every step feels safe. Then the bill compounds, call by call, and nobody can say which step earned it.",
+    Mockup: UsageMockup,
   },
   {
     title: "Evidence beats vibes.",
-    intro: "Leaderboards are not your workload.",
-    body: "You should not downgrade because a chart liked a model, or stay expensive because switching feels risky. The only proof that counts is your own traces, judged against the output you already shipped.",
-    artifact: "vibes",
+    body: "Leaderboards are not your workload. Every candidate is replayed on your own traces and judged against what you shipped.",
+    Mockup: FlowMockup,
   },
   {
     title: "A category, not a feature.",
-    intro: "Evidence-backed model downgrading.",
-    body: "Detect the inefficient call, prove the safe swap on your data, apply the fix in your repo. The skill does it today as a report you run. The agent will ship it as a pull request. Crucible will do it continuously.",
-    artifact: "after",
+    body: "Evidence-backed model downgrading: detect, prove, fix. A report you run today, pull requests next, continuous with Crucible.",
+    Mockup: ReviewMockup,
+  },
+];
+
+// The quiet second band: three commitments under the claims, each marked by a bespoke glyph.
+const PILLARS: {
+  Icon: typeof QualityFloorIcon;
+  title: string;
+  body: string;
+}[] = [
+  {
+    Icon: QualityFloorIcon,
+    title: "It can say no.",
+    body: "Weak evidence means abstain. A tool that always finds savings is not measuring anything.",
+  },
+  {
+    Icon: ReplayLoopIcon,
+    title: "Your traces are the benchmark.",
+    body: "Replayed and judged against the output you already shipped, never a public leaderboard.",
+  },
+  {
+    Icon: PullRequestIcon,
+    title: "Nothing swaps on its own.",
+    body: "Cascade risk gets flagged, evidence gets attached, and the merge stays yours.",
   },
 ];
 
@@ -280,63 +409,57 @@ export default function ManifestoPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {/* The argument as catalog rows: full-bleed between the frame's side rules, split by a
-          center hairline with a junction dot where the rules cross. */}
       <section className="bg-parchment-white">
-        <div className="divide-y divide-ash-border">
-          {ROWS.map((row, i) => {
-            // The middle row swaps sides (art left, words right): the zig-zag that tells the
-            // manifesto apart from the glossary catalog at a glance. DOM order stays words-first
-            // for mobile; order utilities flip it at lg, and the center hairline follows the
-            // visually-right cell.
-            const flip = row.artifact === "vibes";
-            return (
-              <div key={row.title} className="relative grid lg:grid-cols-2">
-                {i > 0 && (
-                  <span
-                    aria-hidden
-                    className="absolute left-1/2 top-0 z-10 hidden size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-driftwood lg:block"
-                  />
-                )}
-
-                <div
-                  className={`p-6 sm:p-10 lg:p-12 ${
-                    flip
-                      ? "lg:order-2 lg:border-l lg:border-ash-border"
-                      : "lg:order-1"
-                  }`}
-                >
-                  <Reveal>
-                    <h2 className="font-display text-heading text-midnight-ink">
-                      {row.title}
+        {/* ── The claims: three cards, each holding a layered still of the product's world. ── */}
+        <div className="px-4 py-14 sm:px-6 sm:py-16">
+          <div className="grid gap-4 sm:gap-5 md:grid-cols-3">
+            {CLAIMS.map((claim, i) => (
+              <Reveal key={claim.title} delay={i * 0.06} className="h-full">
+                <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand">
+                  <div className="p-6 sm:p-7">
+                    <h2 className="font-sans text-heading-sm text-midnight-ink">
+                      {claim.title}
                     </h2>
-                    <p className="mt-3 max-w-md text-subheading text-driftwood">
-                      {row.intro}
+                    <p className="mt-2 text-body text-driftwood">
+                      {claim.body}
                     </p>
-                    <p className="mt-6 max-w-md text-body text-driftwood">
-                      {row.body}
-                    </p>
-                  </Reveal>
+                  </div>
+                  <div className="mt-auto">
+                    <claim.Mockup />
+                  </div>
                 </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
 
-                {row.artifact === "vibes" ? (
-                  <div className="relative min-h-72 overflow-hidden border-t border-ash-border lg:order-1 lg:min-h-0 lg:border-t-0">
-                    <VibesArtifact />
-                  </div>
-                ) : (
-                  <div className="border-t border-ash-border p-6 sm:p-10 lg:order-2 lg:border-l lg:border-t-0 lg:p-12">
-                    <Reveal delay={0.06} className="h-full w-full">
-                      {row.artifact === "before" ? (
-                        <BeforeArtifact />
-                      ) : (
-                        <AfterArtifact />
-                      )}
-                    </Reveal>
-                  </div>
-                )}
+        {/* ── The commitments: an icon-marked column band, hairlined and dotted at the joins. ── */}
+        <div className="relative border-t border-ash-border">
+          <span
+            aria-hidden
+            className="absolute left-1/3 top-0 z-10 hidden size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-driftwood md:block"
+          />
+          <span
+            aria-hidden
+            className="absolute left-2/3 top-0 z-10 hidden size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-driftwood md:block"
+          />
+          <div className="grid divide-y divide-ash-border md:grid-cols-3 md:divide-x md:divide-y-0">
+            {PILLARS.map((pillar, i) => (
+              <div key={pillar.title} className="p-6 sm:p-10 lg:p-12">
+                <Reveal delay={i * 0.06}>
+                  <span className="flex size-11 items-center justify-center rounded-xl border border-ash-border bg-parchment-white text-driftwood">
+                    <pillar.Icon size={20} />
+                  </span>
+                  <h2 className="mt-14 font-sans text-heading-sm text-midnight-ink sm:mt-20">
+                    {pillar.title}
+                  </h2>
+                  <p className="mt-2 max-w-sm text-body text-driftwood">
+                    {pillar.body}
+                  </p>
+                </Reveal>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       </section>
 

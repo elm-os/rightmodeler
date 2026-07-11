@@ -240,14 +240,16 @@ function FloorArtifact() {
           />
 
           {/* below the floor, fading back and running off-canvas */}
-          <g opacity="0.32">
+          <g opacity="0.5">
             <rect
               x="-300"
               y="268"
               width="1200"
               height="66"
               rx="18"
-              className="fill-silver-mist"
+              className="fill-none stroke-silver-mist"
+              strokeWidth="1.5"
+              strokeDasharray="5 7"
             />
           </g>
           <text
@@ -261,14 +263,16 @@ function FloorArtifact() {
             llama-4-nano · 0.62
           </text>
 
-          <g opacity="0.45">
+          <g opacity="0.7">
             <rect
               x="-300"
               y="178"
               width="1200"
               height="66"
               rx="18"
-              className="fill-silver-mist"
+              className="fill-none stroke-silver-mist"
+              strokeWidth="1.5"
+              strokeDasharray="5 7"
             />
           </g>
           <text
