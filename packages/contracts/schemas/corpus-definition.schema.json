@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.com/schemas/corpus-definition.schema.json",
+  "title": "Corpus Definition",
+  "type": "object",
+  "required": ["version", "corpus_id", "parent_version", "cases"],
+  "properties": {
+    "version": { "type": "string" },
+    "corpus_id": { "type": "string", "minLength": 1 },
+    "parent_version": { "type": ["string", "null"] },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "case_id",
+          "source_run_id",
+          "pipeline_family",
+          "workload_label",
+          "split",
+          "risk",
+          "required_evidence",
+          "checks"
+        ],
+        "properties": {
+          "case_id": { "type": "string", "minLength": 1 },
+          "source_run_id": { "type": "string", "minLength": 1 },
+          "pipeline_family": {
+            "type": "string",
+            "enum": [
+              "reference-freeform",
+              "structured-check",
+              "tool-trajectory",
+              "repo-fix"
+            ]
+          },
+          "workload_label": { "type": "string", "minLength": 1 },
+          "split": { "type": "string", "enum": ["working", "holdout"] },
+          "risk": { "type": "string", "enum": ["normal", "high"] },
+          "required_evidence": {
+            "type": "string",
+            "enum": ["deterministic", "reference", "trajectory", "abstain"]
+          },
+          "checks": { "type": "object" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

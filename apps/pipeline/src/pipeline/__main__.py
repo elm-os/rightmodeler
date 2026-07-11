@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from jsonschema import validate
+from pipeline.corpus import compile_corpus
 from pipeline.evaluate import evaluate
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -155,6 +156,16 @@ def report(analysis_path, output_path, evaluation_path=None):
     return write_json(output_path, report_payload)
 
 
+def build_corpus(input_path, definition_path, manifest_output, cases_output):
+    bundle = validate_schema(load_json(input_path), "historical-run-bundle")
+    definition = validate_schema(load_json(definition_path), "corpus-definition")
+    manifest, benchmark_cases = compile_corpus(bundle, definition)
+    validate_schema(manifest, "corpus-manifest")
+    validate_schema(benchmark_cases, "benchmark-cases")
+    write_json(manifest_output, manifest)
+    return write_json(cases_output, benchmark_cases)
+
+
 def smoke():
     sample = {
         "version": "1",
@@ -264,6 +275,36 @@ def build_parser():
     report_parser.set_defaults(
         handler=lambda args: (
             print(report(args.analysis_input, args.output, args.evaluation_input)),
+            0,
+        )[1]
+    )
+
+    corpus_parser = subparsers.add_parser("corpus")
+    corpus_subparsers = corpus_parser.add_subparsers(dest="corpus_command", required=True)
+    corpus_build_parser = corpus_subparsers.add_parser("build")
+    corpus_build_parser.add_argument(
+        "--input",
+        default=str(ARTIFACTS / "input" / "historical-run-bundle.json"),
+    )
+    corpus_build_parser.add_argument("--definition", required=True)
+    corpus_build_parser.add_argument(
+        "--manifest-output",
+        default=str(ARTIFACTS / "corpus" / "manifest.json"),
+    )
+    corpus_build_parser.add_argument(
+        "--cases-output",
+        default=str(ARTIFACTS / "corpus" / "benchmark-cases.json"),
+    )
+    corpus_build_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                build_corpus(
+                    args.input,
+                    args.definition,
+                    args.manifest_output,
+                    args.cases_output,
+                )
+            ),
             0,
         )[1]
     )
