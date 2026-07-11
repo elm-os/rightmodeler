@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" fill="none" stroke="#57514a" stroke-width="0.6">
+  <!-- rightmodeler agent — the autopilot: a gyroscope holding its course. Hand-drawn in the same
+       thin-ink instrument-diagram language as the generated platform art (dotted construction
+       lines, wireframe solids, white ground melted into the card by mix-blend-multiply). -->
+
+  <!-- dotted polar axis -->
+  <line x1="240" y1="52" x2="240" y2="428" stroke-dasharray="0.1 7" stroke-linecap="round" stroke-width="0.85"/>
+
+  <!-- wireframe sphere -->
+  <circle cx="240" cy="240" r="88"/>
+  <ellipse cx="240" cy="240" rx="58" ry="88"/>
+  <ellipse cx="240" cy="240" rx="26" ry="88"/>
+  <ellipse cx="240" cy="240" rx="88" ry="20"/>
+  <ellipse cx="240" cy="196" rx="72" ry="16"/>
+  <ellipse cx="240" cy="284" rx="72" ry="16"/>
+
+  <!-- inner orbital ring -->
+  <g transform="rotate(-16 240 240)">
+    <ellipse cx="240" cy="240" rx="148" ry="50"/>
+  </g>
+
+  <!-- outer orbit: near half solid, far half dotted, one satellite holding the line -->
+  <g transform="rotate(12 240 240)">
+    <path d="M 46 240 A 194 64 0 0 0 434 240"/>
+    <path d="M 434 240 A 194 64 0 0 0 46 240" stroke-dasharray="0.1 7" stroke-linecap="round" stroke-width="0.85"/>
+    <circle cx="64" cy="267" r="3" fill="#57514a" stroke="none"/>
+  </g>
+</svg>
