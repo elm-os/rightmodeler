@@ -27,16 +27,16 @@ export function Body() {
   return (
     <Prose>
       <Lead>
-        The new model dropped on a Tuesday, because they always seem to drop
-        on a Tuesday. By ten the group chat was a wall of benchmark
-        screenshots. By quarter past, someone had asked the only question that
-        matters: so, are we switching? And then everyone went quiet and looked
-        at the one engineer who owns the model configs.
+        The new model dropped on a Tuesday, because they always seem to drop on
+        a Tuesday. By ten the group chat was a wall of benchmark screenshots. By
+        quarter past, someone had asked the only question that matters: so, are
+        we switching? And then everyone went quiet and looked at the one
+        engineer who owns the model configs.
       </Lead>
 
       <P>
-        If you run agents in production, you know that silence. It is the
-        sound of a person doing bad math quickly. Because the honest answer to
+        If you run agents in production, you know that silence. It is the sound
+        of a person doing bad math quickly. Because the honest answer to
         &ldquo;are we switching&rdquo; is a project, and everyone in the chat
         knows nobody budgeted for it.
       </P>
@@ -48,11 +48,11 @@ export function Body() {
         traces. Build a harness to replay them through the new model, step by
         step, with the same tools and the same context. Judge the outputs
         against what you already shipped, carefully, because eyeballing is how
-        regressions sneak through. Price the whole thing at your real token
-        mix, not the launch table&rsquo;s. Write it up so the swap survives
-        review. That is two days if the harness already exists, and closer to
-        a week if it does not. And the next model lands in three weeks, so you
-        get to do it all again.
+        regressions sneak through. Price the whole thing at your real token mix,
+        not the launch table&rsquo;s. Write it up so the swap survives review.
+        That is two days if the harness already exists, and closer to a week if
+        it does not. And the next model lands in three weeks, so you get to do
+        it all again.
       </P>
 
       <P>
@@ -85,12 +85,12 @@ export function Body() {
 
       <P>
         Engineers are not bad at the judgment part. Given the replays, the
-        scores, and the deltas, most teams make the right call in minutes.
-        What breaks people is the cadence. A frontier release every few
-        weeks, multiplied by every step in your stack, multiplied by every
-        provider, is not a task you finish. It is a standing job. And standing
-        jobs with clear inputs, checkable evidence, and a crisp definition of
-        done are exactly the jobs we hand to software.
+        scores, and the deltas, most teams make the right call in minutes. What
+        breaks people is the cadence. A frontier release every few weeks,
+        multiplied by every step in your stack, multiplied by every provider, is
+        not a task you finish. It is a standing job. And standing jobs with
+        clear inputs, checkable evidence, and a crisp definition of done are
+        exactly the jobs we hand to software.
       </P>
 
       <H2>A migration should be a pull request</H2>
@@ -98,20 +98,20 @@ export function Body() {
       <P>
         So here is the shape we are building toward.{" "}
         <A href="/agent">rightmodeler agent</A> watches every release. When a
-        new model could beat a step in your stack, it replays that step on
-        your real traces in a sandbox, judges the outputs against what you
-        already shipped, and checks the result against your preferences file:
-        your quality floor, your minimum saving, your latency budget, the
-        providers you allow, the steps it must never touch.
+        new model could beat a step in your stack, it replays that step on your
+        real traces in a sandbox, judges the outputs against what you already
+        shipped, and checks the result against your preferences file: your
+        quality floor, your minimum saving, your latency budget, the providers
+        you allow, the steps it must never touch.
       </P>
 
       <P>
         When a candidate clears the bar, it opens a pull request in your repo.
         The diff is one line. Attached to it are the receipts: quality scores
-        judged against your shipped outputs, the cost delta, the latency
-        delta, the confidence, and the replayed traces behind all of it. Your
-        Tuesday shrinks to code review. You read the evidence, maybe
-        spot-check a trace, and merge or close. It never merges on its own.
+        judged against your shipped outputs, the cost delta, the latency delta,
+        the confidence, and the replayed traces behind all of it. Your Tuesday
+        shrinks to code review. You read the evidence, maybe spot-check a trace,
+        and merge or close. It never merges on its own.
       </P>
 
       <P>
@@ -128,17 +128,14 @@ export function Body() {
         runs the same replay-and-judge loop on your own traces today, one
         command to install. The agent takes that loop and gives it a calendar.
         It is in active development; join the waitlist on{" "}
-        <A href="/agent">the agent page</A> and we will send one note when
-        early access opens.
+        <A href="/agent">the agent page</A> and we will send one note when early
+        access opens.
       </P>
 
       <P>
-        This is part two of the vision. Part one is about seeing: why your
-        agent bill has no line items, and what{" "}
-        <A href="/blog/the-bill-nobody-can-read">
-          Crucible does about it
-        </A>
-        .
+        This is part two of the vision. Part one is about seeing: why your agent
+        bill has no line items, and what{" "}
+        <A href="/blog/the-bill-nobody-can-read">Crucible does about it</A>.
       </P>
     </Prose>
   );

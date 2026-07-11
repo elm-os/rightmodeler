@@ -34,39 +34,39 @@ export function Body() {
       </Lead>
 
       <P>
-        The details change from team to team, and we have now watched this
-        scene play out at several, including our own. The shape is always the
-        same. An agent feature ships on a Thursday. The demo lands, everyone is
-        pleased, the system quietly goes to work. Then the bill arrives,
-        several times larger than anyone expected, formatted as a single line
-        item. Model usage. As if that explained anything.
+        The details change from team to team, and we have now watched this scene
+        play out at several, including our own. The shape is always the same. An
+        agent feature ships on a Thursday. The demo lands, everyone is pleased,
+        the system quietly goes to work. Then the bill arrives, several times
+        larger than anyone expected, formatted as a single line item. Model
+        usage. As if that explained anything.
       </P>
 
       <P>
         So someone stays late and goes spelunking. They export the usage CSVs.
-        They grep logs. They build the spreadsheet every team builds
-        eventually, the one with a tab per day and a formula nobody fully
-        trusts. And buried in that spreadsheet they find the anatomy the
-        invoice refused to show. An orchestrator calling a frontier model to
-        decide which of three branches to take, thousands of times a day. A
-        research subagent summarizing documents, and a coordinator summarizing
-        the summaries. And the one that stings: a tool call that had been
-        failing quietly for eleven days, caught by a fallback, retried three
-        times per request. Every retry billed. No error ever surfaced, because
-        technically nothing was down.
+        They grep logs. They build the spreadsheet every team builds eventually,
+        the one with a tab per day and a formula nobody fully trusts. And buried
+        in that spreadsheet they find the anatomy the invoice refused to show.
+        An orchestrator calling a frontier model to decide which of three
+        branches to take, thousands of times a day. A research subagent
+        summarizing documents, and a coordinator summarizing the summaries. And
+        the one that stings: a tool call that had been failing quietly for
+        eleven days, caught by a fallback, retried three times per request.
+        Every retry billed. No error ever surfaced, because technically nothing
+        was down.
       </P>
 
       <H2>We instrument everything except the layer that thinks</H2>
 
       <P>
-        Here is the strange part. That team was not sloppy. They had tracing
-        on every service, dashboards for CPU and memory, alerts on p95s,
-        budgets for every queue. Twenty years of observability practice, fully
-        applied. And all of it stopped one layer short. The moment a request
-        crossed into the agent system, the instruments went quiet. The stack
-        saw a request go out and a response come back. What happened in
-        between, which agent called which model, at which step, for how much,
-        was a black box wearing a dashboard.
+        Here is the strange part. That team was not sloppy. They had tracing on
+        every service, dashboards for CPU and memory, alerts on p95s, budgets
+        for every queue. Twenty years of observability practice, fully applied.
+        And all of it stopped one layer short. The moment a request crossed into
+        the agent system, the instruments went quiet. The stack saw a request go
+        out and a response come back. What happened in between, which agent
+        called which model, at which step, for how much, was a black box wearing
+        a dashboard.
       </P>
 
       <PullQuote>
@@ -76,29 +76,28 @@ export function Body() {
 
       <P>
         A modern agent feature is not a model call. It is an orchestrator, a
-        handful of subagents, tool calls, retries, judges, and glue steps,
-        each with its own model, its own latency, and its own ways of failing.
-        We would never run a fleet of services without per-service metrics. We
-        run fleets of agents that way every day.
+        handful of subagents, tool calls, retries, judges, and glue steps, each
+        with its own model, its own latency, and its own ways of failing. We
+        would never run a fleet of services without per-service metrics. We run
+        fleets of agents that way every day.
       </P>
 
       <H2>What seeing actually changes</H2>
 
       <P>
-        Imagine the same three weeks with instruments. Cost has line items:
-        this agent, this step, this model, this many dollars, ranked. The
-        orchestrator&rsquo;s glue calls show up on day one as the most
-        expensive routing decision in company history, instead of hiding in an
-        aggregate for a quarter. Speed has a shape: p50 and p95 per step, so
-        the slow layer cannot hide inside an average. And failures have a
-        feed: the tool call that starts failing shows up the hour it starts,
-        tagged with its retry bill, eleven days before the invoice does.
+        Imagine the same three weeks with instruments. Cost has line items: this
+        agent, this step, this model, this many dollars, ranked. The
+        orchestrator&rsquo;s glue calls show up on day one as the most expensive
+        routing decision in company history, instead of hiding in an aggregate
+        for a quarter. Speed has a shape: p50 and p95 per step, so the slow
+        layer cannot hide inside an average. And failures have a feed: the tool
+        call that starts failing shows up the hour it starts, tagged with its
+        retry bill, eleven days before the invoice does.
       </P>
 
       <P>
-        None of this is exotic. It is the ordinary decency we already extend
-        to databases and queues, extended to the layer that now does the
-        thinking.
+        None of this is exotic. It is the ordinary decency we already extend to
+        databases and queues, extended to the layer that now does the thinking.
       </P>
 
       <H2>Crucible</H2>
@@ -112,27 +111,26 @@ export function Body() {
       </P>
 
       <P>
-        And it does one thing a dashboard cannot. Crucible runs the
-        rightmodeler proof loop continuously, the same replay-and-judge engine
-        you can <A href="https://github.com/elm-os/rightmodeler">run by hand
-        today</A>. So when it finds a layer overpaying for its work, it does
-        not just chart the problem. It proves the cheaper model that holds
-        your quality, and keeps the stack it watches right-sized.
+        And it does one thing a dashboard cannot. Crucible runs the rightmodeler
+        proof loop continuously, the same replay-and-judge engine you can{" "}
+        <A href="https://github.com/elm-os/rightmodeler">run by hand today</A>.
+        So when it finds a layer overpaying for its work, it does not just chart
+        the problem. It proves the cheaper model that holds your quality, and
+        keeps the stack it watches right-sized.
       </P>
 
       <P>
         Seeing is the foundation. It is the half of the vision that makes the
         other half safe: once you can see every layer and prove every claim,
-        changing models stops being frightening. What happens when a
-        brand-new model ships on a Tuesday, and why that should end as a pull
-        request in your repo, is{" "}
-        <A href="/blog/the-tuesday-problem">part two</A>.
+        changing models stops being frightening. What happens when a brand-new
+        model ships on a Tuesday, and why that should end as a pull request in
+        your repo, is <A href="/blog/the-tuesday-problem">part two</A>.
       </P>
 
       <P>
         Crucible is in early access. Join the waitlist on{" "}
-        <A href="/crucible">the Crucible page</A> and we will send one note
-        when it opens.
+        <A href="/crucible">the Crucible page</A> and we will send one note when
+        it opens.
       </P>
     </Prose>
   );

@@ -52,7 +52,8 @@ export async function POST(request: Request) {
 
   // Lenient product tag: missing or unknown values fall back to Crucible so older clients and
   // hand-rolled POSTs keep working with no new 400 paths.
-  const which = product === "agent" ? ("agent" as const) : ("crucible" as const);
+  const which =
+    product === "agent" ? ("agent" as const) : ("crucible" as const);
   const label = which === "agent" ? "rightmodeler agent" : "Crucible";
 
   // Pass the React Email template as a function call (Resend renders it) so this stays a plain

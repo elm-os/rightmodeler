@@ -18,7 +18,13 @@ const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 // One label/value line in the evidence block. The fixed label column keeps values aligned so the
 // rows read as one record, without hand-set leading or an off-scale grid.
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex gap-x-3 font-mono text-[13px]">
       <span className="w-24 shrink-0 text-fog">{label}</span>
@@ -130,13 +136,13 @@ export function AgentPrCard() {
             <div className="min-w-max">
               <p className="text-driftwood">steps/summarize.ts</p>
               <p className="mt-2 whitespace-pre text-fog">
-                {"   step: \"summarize\","}
+                {'   step: "summarize",'}
               </p>
               <p className="whitespace-pre text-fog">
-                {"-  model: \"gpt-4.1\","}
+                {'-  model: "gpt-4.1",'}
               </p>
               <p className="whitespace-pre text-midnight-ink">
-                {"+  model: \"gpt-4o-mini\","}
+                {'+  model: "gpt-4o-mini",'}
               </p>
             </div>
           </div>

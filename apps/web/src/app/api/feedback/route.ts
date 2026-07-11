@@ -46,7 +46,10 @@ export async function POST(request: Request) {
 
   if (message.length > MAX_MESSAGE_LENGTH) {
     return Response.json(
-      { error: "That message is too long. Please keep it under 5,000 characters." },
+      {
+        error:
+          "That message is too long. Please keep it under 5,000 characters.",
+      },
       { status: 400 },
     );
   }

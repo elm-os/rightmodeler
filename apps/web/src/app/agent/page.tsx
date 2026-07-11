@@ -114,8 +114,8 @@ export default function AgentPage() {
             </h2>
             <p className="mt-4 text-body text-driftwood">
               The agent moves only inside guardrails you set. A config in your
-              repo decides what counts as better, what it may touch, and what
-              it must never go near.
+              repo decides what counts as better, what it may touch, and what it
+              must never go near.
             </p>
           </Reveal>
 
@@ -152,8 +152,8 @@ export default function AgentPage() {
               )}
             </div>
             <p className="mt-4 max-w-xl text-body text-driftwood">
-              Nothing sits in your request path. The agent wakes in CI, does
-              its work, opens a PR, and goes back to sleep.
+              Nothing sits in your request path. The agent wakes in CI, does its
+              work, opens a PR, and goes back to sleep.
             </p>
           </Reveal>
 
@@ -165,8 +165,8 @@ export default function AgentPage() {
                 </p>
                 <p className="mt-1 text-body text-driftwood">
                   The diff ships with quality scores, cost deltas, latency, and
-                  the replayed traces behind them. When a reviewer asks why,
-                  the answer is already attached.
+                  the replayed traces behind them. When a reviewer asks why, the
+                  answer is already attached.
                 </p>
               </li>
             </Reveal>

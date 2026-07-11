@@ -28,7 +28,9 @@ export function WaitlistNotification({
   return (
     <Html lang="en">
       <Head />
-      <Preview>New {label} waitlist signup: {email}</Preview>
+      <Preview>
+        New {label} waitlist signup: {email}
+      </Preview>
       <Body
         style={{
           backgroundColor: "#fdfcfc",

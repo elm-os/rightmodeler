@@ -37,16 +37,15 @@ export default function PrivacyPage() {
           </p>
 
           <Lead>
-            The short version: we collect almost nothing, what you hand us
-            stays with the team, and every list we run is one email away from
-            removal.
+            The short version: we collect almost nothing, what you hand us stays
+            with the team, and every list we run is one email away from removal.
           </Lead>
 
           <H2>Who we are</H2>
           <P>
-            rightmodeler is an ELM-OS project (referred to here as
-            rightmodeler, we, or us). We operate this website at
-            www.rightmodeler.com. Questions about this policy reach us at{" "}
+            rightmodeler is an ELM-OS project (referred to here as rightmodeler,
+            we, or us). We operate this website at www.rightmodeler.com.
+            Questions about this policy reach us at{" "}
             <A href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</A>.
           </P>
 
@@ -54,24 +53,23 @@ export default function PrivacyPage() {
           <P>Two kinds of information, both small.</P>
           <UL>
             <LI>
-              Information you give us. If you join the Crucible or
-              rightmodeler agent waitlist, we collect your email address. If
-              you send feedback, we collect your email address and your
-              message.
+              Information you give us. If you join the Crucible or rightmodeler
+              agent waitlist, we collect your email address. If you send
+              feedback, we collect your email address and your message.
             </LI>
             <LI>
               Information collected automatically. We use Vercel Analytics to
-              understand aggregate site usage: pages viewed, referrers,
-              country, and device type. It is anonymized, does not use
-              advertising cookies, and does not follow you across other sites.
+              understand aggregate site usage: pages viewed, referrers, country,
+              and device type. It is anonymized, does not use advertising
+              cookies, and does not follow you across other sites.
             </LI>
           </UL>
 
           <H2>How we use it</H2>
           <UL>
             <LI>
-              To send you the early-access note you asked for when you joined
-              a waitlist.
+              To send you the early-access note you asked for when you joined a
+              waitlist.
             </LI>
             <LI>To read, and usually answer, the feedback you send us.</LI>
             <LI>
@@ -87,24 +85,23 @@ export default function PrivacyPage() {
           <P>
             Waitlist and feedback submissions are delivered by Resend as email
             to the founding team&rsquo;s inboxes. We do not run a separate
-            marketing database today. The site itself is hosted on Vercel,
-            whose infrastructure processes requests in order to serve these
-            pages.
+            marketing database today. The site itself is hosted on Vercel, whose
+            infrastructure processes requests in order to serve these pages.
           </P>
 
           <H2>Third parties</H2>
           <P>
             Two services process data on our behalf: Vercel (hosting and
             anonymized analytics) and Resend (email delivery for form
-            submissions). Links that leave this site, to GitHub or LinkedIn
-            for example, are governed by those sites&rsquo; own policies.
+            submissions). Links that leave this site, to GitHub or LinkedIn for
+            example, are governed by those sites&rsquo; own policies.
           </P>
 
           <H2>Your choices</H2>
           <P>
             Email us at <A href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</A>{" "}
-            to ask what we hold about you, to correct it, or to have it
-            deleted. We honor deletion requests without ceremony.
+            to ask what we hold about you, to correct it, or to have it deleted.
+            We honor deletion requests without ceremony.
           </P>
 
           <H2>Children</H2>
@@ -115,8 +112,8 @@ export default function PrivacyPage() {
 
           <H2>Changes</H2>
           <P>
-            If this policy changes, we will update this page and the date at
-            the top. Meaningful changes get called out plainly, not buried.
+            If this policy changes, we will update this page and the date at the
+            top. Meaningful changes get called out plainly, not buried.
           </P>
 
           <div className="border-t border-ash-border pt-8">

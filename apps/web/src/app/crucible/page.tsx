@@ -89,11 +89,9 @@ export default function CruciblePage() {
             <Tldr>
               Crucible watches your agents in production: cost per layer, speed
               per step,{" "}
-              <span className="text-midnight-ink">
-                failures as they happen
-              </span>
-              . And because it runs the rightmodeler proof loop continuously,
-              it does not just show you problems, it right-sizes the stack that
+              <span className="text-midnight-ink">failures as they happen</span>
+              . And because it runs the rightmodeler proof loop continuously, it
+              does not just show you problems, it right-sizes the stack that
               caused them.
             </Tldr>
           </Reveal>

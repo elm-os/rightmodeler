@@ -56,9 +56,9 @@ export function AgentDecisionSpine() {
             From release notes to a reviewable diff.
           </h2>
           <p className="mt-4 text-body text-driftwood">
-            The same proof loop as the rightmodeler skill, running on a
-            schedule instead of on demand. Nothing reaches your repo without
-            surviving all four steps.
+            The same proof loop as the rightmodeler skill, running on a schedule
+            instead of on demand. Nothing reaches your repo without surviving
+            all four steps.
           </p>
         </Reveal>
 
@@ -71,7 +71,10 @@ export function AgentDecisionSpine() {
 
           <div className="grid grid-cols-[2rem_1fr] items-center gap-x-5 sm:grid-cols-[2.5rem_1fr] sm:gap-x-7">
             <span className="flex justify-center">
-              <span aria-hidden className="size-1.5 rounded-full bg-ash-border" />
+              <span
+                aria-hidden
+                className="size-1.5 rounded-full bg-ash-border"
+              />
             </span>
             <p className="font-mono text-caption text-fog">
               in ▸ a new model release

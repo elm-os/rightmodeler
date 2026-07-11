@@ -56,9 +56,7 @@ function OfferingCard({ offering }: { offering: Offering }) {
     <>
       <span
         className={`inline-flex w-fit items-center rounded border border-ash-border px-1.5 py-0.5 font-mono text-caption uppercase ${
-          offering.strong
-            ? "font-medium text-midnight-ink"
-            : "text-driftwood"
+          offering.strong ? "font-medium text-midnight-ink" : "text-driftwood"
         }`}
       >
         {offering.chip}
