@@ -169,14 +169,16 @@ function VibesArtifact() {
             strokeWidth="1"
           />
 
-          <g opacity="0.32">
+          <g opacity="0.5">
             <rect
               x="-300"
               y="268"
               width="1200"
               height="66"
               rx="18"
-              className="fill-silver-mist"
+              className="fill-none stroke-silver-mist"
+              strokeWidth="1.5"
+              strokeDasharray="5 7"
             />
           </g>
           <text
@@ -190,14 +192,16 @@ function VibesArtifact() {
             top of a leaderboard
           </text>
 
-          <g opacity="0.45">
+          <g opacity="0.7">
             <rect
               x="-300"
               y="178"
               width="1200"
               height="66"
               rx="18"
-              className="fill-silver-mist"
+              className="fill-none stroke-silver-mist"
+              strokeWidth="1.5"
+              strokeDasharray="5 7"
             />
           </g>
           <text
@@ -280,49 +284,59 @@ export default function ManifestoPage() {
           center hairline with a junction dot where the rules cross. */}
       <section className="bg-parchment-white">
         <div className="divide-y divide-ash-border">
-          {ROWS.map((row, i) => (
-            <div
-              key={row.title}
-              className="relative grid lg:grid-cols-2 lg:divide-x lg:divide-ash-border"
-            >
-              {i > 0 && (
-                <span
-                  aria-hidden
-                  className="absolute left-1/2 top-0 z-10 hidden size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-driftwood lg:block"
-                />
-              )}
+          {ROWS.map((row, i) => {
+            // The middle row swaps sides (art left, words right): the zig-zag that tells the
+            // manifesto apart from the glossary catalog at a glance. DOM order stays words-first
+            // for mobile; order utilities flip it at lg, and the center hairline follows the
+            // visually-right cell.
+            const flip = row.artifact === "vibes";
+            return (
+              <div key={row.title} className="relative grid lg:grid-cols-2">
+                {i > 0 && (
+                  <span
+                    aria-hidden
+                    className="absolute left-1/2 top-0 z-10 hidden size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-driftwood lg:block"
+                  />
+                )}
 
-              <div className="p-6 sm:p-10 lg:p-12">
-                <Reveal>
-                  <h2 className="font-display text-heading text-midnight-ink">
-                    {row.title}
-                  </h2>
-                  <p className="mt-3 max-w-md text-subheading text-driftwood">
-                    {row.intro}
-                  </p>
-                  <p className="mt-6 max-w-md text-body text-driftwood">
-                    {row.body}
-                  </p>
-                </Reveal>
-              </div>
-
-              {row.artifact === "vibes" ? (
-                <div className="relative min-h-72 overflow-hidden border-t border-ash-border lg:min-h-0 lg:border-t-0">
-                  <VibesArtifact />
-                </div>
-              ) : (
-                <div className="border-t border-ash-border p-6 sm:p-10 lg:border-t-0 lg:p-12">
-                  <Reveal delay={0.06} className="h-full w-full">
-                    {row.artifact === "before" ? (
-                      <BeforeArtifact />
-                    ) : (
-                      <AfterArtifact />
-                    )}
+                <div
+                  className={`p-6 sm:p-10 lg:p-12 ${
+                    flip
+                      ? "lg:order-2 lg:border-l lg:border-ash-border"
+                      : "lg:order-1"
+                  }`}
+                >
+                  <Reveal>
+                    <h2 className="font-display text-heading text-midnight-ink">
+                      {row.title}
+                    </h2>
+                    <p className="mt-3 max-w-md text-subheading text-driftwood">
+                      {row.intro}
+                    </p>
+                    <p className="mt-6 max-w-md text-body text-driftwood">
+                      {row.body}
+                    </p>
                   </Reveal>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {row.artifact === "vibes" ? (
+                  <div className="relative min-h-72 overflow-hidden border-t border-ash-border lg:order-1 lg:min-h-0 lg:border-t-0">
+                    <VibesArtifact />
+                  </div>
+                ) : (
+                  <div className="border-t border-ash-border p-6 sm:p-10 lg:order-2 lg:border-l lg:border-t-0 lg:p-12">
+                    <Reveal delay={0.06} className="h-full w-full">
+                      {row.artifact === "before" ? (
+                        <BeforeArtifact />
+                      ) : (
+                        <AfterArtifact />
+                      )}
+                    </Reveal>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 

@@ -134,7 +134,7 @@ const faqLd = {
 // line still fits.
 function CodeCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="h-full w-full rounded-2xl border border-ash-border bg-parchment-white p-6 sm:p-8">
+    <div className="h-full w-full rounded-2xl border border-ash-border bg-warm-sand p-6 sm:p-8">
       <div className="space-y-1.5 font-mono text-[12px] sm:text-sm">
         {children}
       </div>
@@ -365,7 +365,7 @@ export default function GlossaryPage() {
       {/* The catalog — full-bleed rows between the frame's side rules: terms on the left, the
           artifact that shows them on the right, split by a center hairline with a junction dot
           where the rules cross. */}
-      <section className="bg-warm-sand">
+      <section className="bg-parchment-white">
         <div className="divide-y divide-ash-border">
           {THEMES.map((theme, i) => {
             const terms = theme.slugs.map(byIdSlug);
