@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
 import { GithubButton } from "@/components/sections/github-button";
@@ -271,7 +272,16 @@ export default function ReduceLlmCostsPage() {
         <div className="px-4 py-14 sm:px-6 sm:py-16">
           <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
             <Reveal className="h-full">
-              <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand">
+              <div className="relative isolate flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand">
+                {/* Same subtle grain as the agent page's deliverable panel. */}
+                <Image
+                  src="/agent/showcase-grain.jpg"
+                  alt=""
+                  fill
+                  aria-hidden
+                  className="-z-10 object-cover object-left-bottom"
+                  sizes="(min-width: 768px) 50vw, 100vw"
+                />
                 <div className="p-6 sm:p-7">
                   <h2 className="font-sans text-heading-sm text-midnight-ink">
                     Run the audit today
