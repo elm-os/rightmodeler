@@ -134,18 +134,21 @@ function LedgerMockup() {
   );
 }
 
+// Monochrome "syntax" tones for the config panel: structure in driftwood, comments in fog,
+// values in ink.
+const Ln = ({ children }: { children: React.ReactNode }) => (
+  <div className="whitespace-pre text-driftwood">{children}</div>
+);
+const C = ({ children }: { children: React.ReactNode }) => (
+  <span className="text-fog">{children}</span>
+);
+const V = ({ children }: { children: React.ReactNode }) => (
+  <span className="text-midnight-ink">{children}</span>
+);
+
 // Right card: the audit as configuration, running off the card's corner like the reference's
-// code panel. Comments in fog, values in ink, no hue.
+// code panel.
 function ConfigMockup() {
-  const Ln = ({ children }: { children: React.ReactNode }) => (
-    <div className="whitespace-pre text-driftwood">{children}</div>
-  );
-  const C = ({ children }: { children: React.ReactNode }) => (
-    <span className="text-fog">{children}</span>
-  );
-  const V = ({ children }: { children: React.ReactNode }) => (
-    <span className="text-midnight-ink">{children}</span>
-  );
   return (
     <div className="relative -mr-6 mb-0 ml-4 mt-6 sm:-mr-8 sm:ml-6">
       <div
