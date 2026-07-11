@@ -62,9 +62,10 @@ function UsageMockup() {
     { step: "route", cost: "$1,180" },
     { step: "extract", cost: "$940" },
     { step: "summarize", cost: "$2,310" },
+    { step: "judge", cost: "$860" },
   ];
   return (
-    <div className="relative mx-5 -mb-14 mt-4 sm:mx-6">
+    <div className="relative mx-4 -mb-10 mt-4 sm:mx-5">
       <div
         className={`rounded-xl border border-ash-border bg-parchment-white ${MOCKUP_SHADOW}`}
       >
@@ -83,7 +84,7 @@ function UsageMockup() {
           {rows.map((row) => (
             <div
               key={row.step}
-              className="flex items-baseline justify-between gap-3 px-4 py-2 font-mono text-[12px]"
+              className="flex items-baseline justify-between gap-3 px-4 py-2.5 font-mono text-[12px]"
             >
               <span className="min-w-0 truncate">
                 <span className="text-midnight-ink">{row.step}</span>
@@ -112,7 +113,7 @@ function UsageMockup() {
 // land on opposite branches.
 function FlowMockup() {
   return (
-    <div className="relative mx-auto mb-3 mt-2 w-full max-w-[380px] px-2">
+    <div className="relative mx-3 mb-4 mt-2 sm:mx-4">
       <svg
         viewBox="0 0 480 310"
         className="h-auto w-full"
@@ -305,7 +306,7 @@ function FlowMockup() {
 // right edge, so the ink button sits against the clip like the reference.
 function ReviewMockup() {
   return (
-    <div className="relative -mr-5 mb-5 ml-5 mt-3 sm:-mr-6 sm:ml-6">
+    <div className="relative -mr-5 mb-5 ml-4 mt-3 sm:-mr-6 sm:ml-5">
       <div
         className={`rounded-xl border border-ash-border bg-parchment-white p-4 pr-9 sm:pr-10 ${MOCKUP_SHADOW}`}
       >
@@ -380,17 +381,17 @@ const PILLARS: {
   {
     Icon: QualityFloorIcon,
     title: "It can say no.",
-    body: "Weak evidence means abstain. A tool that always finds savings is not measuring anything.",
+    body: "Weak evidence means abstain.",
   },
   {
     Icon: ReplayLoopIcon,
     title: "Your traces are the benchmark.",
-    body: "Replayed and judged against the output you already shipped, never a public leaderboard.",
+    body: "Judged against what you shipped, never a leaderboard.",
   },
   {
     Icon: PullRequestIcon,
     title: "Nothing swaps on its own.",
-    body: "Cascade risk gets flagged, evidence gets attached, and the merge stays yours.",
+    body: "Risks flagged, evidence attached, merge yours.",
   },
 ];
 
@@ -443,12 +444,12 @@ export default function ManifestoPage() {
           />
           <div className="grid divide-y divide-ash-border md:grid-cols-3 md:divide-x md:divide-y-0">
             {PILLARS.map((pillar, i) => (
-              <div key={pillar.title} className="p-6 sm:p-10 lg:p-12">
+              <div key={pillar.title} className="p-6 sm:p-8">
                 <Reveal delay={i * 0.06}>
                   <span className="flex size-11 items-center justify-center rounded-xl border border-ash-border bg-parchment-white text-driftwood">
                     <pillar.Icon size={20} />
                   </span>
-                  <h2 className="mt-10 font-sans text-heading-sm text-midnight-ink sm:mt-14">
+                  <h2 className="mt-8 font-sans text-heading-sm text-midnight-ink sm:mt-10">
                     {pillar.title}
                   </h2>
                   <p className="mt-2 max-w-sm text-body text-driftwood">
