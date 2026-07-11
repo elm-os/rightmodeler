@@ -195,7 +195,7 @@ function DecisionArtifact() {
 function FloorArtifact() {
   return (
     <svg
-      viewBox="0 0 560 380"
+      viewBox="0 0 700 460"
       preserveAspectRatio="xMidYMid slice"
       className="absolute inset-0 h-full w-full"
       aria-hidden
@@ -218,89 +218,91 @@ function FloorArtifact() {
         </filter>
       </defs>
 
-      {/* faint construction diagonals, one crossing the flow */}
-      <line
-        x1="360"
-        y1="-30"
-        x2="720"
-        y2="330"
-        className="stroke-ash-border"
-        strokeWidth="1"
-      />
-
-      <g transform="rotate(-30 280 190)">
+      <g transform="translate(70 40)">
+        {/* faint construction diagonals, one crossing the flow */}
         <line
-          x1="-300"
-          y1="48"
-          x2="900"
-          y2="48"
+          x1="360"
+          y1="-70"
+          x2="760"
+          y2="330"
           className="stroke-ash-border"
           strokeWidth="1"
         />
 
-        {/* below the floor, fading back and running off-canvas */}
-        <g opacity="0.32">
+        <g transform="rotate(-30 280 190)">
+          <line
+            x1="-300"
+            y1="48"
+            x2="900"
+            y2="48"
+            className="stroke-ash-border"
+            strokeWidth="1"
+          />
+
+          {/* below the floor, fading back and running off-canvas */}
+          <g opacity="0.32">
+            <rect
+              x="-300"
+              y="268"
+              width="1200"
+              height="66"
+              rx="18"
+              className="fill-silver-mist"
+            />
+          </g>
+          <text
+            x="250"
+            y="309"
+            textAnchor="end"
+            className="fill-fog font-sans"
+            fontSize="16"
+            fontWeight="500"
+          >
+            llama-4-nano · 0.62
+          </text>
+
+          <g opacity="0.45">
+            <rect
+              x="-300"
+              y="178"
+              width="1200"
+              height="66"
+              rx="18"
+              className="fill-silver-mist"
+            />
+          </g>
+          <text
+            x="360"
+            y="219"
+            textAnchor="end"
+            className="fill-fog font-sans"
+            fontSize="16"
+            fontWeight="500"
+          >
+            gpt-5.4-nano · 0.71
+          </text>
+
+          {/* the one that cleared it: white pill, rounded cap, soft shadow, ink label */}
           <rect
             x="-300"
-            y="268"
-            width="1200"
-            height="66"
-            rx="18"
-            className="fill-silver-mist"
+            y="86"
+            width="770"
+            height="70"
+            rx="35"
+            className="fill-parchment-white"
+            filter="url(#floor-pill-shadow)"
           />
+          <text
+            x="446"
+            y="129"
+            textAnchor="end"
+            className="fill-midnight-ink font-sans"
+            fontSize="17"
+            fontWeight="500"
+          >
+            gpt-5.4-mini · 0.94 · clears the floor
+          </text>
         </g>
-        <text
-          x="250"
-          y="309"
-          textAnchor="end"
-          className="fill-fog font-sans"
-          fontSize="16"
-          fontWeight="500"
-        >
-          llama-4-nano · 0.62
-        </text>
-
-        <g opacity="0.45">
-          <rect
-            x="-300"
-            y="178"
-            width="1200"
-            height="66"
-            rx="18"
-            className="fill-silver-mist"
-          />
-        </g>
-        <text
-          x="360"
-          y="219"
-          textAnchor="end"
-          className="fill-fog font-sans"
-          fontSize="16"
-          fontWeight="500"
-        >
-          gpt-5.4-nano · 0.71
-        </text>
-
-        {/* the one that cleared it: white pill, rounded cap, soft shadow, ink label */}
-        <rect
-          x="-300"
-          y="86"
-          width="770"
-          height="70"
-          rx="35"
-          className="fill-parchment-white"
-          filter="url(#floor-pill-shadow)"
-        />
-        <text
-          x="446"
-          y="129"
-          textAnchor="end"
-          className="fill-midnight-ink font-sans"
-          fontSize="17"
-          fontWeight="500"
-        >
-          gpt-5.4-mini · 0.94 · clears the floor
-        </text>
       </g>
     </svg>
   );
