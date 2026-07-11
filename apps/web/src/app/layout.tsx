@@ -28,7 +28,7 @@ const geistMono = Geist_Mono({
 });
 
 const description =
-  "Replay real agent traces through cheaper models, judge each output against what you already shipped, and prove which swaps are safe.";
+  "Keep your agents on the right model: prove safe swaps from your real traces, ship model upgrades as evidence-backed PRs, and watch every layer with Crucible.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.rightmodeler.com"),

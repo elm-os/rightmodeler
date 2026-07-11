@@ -13,7 +13,7 @@ const VEIL =
   "radial-gradient(130% 115% at 24% 30%, rgba(253,252,252,0.82) 0%, rgba(253,252,252,0.34) 46%, rgba(253,252,252,0) 74%)";
 
 const description =
-  "Field notes from the rightmodeler team on cutting model cost without giving up the quality you already shipped.";
+  "Field notes from the rightmodeler team on keeping agents on the right models: proving swaps, watching every layer, and shipping migrations as pull requests.";
 
 export const metadata: Metadata = {
   title: "Blog",
@@ -75,11 +75,12 @@ export default function BlogIndexPage() {
               The rightmodeler blog
             </p>
             <h1 className="mt-5 font-display text-heading-lg text-balance text-midnight-ink sm:text-display">
-              Notes on spending less on models.
+              Notes on running agents on the right models.
             </h1>
             <p className="mt-6 max-w-xl text-subheading text-driftwood">
-              How we make multi-agent systems cheaper without giving up the
-              quality you already shipped.
+              How we prove model swaps, watch every layer, and turn migrations
+              into code review, without giving up the quality you already
+              shipped.
             </p>
           </Reveal>
         </div>
