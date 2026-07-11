@@ -3,6 +3,44 @@
   "$id": "https://rightmodeler.com/schemas/candidate-results.schema.json",
   "title": "Candidate Results",
   "type": "object",
+  "$defs": {
+    "trajectory": {
+      "type": "object",
+      "required": ["tool_calls", "terminal_state", "final_output"],
+      "properties": {
+        "tool_calls": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "call_id",
+              "tool_name",
+              "arguments",
+              "attempt",
+              "status"
+            ],
+            "properties": {
+              "call_id": { "type": "string", "minLength": 1 },
+              "tool_name": { "type": "string", "minLength": 1 },
+              "arguments": { "type": "object" },
+              "attempt": { "type": "integer", "minimum": 1 },
+              "status": { "type": "string", "enum": ["success", "error"] },
+              "loop_id": { "type": "string", "minLength": 1 },
+              "iteration": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "terminal_state": {
+          "type": "string",
+          "enum": ["success", "failure", "abstain"]
+        },
+        "final_output": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
   "required": [
     "version",
     "bundle_id",
@@ -41,6 +79,7 @@
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
           },
+          "trajectory": { "$ref": "#/$defs/trajectory" },
           "reference": {
             "oneOf": [
               {
@@ -71,6 +110,20 @@
                     "minItems": 1,
                     "items": { "type": "string", "minLength": 1 }
                   }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["type", "refs", "trajectory"],
+                "properties": {
+                  "type": { "const": "reference-trajectory" },
+                  "refs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "trajectory": { "$ref": "#/$defs/trajectory" }
                 },
                 "additionalProperties": false
               }
