@@ -40,7 +40,7 @@ const OFFERINGS: Offering[] = [
     body: "The autopilot. A new model ships; your repo gets a pull request with the evidence attached. Migrations become code review.",
     cta: "Meet the agent",
     href: "/agent",
-    art: "/platform/agent.jpg",
+    art: "/platform/agent.svg",
   },
   {
     chip: "Early access",
@@ -54,13 +54,14 @@ const OFFERINGS: Offering[] = [
 ];
 
 const cardClass =
-  "group flex h-full flex-col rounded-2xl border border-ash-border bg-parchment-white transition-[background-color,transform] duration-150 ease-out hover:bg-warm-sand active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white lg:aspect-[6/7]";
+  "group flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-parchment-white transition-[background-color,transform] duration-150 ease-out hover:bg-warm-sand active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white lg:aspect-[6/7]";
 
 function OfferingCard({ offering }: { offering: Offering }) {
   const inner = (
     <>
-      {/* The diagram — centered in the upper field, white ground melted away by multiply. */}
-      <div className="flex flex-1 items-center justify-center px-8 pt-8">
+      {/* The diagram — centered in the upper field, white ground melted away by multiply. Height
+          is capped so the words below always stay inside the card, whatever the column width. */}
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 pt-8">
         <Image
           src={offering.art}
           alt=""
@@ -68,7 +69,8 @@ function OfferingCard({ offering }: { offering: Offering }) {
           width={480}
           height={480}
           sizes="(min-width: 768px) 30vw, 80vw"
-          className="w-3/4 max-w-72 mix-blend-multiply"
+          className="h-auto max-h-56 w-auto max-w-[72%] mix-blend-multiply sm:max-h-64"
+          unoptimized={offering.art.endsWith(".svg")}
         />
       </div>
 
