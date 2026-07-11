@@ -17,10 +17,11 @@ export function Footer() {
       <div className="mx-auto w-full max-w-4xl">
         <Reveal className="border-t border-ash-border pt-8">
           <h2 className="max-w-xl text-balance font-display text-heading text-midnight-ink sm:text-heading-lg lg:text-display">
-            A recommendation report, not a runtime gateway.
+            Every step, on the right model. Proven, not guessed.
           </h2>
           <p className="mt-5 max-w-md text-body text-driftwood">
-            Proven on your own traces. You decide what to swap, and when.
+            The skill proves it on your traces today. The agent ships it as a
+            pull request. Crucible keeps watch.
           </p>
         </Reveal>
 
@@ -48,6 +49,9 @@ export function Footer() {
             <Link href="/glossary" className={linkClass}>
               Glossary
             </Link>
+            <Link href="/agent" className={linkClass}>
+              Agent
+            </Link>
             <Link href="/crucible" className={linkClass}>
               Crucible
             </Link>
@@ -57,11 +61,31 @@ export function Footer() {
             <Link href="/blog" className={linkClass}>
               Blog
             </Link>
+            <Link href="/feedback" className={linkClass}>
+              Feedback
+            </Link>
             <SocialLinks className="-ml-2" />
           </nav>
         </Reveal>
 
         <Reveal delay={0.14} className="mt-10 space-y-1.5">
+          <nav
+            aria-label="Legal"
+            className="flex flex-wrap gap-x-5 gap-y-2 pb-1"
+          >
+            <Link
+              href="/privacy"
+              className={`font-mono text-caption ${linkClass}`}
+            >
+              Privacy policy
+            </Link>
+            <Link
+              href="/terms"
+              className={`font-mono text-caption ${linkClass}`}
+            >
+              Terms of service
+            </Link>
+          </nav>
           <p className="font-mono text-caption text-driftwood">
             Every figure shown on this page is an illustrative example, not
             measured savings.

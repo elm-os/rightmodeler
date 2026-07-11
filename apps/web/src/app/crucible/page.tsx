@@ -13,14 +13,26 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Crucible (coming soon)",
   description:
-    "Crucible is rightmodeler, hosted and always-on: connect over MCP and it continuously replays new traces through cheaper models, proves what's safe, and applies the swap. Join the waitlist.",
+    "Crucible is the analytics and optimization suite for your AI agents: cost per layer, speed per step, failures as they happen, and a model stack that keeps itself right-sized. Join the waitlist.",
   path: "/crucible",
 });
 
 const BULLETS: { title: string; body: string }[] = [
   {
-    title: "Detect, prove, fix, continuously",
-    body: "The same loop rightmodeler runs today, always-on: every new trace is audited as it arrives, so your model stack stays right-sized instead of drifting.",
+    title: "Cost, by layer",
+    body: "One invoice becomes a map. See exactly what each agent, step, and model spends, so the bill finally has line items you can act on.",
+  },
+  {
+    title: "Speed, by step",
+    body: "Latency broken down where it happens: p50 and p95 per step, so the slow layer stops hiding inside an aggregate.",
+  },
+  {
+    title: "Failures, as they happen",
+    body: "Failed tool calls, silent retries, and quality regressions surface in a passive feed. No stack trace does not mean nothing went wrong.",
+  },
+  {
+    title: "Continuously right-sized",
+    body: "The same detect, prove, fix loop rightmodeler runs today, always-on: every new trace is audited as it arrives, so your model stack stays right-sized instead of drifting.",
   },
   {
     title: "Connected over MCP",
@@ -35,15 +47,19 @@ const BULLETS: { title: string; body: string }[] = [
 const FAQ: FaqItem[] = [
   {
     q: "What is Crucible?",
-    a: "Crucible is rightmodeler, hosted and always-on. Instead of running the audit yourself, you connect your pipeline once and Crucible replays every new trace through cheaper models, proves what's safe against what you shipped, and applies the swap, continuously.",
+    a: "Crucible is the analytics and optimization suite for AI agents, by rightmodeler. It shows what every layer of your agent system costs, how fast it runs, and where it fails, and it runs the rightmodeler proof loop continuously so your model stack stays right-sized as new traces arrive.",
   },
   {
     q: "When can I use it?",
-    a: "Crucible is in active development. Join the waitlist and we'll send an early-access note when it opens. The open-source engine, rightmodeler, is available now on GitHub.",
+    a: "Crucible is in active development. Join the waitlist and we'll send an early-access note when it opens. The engine behind it, the rightmodeler skill, is available now on GitHub.",
   },
   {
     q: "How does it connect?",
     a: "Over MCP, using the tracing you already emit, with no new SDK. You keep your own API keys and can route through OpenRouter, the Vercel AI Gateway, or LiteLLM.",
+  },
+  {
+    q: "Is it a gateway?",
+    a: "No. Crucible reads your traces passively and never sits in your request path. Your traffic keeps flowing through your own keys and routes; Crucible watches, measures, and proves.",
   },
 ];
 
@@ -54,8 +70,8 @@ export default function CruciblePage() {
 
       <PageHero
         eyebrow="Coming soon · by rightmodeler"
-        title="Crucible: your model stack, continuously refined."
-        lede="rightmodeler, hosted and always-on. No dashboards to babysit, no runtime risk."
+        title="Crucible: every layer, measured and right-sized."
+        lede="The analytics and optimization suite for your AI agents. See what every layer costs, how fast it runs, and where it fails, while Crucible keeps your model stack right-sized, continuously."
       >
         <div className="max-w-md">
           <WaitlistForm />
@@ -71,10 +87,12 @@ export default function CruciblePage() {
         <div className="mx-auto max-w-3xl px-6 py-16 sm:px-10 sm:py-20">
           <Reveal>
             <Tldr>
-              Connect your pipeline over MCP and Crucible replays every new
-              trace through cheaper models, proves what&apos;s safe against{" "}
-              <span className="text-midnight-ink">what you shipped</span>, and
-              applies the swap, continuously.
+              Crucible watches your agents in production: cost per layer, speed
+              per step,{" "}
+              <span className="text-midnight-ink">failures as they happen</span>
+              . And because it runs the rightmodeler proof loop continuously, it
+              does not just show you problems, it right-sizes the stack that
+              caused them.
             </Tldr>
           </Reveal>
 
@@ -93,8 +111,8 @@ export default function CruciblePage() {
 
           <Reveal delay={0.1} className="mt-10">
             <p className="max-w-xl text-body text-driftwood">
-              Crucible is in active development. The open-source engine behind
-              it, rightmodeler, is available now on GitHub.
+              Crucible is in active development. The engine behind it, the
+              rightmodeler skill, is available now on GitHub.
             </p>
             <div className="mt-6">
               <GithubButton />
@@ -104,7 +122,8 @@ export default function CruciblePage() {
           <div className="mt-12 border-t border-ash-border pt-8">
             <RelatedLinks
               links={[
-                { href: "/how-it-works", label: "How it works" },
+                { href: "/how-it-works", label: "How the proof works" },
+                { href: "/agent", label: "rightmodeler agent, the PR writer" },
                 { href: "/manifesto", label: "Read the manifesto" },
               ]}
             />
