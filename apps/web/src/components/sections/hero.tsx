@@ -18,6 +18,7 @@ import { HeroGradient } from "@/components/hero-gradient";
 import { ArrowRightIcon, GitHubIcon } from "@/components/icons";
 import { ProgressiveBlur } from "@/components/progressive-blur";
 import { Reveal } from "@/components/reveal";
+import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 
 // Strong ease-out curve (docs/design.md § Motion) as a motion-friendly tuple.
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -182,9 +183,9 @@ export function Hero() {
 
               {/* CTA row — the trivial first step (a copy-able command) plus a quiet repo link. */}
               <div className="mt-8 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
-                <CopyCommand command="npx skills add elm-os/rightmodeler --skill rightmodeler" />
+                <CopyCommand command={RUN_COMMAND} />
                 <a
-                  href="https://github.com/elm-os/rightmodeler"
+                  href={REPO_URL}
                   target="_blank"
                   rel="noreferrer noopener"
                   className="group inline-flex items-center gap-2 rounded text-body text-driftwood transition-colors duration-150 hover:text-midnight-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white"

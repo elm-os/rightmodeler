@@ -6,28 +6,31 @@
 import { getAllPosts } from "@/content/blog";
 import { SITE_NAME, SITE_URL, REPO_URL, RUN_COMMAND } from "@/lib/site";
 
-// One-paragraph summary for the llms.txt blockquote. Stands alone: an LLM should grasp what
-// rightmodeler is and its key caveat (report, not gateway) from this line.
+// One-paragraph summary for the llms.txt blockquote. Stands alone: an LLM should grasp the whole
+// platform (skill, agent, Crucible) and the key caveat (the skill is a report, not a gateway).
 const SUMMARY =
-  "Prove which models you can safely downgrade. rightmodeler replays your real agent traces through cheaper models, judges each output against what you already shipped, and produces a recommendation report showing exactly which model swaps are safe, with evidence and confidence on every call. It is a report you run on your own traces, not a runtime gateway.";
+  "rightmodeler keeps AI agents on the right model at every step. The rightmodeler skill, free on GitHub, replays your real agent traces through cheaper models and proves which swaps are safe, with evidence and confidence on every call. rightmodeler agent, coming soon, watches new model releases and opens evidence-backed model-swap pull requests in your repo. Crucible, in early access, is the analytics and optimization suite that shows what every layer of your agent system costs, how fast it runs, and where it fails, and keeps your stack right-sized continuously. The skill is a report you run on your own traces, not a runtime gateway.";
 
 // Product overview in Markdown for llms-full.txt (indented code block avoids backticks in this file).
 const OVERVIEW = `## What it is
 
-${SITE_NAME} is a developer tool for teams running multi-agent LLM systems. It answers one question with evidence: which steps in your stack can move to a cheaper model without losing quality?
+${SITE_NAME} is the model layer for teams running multi-agent LLM systems. New models ship every few weeks, and the gap between the right model and the default one is real money. ${SITE_NAME} answers one question with evidence, at every step of your stack: which model belongs here?
 
-## How it works
+Three offerings:
 
-- Replay your real agent traces through cheaper candidate models.
-- Judge each cheaper output against what you already shipped in production, using reference-based and judge-based evaluation.
-- Get a per-step recommendation report: which downgrades hold up, how much they save, and the confidence behind each call.
-- It abstains when the evidence is weak. A tool that always finds savings is not measuring anything, so ${SITE_NAME} also tells you when not to switch.
+- The ${SITE_NAME} skill (available now): an audit you run on your own traces. It replays your real agent traces through cheaper candidate models, judges each output against what you already shipped, and produces a per-step recommendation report with evidence and confidence on every call. It is a report, not a runtime gateway; it never sits in your request path.
+- ${SITE_NAME} agent (coming soon): the same proof loop, continuous. It watches new model releases, replays them against your traces, and when a swap clears your quality floor and preferences it opens a pull request in your repo with the evidence attached. Model migrations become code review.
+- Crucible (early access): the analytics and optimization suite for your agents. Cost per layer, speed per step, failed tool calls and regressions as they happen, connected over MCP, while it keeps your model stack right-sized continuously.
 
-It is a report, not a runtime gateway. It does not sit in your request path, route your traffic, or add a hop to your latency budget. You read the evidence and decide what to swap, and when.
+## How the proof works
+
+- Replay your real agent traces through candidate models.
+- Judge each output against what you already shipped in production, using reference-based and judge-based evaluation.
+- Abstain when the evidence is weak. A tool that always finds savings is not measuring anything, so ${SITE_NAME} also tells you when not to switch.
 
 ## Get started
 
-Run it on your own traces:
+Run the skill on your own traces:
 
     ${RUN_COMMAND}
 

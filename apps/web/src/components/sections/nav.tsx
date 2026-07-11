@@ -7,11 +7,7 @@
 import Link from "next/link";
 import { CopyCommand } from "@/components/copy-command";
 import { GitHubIcon, LogoMark } from "@/components/icons";
-
-// Placeholder repo URL — point at the real repository before shipping.
-const REPO_URL = "https://github.com/elm-os/rightmodeler";
-// Real entrypoint from README.md: install the skill into the current agent.
-const RUN_COMMAND = "npx skills add elm-os/rightmodeler --skill rightmodeler";
+import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 
 const NAV_CSS = `
 /* Monochrome keyboard focus, never a colored ring. */
