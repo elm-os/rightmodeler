@@ -3,33 +3,43 @@
 // from the left and bleeding off the right edge (clipped by the panel), over a grainy
 // brand-gradient image that stays visible along the left sliver and bottom band, where the
 // caption sits. The right panel carries the TL;DR in a parchment inset box with its own caption
-// anchored bottom. Below, the four decision steps as equal boxes (square at desktop), ordinal
-// chips instead of icons because the sequence is real. The accent hues live only inside the
-// generated grain image; every control and every word stays monochrome. Server component —
-// Reveal and the PR card are the client leaves.
+// anchored bottom. Below, the four decision steps as equal boxes (square at desktop), each marked
+// by a bespoke stroke glyph from the house icon set in a squircle seat. The accent hues live only
+// inside the generated grain image; every control and every word stays monochrome. Server
+// component — Reveal and the PR card are the client leaves.
 
 import Image from "next/image";
+import {
+  PullRequestIcon,
+  QualityFloorIcon,
+  ReplayLoopIcon,
+  WatchSignalIcon,
+} from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { AgentPrCard } from "@/components/sections/agent-pr-card";
 
-const STEPS: { n: string; name: string; body: string }[] = [
+const STEPS: {
+  Icon: typeof WatchSignalIcon;
+  name: string;
+  body: string;
+}[] = [
   {
-    n: "01",
+    Icon: WatchSignalIcon,
     name: "Watch",
     body: "Every release, every provider, tracked live. Candidates get flagged per step the moment they ship.",
   },
   {
-    n: "02",
+    Icon: ReplayLoopIcon,
     name: "Replay",
     body: "Candidates rerun your real traces end to end in a sandboxed worktree, so cascade failures surface early.",
   },
   {
-    n: "03",
+    Icon: QualityFloorIcon,
     name: "Judge",
     body: "Each output is judged against what you already shipped, cross-family, with your quality floor as the bar.",
   },
   {
-    n: "04",
+    Icon: PullRequestIcon,
     name: "Open the PR",
     body: "Diff, evidence, and confidence, opened for your review. Weak evidence means no PR.",
   },
@@ -105,10 +115,10 @@ export function AgentShowcase() {
       {/* ── The four steps: equal boxes, square at desktop, chip up top and copy anchored low. ── */}
       <div className="mt-4 grid gap-4 sm:mt-5 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
         {STEPS.map((step, i) => (
-          <Reveal key={step.n} delay={i * 0.06} className="h-full">
+          <Reveal key={step.name} delay={i * 0.06} className="h-full">
             <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-5 sm:p-6 lg:aspect-square">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-ash-border bg-parchment-white font-mono text-body text-driftwood">
-                {step.n}
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-ash-border bg-parchment-white text-driftwood">
+                <step.Icon size={19} />
               </span>
               {/* Fixed offset from the chip (not bottom-anchored) so the four titles sit on the
                   same line across the row regardless of body length. */}

@@ -114,3 +114,97 @@ export function ArrowRightIcon({ size = 16, ...props }: IconProps) {
     </svg>
   );
 }
+
+// ── Bespoke glyphs for the agent's decision loop (agent-showcase.tsx). Hand-drawn in the house
+// stroke grammar (1.5 weight, round caps, currentColor) rather than pulled from an icon library,
+// so each one says something specific about the step it marks. All decorative — aria-hidden.
+
+// Watch — a signal dot with two radar arcs: releases being tracked as they ship.
+export function WatchSignalIcon({ size = 18, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <circle cx="7" cy="17" r="1.4" fill="currentColor" stroke="none" />
+      <path d="M8.3 12.2a5 5 0 0 1 3.5 6.1" />
+      <path d="M9.3 8.3a9 9 0 0 1 6.4 11" />
+    </svg>
+  );
+}
+
+// Replay — a run that loops back on itself: the same traces, run again.
+export function ReplayLoopIcon({ size = 18, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M4.5 7.5h10.5a4.5 4.5 0 0 1 0 9H7" />
+      <path d="m9.5 13.5-3 3 3 3" />
+    </svg>
+  );
+}
+
+// Judge — two outputs measured against a dashed quality floor: one clears it, one does not.
+export function QualityFloorIcon({ size = 18, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M9 19V6" />
+      <path d="M15 19v-7" />
+      <path d="M4 9.5h16" strokeDasharray="2.5 2.75" />
+    </svg>
+  );
+}
+
+// Open the PR — a branch merging home: the swap arriving as a pull request.
+export function PullRequestIcon({ size = 18, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <circle cx="6" cy="5" r="2" />
+      <circle cx="6" cy="19" r="2" />
+      <path d="M6 7v10" />
+      <path d="M12 5h2a4 4 0 0 1 4 4v6" />
+      <path d="M9.5 2.5 12 5 9.5 7.5" />
+      <circle cx="18" cy="19" r="2" />
+    </svg>
+  );
+}

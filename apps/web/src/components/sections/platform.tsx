@@ -1,10 +1,11 @@
-// Platform — the trio, stated once on the landing page: the skill you can run today, the agent
-// that ships swaps as PRs, and Crucible watching every layer. Three link-cards on the parchment
-// canvas (PostCard grammar: hairline border, surface deepens on hover, gentle press), each with a
-// mono status chip that tells the truth about availability. The header carries the why-now facts
-// (release cadence, price spreads) so the perceived scale comes from the problem, not from
-// invented traction. Server component — composes Reveal and the shared icons only.
+// Platform — the trio as a gallery row: three tall link-cards spanning the framed column edge to
+// edge, each with a bespoke line-art diagram floating in the upper field and the words anchored
+// low (chip, name, one-liner, quiet arrow CTA). The diagrams are generated ink-line drawings on
+// white; mix-blend-multiply melts the white into whichever surface the card shows, so hover can
+// deepen the card without a pale rectangle appearing. Status chips tell the truth about
+// availability; everything stays monochrome. Server component — Reveal is the client leaf.
 
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRightIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
@@ -18,6 +19,7 @@ type Offering = {
   cta: string;
   href: string;
   external?: boolean;
+  art: string;
 };
 
 const OFFERINGS: Offering[] = [
@@ -29,6 +31,7 @@ const OFFERINGS: Offering[] = [
     cta: "View on GitHub",
     href: REPO_URL,
     external: true,
+    art: "/platform/skill.jpg",
   },
   {
     chip: "Coming soon",
@@ -37,6 +40,7 @@ const OFFERINGS: Offering[] = [
     body: "The autopilot. A new model ships; your repo gets a pull request with the evidence attached. Migrations become code review.",
     cta: "Meet the agent",
     href: "/agent",
+    art: "/platform/agent.jpg",
   },
   {
     chip: "Early access",
@@ -45,32 +49,49 @@ const OFFERINGS: Offering[] = [
     body: "The instruments. Cost per layer, speed per step, failures as they happen, and a stack that stays right-sized.",
     cta: "Meet Crucible",
     href: "/crucible",
+    art: "/platform/crucible.jpg",
   },
 ];
 
 const cardClass =
-  "group flex h-full flex-col rounded-xl border border-ash-border bg-parchment-white p-5 transition-[background-color,transform] duration-150 ease-out hover:bg-warm-sand active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white sm:p-6";
+  "group flex h-full flex-col rounded-2xl border border-ash-border bg-parchment-white transition-[background-color,transform] duration-150 ease-out hover:bg-warm-sand active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white lg:aspect-[6/7]";
 
 function OfferingCard({ offering }: { offering: Offering }) {
   const inner = (
     <>
-      <span
-        className={`inline-flex w-fit items-center rounded border border-ash-border px-1.5 py-0.5 font-mono text-caption uppercase ${
-          offering.strong ? "font-medium text-midnight-ink" : "text-driftwood"
-        }`}
-      >
-        {offering.chip}
-      </span>
-      <span className="mt-4 font-sans text-heading-sm text-midnight-ink">
-        {offering.name}
-      </span>
-      <span className="mt-2 flex-1 text-body text-driftwood">
-        {offering.body}
-      </span>
-      <span className="mt-5 inline-flex items-center gap-2 text-body text-midnight-ink">
-        {offering.cta}
-        <ArrowRightIcon className="transition-transform duration-150 ease-out [@media(hover:hover)_and_(pointer:fine)]:group-hover:translate-x-0.5" />
-      </span>
+      {/* The diagram — centered in the upper field, white ground melted away by multiply. */}
+      <div className="flex flex-1 items-center justify-center px-8 pt-8">
+        <Image
+          src={offering.art}
+          alt=""
+          aria-hidden
+          width={480}
+          height={480}
+          sizes="(min-width: 768px) 30vw, 80vw"
+          className="w-3/4 max-w-72 mix-blend-multiply"
+        />
+      </div>
+
+      <div className="p-5 sm:p-6">
+        <span
+          className={`inline-flex w-fit items-center rounded border border-ash-border px-1.5 py-0.5 font-mono text-caption uppercase ${
+            offering.strong ? "font-medium text-midnight-ink" : "text-driftwood"
+          }`}
+        >
+          {offering.chip}
+        </span>
+        <span className="mt-4 block font-sans text-heading-sm text-midnight-ink">
+          {offering.name}
+        </span>
+        {/* Reserve four body lines at desktop so the three CTA arrows sit on one line. */}
+        <span className="mt-2 block text-body text-driftwood md:min-h-24">
+          {offering.body}
+        </span>
+        <span className="mt-4 inline-flex items-center gap-2 text-body text-midnight-ink">
+          {offering.cta}
+          <ArrowRightIcon className="transition-transform duration-150 ease-out [@media(hover:hover)_and_(pointer:fine)]:group-hover:translate-x-0.5" />
+        </span>
+      </div>
     </>
   );
 
@@ -96,23 +117,17 @@ function OfferingCard({ offering }: { offering: Offering }) {
 export function Platform() {
   return (
     <section className="bg-parchment-white">
-      <div className="mx-auto max-w-5xl px-6 py-16 sm:px-8 sm:py-24">
-        <Reveal className="max-w-2xl">
+      <div className="px-4 py-16 sm:px-6 sm:py-24">
+        <Reveal>
           <p className="font-mono text-caption uppercase text-fog">
             The platform
           </p>
-          <h2 className="mt-4 font-display text-heading text-balance text-midnight-ink sm:text-heading-lg">
+          <h2 className="mt-4 max-w-2xl font-display text-heading text-balance text-midnight-ink sm:text-heading-lg">
             See everything. Prove what&rsquo;s better. Switch by pull request.
           </h2>
-          <p className="mt-4 text-body text-driftwood">
-            A frontier release lands every few weeks, and comparable models sit
-            ten times apart on price. Keeping every step of an agent system on
-            the right model has become a full-time job. rightmodeler makes it a
-            loop: watch, prove, ship the switch.
-          </p>
         </Reveal>
 
-        <div className="mt-10 grid gap-4 sm:grid-cols-3">
+        <div className="mt-8 grid gap-4 sm:mt-10 sm:gap-5 md:grid-cols-3">
           {OFFERINGS.map((offering, i) => (
             <Reveal key={offering.name} delay={i * 0.06} className="h-full">
               <OfferingCard offering={offering} />
