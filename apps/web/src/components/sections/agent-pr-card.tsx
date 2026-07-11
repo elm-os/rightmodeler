@@ -5,9 +5,10 @@
 // button, no traffic-light hues). The one bold move is the assembly order — the card builds its
 // case the way the agent does, evidence rows before the verdict number — via a single staggered
 // whileInView cascade. The savings figure is gated by useInView so the count-up runs when seen,
-// not on mount, with an invisible twin reserving the final width. Every figure is stamped
-// illustrative; the illustrative story (summarize step, gpt-4.1 → gpt-4o-mini, 72% · 0.94)
-// deliberately rhymes with the landing hero's ledger so the whole site tells one example.
+// not on mount, with an invisible twin reserving the final width. The model pair and the 85% are
+// factual: OpenAI list prices as of July 2026 put gpt-5.6 at $5/$30 per 1M tokens and
+// gpt-5.4-mini at $0.75/$4.50, an 85% per-token cut on both input and output. Quality, latency,
+// and trace-count figures remain illustrative and the title bar stamps them as such.
 
 import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
@@ -81,112 +82,84 @@ export function AgentPrCard() {
       viewport={{ once: true, margin: "-64px" }}
     >
       {/* Title bar — artifact name (left), honesty stamp (right). Same grammar as the hero ledger. */}
-      <div className="flex items-center justify-between gap-4 border-b border-ash-border px-4 py-3 sm:px-5">
+      <div className="flex items-center justify-between gap-4 border-b border-ash-border px-4 py-2">
         <span className="min-w-0 truncate font-mono text-caption text-driftwood">
           rightmodeler agent · pull request
         </span>
         <span className="shrink-0 font-mono text-caption text-fog">
-          illustrative example
+          illustrative
         </span>
       </div>
 
       <div className="divide-y divide-ash-border">
-        {/* Branch + author line. */}
-        <motion.div
-          variants={block}
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-4 sm:px-5"
-        >
-          <span className="inline-flex items-center rounded-md border border-ash-border bg-parchment-white px-2.5 py-1 font-mono text-caption text-midnight-ink">
-            agent/swap-summarize-step
-          </span>
-          <span className="font-mono text-caption text-fog">
-            opened by rightmodeler-agent
-          </span>
-        </motion.div>
-
-        {/* PR title + one-line body. */}
-        <motion.div variants={block} className="px-4 py-4 sm:px-5">
-          <p className="font-sans text-heading-sm text-midnight-ink">
-            swap: summarize step to gpt-4o-mini
-          </p>
-          <p className="mt-1 text-body text-driftwood">
-            gpt-4.1 is doing work gpt-4o-mini can hold. Evidence below; merging
-            is yours.
+        {/* PR title. */}
+        <motion.div variants={block} className="px-4 py-3">
+          <p className="font-sans text-body font-medium text-midnight-ink">
+            swap: summarize step to gpt-5.4-mini
           </p>
         </motion.div>
 
         {/* Evidence rows — the case, before the verdict. */}
         <motion.div
           variants={block}
-          className="flex flex-col gap-y-2 px-4 py-4 sm:px-5"
+          className="flex flex-col gap-y-1.5 px-4 py-3"
         >
           <Row label="quality">
             <span className="text-midnight-ink">0.94</span> vs 0.95 shipped ·
-            floor 0.90
+            floor 0.90 · medium
           </Row>
           <Row label="p95 latency">
             <span className="text-midnight-ink">-38%</span> vs current
           </Row>
-          <Row label="confidence">medium · judged, position-swapped</Row>
+          <Row label="list price">
+            <span className="text-midnight-ink">$5.00 → $0.75</span> in ·{" "}
+            <span className="text-midnight-ink">$30.00 → $4.50</span> out · /1M
+          </Row>
         </motion.div>
 
         {/* The diff itself — recessed mono slab, glyphs and ink only (no red/green, ever). */}
-        <motion.div variants={block} className="px-4 py-4 sm:px-5">
-          <div className="overflow-x-auto rounded-lg border border-ash-border bg-midnight-ink/5 p-4 font-mono text-[13px]">
+        <motion.div variants={block} className="px-4 py-3">
+          <div className="overflow-x-auto rounded-lg border border-ash-border bg-midnight-ink/5 p-2.5 font-mono text-[13px]">
             <div className="min-w-max">
               <p className="text-driftwood">steps/summarize.ts</p>
-              <p className="mt-2 whitespace-pre text-fog">
-                {'   step: "summarize",'}
-              </p>
-              <p className="whitespace-pre text-fog">
-                {'-  model: "gpt-4.1",'}
+              <p className="mt-1 whitespace-pre text-fog">
+                {'-  model: "gpt-5.6",'}
               </p>
               <p className="whitespace-pre text-midnight-ink">
-                {'+  model: "gpt-4o-mini",'}
+                {'+  model: "gpt-5.4-mini",'}
               </p>
             </div>
           </div>
         </motion.div>
 
-        {/* Checks — what ran before this PR existed. */}
-        <motion.div
-          variants={block}
-          className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-4 sm:px-5"
-        >
-          <Check>replay: 214 traces</Check>
-          <Check>judge: pass</Check>
-          <Check>cascade: clear</Check>
-        </motion.div>
-
         {/* The verdict number — counts up only once it is actually in view. The invisible twin
             reserves the final width so the line never reflows as digits grow. */}
-        <motion.div variants={block} className="px-4 py-5 sm:px-5">
+        <motion.div variants={block} className="px-4 py-3">
           <div ref={numberRef}>
-            <span className="relative inline-block font-display text-heading text-midnight-ink sm:text-heading-lg">
+            <span className="relative inline-block font-display text-heading text-midnight-ink">
               <span aria-hidden className="invisible">
-                72%
+                85%
               </span>
               {numberInView && (
                 <AnimatedNumber
-                  value={72}
+                  value={85}
                   suffix="%"
                   className="absolute inset-0"
                 />
               )}
             </span>
-            <p className="mt-1.5 font-mono text-caption text-fog">
-              cost reduction on this step · illustrative example
+            <p className="mt-1 font-mono text-caption text-fog">
+              cheaper per token · gpt-5.6 to gpt-5.4-mini · list prices
             </p>
           </div>
         </motion.div>
       </div>
 
-      {/* Footer — the ethos, stated where the artifact ends. */}
-      <div className="border-t border-ash-border px-4 py-3 sm:px-5">
-        <p className="font-mono text-caption text-driftwood">
-          Every pull request ships with the evidence behind it. Merging stays
-          your call.
-        </p>
+      {/* Footer — the checks that ran before this PR existed. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-ash-border px-4 py-2">
+        <Check>replay: 214 traces</Check>
+        <Check>judge: pass</Check>
+        <Check>cascade: clear</Check>
       </div>
     </motion.article>
   );

@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import { JsonLd } from "@/components/json-ld";
 import { Reveal } from "@/components/reveal";
-import { AgentDecisionSpine } from "@/components/sections/agent-decision-spine";
-import { AgentPrCard } from "@/components/sections/agent-pr-card";
+import { AgentShowcase } from "@/components/sections/agent-showcase";
 import { Faq, type FaqItem } from "@/components/sections/faq";
 import { GithubButton } from "@/components/sections/github-button";
 import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
-import { Tldr } from "@/components/sections/tldr";
 import { WaitlistForm } from "@/components/sections/waitlist-form";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
@@ -73,35 +71,12 @@ export default function AgentPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {/* The deliverable — lede, then the artifact itself. */}
+      {/* The feature spread — the deliverable and the loop, filling the framed column. */}
       <section className="bg-parchment-white">
-        <div className="mx-auto max-w-3xl px-6 py-16 sm:px-10 sm:py-20">
-          <Reveal>
-            <Tldr>
-              rightmodeler agent watches every model release, proves the ones
-              that beat your current stack on your own traces, and ships the
-              swap as{" "}
-              <span className="text-midnight-ink">
-                a pull request in your repo
-              </span>
-              . Model migrations become code review.
-            </Tldr>
-          </Reveal>
-
-          <div className="mt-12">
-            <div className="mb-3 flex justify-end">
-              <span className="font-mono text-caption text-fog">
-                Illustrative, not measured results
-              </span>
-            </div>
-            <AgentPrCard />
-          </div>
+        <div className="px-4 py-14 sm:px-6 sm:py-20">
+          <AgentShowcase />
         </div>
       </section>
-
-      <div aria-hidden className="h-px w-full bg-ash-border" />
-
-      <AgentDecisionSpine />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
