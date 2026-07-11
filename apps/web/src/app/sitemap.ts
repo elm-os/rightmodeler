@@ -24,10 +24,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const pageEntries: MetadataRoute.Sitemap = (
     [
       ["/how-it-works", 0.9],
+      ["/agent", 0.9],
       ["/use-cases/reduce-llm-costs", 0.8],
+      ["/crucible", 0.8],
       ["/manifesto", 0.7],
       ["/glossary", 0.7],
-      ["/crucible", 0.6],
       ["/about", 0.6],
     ] as const
   ).map(([path, priority]) => ({

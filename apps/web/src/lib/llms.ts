@@ -63,6 +63,12 @@ const PAGES: { path: string; title: string; description: string }[] = [
       "Plain definitions for the model-downgrade vocabulary: quality floor, cascade risk, abstain, LLM-as-judge, and more.",
   },
   {
+    path: "/agent",
+    title: "rightmodeler agent (coming soon)",
+    description:
+      "The autonomous agent that watches new model releases, replays them against your real traces, and opens evidence-backed model-swap pull requests in your repo.",
+  },
+  {
     path: "/crucible",
     title: "Crucible (coming soon)",
     description:
