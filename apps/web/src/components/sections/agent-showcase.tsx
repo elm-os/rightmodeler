@@ -59,11 +59,13 @@ export function AgentShowcase() {
               <AgentPrCard />
             </div>
 
-            <div className="mt-auto max-w-lg p-4 pt-6 sm:p-5">
+            {/* Caption — left edge aligned to the artifact's inset; the body reserves two lines
+                so this kicker sits on the same line as the right panel's, whatever wraps. */}
+            <div className="mt-auto max-w-lg px-4 pb-4 pt-6 sm:px-8 sm:pb-8">
               <p className="font-mono text-caption uppercase text-driftwood">
                 The deliverable
               </p>
-              <p className="mt-1.5 text-body text-midnight-ink">
+              <p className="mt-2 min-h-12 text-body text-midnight-ink">
                 A one-line diff with the receipts attached.
               </p>
             </div>
@@ -71,7 +73,7 @@ export function AgentShowcase() {
         </Reveal>
 
         <Reveal delay={0.06} className="h-full">
-          <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-4 sm:p-5 lg:aspect-square">
+          <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-4 sm:p-8 lg:aspect-square">
             <div className="rounded-xl border border-ash-border bg-parchment-white p-5 sm:p-7">
               <p className="font-mono text-caption uppercase text-fog">TL;DR</p>
               <p className="mt-3 text-subheading text-driftwood">
@@ -85,11 +87,13 @@ export function AgentShowcase() {
               </p>
             </div>
 
-            <div className="mt-auto max-w-md p-1 pt-10 sm:p-2">
+            {/* Caption — same inset scale and reserved two-line body as the left panel's, so the
+                two kickers and bodies align across the pair. */}
+            <div className="mt-auto max-w-md pt-10">
               <p className="font-mono text-caption uppercase text-driftwood">
                 The loop
               </p>
-              <p className="mt-2 text-body text-midnight-ink">
+              <p className="mt-2 min-h-12 text-body text-midnight-ink">
                 Watch, replay, judge, open the PR. Continuous, and always inside
                 your guardrails.
               </p>
