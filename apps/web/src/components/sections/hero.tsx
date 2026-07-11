@@ -116,9 +116,9 @@ const ROWS: LedgerRow[] = [
     step: "5",
     family: "auth_code_edit",
     from: "gpt-4.1",
-    to: "—",
-    save: "—",
-    quality: "—",
+    to: "·",
+    save: "·",
+    quality: "·",
     evidence: "none",
     flag: { label: "HIGH-RISK · abstain", strong: true },
     dim: true,
@@ -152,7 +152,7 @@ export function Hero() {
           <Reveal className="relative max-w-3xl">
             <div className="relative">
               <p className="font-mono text-caption text-fog uppercase">
-                Evidence-backed model downgrades
+                Evidence-backed model decisions
               </p>
 
               <h1 className="mt-5 font-display text-heading-lg text-balance text-midnight-ink sm:text-display">
@@ -462,11 +462,11 @@ function ApprovalTable() {
   );
 }
 
-// Flags are monochrome hairline tags (never colour-coded pills). "—" is a quiet fog dash; the
+// Flags are monochrome hairline tags (never colour-coded pills). "·" is a quiet fog middot; the
 // abstain verdict is emphasised to ink so the stop reads as intentional, not missing data.
 function FlagCell({ flag }: { flag: Flag }) {
   if (!flag) {
-    return <span className="text-[13px] text-fog">—</span>;
+    return <span className="text-[13px] text-fog">·</span>;
   }
   return (
     <span

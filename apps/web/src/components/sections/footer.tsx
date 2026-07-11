@@ -17,10 +17,11 @@ export function Footer() {
       <div className="mx-auto w-full max-w-4xl">
         <Reveal className="border-t border-ash-border pt-8">
           <h2 className="max-w-xl text-balance font-display text-heading text-midnight-ink sm:text-heading-lg lg:text-display">
-            A recommendation report, not a runtime gateway.
+            Every step, on the right model. Proven, not guessed.
           </h2>
           <p className="mt-5 max-w-md text-body text-driftwood">
-            Proven on your own traces. You decide what to swap, and when.
+            The skill proves it on your traces today. The agent ships it as a
+            pull request. Crucible keeps watch.
           </p>
         </Reveal>
 
@@ -47,6 +48,9 @@ export function Footer() {
             </Link>
             <Link href="/glossary" className={linkClass}>
               Glossary
+            </Link>
+            <Link href="/agent" className={linkClass}>
+              Agent
             </Link>
             <Link href="/crucible" className={linkClass}>
               Crucible
