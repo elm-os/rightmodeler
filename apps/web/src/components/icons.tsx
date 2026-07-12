@@ -115,6 +115,25 @@ export function ArrowRightIcon({ size = 16, ...props }: IconProps) {
   );
 }
 
+export function ChevronDownIcon({ size = 16, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 // ── Bespoke glyphs for the agent's decision loop (agent-showcase.tsx). Hand-drawn in the house
 // stroke grammar (1.5 weight, round caps, currentColor) rather than pulled from an icon library,
 // so each one says something specific about the step it marks. All decorative — aria-hidden.

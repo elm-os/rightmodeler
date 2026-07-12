@@ -1,0 +1,105 @@
+{
+  "slug": "openrouter",
+  "name": "OpenRouter",
+  "category": "replay-engine",
+  "categoryLabel": "Replay engine",
+  "title": "OpenRouter integration: one key, every candidate model",
+  "description": "Set one OPENROUTER_API_KEY and rightmodeler shortlists cheaper candidates from the live catalog, replays your steps at temperature 0, and prices every swap with usage.cost.",
+  "h1": "rightmodeler + OpenRouter",
+  "lede": "Every candidate call in a rightmodeler audit (shortlist, replay, judge, price) runs through OpenRouter on your own key. It is the engine of the audit, not a source of traces.",
+  "tldr": "rightmodeler uses OpenRouter as its replay engine: /models builds the shortlist of cheaper candidates that support what each step needs, /chat/completions runs the replays at temperature 0 and the cross-family judge, and usage.cost prices every call at what was actually charged, never token-count guesses. One OPENROUTER_API_KEY on your side is the whole integration.",
+  "steps": [
+    {
+      "label": "01 · Key",
+      "title": "One key, found where you keep it",
+      "body": "Create a key at openrouter.ai and export OPENROUTER_API_KEY, or drop it in your project's .env; the skill checks the environment first, then walks up from the working directory until it finds a .env that defines it. Preflight calls GET /key to confirm the key works and how many credits remain before anything spends."
+    },
+    {
+      "label": "02 · Shortlist",
+      "title": "Candidates from the live catalog",
+      "body": "GET /models returns every model with pricing, context length, and supported parameters. A candidate makes the shortlist only if it supports what the step needs (tool calling, structured output, enough context) and is priced strictly below the current model on a blended per-token price. The cheapest few are tried; :free variants are excluded."
+    },
+    {
+      "label": "03 · Replay + judge",
+      "title": "Deterministic replays, a judge from a third family",
+      "body": "Each candidate replays the step's exact inputs through POST /chat/completions at temperature 0, with provider.require_parameters set so providers that silently drop tools or structured output never corrupt a verdict. A judge from a third model family scores each output against the one you shipped, position-swapped, with ordinal verdicts: equivalent, minor_drift, divergent."
+    },
+    {
+      "label": "04 · Price",
+      "title": "Real prices from usage.cost",
+      "body": "Every response carries usage.cost, the amount OpenRouter actually charged. Cost comparisons in the report use that figure, never token counts, because every model tokenizes differently. For tool-calling steps confirmed end-to-end, the sandboxed worktree points OPENAI_BASE_URL at openrouter.ai so the whole pipeline re-run is billed and priced the same way."
+    }
+  ],
+  "setup": {
+    "intro": "The audit needs exactly one credential: an OpenRouter key. Create one at openrouter.ai, then export it or keep it in your project's .env; the skill resolves either, and preflight verifies it against /key before any replay spends.",
+    "commands": [
+      {
+        "comment": "# one key powers the shortlist, every replay, and the judge",
+        "command": "export OPENROUTER_API_KEY=sk-or-..."
+      },
+      {
+        "comment": "# or keep it in the project; the skill walks up to find .env",
+        "command": "echo 'OPENROUTER_API_KEY=sk-or-...' >> .env"
+      },
+      {
+        "comment": "# then point the skill at any exported trace",
+        "command": "claude \"run the rightmodeler skill on ./traces/\""
+      }
+    ]
+  },
+  "reads": [],
+  "detection": "",
+  "useCases": [
+    {
+      "title": "Candidates from every family, one account",
+      "body": "The shortlist draws from OpenRouter's whole catalog, so a step sitting on one provider's frontier model gets tested against cheaper models from every family, without you creating an account or holding a key per provider."
+    },
+    {
+      "title": "A judge that can't grade its own homework",
+      "body": "Cross-family judging needs a catalog that spans providers. rightmodeler picks a judge from a different family than both the candidate and the model you run today, so no family scores its own output; one key makes that selection trivial."
+    },
+    {
+      "title": "Savings measured in dollars, not tokens",
+      "body": "Because usage.cost reports the actual charge per call, the report compares what a step costs today against what the candidate charged in replay. No per-token arithmetic across incompatible tokenizers, no stale pricing tables."
+    },
+    {
+      "title": "Capability-safe shortlists",
+      "body": "supported_parameters filtering plus provider.require_parameters means a candidate that can't do tool calling or structured output never reaches the bench, so a verdict is never flattered by a model that quietly skipped the hard part."
+    }
+  ],
+  "limits": [
+    "Replays and judge calls are billed to your key at catalog prices. The audit spends real money to produce evidence; each call's usage.cost is recorded, so the spend is itemized, but it is yours.",
+    "OpenRouter is the audit's only replay path. The skill does not fan out to per-provider keys, so if third-party routing is off the table for your data, the audit is too.",
+    "The shortlist skips :free variants by default: free tiers rate-limit and disappear mid-run, which corrupts a benchmark more than it saves.",
+    "A cheaper model existing in the catalog is not a recommendation. When position-swapped verdicts disagree or the evidence is weak, the audit abstains; a tool that always finds a swap is not measuring anything.",
+    "rightmodeler calls OpenRouter offline, on traces you exported. It is not a gateway: nothing routes your production traffic through OpenRouter, before or after the audit."
+  ],
+  "faq": [
+    {
+      "q": "Do I need an OpenRouter account?",
+      "a": "Yes, it is free to create, and it is the only account the audit needs. You add credits and pay only for the replay and judge calls you actually run; preflight checks GET /key and reports remaining credits before anything spends."
+    },
+    {
+      "q": "Why OpenRouter instead of my existing provider keys?",
+      "a": "The shortlist needs one live catalog with prices, context lengths, and capability flags across every model family, and the cross-family judge needs models outside both the candidate's and the incumbent's family. One OpenAI-compatible endpoint and one key cover all of that; a drawer of per-provider keys covers almost none of it."
+    },
+    {
+      "q": "How much will the replays cost me?",
+      "a": "Whatever the candidate and judge calls cost at catalog prices; every response carries usage.cost, and the report records it per call, so the audit's own spend is itemized rather than estimated. Steps replay on their real inputs, so spend scales with the traces you point it at."
+    },
+    {
+      "q": "Does my trace data leave my machine?",
+      "a": "Step inputs go to OpenRouter with your key when a replay runs, the same class of call your agent already makes to a model provider. Nothing goes anywhere else: no rightmodeler server, no account with us, no telemetry."
+    },
+    {
+      "q": "Will it always find a cheaper model?",
+      "a": "No, and that is the point. Some steps already sit on the cheapest capable model; others fail the 0.90 quality floor, draw inconsistent verdicts under position-swapping, or are flagged high-risk. The audit abstains there; a tool that always finds a swap is not measuring anything."
+    },
+    {
+      "q": "If I approve a swap, do I have to serve it through OpenRouter?",
+      "a": "No. The report recommends a model, not a route. You serve the approved model through whatever provider or gateway you already use, OpenRouter was the test bench, not a dependency you ship."
+    }
+  ],
+  "related": ["litellm", "langsmith", "claude-code"],
+  "cta": "github"
+}
