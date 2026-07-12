@@ -18,6 +18,7 @@ export const CONTACT_EMAIL = "rightmodeler@gmail.com";
 export const GITHUB_ORG_URL = "https://github.com/elm-os";
 export const LINKEDIN_URL = "https://www.linkedin.com/company/rightmodeler";
 export const X_URL = "https://x.com/rightmodeler";
+export const REDDIT_URL = "https://www.reddit.com/user/rightmodeler/";
 
 // Format an ISO date (YYYY-MM-DD) as a readable byline date. Pinned to UTC so the day never drifts
 // across the reader's timezone.

@@ -2,8 +2,13 @@
 // Monochrome per docs/design.md: driftwood glyph that deepens to ink on hover, ink focus ring. The
 // accessible name lives on aria-label since the icon carries no visible text.
 
-import { GitHubIcon, LinkedInIcon, XIcon } from "@/components/icons";
-import { LINKEDIN_URL, REPO_URL, X_URL } from "@/lib/site";
+import {
+  GitHubIcon,
+  LinkedInIcon,
+  RedditIcon,
+  XIcon,
+} from "@/components/icons";
+import { LINKEDIN_URL, REDDIT_URL, REPO_URL, X_URL } from "@/lib/site";
 
 const linkClass =
   "flex h-10 w-10 items-center justify-center rounded-md text-driftwood transition-colors duration-150 ease-out hover:text-midnight-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white";
@@ -37,6 +42,15 @@ export function SocialLinks({ className }: { className?: string }) {
         className={linkClass}
       >
         <XIcon size={16} />
+      </a>
+      <a
+        href={REDDIT_URL}
+        target="_blank"
+        rel="noreferrer noopener"
+        aria-label="rightmodeler on Reddit"
+        className={linkClass}
+      >
+        <RedditIcon size={18} />
       </a>
     </div>
   );

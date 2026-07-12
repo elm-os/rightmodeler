@@ -8,6 +8,7 @@ import { SocialLinks } from "@/components/sections/social-links";
 import {
   GITHUB_ORG_URL,
   LINKEDIN_URL,
+  REDDIT_URL,
   REPO_URL,
   SITE_NAME,
   SITE_URL,
@@ -30,7 +31,7 @@ const organizationLd = {
   logo: `${SITE_URL}/icon.png`,
   description:
     "rightmodeler keeps AI agents on the right model: it proves safe swaps on your real traces, ships model upgrades as evidence-backed pull requests, and watches every layer with Crucible.",
-  sameAs: [X_URL, LINKEDIN_URL, REPO_URL, GITHUB_ORG_URL],
+  sameAs: [X_URL, LINKEDIN_URL, REDDIT_URL, REPO_URL, GITHUB_ORG_URL],
 };
 
 const FAQ: FaqItem[] = [
