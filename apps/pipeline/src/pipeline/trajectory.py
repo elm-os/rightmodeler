@@ -110,6 +110,7 @@ def _trajectory_comparison(case, result, candidate_trajectory, reference_traject
             set(result.get("evidence_refs", [])) | set(result["reference"].get("refs", []))
         ),
         "trajectory": trajectory_evidence,
+        "repo_fix": None,
         "reference": result["reference"],
     }
 
@@ -134,6 +135,7 @@ def _abstention(case, result, reason):
         "cost_usd": result["cost_usd"],
         "evidence_refs": sorted(set(result.get("evidence_refs", [])) | set(reference_refs)),
         "trajectory": None,
+        "repo_fix": None,
         "reference": reference,
     }
 
@@ -153,6 +155,7 @@ def _missing_result(case):
         "cost_usd": 0,
         "evidence_refs": [],
         "trajectory": None,
+        "repo_fix": None,
         "reference": None,
     }
 
