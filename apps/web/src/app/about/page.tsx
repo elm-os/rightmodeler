@@ -11,6 +11,7 @@ import {
   REPO_URL,
   SITE_NAME,
   SITE_URL,
+  X_URL,
 } from "@/lib/site";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
@@ -29,7 +30,7 @@ const organizationLd = {
   logo: `${SITE_URL}/icon.png`,
   description:
     "rightmodeler keeps AI agents on the right model: it proves safe swaps on your real traces, ships model upgrades as evidence-backed pull requests, and watches every layer with Crucible.",
-  sameAs: [LINKEDIN_URL, REPO_URL, GITHUB_ORG_URL],
+  sameAs: [X_URL, LINKEDIN_URL, REPO_URL, GITHUB_ORG_URL],
 };
 
 const FAQ: FaqItem[] = [
