@@ -1,0 +1,118 @@
+{
+  "slug": "langfuse",
+  "name": "Langfuse",
+  "category": "trace-source-generic",
+  "categoryLabel": "Trace source · autodetected",
+  "title": "Langfuse integration: prove cheaper models on real traces",
+  "description": "Export Langfuse observations to disk and rightmodeler replays each step through cheaper models, judging every candidate against the output you already shipped.",
+  "h1": "rightmodeler + Langfuse",
+  "lede": "Langfuse already records what every generation cost and produced. rightmodeler replays those observations through cheaper models and reports, step by step, which swaps hold.",
+  "tldr": "rightmodeler autodetects Langfuse exports by their traceId, observations, and usageDetails keys, then normalizes them with its generic adapter, a best-effort pass that pulls model, input messages, and output per record and keeps the rest in raw. Each successful step is replayed through cheaper OpenRouter candidates and judged against the output you already shipped, with a 0.90 quality floor by default.",
+  "steps": [
+    {
+      "label": "01 · Export",
+      "title": "Export observations to a file",
+      "body": "Pull observations from GET /api/public/observations (basic auth with your LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY) and save the data array as JSON, or take a JSONL batch export from blob storage. A file or a folder on disk is all the ingester needs."
+    },
+    {
+      "label": "02 · Ingest",
+      "title": "Autodetected, normalized best-effort",
+      "body": "The ingester recognizes Langfuse by its traceId, observations, and usageDetails keys, then hands the records to the generic adapter: model, input messages, and output are extracted per record, and the untouched original rides along in raw. Langfuse's own observation fields (model, input, output, name) are exactly the names it looks for, so flat observation exports land cleanly."
+    },
+    {
+      "label": "03 · Replay",
+      "title": "Cheaper candidates, judged against what shipped",
+      "body": "Successful single-shot steps are replayed through cheaper OpenRouter models on the exact inputs from your export, and a judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you already shipped, with a 0.90 quality floor by default. Steps with tool calls or loops go to an end-to-end re-run of your pipeline code in a throwaway git worktree instead."
+    },
+    {
+      "label": "04 · Decide",
+      "title": "A per-step report, approved by you",
+      "body": "The report lays out each proposed swap with its evidence, and the TUI walks you through approve, reject, or hold, per step. Where evidence is weak it abstains, and high-risk families like auth, payments, and migrations are flagged rather than swapped."
+    }
+  ],
+  "setup": {
+    "intro": "Install the skill once, then feed it a file of Langfuse observations. Nothing connects to your Langfuse project: your keys stay in your own curl call, and the audit runs on the export.",
+    "commands": [
+      {
+        "comment": "# export observations via the public API (keys from project settings)",
+        "command": "curl -su $LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY $LANGFUSE_HOST/api/public/observations | jq .data > lf.json"
+      },
+      {
+        "comment": "# then hand the export to the skill inside Claude Code",
+        "command": "claude \"run the rightmodeler skill on ./lf.json\""
+      }
+    ]
+  },
+  "reads": [
+    {
+      "field": "model",
+      "source": "model"
+    },
+    {
+      "field": "input messages",
+      "source": "messages, input"
+    },
+    {
+      "field": "output",
+      "source": "output, completion"
+    },
+    {
+      "field": "step name",
+      "source": "name"
+    },
+    {
+      "field": "everything else",
+      "source": "kept untouched in raw"
+    }
+  ],
+  "detection": "traceId · observations · usageDetails",
+  "useCases": [
+    {
+      "title": "Turn Langfuse cost tracking into decisions",
+      "body": "Langfuse already tells you what each trace costs. The audit adds the missing column: which steps could run on a cheaper model, with a judged verdict and evidence per step instead of a hunch about the bill."
+    },
+    {
+      "title": "Right-size without re-instrumenting",
+      "body": "No new SDK, no config change, no code in your app. You export observations you already collect, run the skill offline, and read the verdicts. Langfuse keeps observing production; rightmodeler only ever sees the files."
+    },
+    {
+      "title": "Screen a downgrade before any production trial",
+      "body": "Instead of canarying a cheaper model behind a flag and watching dashboards, replay last month's observations and read the per-step verdicts first, judged against outputs your users already accepted."
+    }
+  ],
+  "limits": [
+    "Langfuse is autodetected, but there is no bespoke adapter: the generic adapter extracts model, input messages, and output per record, best-effort. usageDetails, scores, and nested observation structure stay in the raw record rather than mapped fields.",
+    "It reads exported files, JSON or JSONL on disk. It does not connect to your Langfuse project, poll the API, or watch new traces arrive.",
+    "Steps with tool calls or loops are never judged from the trace alone; they are confirmed by re-running your pipeline end-to-end in a throwaway git worktree with the candidate model injected.",
+    "High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, and weak evidence means the audit abstains rather than recommends.",
+    "It is a report, not a runtime gateway. Langfuse remains your observability layer; rightmodeler never sits in the request path."
+  ],
+  "faq": [
+    {
+      "q": "How do I export traces from Langfuse?",
+      "a": "Call GET /api/public/observations with basic auth (public key as username, secret key as password) and save the data array as JSON, or use a batch export to blob storage in JSONL. Point the skill at the file or folder; the format is autodetected from the traceId, observations, and usageDetails keys."
+    },
+    {
+      "q": "Why is Langfuse a generic trace source rather than a dedicated adapter?",
+      "a": "Detection is bespoke; normalization is not. The generic adapter takes a best-effort pass (model, input messages, output, and name per record) which happens to match Langfuse's own observation fields, and preserves the full record in raw. What it cannot map it does not guess at: steps with tool calls or loops go to end-to-end replay instead of trace-only judging."
+    },
+    {
+      "q": "Does rightmodeler replace Langfuse?",
+      "a": "No. Langfuse observes, scores, and debugs your agent in production; rightmodeler is an offline audit of the traces it produced, answering one question your dashboards don't: which steps can move to a cheaper model without losing quality."
+    },
+    {
+      "q": "What does it do with Langfuse's cost data?",
+      "a": "Not much, today. The generic adapter maps model, messages, and output; Langfuse's cost and usage fields stay in each record's raw copy. Savings in the report are estimated from OpenRouter's blended per-token prices for the incumbent and the candidate, so both sides are priced from the same catalog."
+    },
+    {
+      "q": "Does my trace data leave my machine?",
+      "a": "Replays send step inputs to candidate models through OpenRouter with your own API key, the same shape of call your agent already makes. There is no rightmodeler server, and your Langfuse keys are only ever used by the curl you run yourself."
+    },
+    {
+      "q": "Will it always find a swap?",
+      "a": "No, and that is the point. When evidence is weak or a step is high-risk, the audit abstains and the current model stays. A tool that always finds a swap is not measuring anything."
+    }
+  ],
+  "related": ["langsmith", "braintrust", "openrouter"],
+  "cta": "github"
+}

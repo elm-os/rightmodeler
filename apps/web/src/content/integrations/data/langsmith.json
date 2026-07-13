@@ -1,0 +1,125 @@
+{
+  "slug": "langsmith",
+  "name": "LangSmith",
+  "category": "trace-source",
+  "categoryLabel": "Trace source · dedicated adapter",
+  "title": "LangSmith integration: replay traces on cheaper models",
+  "description": "Export a LangSmith run tree and rightmodeler replays each step through cheaper models, judges every output against what you shipped, and reports the safe swaps.",
+  "h1": "rightmodeler + LangSmith",
+  "lede": "Your LangSmith traces already hold the evidence. rightmodeler replays them through cheaper models and proves, step by step, which swaps are safe.",
+  "tldr": "rightmodeler reads exported LangSmith run trees with a dedicated adapter, replays each successful step through cheaper candidates on OpenRouter, and judges every output against the one you already shipped, so a LangSmith-instrumented agent gets right-sized without new instrumentation.",
+  "steps": [
+    {
+      "label": "01 · Export",
+      "title": "Export a run tree",
+      "body": "Pull runs with client.read_run(run_id, load_child_runs=True) or a bulk export from your LangSmith project, and save the JSON anywhere on disk, as one file or a folder of them."
+    },
+    {
+      "label": "02 · Ingest",
+      "title": "Autodetected, then normalized",
+      "body": "The ingester recognizes LangSmith by its run_type, trace_id, and parent_run_id keys, walks the run tree, and folds every LLM, tool, and chain run into one per-step schema. LangGraph runs arrive the same way: each node becomes a step."
+    },
+    {
+      "label": "03 · Replay + judge",
+      "title": "Cheaper candidates, judged against what you shipped",
+      "body": "Single-shot steps are replayed through cheaper OpenRouter models on the exact inputs from your trace, and a judge from a different model family scores each candidate against the output you already shipped, with a quality floor of 0.90 by default. Steps with tool calls or loops are confirmed end-to-end by re-running your pipeline code instead."
+    },
+    {
+      "label": "04 · Approve",
+      "title": "A per-step report you approve",
+      "body": "The report lists every proposed swap with its evidence and confidence, and the TUI walks you through approve, reject, or hold for each step, never all-or-nothing. Where the evidence is weak, it abstains and the current model stays."
+    }
+  ],
+  "setup": {
+    "intro": "Install once, then point the skill at an exported run tree. Nothing connects to your LangSmith account; the audit runs on files you export.",
+    "commands": [
+      {
+        "comment": "# inside Claude Code, hand the export to the skill",
+        "command": "claude \"run the rightmodeler skill on ./traces/langsmith-run.json\""
+      }
+    ]
+  },
+  "reads": [
+    {
+      "field": "step kind",
+      "source": "run_type"
+    },
+    {
+      "field": "model",
+      "source": "extra.metadata.ls_model_name"
+    },
+    {
+      "field": "input messages",
+      "source": "inputs.messages"
+    },
+    {
+      "field": "tool calls",
+      "source": "child tool runs"
+    },
+    {
+      "field": "tool results",
+      "source": "tool run outputs"
+    },
+    {
+      "field": "available tools",
+      "source": "extra.invocation_params.tools"
+    },
+    {
+      "field": "token usage",
+      "source": "token_usage.*"
+    },
+    {
+      "field": "success signal",
+      "source": "feedback_stats, error"
+    }
+  ],
+  "detection": "run_type · trace_id · parent_run_id",
+  "useCases": [
+    {
+      "title": "Right-size a LangGraph agent",
+      "body": "Every node in a LangGraph run lands as its own step, so the audit shows which nodes genuinely need a frontier model and which are paying for capability they never use."
+    },
+    {
+      "title": "Prove a swap before you ship it",
+      "body": "Instead of trialing a cheaper model in production and watching dashboards, replay last week's run trees and read the verdict per step, judged against outputs your users already accepted."
+    },
+    {
+      "title": "Turn traces into a cost review",
+      "body": "The report itemizes what each task family costs today and which proven swaps change that, with evidence attached: a model bill your team can actually act on."
+    }
+  ],
+  "limits": [
+    "It reads exported run trees as JSON or JSONL files. It does not connect to your LangSmith account, poll projects, or watch new runs.",
+    "Steps with tool calls or loops are not judged from the trace alone; they are confirmed by re-running your pipeline end-to-end with the candidate model injected.",
+    "High-risk steps like auth, payments, and migrations are flagged and left on the current model, and weak evidence means abstain rather than a recommendation.",
+    "It is a report, not a runtime gateway. LangSmith keeps observing your agent; rightmodeler never sits in the request path."
+  ],
+  "faq": [
+    {
+      "q": "How do I get my traces out of LangSmith?",
+      "a": "Use the Python SDK, where client.read_run(run_id, load_child_runs=True) returns the full run tree, or run a bulk export from your project, and save the result as JSON or JSONL. Point the skill at the file or folder; the format is autodetected."
+    },
+    {
+      "q": "Does rightmodeler replace LangSmith?",
+      "a": "No. LangSmith observes your agent in production; rightmodeler is an offline audit that answers one question your dashboards don't: which steps can move to a cheaper model without losing quality. They work on the same traces."
+    },
+    {
+      "q": "Does it work with LangGraph?",
+      "a": "Yes. LangGraph runs are recorded as LangSmith run trees, and each node becomes a step in the audit. For graph steps that call tools or loop, the skill re-runs your pipeline end-to-end, and it can even find the entrypoint from langgraph.json, so cascade effects surface before you swap."
+    },
+    {
+      "q": "Which candidate models does it try?",
+      "a": "Cheaper models from OpenRouter's catalog that support what the step actually needs (tool calling, structured output, enough context) and are priced strictly below the current model. Replays run with your own OpenRouter key, and a judge from a different model family scores each output."
+    },
+    {
+      "q": "Does my trace data leave my machine?",
+      "a": "Replays send step inputs to candidate models through OpenRouter with your own API key, the same shape of call your agent already makes to a provider. There is no rightmodeler server, and nothing else holds your traces."
+    },
+    {
+      "q": "Will it always find savings?",
+      "a": "No, and that's deliberate. When the evidence is weak or a step is high-risk, the audit abstains and the current model stays. A tool that always finds a swap is not measuring anything."
+    }
+  ],
+  "related": ["langfuse", "phoenix", "openrouter"],
+  "cta": "github"
+}

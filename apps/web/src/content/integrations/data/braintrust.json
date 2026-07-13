@@ -1,0 +1,117 @@
+{
+  "slug": "braintrust",
+  "name": "Braintrust",
+  "category": "trace-source-generic",
+  "categoryLabel": "Trace source · autodetected",
+  "title": "Braintrust integration: replay spans on cheaper models",
+  "description": "Fetch Braintrust span rows and rightmodeler replays each step through cheaper models, judges every candidate against the output you shipped, and reports the safe swaps.",
+  "h1": "rightmodeler + Braintrust",
+  "lede": "Braintrust scores your agent against your evals. rightmodeler puts the same span rows to a different test: which steps survive on a cheaper model, judged against the outputs you already shipped.",
+  "tldr": "rightmodeler autodetects Braintrust span rows by their span_id and root_span_id keys, folds them into its per-step schema with a best-effort generic adapter, and replays each successful step through cheaper candidates on OpenRouter. A cross-family judge scores every candidate against what you shipped: the reference is your production output, not a benchmark suite.",
+  "steps": [
+    {
+      "label": "01 · Fetch",
+      "title": "Save span rows to disk",
+      "body": "Pull rows from the REST API with your BRAINTRUST_API_KEY: GET /v1/project_logs/{project_id}/fetch for live logs, or /v1/experiment/{experiment_id}/fetch for experiment runs. The response nests rows under an events array; save that array (jq .events) as a JSON file anywhere on disk."
+    },
+    {
+      "label": "02 · Ingest",
+      "title": "Detected as Braintrust, mapped generically",
+      "body": "The ingester recognizes the rows by their span_id and root_span_id keys, then normalizes them with the generic adapter, reading name, model, messages or input, and output or completion from each row, best-effort. The untouched row is preserved under raw, so nothing is lost."
+    },
+    {
+      "label": "03 · Replay",
+      "title": "Replayed on cheaper models, judged against your output",
+      "body": "Successful single-shot steps are replayed through cheaper OpenRouter candidates on the exact inputs from your rows. A judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you shipped, with a 0.90 quality floor by default. Steps with tool calls or loops are confirmed by re-running your pipeline code end-to-end in a throwaway worktree."
+    },
+    {
+      "label": "04 · Approve",
+      "title": "A report you approve step by step",
+      "body": "Every proposed swap arrives with its evidence and an ordinal verdict (equivalent, minor drift, or divergent) and the TUI walks you through approve, reject, or hold. Weak evidence means abstain, and high-risk families like auth and payments are flagged and left on the current model."
+    }
+  ],
+  "setup": {
+    "intro": "Install once, then point the skill at your saved span rows. Nothing connects to your Braintrust account; the audit runs offline on the files you fetched.",
+    "commands": [
+      {
+        "comment": "# fetch span rows, save the response's events array as your trace file",
+        "command": "curl -s https://api.braintrust.dev/v1/project_logs/$ID/fetch -H \"Authorization: Bearer $BRAINTRUST_API_KEY\""
+      },
+      {
+        "comment": "# then hand the file to the skill inside Claude Code",
+        "command": "claude \"run the rightmodeler skill on ./traces/braintrust-spans.json\""
+      }
+    ]
+  },
+  "reads": [
+    {
+      "field": "step name",
+      "source": "name"
+    },
+    {
+      "field": "model",
+      "source": "model"
+    },
+    {
+      "field": "input messages",
+      "source": "messages, input"
+    },
+    {
+      "field": "output text",
+      "source": "output, completion"
+    },
+    {
+      "field": "everything else",
+      "source": "preserved in raw"
+    }
+  ],
+  "detection": "span_id · root_span_id · span_attributes.type",
+  "useCases": [
+    {
+      "title": "Price the agent your evals already passed",
+      "body": "Braintrust tells you the agent clears the bar you set; rightmodeler tells you which of its steps are overpaying to clear it. Same span rows, different question, answered with per-step evidence instead of a hunch."
+    },
+    {
+      "title": "Test cheaper models without writing a benchmark",
+      "body": "You don't need a new eval suite to try a cheaper model. The audit judges each candidate against outputs your agent already produced in the rows you fetched: the reference set is your own shipped work."
+    },
+    {
+      "title": "Turn a finished experiment into a swap decision",
+      "body": "Fetch the span rows from an experiment you already ran and replay its successful steps through cheaper candidates. The next model decision starts from evidence you already paid to generate."
+    }
+  ],
+  "limits": [
+    "Braintrust rows are detected as Braintrust but normalized by the generic adapter: a best-effort read of each row's top-level name, model, messages or input, and output or completion. There is no bespoke Braintrust field mapping yet.",
+    "Fields Braintrust nests deeper (a model recorded under metadata, token counts under metrics) may not survive normalization. Skim normalized.json before trusting the verdicts.",
+    "Every fetched row becomes a step, score and task spans included. Filtering the export to rows where span_attributes.type is \"llm\" gives the audit cleaner input.",
+    "It is a report, not a runtime gateway. Braintrust keeps scoring your agent in production; rightmodeler runs offline on the files you fetched and never sits in the request path."
+  ],
+  "faq": [
+    {
+      "q": "How do I get span rows out of Braintrust?",
+      "a": "Fetch them from the REST API, GET /v1/project_logs/{project_id}/fetch for live logs, /v1/experiment/{experiment_id}/fetch for experiment runs, with an Authorization: Bearer header carrying your BRAINTRUST_API_KEY. The response nests rows under events; save that array as JSON and point the skill at the file."
+    },
+    {
+      "q": "Does rightmodeler replace my Braintrust evals?",
+      "a": "No. Evals measure whether your agent clears a bar you defined; rightmodeler measures whether a cheaper model can match what you already shipped, step by step. They answer different questions, and a swap the audit proposes is exactly the kind of change worth confirming in your eval suite before it ships."
+    },
+    {
+      "q": "Why does Braintrust use the generic adapter?",
+      "a": "Detection is bespoke (span_id and root_span_id identify the format) but there is no dedicated field mapping yet. The generic adapter extracts model, messages, and output best-effort from each row and preserves the full source row under raw, so nothing is lost; check the normalized output before leaning on the verdicts."
+    },
+    {
+      "q": "Does my span data leave my machine?",
+      "a": "Replays send step inputs to candidate models through OpenRouter using your own key, the same shape of call your agent already makes to a provider. There is no rightmodeler server and no account; your Braintrust key is used once, by you, to fetch the export."
+    },
+    {
+      "q": "Will it always find savings?",
+      "a": "No, by design. When evidence is weak the audit abstains, and high-risk step families like auth, payments, and migrations are flagged rather than swapped. An audit that always finds a swap isn't measuring anything."
+    },
+    {
+      "q": "Do I need to re-instrument my agent?",
+      "a": "No. If Braintrust already logs your agent, the rows you can fetch today are the input. The audit runs on those files as they are, the only new credential involved is an OpenRouter key for the replays."
+    }
+  ],
+  "related": ["langsmith", "langfuse", "openrouter"],
+  "cta": "github"
+}

@@ -180,6 +180,7 @@ export default function HowItWorksPage() {
                   href: "/use-cases/reduce-llm-costs",
                   label: "Cut your model bill",
                 },
+                { href: "/integrations", label: "Integrations" },
               ]}
             />
           </div>
