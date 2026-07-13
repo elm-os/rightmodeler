@@ -4,6 +4,7 @@
 // text/plain; charset=utf-8.
 
 import { getAllPosts } from "@/content/blog";
+import { getAllIntegrations } from "@/content/integrations";
 import { SITE_NAME, SITE_URL, REPO_URL, RUN_COMMAND } from "@/lib/site";
 
 // One-paragraph summary for the llms.txt blockquote. Stands alone: an LLM should grasp the whole
@@ -49,6 +50,12 @@ const PAGES: { path: string; title: string; description: string }[] = [
     title: "Reduce LLM costs",
     description:
       "Cut your agent's model bill without guessing: prove which steps can move to cheaper models on your own traces.",
+  },
+  {
+    path: "/integrations",
+    title: "Integrations",
+    description:
+      "Every tool rightmodeler works with: the trace formats it reads and the infrastructure it replays through.",
   },
   {
     path: "/manifesto",
@@ -103,6 +110,14 @@ const pageLinks = PAGES.map(
   (page) => `- [${page.title}](${SITE_URL}${page.path}): ${page.description}`,
 ).join("\n");
 
+// Integration pages, resolved from the same registry the /integrations routes use.
+const integrationLinks = getAllIntegrations()
+  .map(
+    (integration) =>
+      `- [${SITE_NAME} + ${integration.name}](${SITE_URL}/integrations/${integration.slug}): ${integration.description}`,
+  )
+  .join("\n");
+
 // /llms.txt — curated index: H1, blockquote summary, a non-heading context line, then annotated
 // link sections. The reserved "## Optional" section points at the full-content file.
 export function buildLlmsTxt(): string {
@@ -127,6 +142,10 @@ ${SITE_NAME} is a developer tool from ELM-OS for teams running multi-agent LLM s
 ## Pages
 
 ${pageLinks}
+
+## Integrations
+
+${integrationLinks}
 
 ## Blog
 
@@ -159,6 +178,10 @@ ${OVERVIEW}
 ## Pages
 
 ${pageLinks}
+
+## Integrations
+
+${integrationLinks}
 
 ---
 

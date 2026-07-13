@@ -4,6 +4,7 @@
 
 import type { MetadataRoute } from "next";
 import { getAllPosts } from "@/content/blog";
+import { getAllIntegrations } from "@/content/integrations";
 import { SITE_URL } from "@/lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -19,6 +20,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
     images: [`${SITE_URL}${post.meta.hero.src}`],
   }));
 
+  // Integration pages, resolved from the same registry the /integrations routes use.
+  const integrationEntries: MetadataRoute.Sitemap = getAllIntegrations().map(
+    (integration) => ({
+      url: `${SITE_URL}/integrations/${integration.slug}`,
+      lastModified: latest,
+      changeFrequency: "monthly",
+      priority: 0.6,
+    }),
+  );
+
   // Static marketing / SEO pages. Priority ranks the core explainer highest; all share the site's
   // freshness date since they're maintained alongside it.
   const pageEntries: MetadataRoute.Sitemap = (
@@ -26,6 +37,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       ["/how-it-works", 0.9],
       ["/agent", 0.9],
       ["/use-cases/reduce-llm-costs", 0.8],
+      ["/integrations", 0.8],
       ["/crucible", 0.8],
       ["/manifesto", 0.7],
       ["/glossary", 0.7],
@@ -55,6 +67,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     },
     ...pageEntries,
+    ...integrationEntries,
     ...postEntries,
   ];
 }

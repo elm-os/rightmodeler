@@ -1,0 +1,105 @@
+{
+  "slug": "litellm",
+  "name": "LiteLLM",
+  "category": "replay-method",
+  "categoryLabel": "Replay method · E2E",
+  "title": "LiteLLM integration: end-to-end replay on cheaper models",
+  "description": "rightmodeler re-runs your real pipeline with a LiteLLM proxy injecting the cheaper candidate, tools fire, loops run, and the report shows whether the swap survived.",
+  "h1": "rightmodeler + LiteLLM",
+  "lede": "When a step calls tools or loops, judging one replayed completion is not proof. rightmodeler re-runs your real pipeline with a LiteLLM proxy swapping the model underneath, your code unmodified, the candidate doing the actual work.",
+  "tldr": "rightmodeler uses LiteLLM as its documented injection method for end-to-end replay: a local proxy maps the model name your code requests to the cheaper OpenRouter candidate, so the pipeline re-runs unmodified in a throwaway git worktree while the swap happens underneath. Anthropic SDKs go through LiteLLM's Anthropic-passthrough, and teams already running a LiteLLM gateway can point the same mechanics at OpenRouter.",
+  "steps": [
+    {
+      "label": "01 · Configure",
+      "title": "One config file maps the model underneath",
+      "body": "A LiteLLM config's model_list maps the model name your code requests to the candidate under test: litellm_params.model set to the openrouter/… slug, api_base https://openrouter.ai/api/v1, api_key os.environ/OPENROUTER_API_KEY. A wildcard entry (model_name \"*\" to openrouter/*) catches anything else the run asks for."
+    },
+    {
+      "label": "02 · Redirect",
+      "title": "Point the pipeline at localhost, not the provider",
+      "body": "litellm --config config.yaml starts the gateway, and OPENAI_BASE_URL=http://localhost:4000 points your unmodified code at it; the pipeline keeps requesting the model it always requests. Anthropic SDKs go through LiteLLM's Anthropic-passthrough instead, since OpenRouter's /v1 speaks the OpenAI wire format."
+    },
+    {
+      "label": "03 · Re-run",
+      "title": "The real pipeline, in a throwaway worktree",
+      "body": "rightmodeler re-runs your pipeline from a detached git worktree of your repo's HEAD, seeded with the recorded task input; the candidate takes its own trajectory rather than replaying your old turns. Tools actually fire: side-effecting ones are mocked from the trace, read-only ones run live, and non-model HTTP is frozen with vcrpy."
+    },
+    {
+      "label": "04 · Compare",
+      "title": "Three axes, then a verdict",
+      "body": "The original and candidate runs are compared on tool-call sequence, step and loop count with the cost delta, and final output: deterministic trajectory matching for tool-selection regressions, a trajectory judge for valid-but-different paths. The verdict lands in the per-step report, and you approve, reject, or hold each swap in the TUI."
+    }
+  ],
+  "setup": {
+    "intro": "There is nothing to install into your app; LiteLLM exists here only inside the replay sandbox, standing in front of your unmodified pipeline for the length of a run. Your OpenRouter key is the one credential.",
+    "commands": [
+      {
+        "comment": "# the one credential; replay traffic bills to your own account",
+        "command": "export OPENROUTER_API_KEY=sk-or-..."
+      },
+      {
+        "comment": "# what the E2E replay stands up in front of your code",
+        "command": "litellm --config config.yaml"
+      },
+      {
+        "comment": "# inside Claude Code, hand the skill your traces and the repo to re-run",
+        "command": "claude \"run the rightmodeler skill on ./traces and confirm swaps against this repo\""
+      }
+    ]
+  },
+  "reads": [],
+  "detection": "",
+  "useCases": [
+    {
+      "title": "Prove a swap survives tool calls and loops",
+      "body": "A step that chooses tools cannot be judged from one replayed completion. The end-to-end re-run shows whether the candidate picks the same calls with the same arguments, stays out of extra loop iterations, and still lands the final output."
+    },
+    {
+      "title": "Audit an Anthropic-SDK pipeline",
+      "body": "OpenRouter's API is OpenAI-shaped, so an Anthropic client cannot be redirected with a base URL alone. LiteLLM's Anthropic-passthrough sits in between and speaks the Anthropic wire format, your pipeline joins the replay without a single code edit."
+    },
+    {
+      "title": "Reuse the gateway you already run",
+      "body": "If LiteLLM already fronts your LLM traffic, the same model_list mechanics point a replay at OpenRouter, and the proxy's request logging hands you the candidate's trajectory for free."
+    },
+    {
+      "title": "Catch cascades before they ship",
+      "body": "A cheaper model that drifts on one step can wreck the steps that consume its output. Re-running the whole pipeline surfaces those failures while they are still a report finding, not an incident."
+    }
+  ],
+  "limits": [
+    "rightmodeler does not ingest LiteLLM proxy logs. LiteLLM's role here is model injection during replay, not a trace source; traces come from the eight supported export formats.",
+    "Replays are not bit-exact even at temperature 0 with a fixed seed; GPU float non-associativity and MoE routing still drift. Important steps are re-run several times and read as a distribution, not a single sample.",
+    "When a mocked side-effecting tool is called with different arguments than the trace recorded, there is no stored answer; that replay mainly measures whether the candidate picks the same calls.",
+    "High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, and weak evidence means abstain. A tool that always finds a swap is not measuring anything.",
+    "The proxy lives and dies inside the replay sandbox. rightmodeler never routes production traffic through LiteLLM or anything else; it is an offline report, not a hop in your request path."
+  ],
+  "faq": [
+    {
+      "q": "Do I need to run LiteLLM to use rightmodeler?",
+      "a": "No. LiteLLM is not a dependency; single-shot steps replay directly against OpenRouter with your own key. The proxy enters only when a step has tool calls, loops, or downstream consumers and needs end-to-end confirmation, and it runs locally for the length of the replay."
+    },
+    {
+      "q": "Does rightmodeler replace LiteLLM?",
+      "a": "No, they do different jobs. LiteLLM routes live traffic; rightmodeler is an offline audit that borrows it as a swap point during replay and never sits in your request path. If a LiteLLM gateway already fronts your traffic, keep it. Crucible, the planned optimization suite, names LiteLLM as a bring-your-own-routing option."
+    },
+    {
+      "q": "Can rightmodeler ingest my LiteLLM proxy logs?",
+      "a": "Not directly; there is no LiteLLM log adapter. But LiteLLM can forward request logs to backends like Langfuse or an OpenTelemetry collector, and exports from both of those are among the eight formats the ingester autodetects."
+    },
+    {
+      "q": "My pipeline uses the Anthropic SDK. How does the swap work?",
+      "a": "OpenRouter's /v1 endpoint speaks the OpenAI wire format, so an Anthropic client cannot be redirected with a base URL alone. The replay puts a LiteLLM Anthropic-passthrough proxy in front of it instead, and because ANTHROPIC_BASE_URL is read once at process start, it is set before your pipeline launches."
+    },
+    {
+      "q": "Is re-running my pipeline with a cheaper model safe?",
+      "a": "The replay runs in a detached git worktree, so writes never touch your real tree; side-effecting tools are mocked from the trace and read-only ones run live. Worktrees isolate files, not runtime; for untrusted or generated code, the run can be wrapped in Docker."
+    },
+    {
+      "q": "Will the end-to-end replay always confirm a swap?",
+      "a": "No, and that is the point of running it. The E2E pass exists to kill shortlisted swaps that cascade: a candidate that drifts mid-pipeline fails here even if its isolated outputs looked fine. When trajectories diverge or evidence is thin, the audit abstains; a tool that always finds a swap is not measuring anything."
+    }
+  ],
+  "related": ["openrouter", "openai-sdk", "vercel-ai-gateway"],
+  "cta": "github"
+}
