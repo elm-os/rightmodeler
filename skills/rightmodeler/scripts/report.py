@@ -127,12 +127,80 @@ def machine_json(results: dict, decisions: dict | None) -> dict:
     return {"generated_at": results.get("generated_at"), "recommendations": recs}
 
 
+def render_snapshot(snapshot: dict) -> str:
+    lines = ["# Rightmodeler Benchmark Snapshot", ""]
+    lines.append(f"- Snapshot: `{snapshot['snapshot_id']}`")
+    lines.append(f"- Corpus: `{snapshot['corpus_version_id']}`")
+    lines.append(f"- Candidate: `{snapshot['candidate']['model']}`")
+    lines.append(
+        f"- Cases: {snapshot['summary']['total_cases']} total, "
+        f"{snapshot['summary']['pass_count']} pass, "
+        f"{snapshot['summary']['fail_count']} fail, "
+        f"{snapshot['summary']['abstain_count']} abstain"
+    )
+    lines.append(f"- Coverage: {snapshot['summary']['coverage']:.0%}")
+    lines.append("")
+    lines.append("## Release gates")
+    lines.append("")
+    lines.append("| Gate | Status | Observed | Threshold | Evidence |")
+    lines.append("|---|---|---:|---:|---|")
+    for gate in snapshot["gates"]:
+        evidence = ", ".join(f"`{ref}`" for ref in gate["evidence_refs"]) or "none"
+        observed = gate["observed"] if gate["observed"] is not None else "n/a"
+        threshold = gate["threshold"] if gate["threshold"] is not None else "n/a"
+        lines.append(
+            f"| `{gate['id']}` | **{gate['status']}** | {observed} | {threshold} | {evidence} |"
+        )
+    lines.append("")
+    lines.append("## Scorecards")
+    lines.append("")
+    for name, metric in snapshot["scorecards"].items():
+        if name == "quality":
+            metric = metric["overall"]
+        value = metric.get("value", metric.get("level", "n/a"))
+        status = metric.get("status", "n/a")
+        lines.append(f"- **{name}**: {value} ({status})")
+    lines.append("")
+    lines.append(
+        f"Timing availability: **{snapshot['timing']['availability']}**. "
+        f"Total candidate cost: **${snapshot['cost']['total_cost_usd']:.6f}**."
+    )
+    return "\n".join(lines)
+
+
+def snapshot_machine_json(snapshot: dict) -> dict:
+    return {
+        "snapshot_id": snapshot["snapshot_id"],
+        "corpus_version_id": snapshot["corpus_version_id"],
+        "candidate": snapshot["candidate"],
+        "summary": snapshot["summary"],
+        "timing": snapshot["timing"],
+        "cost": snapshot["cost"],
+        "scorecards": snapshot["scorecards"],
+        "gates": snapshot["gates"],
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("results")
+    ap.add_argument("results", nargs="?")
+    ap.add_argument("--snapshot")
     ap.add_argument("--decisions")
     ap.add_argument("--out", default=".rightmodeler/report.md")
     args = ap.parse_args()
+
+    if not args.results and not args.snapshot:
+        ap.error("provide results or --snapshot")
+    if args.snapshot:
+        snapshot = load_json(args.snapshot)
+        md = render_snapshot(snapshot)
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+        with open(args.out, "w") as f:
+            f.write(md)
+        jpath = os.path.splitext(args.out)[0].replace("report", "recommendations") + ".json"
+        dump_json(snapshot_machine_json(snapshot), jpath)
+        print(f"wrote {args.out} and {jpath}")
+        return 0
 
     results = load_json(args.results)
     decisions = None

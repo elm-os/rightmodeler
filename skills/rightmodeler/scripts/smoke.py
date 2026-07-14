@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -7,8 +8,9 @@ from pathlib import Path
 from analyze import analyze
 from common import resolve_openrouter_key
 from ingest import detect_format
-from report import render
+from report import render, render_snapshot
 from replay import ReplayError, replay_cases
+from workflow import run_workflow
 
 
 def main():
@@ -198,6 +200,72 @@ def main():
         )
         assert e2e["replay"]["mode"] == "e2e"
         assert e2e_calls == ["e2e"]
+
+    with tempfile.TemporaryDirectory() as workflow_tmp:
+        workflow_root = Path(workflow_tmp)
+        cases_path = workflow_root / "cases.json"
+        candidate_path = workflow_root / "candidate.json"
+        snapshot_path = workflow_root / "snapshot.json"
+        report_path = workflow_root / "report.md"
+        summary_path = workflow_root / "workflow.json"
+        cases_path.write_text(
+            json.dumps(
+                {
+                    "version": "1",
+                    "corpus_version_id": "sha256:" + "c" * 64,
+                    "source_bundle_id": "smoke-bundle",
+                    "cases": [
+                        {
+                            "case_id": "case-1",
+                            "source_run_id": "run-1",
+                            "pipeline_family": "structured-check",
+                            "workload_label": "smoke",
+                            "split": "working",
+                            "risk": "normal",
+                            "required_evidence": "deterministic",
+                            "checks": {"required_fields": ["status"]},
+                        }
+                    ],
+                }
+            )
+        )
+        candidate_path.write_text(
+            json.dumps(
+                {
+                    "version": "1",
+                    "bundle_id": "candidate-smoke",
+                    "corpus_version_id": "sha256:" + "c" * 64,
+                    "candidate": {
+                        "id": "candidate-smoke",
+                        "model": "local-fixture",
+                        "source": "imported",
+                    },
+                    "results": [
+                        {
+                            "case_id": "case-1",
+                            "output_text": '{"status":"open"}',
+                            "cost_usd": 0.01,
+                            "duration_ms": 10,
+                            "evidence_refs": ["smoke/case-1"],
+                        }
+                    ],
+                }
+            )
+        )
+        summary = run_workflow(
+            Path(__file__).resolve().parents[3],
+            cases_path,
+            candidate_path,
+            "structured-check",
+            snapshot_path,
+            report_path,
+            summary_path,
+        )
+        snapshot = json.loads(snapshot_path.read_text())
+        assert summary["mode"] == "offline-imported"
+        assert "Release gates" in render_snapshot(snapshot)
+        assert report_path.exists()
+        assert summary_path.exists()
 
 
 if __name__ == "__main__":

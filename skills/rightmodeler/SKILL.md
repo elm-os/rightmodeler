@@ -45,6 +45,31 @@ The premise (from the user):
    recorded trace unless the user opts into live execution.
 6. **The user approves every swap.** We recommend and rank; they tip the scale.
 
+## Local engine workflow
+
+The installed skill is the orchestration layer. The repository pipeline owns
+contracts, evaluator policy, scorecards, release gates, remediation evidence,
+and corpus versioning. From a repository root, the default imported-result path
+stays offline:
+
+```bash
+uv run python /path/to/rightmodeler/skills/rightmodeler/scripts/workflow.py \
+  --repo . \
+  --cases .rightmodeler/corpus/benchmark-cases.json \
+  --candidate .rightmodeler/input/candidate-results.json \
+  --family structured-check
+```
+
+This runs the pipeline benchmark evaluator, writes an immutable snapshot, and
+renders the same snapshot gates and scorecards into a report. Use
+`--family reference-freeform`, `tool-trajectory`, or `repo-fix` for the other
+evaluation families. For `repo-fix`, also pass `--repo-target`.
+
+Provider replay, remediation diagnosis, approval, apply, rollback, and corpus
+publication are explicit follow-up commands. The workflow runner does not call
+them implicitly. Use the commands in [reference/replay.md](reference/replay.md)
+and the pipeline README when you intentionally want those actions.
+
 ## Prerequisites (check first)
 
 Run all commands below from the skill root (`rightmodeler`).
@@ -178,8 +203,8 @@ machine-readable JSON (total savings, per-family recommendations, risks, abstent
 
 ## Files
 
-- `scripts/` — `preflight`, `ingest`, `analyze`, `shortlist`, `replay_step`, `judge`,
-  `run_pipeline`, `orchestrate`, `tui`, `report`.
+- `scripts/` — `preflight`, `ingest`, `analyze`, `shortlist`, `replay_step`, `replay`,
+  `judge`, `run_pipeline`, `orchestrate`, `workflow`, `tui`, `report`.
 - `reference/` — deep docs loaded on demand: `trace-formats.md`, `replay.md`,
   `judge.md`, `openrouter.md`.
 - Working output lives under `.rightmodeler/` in the user's project (gitignore it).
