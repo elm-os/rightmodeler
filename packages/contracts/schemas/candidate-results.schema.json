@@ -40,6 +40,41 @@
           "evidence_refs": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
+          },
+          "reference": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["type", "refs", "verdict", "agreement"],
+                "properties": {
+                  "type": { "const": "frozen-human-verdict" },
+                  "refs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "verdict": { "enum": ["pass", "fail", null] },
+                  "agreement": {
+                    "type": "string",
+                    "enum": ["unanimous", "disputed"]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["type", "refs"],
+                "properties": {
+                  "type": { "const": "reference-evidence" },
+                  "refs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "additionalProperties": false

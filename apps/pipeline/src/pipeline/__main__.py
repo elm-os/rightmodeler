@@ -9,6 +9,7 @@ from pathlib import Path
 from jsonschema import validate
 from pipeline.corpus import compile_corpus
 from pipeline.evaluate import evaluate
+from pipeline.freeform import evaluate_freeform_candidates
 from pipeline.structured import evaluate_structured_candidates
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -175,6 +176,22 @@ def evaluate_structured(cases_path, candidate_path, output_path):
     return write_json(output_path, snapshot)
 
 
+def evaluate_freeform(cases_path, candidate_path, output_path):
+    cases = validate_schema(load_json(cases_path), "benchmark-cases")
+    candidate_bundle = validate_schema(load_json(candidate_path), "candidate-results")
+    snapshot = evaluate_freeform_candidates(cases, candidate_bundle)
+    validate_schema(snapshot, "benchmark-snapshot")
+    return write_json(output_path, snapshot)
+
+
+def evaluate_benchmark(cases_path, candidate_path, output_path, pipeline_family):
+    if pipeline_family == "structured-check":
+        return evaluate_structured(cases_path, candidate_path, output_path)
+    if pipeline_family == "reference-freeform":
+        return evaluate_freeform(cases_path, candidate_path, output_path)
+    raise ValueError(f"unsupported benchmark family: {pipeline_family}")
+
+
 def smoke():
     sample = {
         "version": "1",
@@ -327,12 +344,24 @@ def build_parser():
     )
     benchmark_evaluate_parser.add_argument("--candidate", required=True)
     benchmark_evaluate_parser.add_argument(
+        "--family",
+        choices=["structured-check", "reference-freeform"],
+        default="structured-check",
+    )
+    benchmark_evaluate_parser.add_argument(
         "--output",
         default=str(ARTIFACTS / "evaluation" / "benchmark-snapshot.json"),
     )
     benchmark_evaluate_parser.set_defaults(
         handler=lambda args: (
-            print(evaluate_structured(args.cases, args.candidate, args.output)),
+            print(
+                evaluate_benchmark(
+                    args.cases,
+                    args.candidate,
+                    args.output,
+                    args.family,
+                )
+            ),
             0,
         )[1]
     )
