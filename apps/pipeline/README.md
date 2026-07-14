@@ -77,6 +77,23 @@ The trajectory evaluator compares tool names, arguments, order, retries, loop
 markers, recovery, terminal state, and exact final output. It derives
 downstream, loop, and recovery risk flags without replaying tools.
 
+## Diagnose a remediation
+
+Turn a failed or weak snapshot into one primary issue class and next action
+without changing the repository:
+
+```bash
+uv run python -m pipeline remediation diagnose \
+  --snapshot .rightmodeler/evaluation/benchmark-snapshot.json \
+  --output .rightmodeler/remediation/evidence.json
+```
+
+Pass `--proposal`, `--post-fix-snapshot`, `--holdout-snapshot`, and
+`--validation` when those artifacts exist. The output is validated against the
+`remediation-evidence` contract. It stays `review` or `draft` until an
+actionable change, improved target gate, stable gates, and passed validation
+are all present. Diagnosis never applies a diff.
+
 Evaluate a repository-fix candidate in an isolated worktree:
 
 ```bash

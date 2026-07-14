@@ -8,6 +8,7 @@ from pathlib import Path
 
 from jsonschema import validate
 from pipeline.corpus import compile_corpus
+from pipeline.diagnosis import diagnose_snapshot
 from pipeline.evaluate import evaluate
 from pipeline.freeform import evaluate_freeform_candidates
 from pipeline.repo_fix import evaluate_repo_fix_candidates
@@ -216,6 +217,32 @@ def evaluate_benchmark(cases_path, candidate_path, output_path, pipeline_family,
     raise ValueError(f"unsupported benchmark family: {pipeline_family}")
 
 
+def diagnose(
+    snapshot_path,
+    output_path,
+    proposal_path=None,
+    post_fix_snapshot_path=None,
+    holdout_snapshot_path=None,
+    validation_path=None,
+):
+    snapshot = validate_schema(load_json(snapshot_path), "benchmark-snapshot")
+    proposal = load_json(proposal_path) if proposal_path else None
+    post_fix = (
+        validate_schema(load_json(post_fix_snapshot_path), "benchmark-snapshot")
+        if post_fix_snapshot_path
+        else None
+    )
+    holdout = (
+        validate_schema(load_json(holdout_snapshot_path), "benchmark-snapshot")
+        if holdout_snapshot_path
+        else None
+    )
+    validation = load_json(validation_path) if validation_path else None
+    evidence = diagnose_snapshot(snapshot, proposal, post_fix, holdout, validation)
+    validate_schema(evidence, "remediation-evidence")
+    return write_json(output_path, evidence)
+
+
 def smoke():
     sample = {
         "version": "1",
@@ -386,6 +413,36 @@ def build_parser():
                     args.output,
                     args.family,
                     args.repo,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    remediation_parser = subparsers.add_parser("remediation")
+    remediation_subparsers = remediation_parser.add_subparsers(
+        dest="remediation_command", required=True
+    )
+    remediation_diagnose_parser = remediation_subparsers.add_parser("diagnose")
+    remediation_diagnose_parser.add_argument("--snapshot", required=True)
+    remediation_diagnose_parser.add_argument("--proposal")
+    remediation_diagnose_parser.add_argument("--post-fix-snapshot")
+    remediation_diagnose_parser.add_argument("--holdout-snapshot")
+    remediation_diagnose_parser.add_argument("--validation")
+    remediation_diagnose_parser.add_argument(
+        "--output",
+        default=str(ARTIFACTS / "remediation" / "evidence.json"),
+    )
+    remediation_diagnose_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                diagnose(
+                    args.snapshot,
+                    args.output,
+                    args.proposal,
+                    args.post_fix_snapshot,
+                    args.holdout_snapshot,
+                    args.validation,
                 )
             ),
             0,
