@@ -215,6 +215,87 @@
         }
       },
       "additionalProperties": false
+    },
+    "scorecard_metric": {
+      "type": "object",
+      "required": [
+        "value",
+        "numerator",
+        "denominator",
+        "threshold",
+        "status",
+        "evidence_refs",
+        "details"
+      ],
+      "properties": {
+        "value": { "type": ["number", "null"] },
+        "numerator": { "type": "integer", "minimum": 0 },
+        "denominator": { "type": "integer", "minimum": 0 },
+        "threshold": { "type": ["number", "null"] },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "review", "unavailable"]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "confidence": {
+      "type": "object",
+      "required": [
+        "level",
+        "status",
+        "sample_count",
+        "pass_rate",
+        "evidence_refs"
+      ],
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["high", "medium", "low", "abstain"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "review", "unavailable"]
+        },
+        "sample_count": { "type": "integer", "minimum": 0 },
+        "pass_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "gate": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "threshold",
+        "observed",
+        "evidence_refs",
+        "detail"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "review", "unavailable"]
+        },
+        "threshold": { "type": ["number", "null"] },
+        "observed": { "type": ["number", "null"] },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "detail": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
     }
   },
   "required": [
@@ -227,7 +308,9 @@
     "summary",
     "cost",
     "timing",
-    "evidence"
+    "evidence",
+    "scorecards",
+    "gates"
   ],
   "properties": {
     "version": { "type": "string" },
@@ -403,6 +486,49 @@
         }
       },
       "additionalProperties": false
+    },
+    "scorecards": {
+      "type": "object",
+      "required": [
+        "safety",
+        "quality",
+        "recommendation_precision",
+        "safe_opportunity_recall",
+        "required_abstention",
+        "coverage",
+        "speed",
+        "confidence",
+        "remediation",
+        "cost"
+      ],
+      "properties": {
+        "safety": { "$ref": "#/$defs/scorecard_metric" },
+        "quality": {
+          "type": "object",
+          "required": ["overall", "by_family"],
+          "properties": {
+            "overall": { "$ref": "#/$defs/scorecard_metric" },
+            "by_family": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/scorecard_metric" }
+            }
+          },
+          "additionalProperties": false
+        },
+        "recommendation_precision": { "$ref": "#/$defs/scorecard_metric" },
+        "safe_opportunity_recall": { "$ref": "#/$defs/scorecard_metric" },
+        "required_abstention": { "$ref": "#/$defs/scorecard_metric" },
+        "coverage": { "$ref": "#/$defs/scorecard_metric" },
+        "speed": { "$ref": "#/$defs/scorecard_metric" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "remediation": { "$ref": "#/$defs/scorecard_metric" },
+        "cost": { "$ref": "#/$defs/scorecard_metric" }
+      },
+      "additionalProperties": false
+    },
+    "gates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/gate" }
     }
   },
   "additionalProperties": false
