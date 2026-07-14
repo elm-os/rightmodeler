@@ -12,6 +12,9 @@ from pipeline.diagnosis import diagnose_snapshot
 from pipeline.evaluate import evaluate
 from pipeline.freeform import evaluate_freeform_candidates
 from pipeline.repo_fix import evaluate_repo_fix_candidates
+from pipeline.remediation import apply as apply_remediation
+from pipeline.remediation import approve as approve_remediation
+from pipeline.remediation import rollback as rollback_remediation
 from pipeline.structured import evaluate_structured_candidates
 from pipeline.trajectory import evaluate_tool_trajectories
 
@@ -243,6 +246,24 @@ def diagnose(
     return write_json(output_path, evidence)
 
 
+def approve(evidence_path, repo_path, lifecycle_path, actor, reason=None):
+    event = approve_remediation(evidence_path, repo_path, lifecycle_path, actor, reason)
+    validate_schema(event, "remediation-lifecycle")
+    return lifecycle_path
+
+
+def apply(evidence_path, repo_path, lifecycle_path, actor, reason=None):
+    event = apply_remediation(evidence_path, repo_path, lifecycle_path, actor, reason)
+    validate_schema(event, "remediation-lifecycle")
+    return lifecycle_path
+
+
+def rollback(evidence_path, repo_path, lifecycle_path, actor, reason=None):
+    event = rollback_remediation(evidence_path, repo_path, lifecycle_path, actor, reason)
+    validate_schema(event, "remediation-lifecycle")
+    return lifecycle_path
+
+
 def smoke():
     sample = {
         "version": "1",
@@ -448,6 +469,35 @@ def build_parser():
             0,
         )[1]
     )
+
+    for command, handler in (
+        ("approve", approve),
+        ("apply", apply),
+        ("rollback", rollback),
+    ):
+        lifecycle_parser = remediation_subparsers.add_parser(command)
+        lifecycle_parser.add_argument("--evidence", required=True)
+        lifecycle_parser.add_argument("--repo", required=True)
+        lifecycle_parser.add_argument(
+            "--lifecycle",
+            default=str(ARTIFACTS / "remediation" / "lifecycle.json"),
+        )
+        lifecycle_parser.add_argument("--actor", required=True)
+        lifecycle_parser.add_argument("--reason")
+        lifecycle_parser.set_defaults(
+            handler=lambda args, handler=handler: (
+                print(
+                    handler(
+                        args.evidence,
+                        args.repo,
+                        args.lifecycle,
+                        args.actor,
+                        args.reason,
+                    )
+                ),
+                0,
+            )[1]
+        )
 
     smoke_parser = subparsers.add_parser("smoke")
     smoke_parser.set_defaults(handler=lambda _: smoke())

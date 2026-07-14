@@ -94,6 +94,30 @@ Pass `--proposal`, `--post-fix-snapshot`, `--holdout-snapshot`, and
 actionable change, improved target gate, stable gates, and passed validation
 are all present. Diagnosis never applies a diff.
 
+Approve, apply, and roll back are separate explicit local actions. They use an
+append-only lifecycle artifact and never create Git history or remote state:
+
+```bash
+uv run python -m pipeline remediation approve \
+  --evidence .rightmodeler/remediation/evidence.json \
+  --repo . \
+  --actor ameya
+uv run python -m pipeline remediation apply \
+  --evidence .rightmodeler/remediation/evidence.json \
+  --repo . \
+  --actor ameya
+uv run python -m pipeline remediation rollback \
+  --evidence .rightmodeler/remediation/evidence.json \
+  --repo . \
+  --actor ameya
+```
+
+Approval records the clean base revision and affected-file digests. Apply
+refuses stale or dirty state, checks the declared patch scope, runs the
+declared validation commands, and restores the recorded pre-apply files when
+validation fails. Rollback refuses if affected files no longer match the
+recorded applied digests.
+
 Evaluate a repository-fix candidate in an isolated worktree:
 
 ```bash
