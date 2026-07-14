@@ -1,6 +1,7 @@
 """Shared matching and immutable snapshot assembly for benchmark families."""
 
 from pipeline.corpus import content_digest
+from pipeline.scorecards import compute_scorecards
 
 
 def match_candidate_results(corpus, candidate_bundle, pipeline_family):
@@ -45,6 +46,7 @@ def build_snapshot(corpus, candidate_bundle, verdicts):
         else "unavailable"
     )
     candidate_cost = sum(verdict["cost_usd"] for verdict in verdicts)
+    scorecards, gates = compute_scorecards(corpus, candidate_bundle, verdicts)
     snapshot_without_id = {
         "version": "1",
         "corpus_version_id": corpus["corpus_version_id"],
@@ -77,6 +79,8 @@ def build_snapshot(corpus, candidate_bundle, verdicts):
                 {reference for verdict in verdicts for reference in verdict["evidence_refs"]}
             ),
         },
+        "scorecards": scorecards,
+        "gates": gates,
     }
     return {
         **snapshot_without_id,

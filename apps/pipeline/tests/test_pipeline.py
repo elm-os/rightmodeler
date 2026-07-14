@@ -464,6 +464,133 @@ def test_structured_evaluation_is_repeatable(tmp_path):
     assert json.loads(first_output.read_text()) == json.loads(second_output.read_text())
 
 
+def _scorecard_corpus_and_candidate(
+    tmp_path,
+    case_count=10,
+    unsafe_indexes=(),
+    failing_indexes=(),
+    high_risk_indexes=(),
+    missing_baseline=False,
+    candidate_times=None,
+):
+    cases = []
+    results = []
+    candidate_times = candidate_times or [90] * case_count
+    for index in range(case_count):
+        case_id = f"case-{index + 1}"
+        high_risk = index in high_risk_indexes
+        cases.append(
+            {
+                "case_id": case_id,
+                "source_run_id": f"run-{index + 1}",
+                "pipeline_family": "structured-check",
+                "workload_label": "scorecard-fixture",
+                "split": "working",
+                "risk": "high" if high_risk else "normal",
+                "required_evidence": "deterministic",
+                "checks": {},
+                "labels": {
+                    "recommendation": "unsafe" if index in unsafe_indexes else "safe",
+                    "required_abstention": high_risk,
+                },
+            }
+        )
+        result = {
+            "case_id": case_id,
+            "output_text": "not json" if index in failing_indexes else "{}",
+            "cost_usd": 0.01,
+            "duration_ms": candidate_times[index],
+            "evidence_refs": [f"candidate-1/{case_id}"],
+        }
+        if not missing_baseline:
+            result["baseline_duration_ms"] = 100
+        results.append(result)
+    return _structured_corpus_and_candidate(tmp_path, results=results, cases=cases)
+
+
+def test_scorecard_thresholds_keep_abstentions_out_of_quality(tmp_path):
+    corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(
+        tmp_path, failing_indexes={9}
+    )
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    assert snapshot["scorecards"]["quality"]["overall"]["value"] == 0.9
+    assert snapshot["scorecards"]["quality"]["overall"]["status"] == "pass"
+    assert snapshot["scorecards"]["recommendation_precision"]["value"] == 1.0
+    assert snapshot["scorecards"]["safe_opportunity_recall"]["value"] == 0.9
+    assert snapshot["scorecards"]["confidence"]["level"] == "medium"
+    assert snapshot["scorecards"]["speed"]["status"] == "pass"
+    validate_schema(snapshot, "benchmark-snapshot")
+
+
+def test_scorecard_required_abstention_is_separate_from_quality(tmp_path):
+    corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(
+        tmp_path, case_count=2, high_risk_indexes={1}
+    )
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    assert snapshot["summary"]["abstain_count"] == 1
+    assert snapshot["scorecards"]["quality"]["overall"]["value"] == 1.0
+    assert snapshot["scorecards"]["quality"]["overall"]["denominator"] == 1
+    assert snapshot["scorecards"]["required_abstention"]["value"] == 1.0
+    assert snapshot["scorecards"]["coverage"]["value"] == 1.0
+
+
+def test_scorecard_precision_and_safety_gate_reject_unsafe_recommendation(tmp_path):
+    corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(
+        tmp_path, unsafe_indexes={9}
+    )
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    assert snapshot["scorecards"]["recommendation_precision"]["value"] == 0.9
+    assert snapshot["scorecards"]["recommendation_precision"]["status"] == "fail"
+    safety_gate = next(gate for gate in snapshot["gates"] if gate["id"] == "zero-unsafe-substitutions")
+    assert safety_gate["status"] == "fail"
+    assert safety_gate["observed"] == 1
+
+
+def test_scorecard_speed_is_unavailable_without_paired_baseline(tmp_path):
+    corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(
+        tmp_path, missing_baseline=True
+    )
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    speed = json.loads(output_path.read_text())["scorecards"]["speed"]
+    assert speed["status"] == "unavailable"
+    assert speed["details"]["paired_case_count"] == 0
+    assert speed["details"]["missing_case_count"] == 10
+
+
+def test_scorecard_speed_fails_material_p95_regression(tmp_path):
+    candidate_times = [90] * 9 + [1000]
+    corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(
+        tmp_path, candidate_times=candidate_times
+    )
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    assert snapshot["scorecards"]["speed"]["status"] == "fail"
+    assert snapshot["scorecards"]["speed"]["details"]["p95_regression_pct"] > 0.2
+
+
+def test_scorecard_contract_rejects_invalid_frozen_label(tmp_path):
+    corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(tmp_path)
+    corpus = json.loads(corpus_path.read_text())
+    corpus["cases"][0]["labels"]["recommendation"] = "maybe"
+    corpus_path.write_text(json.dumps(corpus))
+
+    with pytest.raises(ValidationError):
+        evaluate_structured(corpus_path, candidate_path, output_path)
+
+
 def test_benchmark_evaluate_command_writes_snapshot(tmp_path, monkeypatch, capsys):
     corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(tmp_path)
     monkeypatch.setattr(

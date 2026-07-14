@@ -33,6 +33,22 @@ The command validates the candidate contract, runs JSON/schema/required-field
 checks, and emits a content-addressed snapshot with terminal verdicts,
 abstentions, imported cost, evidence references, and timing availability.
 
+Snapshots also include v1 scorecards and release gates. Add frozen labels to a
+benchmark case when measuring recommendation precision and safe-opportunity
+recall:
+
+```json
+"labels": {
+  "recommendation": "safe",
+  "required_abstention": false
+}
+```
+
+Add `baseline_duration_ms` to a candidate result for paired speed metrics. The
+snapshot reports quality, safety, coverage, confidence, cost, and remediation
+status separately. Missing labels, remediation proof, or paired timing remain
+`unavailable` or `review`; the evaluator never infers them from other fields.
+
 Evaluate freeform results with an explicit reference:
 
 ```bash
