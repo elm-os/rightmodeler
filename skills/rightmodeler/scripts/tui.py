@@ -110,6 +110,31 @@ def run_rich_fallback(results: dict, rows: list[dict]) -> int:
     return 0
 
 
+def run_snapshot_fallback(snapshot: dict) -> int:
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    table = Table(title="rightmodeler benchmark gates (read-only)")
+    for column in ("Gate", "Status", "Observed", "Threshold", "Evidence"):
+        table.add_column(column, overflow="fold")
+    for gate in snapshot["gates"]:
+        table.add_row(
+            gate["id"],
+            gate["status"],
+            str(gate["observed"] if gate["observed"] is not None else "n/a"),
+            str(gate["threshold"] if gate["threshold"] is not None else "n/a"),
+            ", ".join(gate["evidence_refs"]) or "none",
+        )
+    console.print(table)
+    console.print(
+        f"snapshot {snapshot['snapshot_id']}  "
+        f"coverage {snapshot['summary']['coverage']:.0%}  "
+        f"timing {snapshot['timing']['availability']}"
+    )
+    return 0
+
+
 def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
     from textual.app import App, ComposeResult
     from textual.containers import Horizontal
@@ -256,9 +281,15 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("results")
+    ap.add_argument("results", nargs="?")
+    ap.add_argument("--snapshot")
     ap.add_argument("--out")
     args = ap.parse_args()
+
+    if args.snapshot:
+        return run_snapshot_fallback(load_json(args.snapshot))
+    if not args.results:
+        ap.error("provide results or --snapshot")
 
     results = load_json(args.results)
     rows = _rows(results)

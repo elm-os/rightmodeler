@@ -166,3 +166,8 @@ The repository must be clean and at the declared Git revision. Validation
 commands use argv arrays with bounded timeouts, run only in a disposable
 worktree, and record exit status, output summaries, timing, patch scope, and
 patch evidence. The real repository is not modified.
+
+The pipeline test suite is the local conformance suite for all four families.
+The skill workflow and report consume the emitted snapshot rather than
+recomputing evaluator policy. Default checks stay offline; replay and
+remediation actions require their explicit commands.
