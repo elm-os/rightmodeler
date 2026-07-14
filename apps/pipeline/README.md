@@ -32,3 +32,17 @@ uv run python -m pipeline benchmark evaluate \
 The command validates the candidate contract, runs JSON/schema/required-field
 checks, and emits a content-addressed snapshot with terminal verdicts,
 abstentions, imported cost, evidence references, and timing availability.
+
+Evaluate freeform results with an explicit reference:
+
+```bash
+uv run python -m pipeline benchmark evaluate \
+  --family reference-freeform \
+  --cases .rightmodeler/corpus/benchmark-cases.json \
+  --candidate .rightmodeler/input/candidate-results.json \
+  --output .rightmodeler/evaluation/benchmark-snapshot.json
+```
+
+Freeform results may carry a frozen human verdict with reviewer references and
+an agreement state. Reference evidence without a calibrated verdict, disputed
+reviews, and missing references abstain instead of invoking a semantic judge.

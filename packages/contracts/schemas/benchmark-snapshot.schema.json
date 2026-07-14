@@ -3,6 +3,43 @@
   "$id": "https://rightmodeler.com/schemas/benchmark-snapshot.schema.json",
   "title": "Benchmark Snapshot",
   "type": "object",
+  "$defs": {
+    "reference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "refs", "verdict", "agreement"],
+          "properties": {
+            "type": { "const": "frozen-human-verdict" },
+            "refs": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "verdict": { "enum": ["pass", "fail", null] },
+            "agreement": {
+              "type": "string",
+              "enum": ["unanimous", "disputed"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "refs"],
+          "properties": {
+            "type": { "const": "reference-evidence" },
+            "refs": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
   "required": [
     "version",
     "snapshot_id",
@@ -45,19 +82,35 @@
           "pipeline_family",
           "split",
           "terminal_verdict",
+          "evidence_type",
+          "evaluator",
           "checks",
           "timing",
           "cost_usd",
-          "evidence_refs"
+          "evidence_refs",
+          "reference"
         ],
         "properties": {
           "case_id": { "type": "string", "minLength": 1 },
-          "pipeline_family": { "const": "structured-check" },
+          "pipeline_family": {
+            "type": "string",
+            "enum": ["structured-check", "reference-freeform"]
+          },
           "split": { "type": "string", "enum": ["working", "holdout"] },
           "terminal_verdict": {
             "type": "string",
             "enum": ["pass", "fail", "abstain"]
           },
+          "evidence_type": {
+            "type": "string",
+            "enum": [
+              "deterministic",
+              "frozen-human-verdict",
+              "reference-evidence",
+              "abstain"
+            ]
+          },
+          "evaluator": { "type": "string", "minLength": 1 },
           "checks": {
             "type": "array",
             "items": {
@@ -92,6 +145,9 @@
           "evidence_refs": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
+          },
+          "reference": {
+            "anyOf": [{ "$ref": "#/$defs/reference" }, { "type": "null" }]
           }
         },
         "additionalProperties": false
