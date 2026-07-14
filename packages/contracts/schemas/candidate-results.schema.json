@@ -4,6 +4,38 @@
   "title": "Candidate Results",
   "type": "object",
   "$defs": {
+    "replay": {
+      "type": "object",
+      "required": [
+        "mode",
+        "max_cost_usd",
+        "projected_cost_usd",
+        "actual_cost_usd",
+        "remaining_cost_usd",
+        "cache_hits",
+        "cache_misses",
+        "status",
+        "partial"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["single-shot", "e2e", "mixed"]
+        },
+        "max_cost_usd": { "type": "number", "exclusiveMinimum": 0 },
+        "projected_cost_usd": { "type": "number", "minimum": 0 },
+        "actual_cost_usd": { "type": "number", "minimum": 0 },
+        "remaining_cost_usd": { "type": "number", "minimum": 0 },
+        "cache_hits": { "type": "integer", "minimum": 0 },
+        "cache_misses": { "type": "integer", "minimum": 0 },
+        "status": {
+          "type": "string",
+          "enum": ["completed", "budget_exhausted", "failed"]
+        },
+        "partial": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
     "trajectory": {
       "type": "object",
       "required": ["tool_calls", "terminal_state", "final_output"],
@@ -109,7 +141,7 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "model": { "type": "string", "minLength": 1 },
-        "source": { "type": "string", "enum": ["imported"] }
+        "source": { "type": "string", "enum": ["imported", "replayed"] }
       },
       "additionalProperties": false
     },
@@ -124,6 +156,7 @@
           "cost_usd": { "type": "number", "minimum": 0 },
           "duration_ms": { "type": ["number", "null"], "minimum": 0 },
           "baseline_duration_ms": { "type": ["number", "null"], "minimum": 0 },
+          "replay_error": { "type": ["string", "null"] },
           "evidence_refs": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
@@ -182,7 +215,8 @@
         },
         "additionalProperties": false
       }
-    }
+    },
+    "replay": { "$ref": "#/$defs/replay" }
   },
   "additionalProperties": false
 }
