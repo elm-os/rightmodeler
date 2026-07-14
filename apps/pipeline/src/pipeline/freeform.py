@@ -82,6 +82,7 @@ def _evaluate_result(case, result):
         },
         "cost_usd": result["cost_usd"],
         "evidence_refs": evidence_refs,
+        "trajectory": None,
         "reference": reference,
     }
 
@@ -100,6 +101,7 @@ def _missing_result(case):
         "timing": {"availability": "unavailable", "duration_ms": None},
         "cost_usd": 0,
         "evidence_refs": [],
+        "trajectory": None,
         "reference": None,
     }
 

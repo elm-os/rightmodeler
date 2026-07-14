@@ -8,6 +8,7 @@ from pipeline.__main__ import (
     build_corpus,
     evaluate_freeform,
     evaluate_structured,
+    evaluate_tool_trajectory,
     infer_task_family,
     normalize_run,
     validate_schema,
@@ -650,6 +651,234 @@ def test_benchmark_evaluate_command_selects_freeform_family(tmp_path, monkeypatc
     assert main() == 0
     assert json.loads(output_path.read_text())["case_verdicts"][0]["evaluator"] == (
         "frozen-human-verdict"
+    )
+    assert str(output_path) in capsys.readouterr().out
+
+
+def _tool_trajectory():
+    return {
+        "tool_calls": [
+            {
+                "call_id": "search-1",
+                "tool_name": "search",
+                "arguments": {"query": "rightmodeler"},
+                "attempt": 1,
+                "status": "error",
+                "loop_id": "lookup",
+                "iteration": 1,
+            },
+            {
+                "call_id": "search-2",
+                "tool_name": "search",
+                "arguments": {"query": "rightmodeler"},
+                "attempt": 2,
+                "status": "success",
+                "loop_id": "lookup",
+                "iteration": 2,
+            },
+            {
+                "call_id": "write-1",
+                "tool_name": "write_note",
+                "arguments": {"value": "result"},
+                "attempt": 1,
+                "status": "success",
+            },
+        ],
+        "terminal_state": "success",
+        "final_output": "done",
+    }
+
+
+_TRAJECTORY_SENTINEL = object()
+
+
+def _tool_corpus_and_candidate(
+    tmp_path,
+    candidate_trajectory=_TRAJECTORY_SENTINEL,
+    reference_trajectory=_TRAJECTORY_SENTINEL,
+    results=None,
+):
+    case = {
+        "case_id": "case-1",
+        "source_run_id": "run-1",
+        "pipeline_family": "tool-trajectory",
+        "workload_label": "research-agent",
+        "split": "working",
+        "risk": "normal",
+        "required_evidence": "trajectory",
+        "checks": {},
+    }
+    if results is None:
+        candidate = (
+            _tool_trajectory()
+            if candidate_trajectory is _TRAJECTORY_SENTINEL
+            else candidate_trajectory
+        )
+        reference = (
+            _tool_trajectory()
+            if reference_trajectory is _TRAJECTORY_SENTINEL
+            else reference_trajectory
+        )
+        result = {
+            "case_id": "case-1",
+            "output_text": "done",
+            "cost_usd": 0.12,
+            "duration_ms": 225,
+            "evidence_refs": ["candidate-1/case-1"],
+        }
+        if candidate is not None:
+            result["trajectory"] = candidate
+        if reference is not None:
+            result["reference"] = {
+                "type": "reference-trajectory",
+                "refs": ["reference-1/case-1"],
+                "trajectory": reference,
+            }
+        results = [result]
+    return _structured_corpus_and_candidate(tmp_path, results=results, cases=[case])
+
+
+def test_tool_trajectory_evaluation_compares_full_trajectory(tmp_path):
+    corpus_path, candidate_path, output_path = _tool_corpus_and_candidate(tmp_path)
+
+    result = evaluate_tool_trajectory(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    verdict = snapshot["case_verdicts"][0]
+    assert result == output_path
+    assert verdict["terminal_verdict"] == "pass"
+    assert verdict["evidence_type"] == "trajectory"
+    assert verdict["evaluator"] == "tool-trajectory"
+    assert verdict["trajectory"] == {
+        "tool_name": "pass",
+        "arguments": "pass",
+        "ordering": "pass",
+        "retries": "pass",
+        "loops": "pass",
+        "recovery": "pass",
+        "terminal_state": "pass",
+        "final_output": "pass",
+        "risk_flags": ["downstream", "loop", "recovery"],
+    }
+    validate_schema(snapshot, "benchmark-snapshot")
+
+
+def test_tool_trajectory_evaluation_rejects_argument_mismatch(tmp_path):
+    candidate = _tool_trajectory()
+    candidate["tool_calls"][0]["arguments"] = {"query": "wrong"}
+    corpus_path, candidate_path, output_path = _tool_corpus_and_candidate(
+        tmp_path, candidate_trajectory=candidate
+    )
+
+    evaluate_tool_trajectory(corpus_path, candidate_path, output_path)
+
+    trajectory = json.loads(output_path.read_text())["case_verdicts"][0]["trajectory"]
+    assert trajectory["arguments"] == "fail"
+    assert trajectory["tool_name"] == "pass"
+    assert trajectory["ordering"] == "pass"
+    assert json.loads(output_path.read_text())["case_verdicts"][0]["terminal_verdict"] == (
+        "fail"
+    )
+
+
+def test_tool_trajectory_evaluation_rejects_order_and_retry_mismatch(tmp_path):
+    candidate = _tool_trajectory()
+    candidate["tool_calls"][0], candidate["tool_calls"][1] = (
+        candidate["tool_calls"][1],
+        candidate["tool_calls"][0],
+    )
+    candidate["tool_calls"][1]["attempt"] = 1
+    corpus_path, candidate_path, output_path = _tool_corpus_and_candidate(
+        tmp_path, candidate_trajectory=candidate
+    )
+
+    evaluate_tool_trajectory(corpus_path, candidate_path, output_path)
+
+    trajectory = json.loads(output_path.read_text())["case_verdicts"][0]["trajectory"]
+    assert trajectory["ordering"] == "fail"
+    assert trajectory["retries"] == "fail"
+
+
+def test_tool_trajectory_evaluation_rejects_terminal_and_final_output(tmp_path):
+    candidate = _tool_trajectory()
+    candidate["terminal_state"] = "failure"
+    candidate["final_output"] = "different"
+    corpus_path, candidate_path, output_path = _tool_corpus_and_candidate(
+        tmp_path, candidate_trajectory=candidate
+    )
+    candidate_bundle = json.loads(candidate_path.read_text())
+    candidate_bundle["results"][0]["output_text"] = "different"
+    candidate_path.write_text(json.dumps(candidate_bundle))
+
+    evaluate_tool_trajectory(corpus_path, candidate_path, output_path)
+
+    trajectory = json.loads(output_path.read_text())["case_verdicts"][0]["trajectory"]
+    assert trajectory["terminal_state"] == "fail"
+    assert trajectory["final_output"] == "fail"
+
+
+def test_tool_trajectory_evaluation_abstains_without_candidate_trajectory(tmp_path):
+    corpus_path, candidate_path, output_path = _tool_corpus_and_candidate(
+        tmp_path, candidate_trajectory=None
+    )
+
+    evaluate_tool_trajectory(corpus_path, candidate_path, output_path)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "abstain"
+    assert verdict["abstention_reason"] == "missing_candidate_trajectory"
+    assert verdict["evaluator"] == "abstain"
+
+
+def test_tool_trajectory_evaluation_abstains_without_reference_trajectory(tmp_path):
+    corpus_path, candidate_path, output_path = _tool_corpus_and_candidate(
+        tmp_path, reference_trajectory=None
+    )
+
+    evaluate_tool_trajectory(corpus_path, candidate_path, output_path)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "abstain"
+    assert verdict["abstention_reason"] == "missing_reference_trajectory"
+
+
+def test_tool_trajectory_evaluation_is_repeatable(tmp_path):
+    first = _tool_corpus_and_candidate(tmp_path / "first")
+    second = _tool_corpus_and_candidate(tmp_path / "second")
+
+    evaluate_tool_trajectory(first[0], first[1], first[2])
+    evaluate_tool_trajectory(second[0], second[1], second[2])
+
+    assert json.loads(first[2].read_text()) == json.loads(second[2].read_text())
+
+
+def test_benchmark_evaluate_command_selects_tool_trajectory_family(
+    tmp_path, monkeypatch, capsys
+):
+    corpus_path, candidate_path, output_path = _tool_corpus_and_candidate(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pipeline",
+            "benchmark",
+            "evaluate",
+            "--cases",
+            str(corpus_path),
+            "--candidate",
+            str(candidate_path),
+            "--family",
+            "tool-trajectory",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    from pipeline.__main__ import main
+
+    assert main() == 0
+    assert json.loads(output_path.read_text())["case_verdicts"][0]["evaluator"] == (
+        "tool-trajectory"
     )
     assert str(output_path) in capsys.readouterr().out
 
