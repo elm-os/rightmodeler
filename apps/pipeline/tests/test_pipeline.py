@@ -1,12 +1,15 @@
 import json
+import subprocess
 import sys
 
 import pytest
+from jsonschema import ValidationError
 
 from pipeline.__main__ import (
     analyze,
     build_corpus,
     evaluate_freeform,
+    evaluate_repo_fix,
     evaluate_structured,
     evaluate_tool_trajectory,
     infer_task_family,
@@ -880,6 +883,243 @@ def test_benchmark_evaluate_command_selects_tool_trajectory_family(
     assert json.loads(output_path.read_text())["case_verdicts"][0]["evaluator"] == (
         "tool-trajectory"
     )
+    assert str(output_path) in capsys.readouterr().out
+
+
+def _init_clean_repo(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "Test User"],
+        check=True,
+    )
+    (repo / "value.txt").write_text("before\n")
+    subprocess.run(["git", "-C", str(repo), "add", "value.txt"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "initial"],
+        check=True,
+        capture_output=True,
+    )
+    revision = subprocess.check_output(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+    ).strip()
+    return repo, revision
+
+
+def _repo_fix_corpus_and_candidate(
+    tmp_path,
+    patch=None,
+    validation_commands=None,
+    include_repo_fix=True,
+):
+    repo, revision = _init_clean_repo(tmp_path)
+    case = {
+        "case_id": "case-1",
+        "source_run_id": "run-1",
+        "pipeline_family": "repo-fix",
+        "workload_label": "test-fix",
+        "split": "working",
+        "risk": "normal",
+        "required_evidence": "deterministic",
+        "checks": {},
+    }
+    patch = patch or """diff --git a/value.txt b/value.txt
+--- a/value.txt
++++ b/value.txt
+@@ -1 +1 @@
+-before
++after
+"""
+    validation_commands = (
+        validation_commands
+        if validation_commands is not None
+        else [
+            {
+                "name": "value-check",
+                "command": [
+                    sys.executable,
+                    "-c",
+                    "from pathlib import Path; assert Path('value.txt').read_text() == 'after\\n'",
+                ],
+                "timeout_seconds": 5,
+            }
+        ]
+    )
+    results = [
+        {
+            "case_id": "case-1",
+            "output_text": "patch applied",
+            "cost_usd": 0.02,
+            "evidence_refs": ["candidate-1/case-1"],
+        }
+    ]
+    if include_repo_fix:
+        results[0]["repo_fix"] = {
+            "repository": {"revision": revision},
+            "patch": patch,
+            "affected_files": ["value.txt"],
+            "validation_commands": validation_commands,
+        }
+    corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(
+        tmp_path / "artifacts", results=results, cases=[case]
+    )
+    return repo, revision, corpus_path, candidate_path, output_path
+
+
+def test_repo_fix_evaluation_validates_in_isolated_worktree(tmp_path):
+    repo, _, corpus_path, candidate_path, output_path = _repo_fix_corpus_and_candidate(
+        tmp_path
+    )
+
+    evaluate_repo_fix(corpus_path, candidate_path, output_path, repo)
+
+    snapshot = json.loads(output_path.read_text())
+    verdict = snapshot["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "pass"
+    assert verdict["evaluator"] == "repo-fix"
+    assert verdict["repo_fix"]["patch_applied"] is True
+    assert verdict["repo_fix"]["scope_matches"] is True
+    assert verdict["repo_fix"]["validation"]["all_passed"] is True
+    assert verdict["repo_fix"]["validation"]["commands"][0]["exit_code"] == 0
+    assert (repo / "value.txt").read_text() == "before\n"
+    assert subprocess.check_output(
+        ["git", "-C", str(repo), "status", "--porcelain"], text=True
+    ) == ""
+    validate_schema(snapshot, "benchmark-snapshot")
+
+
+def test_repo_fix_evaluation_captures_failed_validation(tmp_path):
+    commands = [
+        {
+            "name": "failing-check",
+            "command": [sys.executable, "-c", "print('failed'); raise SystemExit(2)"],
+            "timeout_seconds": 5,
+        }
+    ]
+    repo, _, corpus_path, candidate_path, output_path = _repo_fix_corpus_and_candidate(
+        tmp_path, validation_commands=commands
+    )
+
+    evaluate_repo_fix(corpus_path, candidate_path, output_path, repo)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    command = verdict["repo_fix"]["validation"]["commands"][0]
+    assert verdict["terminal_verdict"] == "fail"
+    assert verdict["failure_code"] == "validation_failed"
+    assert command["exit_code"] == 2
+    assert "failed" in command["stdout_summary"]
+    assert (repo / "value.txt").read_text() == "before\n"
+
+
+def test_repo_fix_evaluation_captures_patch_conflict(tmp_path):
+    conflict = """diff --git a/value.txt b/value.txt
+--- a/value.txt
++++ b/value.txt
+@@ -1 +1 @@
+-not-present
++after
+"""
+    repo, _, corpus_path, candidate_path, output_path = _repo_fix_corpus_and_candidate(
+        tmp_path, patch=conflict
+    )
+
+    evaluate_repo_fix(corpus_path, candidate_path, output_path, repo)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "fail"
+    assert verdict["failure_code"] == "patch_conflict"
+    assert verdict["repo_fix"]["patch_applied"] is False
+    assert verdict["repo_fix"]["validation"]["commands"] == []
+    assert (repo / "value.txt").read_text() == "before\n"
+
+
+def test_repo_fix_evaluation_rejects_declared_scope_mismatch(tmp_path):
+    repo, _, corpus_path, candidate_path, output_path = _repo_fix_corpus_and_candidate(tmp_path)
+    candidate = json.loads(candidate_path.read_text())
+    candidate["results"][0]["repo_fix"]["affected_files"] = ["other.txt"]
+    candidate_path.write_text(json.dumps(candidate))
+
+    evaluate_repo_fix(corpus_path, candidate_path, output_path, repo)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "fail"
+    assert verdict["failure_code"] == "patch_scope_mismatch"
+    assert verdict["repo_fix"]["scope_matches"] is False
+    assert (repo / "value.txt").read_text() == "before\n"
+
+
+def test_repo_fix_evaluation_refuses_dirty_repository(tmp_path):
+    repo, _, corpus_path, candidate_path, output_path = _repo_fix_corpus_and_candidate(tmp_path)
+    (repo / "value.txt").write_text("dirty\n")
+
+    with pytest.raises(ValueError, match="working tree is not clean"):
+        evaluate_repo_fix(corpus_path, candidate_path, output_path, repo)
+
+    assert (repo / "value.txt").read_text() == "dirty\n"
+
+
+def test_repo_fix_evaluation_refuses_stale_repository_provenance(tmp_path):
+    repo, _, corpus_path, candidate_path, output_path = _repo_fix_corpus_and_candidate(tmp_path)
+    candidate = json.loads(candidate_path.read_text())
+    candidate["results"][0]["repo_fix"]["repository"]["revision"] = "0" * 40
+    candidate_path.write_text(json.dumps(candidate))
+
+    with pytest.raises(ValueError, match="revision does not match"):
+        evaluate_repo_fix(corpus_path, candidate_path, output_path, repo)
+
+
+def test_repo_fix_evaluation_rejects_missing_validation_commands(tmp_path):
+    repo, _, corpus_path, candidate_path, output_path = _repo_fix_corpus_and_candidate(
+        tmp_path, validation_commands=[]
+    )
+
+    with pytest.raises(ValidationError):
+        evaluate_repo_fix(corpus_path, candidate_path, output_path, repo)
+
+
+def test_repo_fix_evaluation_abstains_for_incomplete_candidate(tmp_path):
+    repo, _, corpus_path, candidate_path, output_path = _repo_fix_corpus_and_candidate(
+        tmp_path, include_repo_fix=False
+    )
+
+    evaluate_repo_fix(corpus_path, candidate_path, output_path, repo)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "abstain"
+    assert verdict["abstention_reason"] == "missing_repo_fix"
+
+
+def test_benchmark_evaluate_command_selects_repo_fix_family(tmp_path, monkeypatch, capsys):
+    repo, _, corpus_path, candidate_path, output_path = _repo_fix_corpus_and_candidate(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pipeline",
+            "benchmark",
+            "evaluate",
+            "--cases",
+            str(corpus_path),
+            "--candidate",
+            str(candidate_path),
+            "--family",
+            "repo-fix",
+            "--repo",
+            str(repo),
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    from pipeline.__main__ import main
+
+    assert main() == 0
+    assert json.loads(output_path.read_text())["case_verdicts"][0]["evaluator"] == "repo-fix"
     assert str(output_path) in capsys.readouterr().out
 
 

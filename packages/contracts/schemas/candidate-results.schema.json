@@ -39,6 +39,54 @@
         "final_output": { "type": "string" }
       },
       "additionalProperties": false
+    },
+    "repo_fix": {
+      "type": "object",
+      "required": [
+        "repository",
+        "patch",
+        "affected_files",
+        "validation_commands"
+      ],
+      "properties": {
+        "repository": {
+          "type": "object",
+          "required": ["revision"],
+          "properties": {
+            "revision": { "type": "string", "pattern": "^[a-f0-9]{40}$" }
+          },
+          "additionalProperties": false
+        },
+        "patch": { "type": "string", "minLength": 1 },
+        "affected_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "validation_commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "command", "timeout_seconds"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "command": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 300
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": [
@@ -80,6 +128,7 @@
             "items": { "type": "string", "minLength": 1 }
           },
           "trajectory": { "$ref": "#/$defs/trajectory" },
+          "repo_fix": { "$ref": "#/$defs/repo_fix" },
           "reference": {
             "oneOf": [
               {

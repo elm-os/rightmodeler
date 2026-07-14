@@ -83,6 +83,7 @@ def _evaluate_result(case, result):
         "cost_usd": result["cost_usd"],
         "evidence_refs": evidence_refs,
         "trajectory": None,
+        "repo_fix": None,
         "reference": reference,
     }
 
@@ -102,6 +103,7 @@ def _missing_result(case):
         "cost_usd": 0,
         "evidence_refs": [],
         "trajectory": None,
+        "repo_fix": None,
         "reference": None,
     }
 
