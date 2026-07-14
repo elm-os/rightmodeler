@@ -11,6 +11,7 @@ from pipeline.corpus import compile_corpus
 from pipeline.evaluate import evaluate
 from pipeline.freeform import evaluate_freeform_candidates
 from pipeline.structured import evaluate_structured_candidates
+from pipeline.trajectory import evaluate_tool_trajectories
 
 ROOT = Path(__file__).resolve().parents[4]
 ARTIFACTS = ROOT / ".rightmodeler"
@@ -184,11 +185,21 @@ def evaluate_freeform(cases_path, candidate_path, output_path):
     return write_json(output_path, snapshot)
 
 
+def evaluate_tool_trajectory(cases_path, candidate_path, output_path):
+    cases = validate_schema(load_json(cases_path), "benchmark-cases")
+    candidate_bundle = validate_schema(load_json(candidate_path), "candidate-results")
+    snapshot = evaluate_tool_trajectories(cases, candidate_bundle)
+    validate_schema(snapshot, "benchmark-snapshot")
+    return write_json(output_path, snapshot)
+
+
 def evaluate_benchmark(cases_path, candidate_path, output_path, pipeline_family):
     if pipeline_family == "structured-check":
         return evaluate_structured(cases_path, candidate_path, output_path)
     if pipeline_family == "reference-freeform":
         return evaluate_freeform(cases_path, candidate_path, output_path)
+    if pipeline_family == "tool-trajectory":
+        return evaluate_tool_trajectory(cases_path, candidate_path, output_path)
     raise ValueError(f"unsupported benchmark family: {pipeline_family}")
 
 
@@ -345,7 +356,7 @@ def build_parser():
     benchmark_evaluate_parser.add_argument("--candidate", required=True)
     benchmark_evaluate_parser.add_argument(
         "--family",
-        choices=["structured-check", "reference-freeform"],
+        choices=["structured-check", "reference-freeform", "tool-trajectory"],
         default="structured-check",
     )
     benchmark_evaluate_parser.add_argument(

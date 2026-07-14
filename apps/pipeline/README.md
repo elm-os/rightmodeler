@@ -46,3 +46,17 @@ uv run python -m pipeline benchmark evaluate \
 Freeform results may carry a frozen human verdict with reviewer references and
 an agreement state. Reference evidence without a calibrated verdict, disputed
 reviews, and missing references abstain instead of invoking a semantic judge.
+
+Evaluate imported tool trajectories against a recorded reference trajectory:
+
+```bash
+uv run python -m pipeline benchmark evaluate \
+  --family tool-trajectory \
+  --cases .rightmodeler/corpus/benchmark-cases.json \
+  --candidate .rightmodeler/input/candidate-results.json \
+  --output .rightmodeler/evaluation/benchmark-snapshot.json
+```
+
+The trajectory evaluator compares tool names, arguments, order, retries, loop
+markers, recovery, terminal state, and exact final output. It derives
+downstream, loop, and recovery risk flags without replaying tools.
