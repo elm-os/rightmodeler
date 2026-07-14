@@ -4,7 +4,7 @@ import json
 
 from jsonschema import SchemaError, ValidationError, validate
 
-from pipeline.corpus import content_digest
+from pipeline.snapshot import build_snapshot, match_candidate_results
 
 
 def _check(name, status, detail=None):
@@ -65,6 +65,8 @@ def _evaluate_result(case, result):
     checks = []
     failure_code = None
     abstention_reason = None
+    evidence_type = "abstain"
+    evaluator = "abstain"
 
     if case["risk"] == "high":
         terminal_verdict = "abstain"
@@ -76,6 +78,8 @@ def _evaluate_result(case, result):
         terminal_verdict = "abstain"
         abstention_reason = "case_requires_abstention"
     else:
+        evidence_type = "deterministic"
+        evaluator = "structured-check"
         parsed, parse_check = _parse_output(result["output_text"])
         checks.append(parse_check)
         if parse_check["status"] == "fail":
@@ -104,6 +108,8 @@ def _evaluate_result(case, result):
         "pipeline_family": case["pipeline_family"],
         "split": case["split"],
         "terminal_verdict": terminal_verdict,
+        "evidence_type": evidence_type,
+        "evaluator": evaluator,
         "checks": checks,
         "failure_code": failure_code,
         "abstention_reason": abstention_reason,
@@ -113,6 +119,7 @@ def _evaluate_result(case, result):
         },
         "cost_usd": result["cost_usd"],
         "evidence_refs": evidence_refs,
+        "reference": None,
     }
 
 
@@ -122,34 +129,20 @@ def _missing_result(case):
         "pipeline_family": case["pipeline_family"],
         "split": case["split"],
         "terminal_verdict": "abstain",
+        "evidence_type": "abstain",
+        "evaluator": "abstain",
         "checks": [],
         "failure_code": None,
         "abstention_reason": "missing_candidate_result",
         "timing": {"availability": "unavailable", "duration_ms": None},
         "cost_usd": 0,
         "evidence_refs": [],
+        "reference": None,
     }
 
 
 def evaluate_structured_candidates(corpus, candidate_bundle):
-    if candidate_bundle["corpus_version_id"] != corpus["corpus_version_id"]:
-        raise ValueError("candidate corpus version does not match benchmark cases")
-
-    cases = sorted(corpus["cases"], key=lambda case: case["case_id"])
-    if any(case["pipeline_family"] != "structured-check" for case in cases):
-        raise ValueError("structured evaluation requires structured-check cases")
-
-    case_by_id = {case["case_id"]: case for case in cases}
-    if len(case_by_id) != len(cases):
-        raise ValueError("duplicate benchmark case")
-    results_by_case = {}
-    for result in candidate_bundle["results"]:
-        case_id = result["case_id"]
-        if case_id not in case_by_id:
-            raise ValueError(f"candidate case not found in benchmark cases: {case_id}")
-        if case_id in results_by_case:
-            raise ValueError(f"duplicate candidate result: {case_id}")
-        results_by_case[case_id] = result
+    cases, results_by_case = match_candidate_results(corpus, candidate_bundle, "structured-check")
 
     verdicts = [
         _evaluate_result(case, results_by_case[case["case_id"]])
@@ -157,63 +150,4 @@ def evaluate_structured_candidates(corpus, candidate_bundle):
         else _missing_result(case)
         for case in cases
     ]
-    verdict_counts = {
-        verdict: sum(1 for item in verdicts if item["terminal_verdict"] == verdict)
-        for verdict in ("pass", "fail", "abstain")
-    }
-    total_cases = len(verdicts)
-    available_timing = sum(
-        1 for verdict in verdicts if verdict["timing"]["availability"] == "available"
-    )
-    available_evidence = sum(1 for verdict in verdicts if verdict["evidence_refs"])
-    missing_timing = total_cases - available_timing
-    missing_evidence = total_cases - available_evidence
-    timing_availability = (
-        "available"
-        if available_timing == total_cases
-        else "partial"
-        if available_timing
-        else "unavailable"
-    )
-    candidate_cost = sum(
-        results_by_case[case["case_id"]]["cost_usd"]
-        for case in cases
-        if case["case_id"] in results_by_case
-    )
-    snapshot_without_id = {
-        "version": "1",
-        "corpus_version_id": corpus["corpus_version_id"],
-        "candidate_bundle_id": candidate_bundle["bundle_id"],
-        "candidate": candidate_bundle["candidate"],
-        "case_verdicts": verdicts,
-        "summary": {
-            "total_cases": total_cases,
-            "pass_count": verdict_counts["pass"],
-            "fail_count": verdict_counts["fail"],
-            "abstain_count": verdict_counts["abstain"],
-            "coverage": (total_cases - verdict_counts["abstain"]) / total_cases
-            if total_cases
-            else 0,
-        },
-        "cost": {
-            "candidate_cost_usd": candidate_cost,
-            "evaluation_cost_usd": 0,
-            "total_cost_usd": candidate_cost,
-        },
-        "timing": {
-            "availability": timing_availability,
-            "available_case_count": available_timing,
-            "missing_case_count": missing_timing,
-        },
-        "evidence": {
-            "available_case_count": available_evidence,
-            "missing_case_count": missing_evidence,
-            "references": sorted(
-                {reference for verdict in verdicts for reference in verdict["evidence_refs"]}
-            ),
-        },
-    }
-    return {
-        **snapshot_without_id,
-        "snapshot_id": content_digest(snapshot_without_id),
-    }
+    return build_snapshot(corpus, candidate_bundle, verdicts)
