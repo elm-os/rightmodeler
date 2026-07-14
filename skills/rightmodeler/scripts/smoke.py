@@ -8,6 +8,7 @@ from analyze import analyze
 from common import resolve_openrouter_key
 from ingest import detect_format
 from report import render
+from replay import ReplayError, replay_cases
 
 
 def main():
@@ -86,6 +87,117 @@ def main():
         None,
     )
     assert "Recommendation Report" in report
+
+    replay_normalized = {
+        "steps": [
+            {
+                "step_id": "s1",
+                "input_messages": [{"role": "user", "content": "Say hello."}],
+            },
+            {
+                "step_id": "s2",
+                "input_messages": [{"role": "user", "content": "Say goodbye."}],
+            },
+            {
+                "step_id": "s3",
+                "input_messages": [{"role": "user", "content": "Say later."}],
+            },
+        ]
+    }
+    replay_cases_input = [
+        {"case_id": f"case-{index}", "source_run_id": f"s{index}"} for index in range(1, 4)
+    ]
+
+    class FakeOpenRouter:
+        def price_per_token(self, _model):
+            return 0.000001, 0.000001
+
+    calls = []
+
+    def single_shot_runner(*_args, **_kwargs):
+        calls.append("single-shot")
+        return {"text": "hello", "cost": 0.01, "error": None}
+
+    with tempfile.TemporaryDirectory() as replay_tmp:
+        cache = Path(replay_tmp) / "cache.json"
+        first = replay_cases(
+            replay_cases_input[:1],
+            replay_normalized,
+            "cheap-model",
+            0.05,
+            "sha256:" + "b" * 64,
+            cache_path=cache,
+            orr=FakeOpenRouter(),
+            single_shot_runner=single_shot_runner,
+        )
+        second = replay_cases(
+            replay_cases_input[:1],
+            replay_normalized,
+            "cheap-model",
+            0.05,
+            "sha256:" + "b" * 64,
+            cache_path=cache,
+            orr=FakeOpenRouter(),
+            single_shot_runner=single_shot_runner,
+        )
+        assert first["candidate"]["source"] == "replayed"
+        assert first["corpus_version_id"] == "sha256:" + "b" * 64
+        assert first["replay"]["mode"] == "single-shot"
+        assert second["replay"]["cache_hits"] == 1
+        assert len(calls) == 1
+
+        try:
+            replay_cases(
+                replay_cases_input[:1],
+                replay_normalized,
+                "cheap-model",
+                0.0001,
+                "sha256:" + "b" * 64,
+                orr=FakeOpenRouter(),
+                single_shot_runner=single_shot_runner,
+            )
+        except ReplayError as error:
+            assert "exceeds cap" in str(error)
+        else:
+            raise AssertionError("replay should refuse a projected cost over the cap")
+
+        exhausted = replay_cases(
+            replay_cases_input,
+            replay_normalized,
+            "cheap-model",
+            0.015,
+            "sha256:" + "b" * 64,
+            orr=FakeOpenRouter(),
+            single_shot_runner=single_shot_runner,
+        )
+        assert exhausted["replay"]["status"] == "budget_exhausted"
+        assert exhausted["replay"]["partial"] is True
+        assert len(exhausted["results"]) == 2
+
+        e2e_calls = []
+
+        def e2e_runner(*_args, **_kwargs):
+            e2e_calls.append("e2e")
+            return {
+                "ok": True,
+                "stdout": '{"output_text":"e2e output","cost_usd":0.02}\n',
+                "stderr": "",
+            }
+
+        e2e = replay_cases(
+            replay_cases_input[:1],
+            replay_normalized,
+            "cheap-model",
+            0.05,
+            "sha256:" + "b" * 64,
+            pipeline={"steps": [{"step_id": "s1", "replay_mode": "e2e"}]},
+            codebase=replay_tmp,
+            run_command="ignored",
+            e2e_cost_per_case=0.02,
+            e2e_runner=e2e_runner,
+        )
+        assert e2e["replay"]["mode"] == "e2e"
+        assert e2e_calls == ["e2e"]
 
 
 if __name__ == "__main__":

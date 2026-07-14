@@ -581,6 +581,32 @@ def test_scorecard_speed_fails_material_p95_regression(tmp_path):
     assert snapshot["scorecards"]["speed"]["details"]["p95_regression_pct"] > 0.2
 
 
+def test_replayed_candidate_contract_records_budget_gate(tmp_path):
+    corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(tmp_path)
+    candidate = json.loads(candidate_path.read_text())
+    candidate["candidate"]["source"] = "replayed"
+    candidate["replay"] = {
+        "mode": "single-shot",
+        "max_cost_usd": 0.05,
+        "projected_cost_usd": 0.03,
+        "actual_cost_usd": 0.02,
+        "remaining_cost_usd": 0.03,
+        "cache_hits": 1,
+        "cache_misses": 9,
+        "status": "budget_exhausted",
+        "partial": True,
+    }
+    candidate_path.write_text(json.dumps(candidate))
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    replay_gate = next(gate for gate in snapshot["gates"] if gate["id"] == "replay-budget")
+    assert replay_gate["status"] == "fail"
+    assert replay_gate["observed"] == 0.02
+    validate_schema(snapshot, "benchmark-snapshot")
+
+
 def test_scorecard_contract_rejects_invalid_frozen_label(tmp_path):
     corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(tmp_path)
     corpus = json.loads(corpus_path.read_text())

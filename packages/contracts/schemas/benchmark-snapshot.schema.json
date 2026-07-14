@@ -329,7 +329,7 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "model": { "type": "string", "minLength": 1 },
-        "source": { "type": "string", "enum": ["imported"] }
+        "source": { "type": "string", "enum": ["imported", "replayed"] }
       },
       "additionalProperties": false
     },
