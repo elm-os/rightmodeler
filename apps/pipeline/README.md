@@ -60,3 +60,19 @@ uv run python -m pipeline benchmark evaluate \
 The trajectory evaluator compares tool names, arguments, order, retries, loop
 markers, recovery, terminal state, and exact final output. It derives
 downstream, loop, and recovery risk flags without replaying tools.
+
+Evaluate a repository-fix candidate in an isolated worktree:
+
+```bash
+uv run python -m pipeline benchmark evaluate \
+  --family repo-fix \
+  --repo /path/to/repository \
+  --cases .rightmodeler/corpus/benchmark-cases.json \
+  --candidate .rightmodeler/input/candidate-results.json \
+  --output .rightmodeler/evaluation/benchmark-snapshot.json
+```
+
+The repository must be clean and at the declared Git revision. Validation
+commands use argv arrays with bounded timeouts, run only in a disposable
+worktree, and record exit status, output summaries, timing, patch scope, and
+patch evidence. The real repository is not modified.

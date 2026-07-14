@@ -10,6 +10,7 @@ from jsonschema import validate
 from pipeline.corpus import compile_corpus
 from pipeline.evaluate import evaluate
 from pipeline.freeform import evaluate_freeform_candidates
+from pipeline.repo_fix import evaluate_repo_fix_candidates
 from pipeline.structured import evaluate_structured_candidates
 from pipeline.trajectory import evaluate_tool_trajectories
 
@@ -193,13 +194,25 @@ def evaluate_tool_trajectory(cases_path, candidate_path, output_path):
     return write_json(output_path, snapshot)
 
 
-def evaluate_benchmark(cases_path, candidate_path, output_path, pipeline_family):
+def evaluate_repo_fix(cases_path, candidate_path, output_path, repo_path):
+    cases = validate_schema(load_json(cases_path), "benchmark-cases")
+    candidate_bundle = validate_schema(load_json(candidate_path), "candidate-results")
+    snapshot = evaluate_repo_fix_candidates(cases, candidate_bundle, repo_path)
+    validate_schema(snapshot, "benchmark-snapshot")
+    return write_json(output_path, snapshot)
+
+
+def evaluate_benchmark(cases_path, candidate_path, output_path, pipeline_family, repo_path):
     if pipeline_family == "structured-check":
         return evaluate_structured(cases_path, candidate_path, output_path)
     if pipeline_family == "reference-freeform":
         return evaluate_freeform(cases_path, candidate_path, output_path)
     if pipeline_family == "tool-trajectory":
         return evaluate_tool_trajectory(cases_path, candidate_path, output_path)
+    if pipeline_family == "repo-fix":
+        if not repo_path:
+            raise ValueError("--repo is required for repo-fix evaluation")
+        return evaluate_repo_fix(cases_path, candidate_path, output_path, repo_path)
     raise ValueError(f"unsupported benchmark family: {pipeline_family}")
 
 
@@ -356,9 +369,10 @@ def build_parser():
     benchmark_evaluate_parser.add_argument("--candidate", required=True)
     benchmark_evaluate_parser.add_argument(
         "--family",
-        choices=["structured-check", "reference-freeform", "tool-trajectory"],
+        choices=["structured-check", "reference-freeform", "tool-trajectory", "repo-fix"],
         default="structured-check",
     )
+    benchmark_evaluate_parser.add_argument("--repo")
     benchmark_evaluate_parser.add_argument(
         "--output",
         default=str(ARTIFACTS / "evaluation" / "benchmark-snapshot.json"),
@@ -371,6 +385,7 @@ def build_parser():
                     args.candidate,
                     args.output,
                     args.family,
+                    args.repo,
                 )
             ),
             0,
