@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.com/schemas/candidate-results.schema.json",
+  "title": "Candidate Results",
+  "type": "object",
+  "required": [
+    "version",
+    "bundle_id",
+    "corpus_version_id",
+    "candidate",
+    "results"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "bundle_id": { "type": "string", "minLength": 1 },
+    "corpus_version_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["id", "model", "source"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "enum": ["imported"] }
+      },
+      "additionalProperties": false
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["case_id", "output_text", "cost_usd", "evidence_refs"],
+        "properties": {
+          "case_id": { "type": "string", "minLength": 1 },
+          "output_text": { "type": "string" },
+          "cost_usd": { "type": "number", "minimum": 0 },
+          "duration_ms": { "type": ["number", "null"], "minimum": 0 },
+          "evidence_refs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
