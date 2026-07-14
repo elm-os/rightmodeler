@@ -17,6 +17,39 @@ The command writes an immutable corpus manifest and benchmark-case references
 under `.rightmodeler/corpus/`. It stays offline and rejects missing or
 unaccepted source runs.
 
+## Review corpus drift
+
+Compare a current candidate definition and run bundle with a parent corpus:
+
+```bash
+uv run python -m pipeline corpus detect-drift \
+  --parent-manifest .rightmodeler/corpus/parent-manifest.json \
+  --parent-bundle .rightmodeler/input/parent-bundle.json \
+  --candidate-bundle .rightmodeler/input/candidate-bundle.json \
+  --candidate-definition corpus-definition-v2.json \
+  --output .rightmodeler/corpus/drift-proposal.json
+```
+
+Drift detection only creates a proposal. Approve it explicitly, then publish a
+new version:
+
+```bash
+uv run python -m pipeline corpus approve-drift \
+  --proposal .rightmodeler/corpus/drift-proposal.json \
+  --output .rightmodeler/corpus/approved-drift.json \
+  --actor ameya
+uv run python -m pipeline corpus publish \
+  --parent-manifest .rightmodeler/corpus/parent-manifest.json \
+  --candidate-bundle .rightmodeler/input/candidate-bundle.json \
+  --candidate-definition corpus-definition-v2.json \
+  --proposal .rightmodeler/corpus/approved-drift.json \
+  --manifest-output .rightmodeler/corpus/manifest-v2.json \
+  --cases-output .rightmodeler/corpus/benchmark-cases-v2.json
+```
+
+Publishing preserves the parent digest and refuses an exposed holdout without
+replacement coverage. Existing manifests and snapshots are never rewritten.
+
 ## Evaluate Imported Structured Results
 
 Evaluate imported candidate results against a compiled corpus without network
