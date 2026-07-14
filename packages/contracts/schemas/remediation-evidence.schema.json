@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.com/schemas/remediation-evidence.schema.json",
+  "title": "Remediation Evidence",
+  "type": "object",
+  "$defs": {
+    "snapshot_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "proposed_change": {
+      "type": "object",
+      "required": ["type", "content", "affected_files", "validation_commands"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["none", "diff", "configuration"]
+        },
+        "content": { "type": ["string", "null"] },
+        "affected_files": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "validation_commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "command", "timeout_seconds"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "command": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "timeout_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 300
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "none" } } },
+          "then": {
+            "properties": {
+              "content": { "type": "null" },
+              "affected_files": { "maxItems": 0 },
+              "validation_commands": { "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["diff", "configuration"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "content": { "type": "string", "minLength": 1 },
+              "affected_files": { "minItems": 1 }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "validation": {
+      "type": "object",
+      "required": ["status", "commands", "evidence_refs"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not_run", "passed", "failed", "review"]
+        },
+        "commands": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "evidence_id",
+    "baseline_snapshot_id",
+    "issue_class",
+    "next_action",
+    "status",
+    "trigger_case_ids",
+    "proposed_change",
+    "proof",
+    "residual_risks"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "evidence_id": { "$ref": "#/$defs/snapshot_id" },
+    "baseline_snapshot_id": { "$ref": "#/$defs/snapshot_id" },
+    "issue_class": {
+      "type": "string",
+      "enum": [
+        "ingestion",
+        "evaluator",
+        "replay",
+        "candidate-selection",
+        "repo-validation",
+        "insufficient-evidence"
+      ]
+    },
+    "next_action": {
+      "type": "string",
+      "enum": [
+        "fix-ingestion",
+        "fix-evaluator",
+        "fix-replay",
+        "adjust-selection",
+        "fix-repo-validation",
+        "collect-evidence"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "review", "proven"]
+    },
+    "trigger_case_ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "proposed_change": { "$ref": "#/$defs/proposed_change" },
+    "proof": {
+      "type": "object",
+      "required": [
+        "target_gate_ids",
+        "baseline_gate_statuses",
+        "post_fix_snapshot_id",
+        "holdout_snapshot_id",
+        "target_improved",
+        "regressed_gate_ids",
+        "validation"
+      ],
+      "properties": {
+        "target_gate_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "baseline_gate_statuses": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["pass", "fail", "review", "unavailable"]
+          }
+        },
+        "post_fix_snapshot_id": {
+          "anyOf": [{ "$ref": "#/$defs/snapshot_id" }, { "type": "null" }]
+        },
+        "holdout_snapshot_id": {
+          "anyOf": [{ "$ref": "#/$defs/snapshot_id" }, { "type": "null" }]
+        },
+        "target_improved": { "type": "boolean" },
+        "regressed_gate_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "validation": { "$ref": "#/$defs/validation" }
+      },
+      "additionalProperties": false
+    },
+    "residual_risks": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "additionalProperties": false
+}
