@@ -4,6 +4,42 @@
   "title": "Benchmark Snapshot",
   "type": "object",
   "$defs": {
+    "trajectory_record": {
+      "type": "object",
+      "required": ["tool_calls", "terminal_state", "final_output"],
+      "properties": {
+        "tool_calls": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "call_id",
+              "tool_name",
+              "arguments",
+              "attempt",
+              "status"
+            ],
+            "properties": {
+              "call_id": { "type": "string", "minLength": 1 },
+              "tool_name": { "type": "string", "minLength": 1 },
+              "arguments": { "type": "object" },
+              "attempt": { "type": "integer", "minimum": 1 },
+              "status": { "type": "string", "enum": ["success", "error"] },
+              "loop_id": { "type": "string", "minLength": 1 },
+              "iteration": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "terminal_state": {
+          "type": "string",
+          "enum": ["success", "failure", "abstain"]
+        },
+        "final_output": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "reference": {
       "oneOf": [
         {
@@ -36,8 +72,78 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "refs", "trajectory"],
+          "properties": {
+            "type": { "const": "reference-trajectory" },
+            "refs": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "trajectory": { "$ref": "#/$defs/trajectory_record" }
+          },
+          "additionalProperties": false
         }
       ]
+    },
+    "trajectory": {
+      "type": "object",
+      "required": [
+        "tool_name",
+        "arguments",
+        "ordering",
+        "retries",
+        "loops",
+        "recovery",
+        "terminal_state",
+        "final_output",
+        "risk_flags"
+      ],
+      "properties": {
+        "tool_name": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "arguments": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "ordering": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "retries": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "loops": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "recovery": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "terminal_state": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "final_output": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "risk_flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["loop", "downstream", "recovery"]
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": [
@@ -94,7 +200,11 @@
           "case_id": { "type": "string", "minLength": 1 },
           "pipeline_family": {
             "type": "string",
-            "enum": ["structured-check", "reference-freeform"]
+            "enum": [
+              "structured-check",
+              "reference-freeform",
+              "tool-trajectory"
+            ]
           },
           "split": { "type": "string", "enum": ["working", "holdout"] },
           "terminal_verdict": {
@@ -107,6 +217,7 @@
               "deterministic",
               "frozen-human-verdict",
               "reference-evidence",
+              "trajectory",
               "abstain"
             ]
           },
@@ -145,6 +256,9 @@
           "evidence_refs": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
+          },
+          "trajectory": {
+            "anyOf": [{ "$ref": "#/$defs/trajectory" }, { "type": "null" }]
           },
           "reference": {
             "anyOf": [{ "$ref": "#/$defs/reference" }, { "type": "null" }]
