@@ -1,5 +1,33 @@
 # Replay: per-step and code-execution E2E
 
+## Bounded opt-in replay
+
+Replay is never part of the default offline benchmark path. Invoke it explicitly
+with a positive `--max-cost-usd` cap:
+
+```bash
+uv run python scripts/replay.py \
+  --normalized .rightmodeler/normalized/normalized-runs.json \
+  --cases .rightmodeler/corpus/benchmark-cases.json \
+  --candidate-model openai/gpt-4o-mini \
+  --max-cost-usd 2.00 \
+  --out .rightmodeler/input/candidate-results.json
+```
+
+The wrapper estimates every uncached case before making a provider call. It
+refuses an over-cap projection, uses a stable JSON cache when supplied, and
+records `projected_cost_usd`, `actual_cost_usd`, `remaining_cost_usd`, cache
+counts, replay mode, and completion status in the shared candidate-results
+bundle. A provider cost overrun or an interrupted run is marked
+`budget_exhausted` and `partial`; the scorecard adds a failing replay-budget
+gate so a partial replay cannot pass release evaluation.
+
+The `--pipeline` map controls routing. Steps marked `single_shot` use
+`replay_step.py`; steps marked `e2e` require `--codebase`, `--run-command`, and
+an explicit `--e2e-cost-per-case`. E2E processes must print authoritative
+`cost_usd` in a JSON output line. If they do not, the wrapper refuses to treat
+the run as bounded.
+
 Two replay modes. Pick per step based on `analyze.py`'s classification.
 
 ## Mode A — per-step isolated replay (`replay_step.py`)

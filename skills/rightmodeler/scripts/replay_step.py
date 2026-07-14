@@ -55,13 +55,17 @@ def to_openai_tools(step: dict) -> list[dict] | None:
     return tools or None
 
 
-def replay_step(orr, step: dict, candidate_model: str, runs: int = 1) -> dict:
+def replay_step(
+    orr, step: dict, candidate_model: str, runs: int = 1, max_tokens: int | None = None
+) -> dict:
     messages = build_messages(step)
     tools = to_openai_tools(step)
     samples = []
     total_cost = 0.0
     for _ in range(max(1, runs)):
-        resp = orr.chat(candidate_model, messages, tools=tools, temperature=0.0)
+        resp = orr.chat(
+            candidate_model, messages, tools=tools, temperature=0.0, max_tokens=max_tokens
+        )
         if resp.get("error"):
             return {"model": candidate_model, "error": resp["error"], "samples": samples}
         total_cost += resp.get("cost") or 0.0
@@ -92,12 +96,13 @@ def main() -> int:
     ap.add_argument("--step-id", required=True)
     ap.add_argument("--model", required=True)
     ap.add_argument("--runs", type=int, default=1)
+    ap.add_argument("--max-tokens", type=int)
     args = ap.parse_args()
     from openrouter import OpenRouter
 
     data = load_json(args.normalized)
     step = next(s for s in data["steps"] if s["step_id"] == args.step_id)
-    out = replay_step(OpenRouter(), step, args.model, runs=args.runs)
+    out = replay_step(OpenRouter(), step, args.model, runs=args.runs, max_tokens=args.max_tokens)
     print(json.dumps(out, indent=2, default=str))
     return 0
 
