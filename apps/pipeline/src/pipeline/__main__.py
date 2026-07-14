@@ -9,6 +9,7 @@ from pathlib import Path
 from jsonschema import validate
 from pipeline.corpus import compile_corpus
 from pipeline.evaluate import evaluate
+from pipeline.structured import evaluate_structured_candidates
 
 ROOT = Path(__file__).resolve().parents[4]
 ARTIFACTS = ROOT / ".rightmodeler"
@@ -166,6 +167,14 @@ def build_corpus(input_path, definition_path, manifest_output, cases_output):
     return write_json(cases_output, benchmark_cases)
 
 
+def evaluate_structured(cases_path, candidate_path, output_path):
+    cases = validate_schema(load_json(cases_path), "benchmark-cases")
+    candidate_bundle = validate_schema(load_json(candidate_path), "candidate-results")
+    snapshot = evaluate_structured_candidates(cases, candidate_bundle)
+    validate_schema(snapshot, "benchmark-snapshot")
+    return write_json(output_path, snapshot)
+
+
 def smoke():
     sample = {
         "version": "1",
@@ -305,6 +314,25 @@ def build_parser():
                     args.cases_output,
                 )
             ),
+            0,
+        )[1]
+    )
+
+    benchmark_parser = subparsers.add_parser("benchmark")
+    benchmark_subparsers = benchmark_parser.add_subparsers(dest="benchmark_command", required=True)
+    benchmark_evaluate_parser = benchmark_subparsers.add_parser("evaluate")
+    benchmark_evaluate_parser.add_argument(
+        "--cases",
+        default=str(ARTIFACTS / "corpus" / "benchmark-cases.json"),
+    )
+    benchmark_evaluate_parser.add_argument("--candidate", required=True)
+    benchmark_evaluate_parser.add_argument(
+        "--output",
+        default=str(ARTIFACTS / "evaluation" / "benchmark-snapshot.json"),
+    )
+    benchmark_evaluate_parser.set_defaults(
+        handler=lambda args: (
+            print(evaluate_structured(args.cases, args.candidate, args.output)),
             0,
         )[1]
     )

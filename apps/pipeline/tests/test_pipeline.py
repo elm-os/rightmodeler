@@ -6,6 +6,7 @@ import pytest
 from pipeline.__main__ import (
     analyze,
     build_corpus,
+    evaluate_structured,
     infer_task_family,
     normalize_run,
     validate_schema,
@@ -84,7 +85,8 @@ def _corpus_definition(cases=None):
         "corpus_id": "test-corpus",
         "parent_version": None,
         "cases": cases
-        or [
+        if cases is not None
+        else [
             {
                 "case_id": "case-1",
                 "source_run_id": "run-1",
@@ -239,6 +241,246 @@ def test_build_corpus_rejects_duplicate_case_id(tmp_path):
             tmp_path / "manifest.json",
             tmp_path / "cases.json",
         )
+
+
+def _structured_corpus_and_candidate(tmp_path, results=None, cases=None):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    corpus_path = tmp_path / "cases.json"
+    candidate_path = tmp_path / "candidate.json"
+    output_path = tmp_path / "snapshot.json"
+    corpus = {
+        "version": "1",
+        "corpus_version_id": "sha256:" + "a" * 64,
+        "source_bundle_id": "bundle-1",
+        "cases": cases
+        or [
+            {
+                "case_id": "case-1",
+                "source_run_id": "run-1",
+                "pipeline_family": "structured-check",
+                "workload_label": "ticket-json",
+                "split": "working",
+                "risk": "normal",
+                "required_evidence": "deterministic",
+                "checks": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["ticket", "status"],
+                        "properties": {
+                            "ticket": {"type": "integer"},
+                            "status": {"type": "string"},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "required_fields": ["ticket", "status"],
+                },
+            }
+        ],
+    }
+    candidate = {
+        "version": "1",
+        "bundle_id": "candidate-1",
+        "corpus_version_id": corpus["corpus_version_id"],
+        "candidate": {
+            "id": "candidate-1",
+            "model": "cheap-model",
+            "source": "imported",
+        },
+        "results": results
+        if results is not None
+        else [
+            {
+                "case_id": "case-1",
+                "output_text": '{"ticket": 42, "status": "open"}',
+                "cost_usd": 0.04,
+                "duration_ms": 125,
+                "evidence_refs": ["candidate-1/case-1"],
+            }
+        ],
+    }
+    corpus_path.write_text(json.dumps(corpus))
+    candidate_path.write_text(json.dumps(candidate))
+    return corpus_path, candidate_path, output_path
+
+
+def test_structured_evaluation_emits_passing_snapshot(tmp_path):
+    corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(tmp_path)
+
+    result = evaluate_structured(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    assert result == output_path
+    assert snapshot["case_verdicts"][0]["terminal_verdict"] == "pass"
+    assert snapshot["summary"] == {
+        "total_cases": 1,
+        "pass_count": 1,
+        "fail_count": 0,
+        "abstain_count": 0,
+        "coverage": 1.0,
+    }
+    assert snapshot["cost"] == {
+        "candidate_cost_usd": 0.04,
+        "evaluation_cost_usd": 0,
+        "total_cost_usd": 0.04,
+    }
+    assert snapshot["timing"]["availability"] == "available"
+    assert snapshot["snapshot_id"].startswith("sha256:")
+    validate_schema(snapshot, "benchmark-snapshot")
+
+
+def test_structured_evaluation_rejects_invalid_json(tmp_path):
+    results = [
+        {
+            "case_id": "case-1",
+            "output_text": "not json",
+            "cost_usd": 0.04,
+            "evidence_refs": ["candidate-1/case-1"],
+        }
+    ]
+    corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(
+        tmp_path, results
+    )
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "fail"
+    assert verdict["failure_code"] == "invalid_json"
+
+
+def test_structured_evaluation_rejects_schema_mismatch(tmp_path):
+    results = [
+        {
+            "case_id": "case-1",
+            "output_text": '{"ticket": "not-an-integer", "status": "open"}',
+            "cost_usd": 0.04,
+            "evidence_refs": ["candidate-1/case-1"],
+        }
+    ]
+    corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(
+        tmp_path, results
+    )
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "fail"
+    assert verdict["failure_code"] == "schema_mismatch"
+
+
+def test_structured_evaluation_rejects_missing_required_field(tmp_path):
+    results = [
+        {
+            "case_id": "case-1",
+            "output_text": '{"ticket": 42}',
+            "cost_usd": 0.04,
+            "evidence_refs": ["candidate-1/case-1"],
+        }
+    ]
+    corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(
+        tmp_path, results
+    )
+    corpus = json.loads(corpus_path.read_text())
+    corpus["cases"][0]["checks"] = {"required_fields": ["ticket", "status"]}
+    corpus_path.write_text(json.dumps(corpus))
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "fail"
+    assert verdict["failure_code"] == "missing_required_fields"
+
+
+def test_structured_evaluation_abstains_for_missing_timing_and_evidence(tmp_path):
+    results = [
+        {
+            "case_id": "case-1",
+            "output_text": '{"ticket": 42, "status": "open"}',
+            "cost_usd": 0.04,
+            "evidence_refs": [],
+        }
+    ]
+    corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(
+        tmp_path, results
+    )
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    snapshot = json.loads(output_path.read_text())
+    verdict = snapshot["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "abstain"
+    assert verdict["abstention_reason"] == "missing_evidence"
+    assert verdict["timing"] == {"availability": "unavailable", "duration_ms": None}
+    assert snapshot["timing"]["availability"] == "unavailable"
+    assert snapshot["evidence"]["missing_case_count"] == 1
+
+
+def test_structured_evaluation_abstains_for_missing_candidate_result(tmp_path):
+    corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(
+        tmp_path, results=[]
+    )
+
+    evaluate_structured(corpus_path, candidate_path, output_path)
+
+    verdict = json.loads(output_path.read_text())["case_verdicts"][0]
+    assert verdict["terminal_verdict"] == "abstain"
+    assert verdict["abstention_reason"] == "missing_candidate_result"
+
+
+def test_structured_evaluation_rejects_mismatched_candidate_case(tmp_path):
+    results = [
+        {
+            "case_id": "case-does-not-exist",
+            "output_text": "{}",
+            "cost_usd": 0.04,
+            "evidence_refs": ["candidate-1/case-does-not-exist"],
+        }
+    ]
+    corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(
+        tmp_path, results
+    )
+
+    with pytest.raises(ValueError, match="candidate case not found"):
+        evaluate_structured(corpus_path, candidate_path, output_path)
+
+
+def test_structured_evaluation_is_repeatable(tmp_path):
+    first_corpus, first_candidate, first_output = _structured_corpus_and_candidate(
+        tmp_path / "first"
+    )
+    second_corpus, second_candidate, second_output = _structured_corpus_and_candidate(
+        tmp_path / "second"
+    )
+
+    evaluate_structured(first_corpus, first_candidate, first_output)
+    evaluate_structured(second_corpus, second_candidate, second_output)
+
+    assert json.loads(first_output.read_text()) == json.loads(second_output.read_text())
+
+
+def test_benchmark_evaluate_command_writes_snapshot(tmp_path, monkeypatch, capsys):
+    corpus_path, candidate_path, output_path = _structured_corpus_and_candidate(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pipeline",
+            "benchmark",
+            "evaluate",
+            "--cases",
+            str(corpus_path),
+            "--candidate",
+            str(candidate_path),
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    from pipeline.__main__ import main
+
+    assert main() == 0
+    assert output_path.exists()
+    assert str(output_path) in capsys.readouterr().out
 
 
 # --- analyze: success_rate math (explicit success + cost_usd only) ---------

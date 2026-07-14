@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.com/schemas/benchmark-snapshot.schema.json",
+  "title": "Benchmark Snapshot",
+  "type": "object",
+  "required": [
+    "version",
+    "snapshot_id",
+    "corpus_version_id",
+    "candidate_bundle_id",
+    "candidate",
+    "case_verdicts",
+    "summary",
+    "cost",
+    "timing",
+    "evidence"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "snapshot_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "corpus_version_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "candidate_bundle_id": { "type": "string", "minLength": 1 },
+    "candidate": {
+      "type": "object",
+      "required": ["id", "model", "source"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "enum": ["imported"] }
+      },
+      "additionalProperties": false
+    },
+    "case_verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "case_id",
+          "pipeline_family",
+          "split",
+          "terminal_verdict",
+          "checks",
+          "timing",
+          "cost_usd",
+          "evidence_refs"
+        ],
+        "properties": {
+          "case_id": { "type": "string", "minLength": 1 },
+          "pipeline_family": { "const": "structured-check" },
+          "split": { "type": "string", "enum": ["working", "holdout"] },
+          "terminal_verdict": {
+            "type": "string",
+            "enum": ["pass", "fail", "abstain"]
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "status"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "status": {
+                  "type": "string",
+                  "enum": ["pass", "fail", "not_applicable"]
+                },
+                "detail": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "failure_code": { "type": ["string", "null"] },
+          "abstention_reason": { "type": ["string", "null"] },
+          "timing": {
+            "type": "object",
+            "required": ["availability", "duration_ms"],
+            "properties": {
+              "availability": {
+                "type": "string",
+                "enum": ["available", "unavailable"]
+              },
+              "duration_ms": { "type": ["number", "null"], "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "cost_usd": { "type": "number", "minimum": 0 },
+          "evidence_refs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total_cases",
+        "pass_count",
+        "fail_count",
+        "abstain_count",
+        "coverage"
+      ],
+      "properties": {
+        "total_cases": { "type": "integer", "minimum": 0 },
+        "pass_count": { "type": "integer", "minimum": 0 },
+        "fail_count": { "type": "integer", "minimum": 0 },
+        "abstain_count": { "type": "integer", "minimum": 0 },
+        "coverage": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "cost": {
+      "type": "object",
+      "required": [
+        "candidate_cost_usd",
+        "evaluation_cost_usd",
+        "total_cost_usd"
+      ],
+      "properties": {
+        "candidate_cost_usd": { "type": "number", "minimum": 0 },
+        "evaluation_cost_usd": { "const": 0 },
+        "total_cost_usd": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "timing": {
+      "type": "object",
+      "required": [
+        "availability",
+        "available_case_count",
+        "missing_case_count"
+      ],
+      "properties": {
+        "availability": {
+          "type": "string",
+          "enum": ["available", "partial", "unavailable"]
+        },
+        "available_case_count": { "type": "integer", "minimum": 0 },
+        "missing_case_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["available_case_count", "missing_case_count", "references"],
+      "properties": {
+        "available_case_count": { "type": "integer", "minimum": 0 },
+        "missing_case_count": { "type": "integer", "minimum": 0 },
+        "references": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
