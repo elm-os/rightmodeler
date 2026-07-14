@@ -417,6 +417,29 @@ def compute_scorecards(corpus, candidate_bundle, verdicts):
             "Imported benchmark evaluation must spend zero external evaluator cost.",
         ),
     ]
+    replay = candidate_bundle.get("replay")
+    if replay and replay["status"] == "budget_exhausted":
+        gates.append(
+            _gate(
+                "replay-budget",
+                "fail",
+                replay["max_cost_usd"],
+                replay["actual_cost_usd"],
+                _references(verdicts),
+                "Budget exhaustion creates a partial snapshot that cannot pass a release gate.",
+            )
+        )
+    elif replay and replay["status"] == "failed":
+        gates.append(
+            _gate(
+                "replay-budget",
+                "fail",
+                replay["max_cost_usd"],
+                replay["actual_cost_usd"],
+                _references(verdicts),
+                "Replay failed before producing a complete candidate bundle.",
+            )
+        )
     required_gates = [gate for gate in gates if gate["id"] != "remediation-proof"]
     gates.append(
         _gate(
