@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.com/schemas/corpus-drift-proposal.schema.json",
+  "title": "Corpus Drift Proposal",
+  "type": "object",
+  "required": [
+    "version",
+    "proposal_id",
+    "parent_corpus_version_id",
+    "candidate_definition_digest",
+    "status",
+    "proposed_changes",
+    "signals",
+    "exposed_holdout_case_ids",
+    "replacement_holdout_case_ids",
+    "approval"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "proposal_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "parent_corpus_version_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "candidate_definition_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "approved", "rejected", "published"]
+    },
+    "proposed_changes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["action", "case_id", "signal", "detail"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["add", "relabel", "retire", "red-team", "no-change"]
+          },
+          "case_id": { "type": "string", "minLength": 1 },
+          "signal": {
+            "type": "string",
+            "enum": [
+              "input",
+              "tool",
+              "evaluator",
+              "acceptance",
+              "model",
+              "cost",
+              "latency",
+              "retry",
+              "trajectory",
+              "none"
+            ]
+          },
+          "detail": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "input",
+          "tool",
+          "evaluator",
+          "acceptance",
+          "model",
+          "cost",
+          "latency",
+          "retry",
+          "trajectory",
+          "none"
+        ]
+      }
+    },
+    "exposed_holdout_case_ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "replacement_holdout_case_ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "approval": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["actor", "timestamp", "reason"],
+          "properties": {
+            "actor": { "type": "string", "minLength": 1 },
+            "timestamp": { "type": "string", "format": "date-time" },
+            "reason": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "enum": ["approved", "published"] } }
+      },
+      "then": { "required": ["approval"] }
+    }
+  ],
+  "additionalProperties": false
+}
