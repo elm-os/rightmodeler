@@ -123,6 +123,7 @@
           "output_text": { "type": "string" },
           "cost_usd": { "type": "number", "minimum": 0 },
           "duration_ms": { "type": ["number", "null"], "minimum": 0 },
+          "baseline_duration_ms": { "type": ["number", "null"], "minimum": 0 },
           "evidence_refs": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }

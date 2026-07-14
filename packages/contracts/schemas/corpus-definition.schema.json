@@ -41,7 +41,19 @@
             "type": "string",
             "enum": ["deterministic", "reference", "trajectory", "abstain"]
           },
-          "checks": { "type": "object" }
+          "checks": { "type": "object" },
+          "labels": {
+            "type": "object",
+            "required": ["recommendation", "required_abstention"],
+            "properties": {
+              "recommendation": {
+                "type": "string",
+                "enum": ["safe", "unsafe", "not_applicable"]
+              },
+              "required_abstention": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
         },
         "additionalProperties": false
       }
