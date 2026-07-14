@@ -1,6 +1,15 @@
 import json
+import sys
 
-from pipeline.__main__ import analyze, infer_task_family, normalize_run, validate_schema
+import pytest
+
+from pipeline.__main__ import (
+    analyze,
+    build_corpus,
+    infer_task_family,
+    normalize_run,
+    validate_schema,
+)
 
 
 # --- infer_task_family: unambiguous inputs only ---------------------------
@@ -67,6 +76,169 @@ def test_normalize_run_minimal():
     assert result["cost_usd"] is None
     assert result["prompt_excerpt"] == "short prompt"
     assert result["evidence_signals"] == ["none"]
+
+
+def _corpus_definition(cases=None):
+    return {
+        "version": "1",
+        "corpus_id": "test-corpus",
+        "parent_version": None,
+        "cases": cases
+        or [
+            {
+                "case_id": "case-1",
+                "source_run_id": "run-1",
+                "pipeline_family": "structured-check",
+                "workload_label": "json-extraction",
+                "split": "working",
+                "risk": "normal",
+                "required_evidence": "deterministic",
+                "checks": {"schema": "ticket"},
+            }
+        ],
+    }
+
+
+def _write_corpus_inputs(tmp_path, definition=None):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    bundle_path = tmp_path / "bundle.json"
+    definition_path = tmp_path / "definition.json"
+    bundle_path.write_text(
+        json.dumps(
+            {
+                "version": "1",
+                "bundle_id": "bundle-1",
+                "runs": [
+                    {
+                        "id": "run-1",
+                        "prompt": "Extract ticket fields.",
+                        "model": "gpt-4o",
+                        "final_output": '{"ticket": 42}',
+                        "success": True,
+                    }
+                ],
+            }
+        )
+    )
+    definition_path.write_text(json.dumps(definition or _corpus_definition()))
+    return bundle_path, definition_path
+
+
+def test_build_corpus_emits_digest_and_case_references(tmp_path):
+    bundle_path, definition_path = _write_corpus_inputs(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    cases_path = tmp_path / "cases.json"
+
+    result = build_corpus(bundle_path, definition_path, manifest_path, cases_path)
+
+    manifest = json.loads(manifest_path.read_text())
+    cases = json.loads(cases_path.read_text())
+    assert result == cases_path
+    assert manifest["content_digest"].startswith("sha256:")
+    assert manifest["content_digest"] == cases["corpus_version_id"]
+    assert cases["cases"][0]["source_run_id"] == "run-1"
+    assert "final_output" not in cases["cases"][0]
+
+
+def test_corpus_build_command_writes_benchmark_cases(tmp_path, monkeypatch, capsys):
+    bundle_path, definition_path = _write_corpus_inputs(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    cases_path = tmp_path / "cases.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pipeline",
+            "corpus",
+            "build",
+            "--input",
+            str(bundle_path),
+            "--definition",
+            str(definition_path),
+            "--manifest-output",
+            str(manifest_path),
+            "--cases-output",
+            str(cases_path),
+        ],
+    )
+
+    from pipeline.__main__ import main
+
+    assert main() == 0
+    assert manifest_path.exists()
+    assert json.loads(cases_path.read_text())["cases"][0]["case_id"] == "case-1"
+    assert str(cases_path) in capsys.readouterr().out
+
+
+def test_build_corpus_digest_is_stable_across_case_order(tmp_path):
+    cases = [
+        {
+            "case_id": "case-2",
+            "source_run_id": "run-1",
+            "pipeline_family": "structured-check",
+            "workload_label": "json-extraction",
+            "split": "holdout",
+            "risk": "normal",
+            "required_evidence": "deterministic",
+            "checks": {"schema": "ticket"},
+        },
+        {
+            "case_id": "case-1",
+            "source_run_id": "run-1",
+            "pipeline_family": "structured-check",
+            "workload_label": "json-extraction",
+            "split": "working",
+            "risk": "normal",
+            "required_evidence": "deterministic",
+            "checks": {"schema": "ticket"},
+        },
+    ]
+    first_bundle, first_definition = _write_corpus_inputs(
+        tmp_path / "first", _corpus_definition(cases)
+    )
+    second_bundle, second_definition = _write_corpus_inputs(
+        tmp_path / "second", _corpus_definition(list(reversed(cases)))
+    )
+    first_manifest = tmp_path / "first-manifest.json"
+    first_cases = tmp_path / "first-cases.json"
+    second_manifest = tmp_path / "second-manifest.json"
+    second_cases = tmp_path / "second-cases.json"
+
+    build_corpus(first_bundle, first_definition, first_manifest, first_cases)
+    build_corpus(second_bundle, second_definition, second_manifest, second_cases)
+
+    assert json.loads(first_manifest.read_text())["content_digest"] == json.loads(
+        second_manifest.read_text()
+    )["content_digest"]
+
+
+def test_build_corpus_rejects_unaccepted_source(tmp_path):
+    bundle_path, definition_path = _write_corpus_inputs(tmp_path)
+    bundle = json.loads(bundle_path.read_text())
+    bundle["runs"][0]["success"] = False
+    bundle_path.write_text(json.dumps(bundle))
+
+    with pytest.raises(ValueError, match="source run is not accepted"):
+        build_corpus(
+            bundle_path,
+            definition_path,
+            tmp_path / "manifest.json",
+            tmp_path / "cases.json",
+        )
+
+
+def test_build_corpus_rejects_duplicate_case_id(tmp_path):
+    duplicate = _corpus_definition()
+    duplicate["cases"].append(dict(duplicate["cases"][0]))
+    bundle_path, definition_path = _write_corpus_inputs(tmp_path, duplicate)
+
+    with pytest.raises(ValueError, match="duplicate corpus case"):
+        build_corpus(
+            bundle_path,
+            definition_path,
+            tmp_path / "manifest.json",
+            tmp_path / "cases.json",
+        )
 
 
 # --- analyze: success_rate math (explicit success + cost_usd only) ---------
