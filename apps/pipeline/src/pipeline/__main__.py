@@ -9,6 +9,7 @@ from pathlib import Path
 from jsonschema import validate
 from pipeline.corpus import compile_corpus
 from pipeline.diagnosis import diagnose_snapshot
+from pipeline.drift import approve_drift, detect_drift, publish_corpus
 from pipeline.evaluate import evaluate
 from pipeline.freeform import evaluate_freeform_candidates
 from pipeline.repo_fix import evaluate_repo_fix_candidates
@@ -168,6 +169,57 @@ def build_corpus(input_path, definition_path, manifest_output, cases_output):
     bundle = validate_schema(load_json(input_path), "historical-run-bundle")
     definition = validate_schema(load_json(definition_path), "corpus-definition")
     manifest, benchmark_cases = compile_corpus(bundle, definition)
+    validate_schema(manifest, "corpus-manifest")
+    validate_schema(benchmark_cases, "benchmark-cases")
+    write_json(manifest_output, manifest)
+    return write_json(cases_output, benchmark_cases)
+
+
+def detect_corpus_drift(
+    parent_manifest_path,
+    parent_bundle_path,
+    candidate_bundle_path,
+    candidate_definition_path,
+    output_path,
+):
+    parent_manifest = validate_schema(load_json(parent_manifest_path), "corpus-manifest")
+    parent_bundle = validate_schema(load_json(parent_bundle_path), "historical-run-bundle")
+    candidate_bundle = validate_schema(load_json(candidate_bundle_path), "historical-run-bundle")
+    candidate_definition = validate_schema(
+        load_json(candidate_definition_path), "corpus-definition"
+    )
+    proposal = detect_drift(parent_manifest, parent_bundle, candidate_bundle, candidate_definition)
+    validate_schema(proposal, "corpus-drift-proposal")
+    return write_json(output_path, proposal)
+
+
+def approve_corpus_drift(proposal_path, output_path, actor, reason=None):
+    proposal = validate_schema(load_json(proposal_path), "corpus-drift-proposal")
+    approved = approve_drift(proposal, actor, reason)
+    validate_schema(approved, "corpus-drift-proposal")
+    return write_json(output_path, approved)
+
+
+def publish_reviewed_corpus(
+    parent_manifest_path,
+    candidate_bundle_path,
+    candidate_definition_path,
+    proposal_path,
+    manifest_output,
+    cases_output,
+):
+    parent_manifest = validate_schema(load_json(parent_manifest_path), "corpus-manifest")
+    candidate_bundle = validate_schema(load_json(candidate_bundle_path), "historical-run-bundle")
+    candidate_definition = validate_schema(
+        load_json(candidate_definition_path), "corpus-definition"
+    )
+    proposal = validate_schema(load_json(proposal_path), "corpus-drift-proposal")
+    manifest, benchmark_cases = publish_corpus(
+        parent_manifest,
+        candidate_bundle,
+        candidate_definition,
+        proposal,
+    )
     validate_schema(manifest, "corpus-manifest")
     validate_schema(benchmark_cases, "benchmark-cases")
     write_json(manifest_output, manifest)
@@ -399,6 +451,72 @@ def build_parser():
                 build_corpus(
                     args.input,
                     args.definition,
+                    args.manifest_output,
+                    args.cases_output,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    corpus_drift_parser = corpus_subparsers.add_parser("detect-drift")
+    corpus_drift_parser.add_argument("--parent-manifest", required=True)
+    corpus_drift_parser.add_argument("--parent-bundle", required=True)
+    corpus_drift_parser.add_argument("--candidate-bundle", required=True)
+    corpus_drift_parser.add_argument("--candidate-definition", required=True)
+    corpus_drift_parser.add_argument(
+        "--output",
+        default=str(ARTIFACTS / "corpus" / "drift-proposal.json"),
+    )
+    corpus_drift_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                detect_corpus_drift(
+                    args.parent_manifest,
+                    args.parent_bundle,
+                    args.candidate_bundle,
+                    args.candidate_definition,
+                    args.output,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    corpus_approve_parser = corpus_subparsers.add_parser("approve-drift")
+    corpus_approve_parser.add_argument("--proposal", required=True)
+    corpus_approve_parser.add_argument("--output", required=True)
+    corpus_approve_parser.add_argument("--actor", required=True)
+    corpus_approve_parser.add_argument("--reason")
+    corpus_approve_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                approve_corpus_drift(
+                    args.proposal,
+                    args.output,
+                    args.actor,
+                    args.reason,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    corpus_publish_parser = corpus_subparsers.add_parser("publish")
+    corpus_publish_parser.add_argument("--parent-manifest", required=True)
+    corpus_publish_parser.add_argument("--candidate-bundle", required=True)
+    corpus_publish_parser.add_argument("--candidate-definition", required=True)
+    corpus_publish_parser.add_argument("--proposal", required=True)
+    corpus_publish_parser.add_argument("--manifest-output", required=True)
+    corpus_publish_parser.add_argument("--cases-output", required=True)
+    corpus_publish_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                publish_reviewed_corpus(
+                    args.parent_manifest,
+                    args.candidate_bundle,
+                    args.candidate_definition,
+                    args.proposal,
                     args.manifest_output,
                     args.cases_output,
                 )
