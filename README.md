@@ -51,23 +51,6 @@ npx skills add . --skill rightmodeler --agent codex --yes --copy
 The canonical skill source lives in `skills/rightmodeler`. Do not edit generated
 copies under `.agents/skills/` or `.claude/skills/`.
 
-## Repository layout
-
-```text
-.
-├── apps/
-│   ├── pipeline/   # Python CLI app for ingest, analysis, and report generation
-│   └── web/        # Next.js app
-├── docs/           # Product and project docs
-├── packages/
-│   └── contracts/  # Shared JSON Schema contracts
-├── skills/
-│   └── rightmodeler/  # Publishable agent skill source
-├── package.json
-├── pnpm-workspace.yaml
-└── turbo.json
-```
-
 ## Contributor setup
 
 Requirements:
@@ -122,12 +105,3 @@ Expected layout:
 
 This directory is the current handoff boundary between the Python pipeline and the
 rest of the repo.
-
-## Docs
-
-Project docs live in `docs/`.
-
-- `docs/PRD.md`: product requirements
-
-Keep product docs, technical notes, and planning docs in `docs/`, not at the repo
-root.
