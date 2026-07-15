@@ -1,9 +1,21 @@
 # Rightmodeler Eval Pipelines V1
 
-- Status: `implemented`
+- Status: `partially implemented`
 - Scope: local product implementation with stable Crucible artifact seams
 - Source: local Wayfinder planning map under `tasks/wayfinder/`
 - Implementation tracker: local `tasks/implementation-tickets.md`
+
+## Implementation Status
+
+The core local workflow is implemented: versioned corpora, the four evaluation
+families, imported and bounded replay candidates, benchmark snapshots, core
+scorecards, diagnosis, remediation evidence, guarded apply and rollback, drift
+proposals, and skill conformance.
+
+The following remain target v1 policy rather than enforced release behavior:
+per-family quality gates, evaluator-specific confidence thresholds and judge
+calibration, diagnosis-accuracy aggregation, remediation-proof aggregation,
+and holdout-based release measurements.
 
 ## Problem Statement
 
@@ -102,6 +114,9 @@ produced by the local engine.
 
 ## Implementation Decisions
 
+These decisions define the target v1 design. The implementation status above
+identifies which policy requirements are enforced at the current product seam.
+
 - The Python pipeline command is the single evaluation engine boundary. The installed skill orchestrates it, and Crucible consumes its contracts rather than implementing separate evaluation logic.
 - The first product implementation is local and artifact-first. Live traffic routing and runtime model gateway behavior are excluded.
 - The primary scoring unit is the task family. Step-level diagnosis and fix-artifact quality are subordinate views used for replay, attribution, and remediation.
@@ -120,11 +135,11 @@ produced by the local engine.
 - `repo-fix` evaluates patch scope and declared local validation commands inside an isolated worktree.
 - Replay is explicit and outside default CI. Single-shot replay is allowed only for isolated model steps. Tool, loop, and downstream-dependent cases require sandboxed end-to-end replay.
 - Provider-backed replay requires an explicit maximum cost, a bounded worst-case estimate, authoritative actual cost recording, stable cache keys, and budget-aware partial snapshots.
-- The v1 quality floor is `0.90`. Release policy requires zero unsafe substitutions, at least `95%` recommendation precision, at least `80%` recall of labeled safe downgrade opportunities, `100%` required high-risk or insufficient-evidence abstention, and complete terminal verdict coverage.
-- High confidence requires strong deterministic evidence across at least 20 cases or strong reference or trajectory evidence across at least 30 cases, at least `0.95` pass rate, no hard failure, and required evaluator agreement.
-- Medium confidence requires eligible deterministic, reference, or trajectory evidence across at least 10 cases and at least `0.90` pass rate with no hard failure.
-- Judge evidence may support medium confidence only after the agreed human-label calibration and agreement thresholds are satisfied. Judge evidence alone cannot produce high confidence in v1.
-- Speed uses paired p50 and p95 wall-clock measurements. Missing timing is unavailable. A faster claim requires at least `10%` paired median improvement without p95 regression, and a candidate has no material speed regression when p95 is no more than `20%` slower.
+- Target v1 policy sets a `0.90` quality floor, zero unsafe substitutions, at least `95%` recommendation precision, at least `80%` recall of labeled safe downgrade opportunities, `100%` required high-risk or insufficient-evidence abstention, and complete terminal verdict coverage.
+- Target v1 policy requires high confidence from strong deterministic evidence across at least 20 cases or strong reference or trajectory evidence across at least 30 cases, at least `0.95` pass rate, no hard failure, and required evaluator agreement.
+- Target v1 policy requires medium confidence from eligible deterministic, reference, or trajectory evidence across at least 10 cases and at least `0.90` pass rate with no hard failure.
+- Target v1 policy allows judge evidence to support medium confidence only after human-label calibration and agreement thresholds are satisfied. Judge evidence alone cannot produce high confidence in v1.
+- Current speed scorecards use paired p50 and p95 wall-clock measurements, report missing timing as unavailable, and expose the faster-claim thresholds. Per-family and evaluator-specific release enforcement remains pending.
 - Offline smoke and imported-result benchmarks have zero external-spend budget. Default checks validate contracts, deterministic fixtures, report generation, repeatability, and absence of network calls.
 - Each failed, missed, or weak result has exactly one primary issue class: `ingestion`, `evaluator`, `replay`, `candidate-selection`, `repo-validation`, or `insufficient-evidence`.
 - Draftable fixes carry a frozen baseline, triggering cases, primary diagnosis, proposed diff or configuration change, validation commands, post-fix snapshot, holdout result when available, and residual risks.

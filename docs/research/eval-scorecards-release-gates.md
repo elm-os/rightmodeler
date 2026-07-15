@@ -1,5 +1,9 @@
 # Eval scorecards and release gates
 
+- Status: `target v1 policy`
+- Current implementation: core scorecards and safety gates are available, but
+  several policy thresholds below are not yet enforced by benchmark release gates.
+
 ## Scope
 
 This note defines conservative v1 defaults for evaluating rightmodeler itself.
@@ -9,7 +13,7 @@ offline release checks, optional replay checks, and eval spend.
 These are product defaults, not universal constants. A task family may tighten
 them, but weakening a safety gate must be explicit in the benchmark manifest.
 
-## Scorecard
+## Target v1 scorecard
 
 Report quality, coverage, speed, remediation, and cost separately. Abstentions
 do not count as correct recommendations and do not reduce the denominator for
@@ -30,7 +34,7 @@ Coverage reports the proportions that are recommended, rejected, abstained,
 review-only, and unavailable. This prevents a system from appearing accurate by
 abstaining on most of the corpus.
 
-## Confidence defaults
+## Target confidence policy
 
 A recommendation is eligible only when its family quality score is at least
 `0.90` and no hard deterministic check fails.
@@ -68,7 +72,7 @@ Use paired measurements from the same cases and environment.
 If timing is absent, speed is `unavailable`. The report may still make a
 quality-and-cost recommendation, but it cannot claim a speed improvement.
 
-## Release gates
+## Release gate policy
 
 ### Offline smoke
 
@@ -125,8 +129,12 @@ cannot redefine the gate that judged it.
 
 ## Local evidence
 
-The current skill already uses a `0.90` quality floor, authoritative replay
-cost, explicit high-risk abstention, deterministic-first evaluation, and
-position-swapped judging. The current evaluator's three- and five-example
-confidence constants are bootstrap behavior, not release-grade calibration;
-the v1 defaults above replace them when the benchmark contracts are implemented.
+The current implementation provides an overall `0.90` normal-risk quality
+scorecard, recommendation precision and safe-opportunity recall when labels are
+present, required abstention and evidence-coverage gates, paired speed metrics,
+zero-cost imported benchmarks, and bounded replay budget gates.
+
+The current implementation does not yet enforce per-family quality, evaluator-
+specific confidence sample sizes, judge correlation or Cohen's kappa, aggregate
+diagnosis accuracy, or remediation-proof rates in benchmark release decisions.
+Those requirements are acceptance criteria for the future target v1 policy.
