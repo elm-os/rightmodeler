@@ -42,7 +42,7 @@ VERDICT_SCORE = {"equivalent": 1.0, "minor_drift": 0.6, "divergent": 0.0}
 DEFAULT_JUDGES = [  # neutral third-family options; picked to avoid both candidates' families
     "google/gemini-2.5-pro",
     "openai/gpt-4o",
-    "anthropic/claude-sonnet-4-6",
+    "anthropic/claude-sonnet-5",
     "deepseek/deepseek-chat",
 ]
 

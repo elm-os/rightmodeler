@@ -73,7 +73,12 @@ Limits: credit-based + global. `402` = negative balance, `429` = rate limit. Che
 - Prompt caching is per-provider (OpenAI auto ≥1024 tok; Anthropic needs direct routing or
   per-block `cache_control`; DeepSeek/Gemini auto) — affects cost comparisons; OpenRouter uses
   provider-sticky routing to maximize cache hits.
-- `require_parameters: true` avoids silent capability mismatches that corrupt benchmark results.
+- `require_parameters: true` avoids silent capability mismatches that corrupt benchmark
+  results — but it filters on _every_ param you send, and few endpoints advertise `seed`, so
+  whole model families can 404 with "No endpoints found that can handle the requested
+  parameters" (observed as 404 in practice; docs say 503). The client retries such failures
+  once without the provider requirement (unsupported params are then ignored by providers)
+  instead of recording the model as a failed candidate.
 
 Sources: openrouter.ai/docs (quickstart, models, usage-accounting, routing, structured-outputs,
 tool-calling, limits, prompt-caching).

@@ -78,7 +78,13 @@ def shortlist(
         )
 
     out.sort(key=lambda x: x["blended_price"])
-    return out[:top]
+    if len(out) <= top or top <= 1:
+        return out[:top]
+    # spread picks across the price range below the current model: the absolute
+    # cheapest models usually fail the quality floor, and viable swaps often sit
+    # mid-range — cheapest-N would never test them
+    idxs = sorted({round(i * (len(out) - 1) / (top - 1)) for i in range(top)})
+    return [out[i] for i in idxs]
 
 
 def main() -> int:

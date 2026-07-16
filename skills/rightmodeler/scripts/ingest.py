@@ -1,8 +1,10 @@
 """Ingest agent trace logs and normalize them into the common step schema.
 
 Supports (autodetected): Claude Code JSONL, Codex CLI JSONL, OpenAI JSONL,
-LangSmith run-tree JSON, OTel GenAI / OpenInference spans (json). Unknown shapes
-fall back to a best-effort generic adapter.
+LiteLLM proxy StandardLoggingPayload, LangSmith run-tree JSON, OTel GenAI /
+OpenInference spans (json). Unknown shapes fall back to a best-effort generic
+adapter. Reads gzipped files and unwraps log-store envelopes (CloudWatch,
+Firehose, Docker/k8s) transparently.
 
 CLI:
     python ingest.py <path> --out normalized.json      # normalize
@@ -13,9 +15,11 @@ from __future__ import annotations
 
 import argparse
 import glob
+import gzip
 import json
 import os
 import sys
+from collections import Counter
 from typing import Any
 
 from common import dump_json, eprint, read_jsonl
@@ -24,20 +28,28 @@ from common import dump_json, eprint, read_jsonl
 # --------------------------------------------------------------------------- #
 # detection
 # --------------------------------------------------------------------------- #
+def _open(path: str):
+    """Open plain or gzipped text — log-store exports (CloudWatch S3, Datadog)
+    usually arrive gzipped."""
+    if path.endswith(".gz"):
+        return gzip.open(path, "rt")
+    return open(path)
+
+
 def _sample_records(path: str) -> tuple[list[dict], str]:
     """Return (records, kind) where kind is 'jsonl' or 'json'."""
     files = _expand(path)
     if not files:
         return [], "none"
     first = files[0]
-    if first.endswith(".jsonl") or _looks_jsonl(first):
+    if first.endswith((".jsonl", ".jsonl.gz")) or _looks_jsonl(first):
         recs = []
         for f in files:
             recs.extend(read_jsonl(f))
-        return recs, "jsonl"
-    with open(first) as fh:
+        return _unwrap_envelopes(recs), "jsonl"
+    with _open(first) as fh:
         data = json.load(fh)
-    return (data if isinstance(data, list) else [data]), "json"
+    return _unwrap_envelopes(data if isinstance(data, list) else [data]), "json"
 
 
 def _expand(path: str) -> list[str]:
@@ -50,7 +62,7 @@ def _expand(path: str) -> list[str]:
 
 def _looks_jsonl(path: str) -> bool:
     try:
-        with open(path) as f:
+        with _open(path) as f:
             first = f.readline().strip()
             f.readline()
         json.loads(first)
@@ -59,10 +71,45 @@ def _looks_jsonl(path: str) -> bool:
         return False
 
 
+def _unwrap_envelopes(records: list[dict]) -> list[dict]:
+    """Log stores wrap the real record in an envelope with the payload as a JSON
+    string — CloudWatch events ({timestamp, message}), Firehose deliveries
+    ({messageType, logEvents: [...]}), Docker/k8s lines ({log}). If most records
+    carry a parseable dict in such a field, unwrap it."""
+    if any(isinstance(r, dict) and isinstance(r.get("logEvents"), list) for r in records):
+        records = [
+            ev
+            for r in records
+            for ev in (r["logEvents"] if isinstance(r.get("logEvents"), list) else [r])
+        ]
+    for field in ("message", "log", "@message"):
+        unwrapped = []
+        for r in records:
+            v = r.get(field) if isinstance(r, dict) else None
+            if isinstance(v, str):
+                try:
+                    parsed = json.loads(v)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, dict):
+                    unwrapped.append(parsed)
+        if records and len(unwrapped) >= max(1, len(records) // 2):
+            return unwrapped
+    return records
+
+
 def detect_format(records: list[dict]) -> str:
+    """Vote across a sample of records — the first line of a real log file is
+    often a header/meta record that would misdetect the whole file."""
     if not records:
         return "unknown"
-    r = records[0]
+    votes = Counter(
+        f for f in (_detect_one(r) for r in records[:25] if isinstance(r, dict)) if f != "generic"
+    )
+    return votes.most_common(1)[0][0] if votes else "generic"
+
+
+def _detect_one(r: dict) -> str:
     keys = set(r.keys())
     # Claude Code
     if "parentUuid" in keys or (
@@ -87,6 +134,13 @@ def detect_format(records: list[dict]) -> str:
         return "braintrust"
     if "observations" in keys or ("traceId" in keys and "usageDetails" in keys):
         return "langfuse"
+    # LiteLLM proxy StandardLoggingPayload (s3/gcs/file/custom-callback logging)
+    if (
+        "call_type" in keys
+        and "messages" in keys
+        and ("response_cost" in keys or "startTime" in keys)
+    ):
+        return "litellm"
     # OpenAI JSONL
     if "messages" in keys and ("model" in keys or "response" in keys):
         return "openai_jsonl"
@@ -100,6 +154,7 @@ def _step(order: int, **kw: Any) -> dict:
     base = {
         "step_id": kw.get("step_id", f"s{order}"),
         "parent_id": kw.get("parent_id"),
+        "case_id": kw.get("case_id"),
         "order": order,
         "kind": kw.get("kind", "llm"),
         "name": kw.get("name", ""),
@@ -289,6 +344,7 @@ def adapt_openai_jsonl(records: list[dict]) -> list[dict]:
                 order,
                 kind="agent" if tool_calls else "llm",
                 name=rec.get("name", "chat"),
+                case_id=rec.get("case_id"),
                 model=rec.get("model") or resp.get("model"),
                 system_prompt=system,
                 input_messages=[m for m in messages if m.get("role") != "system"],
@@ -310,6 +366,44 @@ def adapt_openai_jsonl(records: list[dict]) -> list[dict]:
                 raw=rec,
             )
         )
+    return steps
+
+
+def adapt_litellm(records: list[dict]) -> list[dict]:
+    """LiteLLM proxy StandardLoggingPayload: `response` is already an OpenAI-format
+    completion, so reuse the OpenAI adapter. Records redacted by
+    `turn_off_message_logging` carry placeholder strings and are unreplayable."""
+    clean, redacted = [], 0
+    for rec in records:
+        if "redacted-by-litellm" in json.dumps([rec.get("messages"), rec.get("response")]):
+            redacted += 1
+            continue
+        clean.append(rec)
+    if redacted:
+        eprint(
+            f"[warn] skipped {redacted} LiteLLM records with redacted payloads "
+            "(proxy has turn_off_message_logging set)"
+        )
+    steps = adapt_openai_jsonl(
+        [
+            {
+                "name": r.get("call_type") or "chat",
+                "case_id": r.get("trace_id") or r.get("id"),
+                "model": r.get("model"),
+                "messages": r.get("messages") or [],
+                "response": r.get("response") or {},
+                "usage": {
+                    "prompt_tokens": r.get("prompt_tokens", 0),
+                    "completion_tokens": r.get("completion_tokens", 0),
+                    "total_tokens": r.get("total_tokens", 0),
+                },
+            }
+            for r in clean
+        ]
+    )
+    for step, rec in zip(steps, clean):
+        step["cost_usd"] = rec.get("response_cost") or 0.0
+        step["raw"] = rec
     return steps
 
 
@@ -451,6 +545,7 @@ ADAPTERS = {
     "claude_code": adapt_claude_code,
     "codex_cli": adapt_codex,
     "openai_jsonl": adapt_openai_jsonl,
+    "litellm": adapt_litellm,
     "langsmith": adapt_langsmith,
     "otel_genai": lambda r: adapt_spans(r, "otel_genai"),
     "openinference": lambda r: adapt_spans(r, "openinference"),
