@@ -123,7 +123,10 @@ Establish the baseline. Confirm with the user (ask, don't assume):
   contain request metadata but not the LLM inputs/outputs needed for replay; see the
   log-store section of trace-formats.md. If no usable traces exist but the app
   persists LLM outputs in a database, reconstruct a corpus instead — see
-  [reference/corpus-reconstruction.md](reference/corpus-reconstruction.md).
+  [reference/corpus-reconstruction.md](reference/corpus-reconstruction.md). If
+  there are no logs at all, set up capture (copy `scripts/capture.py` into the
+  app, or a LiteLLM/proxy logging route — see the capture section of
+  trace-formats.md) and resume once representative traffic has been collected.
 - **Codebase**: repo dir, only needed for multi-step/tool/loop pipelines. If absent,
   you can still do per-step replay for single-shot steps.
 - **Constraints**: model allowlist/denylist, quality floor, providers to avoid,
@@ -232,8 +235,8 @@ yourself before re-running `report.py`.
 
 ## Files
 
-- `scripts/` — `preflight`, `ingest`, `analyze`, `shortlist`, `replay_step`, `replay`,
-  `judge`, `run_pipeline`, `orchestrate`, `workflow`, `tui`, `report`.
+- `scripts/` — `preflight`, `capture`, `ingest`, `analyze`, `shortlist`, `replay_step`,
+  `replay`, `judge`, `run_pipeline`, `orchestrate`, `workflow`, `tui`, `report`.
 - `reference/` — deep docs loaded on demand: `trace-formats.md`, `replay.md`,
   `judge.md`, `openrouter.md`, `corpus-reconstruction.md`.
 - Working output lives under `.rightmodeler/` in the user's project (gitignore it).
