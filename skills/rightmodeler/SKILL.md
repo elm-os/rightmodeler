@@ -9,7 +9,8 @@ description: >-
   per-step cost savings, quality scores, and cascade risks in a TUI + report.
   Use when the user wants to cut model spend, right-size models per task, benchmark
   cheaper model substitutions, or analyze an agentic pipeline (LangGraph, Codex,
-  Claude Code, raw SDK) for cost optimization.
+  Claude Code, raw SDK) for cost optimization. Not a prompt-improvement or
+  prompt-rewriting tool — it changes which model runs a step, never the prompt.
 ---
 
 # rightmodeler
@@ -91,6 +92,11 @@ OPENROUTER_API_KEY=...
 to their project root `.env` or `export OPENROUTER_API_KEY=...` in this session,
 then continue after they reply instead of making them invoke the skill again.
 
+If the user pastes the key in chat, write it to the project root `.env` once and
+let the scripts pick it up from there (they do automatically). Do not re-`export`
+the key inline in every shell command — shell state doesn't persist between
+commands, and inlining embeds the secret throughout the session transcript.
+
 If `uv` is unavailable, fall back to a plain venv install:
 
 ```bash
@@ -112,7 +118,15 @@ Establish the baseline. Confirm with the user (ask, don't assume):
 - **Traces**: path to the uploaded agent trace logs. Autodetect format with
   `scripts/ingest.py --detect <path>` (supports LangSmith, OTel GenAI, OpenInference,
   OpenAI JSONL, Braintrust, Langfuse, Claude Code, Codex — see
-  [reference/trace-formats.md](reference/trace-formats.md)).
+  [reference/trace-formats.md](reference/trace-formats.md)). If the traces live in a
+  log store (CloudWatch, Datadog, GCP Logging), triage them first — most app logs
+  contain request metadata but not the LLM inputs/outputs needed for replay; see the
+  log-store section of trace-formats.md. If no usable traces exist but the app
+  persists LLM outputs in a database, reconstruct a corpus instead — see
+  [reference/corpus-reconstruction.md](reference/corpus-reconstruction.md). If
+  there are no logs at all, set up capture (copy `scripts/capture.py` into the
+  app, or a LiteLLM/proxy logging route — see the capture section of
+  trace-formats.md) and resume once representative traffic has been collected.
 - **Codebase**: repo dir, only needed for multi-step/tool/loop pipelines. If absent,
   you can still do per-step replay for single-shot steps.
 - **Constraints**: model allowlist/denylist, quality floor, providers to avoid,
@@ -128,9 +142,9 @@ are already on a cheap/mixed model, warn the user the baseline is weak.
 ### Phase 1 — Analyze (map the pipeline)
 
 ```bash
-.venv/bin/python scripts/ingest.py \
+uv run python scripts/ingest.py \
   <traces-path> --out .rightmodeler/normalized.json
-.venv/bin/python scripts/analyze.py \
+uv run python scripts/analyze.py \
   .rightmodeler/normalized.json --codebase <dir> --out .rightmodeler/pipeline.json
 ```
 
@@ -145,8 +159,9 @@ the user before spending money.
 For each step/task family, shortlist candidate cheaper models and test them:
 
 ```bash
-.venv/bin/python scripts/orchestrate.py \
+uv run python scripts/orchestrate.py \
   .rightmodeler/pipeline.json \
+  --normalized .rightmodeler/normalized.json \
   --quality-floor 0.9 \
   --candidates auto \
   --out .rightmodeler/results.json
@@ -168,15 +183,25 @@ output, context length) and cost strictly less than the current model, test the
 cheapest N. See [reference/openrouter.md](reference/openrouter.md).
 
 Run this in the background if the fleet is large; stream progress to the user.
+`orchestrate.py` checkpoints `--out` after every step, so a long run is observable
+(read the partial results file) and a crash loses nothing. Progress lines on stderr
+are numbered `i/N`. To re-test a subset after a fix (new judge, corrected client,
+one family), use `--only <family|step_id> …` and overlay onto the previous run with
+`--merge-into .rightmodeler/results.json` — don't hand-edit results files.
+
+If the final summary prints a `[warn] <model> errored on ALL n calls` line, that
+candidate was never actually tested — its 0.00 scores are API failures, not quality
+verdicts. Fix the cause (see `candidate_errors` in results.json for the error text)
+and re-run those steps with `--only`/`--merge-into` before drawing conclusions.
 
 ### Phase 3 — Result (TUI + report)
 
 Launch the interactive per-step approval TUI, then export:
 
 ```bash
-.venv/bin/python scripts/tui.py \
+uv run python scripts/tui.py \
   .rightmodeler/results.json
-.venv/bin/python scripts/report.py \
+uv run python scripts/report.py \
   .rightmodeler/results.json --out .rightmodeler/report.md
 ```
 
@@ -185,6 +210,13 @@ score, evidence type, confidence, and a cascade-risk flag — and lets the user
 **approve / reject / hold** each swap. Approved swaps are written to
 `.rightmodeler/decisions.json`; `report.py` renders the final Markdown report +
 machine-readable JSON (total savings, per-family recommendations, risks, abstentions).
+
+When there's no interactive terminal for the TUI (agent-driven session), skip it:
+present the report's **per-family** table in chat (when families have multiple
+cases, the per-family pass-rate table is the decision table — single-step wins are
+noise), collect approve/reject per family conversationally, and write
+`.rightmodeler/decisions.json` (`{"<step_id>": "approved" | "rejected" | "hold"}`)
+yourself before re-running `report.py`.
 
 ## Guardrails & failure modes
 
@@ -203,10 +235,10 @@ machine-readable JSON (total savings, per-family recommendations, risks, abstent
 
 ## Files
 
-- `scripts/` — `preflight`, `ingest`, `analyze`, `shortlist`, `replay_step`, `replay`,
-  `judge`, `run_pipeline`, `orchestrate`, `workflow`, `tui`, `report`.
+- `scripts/` — `preflight`, `capture`, `ingest`, `analyze`, `shortlist`, `replay_step`,
+  `replay`, `judge`, `run_pipeline`, `orchestrate`, `workflow`, `tui`, `report`.
 - `reference/` — deep docs loaded on demand: `trace-formats.md`, `replay.md`,
-  `judge.md`, `openrouter.md`.
+  `judge.md`, `openrouter.md`, `corpus-reconstruction.md`.
 - Working output lives under `.rightmodeler/` in the user's project (gitignore it).
 
 Full product context (task-family detection, confidence bands, non-goals) is in the

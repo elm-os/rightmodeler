@@ -32,9 +32,14 @@ FAMILY_HINTS = [
 
 def classify_step(step: dict, steps: list[dict]) -> dict:
     has_tools = bool(step.get("tool_calls"))
-    # loop: same node name appears more than once
+    # loop: same node name appears more than once within the same case. Steps from
+    # different cases (benchmark corpora set case_id per example) are independent
+    # samples of the same step, not loop iterations.
     name = step.get("name")
-    repeats = sum(1 for s in steps if s.get("name") == name and name) > 1
+    case = step.get("case_id")
+    repeats = (
+        sum(1 for s in steps if s.get("name") == name and name and s.get("case_id") == case) > 1
+    )
     # feeds downstream: any later step references this as parent
     sid = step.get("step_id")
     feeds = any(s.get("parent_id") == sid for s in steps)

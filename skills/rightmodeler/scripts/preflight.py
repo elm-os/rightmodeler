@@ -46,7 +46,8 @@ def main() -> int:
         try:
             from openrouter import OpenRouter
 
-            info = OpenRouter(key).key_info()
+            orr = OpenRouter(key)
+            info = orr.key_info()
             rem = info.get("limit_remaining")
             print(
                 f"[ok] OpenRouter reachable. credits remaining: {rem if rem is not None else 'unlimited/unknown'}"
@@ -55,6 +56,24 @@ def main() -> int:
                 print("[warn] key is free-tier — expect rate limits; avoid for large fleets")
         except Exception as e:  # noqa: BLE001
             print(f"[warn] could not reach OpenRouter /key: {e}")
+        else:
+            # judge IDs go stale as catalogs rotate; a missing judge silently fails
+            # every candidate it would have scored
+            try:
+                from judge import DEFAULT_JUDGES
+
+                ids = {m["id"] for m in orr.list_models()}
+                for j in DEFAULT_JUDGES:
+                    if j in ids:
+                        print(f"[ok] judge model in catalog: {j}")
+                    else:
+                        print(
+                            f"[MISSING] judge model not in OpenRouter catalog: {j} — "
+                            "update DEFAULT_JUDGES in judge.py"
+                        )
+                        ok = False
+            except Exception as e:  # noqa: BLE001
+                print(f"[warn] could not validate judge models: {e}")
 
     print("-" * 40)
     print("READY" if ok else "NOT READY — resolve [MISSING] items above")
