@@ -33,6 +33,7 @@ Tool `arguments` and tool schemas often arrive as JSON _strings_ — parse defen
     {
       "step_id": "string",
       "parent_id": "string|null",
+      "case_id": "string|null",
       "order": 0,
       "kind": "llm|tool|chain|retriever|agent",
       "name": "string",
@@ -91,6 +92,9 @@ Design choices baked into the normalizer:
   original signal so we know how much to trust it.
 - `cost_usd`: only LangSmith/Braintrust/Langfuse carry it reliably; for CLI/OTel derive
   from `model` + token usage via the OpenRouter pricing table.
+- `case_id`: null for real traces. Hand-built benchmark corpora (see
+  [corpus-reconstruction.md](corpus-reconstruction.md)) set it per example so
+  `analyze.py` can tell "same step, N cases" apart from "loop iterations".
 
 ## Field mapping cheat-sheet
 
@@ -111,8 +115,31 @@ Design choices baked into the normalizer:
 
 - **single-shot**: `kind == llm`, no `tool_calls`, not inside a loop, output not consumed
   by a later step's input → safe to replay in isolation (`replay_step.py`).
-- **multi-step / tool / loop**: has tool calls, repeats (same node id appears >1×), or its
-  output feeds a downstream step → must go through `run_pipeline.py` E2E replay.
+- **multi-step / tool / loop**: has tool calls, repeats (same node name appears >1× within
+  the same `case_id`), or its output feeds a downstream step → must go through
+  `run_pipeline.py` E2E replay.
+
+## Log stores (CloudWatch, Datadog, GCP Logging): triage before ingesting
+
+Users often point at their app's log store instead of an agent-trace export. Most
+application logs record _that_ an LLM call happened (request lines, latencies, status
+codes) but not the LLM inputs and outputs — and without input → accepted-output pairs
+there is nothing to replay or judge. Triage before spending any effort on ingestion:
+
+1. **Recency**: list log groups/streams and check the last-event timestamps — stale
+   streams often mean the service moved (e.g. an infra migration) and you're looking
+   at the wrong group.
+2. **Pattern probe**: filter a bounded window for markers of LLM I/O: `system_prompt`,
+   `messages`, `completion`, provider names, model IDs. Compute time windows from the
+   stream's own timestamps, not hardcoded epochs.
+3. **Sample and verify pairs**: pull a handful of matched events and check that a full
+   input (system prompt + messages) AND the model's output are both present for the
+   same call. Metadata-only logs fail this.
+4. **Verdict**: if the pairs exist, export the window to JSONL and run
+   `ingest.py --detect`. If they don't, say so plainly — do not fabricate a corpus
+   from partial logs. Fall back to
+   [corpus-reconstruction.md](corpus-reconstruction.md) if the app persists LLM
+   outputs somewhere else (usually its database).
 
 Sources: LangSmith export docs, OTel GenAI semconv, OpenInference spec, Braintrust/Langfuse
 data models, Claude Code & Codex session-format write-ups (see research notes in git history).

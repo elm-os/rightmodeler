@@ -74,14 +74,58 @@ def evaluate_candidate(orr, step, cand, floor, runs) -> dict:
     }
 
 
+def _candidate_errors(results: list[dict]) -> dict:
+    """Per-candidate API-error tally. A candidate that errors on every call was
+    never actually tested — without this, hard failures (bad routing, 404s) look
+    identical to judged quality failures (score 0.00)."""
+    tally: dict[str, dict] = {}
+    for r in results:
+        for c in r.get("candidates", []):
+            if "model" not in c:  # shortlist-only entries (e2e steps) were never called
+                continue
+            t = tally.setdefault(c["model"], {"attempts": 0, "errors": 0, "example": None})
+            t["attempts"] += 1
+            if c.get("error"):
+                t["errors"] += 1
+                t["example"] = t["example"] or str(c["error"])[:200]
+    return {m: t for m, t in tally.items() if t["errors"]}
+
+
+def summarize(results: list[dict], floor: float) -> dict:
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "quality_floor": floor,
+        "total_steps": len(results),
+        "swappable": sum(1 for r in results if r.get("best")),
+        "needs_e2e": sum(1 for r in results if r.get("needs_e2e")),
+        "abstained": sum(1 for r in results if r.get("abstain")),
+        "candidate_errors": _candidate_errors(results),
+        "steps": results,
+    }
+
+
 def run(
-    pipeline: dict, normalized: dict, floor: float, top: int, allow, deny, runs, max_workers: int
+    pipeline: dict,
+    normalized: dict,
+    floor: float,
+    top: int,
+    allow,
+    deny,
+    runs,
+    max_workers: int,
+    checkpoint: str | None = None,
 ) -> dict:
     orr = OpenRouter()
     steps_by_id = {s["step_id"]: s for s in normalized["steps"]}
     results = []
+    total = len(pipeline["steps"])
 
-    for pstep in pipeline["steps"]:
+    def _progress(entry: dict) -> None:
+        results.append(entry)
+        if checkpoint:  # long runs are observable/resumable, not all-or-nothing
+            dump_json(summarize(results, floor), checkpoint)
+
+    for i, pstep in enumerate(pipeline["steps"], 1):
         sid = pstep["step_id"]
         step = steps_by_id.get(sid, {})
         entry = {
@@ -102,8 +146,8 @@ def run(
             entry["abstain_reason"] = (
                 "high-risk task family — recommend no swap without human review"
             )
-            results.append(entry)
-            eprint(f"[abstain] {sid} ({pstep.get('name')}) high-risk")
+            _progress(entry)
+            eprint(f"[abstain] {i}/{total} {sid} ({pstep.get('name')}) high-risk")
             continue
 
         needs_tools = bool(step.get("tool_calls") or step.get("available_tools"))
@@ -112,7 +156,7 @@ def run(
         )
         if not cands:
             entry["abstain_reason"] = "no cheaper candidate with required capabilities"
-            results.append(entry)
+            _progress(entry)
             continue
 
         # e2e steps: don't single-shot replay (misleading). Shortlist only; flag for E2E.
@@ -121,9 +165,10 @@ def run(
             entry["note"] = (
                 "multi-step/tool/loop — confirm via run_pipeline.py E2E replay before swapping"
             )
-            results.append(entry)
+            _progress(entry)
             eprint(
-                f"[e2e]     {sid} ({pstep.get('name')}) shortlisted {len(cands)} for E2E confirm"
+                f"[e2e]     {i}/{total} {sid} ({pstep.get('name')}) "
+                f"shortlisted {len(cands)} for E2E confirm"
             )
             continue
 
@@ -137,23 +182,18 @@ def run(
         entry["candidates"] = evals
         passing = [e for e in evals if e["passes"]]
         entry["best"] = min(passing, key=lambda e: e["blended_price"]) if passing else None
-        results.append(entry)
+        _progress(entry)
         best = entry["best"]
         if best:
             save = best.get("est_savings") or 0
-            eprint(f"[done]    {sid} ({pstep.get('name')}) -> {best['model']} (save {save:.0%})")
+            eprint(
+                f"[done]    {i}/{total} {sid} ({pstep.get('name')}) -> "
+                f"{best['model']} (save {save:.0%})"
+            )
         else:
-            eprint(f"[done]    {sid} ({pstep.get('name')}) -> no viable swap")
+            eprint(f"[done]    {i}/{total} {sid} ({pstep.get('name')}) -> no viable swap")
 
-    return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "quality_floor": floor,
-        "total_steps": len(results),
-        "swappable": sum(1 for r in results if r.get("best")),
-        "needs_e2e": sum(1 for r in results if r.get("needs_e2e")),
-        "abstained": sum(1 for r in results if r.get("abstain")),
-        "steps": results,
-    }
+    return summarize(results, floor)
 
 
 def main() -> int:
@@ -167,11 +207,30 @@ def main() -> int:
     ap.add_argument("--allow", nargs="*")
     ap.add_argument("--deny", nargs="*")
     ap.add_argument("--max-workers", type=int, default=6)
+    ap.add_argument(
+        "--only", nargs="*", help="restrict to steps whose family, name, or step_id matches"
+    )
+    ap.add_argument(
+        "--merge-into",
+        help="overlay this run's steps onto a previous results.json (by step_id) before writing",
+    )
     ap.add_argument("--out")
     args = ap.parse_args()
 
+    pipeline = load_json(args.pipeline)
+    if args.only:
+        keep = set(args.only)
+        pipeline["steps"] = [
+            s
+            for s in pipeline["steps"]
+            if keep & {s.get("family"), s.get("name"), s.get("step_id")}
+        ]
+        if not pipeline["steps"]:
+            ap.error(f"--only {args.only} matched no steps")
+        eprint(f"--only: {len(pipeline['steps'])} steps selected")
+
     result = run(
-        load_json(args.pipeline),
+        pipeline,
         load_json(args.normalized),
         args.quality_floor,
         args.top,
@@ -179,11 +238,30 @@ def main() -> int:
         args.deny,
         args.runs,
         args.max_workers,
+        checkpoint=args.out,
     )
+
+    if args.merge_into:
+        prior = load_json(args.merge_into)
+        new_by_id = {s["step_id"]: s for s in result["steps"]}
+        merged = [new_by_id.pop(s["step_id"], s) for s in prior["steps"]]
+        merged.extend(new_by_id.values())
+        result = summarize(merged, args.quality_floor)
+        eprint(f"merged over {args.merge_into}: {len(merged)} steps")
+
     eprint(
         f"\nswappable: {result['swappable']}/{result['total_steps']}  "
         f"needs-e2e: {result['needs_e2e']}  abstained: {result['abstained']}"
     )
+    for m, t in result["candidate_errors"].items():
+        if t["errors"] == t["attempts"]:
+            eprint(
+                f"[warn] {m} errored on ALL {t['attempts']} calls — never actually "
+                f"tested, do NOT read its 0.00 scores as a quality verdict. "
+                f"example: {t['example']}"
+            )
+        else:
+            eprint(f"[warn] {m} errored on {t['errors']}/{t['attempts']} calls")
     if args.out:
         dump_json(result, args.out)
         eprint(f"wrote {args.out}")

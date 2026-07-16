@@ -100,6 +100,7 @@ def _step(order: int, **kw: Any) -> dict:
     base = {
         "step_id": kw.get("step_id", f"s{order}"),
         "parent_id": kw.get("parent_id"),
+        "case_id": kw.get("case_id"),
         "order": order,
         "kind": kw.get("kind", "llm"),
         "name": kw.get("name", ""),

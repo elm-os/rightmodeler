@@ -14,6 +14,56 @@ import os
 
 from common import dump_json, load_json
 
+# a candidate must clear the quality floor in at least this fraction of a
+# family's cases before a swap is recommended — one lucky case is not evidence
+PASS_FRAC = 0.75
+
+
+def family_rollup(steps: list[dict]) -> dict:
+    """Aggregate per-(family, candidate) across cases: pass count, scores, savings."""
+    fams: dict[str, dict] = {}
+    for s in steps:
+        fam = s.get("family") or "general"
+        f = fams.setdefault(fam, {"current": s.get("current_model"), "n": 0, "cands": {}})
+        f["n"] += 1
+        for c in s.get("candidates", []):
+            if "model" not in c:  # shortlist-only entry (e2e step), never replayed
+                continue
+            cc = f["cands"].setdefault(
+                c["model"], {"passes": 0, "scores": [], "errors": 0, "save": None, "price": None}
+            )
+            cc["scores"].append(c.get("score") or 0.0)
+            cc["passes"] += bool(c.get("passes"))
+            cc["errors"] += bool(c.get("error"))
+            if cc["save"] is None and c.get("est_savings") is not None:
+                cc["save"] = c["est_savings"]
+            if cc["price"] is None and c.get("blended_price") is not None:
+                cc["price"] = c["blended_price"]
+    return fams
+
+
+def family_recommendations(rollup: dict) -> list[dict]:
+    recs = []
+    for fam, f in rollup.items():
+        viable = []
+        for model, cc in f["cands"].items():
+            cases = len(cc["scores"])
+            if cases and cc["passes"] / cases >= PASS_FRAC:
+                viable.append((cc["price"] if cc["price"] is not None else 9e9, model, cc))
+        pick = min(viable) if viable else None
+        recs.append(
+            {
+                "family": fam,
+                "current_model": f["current"],
+                "cases": f["n"],
+                "recommended_model": pick[1] if pick else None,
+                "pass_rate": (pick[2]["passes"] / len(pick[2]["scores"])) if pick else None,
+                "avg_quality": (sum(pick[2]["scores"]) / len(pick[2]["scores"])) if pick else None,
+                "estimated_savings": pick[2]["save"] if pick else None,
+            }
+        )
+    return recs
+
 
 def confidence(step: dict) -> str:
     best = step.get("best")
@@ -52,6 +102,39 @@ def render(results: dict, decisions: dict | None) -> str:
             f"**{sum(avg_save) / len(avg_save):.0%}**"
         )
     lines.append("")
+
+    rollup = family_rollup(steps)
+    multi = {f: v for f, v in rollup.items() if v["n"] > 1}
+    if multi:
+        recs = {r["family"]: r for r in family_recommendations(rollup)}
+        lines.append("## Per-family results across cases")
+        lines.append(
+            f"_A swap is recommended only when a candidate clears the quality floor in "
+            f"≥{PASS_FRAC:.0%} of a family's cases — a per-step win on one case is noise._"
+        )
+        lines.append("")
+        for fam, f in multi.items():
+            lines.append(f"### {fam} — current `{f['current']}` ({f['n']} cases)")
+            lines.append("")
+            lines.append("| Candidate | Pass | Avg quality | Savings | Errors |")
+            lines.append("|---|---|---|---|---|")
+            for model, cc in sorted(f["cands"].items(), key=lambda kv: kv[1]["price"] or 9e9):
+                cases = len(cc["scores"])
+                save = f"{cc['save']:.0%}" if cc["save"] is not None else "?"
+                lines.append(
+                    f"| `{model}` | {cc['passes']}/{cases} | "
+                    f"{sum(cc['scores']) / cases:.2f} | {save} | {cc['errors']} |"
+                )
+            r = recs[fam]
+            if r["recommended_model"]:
+                lines.append(
+                    f"\n**→ swap to `{r['recommended_model']}`** "
+                    f"(passes {r['pass_rate']:.0%} of cases, avg quality "
+                    f"{r['avg_quality']:.2f}, ~{(r['estimated_savings'] or 0):.0%} cheaper)"
+                )
+            else:
+                lines.append("\n**→ KEEP** — no candidate cleared the bar")
+            lines.append("")
 
     lines.append("## Recommended substitutions")
     lines.append("")
@@ -124,7 +207,11 @@ def machine_json(results: dict, decisions: dict | None) -> dict:
                 "decision": (decisions or {}).get(s["step_id"], "proposed"),
             }
         )
-    return {"generated_at": results.get("generated_at"), "recommendations": recs}
+    return {
+        "generated_at": results.get("generated_at"),
+        "recommendations": recs,
+        "family_recommendations": family_recommendations(family_rollup(results["steps"])),
+    }
 
 
 def render_snapshot(snapshot: dict) -> str:
