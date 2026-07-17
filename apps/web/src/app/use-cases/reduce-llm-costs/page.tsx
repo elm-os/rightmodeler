@@ -14,6 +14,7 @@ export const metadata: Metadata = pageMetadata({
   description:
     "Cut your agent's model bill without guessing. rightmodeler proves which steps can move to cheaper models on your own traces, with evidence and a quality floor on every call.",
   path: "/use-cases/reduce-llm-costs",
+  image: "/social/reduce-llm-costs.png",
 });
 
 // ── The before/after band: five muted failures against five proven answers, item for item,

@@ -15,6 +15,7 @@ export const metadata: Metadata = pageMetadata({
   description:
     "rightmodeler agent watches every new model release, replays it against your real agent traces, and opens an evidence-backed model-swap pull request in your repo when a change clears your bar. Join the waitlist.",
   path: "/agent",
+  image: "/social/agent.png",
 });
 
 // The guardrails record — the agent moves only inside these. Rendered as an illustrative config

@@ -27,19 +27,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const description =
-  "Keep your agents on the right model: prove safe swaps from your real traces, ship model upgrades as evidence-backed PRs, and watch every layer with Crucible.";
-
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.rightmodeler.com"),
   title: {
-    default: "rightmodeler: prove which models you can safely downgrade",
+    default: "rightmodeler",
     // Child pages set a short title; this appends the brand (e.g. "Blog · rightmodeler").
     template: "%s · rightmodeler",
   },
-  description,
   alternates: {
-    canonical: "/",
     // Discovery hints for the plain-text sidecars (also reachable at their well-known root paths).
     types: {
       "text/plain": [
@@ -48,18 +43,8 @@ export const metadata: Metadata = {
       ],
     },
   },
-  openGraph: {
-    title: "rightmodeler",
-    description,
-    url: "https://www.rightmodeler.com",
-    siteName: "rightmodeler",
-    locale: "en_US",
-    type: "website",
-  },
-  twitter: {
-    card: "summary",
-    title: "rightmodeler",
-    description,
+  robots: {
+    "max-image-preview": "large",
   },
 };
 

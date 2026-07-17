@@ -12,6 +12,7 @@ export const metadata: Metadata = pageMetadata({
   description:
     "The model-downgrade glossary: plain definitions for evidence-backed model downgrading, quality floor, cascade risk, abstain, reference evidence, LLM-as-judge, and more.",
   path: "/glossary",
+  image: "/social/glossary.png",
 });
 
 // Each term is anchor-linkable (#slug) so it can be cited directly; the DefinedTermSet + FAQPage

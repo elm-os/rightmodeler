@@ -20,6 +20,7 @@ export const metadata: Metadata = pageMetadata({
   description:
     "The rightmodeler manifesto: nobody should downgrade a model on vibes. The case for evidence-backed model downgrading, proven on your own traces, not benchmarks.",
   path: "/manifesto",
+  image: "/social/manifesto.png",
 });
 
 const FAQ: FaqItem[] = [
