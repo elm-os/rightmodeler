@@ -177,7 +177,7 @@ export function Body() {
   );
 }
 
-// The same post as clean Markdown, for llms-full.txt and any LLM-facing surface. Kept in sync with
+// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
 // Body above by hand (there is one post; if the blog grows, generate this from a shared source).
 export const markdown = `# We were picking models by vibes. Then the bill arrived.
 
