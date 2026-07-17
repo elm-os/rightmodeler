@@ -30,7 +30,7 @@ export type Post = {
   meta: PostMeta;
   /** The rendered React body, used on the /blog/[slug] page. */
   Body: ComponentType;
-  /** The same post as plain markdown (no front matter). Powers /blog/<slug>.md and llms-full.txt so
-   *  LLMs get clean, structured text. Keep it in sync with Body when editing a post. */
+  /** The same post as plain markdown (no front matter). Powers llms-context.txt so LLMs get clean,
+   *  structured text. Keep it in sync with Body when editing a post. */
   markdown: string;
 };

@@ -14,6 +14,7 @@ export const metadata: Metadata = pageMetadata({
   description:
     "Every tool rightmodeler works with: the trace formats it reads (LangSmith, Langfuse, Braintrust, Phoenix, OpenAI SDK, Claude Code, Codex, OTel GenAI) and the infrastructure it replays through.",
   path: "/integrations",
+  image: "/social/integrations.png",
 });
 
 // Official vendor marks, downloaded to public/integrations/logos. Two ship as raster; the map

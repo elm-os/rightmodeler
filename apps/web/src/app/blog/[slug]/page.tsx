@@ -47,14 +47,28 @@ export async function generateMetadata({
       publishedTime: meta.date,
       authors: [author],
       images: [
-        { url: meta.hero.src, width: 1200, height: 630, alt: meta.hero.alt },
+        {
+          url: meta.hero.src,
+          width: 1200,
+          height: 630,
+          type: "image/jpeg",
+          alt: meta.hero.alt,
+        },
       ],
     },
     twitter: {
       card: "summary_large_image",
       title: meta.title,
       description: meta.description,
-      images: [meta.hero.src],
+      images: [
+        {
+          url: meta.hero.src,
+          width: 1200,
+          height: 630,
+          type: "image/jpeg",
+          alt: meta.hero.alt,
+        },
+      ],
     },
   };
 }

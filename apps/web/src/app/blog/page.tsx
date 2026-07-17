@@ -4,6 +4,7 @@ import { PostCard } from "@/components/blog/post-card";
 import { HeroGradient } from "@/components/hero-gradient";
 import { Reveal } from "@/components/reveal";
 import { getAllPosts } from "@/content/blog";
+import { socialImage } from "@/lib/seo";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 // Parchment legibility veil over the grain-gradient hero — densest behind the top-left masthead copy,
@@ -14,6 +15,10 @@ const VEIL =
 
 const description =
   "Field notes from the rightmodeler team on keeping agents on the right models: proving swaps, watching every layer, and shipping migrations as pull requests.";
+const preview = socialImage(
+  "/social/blog.png",
+  "The rightmodeler blog: research notes on running agents on the right models",
+);
 
 export const metadata: Metadata = {
   title: "Blog",
@@ -25,11 +30,13 @@ export const metadata: Metadata = {
     description,
     url: `${SITE_URL}/blog`,
     siteName: SITE_NAME,
+    images: [preview],
   },
   twitter: {
     card: "summary_large_image",
     title: `Blog · ${SITE_NAME}`,
     description,
+    images: [preview],
   },
 };
 

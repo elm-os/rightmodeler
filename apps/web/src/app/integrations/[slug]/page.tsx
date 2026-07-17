@@ -37,6 +37,7 @@ export async function generateMetadata({
     title: integration.title,
     description: integration.description,
     path: `/integrations/${integration.slug}`,
+    image: `/social/integrations/${integration.slug}.png`,
   });
 }
 
