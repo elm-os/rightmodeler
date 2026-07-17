@@ -15,63 +15,53 @@ export const metadata: Metadata = pageMetadata({
   image: "/social/glossary.png",
 });
 
-// Each term is anchor-linkable (#slug) so it can be cited directly; the DefinedTermSet + FAQPage
-// JSON-LD below is generated from this same list with the full definitions, while the catalog
-// shows a condensed one-liner (`line`) in the reference's sub-entry style.
-const TERMS: { term: string; slug: string; def: string; line: string }[] = [
+// Each term is anchor-linkable (#slug) so it can be cited directly. The visible catalog and the
+// DefinedTermSet JSON-LD below share the same full definition, so neither representation can drift.
+const TERMS: { term: string; slug: string; def: string }[] = [
   {
     term: "Evidence-backed model downgrading",
     slug: "evidence-backed-model-downgrading",
     def: "Moving a step to a cheaper model only after proving, on your own traces, that quality holds against the output you already shipped. The decision rests on replays and scores, not a benchmark or a hunch.",
-    line: "Proven on your traces, not benchmarks.",
   },
   {
     term: "Model downgrade audit",
     slug: "model-downgrade-audit",
     def: "A pass over your traces that checks, step by step, which model calls could move to a cheaper model without losing quality, and which can't.",
-    line: "The pass that finds the safe swaps.",
   },
   {
     term: "Downgrade-safe",
     slug: "downgrade-safe",
     def: "A step whose cheaper-model output holds up against the shipped reference with enough evidence and confidence to swap. The opposite of a step the audit abstains on.",
-    line: "Quality holds, with evidence to spare.",
   },
   {
     term: "Quality floor",
     slug: "quality-floor",
     def: "The minimum quality score a downgrade must clear to be recommended; below it, the frontier model stays. rightmodeler's default is 0.90, and it's configurable.",
-    line: "0.90 by default. Below it, no swap.",
   },
   {
     term: "Cascade risk",
     slug: "cascade-risk",
     def: "The chance that downgrading one step degrades later steps that depend on it, common in tool and loop steps. It's flagged so a local win doesn't cause a downstream regression.",
-    line: "One cheap step degrades the next.",
   },
   {
     term: "Abstain",
     slug: "abstain",
     def: "The audit's decision to make no recommendation when the evidence is too weak to prove a swap is safe. A tool that always finds savings isn't measuring anything.",
-    line: "Weak evidence, no recommendation.",
   },
   {
     term: "Reference evidence",
     slug: "reference-evidence",
     def: "Grading a cheaper model's output against the output you already shipped for the same input, rather than against a synthetic gold answer. Your production result is the reference.",
-    line: "Graded against what you shipped.",
   },
   {
     term: "LLM-as-judge",
     slug: "llm-as-judge",
     def: "Using a separate model, from a different family than either candidate, to score one output against another, so nothing grades its own work.",
-    line: "Nothing grades its own work.",
   },
   {
     term: "Trace",
     slug: "trace",
     def: "The recorded steps of an agent run: the models called, their inputs, and their outputs. rightmodeler ingests traces you already emit and folds them into one per-step schema.",
-    line: "One agent run, recorded step by step.",
   },
 ];
 
@@ -112,16 +102,6 @@ const definedTermSetLd = {
     description: t.def,
     url: `${SITE_URL}/glossary#${t.slug}`,
     inDefinedTermSet: `${SITE_URL}/glossary`,
-  })),
-};
-
-const faqLd = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: TERMS.map((t) => ({
-    "@type": "Question",
-    name: `What is ${t.term.toLowerCase()}?`,
-    acceptedAnswer: { "@type": "Answer", text: t.def },
   })),
 };
 
@@ -356,7 +336,6 @@ export default function GlossaryPage() {
     <PageShell>
       <JsonLd data={breadcrumbLd("Glossary", "/glossary")} />
       <JsonLd data={definedTermSetLd} />
-      <JsonLd data={faqLd} />
 
       <PageHero
         eyebrow="Glossary"
@@ -394,14 +373,14 @@ export default function GlossaryPage() {
                     <p className="mt-3 max-w-md text-subheading text-driftwood">
                       {theme.intro}
                     </p>
-                    <dl className="mt-10 grid gap-x-10 gap-y-8 sm:mt-14 sm:grid-cols-2">
+                    <dl className="mt-10 space-y-8 sm:mt-14">
                       {terms.map((t) => (
                         <div key={t.slug} id={t.slug} className="scroll-mt-24">
                           <dt className="font-sans text-body font-medium text-midnight-ink">
                             {t.term}
                           </dt>
                           <dd className="mt-1 text-body text-driftwood">
-                            {t.line}
+                            {t.def}
                           </dd>
                         </div>
                       ))}

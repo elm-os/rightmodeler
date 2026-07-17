@@ -55,16 +55,6 @@ const FAQ: { q: string; a: string }[] = [
   },
 ];
 
-const faqLd = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: FAQ.map((item) => ({
-    "@type": "Question",
-    name: item.q,
-    acceptedAnswer: { "@type": "Answer", text: item.a },
-  })),
-};
-
 // ── The two mockups tucked into the CTA cards, clipped by the card edges like the reference's
 // chat window and code panel. Figures are stamped illustrative; shadows are illustration-only.
 
@@ -203,7 +193,6 @@ export default function ReduceLlmCostsPage() {
           "/use-cases/reduce-llm-costs",
         )}
       />
-      <JsonLd data={faqLd} />
 
       <PageHero
         eyebrow="Use case · Reduce LLM costs"
