@@ -16,6 +16,7 @@ export const metadata: Metadata = pageMetadata({
   description:
     "Crucible is the analytics and optimization suite for your AI agents: cost per layer, speed per step, failures as they happen, and a model stack that keeps itself right-sized. Join the waitlist.",
   path: "/crucible",
+  image: "/social/crucible.png",
 });
 
 const FAQ: FaqItem[] = [

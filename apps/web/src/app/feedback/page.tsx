@@ -8,12 +8,15 @@ import { Reveal } from "@/components/reveal";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 import { CONTACT_EMAIL } from "@/lib/site";
 
-export const metadata: Metadata = pageMetadata({
-  title: "Feedback",
-  description:
-    "Tell the rightmodeler team what to build, what broke, and what the agent should handle next. We read everything.",
-  path: "/feedback",
-});
+export const metadata: Metadata = {
+  ...pageMetadata({
+    title: "Feedback",
+    description:
+      "Tell the rightmodeler team what to build, what broke, and what the agent should handle next. We read everything.",
+    path: "/feedback",
+  }),
+  robots: { index: false, follow: true },
+};
 
 export default function FeedbackPage() {
   return (

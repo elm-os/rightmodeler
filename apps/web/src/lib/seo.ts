@@ -16,19 +16,38 @@ export function breadcrumbLd(name: string, path: string) {
   };
 }
 
-// Page metadata in the house style: the layout template appends "— rightmodeler" to `title`; the
-// OG/Twitter cards carry the fully-branded title. Twitter card is `summary` (no per-page OG image),
-// matching the home page. `path` is the canonical route (e.g. "/how-it-works").
+export const DEFAULT_SOCIAL_IMAGE = "/social/default.png";
+
+export function socialImage(url: string, alt: string) {
+  return {
+    url,
+    width: 1200,
+    height: 630,
+    type: "image/png",
+    alt,
+  };
+}
+
+// Page metadata in the house style: the layout template appends "· rightmodeler" to `title`; the
+// OG/Twitter cards carry the fully-branded title and a large social image. `path` is the canonical
+// route (e.g. "/how-it-works"); lower-priority pages fall back to the site-wide social card.
 export function pageMetadata({
   title,
   description,
   path,
+  image = DEFAULT_SOCIAL_IMAGE,
 }: {
   title: string;
   description: string;
   path: string;
+  image?: string;
 }): Metadata {
   const branded = `${title} · ${SITE_NAME}`;
+  const imageAlt =
+    image === DEFAULT_SOCIAL_IMAGE
+      ? "Keep your agents on the right model: rightmodeler"
+      : `${branded} social preview`;
+  const preview = socialImage(image, imageAlt);
   return {
     title,
     description,
@@ -39,11 +58,13 @@ export function pageMetadata({
       description,
       url: `${SITE_URL}${path}`,
       siteName: SITE_NAME,
+      images: [preview],
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title: branded,
       description,
+      images: [preview],
     },
   };
 }

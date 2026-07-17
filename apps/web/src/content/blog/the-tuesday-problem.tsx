@@ -141,7 +141,7 @@ export function Body() {
   );
 }
 
-// The same post as clean Markdown, for llms-full.txt and any LLM-facing surface. Kept in sync with
+// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
 // Body above by hand.
 export const markdown = `# The Tuesday problem.
 

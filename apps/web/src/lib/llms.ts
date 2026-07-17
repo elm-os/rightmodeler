@@ -1,4 +1,4 @@
-// Builders for the LLM-facing text endpoints (/llms.txt and /llms-full.txt), following the
+// Builders for the LLM-facing text endpoints (/llms.txt and /llms-context.txt), following the
 // llmstxt.org convention. Generated from the same site constants and post registry the rest of the
 // app uses, so they stay in sync as posts are added. The route handlers serve the output as
 // text/plain; charset=utf-8.
@@ -12,7 +12,7 @@ import { SITE_NAME, SITE_URL, REPO_URL, RUN_COMMAND } from "@/lib/site";
 const SUMMARY =
   "rightmodeler keeps AI agents on the right model at every step. The rightmodeler skill, free on GitHub, replays your real agent traces through cheaper models and proves which swaps are safe, with evidence and confidence on every call. rightmodeler agent, coming soon, watches new model releases and opens evidence-backed model-swap pull requests in your repo. Crucible, in early access, is the analytics and optimization suite that shows what every layer of your agent system costs, how fast it runs, and where it fails, and keeps your stack right-sized continuously. The skill is a report you run on your own traces, not a runtime gateway.";
 
-// Product overview in Markdown for llms-full.txt (indented code block avoids backticks in this file).
+// Product overview in Markdown for llms-context.txt (indented code block avoids backticks here).
 const OVERVIEW = `## What it is
 
 ${SITE_NAME} is the model layer for teams running multi-agent LLM systems. New models ship every few weeks, and the gap between the right model and the default one is real money. ${SITE_NAME} answers one question with evidence, at every step of your stack: which model belongs here?
@@ -119,7 +119,7 @@ const integrationLinks = getAllIntegrations()
   .join("\n");
 
 // /llms.txt — curated index: H1, blockquote summary, a non-heading context line, then annotated
-// link sections. The reserved "## Optional" section points at the full-content file.
+// link sections. The reserved "## Optional" section points at the companion context file.
 export function buildLlmsTxt(): string {
   const postLinks = getAllPosts()
     .map(
@@ -132,7 +132,7 @@ export function buildLlmsTxt(): string {
 
 > ${SUMMARY}
 
-${SITE_NAME} is a developer tool from ELM-OS for teams running multi-agent LLM systems. This file indexes the site for language models; for the complete text of every page in one file, see the Optional section.
+${SITE_NAME} is a developer tool from ELM-OS for teams running multi-agent LLM systems. This file indexes the site for language models; for a curated product overview, annotated page index, and complete blog archive in one file, see the Optional section.
 
 ## Product
 
@@ -154,12 +154,13 @@ ${postLinks}
 
 ## Optional
 
-- [Full site content](${SITE_URL}/llms-full.txt): Every page and blog post inlined as one Markdown file, for loading the whole corpus at once.
+- [Curated site context](${SITE_URL}/llms-context.txt): Product overview, annotated page and integration index, and complete blog posts in one Markdown file.
 `;
 }
 
-// /llms-full.txt — full content: the product overview, then each post's Markdown with a Source line.
-export function buildLlmsFull(): string {
+// /llms-context.txt: a curated product overview and annotated site index, followed by the complete
+// blog archive. It is intentionally not described as a page-by-page mirror of the rendered site.
+export function buildLlmsContext(): string {
   const sections = getAllPosts()
     .map(
       (post) =>
@@ -175,15 +176,17 @@ Source: ${SITE_URL}
 
 ${OVERVIEW}
 
-## Pages
+## Page index
 
 ${pageLinks}
 
-## Integrations
+## Integration index
 
 ${integrationLinks}
 
 ---
+
+## Complete blog archive
 
 ${sections}
 `;
