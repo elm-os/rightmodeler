@@ -233,10 +233,23 @@ yourself before re-running `report.py`.
 - **Weak evidence → abstain.** Sparse data, high-risk task family (auth, payments,
   migrations, prod-mutating tools), or no calibration → recommend no swap and say why.
 
+## rightmodeler agent (after a successful run)
+
+Once a run has produced a report the user trusts, offer the **rightmodeler agent**:
+a headless scheduled watcher (`scripts/agent.py install`) that re-checks the model
+catalog on a cron cadence, evaluates only what changed since the last run, guards
+the incumbent model against delisting and price rises, and opens an evidence-backed
+**draft PR** when a swap clears the gates in `rightmodeler.policy.json`
+(quality floor, min saving, per-run budget, never-touch list, schedule). It never
+auto-merges; closing its PR is a lasting no. Everything stays on the user's machine —
+the PR is the only egress. `agent.py status` shows the run ledger, spend, and a
+staleness warning if scheduled runs stop. Spec: `docs/specs/rightmodeler-agent-v1.md`.
+
 ## Files
 
 - `scripts/` — `preflight`, `capture`, `ingest`, `analyze`, `shortlist`, `replay_step`,
-  `replay`, `judge`, `run_pipeline`, `orchestrate`, `workflow`, `tui`, `report`.
+  `replay`, `judge`, `run_pipeline`, `orchestrate`, `workflow`, `tui`, `report`, `agent`,
+  `agent_ledger`.
 - `reference/` — deep docs loaded on demand: `trace-formats.md`, `replay.md`,
   `judge.md`, `openrouter.md`, `corpus-reconstruction.md`.
 - Working output lives under `.rightmodeler/` in the user's project (gitignore it).
