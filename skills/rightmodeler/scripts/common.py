@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import sys
@@ -30,14 +31,22 @@ def dump_json(obj: Any, path: str | Path) -> None:
 
 def read_jsonl(path: str | Path) -> list[dict]:
     out = []
-    with open(path) as f:
+    opener = gzip.open if str(path).endswith(".gz") else open
+    with opener(path, "rt") as f:
         for line in f:
             line = line.strip()
-            if line:
-                try:
-                    out.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError:
+                # CloudWatch S3 exports prefix each line with an ISO timestamp:
+                # "2026-07-15T12:00:00.000Z {json}"
+                if " " in line:
+                    try:
+                        out.append(json.loads(line.split(" ", 1)[1]))
+                    except json.JSONDecodeError:
+                        pass
     return out
 
 

@@ -52,6 +52,10 @@ class OpenRouter:
         for m in self.list_models():
             if m["id"] == model_id or m.get("canonical_slug") == model_id:
                 return m
+        # apps often log bare model names ("claude-sonnet-5"); resolve when unambiguous
+        suffix = [m for m in self.list_models() if m["id"].split("/", 1)[-1] == model_id]
+        if len(suffix) == 1:
+            return suffix[0]
         return None
 
     def price_per_token(self, model_id: str) -> tuple[float, float]:
@@ -115,6 +119,19 @@ class OpenRouter:
                 last_err = str(e)
                 time.sleep(backoff)
                 backoff *= 2
+                continue
+            if (
+                r.status_code in (404, 503)
+                and body.get("provider", {}).get("require_parameters")
+                and "no endpoints found" in r.text.lower()
+            ):
+                # "No endpoints found that can handle the requested parameters" —
+                # usually `seed`, which many endpoints don't advertise. Providers
+                # ignore unsupported params when routing is unconstrained, so drop
+                # the strict requirement and retry rather than recording the whole
+                # model as a failed candidate.
+                body.pop("provider")
+                last_err = f"HTTP {r.status_code} with require_parameters: {r.text[:200]}"
                 continue
             if r.status_code in (429, 402, 500, 502, 503):
                 last_err = f"HTTP {r.status_code}: {r.text[:200]}"

@@ -48,7 +48,7 @@ export type IntegrationData = {
   useCases: { title: string; body: string }[];
   /** "The honest part" — limits and what-this-is-not, in complete sentences. At least two. */
   limits: string[];
-  /** FAQ, 4–6 items — rendered as the accordion and emitted as FAQPage JSON-LD. */
+  /** FAQ, 4–6 items, rendered as the visible accordion. */
   faq: { q: string; a: string }[];
   /** 2–3 sibling slugs for the Related row (resolved to names at render time). */
   related: string[];
