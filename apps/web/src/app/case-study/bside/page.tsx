@@ -8,7 +8,15 @@ import type { Metadata } from "next";
 import { AnimatedNumber } from "@/components/animated-number";
 import { BlogCta } from "@/components/blog/blog-cta";
 import { BlogShell } from "@/components/blog/blog-shell";
-import { H2, Lead, P, Prose, PullQuote, A } from "@/components/blog/prose";
+import {
+  H2,
+  Lead,
+  P,
+  Prose,
+  PullQuote,
+  Strong,
+  A,
+} from "@/components/blog/prose";
 import {
   Artifact,
   CaseStudyHeader,
@@ -67,6 +75,20 @@ const articleLd = {
     name: study.company,
     url: study.website,
   },
+  mentions: [
+    {
+      "@type": "Person",
+      name: study.testimonial.name,
+      jobTitle: study.testimonial.jobTitle,
+      sameAs: study.testimonial.sameAs,
+      worksFor: {
+        "@type": "Organization",
+        name: study.testimonial.org.name,
+        url: study.testimonial.org.url,
+        sameAs: study.testimonial.org.sameAs,
+      },
+    },
+  ],
 };
 
 const breadcrumbLd = {
@@ -429,6 +451,10 @@ export default function BsideCaseStudyPage() {
             Eleven workloads, each on the smallest model and reasoning effort
             that provably holds its quality bar, with Terra and Sol kept for the
             work that deserves them.
+          </P>
+          <PullQuote>&ldquo;{study.testimonial.quote}&rdquo;</PullQuote>
+          <P>
+            <Strong>{study.testimonial.name}</Strong>, {study.testimonial.role}
           </P>
         </Prose>
 

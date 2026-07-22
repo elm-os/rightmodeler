@@ -8,7 +8,15 @@
 import type { Metadata } from "next";
 import { BlogCta } from "@/components/blog/blog-cta";
 import { BlogShell } from "@/components/blog/blog-shell";
-import { H2, Lead, P, Prose, PullQuote, A } from "@/components/blog/prose";
+import {
+  H2,
+  Lead,
+  P,
+  Prose,
+  PullQuote,
+  Strong,
+  A,
+} from "@/components/blog/prose";
 import {
   Artifact,
   CaseStudyHeader,
@@ -68,6 +76,20 @@ const articleLd = {
     name: study.company,
     url: study.website,
   },
+  mentions: [
+    {
+      "@type": "Person",
+      name: study.testimonial.name,
+      jobTitle: study.testimonial.jobTitle,
+      sameAs: study.testimonial.sameAs,
+      worksFor: {
+        "@type": "Organization",
+        name: study.testimonial.org.name,
+        url: study.testimonial.org.url,
+        sameAs: study.testimonial.org.sameAs,
+      },
+    },
+  ],
 };
 
 const breadcrumbLd = {
@@ -341,6 +363,10 @@ export default function Iam360CaseStudyPage() {
             runs on the smallest model and reasoning effort that holds its
             quality bar, with the flagship kept, and sometimes promoted, for the
             work that deserves it.
+          </P>
+          <PullQuote>&ldquo;{study.testimonial.quote}&rdquo;</PullQuote>
+          <P>
+            <Strong>{study.testimonial.name}</Strong>, {study.testimonial.role}
           </P>
         </Prose>
 

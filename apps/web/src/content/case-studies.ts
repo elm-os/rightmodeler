@@ -21,12 +21,17 @@ export type CaseStudy = {
   readingMinutes: number;
   logo: { src: string; alt: string; width: number; height: number };
   hero: { src: string; alt: string };
-  /** Leadership quote for the landing testimonial band. */
+  /** Leadership quote for the landing testimonial band and the article close. The identity
+      fields feed the schema.org Person on the case-study Article (researched, verified links
+      only; a wrong sameAs is worse than none). */
   testimonial: {
     quote: string;
     name: string;
     role: string;
     avatar: { src: string };
+    jobTitle: string;
+    sameAs: string[];
+    org: { name: string; url: string; sameAs: string[] };
   };
 };
 
@@ -59,6 +64,17 @@ export const BSIDE: CaseStudy = {
     name: "Chris Myers",
     role: "CEO, B:Side Capital and Fund",
     avatar: { src: "/case-study/chris-myers.jpg" },
+    jobTitle: "Chief Executive Officer",
+    sameAs: [
+      "https://www.linkedin.com/in/cmyers85/",
+      "https://www.bsidecapital.org/chris-myers",
+      "https://substack.com/@thebsideway",
+    ],
+    org: {
+      name: "B:Side Capital and Fund",
+      url: "https://www.bsidecapital.org",
+      sameAs: ["https://www.linkedin.com/company/bsidecapital"],
+    },
   },
 };
 
@@ -93,6 +109,19 @@ export const IAM360: CaseStudy = {
     name: "Brian Douglas",
     role: "Founder, iAM360",
     avatar: { src: "/case-study/brian-douglas.jpg" },
+    jobTitle: "Founder, Executive Health and Performance Coach",
+    sameAs: ["https://www.iam360.ai/about"],
+    org: {
+      name: "iAM360",
+      url: "https://www.iam360.ai",
+      sameAs: [
+        "https://www.linkedin.com/company/iam360-evolved/",
+        "https://www.instagram.com/iam360_evolved/",
+        "https://x.com/iAM360_Evolved",
+        "https://www.youtube.com/@iAM360-Official",
+        "https://www.tiktok.com/@iam360_performance_coach",
+      ],
+    },
   },
 };
 
