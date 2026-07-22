@@ -5,6 +5,9 @@
 Replay is never part of the default offline benchmark path. Invoke it explicitly
 with a positive `--max-cost-usd` cap:
 
+The model ID below is an illustrative example; select it from the active provider's
+live catalog.
+
 ```bash
 uv run python scripts/replay.py \
   --normalized .rightmodeler/normalized/normalized-runs.json \
@@ -33,9 +36,9 @@ Two replay modes. Pick per step based on `analyze.py`'s classification.
 ## Mode A — per-step isolated replay (`replay_step.py`)
 
 For single-shot LLM steps only. Take the step's exact `{system_prompt, input_messages,
-available_tools, params}` from `normalized.json`, send it to a candidate model via
-OpenRouter, and return the candidate output for the judge to compare against the
-recorded `output_text`. Cheap, fast, parallelizable.
+available_tools, params}` from `normalized.json`, send it to a candidate model through
+the active replay provider, and return the candidate output for the judge to compare
+against the recorded `output_text`. Cheap, fast, parallelizable.
 
 - Set `temperature=0` and a fixed `seed`. Know the limits: temp=0 makes token _selection_
   deterministic but GPU float non-associativity / MoE routing still drift — expect
@@ -57,25 +60,31 @@ failures" box.
 Preference order:
 
 1. **LiteLLM proxy (default, most robust).** Stand up a local OpenAI-compatible gateway
-   that maps the model name the code asks for → a cheap OpenRouter model, and point the
-   app at it:
+   that maps the model name the code asks for → a candidate on the active provider,
+   and point the app at it. This is an illustrative OpenRouter-backed mapping; both
+   `model` syntax and `api_base` must follow the active provider:
    ```yaml
    model_list:
-     - model_name: gpt-4o # what the code requests
+     - model_name: baseline-model # illustrative name the code requests
        litellm_params:
-         model: openrouter/openai/gpt-4o-mini # what actually runs
-         api_base: https://openrouter.ai/api/v1
-         api_key: os.environ/OPENROUTER_API_KEY
+         model: openrouter/openai/gpt-5.5-mini # illustrative candidate
+         api_base: os.environ/RIGHTMODELER_REPLAY_BASE_URL
+         api_key: os.environ/RIGHTMODELER_REPLAY_API_KEY
      - model_name: "*"
        litellm_params: { model: "openrouter/*" }
    ```
    `litellm --config config.yaml` then `OPENAI_BASE_URL=http://localhost:4000`. Central
-   swap point + free request logging for trajectory capture.
+   swap point + free request logging for trajectory capture. A LiteLLM proxy can also
+   be the replay provider itself: select `RIGHTMODELER_PROVIDER=litellm`, point
+   `LITELLM_PROXY_API_BASE` at its root, and use its public catalog aliases instead of
+   running a second proxy.
 2. **Env base_url redirect** when code uses the default OpenAI client and doesn't
-   hard-code `base_url`: `OPENAI_BASE_URL=https://openrouter.ai/api/v1`,
-   `OPENAI_API_KEY=$OPENROUTER_API_KEY`. Anthropic clients need a proxy that speaks the
-   Anthropic wire format (LiteLLM Anthropic-passthrough) since OpenRouter's `/v1` is
-   OpenAI-shaped. `ANTHROPIC_BASE_URL` is read once at process start — set before launch.
+   hard-code `base_url`. `run_pipeline.py` sets `OPENAI_BASE_URL` and `OPENAI_API_KEY`
+   from the active provider before launch. Only the `litellm` route also sets
+   `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY`; its shim imports
+   `langchain_anthropic` and relies on the Anthropic SDK to read those variables and
+   append `/v1/messages`. OpenRouter and Vercel AI Gateway are not wired into
+   Anthropic clients by this script.
 3. **Monkeypatch** when the model _string_ must change or the client hard-codes base_url:
    patch `langchain_openai.ChatOpenAI.__init__` / `langchain_anthropic.ChatAnthropic` /
    `langchain.chat_models.init_chat_model` / `openai.OpenAI` before importing user code.
@@ -98,7 +107,8 @@ Preference order:
   - Default hybrid: mock destructive tools, run read-only live.
 - **Freeze non-model HTTP** with `vcrpy` (or `respx` for httpx clients): record the
   expensive run's tool/HTTP calls to cassettes, replay them during the cheap run so only
-  the model endpoint hits OpenRouter live. Match on method+URL+body; scrub auth headers.
+  the active provider's model endpoint stays live. Match on method+URL+body; scrub auth
+  headers.
 
 ### 3. Safe execution (sandbox)
 
@@ -113,7 +123,8 @@ git worktree remove /tmp/cm-replay-$RUN   # always clean up
 ```
 
 Worktrees isolate _files_, not runtime — they don't stop port/DB/secret clobbering or
-real network calls. So also: restrict egress to OpenRouter + required endpoints, inject
+real network calls. So also: restrict egress to the active replay provider + required
+endpoints, inject
 throwaway secrets, and for arbitrary generated code escalate to Docker/gVisor or an E2B/
 Modal microVM. Run each recorded task in its own sandbox for clean parallelism.
 
@@ -138,5 +149,6 @@ set of `(name, args)`), **step/loop count + cost delta**, **final output**. Use
 trajectory LLM-judge (for valid-but-different paths and final-answer quality). Aggregate
 over N runs — majority trajectory + score distribution — because of determinism limits.
 
-Sources: OpenRouter OpenAI-compat, LiteLLM proxy/wildcard routing, vcrpy/respx, git
-worktrees, LangGraph application-structure/langgraph.json, agentevals/OpenEvals.
+Sources: active-provider compatibility docs in [providers/](providers/), LiteLLM
+proxy/wildcard routing, vcrpy/respx, git worktrees, LangGraph
+application-structure/langgraph.json, agentevals/OpenEvals.

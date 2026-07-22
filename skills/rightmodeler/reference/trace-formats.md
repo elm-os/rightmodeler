@@ -17,6 +17,25 @@ everything into one schema so the rest of the pipeline is format-agnostic.
 | **Codex CLI**               | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`                            | line `{timestamp,type,payload}`, `payload.type` in {message,function_call,function_call_output} |
 | **LiteLLM proxy**           | `StandardLoggingPayload` via s3/gcs/file/custom-callback logging          | `call_type` + `messages` + `response_cost`/`startTime`                                          |
 
+## Live docs per source
+
+| Source                  | Export / API documentation                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| LangSmith               | [Query traces using the SDK](https://docs.langchain.com/langsmith/export-traces)                                                            |
+| OTel GenAI              | [OTLP JSON protobuf encoding](https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding)                                             |
+| OpenInference / Phoenix | [Export data and query spans](https://arize.com/docs/phoenix/tracing/how-to-tracing/importing-and-exporting-traces/extract-data-from-spans) |
+| OpenAI JSONL            | [Create a Chat Completion](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)              |
+| Braintrust              | [API reference](https://www.braintrust.dev/docs/api-reference)                                                                              |
+| Langfuse                | [Observations API](https://langfuse.com/docs/api-and-data-platform/features/observations-api)                                               |
+| Claude Code             | [Export and locate session data](https://code.claude.com/docs/en/sessions)                                                                  |
+| Codex CLI               | [Official rollout recorder implementation](https://github.com/openai/codex/blob/main/codex-rs/rollout/src/recorder.rs)                      |
+| LiteLLM proxy           | [StandardLoggingPayload specification](https://docs.litellm.ai/docs/proxy/logging_spec)                                                     |
+
+OpenAI JSONL is rightmodeler's per-call wrapper around the documented request and
+response objects, not an OpenAI trace export. Claude Code says its local transcript
+entry format is internal and can change per release. Codex publishes no stable local
+rollout schema; its recorder source is the authoritative format reference.
+
 Two topologies to handle: **tree** (parent-link: LangSmith, OTel, OpenInference,
 Claude Code, Braintrust) and **flat-with-id-pairing** (Codex + OpenAI JSONL, join
 `function_call` → `function_call_output` by `call_id`). OTel/OpenInference flatten
@@ -92,7 +111,8 @@ Design choices baked into the normalizer:
 - `success` is heterogeneous across tools — keep the normalized boolean _and_ the
   original signal so we know how much to trust it.
 - `cost_usd`: only LangSmith/Braintrust/Langfuse carry it reliably; for CLI/OTel derive
-  from `model` + token usage via the OpenRouter pricing table.
+  from `model` + token usage via the active provider's live pricing catalog. See the
+  matching snapshot in [providers/](providers/) for field mapping and estimate limits.
 - `case_id`: null for real traces. Hand-built benchmark corpora (see
   [corpus-reconstruction.md](corpus-reconstruction.md)) set it per example so
   `analyze.py` can tell "same step, N cases" apart from "loop iterations".

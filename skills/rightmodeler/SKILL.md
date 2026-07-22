@@ -3,10 +3,11 @@ name: rightmodeler
 description: >-
   Find where an agent pipeline can swap frontier models for cheaper ones without
   losing quality. Ingests the user's agent trace logs, replays successful steps
-  through cheaper models on OpenRouter, and uses an LLM-as-judge to check the
-  cheaper output matches the original. Handles multi-step / tool-calling / looping
-  pipelines by re-executing the real code with the model swapped, then reports
-  per-step cost savings, quality scores, and cascade risks in a TUI + report.
+  through cheaper models on OpenRouter, Vercel AI Gateway, or a LiteLLM proxy, and
+  uses an LLM-as-judge to check the cheaper output matches the original. Handles
+  multi-step / tool-calling / looping pipelines by re-executing the real code with
+  the model swapped, then reports per-step cost savings, quality scores, and cascade
+  risks in a TUI + report.
   Use when the user wants to cut model spend, right-size models per task, benchmark
   cheaper model substitutions, or analyze an agentic pipeline (LangGraph, Codex,
   Claude Code, raw SDK) for cost optimization. Not a prompt-improvement or
@@ -19,9 +20,13 @@ Prove, from the user's _own_ runs, where a cheaper model can replace an expensiv
 one without hurting task quality — then hand them an approved swap plan and the
 dollar savings.
 
+Before any replay-provider API call, fetch and read the live docs listed at the top
+of `reference/providers/<active-provider>.md`. Those shipped files are dated
+snapshots; the live docs override them on any conflict.
+
 The premise (from the user):
 
-> User uploads agent trace logs + an OpenRouter API key + codebase access. For each
+> User uploads agent trace logs + a replay-provider API key + codebase access. For each
 > successful logged step, re-run the system prompt + logged input through a cheaper
 > model and use LLM-as-judge to check the output is similar. Some pipelines are
 > multi-step / tool-calling / looping — those need a **code-execution** replay, not
@@ -80,17 +85,25 @@ uv sync
 uv run python scripts/preflight.py
 ```
 
-This verifies: `OPENROUTER_API_KEY` is set (and has credits), Python deps are
-installable, and prints what's missing. First look for `OPENROUTER_API_KEY` in the
-process environment, then in the user's project root `.env`. If the key is still
-absent, ask the user to add:
+Choose one replay provider. `RIGHTMODELER_PROVIDER` is optional when exactly one setup
+is present; otherwise set it explicitly.
 
-```env
-OPENROUTER_API_KEY=...
-```
+| Provider          | `RIGHTMODELER_PROVIDER` | Required environment                                                  |
+| ----------------- | ----------------------- | --------------------------------------------------------------------- |
+| OpenRouter        | `openrouter`            | `OPENROUTER_API_KEY=...`                                              |
+| Vercel AI Gateway | `vercel-ai-gateway`     | `AI_GATEWAY_API_KEY=...`                                              |
+| LiteLLM proxy     | `litellm`               | `LITELLM_PROXY_API_KEY=...` and `LITELLM_PROXY_API_BASE=<proxy-root>` |
 
-to their project root `.env` or `export OPENROUTER_API_KEY=...` in this session,
-then continue after they reply instead of making them invoke the skill again.
+Without the selector, detection order is OpenRouter, Vercel AI Gateway, then LiteLLM;
+if several are configured the first wins and preflight prints how to override it.
+Preflight verifies the selected provider, dependency imports, account/readiness access,
+and judge-family catalog coverage, then prints what's missing.
+
+For every required variable, resolution checks the process environment first, then
+the first `.env` found from the current working directory upward. If setup is still
+absent, ask the user to add the selected provider's variables to their project root
+`.env` or export them in this session, then continue after they reply instead of
+making them invoke the skill again.
 
 If the user pastes the key in chat, write it to the project root `.env` once and
 let the scripts pick it up from there (they do automatically). Do not re-`export`
@@ -177,10 +190,13 @@ uv run python scripts/orchestrate.py \
    at that step (`run_pipeline.py`, in a sandboxed worktree) and judge the trajectory
    - final output. This is what catches "small drop at A breaks E."
 
-Candidate shortlisting is automatic (`scripts/shortlist.py`): pull OpenRouter
-`/models`, filter to models that support the step's needs (tool calling, structured
-output, context length) and cost strictly less than the current model, test the
-cheapest N. See [reference/openrouter.md](reference/openrouter.md).
+Candidate shortlisting is automatic (`scripts/shortlist.py`): pull the active
+provider's live model catalog, filter to models that support the step's needs (tool
+calling, structured output, context length) and cost strictly less than the current
+model, then test the cheapest N. Never use a pinned model list: models are discovered
+from the active provider's catalog at run time, and any concrete model ID in these
+docs is an explicitly labeled illustrative example. See
+[`reference/providers/`](reference/providers/).
 
 Run this in the background if the fleet is large; stream progress to the user.
 `orchestrate.py` checkpoints `--out` after every step, so a long run is observable
@@ -228,8 +244,10 @@ yourself before re-running `report.py`.
   order-consistent verdicts. For important swaps, require two independent judges to
   agree. Use a small ordinal scale (equivalent / minor-drift / divergent), not 0–100.
 - **Cost of the analysis itself**: brute-forcing costs tokens. Estimate and show the
-  projected OpenRouter spend before Phase 2; cap concurrency to avoid 429s; compare
-  `usage.cost`, never token counts across models (different tokenizers).
+  projected provider spend before Phase 2; cap concurrency to avoid 429s; compare
+  normalized cost, never token counts across models (different tokenizers). Surface
+  `cost_is_estimate=true` wherever catalog pricing rather than provider-reported cost
+  produced the amount.
 - **Weak evidence → abstain.** Sparse data, high-risk task family (auth, payments,
   migrations, prod-mutating tools), or no calibration → recommend no swap and say why.
 
@@ -238,7 +256,8 @@ yourself before re-running `report.py`.
 - `scripts/` — `preflight`, `capture`, `ingest`, `analyze`, `shortlist`, `replay_step`,
   `replay`, `judge`, `run_pipeline`, `orchestrate`, `workflow`, `tui`, `report`.
 - `reference/` — deep docs loaded on demand: `trace-formats.md`, `replay.md`,
-  `judge.md`, `openrouter.md`, `corpus-reconstruction.md`.
+  `judge.md`, `corpus-reconstruction.md`; `reference/providers/` holds the OpenRouter,
+  Vercel AI Gateway, and LiteLLM replay-provider snapshots.
 - Working output lives under `.rightmodeler/` in the user's project (gitignore it).
 
 Full product context (task-family detection, confidence bands, non-goals) is in the
