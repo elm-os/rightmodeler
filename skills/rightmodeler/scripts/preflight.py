@@ -5,7 +5,6 @@ from __future__ import annotations
 import shutil
 import sys
 
-from common import require_provider, resolve_env_var
 from provider import get_provider
 
 
@@ -14,9 +13,11 @@ def main() -> int:
     print("rightmodeler preflight")
     print("-" * 40)
 
-    config, key = require_provider()
-    _, source = resolve_env_var(config.env_key)
-    where = "environment" if source == "environment" else source
+    provider = get_provider()
+    config = provider.config
+    key = provider.api_key
+    where = provider.key_source or "unknown source"
+    print(f"[ok] selected provider: {config.name}")
     print(f"[ok] {config.env_key} loaded from {where} (…{key[-4:]})")
     for url in config.docs:
         print(f"[info] provider docs: {url}")
@@ -41,35 +42,54 @@ def main() -> int:
     # live credit check
     if key:
         try:
-            orr = get_provider(config.name)
-            info = orr.account_info()
-            rem = info.get("limit_remaining")
-            print(
-                f"[ok] {config.name} reachable. credits remaining: "
-                f"{rem if rem is not None else 'unlimited/unknown'}"
-            )
-            if info.get("is_free_tier"):
-                print("[warn] key is free-tier — expect rate limits; avoid for large fleets")
+            info = provider.account_info()
+            if config.name == "openrouter":
+                remaining = info.get("limit_remaining")
+                print(
+                    "[ok] openrouter reachable. credits remaining: "
+                    f"{remaining if remaining is not None else 'unlimited/unknown'}"
+                )
+                if info.get("is_free_tier"):
+                    print("[warn] key is free-tier — expect rate limits; avoid for large fleets")
+            elif config.name == "vercel-ai-gateway":
+                print(
+                    f"[ok] vercel-ai-gateway reachable. balance: ${info.get('balance')} "
+                    f"total used: ${info.get('total_used')}"
+                )
+            else:
+                readiness = info.get("readiness") or {}
+                print(
+                    f"[ok] litellm reachable. readiness: {readiness.get('status', 'healthy')} "
+                    f"models: {info.get('model_count', 0)}"
+                )
         except Exception as e:  # noqa: BLE001
             print(f"[warn] could not reach {config.name} account endpoint: {e}")
         else:
-            # judge IDs go stale as catalogs rotate; a missing judge silently fails
-            # every candidate it would have scored
             try:
-                from judge import DEFAULT_JUDGES
-
-                ids = {m["id"] for m in orr.list_models()}
-                for j in DEFAULT_JUDGES:
-                    if j in ids:
-                        print(f"[ok] judge model in catalog: {j}")
-                    else:
-                        print(
-                            f"[MISSING] judge model not in provider catalog: {j} — "
-                            "update DEFAULT_JUDGES in judge.py"
-                        )
-                        ok = False
+                catalog = provider.list_models()
+                families = {
+                    provider.model_family(model.get("id"))
+                    for model in catalog
+                    if model.get("type") in (None, "language")
+                } - {"unknown"}
+                if len(families) >= 3:
+                    print(f"[ok] catalog has {len(families)} resolvable judge families")
+                elif config.name == "litellm":
+                    print(
+                        f"[warn] litellm catalog has only {len(families)} resolvable model "
+                        "families — map judge-capable models in the proxy config or plan "
+                        "--judge-model"
+                    )
+                else:
+                    print(
+                        f"[MISSING] provider catalog has only {len(families)} resolvable "
+                        "model families — a neutral third-family judge is not guaranteed"
+                    )
+                    ok = False
             except Exception as e:  # noqa: BLE001
                 print(f"[warn] could not validate judge models: {e}")
+
+    provider._client.close()
 
     print("-" * 40)
     print("READY" if ok else "NOT READY — resolve [MISSING] items above")

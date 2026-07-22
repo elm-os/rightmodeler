@@ -113,6 +113,7 @@ def _normalize_result(case_id, bundle_ref, response, duration_ms):
         "case_id": case_id,
         "output_text": response.get("text") or "",
         "cost_usd": response.get("cost") or 0.0,
+        "cost_is_estimate": bool(response.get("cost_is_estimate")),
         "duration_ms": duration_ms,
         "evidence_refs": [bundle_ref],
         "replay_error": error,
@@ -136,6 +137,7 @@ def _parse_e2e_response(response):
     return {
         "text": payload.get("output_text", response.get("stdout") or ""),
         "cost": cost,
+        "cost_is_estimate": bool(payload.get("cost_is_estimate")),
         "tool_calls": payload.get("tool_calls") or [],
         "error": None if response.get("ok") else response.get("stderr") or "E2E replay failed",
     }
@@ -219,6 +221,7 @@ def replay_cases(
     cache_hits = 0
     cache_misses = 0
     status = "completed"
+    cost_is_estimate = False
     for case, step, pipeline_step, mode, cache_key, estimate in prepared:
         bundle_ref = f"replay/{candidate_model}/{case['case_id']}"
         if cache_key in cache:
@@ -247,6 +250,7 @@ def replay_cases(
             duration_ms = round((time.perf_counter() - started) * 1000, 3)
             result = _normalize_result(case["case_id"], bundle_ref, response, duration_ms)
             budget.record(result["cost_usd"])
+            cost_is_estimate = cost_is_estimate or result["cost_is_estimate"]
         except ReplayError:
             raise
         except Exception as error:  # noqa: BLE001
@@ -290,6 +294,7 @@ def replay_cases(
             "max_cost_usd": max_cost_usd,
             "projected_cost_usd": round(projected_cost, 6),
             "actual_cost_usd": round(budget.actual_cost_usd, 6),
+            "cost_is_estimate": cost_is_estimate,
             "remaining_cost_usd": round(budget.remaining_cost_usd, 6),
             "cache_hits": cache_hits,
             "cache_misses": cache_misses,

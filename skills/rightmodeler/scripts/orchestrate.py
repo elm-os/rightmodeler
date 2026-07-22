@@ -20,7 +20,7 @@ import argparse
 import concurrent.futures as cf
 from datetime import datetime, timezone
 
-from common import dump_json, eprint, load_json, model_family
+from common import dump_json, eprint, load_json
 from judge import judge_outputs
 from provider import get_provider
 from replay_step import replay_step
@@ -42,7 +42,7 @@ def _task_text(step: dict) -> str:
     return "\n".join(parts) or step.get("name", "task")
 
 
-def evaluate_candidate(orr, step, cand, floor, runs) -> dict:
+def evaluate_candidate(orr, step, cand, floor, runs, judge_model=None) -> dict:
     rep = replay_step(orr, step, cand["id"], runs=runs)
     if rep.get("error"):
         return {"model": cand["id"], "error": rep["error"], "passes": False}
@@ -51,8 +51,9 @@ def evaluate_candidate(orr, step, cand, floor, runs) -> dict:
         task=_task_text(step),
         reference=_reference_text(step),
         candidate=rep.get("text") or "",
-        candidate_family=model_family(cand["id"]),
-        reference_family=model_family(step.get("model")),
+        candidate_model=cand["id"],
+        reference_model=step.get("model"),
+        judge_model=judge_model,
         reference_tool_calls=[
             {"name": c["name"], "arguments": c["arguments"]} for c in step.get("tool_calls") or []
         ],
@@ -63,6 +64,7 @@ def evaluate_candidate(orr, step, cand, floor, runs) -> dict:
         "blended_price": cand["blended_price"],
         "est_savings": cand.get("est_savings_vs_current"),
         "replay_cost": rep.get("cost"),
+        "cost_is_estimate": bool(rep.get("cost_is_estimate")),
         "candidate_output": (rep.get("text") or "")[:2000],
         "verdict": verdict["verdict"],
         "score": verdict["score"],
@@ -114,6 +116,7 @@ def run(
     runs,
     max_workers: int,
     checkpoint: str | None = None,
+    judge_model: str | None = None,
 ) -> dict:
     orr = get_provider()
     steps_by_id = {s["step_id"]: s for s in normalized["steps"]}
@@ -175,7 +178,10 @@ def run(
         # single-shot: replay + judge each candidate in parallel
         evals = []
         with cf.ThreadPoolExecutor(max_workers=max_workers) as ex:
-            futs = {ex.submit(evaluate_candidate, orr, step, c, floor, runs): c for c in cands}
+            futs = {
+                ex.submit(evaluate_candidate, orr, step, c, floor, runs, judge_model): c
+                for c in cands
+            }
             for fut in cf.as_completed(futs):
                 evals.append(fut.result())
         evals.sort(key=lambda e: (not e["passes"], e.get("blended_price", 9e9)))
@@ -207,6 +213,7 @@ def main() -> int:
     ap.add_argument("--allow", nargs="*")
     ap.add_argument("--deny", nargs="*")
     ap.add_argument("--max-workers", type=int, default=6)
+    ap.add_argument("--judge-model")
     ap.add_argument(
         "--only", nargs="*", help="restrict to steps whose family, name, or step_id matches"
     )
@@ -239,6 +246,7 @@ def main() -> int:
         args.runs,
         args.max_workers,
         checkpoint=args.out,
+        judge_model=args.judge_model,
     )
 
     if args.merge_into:

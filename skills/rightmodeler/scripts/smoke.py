@@ -4,15 +4,26 @@ import json
 import os
 import tempfile
 from contextlib import redirect_stderr
+from dataclasses import replace
 from io import StringIO
 from pathlib import Path
 
 from analyze import analyze
 from common import resolve_env_var
 from ingest import detect_format
-from provider import LiteLLMProvider, OpenRouterProvider, VercelAIGatewayProvider, get_provider
+from judge import pick_judge
+from provider import (
+    LITELLM_CONFIG,
+    OPENROUTER_CONFIG,
+    VERCEL_AI_GATEWAY_CONFIG,
+    LiteLLMProvider,
+    OpenRouterProvider,
+    VercelAIGatewayProvider,
+    get_provider,
+)
 from report import render, render_snapshot
 from replay import ReplayError, replay_cases
+from run_pipeline import _provider_env
 from workflow import run_workflow
 
 
@@ -113,6 +124,102 @@ def provider_selection_smoke():
                 os.environ[name] = previous[name]
 
 
+def judge_selection_smoke():
+    class FakeProvider:
+        def __init__(self, catalog):
+            self.catalog = catalog
+
+        def list_models(self):
+            return self.catalog
+
+    catalog = [
+        {"id": "alpha/candidate", "created": 300, "context_length": 4000},
+        {"id": "beta/reference", "created": 300, "context_length": 4000},
+        {
+            "id": "gamma/judge-small",
+            "created": 100,
+            "context_length": 1000,
+            "pricing": {"prompt": "0.001", "completion": "0.001"},
+        },
+        {
+            "id": "delta/judge-strong",
+            "created": 200,
+            "context_length": 2000,
+            "pricing": {"prompt": "0.002", "completion": "0.003"},
+        },
+    ]
+    provider = FakeProvider(catalog)
+    assert pick_judge(provider, "alpha/candidate", "beta/reference") == "delta/judge-strong"
+
+    try:
+        pick_judge(FakeProvider(catalog[:2]), "alpha/candidate", "beta/reference")
+    except ValueError as error:
+        assert "--judge-model" in str(error)
+    else:
+        raise AssertionError("judge selection should refuse without a neutral family")
+
+    try:
+        pick_judge(provider, "unmapped-alias", "beta/reference")
+    except ValueError as error:
+        assert "--judge-model" in str(error)
+    else:
+        raise AssertionError("unknown model family should require an explicit judge")
+    assert (
+        pick_judge(
+            provider,
+            "unmapped-alias",
+            "beta/reference",
+            override="gamma/judge-small",
+        )
+        == "gamma/judge-small"
+    )
+
+    litellm = object.__new__(LiteLLMProvider)
+    mapped = litellm._enrich_catalog(
+        [{"id": "judge-alias"}],
+        [
+            {
+                "model_name": "judge-alias",
+                "litellm_params": {"model": "gamma/upstream"},
+            }
+        ],
+    )
+    assert mapped[0]["resolved_family"] == "gamma"
+    unmapped = litellm._enrich_catalog([{"id": "judge-alias"}], [])
+    assert unmapped[0]["resolved_family"] == "unknown"
+    mixed = litellm._enrich_catalog(
+        [{"id": "judge-alias"}],
+        [
+            {
+                "model_name": "judge-alias",
+                "litellm_params": {"model": "gamma/upstream"},
+            },
+            {
+                "model_name": "judge-alias",
+                "litellm_params": {"model": "delta/upstream"},
+            },
+        ],
+    )
+    assert mixed[0]["resolved_family"] == "unknown"
+
+
+def provider_env_smoke():
+    for config in (OPENROUTER_CONFIG, VERCEL_AI_GATEWAY_CONFIG):
+        env = _provider_env(config, "test-key")
+        assert env["RIGHTMODELER_REPLAY_BASE_URL"] == config.base_url
+        assert env["RIGHTMODELER_REPLAY_API_KEY"] == "test-key"
+        assert env["OPENAI_BASE_URL"] == config.base_url
+        assert env["OPENAI_API_KEY"] == "test-key"
+        assert "ANTHROPIC_BASE_URL" not in env
+        assert "ANTHROPIC_API_KEY" not in env
+
+    config = replace(LITELLM_CONFIG, base_url="http://localhost:4000")
+    env = _provider_env(config, "test-key")
+    assert env["OPENAI_BASE_URL"] == "http://localhost:4000"
+    assert env["ANTHROPIC_BASE_URL"] == "http://localhost:4000"
+    assert env["ANTHROPIC_API_KEY"] == "test-key"
+
+
 def main():
     previous_key = os.environ.pop("OPENROUTER_API_KEY", None)
     original_cwd = Path.cwd()
@@ -133,6 +240,8 @@ def main():
             os.environ["OPENROUTER_API_KEY"] = previous_key
 
     provider_selection_smoke()
+    judge_selection_smoke()
+    provider_env_smoke()
 
     detected = detect_format(
         [{"timestamp": "2026-01-01T00:00:00Z", "type": "event", "payload": {"type": "message"}}]
@@ -181,6 +290,8 @@ def main():
                     "best": {
                         "model": "openai/gpt-4o-mini",
                         "est_savings": 0.5,
+                        "replay_cost": 0.0123,
+                        "cost_is_estimate": True,
                         "score": 1.0,
                         "verdict": "equivalent",
                         "order_consistent": True,
@@ -191,6 +302,7 @@ def main():
         None,
     )
     assert "Recommendation Report" in report
+    assert "$0.012300 est." in report
 
     replay_normalized = {
         "steps": [
@@ -220,7 +332,12 @@ def main():
 
     def single_shot_runner(*_args, **_kwargs):
         calls.append("single-shot")
-        return {"text": "hello", "cost": 0.01, "error": None}
+        return {
+            "text": "hello",
+            "cost": 0.01,
+            "cost_is_estimate": True,
+            "error": None,
+        }
 
     with tempfile.TemporaryDirectory() as replay_tmp:
         cache = Path(replay_tmp) / "cache.json"
@@ -247,6 +364,9 @@ def main():
         assert first["candidate"]["source"] == "replayed"
         assert first["corpus_version_id"] == "sha256:" + "b" * 64
         assert first["replay"]["mode"] == "single-shot"
+        assert first["replay"]["cost_is_estimate"] is True
+        assert first["results"][0]["cost_is_estimate"] is True
+        assert second["results"][0]["cost_is_estimate"] is True
         assert second["replay"]["cache_hits"] == 1
         assert len(calls) == 1
 
@@ -284,7 +404,9 @@ def main():
             e2e_calls.append("e2e")
             return {
                 "ok": True,
-                "stdout": '{"output_text":"e2e output","cost_usd":0.02}\n',
+                "stdout": (
+                    '{"output_text":"e2e output","cost_usd":0.02,"cost_is_estimate":true}\n'
+                ),
                 "stderr": "",
             }
 
@@ -301,6 +423,8 @@ def main():
             e2e_runner=e2e_runner,
         )
         assert e2e["replay"]["mode"] == "e2e"
+        assert e2e["replay"]["cost_is_estimate"] is True
+        assert e2e["results"][0]["cost_is_estimate"] is True
         assert e2e_calls == ["e2e"]
 
     with tempfile.TemporaryDirectory() as workflow_tmp:

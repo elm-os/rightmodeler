@@ -88,7 +88,10 @@ def require_provider() -> tuple[Any, str]:
     from provider import get_provider
 
     selected = get_provider()
-    return selected.config, selected.api_key
+    try:
+        return selected.config, selected.api_key
+    finally:
+        selected._client.close()
 
 
 def parse_price(v: Any) -> float:
@@ -114,7 +117,7 @@ FAMILY_BY_PREFIX = {
 
 
 def model_family(model_id: str | None) -> str:
-    if not model_id:
+    if not model_id or "/" not in model_id:
         return "unknown"
     prefix = model_id.split("/", 1)[0].lower()
     return FAMILY_BY_PREFIX.get(prefix, prefix)

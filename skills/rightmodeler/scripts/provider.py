@@ -22,7 +22,7 @@ from typing import Any
 
 import httpx
 
-from common import eprint, parse_price, resolve_env_var
+from common import eprint, model_family, parse_price, resolve_env_var
 
 
 @dataclass(frozen=True)
@@ -80,9 +80,15 @@ class Provider:
     models_path = "/models"
     supports_seed = True
 
-    def __init__(self, api_key: str | None = None, timeout: float = 120.0):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        timeout: float = 120.0,
+        key_source: str | None = None,
+    ):
         config = self.__class__.config
-        key = api_key or resolve_env_var(config.env_key)[0]
+        resolved_key, resolved_source = resolve_env_var(config.env_key)
+        key = api_key or resolved_key
         extra = {name: resolve_env_var(name)[0] for name in config.extra_env}
         missing = ([config.env_key] if not key else []) + [
             name for name, value in extra.items() if not value
@@ -96,6 +102,7 @@ class Provider:
             config = replace(config, base_url=base_url)
         self.config = config
         self.api_key = key
+        self.key_source = key_source or resolved_source
         headers = {"Authorization": f"Bearer {self.api_key}"}
         headers.update(self._headers())
         self._client = httpx.Client(
@@ -131,6 +138,13 @@ class Provider:
         if len(suffix) == 1:
             return suffix[0]
         return None
+
+    def model_family(self, model_id: str | None) -> str:
+        if not model_id:
+            return "unknown"
+        info = self.model_info(model_id)
+        resolved_id = (info or {}).get("canonical_slug") or (info or {}).get("id") or model_id
+        return model_family(resolved_id)
 
     def price_per_token(self, model_id: str) -> tuple[float, float]:
         """(prompt, completion) USD per token; (0,0) if unknown."""
@@ -328,6 +342,11 @@ class VercelAIGatewayProvider(Provider):
                     time.sleep(0.1)
         return self._estimate_cost(data), True
 
+    def account_info(self) -> dict:
+        r = self._client.get("/credits")
+        r.raise_for_status()
+        return r.json()
+
 
 class LiteLLMProvider(Provider):
     config = LITELLM_CONFIG
@@ -343,22 +362,28 @@ class LiteLLMProvider(Provider):
             models = r.json()["data"]
             details: list[dict] = []
             info = self._client.get("/model/info")
-            if info.status_code != 403:
-                info.raise_for_status()
+            if info.status_code == 200:
                 details = info.json().get("data", [])
             self._catalog = self._enrich_catalog(models, details)
         return self._catalog
 
     def _enrich_catalog(self, models: list[dict], details: list[dict]) -> list[dict]:
-        detail_by_name = {
-            item.get("model_name"): item.get("model_info") or {}
-            for item in details
-            if item.get("model_name")
-        }
+        details_by_name: dict[str, list[dict]] = {}
+        for detail in details:
+            if detail.get("model_name"):
+                details_by_name.setdefault(detail["model_name"], []).append(detail)
         normalized = []
         for model in models:
             item = dict(model)
-            info = detail_by_name.get(item.get("id"), {})
+            mapped = details_by_name.get(item.get("id"), [])
+            info = (mapped[0].get("model_info") or {}) if mapped else {}
+            upstream_models = [detail.get("litellm_params", {}).get("model") for detail in mapped]
+            families = {model_family(model_id) for model_id in upstream_models}
+            item["resolved_family"] = (
+                next(iter(families))
+                if upstream_models and "unknown" not in families and len(families) == 1
+                else "unknown"
+            )
             pricing = dict(item.get("pricing") or {})
             if info.get("input_cost_per_token") is not None:
                 pricing["prompt"] = info["input_cost_per_token"]
@@ -380,6 +405,18 @@ class LiteLLMProvider(Provider):
             item["supported_parameters"] = supported
             normalized.append(item)
         return normalized
+
+    def model_family(self, model_id: str | None) -> str:
+        if not model_id:
+            return "unknown"
+        info = self.model_info(model_id)
+        return (info or {}).get("resolved_family") or "unknown"
+
+    def account_info(self) -> dict:
+        readiness = self._client.get("/health/readiness")
+        readiness.raise_for_status()
+        models = self.list_models(refresh=True)
+        return {"readiness": readiness.json(), "model_count": len(models)}
 
     def _cost(self, data: dict, headers: Any) -> tuple[float, bool]:
         value = headers.get("x-litellm-response-cost")
@@ -417,10 +454,10 @@ def _configuration_error(reason: str | None = None) -> None:
     sys.exit(2)
 
 
-def _resolved_setup(config: ProviderConfig) -> tuple[str | None, bool]:
-    key = resolve_env_var(config.env_key)[0]
+def _resolved_setup(config: ProviderConfig) -> tuple[str | None, str | None, bool]:
+    key, source = resolve_env_var(config.env_key)
     extras_ready = all(resolve_env_var(name)[0] for name in config.extra_env)
-    return key, extras_ready
+    return key, source, extras_ready
 
 
 def get_provider(name: str | None = None) -> Provider:
@@ -429,20 +466,20 @@ def get_provider(name: str | None = None) -> Provider:
         provider_type = PROVIDER_TYPES.get(explicit_name)
         if provider_type is None:
             _configuration_error(f"unknown RIGHTMODELER_PROVIDER value: {explicit_name}")
-        key, extras_ready = _resolved_setup(provider_type.config)
+        key, source, extras_ready = _resolved_setup(provider_type.config)
         if not key or not extras_ready:
             missing = [provider_type.config.env_key, *provider_type.config.extra_env]
             missing = [variable for variable in missing if not resolve_env_var(variable)[0]]
             _configuration_error(
                 f"{explicit_name} is missing required environment variables: {', '.join(missing)}"
             )
-        return provider_type(api_key=key)
+        return provider_type(api_key=key, key_source=source)
 
     detected = []
     for provider_type in PROVIDER_TYPES.values():
-        key, extras_ready = _resolved_setup(provider_type.config)
+        key, source, extras_ready = _resolved_setup(provider_type.config)
         if key and extras_ready:
-            detected.append((provider_type, key))
+            detected.append((provider_type, key, source))
     if not detected:
         _configuration_error()
     if len(detected) > 1:
@@ -450,8 +487,8 @@ def get_provider(name: str | None = None) -> Provider:
             f"[info] multiple replay providers configured; using {detected[0][0].config.name}. "
             "Set RIGHTMODELER_PROVIDER to override."
         )
-    provider_type, key = detected[0]
-    return provider_type(api_key=key)
+    provider_type, key, source = detected[0]
+    return provider_type(api_key=key, key_source=source)
 
 
 def _main(argv: list[str]) -> int:

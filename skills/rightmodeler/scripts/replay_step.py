@@ -62,6 +62,7 @@ def replay_step(
     tools = to_openai_tools(step)
     samples = []
     total_cost = 0.0
+    cost_is_estimate = False
     for _ in range(max(1, runs)):
         resp = orr.chat(
             candidate_model, messages, tools=tools, temperature=0.0, max_tokens=max_tokens
@@ -69,11 +70,13 @@ def replay_step(
         if resp.get("error"):
             return {"model": candidate_model, "error": resp["error"], "samples": samples}
         total_cost += resp.get("cost") or 0.0
+        cost_is_estimate = cost_is_estimate or bool(resp.get("cost_is_estimate"))
         samples.append(
             {
                 "text": resp.get("text"),
                 "tool_calls": resp.get("tool_calls"),
                 "cost": resp.get("cost"),
+                "cost_is_estimate": bool(resp.get("cost_is_estimate")),
                 "served_by": resp.get("model"),
             }
         )
@@ -84,6 +87,7 @@ def replay_step(
         "text": rep["text"],
         "tool_calls": rep["tool_calls"],
         "cost": total_cost / len(samples),
+        "cost_is_estimate": cost_is_estimate,
         "runs": len(samples),
         "samples": samples,
         "error": None,
