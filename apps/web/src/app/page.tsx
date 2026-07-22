@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
 import { OverscrollSpring } from "@/components/overscroll-spring";
 import { CtaBand } from "@/components/sections/cta-band";
 import { Footer } from "@/components/sections/footer";
@@ -7,6 +8,7 @@ import { Nav } from "@/components/sections/nav";
 import { Platform } from "@/components/sections/platform";
 import { SourcesBar } from "@/components/sections/sources-bar";
 import { DEFAULT_SOCIAL_IMAGE, socialImage } from "@/lib/seo";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 const description =
   "Keep your agents on the right model: prove safe swaps from your real traces, ship model upgrades as evidence-backed PRs, and watch every layer with Crucible.";
@@ -14,6 +16,12 @@ const preview = socialImage(
   DEFAULT_SOCIAL_IMAGE,
   "Keep your agents on the right model: rightmodeler",
 );
+const websiteLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: SITE_NAME,
+  url: SITE_URL,
+};
 
 export const metadata: Metadata = {
   title: {
@@ -47,6 +55,7 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <>
+      <JsonLd data={websiteLd} />
       <span id="top" aria-hidden className="sr-only" />
       <Nav />
       <main data-overscroll-content>

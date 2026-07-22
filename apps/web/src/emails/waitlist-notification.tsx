@@ -65,7 +65,7 @@ export function WaitlistNotification({
             {email}
           </Text>
           <Text style={{ fontSize: "12px", margin: 0, color: "#a59f97" }}>
-            Submitted {submittedAt} · rightmodeler.com/{product}
+            Submitted {submittedAt} · www.rightmodeler.com/{product}
           </Text>
         </Container>
       </Body>

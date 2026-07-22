@@ -77,7 +77,7 @@ export function FeedbackNotification({
             {message}
           </Text>
           <Text style={{ fontSize: "12px", margin: 0, color: "#a59f97" }}>
-            Submitted {submittedAt} · rightmodeler.com/feedback
+            Submitted {submittedAt} · www.rightmodeler.com/feedback
           </Text>
         </Container>
       </Body>
