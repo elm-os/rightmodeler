@@ -3,14 +3,114 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 
 from analyze import analyze
-from common import resolve_openrouter_key
+from common import resolve_env_var
 from ingest import detect_format
+from provider import LiteLLMProvider, OpenRouterProvider, VercelAIGatewayProvider, get_provider
 from report import render, render_snapshot
 from replay import ReplayError, replay_cases
 from workflow import run_workflow
+
+
+PROVIDER_ENV = (
+    "RIGHTMODELER_PROVIDER",
+    "OPENROUTER_API_KEY",
+    "AI_GATEWAY_API_KEY",
+    "LITELLM_PROXY_API_KEY",
+    "LITELLM_PROXY_API_BASE",
+)
+
+
+def provider_selection_smoke():
+    previous = {name: os.environ.get(name) for name in PROVIDER_ENV}
+    original_cwd = Path.cwd()
+
+    def select(values, provider_name=None):
+        for env_name in PROVIDER_ENV:
+            os.environ.pop(env_name, None)
+        os.environ.update(values)
+        provider = get_provider(provider_name)
+        provider._client.close()
+        return provider
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            assert isinstance(select({"OPENROUTER_API_KEY": "test"}), OpenRouterProvider)
+            assert isinstance(select({"AI_GATEWAY_API_KEY": "test"}), VercelAIGatewayProvider)
+            assert isinstance(
+                select(
+                    {
+                        "LITELLM_PROXY_API_KEY": "test",
+                        "LITELLM_PROXY_API_BASE": "http://localhost:4000",
+                    }
+                ),
+                LiteLLMProvider,
+            )
+            assert isinstance(
+                select(
+                    {
+                        "RIGHTMODELER_PROVIDER": "vercel-ai-gateway",
+                        "OPENROUTER_API_KEY": "test",
+                        "AI_GATEWAY_API_KEY": "test",
+                    }
+                ),
+                VercelAIGatewayProvider,
+            )
+            assert isinstance(
+                select(
+                    {
+                        "RIGHTMODELER_PROVIDER": "vercel-ai-gateway",
+                        "OPENROUTER_API_KEY": "test",
+                        "AI_GATEWAY_API_KEY": "test",
+                    },
+                    "openrouter",
+                ),
+                OpenRouterProvider,
+            )
+
+            for name in PROVIDER_ENV:
+                os.environ.pop(name, None)
+            os.environ.update({"OPENROUTER_API_KEY": "test", "AI_GATEWAY_API_KEY": "test"})
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                provider = get_provider()
+            provider._client.close()
+            assert isinstance(provider, OpenRouterProvider)
+            info_lines = [
+                line for line in stderr.getvalue().splitlines() if line.startswith("[info]")
+            ]
+            assert len(info_lines) == 1
+            assert "RIGHTMODELER_PROVIDER" in info_lines[0]
+
+            for name in PROVIDER_ENV:
+                os.environ.pop(name, None)
+            stderr = StringIO()
+            try:
+                with redirect_stderr(stderr):
+                    get_provider()
+            except SystemExit as error:
+                assert error.code == 2
+            else:
+                raise AssertionError("provider selection should exit 2 when unconfigured")
+            output = stderr.getvalue()
+            for name in (
+                "OPENROUTER_API_KEY",
+                "AI_GATEWAY_API_KEY",
+                "LITELLM_PROXY_API_KEY",
+                "LITELLM_PROXY_API_BASE",
+            ):
+                assert name in output
+    finally:
+        os.chdir(original_cwd)
+        for name in PROVIDER_ENV:
+            os.environ.pop(name, None)
+            if previous[name] is not None:
+                os.environ[name] = previous[name]
 
 
 def main():
@@ -23,7 +123,7 @@ def main():
             skill_root.mkdir(parents=True)
             (root / ".env").write_text('OPENROUTER_API_KEY="smoke-key"\n')
             os.chdir(skill_root)
-            key, source = resolve_openrouter_key()
+            key, source = resolve_env_var("OPENROUTER_API_KEY")
             assert key == "smoke-key", key
             assert Path(source).resolve() == (root / ".env").resolve(), source
     finally:
@@ -31,6 +131,8 @@ def main():
         os.environ.pop("OPENROUTER_API_KEY", None)
         if previous_key is not None:
             os.environ["OPENROUTER_API_KEY"] = previous_key
+
+    provider_selection_smoke()
 
     detected = detect_format(
         [{"timestamp": "2026-01-01T00:00:00Z", "type": "event", "payload": {"type": "message"}}]
@@ -110,7 +212,7 @@ def main():
         {"case_id": f"case-{index}", "source_run_id": f"s{index}"} for index in range(1, 4)
     ]
 
-    class FakeOpenRouter:
+    class FakeProvider:
         def price_per_token(self, _model):
             return 0.000001, 0.000001
 
@@ -129,7 +231,7 @@ def main():
             0.05,
             "sha256:" + "b" * 64,
             cache_path=cache,
-            orr=FakeOpenRouter(),
+            orr=FakeProvider(),
             single_shot_runner=single_shot_runner,
         )
         second = replay_cases(
@@ -139,7 +241,7 @@ def main():
             0.05,
             "sha256:" + "b" * 64,
             cache_path=cache,
-            orr=FakeOpenRouter(),
+            orr=FakeProvider(),
             single_shot_runner=single_shot_runner,
         )
         assert first["candidate"]["source"] == "replayed"
@@ -155,7 +257,7 @@ def main():
                 "cheap-model",
                 0.0001,
                 "sha256:" + "b" * 64,
-                orr=FakeOpenRouter(),
+                orr=FakeProvider(),
                 single_shot_runner=single_shot_runner,
             )
         except ReplayError as error:
@@ -169,7 +271,7 @@ def main():
             "cheap-model",
             0.015,
             "sha256:" + "b" * 64,
-            orr=FakeOpenRouter(),
+            orr=FakeProvider(),
             single_shot_runner=single_shot_runner,
         )
         assert exhausted["replay"]["status"] == "budget_exhausted"

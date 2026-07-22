@@ -1,5 +1,5 @@
 """Per-step isolated replay: re-send a single-shot step's exact request to a
-candidate model via OpenRouter and return its output for judging.
+candidate model via the replay provider and return its output for judging.
 
 Use as a module:
     from replay_step import replay_step
@@ -98,11 +98,11 @@ def main() -> int:
     ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("--max-tokens", type=int)
     args = ap.parse_args()
-    from openrouter import OpenRouter
+    from provider import get_provider
 
     data = load_json(args.normalized)
     step = next(s for s in data["steps"] if s["step_id"] == args.step_id)
-    out = replay_step(OpenRouter(), step, args.model, runs=args.runs, max_tokens=args.max_tokens)
+    out = replay_step(get_provider(), step, args.model, runs=args.runs, max_tokens=args.max_tokens)
     print(json.dumps(out, indent=2, default=str))
     return 0
 

@@ -201,7 +201,7 @@ def replay_cases(
             estimate = 0.0
         elif mode == "single_shot":
             if orr is None:
-                raise ReplayError("single-shot replay requires an OpenRouter client")
+                raise ReplayError("single-shot replay requires a replay provider client")
             estimate = _single_shot_estimate(orr, step, candidate_model, runs, max_tokens)
         elif mode == "e2e":
             if not codebase or not run_command or e2e_cost_per_case is None:
@@ -323,9 +323,9 @@ def main():
     has_single_shot = "single_shot" in _modes_for_cases(cases["cases"], normalized, pipeline)
     orr = None
     if has_single_shot:
-        from openrouter import OpenRouter
+        from provider import get_provider
 
-        orr = OpenRouter()
+        orr = get_provider()
 
     bundle = replay_cases(
         cases["cases"],

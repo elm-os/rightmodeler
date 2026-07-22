@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 
 from common import dump_json, eprint, load_json, model_family
 from judge import judge_outputs
-from openrouter import OpenRouter
+from provider import get_provider
 from replay_step import replay_step
 from shortlist import shortlist
 
@@ -115,7 +115,7 @@ def run(
     max_workers: int,
     checkpoint: str | None = None,
 ) -> dict:
-    orr = OpenRouter()
+    orr = get_provider()
     steps_by_id = {s["step_id"]: s for s in normalized["steps"]}
     results = []
     total = len(pipeline["steps"])

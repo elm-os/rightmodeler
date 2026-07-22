@@ -170,10 +170,10 @@ def main() -> int:
     ap.add_argument("--candidate", required=True)
     ap.add_argument("--judge-model")
     args = ap.parse_args()
-    from openrouter import OpenRouter
+    from provider import get_provider
 
     v = judge_outputs(
-        OpenRouter(), args.task, args.reference, args.candidate, judge_model=args.judge_model
+        get_provider(), args.task, args.reference, args.candidate, judge_model=args.judge_model
     )
     print(json.dumps(v, indent=2))
     return 0

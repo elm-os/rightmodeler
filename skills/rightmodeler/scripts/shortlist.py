@@ -1,4 +1,4 @@
-"""Shortlist candidate cheaper models from the OpenRouter catalog for a given step.
+"""Shortlist candidate cheaper models from the replay provider catalog for a given step.
 
 A candidate qualifies if it:
   - supports the capabilities the step needs (tools / structured_outputs),
@@ -16,7 +16,7 @@ import json
 import sys
 
 from common import parse_price
-from openrouter import OpenRouter
+from provider import Provider, get_provider
 
 
 def blended_price(pricing: dict, in_out_ratio: float = 3.0) -> float:
@@ -27,7 +27,7 @@ def blended_price(pricing: dict, in_out_ratio: float = 3.0) -> float:
 
 
 def shortlist(
-    orr: OpenRouter,
+    orr: Provider,
     current_model: str,
     need_tools: bool = False,
     need_structured: bool = False,
@@ -98,7 +98,7 @@ def main() -> int:
     ap.add_argument("--deny", nargs="*")
     args = ap.parse_args()
 
-    orr = OpenRouter()
+    orr = get_provider()
     res = shortlist(
         orr,
         args.current,
