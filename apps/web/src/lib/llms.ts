@@ -51,6 +51,24 @@ const PAGES: { path: string; title: string; description: string }[] = [
       "Cut your agent's model bill without guessing: prove which steps can move to cheaper models on your own traces.",
   },
   {
+    path: "/case-study",
+    title: "Case studies",
+    description:
+      "How real teams right-sized their AI stacks with rightmodeler: per-workload routing policies, dramatically lower inference cost, and quality bars that hold.",
+  },
+  {
+    path: "/case-study/bside",
+    title: "Case study: B:Side Assist",
+    description:
+      "How rightmodeler right-sized AssistAI's 11 AI layers with a per-workload routing policy: 70.8% lower projected inference cost, 53.3% faster responses, 114.3% higher throughput, and a measured 100% quality pass rate.",
+  },
+  {
+    path: "/case-study/iam360",
+    title: "Case study: iAM360",
+    description:
+      "How iAM360 used rightmodeler's routing and evidence framework to cut modeled AI cost per request by 56-57%, while upgrading its hardest coaching paths from Terra to Sol.",
+  },
+  {
     path: "/manifesto",
     title: "Manifesto",
     description:

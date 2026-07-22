@@ -1,4 +1,5 @@
 import { OverscrollSpring } from "@/components/overscroll-spring";
+import { CaseStudyBand } from "@/components/sections/case-study-band";
 import { CtaBand } from "@/components/sections/cta-band";
 import { Footer } from "@/components/sections/footer";
 import { Hero } from "@/components/sections/hero";
@@ -25,6 +26,10 @@ export default function Home() {
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">
           <Platform />
+        </div>
+        <div aria-hidden className="h-px w-full bg-ash-border" />
+        <div className="mx-auto max-w-6xl border-x border-ash-border">
+          <CaseStudyBand />
         </div>
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">
