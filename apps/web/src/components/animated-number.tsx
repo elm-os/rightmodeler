@@ -9,11 +9,13 @@ import { animate, useReducedMotion } from "motion/react";
 export function AnimatedNumber({
   value,
   suffix = "",
+  decimals = 0,
   className,
   durationMs = 1200,
 }: {
   value: number;
   suffix?: string;
+  decimals?: number;
   className?: string;
   durationMs?: number;
 }) {
@@ -35,7 +37,7 @@ export function AnimatedNumber({
 
   return (
     <span ref={ref} className={`tabular-nums ${className ?? ""}`}>
-      {Math.round(reduce ? value : display)}
+      {(reduce ? value : display).toFixed(decimals)}
       {suffix}
     </span>
   );
