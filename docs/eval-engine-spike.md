@@ -7,28 +7,35 @@ The offline deterministic evaluator is built in
 from historical run bundles, emits recommendation objects in the report contract
 shape, and stays fully offline.
 
-The OpenRouter-backed replay path described here is design only. It is not wired
+The provider-backed replay path described here is design only. It is not wired
 into the default pipeline, `smoke`, `pnpm check`, or CI. This replay interface is
 the future path for PRD section 9.2 reference-based comparison: candidate model
 outputs are compared with accepted historical outputs before any cheaper model is
 recommended.
 
-## OpenRouter Access
+## Replay Provider Access
 
-Future replay code should use the OpenRouter REST base URL
-`https://openrouter.ai/api/v1`. Authentication must come only from the
-`OPENROUTER_API_KEY` environment variable, loaded from the process environment
-or from a local gitignored `.env` file. `.env.example` documents the variable
-name with an empty value.
+Future replay code should support the same provider access configured by the skill:
 
-The API key is never hardcoded, never logged, and never committed. Free-tier
-OpenRouter models with a `:free` suffix are acceptable for prototyping, but
-benchmarks should account for their lower rate limits and availability.
+- OpenRouter: base URL `https://openrouter.ai/api/v1`, authenticated with
+  `OPENROUTER_API_KEY`.
+- Vercel AI Gateway: base URL `https://ai-gateway.vercel.sh/v1`, authenticated
+  with `AI_GATEWAY_API_KEY`.
+- LiteLLM proxy: base URL from `LITELLM_PROXY_API_BASE`, authenticated with
+  `LITELLM_PROXY_API_KEY`.
+
+Authentication must come only from the selected provider's documented environment
+variables, loaded from the process environment or from a local gitignored `.env`
+file. `.env.example` documents each variable name with an empty value.
+
+API keys are never hardcoded, never logged, and never committed. On OpenRouter,
+free-tier models with a `:free` suffix are acceptable for prototyping, but benchmarks
+should account for their lower rate limits and availability.
 
 ## Candidate Model Config Format
 
-Replay should take a user-supplied JSON list of candidate models. Each entry
-should include the fields needed for PRD section 10 candidate selection:
+Replay candidate records should include the fields needed for PRD section 10
+candidate selection:
 
 ```json
 [
@@ -43,6 +50,11 @@ should include the fields needed for PRD section 10 candidate selection:
   }
 ]
 ```
+
+The model ID above is an illustrative example. Actual candidates always come from
+the active provider's live catalog because new models ship every few weeks. Model
+slugs are portable between OpenRouter and the Vercel AI Gateway when they use the
+`vendor/model` form. LiteLLM exposes proxy-defined aliases instead.
 
 The engine should filter candidates by customer allowlist, context window,
 tool-use support, structured-output support, and lower expected cost than the
@@ -118,7 +130,7 @@ Future code could live in `apps/pipeline/src/pipeline/replay.py`, separate from
 the offline evaluator:
 
 ```python
-class OpenRouterClient:
+class ReplayProviderClient:
     def __init__(self, base_url, api_key_from_env):
         ...
 
@@ -130,8 +142,8 @@ def replay_family(runs, candidates):
     """
 ```
 
-`OpenRouterClient` should read `OPENROUTER_API_KEY` from the environment at
-runtime. `replay_family(runs, candidates) -> reference_scores` should return
-per-candidate scores, evidence type, confidence inputs, cost observations, and
-any abstain reasons. This interface is future work and is not implemented in
+`ReplayProviderClient` should read the selected provider's documented environment
+variables at runtime. `replay_family(runs, candidates) -> reference_scores` should
+return per-candidate scores, evidence type, confidence inputs, cost observations,
+and any abstain reasons. This interface is future work and is not implemented in
 this spike.
