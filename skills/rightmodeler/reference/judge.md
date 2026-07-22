@@ -67,6 +67,16 @@ them (r ≥ 0.8), report Cohen's κ, and recompute κ when swapping judge or can
 Maintain a small gold set of step outputs for spot-checks. Report **low confidence** when
 no calibration exists.
 
+**Severity check for open-ended tasks.** Reference-judging is harsh on open-ended
+generation (personas, emotional analyses, free-form summaries): two equally good
+outputs can legitimately diverge, and the judge reads divergence as failure. When a
+family scores near-zero for _every_ candidate — including strong ones — suspect judge
+strictness before concluding "no viable swap". Cheap baseline: replay a few cases
+through the **current** model itself and judge that output against the stored
+reference. If the same-model baseline also scores below the floor, the judge (or the
+task's inherent variance) is the bottleneck, and verdicts for that family should be
+reported as low-confidence rather than as evidence against every candidate.
+
 ## Confidence bands (feeds the report)
 
 - **High**: deterministic or strongly reference-backed evidence across enough examples.

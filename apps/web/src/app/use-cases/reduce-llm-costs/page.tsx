@@ -14,6 +14,7 @@ export const metadata: Metadata = pageMetadata({
   description:
     "Cut your agent's model bill without guessing. rightmodeler proves which steps can move to cheaper models on your own traces, with evidence and a quality floor on every call.",
   path: "/use-cases/reduce-llm-costs",
+  image: "/social/reduce-llm-costs.png",
 });
 
 // ── The before/after band: five muted failures against five proven answers, item for item,
@@ -53,16 +54,6 @@ const FAQ: { q: string; a: string }[] = [
     a: "No. rightmodeler reads the traces you already emit across eight formats, folds them into one per-step schema, and runs offline. Nothing sits in your request path.",
   },
 ];
-
-const faqLd = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: FAQ.map((item) => ({
-    "@type": "Question",
-    name: item.q,
-    acceptedAnswer: { "@type": "Answer", text: item.a },
-  })),
-};
 
 // ── The two mockups tucked into the CTA cards, clipped by the card edges like the reference's
 // chat window and code panel. Figures are stamped illustrative; shadows are illustration-only.
@@ -202,7 +193,6 @@ export default function ReduceLlmCostsPage() {
           "/use-cases/reduce-llm-costs",
         )}
       />
-      <JsonLd data={faqLd} />
 
       <PageHero
         eyebrow="Use case · Reduce LLM costs"
@@ -370,6 +360,7 @@ export default function ReduceLlmCostsPage() {
               { href: "/how-it-works", label: "How it works" },
               { href: "/glossary", label: "Glossary" },
               { href: "/manifesto", label: "Read the manifesto" },
+              { href: "/integrations", label: "Integrations" },
             ]}
           />
         </div>

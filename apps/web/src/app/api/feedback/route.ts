@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       message: cleanMessage,
       submittedAt,
     }),
-    text: `New feedback from ${cleanEmail}\n\n${cleanMessage}\n\nSubmitted ${submittedAt} · rightmodeler.com/feedback`,
+    text: `New feedback from ${cleanEmail}\n\n${cleanMessage}\n\nSubmitted ${submittedAt} · www.rightmodeler.com/feedback`,
   });
 
   if (error) {

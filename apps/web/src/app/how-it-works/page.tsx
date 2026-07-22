@@ -15,6 +15,7 @@ export const metadata: Metadata = pageMetadata({
   description:
     "How rightmodeler works: it detects inefficient model calls, proves on your own traces which downgrades are safe against what you already shipped, and applies the fix in your repo. Detect, prove, fix.",
   path: "/how-it-works",
+  image: "/social/how-it-works.png",
 });
 
 // The three-step spine, Detect → Prove → Fix. `line` is the machine-vernacular substance slab under
@@ -180,6 +181,7 @@ export default function HowItWorksPage() {
                   href: "/use-cases/reduce-llm-costs",
                   label: "Cut your model bill",
                 },
+                { href: "/integrations", label: "Integrations" },
               ]}
             />
           </div>

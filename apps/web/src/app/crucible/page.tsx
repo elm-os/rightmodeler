@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JsonLd } from "@/components/json-ld";
+import { CrucibleShowcase } from "@/components/sections/crucible-showcase";
 import { Faq, type FaqItem } from "@/components/sections/faq";
 import { GithubButton } from "@/components/sections/github-button";
 import { PageHero } from "@/components/sections/page-hero";
@@ -15,34 +16,8 @@ export const metadata: Metadata = pageMetadata({
   description:
     "Crucible is the analytics and optimization suite for your AI agents: cost per layer, speed per step, failures as they happen, and a model stack that keeps itself right-sized. Join the waitlist.",
   path: "/crucible",
+  image: "/social/crucible.png",
 });
-
-const BULLETS: { title: string; body: string }[] = [
-  {
-    title: "Cost, by layer",
-    body: "One invoice becomes a map. See exactly what each agent, step, and model spends, so the bill finally has line items you can act on.",
-  },
-  {
-    title: "Speed, by step",
-    body: "Latency broken down where it happens: p50 and p95 per step, so the slow layer stops hiding inside an aggregate.",
-  },
-  {
-    title: "Failures, as they happen",
-    body: "Failed tool calls, silent retries, and quality regressions surface in a passive feed. No stack trace does not mean nothing went wrong.",
-  },
-  {
-    title: "Continuously right-sized",
-    body: "The same detect, prove, fix loop rightmodeler runs today, always-on: every new trace is audited as it arrives, so your model stack stays right-sized instead of drifting.",
-  },
-  {
-    title: "Connected over MCP",
-    body: "Works with the tracing you already have. Crucible reads your traces over MCP, with no new SDK and no re-instrumentation.",
-  },
-  {
-    title: "Your keys, your routes",
-    body: "BYO API keys, or route through OpenRouter, the Vercel AI Gateway, or LiteLLM. Your traffic, your providers. Crucible never becomes a hop in your request path.",
-  },
-];
 
 const FAQ: FaqItem[] = [
   {
@@ -84,7 +59,7 @@ export default function CruciblePage() {
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
       <section className="bg-parchment-white">
-        <div className="mx-auto max-w-3xl px-6 py-16 sm:px-10 sm:py-20">
+        <div className="mx-auto max-w-3xl px-6 pt-16 sm:px-10 sm:pt-20">
           <Reveal>
             <Tldr>
               Crucible watches your agents in production: cost per layer, speed
@@ -95,27 +70,30 @@ export default function CruciblePage() {
               caused them.
             </Tldr>
           </Reveal>
+        </div>
 
-          <ul className="mt-12 divide-y divide-ash-border border-y border-ash-border">
-            {BULLETS.map((b, i) => (
-              <Reveal key={b.title} delay={i * 0.06}>
-                <li className="py-5">
-                  <p className="font-sans text-heading-sm text-midnight-ink">
-                    {b.title}
-                  </p>
-                  <p className="mt-1 text-body text-driftwood">{b.body}</p>
-                </li>
-              </Reveal>
-            ))}
-          </ul>
+        {/* The feature wall runs the full framed column, wider than the prose bands around it,
+            the same move as the /agent feature spread. */}
+        <div className="px-4 py-14 sm:px-6 sm:py-16">
+          <Reveal>
+            <CrucibleShowcase />
+          </Reveal>
+        </div>
 
-          <Reveal delay={0.1} className="mt-10">
-            <p className="max-w-xl text-body text-driftwood">
-              Crucible is in active development. The engine behind it, the
-              rightmodeler skill, is available now on GitHub.
-            </p>
-            <div className="mt-6">
-              <GithubButton />
+        <div className="mx-auto max-w-3xl px-6 pb-16 sm:px-10 sm:pb-20">
+          {/* Closing note as a quiet surface card, echoing the wall's card language above. */}
+          <Reveal delay={0.1}>
+            <div className="rounded-2xl border border-ash-border bg-warm-sand p-6 sm:p-8">
+              <p className="font-mono text-caption uppercase text-fog">
+                Available today
+              </p>
+              <p className="mt-3 max-w-xl text-body text-driftwood">
+                Crucible is in active development. The engine behind it, the
+                rightmodeler skill, is available now on GitHub.
+              </p>
+              <div className="mt-6">
+                <GithubButton />
+              </div>
             </div>
           </Reveal>
 

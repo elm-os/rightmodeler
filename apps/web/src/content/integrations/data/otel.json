@@ -1,0 +1,130 @@
+{
+  "slug": "otel",
+  "name": "OpenTelemetry",
+  "category": "trace-source",
+  "categoryLabel": "Trace source · dedicated adapter",
+  "title": "OTel GenAI integration: replay spans on cheaper models",
+  "description": "Point rightmodeler at OTLP span exports carrying gen_ai.* attributes. It replays each step on cheaper models and proves which swaps hold up against shipped output.",
+  "h1": "rightmodeler + OpenTelemetry",
+  "lede": "If your stack emits gen_ai.* spans, the evidence already exists. rightmodeler reads OTel GenAI telemetry from any OTLP pipeline (no bespoke integration required) and proves which steps can run on a cheaper model.",
+  "tldr": "rightmodeler reads OTLP span exports through a dedicated OTel GenAI adapter: any pipeline that emits gen_ai.* attributes (whatever framework or language produced them) normalizes into one per-step schema. Each successful step is replayed through cheaper candidates on OpenRouter and judged against the output you already shipped, with a 0.90 quality floor by default.",
+  "steps": [
+    {
+      "label": "01 · Export",
+      "title": "Land OTLP spans on disk",
+      "body": "Dump OTLP trace data as JSON: a collector file exporter, your backend's span export, or spans captured from a test run all work. Check that content capture is on so gen_ai.input.messages and gen_ai.output.messages carry real payloads, then save the file anywhere on disk."
+    },
+    {
+      "label": "02 · Ingest",
+      "title": "Autodetected by the gen_ai.* attributes",
+      "body": "The ingester recognizes the format when span attributes start with gen_ai.*, un-flattens the indexed dotted keys OTLP uses for arrays, parses message payloads that arrive as JSON strings, and folds each generation span into one per-step schema, with kind from gen_ai.operation.name and model from gen_ai.request.model."
+    },
+    {
+      "label": "03 · Replay + judge",
+      "title": "Cheaper candidates, judged against shipped output",
+      "body": "Single-shot steps are replayed through cheaper OpenRouter models on the exact inputs recorded in your spans, and a judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you shipped, with a 0.90 quality floor by default. Steps with tool calls or loops are confirmed by re-running your pipeline end-to-end instead."
+    },
+    {
+      "label": "04 · Approve",
+      "title": "A per-step verdict you act on",
+      "body": "The report lists every candidate swap with its evidence, and an interactive TUI takes an approve, reject, or hold decision per step. Where the evidence is weak the audit abstains, and high-risk families (auth, payments, migrations, deploys, secrets) stay on the current model."
+    }
+  ],
+  "setup": {
+    "intro": "Install once, then hand the skill a span export. Nothing connects to your collector or tracing backend; the audit runs offline on files you already have.",
+    "commands": [
+      {
+        "comment": "# inside Claude Code, point the skill at your span export",
+        "command": "claude \"run the rightmodeler skill on ./traces/otel-spans.json\""
+      }
+    ]
+  },
+  "reads": [
+    {
+      "field": "step kind",
+      "source": "gen_ai.operation.name"
+    },
+    {
+      "field": "model",
+      "source": "gen_ai.request.model"
+    },
+    {
+      "field": "input messages",
+      "source": "gen_ai.input.messages"
+    },
+    {
+      "field": "system prompt",
+      "source": "gen_ai.system_instructions"
+    },
+    {
+      "field": "tool calls",
+      "source": "execute_tool spans"
+    },
+    {
+      "field": "tool results",
+      "source": "tool span output"
+    },
+    {
+      "field": "token usage",
+      "source": "gen_ai.usage.*_tokens"
+    },
+    {
+      "field": "success signal",
+      "source": "span status"
+    },
+    {
+      "field": "cost baseline",
+      "source": "derived from model + usage via OpenRouter pricing"
+    }
+  ],
+  "detection": "gen_ai.request.model · gen_ai.input.messages",
+  "useCases": [
+    {
+      "title": "One adapter for everything that speaks OTel",
+      "body": "Framework SDKs, auto-instrumentation agents, hand-rolled tracing: if it emits gen_ai.* semconv spans, it lands in the same audit through one adapter. Adopting a new framework means no new integration work; the telemetry contract does the carrying."
+    },
+    {
+      "title": "Right-size a polyglot stack",
+      "body": "Services in different languages that share nothing but the semantic conventions normalize into one per-step schema, so a single audit covers the Python agent and the TypeScript sidecar alike, and shows which steps in each genuinely earn a frontier model."
+    },
+    {
+      "title": "A model bill from telemetry you already emit",
+      "body": "OTel spans do not carry cost, so rightmodeler derives it from gen_ai.request.model and gen_ai.usage.*_tokens via OpenRouter's pricing table, turning observability exhaust into a per-step cost baseline with proven, cheaper alternatives attached."
+    }
+  ],
+  "limits": [
+    "It reads OTLP span files on disk, JSON or JSONL. It does not connect to your collector, subscribe to a live OTLP endpoint, or scrape your tracing backend.",
+    "Replay needs real payloads. Many GenAI instrumentations leave message-content capture off by default, and spans without gen_ai.input.messages can be counted and costed but not replayed.",
+    "A step that calls tools or loops cannot be judged from its span alone. rightmodeler confirms those by re-running your actual pipeline code end-to-end in a throwaway git worktree with the candidate model injected.",
+    "The audit prefers silence to guessing: thin evidence yields an abstention, and step families that touch auth, payments, migrations, deploys, or secrets are flagged rather than recommended for a swap.",
+    "It is a report, not a collector processor or a gateway. Your OTel pipeline keeps exporting spans; rightmodeler never sits in the request path."
+  ],
+  "faq": [
+    {
+      "q": "How do I export OpenTelemetry spans for rightmodeler?",
+      "a": "Land OTLP trace data on disk as JSON or JSONL: the OTel Collector's file exporter works, as does a span export from your backend or a capture from a local test run. Point the skill at the file or folder; the format is autodetected from the gen_ai.* attributes."
+    },
+    {
+      "q": "My framework has no dedicated adapter. Am I stuck?",
+      "a": "No, that is what the OTel path is for. Anything that emits GenAI semantic-convention spans is readable through the same adapter, whatever SDK or language produced them. If you can get gen_ai.* attributes into an OTLP export, you can run the audit."
+    },
+    {
+      "q": "Why are my spans ingested but not replayed?",
+      "a": "Most likely the message content is missing. GenAI instrumentations often record model names and token counts by default but treat message content as opt-in; without gen_ai.input.messages there is nothing to replay a candidate on. Enable content capture in your instrumentation and re-export."
+    },
+    {
+      "q": "Does rightmodeler replace my tracing backend?",
+      "a": "No. The backend watches production; rightmodeler runs offline on exported spans and answers a question dashboards leave open, whether a cheaper model would have produced equivalent output on the steps you actually ran. Keep both; they read the same telemetry."
+    },
+    {
+      "q": "Does my span data leave my machine?",
+      "a": "Replays send step inputs to candidate models through OpenRouter using your own API key, the same shape of call your service already makes to a provider. There is no rightmodeler server and no account; nothing else touches your spans."
+    },
+    {
+      "q": "Will it always find savings?",
+      "a": "No, and by design. When no candidate clears the quality floor, or a step is high-risk, or the evidence is thin, the audit abstains and leaves the model alone. A tool that always finds a swap is not measuring anything."
+    }
+  ],
+  "related": ["phoenix", "openai-sdk", "vercel-ai-gateway"],
+  "cta": "github"
+}

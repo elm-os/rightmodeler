@@ -1,0 +1,535 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.com/schemas/benchmark-snapshot.schema.json",
+  "title": "Benchmark Snapshot",
+  "type": "object",
+  "$defs": {
+    "trajectory_record": {
+      "type": "object",
+      "required": ["tool_calls", "terminal_state", "final_output"],
+      "properties": {
+        "tool_calls": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "call_id",
+              "tool_name",
+              "arguments",
+              "attempt",
+              "status"
+            ],
+            "properties": {
+              "call_id": { "type": "string", "minLength": 1 },
+              "tool_name": { "type": "string", "minLength": 1 },
+              "arguments": { "type": "object" },
+              "attempt": { "type": "integer", "minimum": 1 },
+              "status": { "type": "string", "enum": ["success", "error"] },
+              "loop_id": { "type": "string", "minLength": 1 },
+              "iteration": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "terminal_state": {
+          "type": "string",
+          "enum": ["success", "failure", "abstain"]
+        },
+        "final_output": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "reference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "refs", "verdict", "agreement"],
+          "properties": {
+            "type": { "const": "frozen-human-verdict" },
+            "refs": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "verdict": { "enum": ["pass", "fail", null] },
+            "agreement": {
+              "type": "string",
+              "enum": ["unanimous", "disputed"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "refs"],
+          "properties": {
+            "type": { "const": "reference-evidence" },
+            "refs": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "refs", "trajectory"],
+          "properties": {
+            "type": { "const": "reference-trajectory" },
+            "refs": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "trajectory": { "$ref": "#/$defs/trajectory_record" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "trajectory": {
+      "type": "object",
+      "required": [
+        "tool_name",
+        "arguments",
+        "ordering",
+        "retries",
+        "loops",
+        "recovery",
+        "terminal_state",
+        "final_output",
+        "risk_flags"
+      ],
+      "properties": {
+        "tool_name": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "arguments": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "ordering": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "retries": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "loops": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "recovery": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "terminal_state": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "final_output": {
+          "type": "string",
+          "enum": ["pass", "fail", "abstain", "not_applicable"]
+        },
+        "risk_flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["loop", "downstream", "recovery"]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "repo_fix": {
+      "type": "object",
+      "required": [
+        "repository_revision",
+        "patch_digest",
+        "affected_files",
+        "patch_applied",
+        "scope_matches",
+        "patch_error",
+        "validation"
+      ],
+      "properties": {
+        "repository_revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "patch_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "affected_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "patch_applied": { "type": "boolean" },
+        "scope_matches": { "type": "boolean" },
+        "patch_error": { "type": ["string", "null"] },
+        "validation": {
+          "type": "object",
+          "required": ["commands", "all_passed", "duration_ms"],
+          "properties": {
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "command",
+                  "exit_code",
+                  "passed",
+                  "timed_out",
+                  "stdout_summary",
+                  "stderr_summary",
+                  "duration_ms"
+                ],
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "command": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "exit_code": { "type": ["integer", "null"] },
+                  "passed": { "type": "boolean" },
+                  "timed_out": { "type": "boolean" },
+                  "stdout_summary": { "type": "string" },
+                  "stderr_summary": { "type": "string" },
+                  "duration_ms": { "type": "number", "minimum": 0 }
+                },
+                "additionalProperties": false
+              }
+            },
+            "all_passed": { "type": "boolean" },
+            "duration_ms": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "scorecard_metric": {
+      "type": "object",
+      "required": [
+        "value",
+        "numerator",
+        "denominator",
+        "threshold",
+        "status",
+        "evidence_refs",
+        "details"
+      ],
+      "properties": {
+        "value": { "type": ["number", "null"] },
+        "numerator": { "type": "integer", "minimum": 0 },
+        "denominator": { "type": "integer", "minimum": 0 },
+        "threshold": { "type": ["number", "null"] },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "review", "unavailable"]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "confidence": {
+      "type": "object",
+      "required": [
+        "level",
+        "status",
+        "sample_count",
+        "pass_rate",
+        "evidence_refs"
+      ],
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["high", "medium", "low", "abstain"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "review", "unavailable"]
+        },
+        "sample_count": { "type": "integer", "minimum": 0 },
+        "pass_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "gate": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "threshold",
+        "observed",
+        "evidence_refs",
+        "detail"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "review", "unavailable"]
+        },
+        "threshold": { "type": ["number", "null"] },
+        "observed": { "type": ["number", "null"] },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "detail": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "snapshot_id",
+    "corpus_version_id",
+    "candidate_bundle_id",
+    "candidate",
+    "case_verdicts",
+    "summary",
+    "cost",
+    "timing",
+    "evidence",
+    "scorecards",
+    "gates"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "snapshot_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "corpus_version_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "candidate_bundle_id": { "type": "string", "minLength": 1 },
+    "candidate": {
+      "type": "object",
+      "required": ["id", "model", "source"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "enum": ["imported", "replayed"] }
+      },
+      "additionalProperties": false
+    },
+    "case_verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "case_id",
+          "pipeline_family",
+          "split",
+          "terminal_verdict",
+          "evidence_type",
+          "evaluator",
+          "checks",
+          "timing",
+          "cost_usd",
+          "evidence_refs",
+          "reference"
+        ],
+        "properties": {
+          "case_id": { "type": "string", "minLength": 1 },
+          "pipeline_family": {
+            "type": "string",
+            "enum": [
+              "structured-check",
+              "reference-freeform",
+              "tool-trajectory",
+              "repo-fix"
+            ]
+          },
+          "split": { "type": "string", "enum": ["working", "holdout"] },
+          "terminal_verdict": {
+            "type": "string",
+            "enum": ["pass", "fail", "abstain"]
+          },
+          "evidence_type": {
+            "type": "string",
+            "enum": [
+              "deterministic",
+              "frozen-human-verdict",
+              "reference-evidence",
+              "trajectory",
+              "abstain"
+            ]
+          },
+          "evaluator": { "type": "string", "minLength": 1 },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "status"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "status": {
+                  "type": "string",
+                  "enum": ["pass", "fail", "not_applicable"]
+                },
+                "detail": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "failure_code": { "type": ["string", "null"] },
+          "abstention_reason": { "type": ["string", "null"] },
+          "timing": {
+            "type": "object",
+            "required": ["availability", "duration_ms"],
+            "properties": {
+              "availability": {
+                "type": "string",
+                "enum": ["available", "unavailable"]
+              },
+              "duration_ms": { "type": ["number", "null"], "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "cost_usd": { "type": "number", "minimum": 0 },
+          "evidence_refs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "trajectory": {
+            "anyOf": [{ "$ref": "#/$defs/trajectory" }, { "type": "null" }]
+          },
+          "reference": {
+            "anyOf": [{ "$ref": "#/$defs/reference" }, { "type": "null" }]
+          },
+          "repo_fix": {
+            "anyOf": [{ "$ref": "#/$defs/repo_fix" }, { "type": "null" }]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total_cases",
+        "pass_count",
+        "fail_count",
+        "abstain_count",
+        "coverage"
+      ],
+      "properties": {
+        "total_cases": { "type": "integer", "minimum": 0 },
+        "pass_count": { "type": "integer", "minimum": 0 },
+        "fail_count": { "type": "integer", "minimum": 0 },
+        "abstain_count": { "type": "integer", "minimum": 0 },
+        "coverage": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "cost": {
+      "type": "object",
+      "required": [
+        "candidate_cost_usd",
+        "evaluation_cost_usd",
+        "total_cost_usd"
+      ],
+      "properties": {
+        "candidate_cost_usd": { "type": "number", "minimum": 0 },
+        "evaluation_cost_usd": { "const": 0 },
+        "total_cost_usd": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "timing": {
+      "type": "object",
+      "required": [
+        "availability",
+        "available_case_count",
+        "missing_case_count"
+      ],
+      "properties": {
+        "availability": {
+          "type": "string",
+          "enum": ["available", "partial", "unavailable"]
+        },
+        "available_case_count": { "type": "integer", "minimum": 0 },
+        "missing_case_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["available_case_count", "missing_case_count", "references"],
+      "properties": {
+        "available_case_count": { "type": "integer", "minimum": 0 },
+        "missing_case_count": { "type": "integer", "minimum": 0 },
+        "references": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "scorecards": {
+      "type": "object",
+      "required": [
+        "safety",
+        "quality",
+        "recommendation_precision",
+        "safe_opportunity_recall",
+        "required_abstention",
+        "coverage",
+        "speed",
+        "confidence",
+        "remediation",
+        "cost"
+      ],
+      "properties": {
+        "safety": { "$ref": "#/$defs/scorecard_metric" },
+        "quality": {
+          "type": "object",
+          "required": ["overall", "by_family"],
+          "properties": {
+            "overall": { "$ref": "#/$defs/scorecard_metric" },
+            "by_family": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/scorecard_metric" }
+            }
+          },
+          "additionalProperties": false
+        },
+        "recommendation_precision": { "$ref": "#/$defs/scorecard_metric" },
+        "safe_opportunity_recall": { "$ref": "#/$defs/scorecard_metric" },
+        "required_abstention": { "$ref": "#/$defs/scorecard_metric" },
+        "coverage": { "$ref": "#/$defs/scorecard_metric" },
+        "speed": { "$ref": "#/$defs/scorecard_metric" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "remediation": { "$ref": "#/$defs/scorecard_metric" },
+        "cost": { "$ref": "#/$defs/scorecard_metric" }
+      },
+      "additionalProperties": false
+    },
+    "gates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/gate" }
+    }
+  },
+  "additionalProperties": false
+}

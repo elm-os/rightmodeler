@@ -7,7 +7,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from jsonschema import validate
+from pipeline.corpus import compile_corpus
+from pipeline.diagnosis import diagnose_snapshot
+from pipeline.drift import approve_drift, detect_drift, publish_corpus
 from pipeline.evaluate import evaluate
+from pipeline.freeform import evaluate_freeform_candidates
+from pipeline.repo_fix import evaluate_repo_fix_candidates
+from pipeline.remediation import apply as apply_remediation
+from pipeline.remediation import approve as approve_remediation
+from pipeline.remediation import rollback as rollback_remediation
+from pipeline.structured import evaluate_structured_candidates
+from pipeline.trajectory import evaluate_tool_trajectories
 
 ROOT = Path(__file__).resolve().parents[4]
 ARTIFACTS = ROOT / ".rightmodeler"
@@ -155,6 +165,157 @@ def report(analysis_path, output_path, evaluation_path=None):
     return write_json(output_path, report_payload)
 
 
+def build_corpus(input_path, definition_path, manifest_output, cases_output):
+    bundle = validate_schema(load_json(input_path), "historical-run-bundle")
+    definition = validate_schema(load_json(definition_path), "corpus-definition")
+    manifest, benchmark_cases = compile_corpus(bundle, definition)
+    validate_schema(manifest, "corpus-manifest")
+    validate_schema(benchmark_cases, "benchmark-cases")
+    write_json(manifest_output, manifest)
+    return write_json(cases_output, benchmark_cases)
+
+
+def detect_corpus_drift(
+    parent_manifest_path,
+    parent_bundle_path,
+    candidate_bundle_path,
+    candidate_definition_path,
+    output_path,
+):
+    parent_manifest = validate_schema(load_json(parent_manifest_path), "corpus-manifest")
+    parent_bundle = validate_schema(load_json(parent_bundle_path), "historical-run-bundle")
+    candidate_bundle = validate_schema(load_json(candidate_bundle_path), "historical-run-bundle")
+    candidate_definition = validate_schema(
+        load_json(candidate_definition_path), "corpus-definition"
+    )
+    proposal = detect_drift(parent_manifest, parent_bundle, candidate_bundle, candidate_definition)
+    validate_schema(proposal, "corpus-drift-proposal")
+    return write_json(output_path, proposal)
+
+
+def approve_corpus_drift(proposal_path, output_path, actor, reason=None):
+    proposal = validate_schema(load_json(proposal_path), "corpus-drift-proposal")
+    approved = approve_drift(proposal, actor, reason)
+    validate_schema(approved, "corpus-drift-proposal")
+    return write_json(output_path, approved)
+
+
+def publish_reviewed_corpus(
+    parent_manifest_path,
+    candidate_bundle_path,
+    candidate_definition_path,
+    proposal_path,
+    manifest_output,
+    cases_output,
+):
+    parent_manifest = validate_schema(load_json(parent_manifest_path), "corpus-manifest")
+    candidate_bundle = validate_schema(load_json(candidate_bundle_path), "historical-run-bundle")
+    candidate_definition = validate_schema(
+        load_json(candidate_definition_path), "corpus-definition"
+    )
+    proposal = validate_schema(load_json(proposal_path), "corpus-drift-proposal")
+    manifest, benchmark_cases = publish_corpus(
+        parent_manifest,
+        candidate_bundle,
+        candidate_definition,
+        proposal,
+    )
+    validate_schema(manifest, "corpus-manifest")
+    validate_schema(benchmark_cases, "benchmark-cases")
+    write_json(manifest_output, manifest)
+    return write_json(cases_output, benchmark_cases)
+
+
+def evaluate_structured(cases_path, candidate_path, output_path):
+    cases = validate_schema(load_json(cases_path), "benchmark-cases")
+    candidate_bundle = validate_schema(load_json(candidate_path), "candidate-results")
+    snapshot = evaluate_structured_candidates(cases, candidate_bundle)
+    validate_schema(snapshot, "benchmark-snapshot")
+    return write_json(output_path, snapshot)
+
+
+def evaluate_freeform(cases_path, candidate_path, output_path):
+    cases = validate_schema(load_json(cases_path), "benchmark-cases")
+    candidate_bundle = validate_schema(load_json(candidate_path), "candidate-results")
+    snapshot = evaluate_freeform_candidates(cases, candidate_bundle)
+    validate_schema(snapshot, "benchmark-snapshot")
+    return write_json(output_path, snapshot)
+
+
+def evaluate_tool_trajectory(cases_path, candidate_path, output_path):
+    cases = validate_schema(load_json(cases_path), "benchmark-cases")
+    candidate_bundle = validate_schema(load_json(candidate_path), "candidate-results")
+    snapshot = evaluate_tool_trajectories(cases, candidate_bundle)
+    validate_schema(snapshot, "benchmark-snapshot")
+    return write_json(output_path, snapshot)
+
+
+def evaluate_repo_fix(cases_path, candidate_path, output_path, repo_path):
+    cases = validate_schema(load_json(cases_path), "benchmark-cases")
+    candidate_bundle = validate_schema(load_json(candidate_path), "candidate-results")
+    snapshot = evaluate_repo_fix_candidates(cases, candidate_bundle, repo_path)
+    validate_schema(snapshot, "benchmark-snapshot")
+    return write_json(output_path, snapshot)
+
+
+def evaluate_benchmark(cases_path, candidate_path, output_path, pipeline_family, repo_path):
+    if pipeline_family == "structured-check":
+        return evaluate_structured(cases_path, candidate_path, output_path)
+    if pipeline_family == "reference-freeform":
+        return evaluate_freeform(cases_path, candidate_path, output_path)
+    if pipeline_family == "tool-trajectory":
+        return evaluate_tool_trajectory(cases_path, candidate_path, output_path)
+    if pipeline_family == "repo-fix":
+        if not repo_path:
+            raise ValueError("--repo is required for repo-fix evaluation")
+        return evaluate_repo_fix(cases_path, candidate_path, output_path, repo_path)
+    raise ValueError(f"unsupported benchmark family: {pipeline_family}")
+
+
+def diagnose(
+    snapshot_path,
+    output_path,
+    proposal_path=None,
+    post_fix_snapshot_path=None,
+    holdout_snapshot_path=None,
+    validation_path=None,
+):
+    snapshot = validate_schema(load_json(snapshot_path), "benchmark-snapshot")
+    proposal = load_json(proposal_path) if proposal_path else None
+    post_fix = (
+        validate_schema(load_json(post_fix_snapshot_path), "benchmark-snapshot")
+        if post_fix_snapshot_path
+        else None
+    )
+    holdout = (
+        validate_schema(load_json(holdout_snapshot_path), "benchmark-snapshot")
+        if holdout_snapshot_path
+        else None
+    )
+    validation = load_json(validation_path) if validation_path else None
+    evidence = diagnose_snapshot(snapshot, proposal, post_fix, holdout, validation)
+    validate_schema(evidence, "remediation-evidence")
+    return write_json(output_path, evidence)
+
+
+def approve(evidence_path, repo_path, lifecycle_path, actor, reason=None):
+    event = approve_remediation(evidence_path, repo_path, lifecycle_path, actor, reason)
+    validate_schema(event, "remediation-lifecycle")
+    return lifecycle_path
+
+
+def apply(evidence_path, repo_path, lifecycle_path, actor, reason=None):
+    event = apply_remediation(evidence_path, repo_path, lifecycle_path, actor, reason)
+    validate_schema(event, "remediation-lifecycle")
+    return lifecycle_path
+
+
+def rollback(evidence_path, repo_path, lifecycle_path, actor, reason=None):
+    event = rollback_remediation(evidence_path, repo_path, lifecycle_path, actor, reason)
+    validate_schema(event, "remediation-lifecycle")
+    return lifecycle_path
+
+
 def smoke():
     sample = {
         "version": "1",
@@ -267,6 +428,194 @@ def build_parser():
             0,
         )[1]
     )
+
+    corpus_parser = subparsers.add_parser("corpus")
+    corpus_subparsers = corpus_parser.add_subparsers(dest="corpus_command", required=True)
+    corpus_build_parser = corpus_subparsers.add_parser("build")
+    corpus_build_parser.add_argument(
+        "--input",
+        default=str(ARTIFACTS / "input" / "historical-run-bundle.json"),
+    )
+    corpus_build_parser.add_argument("--definition", required=True)
+    corpus_build_parser.add_argument(
+        "--manifest-output",
+        default=str(ARTIFACTS / "corpus" / "manifest.json"),
+    )
+    corpus_build_parser.add_argument(
+        "--cases-output",
+        default=str(ARTIFACTS / "corpus" / "benchmark-cases.json"),
+    )
+    corpus_build_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                build_corpus(
+                    args.input,
+                    args.definition,
+                    args.manifest_output,
+                    args.cases_output,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    corpus_drift_parser = corpus_subparsers.add_parser("detect-drift")
+    corpus_drift_parser.add_argument("--parent-manifest", required=True)
+    corpus_drift_parser.add_argument("--parent-bundle", required=True)
+    corpus_drift_parser.add_argument("--candidate-bundle", required=True)
+    corpus_drift_parser.add_argument("--candidate-definition", required=True)
+    corpus_drift_parser.add_argument(
+        "--output",
+        default=str(ARTIFACTS / "corpus" / "drift-proposal.json"),
+    )
+    corpus_drift_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                detect_corpus_drift(
+                    args.parent_manifest,
+                    args.parent_bundle,
+                    args.candidate_bundle,
+                    args.candidate_definition,
+                    args.output,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    corpus_approve_parser = corpus_subparsers.add_parser("approve-drift")
+    corpus_approve_parser.add_argument("--proposal", required=True)
+    corpus_approve_parser.add_argument("--output", required=True)
+    corpus_approve_parser.add_argument("--actor", required=True)
+    corpus_approve_parser.add_argument("--reason")
+    corpus_approve_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                approve_corpus_drift(
+                    args.proposal,
+                    args.output,
+                    args.actor,
+                    args.reason,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    corpus_publish_parser = corpus_subparsers.add_parser("publish")
+    corpus_publish_parser.add_argument("--parent-manifest", required=True)
+    corpus_publish_parser.add_argument("--candidate-bundle", required=True)
+    corpus_publish_parser.add_argument("--candidate-definition", required=True)
+    corpus_publish_parser.add_argument("--proposal", required=True)
+    corpus_publish_parser.add_argument("--manifest-output", required=True)
+    corpus_publish_parser.add_argument("--cases-output", required=True)
+    corpus_publish_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                publish_reviewed_corpus(
+                    args.parent_manifest,
+                    args.candidate_bundle,
+                    args.candidate_definition,
+                    args.proposal,
+                    args.manifest_output,
+                    args.cases_output,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    benchmark_parser = subparsers.add_parser("benchmark")
+    benchmark_subparsers = benchmark_parser.add_subparsers(dest="benchmark_command", required=True)
+    benchmark_evaluate_parser = benchmark_subparsers.add_parser("evaluate")
+    benchmark_evaluate_parser.add_argument(
+        "--cases",
+        default=str(ARTIFACTS / "corpus" / "benchmark-cases.json"),
+    )
+    benchmark_evaluate_parser.add_argument("--candidate", required=True)
+    benchmark_evaluate_parser.add_argument(
+        "--family",
+        choices=["structured-check", "reference-freeform", "tool-trajectory", "repo-fix"],
+        default="structured-check",
+    )
+    benchmark_evaluate_parser.add_argument("--repo")
+    benchmark_evaluate_parser.add_argument(
+        "--output",
+        default=str(ARTIFACTS / "evaluation" / "benchmark-snapshot.json"),
+    )
+    benchmark_evaluate_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                evaluate_benchmark(
+                    args.cases,
+                    args.candidate,
+                    args.output,
+                    args.family,
+                    args.repo,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    remediation_parser = subparsers.add_parser("remediation")
+    remediation_subparsers = remediation_parser.add_subparsers(
+        dest="remediation_command", required=True
+    )
+    remediation_diagnose_parser = remediation_subparsers.add_parser("diagnose")
+    remediation_diagnose_parser.add_argument("--snapshot", required=True)
+    remediation_diagnose_parser.add_argument("--proposal")
+    remediation_diagnose_parser.add_argument("--post-fix-snapshot")
+    remediation_diagnose_parser.add_argument("--holdout-snapshot")
+    remediation_diagnose_parser.add_argument("--validation")
+    remediation_diagnose_parser.add_argument(
+        "--output",
+        default=str(ARTIFACTS / "remediation" / "evidence.json"),
+    )
+    remediation_diagnose_parser.set_defaults(
+        handler=lambda args: (
+            print(
+                diagnose(
+                    args.snapshot,
+                    args.output,
+                    args.proposal,
+                    args.post_fix_snapshot,
+                    args.holdout_snapshot,
+                    args.validation,
+                )
+            ),
+            0,
+        )[1]
+    )
+
+    for command, handler in (
+        ("approve", approve),
+        ("apply", apply),
+        ("rollback", rollback),
+    ):
+        lifecycle_parser = remediation_subparsers.add_parser(command)
+        lifecycle_parser.add_argument("--evidence", required=True)
+        lifecycle_parser.add_argument("--repo", required=True)
+        lifecycle_parser.add_argument(
+            "--lifecycle",
+            default=str(ARTIFACTS / "remediation" / "lifecycle.json"),
+        )
+        lifecycle_parser.add_argument("--actor", required=True)
+        lifecycle_parser.add_argument("--reason")
+        lifecycle_parser.set_defaults(
+            handler=lambda args, handler=handler: (
+                print(
+                    handler(
+                        args.evidence,
+                        args.repo,
+                        args.lifecycle,
+                        args.actor,
+                        args.reason,
+                    )
+                ),
+                0,
+            )[1]
+        )
 
     smoke_parser = subparsers.add_parser("smoke")
     smoke_parser.set_defaults(handler=lambda _: smoke())
