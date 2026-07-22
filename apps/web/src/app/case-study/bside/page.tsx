@@ -1,4 +1,4 @@
-// Case study: B:Side Assist. AssistAI's 11 layers moved from a single all-Terra/xhigh default to
+// Case study: B:Side Assist. AI Assist's 11 layers moved from a single all-Terra/xhigh default to
 // a per-workload routing policy. Wears the blog article surface (BlogShell, prose kit, BlogCta)
 // with the case-study kit for the masthead and figure windows; the two bespoke tables here (the
 // 4-column evaluation ledger) stay local. Fully static; every figure is quoted verbatim from the
@@ -157,7 +157,7 @@ export default function BsideCaseStudyPage() {
           <Lead>
             <A href={study.website}>B:Side Assist</A> is a financial
             intelligence platform that helps businesses understand their
-            financial position. Its AI copilot, AssistAI, answers questions
+            financial position. Its AI copilot, AI Assist, answers questions
             using connected bank accounts, transactions, uploaded financial
             documents, business context, and current research.
           </Lead>
@@ -166,7 +166,7 @@ export default function BsideCaseStudyPage() {
             that response can involve several specialized AI jobs: one model
             call interprets the question, another inspects a document, another
             calculates a financial scenario, and another validates or repairs
-            the final answer. AssistAI runs 11 of these layers, from greetings
+            the final answer. AI Assist runs 11 of these layers, from greetings
             and summaries to validation, research, vision, and recovery.
           </P>
           <P>
@@ -179,7 +179,7 @@ export default function BsideCaseStudyPage() {
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
-            title="assistai · right-sized outcome"
+            title="ai assist · right-sized outcome"
             meta="projected per 20 queries"
             footer="pass rate held at 100%, measured on the same benchmark"
           >
@@ -216,7 +216,7 @@ export default function BsideCaseStudyPage() {
           <H2>The challenge</H2>
           <P>
             The assumed starting architecture used gpt-5.6-terra with xhigh
-            reasoning across every AssistAI layer. Terra is a capable, balanced
+            reasoning across every AI Assist layer. Terra is a capable, balanced
             model, and xhigh tells it to devote substantial reasoning effort to
             the task. That combination makes sense for difficult financial
             analysis. As the default for everything, it treats routine
@@ -237,16 +237,16 @@ export default function BsideCaseStudyPage() {
 
           <H2>What rightmodeler changed</H2>
           <P>
-            rightmodeler evaluated AssistAI as 11 distinct workloads rather than
-            one generic AI request. Each layer was benchmarked on its own traces
-            and matched to the cheapest model and reasoning effort that held its
-            quality bar. The resulting policy:
+            rightmodeler evaluated AI Assist as 11 distinct workloads rather
+            than one generic AI request. Each layer was benchmarked on its own
+            traces and matched to the cheapest model and reasoning effort that
+            held its quality bar. The resulting policy:
           </P>
         </Prose>
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
-            title="rightmodeler · routing policy · assistai"
+            title="rightmodeler · routing policy · ai assist"
             meta="baseline: terra · xhigh everywhere"
           >
             <RouteRows rows={POLICY} />
@@ -274,7 +274,7 @@ export default function BsideCaseStudyPage() {
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
-            title="rightmodeler · assistai evaluation"
+            title="rightmodeler · ai assist evaluation"
             meta="per 20 queries · 11 workloads"
             footer="modeled from actual benchmark traces · current OpenAI pricing · observed xhigh uplift from grounded research"
           >
@@ -401,7 +401,7 @@ export default function BsideCaseStudyPage() {
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
-            title="assistai · savings at volume"
+            title="ai assist · savings at volume"
             meta="modeled at current pricing"
             footer="projected at current Standard pricing · scales linearly with volume"
           >

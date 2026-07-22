@@ -21,6 +21,13 @@ export type CaseStudy = {
   readingMinutes: number;
   logo: { src: string; alt: string; width: number; height: number };
   hero: { src: string; alt: string };
+  /** Leadership quote for the landing testimonial band. */
+  testimonial: {
+    quote: string;
+    name: string;
+    role: string;
+    avatar: { src: string };
+  };
 };
 
 export const BSIDE: CaseStudy = {
@@ -30,10 +37,10 @@ export const BSIDE: CaseStudy = {
   title: "From brute-force reasoning to precision routing",
   headline: "70.8% lower inference cost. Quality held at a measured 100%.",
   excerpt:
-    "AssistAI's 11 AI layers moved from all Terra · xhigh to a per-workload routing policy: 53.3% faster, 114.3% more throughput, zero points of quality lost.",
+    "AI Assist's 11 AI layers moved from all Terra · xhigh to a per-workload routing policy: 53.3% faster, 114.3% more throughput, zero points of quality lost.",
   tagline: "financial intelligence · 11 workloads",
   description:
-    "How rightmodeler right-sized AssistAI's 11 AI layers with a per-workload routing policy: 70.8% lower projected inference cost, 53.3% faster responses, 114.3% higher throughput, and a measured 100% quality pass rate.",
+    "How rightmodeler right-sized AI Assist's 11 AI layers with a per-workload routing policy: 70.8% lower projected inference cost, 53.3% faster responses, 114.3% higher throughput, and a measured 100% quality pass rate.",
   date: "2026-07-22",
   readingMinutes: 4,
   logo: {
@@ -45,6 +52,13 @@ export const BSIDE: CaseStudy = {
   hero: {
     src: "/case-study/bside-hero.jpg",
     alt: "Watercolor illustration of one heavy stroke splitting into several right-sized channels, one carrying a violet to orange gradient",
+  },
+  testimonial: {
+    quote:
+      "rightmodeler took AI Assist from brute force to precision routing. Costs fell 70.8%, responses got twice as fast, and quality held at 100%, measured, not assumed.",
+    name: "Chris Myers",
+    role: "CEO, B:Side Capital and Fund",
+    avatar: { src: "/case-study/chris-myers.jpg" },
   },
 };
 
@@ -72,6 +86,13 @@ export const IAM360: CaseStudy = {
   hero: {
     src: "/case-study/iam360-hero.jpg",
     alt: "Watercolor illustration of a calm pulse line with a single peak carrying a violet to orange gradient",
+  },
+  testimonial: {
+    quote:
+      "rightmodeler concentrated intelligence where our members feel it. The hardest coaching moved up to Sol, routine work got faster, and cost per request dropped by more than half.",
+    name: "Brian Douglas",
+    role: "Founder, iAM360",
+    avatar: { src: "/case-study/brian-douglas.jpg" },
   },
 };
 

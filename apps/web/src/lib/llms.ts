@@ -60,7 +60,7 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/case-study/bside",
     title: "Case study: B:Side Assist",
     description:
-      "How rightmodeler right-sized AssistAI's 11 AI layers with a per-workload routing policy: 70.8% lower projected inference cost, 53.3% faster responses, 114.3% higher throughput, and a measured 100% quality pass rate.",
+      "How rightmodeler right-sized AI Assist's 11 AI layers with a per-workload routing policy: 70.8% lower projected inference cost, 53.3% faster responses, 114.3% higher throughput, and a measured 100% quality pass rate.",
   },
   {
     path: "/case-study/iam360",

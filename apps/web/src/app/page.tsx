@@ -1,11 +1,11 @@
 import { OverscrollSpring } from "@/components/overscroll-spring";
-import { CaseStudyBand } from "@/components/sections/case-study-band";
 import { CtaBand } from "@/components/sections/cta-band";
 import { Footer } from "@/components/sections/footer";
 import { Hero } from "@/components/sections/hero";
 import { Nav } from "@/components/sections/nav";
 import { Platform } from "@/components/sections/platform";
 import { SourcesBar } from "@/components/sections/sources-bar";
+import { TestimonialBand } from "@/components/sections/testimonial-band";
 
 // The hero + works-with bar sit in a max-width column with left/right hairline rules, then the
 // platform trio in its own framed block. Full-bleed horizontal rules (edge to edge) separate the
@@ -29,7 +29,7 @@ export default function Home() {
         </div>
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">
-          <CaseStudyBand />
+          <TestimonialBand />
         </div>
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">
