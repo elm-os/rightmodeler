@@ -43,6 +43,9 @@ export function Footer() {
             <Link href="/use-cases/reduce-llm-costs" className={linkClass}>
               Use cases
             </Link>
+            <Link href="/case-study" className={linkClass}>
+              Case studies
+            </Link>
             <Link href="/integrations" className={linkClass}>
               Integrations
             </Link>

@@ -7,6 +7,7 @@ import { Hero } from "@/components/sections/hero";
 import { Nav } from "@/components/sections/nav";
 import { Platform } from "@/components/sections/platform";
 import { SourcesBar } from "@/components/sections/sources-bar";
+import { TestimonialBand } from "@/components/sections/testimonial-band";
 import { DEFAULT_SOCIAL_IMAGE, socialImage } from "@/lib/seo";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
@@ -66,6 +67,10 @@ export default function Home() {
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">
           <Platform />
+        </div>
+        <div aria-hidden className="h-px w-full bg-ash-border" />
+        <div className="mx-auto max-w-6xl border-x border-ash-border">
+          <TestimonialBand />
         </div>
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">
