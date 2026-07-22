@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     replyTo: clean,
     subject: `New ${label} waitlist signup: ${clean}`,
     react: WaitlistNotification({ email: clean, submittedAt, product: which }),
-    text: `New ${label} waitlist signup: ${clean}\nSubmitted ${submittedAt} · rightmodeler.com/${which}`,
+    text: `New ${label} waitlist signup: ${clean}\nSubmitted ${submittedAt} · www.rightmodeler.com/${which}`,
   });
 
   if (error) {
