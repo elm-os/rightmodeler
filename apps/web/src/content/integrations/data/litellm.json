@@ -7,17 +7,17 @@
   "description": "rightmodeler re-runs your real pipeline with a LiteLLM proxy injecting the cheaper candidate, tools fire, loops run, and the report shows whether the swap survived.",
   "h1": "rightmodeler + LiteLLM",
   "lede": "When a step calls tools or loops, judging one replayed completion is not proof. rightmodeler re-runs your real pipeline with a LiteLLM proxy swapping the model underneath, your code unmodified, the candidate doing the actual work.",
-  "tldr": "rightmodeler uses LiteLLM as its documented injection method for end-to-end replay: a local proxy maps the model name your code requests to the cheaper OpenRouter candidate, so the pipeline re-runs unmodified in a throwaway git worktree while the swap happens underneath. Anthropic SDKs go through LiteLLM's Anthropic-passthrough, and teams already running a LiteLLM gateway can point the same mechanics at OpenRouter.",
+  "tldr": "A LiteLLM proxy can be rightmodeler's replay provider: set RIGHTMODELER_PROVIDER=litellm and candidate and judge calls use the proxy's live catalog, while x-litellm-response-cost supplies each call's charge when present. LiteLLM also remains the documented injection method for end-to-end replay, where you set litellm_params.api_base to the active replay provider and your pipeline re-runs unmodified in a throwaway git worktree.",
   "steps": [
     {
       "label": "01 · Configure",
       "title": "One config file maps the model underneath",
-      "body": "A LiteLLM config's model_list maps the model name your code requests to the candidate under test: litellm_params.model set to the openrouter/… slug, api_base https://openrouter.ai/api/v1, api_key os.environ/OPENROUTER_API_KEY. A wildcard entry (model_name \"*\" to openrouter/*) catches anything else the run asks for."
+      "body": "A LiteLLM config's model_list maps the model name your code requests to the candidate under test. Set litellm_params.model to that provider's model id, litellm_params.api_base to the active replay provider's base URL, and api_key to the matching provider key. When LiteLLM itself is selected with RIGHTMODELER_PROVIDER=litellm, rightmodeler uses the aliases exposed by the proxy's live catalog."
     },
     {
       "label": "02 · Redirect",
       "title": "Point the pipeline at localhost, not the provider",
-      "body": "litellm --config config.yaml starts the gateway, and OPENAI_BASE_URL=http://localhost:4000 points your unmodified code at it; the pipeline keeps requesting the model it always requests. Anthropic SDKs go through LiteLLM's Anthropic-passthrough instead, since OpenRouter's /v1 speaks the OpenAI wire format."
+      "body": "For proxy injection, litellm --config config.yaml starts the gateway and OPENAI_BASE_URL=http://localhost:4000 points your unmodified code at it; the pipeline keeps requesting the model it always requests. When LiteLLM is the active replay provider, the sandbox instead sets OPENAI_BASE_URL to LITELLM_PROXY_API_BASE and also sets the native Anthropic SDK base URL before the pipeline starts."
     },
     {
       "label": "03 · Re-run",
@@ -31,11 +31,15 @@
     }
   ],
   "setup": {
-    "intro": "There is nothing to install into your app; LiteLLM exists here only inside the replay sandbox, standing in front of your unmodified pipeline for the length of a run. Your OpenRouter key is the one credential.",
+    "intro": "There is nothing to install into your app. LiteLLM can be the selected replay provider through an existing proxy, or it can run only inside the replay sandbox as an injection layer in front of your unmodified pipeline.",
     "commands": [
       {
-        "comment": "# the one credential; replay traffic bills to your own account",
+        "comment": "# replay credential when another route runs the audit; traffic bills to your own account",
         "command": "export OPENROUTER_API_KEY=sk-or-..."
+      },
+      {
+        "comment": "# or make your proxy the replay provider itself",
+        "command": "export LITELLM_PROXY_API_BASE=http://localhost:4000 LITELLM_PROXY_API_KEY=sk-... RIGHTMODELER_PROVIDER=litellm"
       },
       {
         "comment": "# what the E2E replay stands up in front of your code",
@@ -60,7 +64,7 @@
     },
     {
       "title": "Reuse the gateway you already run",
-      "body": "If LiteLLM already fronts your LLM traffic, the same model_list mechanics point a replay at OpenRouter, and the proxy's request logging hands you the candidate's trajectory for free."
+      "body": "If LiteLLM already fronts your LLM traffic, set RIGHTMODELER_PROVIDER=litellm and rightmodeler uses that proxy's catalog for replay. Each response's x-litellm-response-cost header supplies the candidate's per-call charge when the proxy returns it."
     },
     {
       "title": "Catch cascades before they ship",
@@ -77,7 +81,7 @@
   "faq": [
     {
       "q": "Do I need to run LiteLLM to use rightmodeler?",
-      "a": "No. LiteLLM is not a dependency; single-shot steps replay directly against OpenRouter with your own key. The proxy enters only when a step has tool calls, loops, or downstream consumers and needs end-to-end confirmation, and it runs locally for the length of the replay."
+      "a": "No, unless you choose it as the replay provider. With RIGHTMODELER_PROVIDER=litellm, single-shot replays and judge calls go through the configured proxy and per-call charges come from x-litellm-response-cost when present. With another provider selected, LiteLLM enters only when an end-to-end replay uses it as the local injection layer."
     },
     {
       "q": "Does rightmodeler replace LiteLLM?",

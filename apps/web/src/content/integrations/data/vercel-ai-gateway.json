@@ -1,45 +1,49 @@
 {
   "slug": "vercel-ai-gateway",
   "name": "Vercel AI Gateway",
-  "category": "roadmap",
-  "categoryLabel": "Roadmap · Crucible",
-  "title": "Vercel AI Gateway integration: roadmap and today's path",
-  "description": "No native Vercel AI Gateway adapter yet: audit AI SDK steps today where your telemetry emits gen_ai.* spans, and join the Crucible waitlist for native support.",
+  "category": "replay-engine",
+  "categoryLabel": "Replay engine",
+  "title": "Vercel AI Gateway integration: replay on your key",
+  "description": "Use your Vercel AI Gateway key to discover cheaper candidates live, replay real steps at temperature 0, judge quality, and record provider-reported costs.",
   "h1": "rightmodeler + Vercel AI Gateway",
-  "lede": "The Vercel AI Gateway is on the Crucible roadmap as a named BYO route, not a shipped adapter. Today the honest path is OpenTelemetry: where your AI SDK telemetry emits gen_ai.* spans, rightmodeler already reads them.",
-  "tldr": "There is no native Vercel AI Gateway adapter today; it is named on the Crucible roadmap as a BYO route your traffic keeps using. What works now is conditional: if your AI SDK setup exports OpenTelemetry spans that carry gen_ai.* attributes, the OTel adapter autodetects them and replays each step through cheaper models, judged against what you already shipped.",
+  "lede": "Vercel AI Gateway is a shipped replay route in rightmodeler. Candidate calls and the cross-family judge run through the Gateway on your key, against models discovered from its live catalog.",
+  "tldr": "Set AI_GATEWAY_API_KEY and rightmodeler can use the Vercel AI Gateway for the full audit: preflight checks your credit balance, /models supplies current prices and capabilities, /chat/completions runs replays and the cross-family judge at temperature 0, and provider-reported usage or generation records price each call. If a generation record cannot be fetched, the report marks the catalog-and-usage fallback as an estimate.",
   "steps": [
     {
-      "label": "01 · Export",
-      "title": "Export spans, then check for gen_ai.* attributes",
-      "body": "The AI SDK can emit OpenTelemetry spans for each model call; whether they carry gen_ai.* attributes depends on your setup and collector. Export a batch as JSON (from your collector or tracing backend) and check one span for keys like gen_ai.request.model before going further."
+      "label": "01 · Key",
+      "title": "Check the key and balance before spending",
+      "body": "Export AI_GATEWAY_API_KEY, or keep it in a .env that the skill can find. Preflight calls the Gateway's /credits endpoint and prints the balance and total used before any replay or judge call spends your credits. Set RIGHTMODELER_PROVIDER only when several replay provider keys are configured."
     },
     {
-      "label": "02 · Ingest",
-      "title": "Autodetected as OTel GenAI",
-      "body": "Autodetection keys off span attributes that start with gen_ai., no Vercel-specific adapter is involved. The generic OTel GenAI adapter maps gen_ai.request.model to the model, gen_ai.input.messages to the inputs, gen_ai.output.messages to the shipped output, and gen_ai.usage.* to token counts, folding each span into the per-step schema."
+      "label": "02 · Catalog",
+      "title": "Discover candidates from the live catalog",
+      "body": "GET /models supplies per-token input and output pricing, context windows, and capability tags such as tool use and structured output. rightmodeler normalizes those fields and builds the shortlist at run time, so there is no fixed model list to go stale."
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Replayed on your real inputs, judged against shipped output",
-      "body": "rightmodeler replays each successful step through cheaper candidates on OpenRouter, using your own key and the exact inputs recorded in the spans. A judge from a different model family scores every candidate against the output you already shipped (quality floor 0.90 by default) and steps with tool calls or loops are confirmed by re-running your pipeline end-to-end in a throwaway worktree."
+      "title": "Replay at temperature 0, judge across families",
+      "body": "Each candidate replays the step's recorded inputs through POST /chat/completions at temperature 0. A judge from a model family different from both the candidate and the model you run today scores the result against the output you shipped; if a neutral family cannot be resolved, the audit requires an explicit judge instead of guessing."
     },
     {
-      "label": "04 · Roadmap",
-      "title": "What Crucible adds for gateway users",
-      "body": "Crucible, in active development, runs the same proof loop continuously and names the Vercel AI Gateway as a BYO route: your keys, your routes, with OpenRouter and LiteLLM as the other options. It reads traces over MCP and never becomes a hop in your request path; the gateway keeps carrying your traffic."
+      "label": "04 · Price",
+      "title": "Use the Gateway's charge for each call",
+      "body": "rightmodeler records provider-reported usage cost when the response includes it. Otherwise it fetches the Gateway's generation record by response id and reads total_cost. If that record cannot be fetched, token usage and live catalog prices produce a fallback that the report labels as an estimate."
     }
   ],
   "setup": {
-    "intro": "Nothing gateway-specific ships yet, so setup is the conditional OTel path: install the skill, export spans from your collector, check for gen_ai.* attributes, and hand over the file.",
+    "intro": "Use a Vercel AI Gateway key with credits. Preflight verifies the account endpoint and live model catalog before the audit begins; choose the provider explicitly only when more than one provider is configured.",
     "commands": [
       {
-        "comment": "# sanity-check the condition first: do your spans carry gen_ai.* keys?",
-        "command": "grep -m1 -o '\"gen_ai\\.[a-z_.]*\"' ./traces/otel-spans.json"
+        "comment": "# replay and judge calls bill to your Vercel AI Gateway credits",
+        "command": "export AI_GATEWAY_API_KEY=..."
       },
       {
-        "comment": "# if yes, hand the export to the skill inside Claude Code",
-        "command": "claude \"run the rightmodeler skill on ./traces/otel-spans.json\""
+        "comment": "# only needed when several provider keys are set",
+        "command": "export RIGHTMODELER_PROVIDER=vercel-ai-gateway"
+      },
+      {
+        "comment": "# then point the skill at any exported trace",
+        "command": "claude \"run the rightmodeler skill on ./traces/\""
       }
     ]
   },
@@ -47,51 +51,55 @@
   "detection": "",
   "useCases": [
     {
-      "title": "Audit AI SDK steps before native support lands",
-      "body": "Where your telemetry emits gen_ai.* spans, every model call becomes a step with inputs, shipped output, and token counts, enough to replay through cheaper candidates and get a per-step verdict today, with no Vercel-specific adapter involved."
+      "title": "Audit on the route you already fund",
+      "body": "If your team already has Vercel AI Gateway credits, the same account can fund candidate replays and judge calls. Preflight shows the balance before the audit starts spending."
     },
     {
-      "title": "Keep the gateway, change only the model id",
-      "body": "An approved swap is an edit in your repo (the model a step asks for), not a change to how requests travel. Your gateway configuration and keys stay exactly as they are; the audit never touches the request path."
+      "title": "Test against a catalog that stays current",
+      "body": "The shortlist comes from the Gateway's live /models response, including current pricing, context windows, and capability tags. New and retired models change the next run without a rightmodeler release."
     },
     {
-      "title": "Plan for continuous right-sizing",
-      "body": "Crucible watches cost per layer, speed per step, and failures as they happen, and re-runs the proof loop on every new trace. For gateway users the promise is specific: BYO keys and routes, with the Vercel AI Gateway named as one of them."
+      "title": "Keep capability checks in the shortlist",
+      "body": "Tool-use and structured-output tags become capability filters, and context windows are checked before a candidate reaches replay. A lower price alone is not enough to make the bench."
+    },
+    {
+      "title": "Confirm complex swaps through the same route",
+      "body": "For end-to-end replay, the throwaway worktree points OPENAI_BASE_URL at the Vercel AI Gateway inside the sandbox, so the candidate pipeline runs through the selected replay provider without changing your real worktree."
     }
   ],
   "limits": [
-    "Native Vercel AI Gateway support is planned, not shipped. There is no dedicated adapter, no gateway connection, and nothing here reads your Vercel account.",
-    "The OTel path is conditional. rightmodeler reads gen_ai.* span attributes; whether your AI SDK or collector setup emits them is your setup's fact to check, not ours to assert. Inspect one exported span first.",
-    "It is a report, not a runtime gateway, and Crucible will not be one either. Traffic keeps flowing through your own routes; the audit runs offline on exported spans and never adds a hop.",
-    "Weak evidence means abstain rather than a recommendation, and high-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model.",
-    "Crucible itself is in active development: a waitlist, not a product you can install today. The rightmodeler skill is what ships now."
+    "Replay and judge calls spend your Vercel AI Gateway credits. Preflight reports the available balance first, but the evidence is produced with real billable calls.",
+    "A generation record is the preferred cost authority when usage cost is absent from the response. If the record cannot be fetched, rightmodeler falls back to token usage and live catalog pricing, and the report labels that amount as an estimate.",
+    "A cheaper candidate is not automatically a recommendation. High-risk steps are held, missing capabilities are filtered out, and weak or inconsistent evidence ends in abstention.",
+    "rightmodeler is an offline report on traces you provide, never a runtime gateway or a hop in your production request path. Replay inputs still leave your machine for the Gateway when the audit calls a model.",
+    "End-to-end replay points OPENAI_BASE_URL at the Vercel AI Gateway only inside a throwaway sandbox. It does not rewrite your application's production routing."
   ],
   "faq": [
     {
-      "q": "Does rightmodeler integrate with the Vercel AI Gateway today?",
-      "a": "Not natively. There is no dedicated adapter or gateway connection; the integration is named on the Crucible roadmap as a BYO-routing option. What exists today is the general OTel path: if your telemetry emits gen_ai.* spans, the skill reads them like any other OTel GenAI export."
+      "q": "Do I need a Vercel AI Gateway account?",
+      "a": "Yes. You provide AI_GATEWAY_API_KEY and fund the replay and judge calls with your own Gateway credits. Preflight checks /credits and shows the balance and total used before the audit starts spending."
     },
     {
-      "q": "How do I audit AI SDK traffic through the gateway right now?",
-      "a": "Export a batch of OpenTelemetry spans from your collector or tracing backend as JSON and point the skill at the file. Detection needs attribute keys starting with gen_ai. (gen_ai.request.model, gen_ai.input.messages) so inspect one span before running the audit."
+      "q": "Why route the audit through the Vercel AI Gateway?",
+      "a": "It gives rightmodeler one OpenAI-compatible route plus a live model catalog with pricing, context windows, and capability tags. That is enough to shortlist cheaper capable models, replay them, and choose a judge from a neutral family without a fixed model list."
     },
     {
-      "q": "Will rightmodeler or Crucible sit between my app and the gateway?",
-      "a": "No. rightmodeler is an offline report on exported traces, and Crucible reads traces passively over MCP. Neither routes traffic or adds a hop; the roadmap keeps your keys and your routes (OpenRouter, the Vercel AI Gateway, or LiteLLM) exactly where they are."
+      "q": "How are replay costs measured?",
+      "a": "rightmodeler uses provider-reported usage cost when it is present. Otherwise it fetches the Gateway generation record for the response and reads total_cost. If that lookup fails, it calculates a fallback from token usage and current catalog prices and labels the result as an estimate."
     },
     {
       "q": "Does my trace data leave my machine?",
-      "a": "Replays send step inputs to candidate models through OpenRouter with your own API key; that is the only traffic the audit generates. There is no rightmodeler server and no account; everything else happens on files already on your disk."
+      "a": "The audit and report run locally, but the recorded step inputs used for replays and judging are sent to the Vercel AI Gateway with your key. There is no rightmodeler server and the audit does not add anything to your production request path."
     },
     {
       "q": "Will it always find savings?",
-      "a": "No, and that is the point. When evidence is weak the audit abstains, and high-risk steps stay on their current model. A tool that always finds a swap is not measuring anything."
+      "a": "No, and that is the point. Some steps have no cheaper capable candidate, some candidates miss the quality floor, and weak or inconsistent evidence causes the audit to abstain. A tool that always finds a swap is not measuring anything."
     },
     {
-      "q": "When does native Vercel AI Gateway support arrive?",
-      "a": "With Crucible, which is in active development. Join the waitlist for one note when it opens; until then the rightmodeler skill on GitHub is the shipping product, and the OTel path above is the honest way in."
+      "q": "If I approve a swap, must I keep using the Gateway?",
+      "a": "No. The report recommends a model, not a permanent route. The Gateway is the test bench for this audit; you can serve an approved model through the provider or gateway that fits your application."
     }
   ],
-  "related": ["otel", "openrouter", "litellm"],
-  "cta": "crucible"
+  "related": ["openrouter", "litellm", "otel"],
+  "cta": "github"
 }
