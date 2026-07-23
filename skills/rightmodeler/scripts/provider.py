@@ -290,7 +290,9 @@ class OpenRouterProvider(Provider):
 
     def _cost(self, data: dict, headers: Any) -> tuple[float, bool]:
         usage = data.get("usage", {}) or {}
-        return usage.get("cost", 0.0), False
+        if "cost" in usage:
+            return parse_price(usage["cost"]), False
+        return self._estimate_cost(data), True
 
 
 class VercelAIGatewayProvider(Provider):

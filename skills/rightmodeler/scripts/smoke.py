@@ -24,6 +24,7 @@ from provider import (
 from report import render, render_snapshot
 from replay import ReplayError, replay_cases
 from run_pipeline import _provider_env
+from shortlist import shortlist
 from workflow import run_workflow
 
 
@@ -204,20 +205,87 @@ def judge_selection_smoke():
 
 
 def provider_env_smoke():
-    for config in (OPENROUTER_CONFIG, VERCEL_AI_GATEWAY_CONFIG):
-        env = _provider_env(config, "test-key")
-        assert env["RIGHTMODELER_REPLAY_BASE_URL"] == config.base_url
-        assert env["RIGHTMODELER_REPLAY_API_KEY"] == "test-key"
-        assert env["OPENAI_BASE_URL"] == config.base_url
-        assert env["OPENAI_API_KEY"] == "test-key"
-        assert "ANTHROPIC_BASE_URL" not in env
-        assert "ANTHROPIC_API_KEY" not in env
+    env = _provider_env(OPENROUTER_CONFIG, "test-key")
+    assert env["RIGHTMODELER_REPLAY_BASE_URL"] == OPENROUTER_CONFIG.base_url
+    assert env["RIGHTMODELER_REPLAY_API_KEY"] == "test-key"
+    assert env["OPENAI_BASE_URL"] == OPENROUTER_CONFIG.base_url
+    assert env["OPENAI_API_KEY"] == "test-key"
+    assert "ANTHROPIC_BASE_URL" not in env
+    assert "ANTHROPIC_API_KEY" not in env
+
+    env = _provider_env(VERCEL_AI_GATEWAY_CONFIG, "test-key")
+    assert env["OPENAI_BASE_URL"] == VERCEL_AI_GATEWAY_CONFIG.base_url
+    assert env["ANTHROPIC_BASE_URL"] == "https://ai-gateway.vercel.sh"
+    assert env["ANTHROPIC_API_KEY"] == "test-key"
 
     config = replace(LITELLM_CONFIG, base_url="http://localhost:4000")
     env = _provider_env(config, "test-key")
     assert env["OPENAI_BASE_URL"] == "http://localhost:4000"
     assert env["ANTHROPIC_BASE_URL"] == "http://localhost:4000"
     assert env["ANTHROPIC_API_KEY"] == "test-key"
+
+
+def provider_cost_smoke():
+    provider = object.__new__(OpenRouterProvider)
+    provider._estimate_cost = lambda _data: 0.0123
+    assert provider._cost({"usage": {"cost": "0"}}, {}) == (0.0, False)
+    assert provider._cost({"usage": {}}, {}) == (0.0123, True)
+
+
+def shortlist_smoke():
+    class FakeProvider:
+        def __init__(self, catalog):
+            self.catalog = catalog
+
+        def list_models(self):
+            return self.catalog
+
+        def model_info(self, model_id):
+            return next((model for model in self.catalog if model["id"] == model_id), None)
+
+    incumbent = {
+        "id": "provider/incumbent",
+        "type": "language",
+        "architecture": {"output_modalities": ["text"]},
+        "pricing": {"prompt": "0.004", "completion": "0.004"},
+    }
+    language = {
+        "id": "provider/language",
+        "type": "language",
+        "architecture": {"output_modalities": ["text"]},
+        "pricing": {"prompt": "0.001", "completion": "0.001"},
+    }
+    embedding = {
+        "id": "provider/embedding",
+        "type": "embedding",
+        "pricing": {"prompt": "0.0001", "completion": "0.0001"},
+    }
+    image = {
+        "id": "provider/image",
+        "architecture": {"output_modalities": ["image"]},
+        "pricing": {"prompt": "0.0001", "completion": "0.0001"},
+    }
+    stderr = StringIO()
+    with redirect_stderr(stderr):
+        result = shortlist(
+            FakeProvider([incumbent, language, embedding, image]),
+            incumbent["id"],
+            need_structured=True,
+        )
+    assert [model["id"] for model in result] == [language["id"]]
+    assert stderr.getvalue().count("structured-output support could not be verified") == 1
+
+    structured = {
+        **language,
+        "id": "provider/structured",
+        "supported_parameters": ["structured_outputs"],
+    }
+    result = shortlist(
+        FakeProvider([incumbent, language, structured]),
+        incumbent["id"],
+        need_structured=True,
+    )
+    assert [model["id"] for model in result] == [structured["id"]]
 
 
 def main():
@@ -242,6 +310,8 @@ def main():
     provider_selection_smoke()
     judge_selection_smoke()
     provider_env_smoke()
+    provider_cost_smoke()
+    shortlist_smoke()
 
     detected = detect_format(
         [{"timestamp": "2026-01-01T00:00:00Z", "type": "event", "payload": {"type": "message"}}]
@@ -367,6 +437,7 @@ def main():
         assert first["replay"]["cost_is_estimate"] is True
         assert first["results"][0]["cost_is_estimate"] is True
         assert second["results"][0]["cost_is_estimate"] is True
+        assert second["replay"]["cost_is_estimate"] is True
         assert second["replay"]["cache_hits"] == 1
         assert len(calls) == 1
 

@@ -221,7 +221,6 @@ def replay_cases(
     cache_hits = 0
     cache_misses = 0
     status = "completed"
-    cost_is_estimate = False
     for case, step, pipeline_step, mode, cache_key, estimate in prepared:
         bundle_ref = f"replay/{candidate_model}/{case['case_id']}"
         if cache_key in cache:
@@ -250,7 +249,6 @@ def replay_cases(
             duration_ms = round((time.perf_counter() - started) * 1000, 3)
             result = _normalize_result(case["case_id"], bundle_ref, response, duration_ms)
             budget.record(result["cost_usd"])
-            cost_is_estimate = cost_is_estimate or result["cost_is_estimate"]
         except ReplayError:
             raise
         except Exception as error:  # noqa: BLE001
@@ -275,6 +273,7 @@ def replay_cases(
     if partial and status == "completed":
         status = "budget_exhausted"
     _save_cache(cache_path, cache)
+    cost_is_estimate = any(result.get("cost_is_estimate") for result in results)
     modes = {mode for _, _, _, mode, _, _ in prepared}
     mode_label = {
         "single_shot": "single-shot",

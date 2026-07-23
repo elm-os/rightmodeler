@@ -109,13 +109,21 @@ def pick_judge(
             "provide an explicit --judge-model"
         )
 
+    catalog = provider.list_models()
+    has_structured_markers = any(
+        "structured_outputs" in (model.get("supported_parameters") or []) for model in catalog
+    )
     eligible = []
-    for model in provider.list_models():
+    for model in catalog:
         model_type = model.get("type")
         if model_type and model_type != "language":
             continue
         output_modalities = (model.get("architecture") or {}).get("output_modalities") or []
         if output_modalities and "text" not in output_modalities:
+            continue
+        if has_structured_markers and "structured_outputs" not in (
+            model.get("supported_parameters") or []
+        ):
             continue
         family = _provider_family(provider, model.get("id"))
         if family == "unknown" or family in (candidate_family, reference_family):
@@ -236,12 +244,20 @@ def main() -> int:
     ap.add_argument("--task", required=True)
     ap.add_argument("--reference", required=True)
     ap.add_argument("--candidate", required=True)
+    ap.add_argument("--candidate-model")
+    ap.add_argument("--reference-model")
     ap.add_argument("--judge-model")
     args = ap.parse_args()
     from provider import get_provider
 
     v = judge_outputs(
-        get_provider(), args.task, args.reference, args.candidate, judge_model=args.judge_model
+        get_provider(),
+        args.task,
+        args.reference,
+        args.candidate,
+        candidate_model=args.candidate_model,
+        reference_model=args.reference_model,
+        judge_model=args.judge_model,
     )
     print(json.dumps(v, indent=2))
     return 0

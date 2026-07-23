@@ -8,6 +8,10 @@ import sys
 from provider import get_provider
 
 
+def _is_auth_failure(error: Exception) -> bool:
+    return getattr(getattr(error, "response", None), "status_code", None) in (401, 403)
+
+
 def main() -> int:
     ok = True
     print("rightmodeler preflight")
@@ -46,7 +50,7 @@ def main() -> int:
             if config.name == "openrouter":
                 remaining = info.get("limit_remaining")
                 print(
-                    "[ok] openrouter reachable. credits remaining: "
+                    "[ok] openrouter reachable. key spend limit remaining: "
                     f"{remaining if remaining is not None else 'unlimited/unknown'}"
                 )
                 if info.get("is_free_tier"):
@@ -63,7 +67,11 @@ def main() -> int:
                     f"models: {info.get('model_count', 0)}"
                 )
         except Exception as e:  # noqa: BLE001
-            print(f"[warn] could not reach {config.name} account endpoint: {e}")
+            if _is_auth_failure(e):
+                print(f"[MISSING] {config.name} authentication failed: {e}")
+                ok = False
+            else:
+                print(f"[warn] could not reach {config.name} account endpoint: {e}")
         else:
             try:
                 catalog = provider.list_models()
@@ -87,7 +95,11 @@ def main() -> int:
                     )
                     ok = False
             except Exception as e:  # noqa: BLE001
-                print(f"[warn] could not validate judge models: {e}")
+                if _is_auth_failure(e):
+                    print(f"[MISSING] {config.name} catalog authentication failed: {e}")
+                    ok = False
+                else:
+                    print(f"[warn] could not validate judge models: {e}")
 
     provider._client.close()
 

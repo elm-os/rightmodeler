@@ -52,9 +52,10 @@ candidate selection:
 ```
 
 The model ID above is an illustrative example. Actual candidates always come from
-the active provider's live catalog because new models ship every few weeks. Model
-slugs are portable between OpenRouter and the Vercel AI Gateway when they use the
-`vendor/model` form. LiteLLM exposes proxy-defined aliases instead.
+the active provider's live catalog because new models ship every few weeks.
+OpenRouter and the Vercel AI Gateway share the `vendor/model` slug shape, but model
+IDs are provider-local and must be resolved against the active provider's catalog.
+LiteLLM exposes proxy-defined aliases instead.
 
 The engine should filter candidates by customer allowlist, context window,
 tool-use support, structured-output support, and lower expected cost than the

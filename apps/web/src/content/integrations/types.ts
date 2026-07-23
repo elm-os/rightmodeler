@@ -2,7 +2,7 @@
 // collected by the registry (./index) so the /integrations hub and each /integrations/[slug] route
 // resolve from one source. Add an integration = add a JSON file + one line in ./index.
 //
-// The type is deliberately JSON-friendly — plain strings, booleans, arrays, nested objects, and no
+// The type is deliberately JSON-friendly: plain strings, booleans, arrays, nested objects, and no
 // literal unions (a JSON import infers its strings as `string`, which would not assign to a union).
 // Allowed values for the string "enums" are documented on each field instead.
 
@@ -12,9 +12,10 @@ export type IntegrationData = {
   /** Display name, e.g. "LangSmith". Feeds "rightmodeler + <name>", hub rows, and related links. */
   name: string;
   /**
-   * How the tool relates to rightmodeler — switches which sections render.
+   * How the tool relates to rightmodeler; switches which sections render.
    * One of: "trace-source" (dedicated ingest adapter) | "trace-source-generic" (autodetected,
-   * generic adapter) | "replay-engine" (OpenRouter) | "replay-method" (LiteLLM proxy) |
+   * generic adapter) | "replay-engine" (OpenRouter or Vercel AI Gateway) |
+   * "replay-method" (LiteLLM proxy) |
    * "roadmap" (named future integration, e.g. Crucible routing).
    */
   category: string;
@@ -26,11 +27,11 @@ export type IntegrationData = {
   description: string;
   /** The page H1, fixed pattern: "rightmodeler + <Name>". */
   h1: string;
-  /** Hero lede — one or two tool-specific sentences under the H1. */
+  /** Hero lede: one or two tool-specific sentences under the H1. */
   lede: string;
   /** TL;DR paragraph near the top: the direct answer to the search intent. */
   tldr: string;
-  /** "How it works with <name>" — 3–5 steps. `label` is the mono tag, e.g. "01 · Export". */
+  /** "How it works with <name>": 3–5 steps. `label` is the mono tag, e.g. "01 · Export". */
   steps: { label: string; title: string; body: string }[];
   /**
    * Setup block. The standard install command renders first on every page (from lib/site
@@ -38,7 +39,7 @@ export type IntegrationData = {
    */
   setup: { intro: string; commands: { comment: string; command: string }[] };
   /**
-   * "What rightmodeler reads from <name>" — normalized-field → source-field rows, taken from the
+   * "What rightmodeler reads from <name>": normalized-field → source-field rows, taken from the
    * skill's trace-format mapping. Empty array hides the section (non-trace categories).
    */
   reads: { field: string; source: string }[];
@@ -46,7 +47,7 @@ export type IntegrationData = {
   detection: string;
   /** 2–4 concrete use cases for the combination. */
   useCases: { title: string; body: string }[];
-  /** "The honest part" — limits and what-this-is-not, in complete sentences. At least two. */
+  /** "The honest part": limits and what-this-is-not, in complete sentences. At least two. */
   limits: string[];
   /** FAQ, 4–6 items, rendered as the visible accordion. */
   faq: { q: string; a: string }[];

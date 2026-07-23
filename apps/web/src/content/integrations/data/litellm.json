@@ -34,11 +34,7 @@
     "intro": "There is nothing to install into your app. LiteLLM can be the selected replay provider through an existing proxy, or it can run only inside the replay sandbox as an injection layer in front of your unmodified pipeline.",
     "commands": [
       {
-        "comment": "# replay credential when another route runs the audit; traffic bills to your own account",
-        "command": "export OPENROUTER_API_KEY=sk-or-..."
-      },
-      {
-        "comment": "# or make your proxy the replay provider itself",
+        "comment": "# make your proxy the replay provider itself",
         "command": "export LITELLM_PROXY_API_BASE=http://localhost:4000 LITELLM_PROXY_API_KEY=sk-... RIGHTMODELER_PROVIDER=litellm"
       },
       {
@@ -60,7 +56,7 @@
     },
     {
       "title": "Audit an Anthropic-SDK pipeline",
-      "body": "OpenRouter's API is OpenAI-shaped, so an Anthropic client cannot be redirected with a base URL alone. LiteLLM's Anthropic-passthrough sits in between and speaks the Anthropic wire format, your pipeline joins the replay without a single code edit."
+      "body": "When LiteLLM is the selected replay provider, rightmodeler points the native Anthropic SDK at the configured proxy before your pipeline starts, so your code joins the replay without an edit."
     },
     {
       "title": "Reuse the gateway you already run",
@@ -72,7 +68,7 @@
     }
   ],
   "limits": [
-    "rightmodeler does not ingest LiteLLM proxy logs. LiteLLM's role here is model injection during replay, not a trace source; traces come from the eight supported export formats.",
+    "rightmodeler natively ingests LiteLLM proxy StandardLoggingPayload logs through a dedicated adapter. LiteLLM can be both a trace source and the selected replay provider.",
     "Replays are not bit-exact even at temperature 0 with a fixed seed; GPU float non-associativity and MoE routing still drift. Important steps are re-run several times and read as a distribution, not a single sample.",
     "When a mocked side-effecting tool is called with different arguments than the trace recorded, there is no stored answer; that replay mainly measures whether the candidate picks the same calls.",
     "High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, and weak evidence means abstain. A tool that always finds a swap is not measuring anything.",
@@ -89,11 +85,11 @@
     },
     {
       "q": "Can rightmodeler ingest my LiteLLM proxy logs?",
-      "a": "Not directly; there is no LiteLLM log adapter. But LiteLLM can forward request logs to backends like Langfuse or an OpenTelemetry collector, and exports from both of those are among the eight formats the ingester autodetects."
+      "a": "Yes. rightmodeler has a dedicated adapter for LiteLLM StandardLoggingPayload logs, and LiteLLM is one of the nine source formats the ingester autodetects."
     },
     {
       "q": "My pipeline uses the Anthropic SDK. How does the swap work?",
-      "a": "OpenRouter's /v1 endpoint speaks the OpenAI wire format, so an Anthropic client cannot be redirected with a base URL alone. The replay puts a LiteLLM Anthropic-passthrough proxy in front of it instead, and because ANTHROPIC_BASE_URL is read once at process start, it is set before your pipeline launches."
+      "a": "When LiteLLM is the selected replay provider, rightmodeler sets ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY to the configured proxy before your pipeline launches. Your code keeps using the native Anthropic SDK."
     },
     {
       "q": "Is re-running my pipeline with a cheaper model safe?",

@@ -15,7 +15,7 @@ import argparse
 import json
 import sys
 
-from common import parse_price
+from common import eprint, parse_price
 from provider import Provider, get_provider
 
 
@@ -39,10 +39,35 @@ def shortlist(
 ) -> list[dict]:
     catalog = orr.list_models()
     cur = orr.model_info(current_model)
-    cur_price = blended_price(cur["pricing"]) if cur else float("inf")
+    if cur is None:
+        raise ValueError(
+            f"current model {current_model!r} was not found in the provider catalog; "
+            "pass --current with an exact catalog model ID or canonical slug"
+        )
+
+    candidates = []
+    for model in catalog:
+        model_type = model.get("type")
+        if model_type and model_type != "language":
+            continue
+        output_modalities = (model.get("architecture") or {}).get("output_modalities") or []
+        if output_modalities and "text" not in output_modalities:
+            continue
+        candidates.append(model)
+
+    has_structured_markers = any(
+        "structured_outputs" in (model.get("supported_parameters") or []) for model in catalog
+    )
+    if need_structured and not has_structured_markers:
+        eprint(
+            "[warn] structured-output support could not be verified from this catalog; "
+            "keeping candidates"
+        )
+
+    cur_price = blended_price(cur["pricing"])
 
     out = []
-    for m in catalog:
+    for m in candidates:
         mid = m["id"]
         if mid == current_model:
             continue
@@ -55,7 +80,7 @@ def shortlist(
         supported = set(m.get("supported_parameters") or [])
         if need_tools and "tools" not in supported:
             continue
-        if need_structured and "structured_outputs" not in supported:
+        if need_structured and has_structured_markers and "structured_outputs" not in supported:
             continue
         if min_context and (m.get("context_length") or 0) < min_context:
             continue

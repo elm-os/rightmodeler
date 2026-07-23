@@ -95,6 +95,13 @@ def _provider_env(config, key: str) -> dict[str, str]:
                 "ANTHROPIC_API_KEY": key,
             }
         )
+    elif config.name == "vercel-ai-gateway":
+        env.update(
+            {
+                "ANTHROPIC_BASE_URL": "https://ai-gateway.vercel.sh",
+                "ANTHROPIC_API_KEY": key,
+            }
+        )
     return env
 
 
