@@ -3,14 +3,289 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from contextlib import redirect_stderr
+from dataclasses import replace
+from io import StringIO
 from pathlib import Path
 
 from analyze import analyze
-from common import resolve_openrouter_key
+from common import resolve_env_var
 from ingest import detect_format
+from judge import pick_judge
+from provider import (
+    LITELLM_CONFIG,
+    OPENROUTER_CONFIG,
+    VERCEL_AI_GATEWAY_CONFIG,
+    LiteLLMProvider,
+    OpenRouterProvider,
+    VercelAIGatewayProvider,
+    get_provider,
+)
 from report import render, render_snapshot
 from replay import ReplayError, replay_cases
+from run_pipeline import _provider_env
+from shortlist import shortlist
 from workflow import run_workflow
+
+
+PROVIDER_ENV = (
+    "RIGHTMODELER_PROVIDER",
+    "OPENROUTER_API_KEY",
+    "AI_GATEWAY_API_KEY",
+    "LITELLM_PROXY_API_KEY",
+    "LITELLM_PROXY_API_BASE",
+)
+
+
+def provider_selection_smoke():
+    previous = {name: os.environ.get(name) for name in PROVIDER_ENV}
+    original_cwd = Path.cwd()
+
+    def select(values, provider_name=None):
+        for env_name in PROVIDER_ENV:
+            os.environ.pop(env_name, None)
+        os.environ.update(values)
+        provider = get_provider(provider_name)
+        provider._client.close()
+        return provider
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            assert isinstance(select({"OPENROUTER_API_KEY": "test"}), OpenRouterProvider)
+            assert isinstance(select({"AI_GATEWAY_API_KEY": "test"}), VercelAIGatewayProvider)
+            assert isinstance(
+                select(
+                    {
+                        "LITELLM_PROXY_API_KEY": "test",
+                        "LITELLM_PROXY_API_BASE": "http://localhost:4000",
+                    }
+                ),
+                LiteLLMProvider,
+            )
+            assert isinstance(
+                select(
+                    {
+                        "RIGHTMODELER_PROVIDER": "vercel-ai-gateway",
+                        "OPENROUTER_API_KEY": "test",
+                        "AI_GATEWAY_API_KEY": "test",
+                    }
+                ),
+                VercelAIGatewayProvider,
+            )
+            assert isinstance(
+                select(
+                    {
+                        "RIGHTMODELER_PROVIDER": "vercel-ai-gateway",
+                        "OPENROUTER_API_KEY": "test",
+                        "AI_GATEWAY_API_KEY": "test",
+                    },
+                    "openrouter",
+                ),
+                OpenRouterProvider,
+            )
+
+            for name in PROVIDER_ENV:
+                os.environ.pop(name, None)
+            os.environ.update({"OPENROUTER_API_KEY": "test", "AI_GATEWAY_API_KEY": "test"})
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                provider = get_provider()
+            provider._client.close()
+            assert isinstance(provider, OpenRouterProvider)
+            info_lines = [
+                line for line in stderr.getvalue().splitlines() if line.startswith("[info]")
+            ]
+            assert len(info_lines) == 1
+            assert "RIGHTMODELER_PROVIDER" in info_lines[0]
+
+            for name in PROVIDER_ENV:
+                os.environ.pop(name, None)
+            stderr = StringIO()
+            try:
+                with redirect_stderr(stderr):
+                    get_provider()
+            except SystemExit as error:
+                assert error.code == 2
+            else:
+                raise AssertionError("provider selection should exit 2 when unconfigured")
+            output = stderr.getvalue()
+            for name in (
+                "OPENROUTER_API_KEY",
+                "AI_GATEWAY_API_KEY",
+                "LITELLM_PROXY_API_KEY",
+                "LITELLM_PROXY_API_BASE",
+            ):
+                assert name in output
+    finally:
+        os.chdir(original_cwd)
+        for name in PROVIDER_ENV:
+            os.environ.pop(name, None)
+            if previous[name] is not None:
+                os.environ[name] = previous[name]
+
+
+def judge_selection_smoke():
+    class FakeProvider:
+        def __init__(self, catalog):
+            self.catalog = catalog
+
+        def list_models(self):
+            return self.catalog
+
+    catalog = [
+        {"id": "alpha/candidate", "created": 300, "context_length": 4000},
+        {"id": "beta/reference", "created": 300, "context_length": 4000},
+        {
+            "id": "gamma/judge-small",
+            "created": 100,
+            "context_length": 1000,
+            "pricing": {"prompt": "0.001", "completion": "0.001"},
+        },
+        {
+            "id": "delta/judge-strong",
+            "created": 200,
+            "context_length": 2000,
+            "pricing": {"prompt": "0.002", "completion": "0.003"},
+        },
+    ]
+    provider = FakeProvider(catalog)
+    assert pick_judge(provider, "alpha/candidate", "beta/reference") == "delta/judge-strong"
+
+    try:
+        pick_judge(FakeProvider(catalog[:2]), "alpha/candidate", "beta/reference")
+    except ValueError as error:
+        assert "--judge-model" in str(error)
+    else:
+        raise AssertionError("judge selection should refuse without a neutral family")
+
+    try:
+        pick_judge(provider, "unmapped-alias", "beta/reference")
+    except ValueError as error:
+        assert "--judge-model" in str(error)
+    else:
+        raise AssertionError("unknown model family should require an explicit judge")
+    assert (
+        pick_judge(
+            provider,
+            "unmapped-alias",
+            "beta/reference",
+            override="gamma/judge-small",
+        )
+        == "gamma/judge-small"
+    )
+
+    litellm = object.__new__(LiteLLMProvider)
+    mapped = litellm._enrich_catalog(
+        [{"id": "judge-alias"}],
+        [
+            {
+                "model_name": "judge-alias",
+                "litellm_params": {"model": "gamma/upstream"},
+            }
+        ],
+    )
+    assert mapped[0]["resolved_family"] == "gamma"
+    unmapped = litellm._enrich_catalog([{"id": "judge-alias"}], [])
+    assert unmapped[0]["resolved_family"] == "unknown"
+    mixed = litellm._enrich_catalog(
+        [{"id": "judge-alias"}],
+        [
+            {
+                "model_name": "judge-alias",
+                "litellm_params": {"model": "gamma/upstream"},
+            },
+            {
+                "model_name": "judge-alias",
+                "litellm_params": {"model": "delta/upstream"},
+            },
+        ],
+    )
+    assert mixed[0]["resolved_family"] == "unknown"
+
+
+def provider_env_smoke():
+    env = _provider_env(OPENROUTER_CONFIG, "test-key")
+    assert env["RIGHTMODELER_REPLAY_BASE_URL"] == OPENROUTER_CONFIG.base_url
+    assert env["RIGHTMODELER_REPLAY_API_KEY"] == "test-key"
+    assert env["OPENAI_BASE_URL"] == OPENROUTER_CONFIG.base_url
+    assert env["OPENAI_API_KEY"] == "test-key"
+    assert "ANTHROPIC_BASE_URL" not in env
+    assert "ANTHROPIC_API_KEY" not in env
+
+    env = _provider_env(VERCEL_AI_GATEWAY_CONFIG, "test-key")
+    assert env["OPENAI_BASE_URL"] == VERCEL_AI_GATEWAY_CONFIG.base_url
+    assert env["ANTHROPIC_BASE_URL"] == "https://ai-gateway.vercel.sh"
+    assert env["ANTHROPIC_API_KEY"] == "test-key"
+
+    config = replace(LITELLM_CONFIG, base_url="http://localhost:4000")
+    env = _provider_env(config, "test-key")
+    assert env["OPENAI_BASE_URL"] == "http://localhost:4000"
+    assert env["ANTHROPIC_BASE_URL"] == "http://localhost:4000"
+    assert env["ANTHROPIC_API_KEY"] == "test-key"
+
+
+def provider_cost_smoke():
+    provider = object.__new__(OpenRouterProvider)
+    provider._estimate_cost = lambda _data: 0.0123
+    assert provider._cost({"usage": {"cost": "0"}}, {}) == (0.0, False)
+    assert provider._cost({"usage": {}}, {}) == (0.0123, True)
+
+
+def shortlist_smoke():
+    class FakeProvider:
+        def __init__(self, catalog):
+            self.catalog = catalog
+
+        def list_models(self):
+            return self.catalog
+
+        def model_info(self, model_id):
+            return next((model for model in self.catalog if model["id"] == model_id), None)
+
+    incumbent = {
+        "id": "provider/incumbent",
+        "type": "language",
+        "architecture": {"output_modalities": ["text"]},
+        "pricing": {"prompt": "0.004", "completion": "0.004"},
+    }
+    language = {
+        "id": "provider/language",
+        "type": "language",
+        "architecture": {"output_modalities": ["text"]},
+        "pricing": {"prompt": "0.001", "completion": "0.001"},
+    }
+    embedding = {
+        "id": "provider/embedding",
+        "type": "embedding",
+        "pricing": {"prompt": "0.0001", "completion": "0.0001"},
+    }
+    image = {
+        "id": "provider/image",
+        "architecture": {"output_modalities": ["image"]},
+        "pricing": {"prompt": "0.0001", "completion": "0.0001"},
+    }
+    stderr = StringIO()
+    with redirect_stderr(stderr):
+        result = shortlist(
+            FakeProvider([incumbent, language, embedding, image]),
+            incumbent["id"],
+            need_structured=True,
+        )
+    assert [model["id"] for model in result] == [language["id"]]
+    assert stderr.getvalue().count("structured-output support could not be verified") == 1
+
+    structured = {
+        **language,
+        "id": "provider/structured",
+        "supported_parameters": ["structured_outputs"],
+    }
+    result = shortlist(
+        FakeProvider([incumbent, language, structured]),
+        incumbent["id"],
+        need_structured=True,
+    )
+    assert [model["id"] for model in result] == [structured["id"]]
 
 
 def main():
@@ -23,7 +298,7 @@ def main():
             skill_root.mkdir(parents=True)
             (root / ".env").write_text('OPENROUTER_API_KEY="smoke-key"\n')
             os.chdir(skill_root)
-            key, source = resolve_openrouter_key()
+            key, source = resolve_env_var("OPENROUTER_API_KEY")
             assert key == "smoke-key", key
             assert Path(source).resolve() == (root / ".env").resolve(), source
     finally:
@@ -31,6 +306,12 @@ def main():
         os.environ.pop("OPENROUTER_API_KEY", None)
         if previous_key is not None:
             os.environ["OPENROUTER_API_KEY"] = previous_key
+
+    provider_selection_smoke()
+    judge_selection_smoke()
+    provider_env_smoke()
+    provider_cost_smoke()
+    shortlist_smoke()
 
     detected = detect_format(
         [{"timestamp": "2026-01-01T00:00:00Z", "type": "event", "payload": {"type": "message"}}]
@@ -79,6 +360,8 @@ def main():
                     "best": {
                         "model": "openai/gpt-4o-mini",
                         "est_savings": 0.5,
+                        "replay_cost": 0.0123,
+                        "cost_is_estimate": True,
                         "score": 1.0,
                         "verdict": "equivalent",
                         "order_consistent": True,
@@ -89,6 +372,7 @@ def main():
         None,
     )
     assert "Recommendation Report" in report
+    assert "$0.012300 est." in report
 
     replay_normalized = {
         "steps": [
@@ -110,7 +394,7 @@ def main():
         {"case_id": f"case-{index}", "source_run_id": f"s{index}"} for index in range(1, 4)
     ]
 
-    class FakeOpenRouter:
+    class FakeProvider:
         def price_per_token(self, _model):
             return 0.000001, 0.000001
 
@@ -118,7 +402,12 @@ def main():
 
     def single_shot_runner(*_args, **_kwargs):
         calls.append("single-shot")
-        return {"text": "hello", "cost": 0.01, "error": None}
+        return {
+            "text": "hello",
+            "cost": 0.01,
+            "cost_is_estimate": True,
+            "error": None,
+        }
 
     with tempfile.TemporaryDirectory() as replay_tmp:
         cache = Path(replay_tmp) / "cache.json"
@@ -129,7 +418,7 @@ def main():
             0.05,
             "sha256:" + "b" * 64,
             cache_path=cache,
-            orr=FakeOpenRouter(),
+            orr=FakeProvider(),
             single_shot_runner=single_shot_runner,
         )
         second = replay_cases(
@@ -139,12 +428,16 @@ def main():
             0.05,
             "sha256:" + "b" * 64,
             cache_path=cache,
-            orr=FakeOpenRouter(),
+            orr=FakeProvider(),
             single_shot_runner=single_shot_runner,
         )
         assert first["candidate"]["source"] == "replayed"
         assert first["corpus_version_id"] == "sha256:" + "b" * 64
         assert first["replay"]["mode"] == "single-shot"
+        assert first["replay"]["cost_is_estimate"] is True
+        assert first["results"][0]["cost_is_estimate"] is True
+        assert second["results"][0]["cost_is_estimate"] is True
+        assert second["replay"]["cost_is_estimate"] is True
         assert second["replay"]["cache_hits"] == 1
         assert len(calls) == 1
 
@@ -155,7 +448,7 @@ def main():
                 "cheap-model",
                 0.0001,
                 "sha256:" + "b" * 64,
-                orr=FakeOpenRouter(),
+                orr=FakeProvider(),
                 single_shot_runner=single_shot_runner,
             )
         except ReplayError as error:
@@ -169,7 +462,7 @@ def main():
             "cheap-model",
             0.015,
             "sha256:" + "b" * 64,
-            orr=FakeOpenRouter(),
+            orr=FakeProvider(),
             single_shot_runner=single_shot_runner,
         )
         assert exhausted["replay"]["status"] == "budget_exhausted"
@@ -182,7 +475,9 @@ def main():
             e2e_calls.append("e2e")
             return {
                 "ok": True,
-                "stdout": '{"output_text":"e2e output","cost_usd":0.02}\n',
+                "stdout": (
+                    '{"output_text":"e2e output","cost_usd":0.02,"cost_is_estimate":true}\n'
+                ),
                 "stderr": "",
             }
 
@@ -199,6 +494,8 @@ def main():
             e2e_runner=e2e_runner,
         )
         assert e2e["replay"]["mode"] == "e2e"
+        assert e2e["replay"]["cost_is_estimate"] is True
+        assert e2e["results"][0]["cost_is_estimate"] is True
         assert e2e_calls == ["e2e"]
 
     with tempfile.TemporaryDirectory() as workflow_tmp:

@@ -7,7 +7,7 @@
   "description": "Point rightmodeler at your OpenAI SDK request log and it replays every call through cheaper models, judges each output against what you shipped, and reports the safe swaps.",
   "h1": "rightmodeler + the OpenAI SDK",
   "lede": "No tracing platform required. rightmodeler reads the request/response log your code already writes around the OpenAI SDK and proves, call by call, which ones can move to a cheaper model.",
-  "tldr": "rightmodeler reads per-line OpenAI SDK request+response dumps with a dedicated adapter: each logged call becomes a step, with no tracing platform in between. Successful steps are replayed through cheaper candidates on OpenRouter and judged against the output you already shipped, with a quality floor of 0.90 by default; tool-using steps are confirmed by re-running your pipeline with the SDK redirected to the candidate.",
+  "tldr": "rightmodeler reads per-line OpenAI SDK request+response dumps with a dedicated adapter: each logged call becomes a step, with no tracing platform in between. Successful steps are replayed through cheaper candidates on your selected replay provider and judged against the output you already shipped, with a quality floor of 0.90 by default; tool-using steps are confirmed by re-running your pipeline with the SDK redirected to the candidate.",
   "steps": [
     {
       "label": "01 · Log",
@@ -22,12 +22,12 @@
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you shipped",
-      "body": "Single-shot steps are replayed through cheaper OpenRouter models on the exact messages from your log, and a judge from a different model family scores each candidate against the output you already shipped, with a quality floor of 0.90 by default. JSONL logs carry no cost field, so the baseline is derived from the model name and token usage via OpenRouter pricing."
+      "body": "Single-shot steps are replayed through cheaper models from your selected replay provider on the exact messages from your log, and a judge from a different model family scores each candidate against the output you already shipped, with a quality floor of 0.90 by default. JSONL logs carry no cost field, so missing historical cost stays unknown; candidate calls are priced through your selected replay provider."
     },
     {
       "label": "04 · Confirm",
       "title": "Tool-using steps re-run through your real code",
-      "body": "Steps with tool calls or loops are confirmed end-to-end: the skill re-runs your pipeline in a throwaway git worktree, injecting a sitecustomize shim that monkeypatches openai.OpenAI and AsyncOpenAI (and langchain_openai.ChatOpenAI) to route to the candidate model on OpenRouter. Your code runs unmodified."
+      "body": "Steps with tool calls or loops are confirmed end-to-end: the skill re-runs your pipeline in a throwaway git worktree, injecting a sitecustomize shim that monkeypatches openai.OpenAI and AsyncOpenAI (and langchain_openai.ChatOpenAI) to route to the candidate model through your selected replay provider. Your code runs unmodified."
     },
     {
       "label": "05 · Approve",
@@ -82,8 +82,8 @@
       "source": "usage.prompt/completion_tokens"
     },
     {
-      "field": "cost baseline",
-      "source": "derived from model + usage"
+      "field": "historical cost",
+      "source": "not present in JSONL logs"
     }
   ],
   "detection": "model · messages · usage",
@@ -103,7 +103,7 @@
   ],
   "limits": [
     "There is no export button for this format. The SDK does not write these logs by itself; your code does, by dumping each request and response as a line of JSON. If yours doesn't yet, that wrapper comes before the audit.",
-    "JSONL logs carry no cost field, so the baseline is derived from the model name and token usage via OpenRouter's pricing table: good enough to rank swaps, not an invoice.",
+    "JSONL logs carry no cost field, so missing historical cost stays unknown rather than being derived from a provider catalog.",
     "Steps with tool calls or loops are not judged from the log alone; they are confirmed by re-running your pipeline end-to-end with the SDK redirected to the candidate model.",
     "High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, and weak evidence means abstain rather than a recommendation.",
     "It is a report, not a runtime gateway. rightmodeler never sits between your SDK and OpenAI, and nothing changes in production until you change it."
@@ -123,11 +123,11 @@
     },
     {
       "q": "My code hardcodes the OpenAI client. How can it replay end-to-end?",
-      "a": "The skill re-runs your pipeline in a throwaway git worktree with a sitecustomize shim on PYTHONPATH that monkeypatches openai.OpenAI and AsyncOpenAI to route to the candidate model on OpenRouter, using your own key. Your code runs unmodified, and the worktree is discarded afterward."
+      "a": "The skill re-runs your pipeline in a throwaway git worktree with a sitecustomize shim on PYTHONPATH that monkeypatches openai.OpenAI and AsyncOpenAI to route to the candidate model through your selected replay provider, using your own key. Your code runs unmodified, and the worktree is discarded afterward."
     },
     {
       "q": "Does my log data leave my machine?",
-      "a": "Replays send step inputs to candidate models through OpenRouter with your own API key, requests of the same shape your agent already sends to OpenAI. There is no rightmodeler server and no account; the report lands on your disk."
+      "a": "Replays send step inputs to candidate models through your selected replay provider with your own key, requests of the same shape your agent already sends to OpenAI. There is no rightmodeler server and no account; the report lands on your disk."
     },
     {
       "q": "Will it always find savings?",

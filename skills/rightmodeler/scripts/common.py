@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 WORKDIR = Path(".rightmodeler")
-ENV_KEY = "OPENROUTER_API_KEY"
 
 
 def eprint(*args: Any) -> None:
@@ -57,10 +56,10 @@ def _parse_env_value(raw: str) -> str:
     return value
 
 
-def resolve_openrouter_key() -> tuple[str | None, str | None]:
-    key = os.environ.get(ENV_KEY)
-    if key:
-        return key, "environment"
+def resolve_env_var(name: str) -> tuple[str | None, str | None]:
+    value = os.environ.get(name)
+    if value:
+        return value, "environment"
 
     for base in (Path.cwd().resolve(), *Path.cwd().resolve().parents):
         env_path = base / ".env"
@@ -74,30 +73,29 @@ def resolve_openrouter_key() -> tuple[str | None, str | None]:
                 stripped = stripped[7:].strip()
             if "=" not in stripped:
                 continue
-            name, raw = stripped.split("=", 1)
-            if name.strip() != ENV_KEY:
+            candidate, raw = stripped.split("=", 1)
+            if candidate.strip() != name:
                 continue
-            key = _parse_env_value(raw)
-            if not key:
+            value = _parse_env_value(raw)
+            if not value:
                 break
-            os.environ[ENV_KEY] = key
-            return key, str(env_path)
+            os.environ[name] = value
+            return value, str(env_path)
     return None, None
 
 
-def require_api_key() -> str:
-    key, _ = resolve_openrouter_key()
-    if not key:
-        eprint(
-            "ERROR: OPENROUTER_API_KEY is not set. Add `OPENROUTER_API_KEY=...` "
-            "to your project root `.env` or export it before running rightmodeler."
-        )
-        sys.exit(2)
-    return key
+def require_provider() -> tuple[Any, str]:
+    from provider import get_provider
+
+    selected = get_provider()
+    try:
+        return selected.config, selected.api_key
+    finally:
+        selected._client.close()
 
 
 def parse_price(v: Any) -> float:
-    """OpenRouter prices are strings in USD per single token."""
+    """Provider prices are strings or numbers in USD per single token."""
     try:
         return float(v)
     except (TypeError, ValueError):
@@ -119,7 +117,7 @@ FAMILY_BY_PREFIX = {
 
 
 def model_family(model_id: str | None) -> str:
-    if not model_id:
+    if not model_id or "/" not in model_id:
         return "unknown"
     prefix = model_id.split("/", 1)[0].lower()
     return FAMILY_BY_PREFIX.get(prefix, prefix)
