@@ -7,7 +7,7 @@
   "description": "Export Langfuse observations to disk and rightmodeler replays each step through cheaper models, judging every candidate against the output you already shipped.",
   "h1": "rightmodeler + Langfuse",
   "lede": "Langfuse already records what every generation cost and produced. rightmodeler replays those observations through cheaper models and reports, step by step, which swaps hold.",
-  "tldr": "rightmodeler autodetects Langfuse exports by their traceId, observations, and usageDetails keys, then normalizes them with its generic adapter, a best-effort pass that pulls model, input messages, and output per record and keeps the rest in raw. Each successful step is replayed through cheaper OpenRouter candidates and judged against the output you already shipped, with a 0.90 quality floor by default.",
+  "tldr": "rightmodeler autodetects Langfuse exports by their traceId, observations, and usageDetails keys, then normalizes them with its generic adapter, a best-effort pass that pulls model, input messages, and output per record and keeps the rest in raw. Each successful step is replayed through cheaper candidates from your selected replay provider and judged against the output you already shipped, with a 0.90 quality floor by default.",
   "steps": [
     {
       "label": "01 · Export",
@@ -22,7 +22,7 @@
     {
       "label": "03 · Replay",
       "title": "Cheaper candidates, judged against what shipped",
-      "body": "Successful single-shot steps are replayed through cheaper OpenRouter models on the exact inputs from your export, and a judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you already shipped, with a 0.90 quality floor by default. Steps with tool calls or loops go to an end-to-end re-run of your pipeline code in a throwaway git worktree instead."
+      "body": "Successful single-shot steps are replayed through cheaper models from your selected replay provider on the exact inputs from your export, and a judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you already shipped, with a 0.90 quality floor by default. Steps with tool calls or loops go to an end-to-end re-run of your pipeline code in a throwaway git worktree instead."
     },
     {
       "label": "04 · Decide",
@@ -102,11 +102,11 @@
     },
     {
       "q": "What does it do with Langfuse's cost data?",
-      "a": "Not much, today. The generic adapter maps model, messages, and output; Langfuse's cost and usage fields stay in each record's raw copy. Savings in the report are estimated from OpenRouter's blended per-token prices for the incumbent and the candidate, so both sides are priced from the same catalog."
+      "a": "Not much, today. The generic adapter maps model, messages, and output; Langfuse's cost and usage fields stay in each record's raw copy. Missing historical costs stay unknown, while candidate calls are priced through your selected replay provider."
     },
     {
       "q": "Does my trace data leave my machine?",
-      "a": "Replays send step inputs to candidate models through OpenRouter with your own API key, the same shape of call your agent already makes. There is no rightmodeler server, and your Langfuse keys are only ever used by the curl you run yourself."
+      "a": "Replays send step inputs to candidate models through your selected replay provider with your own key, the same shape of call your agent already makes. There is no rightmodeler server, and your Langfuse keys are only ever used by the curl you run yourself."
     },
     {
       "q": "Will it always find a swap?",

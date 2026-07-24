@@ -113,6 +113,7 @@ def _normalize_result(case_id, bundle_ref, response, duration_ms):
         "case_id": case_id,
         "output_text": response.get("text") or "",
         "cost_usd": response.get("cost") or 0.0,
+        "cost_is_estimate": bool(response.get("cost_is_estimate")),
         "duration_ms": duration_ms,
         "evidence_refs": [bundle_ref],
         "replay_error": error,
@@ -136,6 +137,7 @@ def _parse_e2e_response(response):
     return {
         "text": payload.get("output_text", response.get("stdout") or ""),
         "cost": cost,
+        "cost_is_estimate": bool(payload.get("cost_is_estimate")),
         "tool_calls": payload.get("tool_calls") or [],
         "error": None if response.get("ok") else response.get("stderr") or "E2E replay failed",
     }
@@ -201,7 +203,7 @@ def replay_cases(
             estimate = 0.0
         elif mode == "single_shot":
             if orr is None:
-                raise ReplayError("single-shot replay requires an OpenRouter client")
+                raise ReplayError("single-shot replay requires a replay provider client")
             estimate = _single_shot_estimate(orr, step, candidate_model, runs, max_tokens)
         elif mode == "e2e":
             if not codebase or not run_command or e2e_cost_per_case is None:
@@ -271,6 +273,7 @@ def replay_cases(
     if partial and status == "completed":
         status = "budget_exhausted"
     _save_cache(cache_path, cache)
+    cost_is_estimate = any(result.get("cost_is_estimate") for result in results)
     modes = {mode for _, _, _, mode, _, _ in prepared}
     mode_label = {
         "single_shot": "single-shot",
@@ -290,6 +293,7 @@ def replay_cases(
             "max_cost_usd": max_cost_usd,
             "projected_cost_usd": round(projected_cost, 6),
             "actual_cost_usd": round(budget.actual_cost_usd, 6),
+            "cost_is_estimate": cost_is_estimate,
             "remaining_cost_usd": round(budget.remaining_cost_usd, 6),
             "cache_hits": cache_hits,
             "cache_misses": cache_misses,
@@ -323,9 +327,9 @@ def main():
     has_single_shot = "single_shot" in _modes_for_cases(cases["cases"], normalized, pipeline)
     orr = None
     if has_single_shot:
-        from openrouter import OpenRouter
+        from provider import get_provider
 
-        orr = OpenRouter()
+        orr = get_provider()
 
     bundle = replay_cases(
         cases["cases"],

@@ -69,7 +69,7 @@
   ],
   "limits": [
     "Replays and judge calls are billed to your key at catalog prices. The audit spends real money to produce evidence; each call's usage.cost is recorded, so the spend is itemized, but it is yours.",
-    "OpenRouter is the audit's only replay path. The skill does not fan out to per-provider keys, so if third-party routing is off the table for your data, the audit is too.",
+    "rightmodeler uses one replay route per audit. OpenRouter, the Vercel AI Gateway, and a LiteLLM proxy are supported alternatives; the skill does not mix provider keys within one run.",
     "The shortlist skips :free variants by default: free tiers rate-limit and disappear mid-run, which corrupts a benchmark more than it saves.",
     "A cheaper model existing in the catalog is not a recommendation. When position-swapped verdicts disagree or the evidence is weak, the audit abstains; a tool that always finds a swap is not measuring anything.",
     "rightmodeler calls OpenRouter offline, on traces you exported. It is not a gateway: nothing routes your production traffic through OpenRouter, before or after the audit."

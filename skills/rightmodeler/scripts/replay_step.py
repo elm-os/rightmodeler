@@ -1,5 +1,5 @@
 """Per-step isolated replay: re-send a single-shot step's exact request to a
-candidate model via OpenRouter and return its output for judging.
+candidate model via the replay provider and return its output for judging.
 
 Use as a module:
     from replay_step import replay_step
@@ -62,6 +62,7 @@ def replay_step(
     tools = to_openai_tools(step)
     samples = []
     total_cost = 0.0
+    cost_is_estimate = False
     for _ in range(max(1, runs)):
         resp = orr.chat(
             candidate_model, messages, tools=tools, temperature=0.0, max_tokens=max_tokens
@@ -69,11 +70,13 @@ def replay_step(
         if resp.get("error"):
             return {"model": candidate_model, "error": resp["error"], "samples": samples}
         total_cost += resp.get("cost") or 0.0
+        cost_is_estimate = cost_is_estimate or bool(resp.get("cost_is_estimate"))
         samples.append(
             {
                 "text": resp.get("text"),
                 "tool_calls": resp.get("tool_calls"),
                 "cost": resp.get("cost"),
+                "cost_is_estimate": bool(resp.get("cost_is_estimate")),
                 "served_by": resp.get("model"),
             }
         )
@@ -84,6 +87,7 @@ def replay_step(
         "text": rep["text"],
         "tool_calls": rep["tool_calls"],
         "cost": total_cost / len(samples),
+        "cost_is_estimate": cost_is_estimate,
         "runs": len(samples),
         "samples": samples,
         "error": None,
@@ -98,11 +102,11 @@ def main() -> int:
     ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("--max-tokens", type=int)
     args = ap.parse_args()
-    from openrouter import OpenRouter
+    from provider import get_provider
 
     data = load_json(args.normalized)
     step = next(s for s in data["steps"] if s["step_id"] == args.step_id)
-    out = replay_step(OpenRouter(), step, args.model, runs=args.runs, max_tokens=args.max_tokens)
+    out = replay_step(get_provider(), step, args.model, runs=args.runs, max_tokens=args.max_tokens)
     print(json.dumps(out, indent=2, default=str))
     return 0
 

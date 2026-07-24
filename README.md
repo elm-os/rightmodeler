@@ -15,15 +15,28 @@ The skill is the execution layer. It installs the skill bundle, then drives the
 repo's Python scripts for you: preflight, ingest, analyze, replay, judge, TUI,
 and report generation.
 
-Before first run, set your OpenRouter key as:
+Before first run, configure one replay provider. Only one setup is needed:
 
 ```env
+# OpenRouter
 OPENROUTER_API_KEY=your_key_here
+
+# Vercel AI Gateway
+AI_GATEWAY_API_KEY=your_key_here
+
+# LiteLLM proxy
+LITELLM_PROXY_API_BASE=https://your-proxy.example.com
+LITELLM_PROXY_API_KEY=your_key_here
 ```
 
-Put that line in your project root `.env`, or export it in your shell. The skill
-checks the process environment first, then looks up the current repo tree for a
-project `.env`.
+Set only the variables for the provider you use. If more than one complete setup
+is present, the skill selects OpenRouter, then the Vercel AI Gateway, then LiteLLM.
+To choose explicitly, optionally set `RIGHTMODELER_PROVIDER` to `openrouter`,
+`vercel-ai-gateway`, or `litellm`.
+
+Put the variables in your project root `.env`, or export them in your shell. The
+skill checks the process environment first, then looks up the current repo tree
+for a project `.env`.
 
 On first run, `rightmodeler` should bootstrap its Python environment, run
 preflight, ask only for missing inputs like the API key or trace path, then

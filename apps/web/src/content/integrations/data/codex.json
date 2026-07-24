@@ -7,7 +7,7 @@
   "description": "Point rightmodeler at ~/.codex/sessions and it replays each step of your Codex CLI rollouts through cheaper models, judging every output against what you accepted.",
   "h1": "rightmodeler + Codex CLI",
   "lede": "Codex CLI already writes every session to disk as a rollout log. rightmodeler reads those files where they sit and proves, step by step, which calls a cheaper model could have handled.",
-  "tldr": "rightmodeler ingests Codex CLI rollout logs straight from ~/.codex/sessions with a dedicated adapter, no export step, because the JSONL files are already on your machine. Each successful step is replayed through cheaper candidates on OpenRouter and judged against the output you already accepted, so everyday Codex sessions become the evidence for which model each kind of step really needs.",
+  "tldr": "rightmodeler ingests Codex CLI rollout logs straight from ~/.codex/sessions with a dedicated adapter, no export step, because the JSONL files are already on your machine. Each successful step is replayed through cheaper candidates on your selected replay provider and judged against the output you already accepted, so everyday Codex sessions become the evidence for which model each kind of step really needs.",
   "steps": [
     {
       "label": "01 · Locate",
@@ -22,7 +22,7 @@
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you accepted",
-      "body": "Each successful single-shot step is re-run on cheaper OpenRouter candidates using the exact inputs from the rollout, and a cross-family judge scores every candidate against the answer Codex already gave, holding a 0.90 quality floor by default. Steps that called tools or looped are confirmed by executing real pipeline code end-to-end in a throwaway git worktree."
+      "body": "Each successful single-shot step is re-run on cheaper candidates from your selected replay provider using the exact inputs from the rollout, and a cross-family judge scores every candidate against the answer Codex already gave, holding a 0.90 quality floor by default. Steps that called tools or looped are confirmed by executing real pipeline code end-to-end in a throwaway git worktree."
     },
     {
       "label": "04 · Approve",
@@ -73,8 +73,8 @@
       "source": "status / approval"
     },
     {
-      "field": "cost baseline",
-      "source": "derived from model + usage via OpenRouter pricing"
+      "field": "historical cost",
+      "source": "not present in Codex logs"
     }
   ],
   "detection": "timestamp · type · payload.type",
@@ -88,15 +88,15 @@
       "body": "Instead of flipping your Codex model config and watching for regressions, replay the sessions you already ran and read the per-step verdicts first. The decision gets made on evidence from your own work, not a leaderboard."
     },
     {
-      "title": "Put a dollar figure on your rollouts",
-      "body": "Codex logs token counts, not cost. The audit derives a per-step baseline from the logged model and usage via OpenRouter's pricing table, then shows which proven swaps would change it, an itemized bill for your agent coding."
+      "title": "Compare candidate replay prices",
+      "body": "Codex logs token counts, not cost, so missing historical step costs stay unknown. The audit prices candidate calls through your selected replay provider and shows which swaps preserve the output you accepted."
     }
   ],
   "limits": [
     "It reads rollout files from disk. It does not hook into Codex, watch live sessions, or change your Codex configuration; acting on the report stays your move.",
     "Steps where Codex called tools (shell commands, patches, file edits) are not judged from the log alone. They are confirmed by re-running real pipeline code end-to-end, and when a session cannot be re-run that way, the audit abstains on those steps.",
     "Rollouts do not record the set of tools Codex had available, so candidates are filtered on what each step actually did rather than the full declared tool surface.",
-    "Codex does not log dollar cost. The baseline is derived from the model and token counts via OpenRouter pricing: a sound estimate, but not your invoice.",
+    "Codex does not log dollar cost. Missing historical step costs stay unknown rather than being derived from a provider catalog.",
     "It is a report, not a gateway. Nothing sits between Codex and its provider, and there is no rightmodeler server to see your sessions."
   ],
   "faq": [
@@ -106,7 +106,7 @@
     },
     {
       "q": "Do I need to export anything before running the audit?",
-      "a": "No. Codex already writes its rollouts to local disk, so there is no dashboard to visit and no export API to call. The only key involved is your own OPENROUTER_API_KEY, used to run the replays."
+      "a": "No. Codex already writes its rollouts to local disk, so there is no dashboard to visit and no export API to call. The only new credential is your replay provider key, used to run the replays."
     },
     {
       "q": "Does rightmodeler change which model Codex uses?",
@@ -114,7 +114,7 @@
     },
     {
       "q": "Does my session data leave my machine?",
-      "a": "Only during replay, when step inputs go to candidate models through OpenRouter under your own key, the same class of call Codex made to produce the log in the first place. There is no rightmodeler server and no account."
+      "a": "Only during replay, when step inputs go to candidate models through your selected replay provider under your own key, the same class of call Codex made to produce the log in the first place. There is no rightmodeler server and no account."
     },
     {
       "q": "Will it always find a cheaper model?",

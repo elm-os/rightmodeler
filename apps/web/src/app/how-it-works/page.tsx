@@ -30,9 +30,9 @@ const STEPS: {
   {
     n: "01",
     name: "Detect",
-    body: "Point it at the traces you already emit. rightmodeler autodetects the format across eight sources and folds every run into one per-step schema, with no new SDK and no re-instrumentation.",
+    body: "Point it at the traces you already emit. rightmodeler autodetects the format across nine sources and folds every run into one per-step schema, with no new SDK and no re-instrumentation.",
     label: "reads",
-    line: "Claude Code · Codex · LangSmith / LangGraph · OpenAI SDK · Langfuse · Braintrust · Phoenix · OTel GenAI  →  1 per-step schema",
+    line: "Claude Code · Codex · LangSmith / LangGraph · OpenAI SDK · Langfuse · Braintrust · Phoenix · OTel GenAI · LiteLLM  →  1 per-step schema",
   },
   {
     n: "02",
@@ -53,7 +53,7 @@ const STEPS: {
 const FAQ: FaqItem[] = [
   {
     q: "Which traces are supported?",
-    a: "Eight formats, autodetected: Claude Code, Codex, LangSmith / LangGraph, the OpenAI SDK, Langfuse, Braintrust, Phoenix, and OpenTelemetry GenAI. rightmodeler folds them all into one per-step schema, so you point it at the traces you already emit, with no new instrumentation.",
+    a: "Nine formats, autodetected: Claude Code, Codex, LangSmith / LangGraph, the OpenAI SDK, Langfuse, Braintrust, Phoenix, OpenTelemetry GenAI, and LiteLLM StandardLoggingPayload. rightmodeler folds them all into one per-step schema, so you point it at the traces you already emit, with no new instrumentation.",
   },
   {
     q: "Does it touch production?",
@@ -61,7 +61,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Do you store my data?",
-    a: "It runs locally on your own traces and your own API keys. Replays call whichever model providers you choose (directly or via OpenRouter) using your keys; there is no rightmodeler server holding your traces.",
+    a: "It runs locally on your own traces and your own replay provider key. Replays call your selected provider, OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy, using your key; there is no rightmodeler server holding your traces.",
   },
 ];
 
@@ -92,7 +92,7 @@ export default function HowItWorksPage() {
           </Reveal>
 
           {/* The pipeline: one continuous hairline spine with numbered nodes.
-              No card fills — warm-sand barely separates from the canvas, so depth
+              No card fills; warm-sand barely separates from the canvas, so depth
               comes from the spine, the display-face step titles, and a
               hairline-topped machine-output line per step. Numbering is earned:
               this is a real Detect -> Prove -> Fix sequence. */}

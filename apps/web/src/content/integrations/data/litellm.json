@@ -7,17 +7,17 @@
   "description": "rightmodeler re-runs your real pipeline with a LiteLLM proxy injecting the cheaper candidate, tools fire, loops run, and the report shows whether the swap survived.",
   "h1": "rightmodeler + LiteLLM",
   "lede": "When a step calls tools or loops, judging one replayed completion is not proof. rightmodeler re-runs your real pipeline with a LiteLLM proxy swapping the model underneath, your code unmodified, the candidate doing the actual work.",
-  "tldr": "rightmodeler uses LiteLLM as its documented injection method for end-to-end replay: a local proxy maps the model name your code requests to the cheaper OpenRouter candidate, so the pipeline re-runs unmodified in a throwaway git worktree while the swap happens underneath. Anthropic SDKs go through LiteLLM's Anthropic-passthrough, and teams already running a LiteLLM gateway can point the same mechanics at OpenRouter.",
+  "tldr": "A LiteLLM proxy can be rightmodeler's replay provider: set RIGHTMODELER_PROVIDER=litellm and candidate and judge calls use the proxy's live catalog, while x-litellm-response-cost supplies each call's charge when present. LiteLLM also remains the documented injection method for end-to-end replay, where you set litellm_params.api_base to the active replay provider and your pipeline re-runs unmodified in a throwaway git worktree.",
   "steps": [
     {
       "label": "01 · Configure",
       "title": "One config file maps the model underneath",
-      "body": "A LiteLLM config's model_list maps the model name your code requests to the candidate under test: litellm_params.model set to the openrouter/… slug, api_base https://openrouter.ai/api/v1, api_key os.environ/OPENROUTER_API_KEY. A wildcard entry (model_name \"*\" to openrouter/*) catches anything else the run asks for."
+      "body": "A LiteLLM config's model_list maps the model name your code requests to the candidate under test. Set litellm_params.model to that provider's model id, litellm_params.api_base to the active replay provider's base URL, and api_key to the matching provider key. When LiteLLM itself is selected with RIGHTMODELER_PROVIDER=litellm, rightmodeler uses the aliases exposed by the proxy's live catalog."
     },
     {
       "label": "02 · Redirect",
       "title": "Point the pipeline at localhost, not the provider",
-      "body": "litellm --config config.yaml starts the gateway, and OPENAI_BASE_URL=http://localhost:4000 points your unmodified code at it; the pipeline keeps requesting the model it always requests. Anthropic SDKs go through LiteLLM's Anthropic-passthrough instead, since OpenRouter's /v1 speaks the OpenAI wire format."
+      "body": "For proxy injection, litellm --config config.yaml starts the gateway and OPENAI_BASE_URL=http://localhost:4000 points your unmodified code at it; the pipeline keeps requesting the model it always requests. When LiteLLM is the active replay provider, the sandbox instead sets OPENAI_BASE_URL to LITELLM_PROXY_API_BASE and also sets the native Anthropic SDK base URL before the pipeline starts."
     },
     {
       "label": "03 · Re-run",
@@ -31,11 +31,11 @@
     }
   ],
   "setup": {
-    "intro": "There is nothing to install into your app; LiteLLM exists here only inside the replay sandbox, standing in front of your unmodified pipeline for the length of a run. Your OpenRouter key is the one credential.",
+    "intro": "There is nothing to install into your app. LiteLLM can be the selected replay provider through an existing proxy, or it can run only inside the replay sandbox as an injection layer in front of your unmodified pipeline.",
     "commands": [
       {
-        "comment": "# the one credential; replay traffic bills to your own account",
-        "command": "export OPENROUTER_API_KEY=sk-or-..."
+        "comment": "# make your proxy the replay provider itself",
+        "command": "export LITELLM_PROXY_API_BASE=http://localhost:4000 LITELLM_PROXY_API_KEY=sk-... RIGHTMODELER_PROVIDER=litellm"
       },
       {
         "comment": "# what the E2E replay stands up in front of your code",
@@ -56,11 +56,11 @@
     },
     {
       "title": "Audit an Anthropic-SDK pipeline",
-      "body": "OpenRouter's API is OpenAI-shaped, so an Anthropic client cannot be redirected with a base URL alone. LiteLLM's Anthropic-passthrough sits in between and speaks the Anthropic wire format, your pipeline joins the replay without a single code edit."
+      "body": "When LiteLLM is the selected replay provider, rightmodeler points the native Anthropic SDK at the configured proxy before your pipeline starts, so your code joins the replay without an edit."
     },
     {
       "title": "Reuse the gateway you already run",
-      "body": "If LiteLLM already fronts your LLM traffic, the same model_list mechanics point a replay at OpenRouter, and the proxy's request logging hands you the candidate's trajectory for free."
+      "body": "If LiteLLM already fronts your LLM traffic, set RIGHTMODELER_PROVIDER=litellm and rightmodeler uses that proxy's catalog for replay. Each response's x-litellm-response-cost header supplies the candidate's per-call charge when the proxy returns it."
     },
     {
       "title": "Catch cascades before they ship",
@@ -68,7 +68,7 @@
     }
   ],
   "limits": [
-    "rightmodeler does not ingest LiteLLM proxy logs. LiteLLM's role here is model injection during replay, not a trace source; traces come from the eight supported export formats.",
+    "rightmodeler natively ingests LiteLLM proxy StandardLoggingPayload logs through a dedicated adapter. LiteLLM can be both a trace source and the selected replay provider.",
     "Replays are not bit-exact even at temperature 0 with a fixed seed; GPU float non-associativity and MoE routing still drift. Important steps are re-run several times and read as a distribution, not a single sample.",
     "When a mocked side-effecting tool is called with different arguments than the trace recorded, there is no stored answer; that replay mainly measures whether the candidate picks the same calls.",
     "High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, and weak evidence means abstain. A tool that always finds a swap is not measuring anything.",
@@ -77,7 +77,7 @@
   "faq": [
     {
       "q": "Do I need to run LiteLLM to use rightmodeler?",
-      "a": "No. LiteLLM is not a dependency; single-shot steps replay directly against OpenRouter with your own key. The proxy enters only when a step has tool calls, loops, or downstream consumers and needs end-to-end confirmation, and it runs locally for the length of the replay."
+      "a": "No, unless you choose it as the replay provider. With RIGHTMODELER_PROVIDER=litellm, single-shot replays and judge calls go through the configured proxy and per-call charges come from x-litellm-response-cost when present. With another provider selected, LiteLLM enters only when an end-to-end replay uses it as the local injection layer."
     },
     {
       "q": "Does rightmodeler replace LiteLLM?",
@@ -85,11 +85,11 @@
     },
     {
       "q": "Can rightmodeler ingest my LiteLLM proxy logs?",
-      "a": "Not directly; there is no LiteLLM log adapter. But LiteLLM can forward request logs to backends like Langfuse or an OpenTelemetry collector, and exports from both of those are among the eight formats the ingester autodetects."
+      "a": "Yes. rightmodeler has a dedicated adapter for LiteLLM StandardLoggingPayload logs, and LiteLLM is one of the nine source formats the ingester autodetects."
     },
     {
       "q": "My pipeline uses the Anthropic SDK. How does the swap work?",
-      "a": "OpenRouter's /v1 endpoint speaks the OpenAI wire format, so an Anthropic client cannot be redirected with a base URL alone. The replay puts a LiteLLM Anthropic-passthrough proxy in front of it instead, and because ANTHROPIC_BASE_URL is read once at process start, it is set before your pipeline launches."
+      "a": "When LiteLLM is the selected replay provider, rightmodeler sets ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY to the configured proxy before your pipeline launches. Your code keeps using the native Anthropic SDK."
     },
     {
       "q": "Is re-running my pipeline with a cheaper model safe?",

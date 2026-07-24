@@ -7,7 +7,7 @@
   "description": "Export OpenInference spans from Phoenix and rightmodeler replays each step on cheaper models, judges every output against what you shipped, and reports proven swaps.",
   "h1": "rightmodeler + Phoenix",
   "lede": "Phoenix already records your agent as OpenInference spans: model, messages, token counts. rightmodeler replays those spans through cheaper candidates and reports, per step, which swaps hold quality.",
-  "tldr": "rightmodeler reads Phoenix traces in their native OpenInference span format with a dedicated adapter: it detects openinference.span.kind and llm.* attributes, un-flattens the dotted message keys, and folds every span into one per-step schema. Each successful step is then replayed through cheaper candidates on OpenRouter and judged against the output you already shipped, right-sizing without new instrumentation.",
+  "tldr": "rightmodeler reads Phoenix traces in their native OpenInference span format with a dedicated adapter: it detects openinference.span.kind and llm.* attributes, un-flattens the dotted message keys, and folds every span into one per-step schema. Each successful step is then replayed through cheaper candidates on your selected replay provider and judged against the output you already shipped, right-sizing without new instrumentation.",
   "steps": [
     {
       "label": "01 · Export",
@@ -22,7 +22,7 @@
     {
       "label": "03 · Replay + judge",
       "title": "Replayed on your inputs, judged against your outputs",
-      "body": "Each successful LLM step is replayed through cheaper OpenRouter candidates on the exact messages recovered from your spans. A judge from a different model family scores every candidate against the output you already shipped, position-swapped, with a 0.90 quality floor by default. Steps with tool calls or loops are confirmed by re-running your pipeline code end-to-end instead."
+      "body": "Each successful LLM step is replayed through cheaper candidates from your selected replay provider on the exact messages recovered from your spans. A judge from a different model family scores every candidate against the output you already shipped, position-swapped, with a 0.90 quality floor by default. Steps with tool calls or loops are confirmed by re-running your pipeline code end-to-end instead."
     },
     {
       "label": "04 · Approve",
@@ -31,7 +31,7 @@
     }
   ],
   "setup": {
-    "intro": "Install once, then hand the skill an exported span file. Nothing connects to your Phoenix instance; the audit runs offline on the spans you already collected, with your own OpenRouter key for replays.",
+    "intro": "Install once, then hand the skill an exported span file. Nothing connects to your Phoenix instance; the audit runs offline on the spans you already collected, with your own replay provider key.",
     "commands": [
       {
         "comment": "# inside Claude Code, hand the exported spans to the skill",
@@ -73,8 +73,8 @@
       "source": "span status"
     },
     {
-      "field": "cost baseline",
-      "source": "derived from model + token counts"
+      "field": "historical cost",
+      "source": "not present in OpenInference spans"
     }
   ],
   "detection": "openinference.span.kind · llm.model_name",
@@ -88,14 +88,14 @@
       "body": "The usual order is swap first, then watch the dashboards. rightmodeler inverts it: replay recorded spans through the candidate model offline, read the judge's verdict against outputs your users already accepted, and ship only what proved out."
     },
     {
-      "title": "Put a price on spans that carry none",
-      "body": "OpenInference spans record token counts but no dollar figures. The audit derives each step's cost baseline from llm.model_name and llm.token_count.* via OpenRouter's pricing table, then itemizes what each step family costs today and which proven swaps would change that."
+      "title": "Compare candidate pricing for costless spans",
+      "body": "OpenInference spans usually record token counts but no dollar figures, so missing historical step costs stay unknown. The audit prices candidate calls through your selected replay provider while testing cheaper alternatives against the output you shipped."
     }
   ],
   "limits": [
     "It reads span files on disk, OTLP JSON or JSONL with OpenInference attributes. It does not connect to a running Phoenix instance, poll its API, or watch new traces arrive.",
     "The integration is with the OpenInference span format, not with Arize: no account connection and no keys exchanged. Spans that use gen_ai.* attributes instead are picked up by the separate OTel GenAI adapter.",
-    "OpenInference spans carry no cost, so the baseline is derived from the model name and token counts against OpenRouter's pricing table, a consistent estimate, not your provider invoice.",
+    "OpenInference spans usually carry no cost, so missing historical step costs stay unknown rather than being derived from a provider catalog.",
     "Steps with tool calls or loops are not judged from the span alone; they are confirmed by re-running your pipeline end-to-end in a throwaway worktree with the candidate model injected.",
     "It is a report, not a runtime gateway. Phoenix keeps observing your agent in production; rightmodeler never sits in the request path, and where evidence is weak it abstains."
   ],
@@ -110,7 +110,7 @@
     },
     {
       "q": "Do I need an Arize account or API key?",
-      "a": "No. The integration is with the OpenInference span format itself, so a self-hosted Phoenix works exactly like the cloud one: export the spans and hand over the file. The only key involved is your own OpenRouter key, used for replays."
+      "a": "No. The integration is with the OpenInference span format itself, so a self-hosted Phoenix works exactly like the cloud one: export the spans and hand over the file. The only new credential is your replay provider key."
     },
     {
       "q": "Why do my spans have keys like llm.input_messages.0.message.role?",
@@ -118,7 +118,7 @@
     },
     {
       "q": "Does my span data leave my machine?",
-      "a": "Only during replay: step inputs go to candidate models through OpenRouter under your own key, the same class of call your agent already makes to a provider. There is no rightmodeler server and no account; the span files themselves stay on disk."
+      "a": "Only during replay: step inputs go to candidate models through your selected replay provider under your own key, the same class of call your agent already makes to a provider. There is no rightmodeler server and no account; the span files themselves stay on disk."
     },
     {
       "q": "Will it always find a cheaper model?",

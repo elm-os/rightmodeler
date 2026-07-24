@@ -7,7 +7,7 @@
   "description": "Fetch Braintrust span rows and rightmodeler replays each step through cheaper models, judges every candidate against the output you shipped, and reports the safe swaps.",
   "h1": "rightmodeler + Braintrust",
   "lede": "Braintrust scores your agent against your evals. rightmodeler puts the same span rows to a different test: which steps survive on a cheaper model, judged against the outputs you already shipped.",
-  "tldr": "rightmodeler autodetects Braintrust span rows by their span_id and root_span_id keys, folds them into its per-step schema with a best-effort generic adapter, and replays each successful step through cheaper candidates on OpenRouter. A cross-family judge scores every candidate against what you shipped: the reference is your production output, not a benchmark suite.",
+  "tldr": "rightmodeler autodetects Braintrust span rows by their span_id and root_span_id keys, folds them into its per-step schema with a best-effort generic adapter, and replays each successful step through cheaper candidates on your selected replay provider. A cross-family judge scores every candidate against what you shipped: the reference is your production output, not a benchmark suite.",
   "steps": [
     {
       "label": "01 · Fetch",
@@ -22,7 +22,7 @@
     {
       "label": "03 · Replay",
       "title": "Replayed on cheaper models, judged against your output",
-      "body": "Successful single-shot steps are replayed through cheaper OpenRouter candidates on the exact inputs from your rows. A judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you shipped, with a 0.90 quality floor by default. Steps with tool calls or loops are confirmed by re-running your pipeline code end-to-end in a throwaway worktree."
+      "body": "Successful single-shot steps are replayed through cheaper candidates from your selected replay provider on the exact inputs from your rows. A judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you shipped, with a 0.90 quality floor by default. Steps with tool calls or loops are confirmed by re-running your pipeline code end-to-end in a throwaway worktree."
     },
     {
       "label": "04 · Approve",
@@ -101,7 +101,7 @@
     },
     {
       "q": "Does my span data leave my machine?",
-      "a": "Replays send step inputs to candidate models through OpenRouter using your own key, the same shape of call your agent already makes to a provider. There is no rightmodeler server and no account; your Braintrust key is used once, by you, to fetch the export."
+      "a": "Replays send step inputs to candidate models through your selected replay provider using your own key, the same shape of call your agent already makes to a provider. There is no rightmodeler server and no account; your Braintrust key is used once, by you, to fetch the export."
     },
     {
       "q": "Will it always find savings?",
@@ -109,7 +109,7 @@
     },
     {
       "q": "Do I need to re-instrument my agent?",
-      "a": "No. If Braintrust already logs your agent, the rows you can fetch today are the input. The audit runs on those files as they are, the only new credential involved is an OpenRouter key for the replays."
+      "a": "No. If Braintrust already logs your agent, the rows you can fetch today are the input. The audit runs on those files as they are, and the only new credential is your replay provider key."
     }
   ],
   "related": ["langsmith", "langfuse", "openrouter"],

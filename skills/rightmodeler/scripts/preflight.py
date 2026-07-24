@@ -5,7 +5,11 @@ from __future__ import annotations
 import shutil
 import sys
 
-from common import resolve_openrouter_key
+from provider import get_provider
+
+
+def _is_auth_failure(error: Exception) -> bool:
+    return getattr(getattr(error, "response", None), "status_code", None) in (401, 403)
 
 
 def main() -> int:
@@ -13,16 +17,14 @@ def main() -> int:
     print("rightmodeler preflight")
     print("-" * 40)
 
-    key, source = resolve_openrouter_key()
-    if key:
-        where = "environment" if source == "environment" else source
-        print(f"[ok] OPENROUTER_API_KEY loaded from {where} (…{key[-4:]})")
-    else:
-        print(
-            "[MISSING] OPENROUTER_API_KEY — add `OPENROUTER_API_KEY=...` to your "
-            "project root `.env` or export it in this session"
-        )
-        ok = False
+    provider = get_provider()
+    config = provider.config
+    key = provider.api_key
+    where = provider.key_source or "unknown source"
+    print(f"[ok] selected provider: {config.name}")
+    print(f"[ok] {config.env_key} loaded from {where} (…{key[-4:]})")
+    for url in config.docs:
+        print(f"[info] provider docs: {url}")
 
     print(f"[info] python {sys.version.split()[0]}")
 
@@ -44,36 +46,62 @@ def main() -> int:
     # live credit check
     if key:
         try:
-            from openrouter import OpenRouter
-
-            orr = OpenRouter(key)
-            info = orr.key_info()
-            rem = info.get("limit_remaining")
-            print(
-                f"[ok] OpenRouter reachable. credits remaining: {rem if rem is not None else 'unlimited/unknown'}"
-            )
-            if info.get("is_free_tier"):
-                print("[warn] key is free-tier — expect rate limits; avoid for large fleets")
+            info = provider.account_info()
+            if config.name == "openrouter":
+                remaining = info.get("limit_remaining")
+                print(
+                    "[ok] openrouter reachable. key spend limit remaining: "
+                    f"{remaining if remaining is not None else 'unlimited/unknown'}"
+                )
+                if info.get("is_free_tier"):
+                    print("[warn] key is free-tier — expect rate limits; avoid for large fleets")
+            elif config.name == "vercel-ai-gateway":
+                print(
+                    f"[ok] vercel-ai-gateway reachable. balance: ${info.get('balance')} "
+                    f"total used: ${info.get('total_used')}"
+                )
+            else:
+                readiness = info.get("readiness") or {}
+                print(
+                    f"[ok] litellm reachable. readiness: {readiness.get('status', 'healthy')} "
+                    f"models: {info.get('model_count', 0)}"
+                )
         except Exception as e:  # noqa: BLE001
-            print(f"[warn] could not reach OpenRouter /key: {e}")
+            if _is_auth_failure(e):
+                print(f"[MISSING] {config.name} authentication failed: {e}")
+                ok = False
+            else:
+                print(f"[warn] could not reach {config.name} account endpoint: {e}")
         else:
-            # judge IDs go stale as catalogs rotate; a missing judge silently fails
-            # every candidate it would have scored
             try:
-                from judge import DEFAULT_JUDGES
-
-                ids = {m["id"] for m in orr.list_models()}
-                for j in DEFAULT_JUDGES:
-                    if j in ids:
-                        print(f"[ok] judge model in catalog: {j}")
-                    else:
-                        print(
-                            f"[MISSING] judge model not in OpenRouter catalog: {j} — "
-                            "update DEFAULT_JUDGES in judge.py"
-                        )
-                        ok = False
+                catalog = provider.list_models()
+                families = {
+                    provider.model_family(model.get("id"))
+                    for model in catalog
+                    if model.get("type") in (None, "language")
+                } - {"unknown"}
+                if len(families) >= 3:
+                    print(f"[ok] catalog has {len(families)} resolvable judge families")
+                elif config.name == "litellm":
+                    print(
+                        f"[warn] litellm catalog has only {len(families)} resolvable model "
+                        "families — map judge-capable models in the proxy config or plan "
+                        "--judge-model"
+                    )
+                else:
+                    print(
+                        f"[MISSING] provider catalog has only {len(families)} resolvable "
+                        "model families — a neutral third-family judge is not guaranteed"
+                    )
+                    ok = False
             except Exception as e:  # noqa: BLE001
-                print(f"[warn] could not validate judge models: {e}")
+                if _is_auth_failure(e):
+                    print(f"[MISSING] {config.name} catalog authentication failed: {e}")
+                    ok = False
+                else:
+                    print(f"[warn] could not validate judge models: {e}")
+
+    provider._client.close()
 
     print("-" * 40)
     print("READY" if ok else "NOT READY — resolve [MISSING] items above")
