@@ -17,11 +17,30 @@ everything into one schema so the rest of the pipeline is format-agnostic.
 | **Codex CLI**               | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`                            | line `{timestamp,type,payload}`, `payload.type` in {message,function_call,function_call_output} |
 | **LiteLLM proxy**           | `StandardLoggingPayload` via s3/gcs/file/custom-callback logging          | `call_type` + `messages` + `response_cost`/`startTime`                                          |
 
+## Live docs per source
+
+| Source                  | Export / API documentation                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| LangSmith               | [Query traces using the SDK](https://docs.langchain.com/langsmith/export-traces)                                                            |
+| OTel GenAI              | [OTLP JSON protobuf encoding](https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding)                                             |
+| OpenInference / Phoenix | [Export data and query spans](https://arize.com/docs/phoenix/tracing/how-to-tracing/importing-and-exporting-traces/extract-data-from-spans) |
+| OpenAI JSONL            | [Create a Chat Completion](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)              |
+| Braintrust              | [API reference](https://www.braintrust.dev/docs/api-reference)                                                                              |
+| Langfuse                | [Observations API](https://langfuse.com/docs/api-and-data-platform/features/observations-api)                                               |
+| Claude Code             | [Export and locate session data](https://code.claude.com/docs/en/sessions)                                                                  |
+| Codex CLI               | [Official rollout recorder implementation](https://github.com/openai/codex/blob/main/codex-rs/rollout/src/recorder.rs)                      |
+| LiteLLM proxy           | [StandardLoggingPayload specification](https://docs.litellm.ai/docs/proxy/logging_spec)                                                     |
+
+OpenAI JSONL is rightmodeler's per-call wrapper around the documented request and
+response objects, not an OpenAI trace export. Claude Code says its local transcript
+entry format is internal and can change per release. Codex publishes no stable local
+rollout schema; its recorder source is the authoritative format reference.
+
 Two topologies to handle: **tree** (parent-link: LangSmith, OTel, OpenInference,
 Claude Code, Braintrust) and **flat-with-id-pairing** (Codex + OpenAI JSONL, join
 `function_call` → `function_call_output` by `call_id`). OTel/OpenInference flatten
-arrays into indexed dotted keys (`...messages.0.message.content`) — un-flatten first.
-Tool `arguments` and tool schemas often arrive as JSON _strings_ — parse defensively.
+arrays into indexed dotted keys (`...messages.0.message.content`); un-flatten first.
+Tool `arguments` and tool schemas often arrive as JSON _strings_; parse defensively.
 
 ## Normalized schema (`normalized.json`)
 
@@ -89,10 +108,12 @@ Design choices baked into the normalizer:
   (join by `tool_call_id` for flat formats).
 - `raw` preserves the untouched source object so nothing is lost and replay can
   reconstruct the exact request.
-- `success` is heterogeneous across tools — keep the normalized boolean _and_ the
+- `success` is heterogeneous across tools; keep the normalized boolean _and_ the
   original signal so we know how much to trust it.
-- `cost_usd`: only LangSmith/Braintrust/Langfuse carry it reliably; for CLI/OTel derive
-  from `model` + token usage via the OpenRouter pricing table.
+- `cost_usd`: CLI/OTel exports usually carry no cost. Candidate pricing during the audit
+  comes from the active provider's live catalog; missing historical costs stay unknown
+  rather than being derived. See the matching snapshot in [providers/](providers/) for
+  field mapping and estimate limits.
 - `case_id`: null for real traces. Hand-built benchmark corpora (see
   [corpus-reconstruction.md](corpus-reconstruction.md)) set it per example so
   `analyze.py` can tell "same step, N cases" apart from "loop iterations".
@@ -124,10 +145,10 @@ Design choices baked into the normalizer:
 
 Users often point at their app's log store instead of an agent-trace export. Most
 application logs record _that_ an LLM call happened (request lines, latencies, status
-codes) but not the LLM inputs and outputs — and without input → accepted-output pairs
+codes) but not the LLM inputs and outputs, and without input → accepted-output pairs
 there is nothing to replay or judge. Triage before spending any effort on ingestion:
 
-1. **Recency**: list log groups/streams and check the last-event timestamps — stale
+1. **Recency**: list log groups/streams and check the last-event timestamps; stale
    streams often mean the service moved (e.g. an infra migration) and you're looking
    at the wrong group.
 2. **Pattern probe**: filter a bounded window for markers of LLM I/O: `system_prompt`,
@@ -137,7 +158,7 @@ there is nothing to replay or judge. Triage before spending any effort on ingest
    input (system prompt + messages) AND the model's output are both present for the
    same call. Metadata-only logs fail this.
 4. **Verdict**: if the pairs exist, export the window to JSONL and run
-   `ingest.py --detect`. If they don't, say so plainly — do not fabricate a corpus
+   `ingest.py --detect`. If they don't, say so plainly; do not fabricate a corpus
    from partial logs. Fall back to
    [corpus-reconstruction.md](corpus-reconstruction.md) if the app persists LLM
    outputs somewhere else (usually its database), or set up capture (below) and
@@ -147,37 +168,37 @@ Export shapes `ingest.py` handles transparently: gzipped files (`.gz`), CloudWat
 S3-export lines (`<ISO timestamp> <json>`), CloudWatch event envelopes
 (`{timestamp, message: "<json string>"}`), Firehose deliveries
 (`{messageType, logEvents: [...]}`), and Docker/k8s `{log}` wrappers. Datadog
-archives are newline-delimited `.json.gz` (handled) — `.json.zst` needs `zstd -d`
+archives are newline-delimited `.json.gz` (handled); `.json.zst` needs `zstd -d`
 first.
 
 ## No usable logs at all? Set up capture
 
-When an app has neither traces nor stored outputs, don't dead-end — help the user
+When an app has neither traces nor stored outputs, don't dead-end; help the user
 start capturing. Every route below produces files `ingest.py` reads directly;
 collect a few days of representative traffic (~8+ cases per task family is the
 useful minimum), then analyze. The captured log contains full prompts and outputs
-— treat it like production data.
+Treat it like production data.
 
 - **SDK shim (fastest, stdlib-only)**: copy `scripts/capture.py` into the app and
-  wrap the client once at startup — `wrap_openai` (chat.completions + Responses
-  API) or `wrap_anthropic` — or call `log_call(...)` at the call site. Appends
+  wrap the client once at startup with `wrap_openai` (chat.completions + Responses
+  API) or `wrap_anthropic`, or call `log_call(...)` at the call site. Appends
   OpenAI-JSONL records with a per-call `case_id`; inside an agent loop, pass the
   request's id as `case_id` on every call so the loop is classified for E2E
-  replay. Streaming calls pass through unlogged — log those call sites explicitly
+  replay. Streaming calls pass through unlogged; log those call sites explicitly
   after assembling the final message, or disable streaming while collecting.
 - **LiteLLM proxy**: any payload-logging destination (`s3_bucket`, `gcs_bucket`,
-  custom `success_callback`) writes `StandardLoggingPayload` — ingested natively
+  custom `success_callback`) writes `StandardLoggingPayload`, ingested natively
   as `litellm`. Records redacted by `turn_off_message_logging` are skipped with a
   warning.
 - **Vercel AI SDK**: ~20-line language-model middleware
   (`wrapLanguageModel({model, middleware: {wrapGenerate}})`) appending
-  `{model, messages: prompt, output: result.text}` JSONL — the generic adapter
+  `{model, messages: prompt, output: result.text}` JSONL; the generic adapter
   ingests it.
 - **LangChain**: a `BaseCallbackHandler` joining `on_chat_model_start` /
   `on_llm_end` on `run_id`, writing the same generic shape.
 - **Provider/proxy exports** (when the app already runs through one): OpenAI
   stored completions (`store: true`, then `GET /v1/chat/completions` +
-  `/{id}/messages` — standard chat-completion objects); Helicone
+  `/{id}/messages`, standard chat-completion objects); Helicone
   `POST /v1/request/query` (follow `signed_body_url` when inline bodies are
   omitted); Portkey Logs Export API (JSONL of raw request/response). OpenRouter
   and the Anthropic console do **not** export payloads.

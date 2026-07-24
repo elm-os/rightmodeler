@@ -7,7 +7,7 @@
   "description": "Export a LangSmith run tree and rightmodeler replays each step through cheaper models, judges every output against what you shipped, and reports the safe swaps.",
   "h1": "rightmodeler + LangSmith",
   "lede": "Your LangSmith traces already hold the evidence. rightmodeler replays them through cheaper models and proves, step by step, which swaps are safe.",
-  "tldr": "rightmodeler reads exported LangSmith run trees with a dedicated adapter, replays each successful step through cheaper candidates on OpenRouter, and judges every output against the one you already shipped, so a LangSmith-instrumented agent gets right-sized without new instrumentation.",
+  "tldr": "rightmodeler reads exported LangSmith run trees with a dedicated adapter, replays each successful step through cheaper candidates on your selected replay provider, and judges every output against the one you already shipped, so a LangSmith-instrumented agent gets right-sized without new instrumentation.",
   "steps": [
     {
       "label": "01 · Export",
@@ -22,7 +22,7 @@
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you shipped",
-      "body": "Single-shot steps are replayed through cheaper OpenRouter models on the exact inputs from your trace, and a judge from a different model family scores each candidate against the output you already shipped, with a quality floor of 0.90 by default. Steps with tool calls or loops are confirmed end-to-end by re-running your pipeline code instead."
+      "body": "Single-shot steps are replayed through cheaper models from your selected replay provider on the exact inputs from your trace, and a judge from a different model family scores each candidate against the output you already shipped, with a quality floor of 0.90 by default. Steps with tool calls or loops are confirmed end-to-end by re-running your pipeline code instead."
     },
     {
       "label": "04 · Approve",
@@ -84,8 +84,8 @@
       "body": "Instead of trialing a cheaper model in production and watching dashboards, replay last week's run trees and read the verdict per step, judged against outputs your users already accepted."
     },
     {
-      "title": "Turn traces into a cost review",
-      "body": "The report itemizes what each task family costs today and which proven swaps change that, with evidence attached: a model bill your team can actually act on."
+      "title": "Compare candidate replay prices",
+      "body": "The audit prices candidate calls through your selected replay provider and tests each cheaper option against the outputs you already shipped. It does not derive missing historical costs from the export."
     }
   ],
   "limits": [
@@ -109,11 +109,11 @@
     },
     {
       "q": "Which candidate models does it try?",
-      "a": "Cheaper models from OpenRouter's catalog that support what the step actually needs (tool calling, structured output, enough context) and are priced strictly below the current model. Replays run with your own OpenRouter key, and a judge from a different model family scores each output."
+      "a": "Cheaper models from your selected replay provider's live catalog that support what the step actually needs (tool calling, structured output, enough context) and are priced strictly below the current model. Replays run with your own provider key, and a judge from a different model family scores each output."
     },
     {
       "q": "Does my trace data leave my machine?",
-      "a": "Replays send step inputs to candidate models through OpenRouter with your own API key, the same shape of call your agent already makes to a provider. There is no rightmodeler server, and nothing else holds your traces."
+      "a": "Replays send step inputs to candidate models through your selected replay provider with your own key, the same shape of call your agent already makes to a provider. There is no rightmodeler server, and nothing else holds your traces."
     },
     {
       "q": "Will it always find savings?",

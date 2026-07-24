@@ -19,6 +19,13 @@ from common import dump_json, load_json
 PASS_FRAC = 0.75
 
 
+def _format_cost(value, cost_is_estimate: bool = False) -> str:
+    if value is None:
+        return "?"
+    marker = " est." if cost_is_estimate else ""
+    return f"${value:.6f}{marker}"
+
+
 def family_rollup(steps: list[dict]) -> dict:
     """Aggregate per-(family, candidate) across cases: pass count, scores, savings."""
     fams: dict[str, dict] = {}
@@ -139,9 +146,9 @@ def render(results: dict, decisions: dict | None) -> str:
     lines.append("## Recommended substitutions")
     lines.append("")
     lines.append(
-        "| Step | Family | Current | → Recommended | Savings | Quality | Evidence | Confidence |"
+        "| Step | Family | Current | → Recommended | Savings | Replay cost | Quality | Evidence | Confidence |"
     )
-    lines.append("|---|---|---|---|---|---|---|---|")
+    lines.append("|---|---|---|---|---|---|---|---|---|")
     for s in steps:
         best = s.get("best")
         if not best:
@@ -149,6 +156,7 @@ def render(results: dict, decisions: dict | None) -> str:
         lines.append(
             f"| {s['name'] or s['step_id']} | {s['family']} | `{s['current_model']}` | "
             f"`{best['model']}` | {(best.get('est_savings') or 0):.0%} | "
+            f"{_format_cost(best.get('replay_cost'), best.get('cost_is_estimate', False))} | "
             f"{best['score']:.2f} ({best['verdict']}) | {s['evaluator']} | {confidence(s)} |"
         )
     lines.append("")
@@ -179,7 +187,10 @@ def render(results: dict, decisions: dict | None) -> str:
         "- Judge is reference-guided, cross-family, position-swapped; tool calls get a "
         "deterministic pre-check. Verdicts: equivalent / minor_drift / divergent."
     )
-    lines.append("- Costs compared via OpenRouter `usage.cost` (never raw token counts).")
+    lines.append(
+        "- Costs use provider-reported charges when available and catalog/usage-derived "
+        "estimates otherwise (never raw token counts across models)."
+    )
     lines.append(
         "- Savings are per-step estimates from blended token pricing; real savings depend "
         "on traffic mix. Confirm E2E-flagged steps before rollout."
@@ -200,6 +211,8 @@ def machine_json(results: dict, decisions: dict | None) -> dict:
                 "current_model": s["current_model"],
                 "recommended_model": best["model"],
                 "estimated_savings": best.get("est_savings"),
+                "replay_cost": best.get("replay_cost"),
+                "cost_is_estimate": bool(best.get("cost_is_estimate")),
                 "quality_score": best["score"],
                 "verdict": best["verdict"],
                 "evidence": s["evaluator"],

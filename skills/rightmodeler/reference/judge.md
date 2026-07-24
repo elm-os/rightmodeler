@@ -35,6 +35,22 @@ For tool calls / structured outputs, decompose — don't hand the blob to a pros
   wrong/hallucinated required arg = hard fail; extra non-conflicting detail acceptable,
   contradiction not.
 
+## Judge selection
+
+`judge.py` has no fixed judge list. It resolves the candidate and reference families
+through the active provider's live catalog, then excludes both families, unknown
+families, non-language records, and models whose declared output modalities omit text.
+If the candidate or reference family cannot be resolved, selection fails closed and
+requires an explicit `--judge-model`.
+
+Among eligible neutral-family models, the automatic selector ranks catalog records by
+the sum of three equal-weight percentile signals: release/addition recency, context
+length, and prompt-plus-completion price. Raw values and model ID break ties. This is a
+catalog-driven strength heuristic, not a permanent endorsement of named models. If no
+catalog record satisfies the third-family rule, provide `--judge-model`; an override
+must differ from both candidates and, when its family is resolvable, from both of their
+families.
+
 ## Bias mitigations (mandatory)
 
 | Bias                           | Mitigation                                                                                                      |
@@ -61,11 +77,11 @@ the _visible_ failure is far from the root cause. So:
 
 ## Calibration
 
-Judge tier: a frontier model, outside the family of both candidates, temperature 0,
-structured output. If the user has any human labels, keep only judges correlating with
-them (r ≥ 0.8), report Cohen's κ, and recompute κ when swapping judge or candidate models.
-Maintain a small gold set of step outputs for spot-checks. Report **low confidence** when
-no calibration exists.
+Judge tier: the strongest eligible neutral-family catalog model selected above,
+temperature 0, structured output. If the user has any human labels, keep only judges
+correlating with them (r ≥ 0.8), report Cohen's κ, and recompute κ when swapping judge
+or candidate models. Maintain a small gold set of step outputs for spot-checks. Report
+**low confidence** when no calibration exists.
 
 **Severity check for open-ended tasks.** Reference-judging is harsh on open-ended
 generation (personas, emotional analyses, free-form summaries): two equally good

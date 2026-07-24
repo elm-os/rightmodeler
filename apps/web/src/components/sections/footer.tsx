@@ -1,4 +1,4 @@
-// The closing colophon — the report's sign-off. Clean by default (no gradient): Dia Browser's
+// The closing colophon, the report's sign-off. Clean by default (no gradient): Dia Browser's
 // signature gradient lives in <OverscrollSpring/> and only rises up from the floor when you pull
 // past the absolute bottom of the page (the whole page eases up to expose it), then snaps back.
 // Server component: it composes client primitives only.
@@ -92,10 +92,6 @@ export function Footer() {
               Terms of service
             </Link>
           </nav>
-          <p className="font-mono text-caption text-driftwood">
-            Every figure shown on this page is an illustrative example, not
-            measured savings.
-          </p>
           <p className="font-mono text-caption text-fog">
             rightmodeler · © 2026 rightmodeler · an ELM-OS project
           </p>

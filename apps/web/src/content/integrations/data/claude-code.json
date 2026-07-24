@@ -7,7 +7,7 @@
   "description": "Run the rightmodeler skill on ~/.claude/projects: it replays every session step through cheaper models, judges each against what you accepted, and reports the safe swaps.",
   "h1": "rightmodeler + Claude Code",
   "lede": "rightmodeler runs inside the tool that wrote the traces. Claude Code already keeps every session on disk, so the audit starts with no export step, no SDK, and no re-instrumentation.",
-  "tldr": "rightmodeler is itself a Claude Code skill, and Claude Code already writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter folds each assistant turn into a per-step schema, replays the successful ones through cheaper models on OpenRouter, and judges every candidate against the output you already accepted.",
+  "tldr": "rightmodeler is itself a Claude Code skill, and Claude Code already writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter folds each assistant turn into a per-step schema, replays the successful ones through cheaper models from your selected replay provider, and judges every candidate against the output you already accepted.",
   "steps": [
     {
       "label": "01 · Locate",
@@ -22,7 +22,7 @@
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you accepted",
-      "body": "Single-shot steps replay through cheaper OpenRouter models on the exact inputs from the log, and a judge from a different model family scores each candidate against the output you already accepted, with a quality floor of 0.90 by default. Steps that call tools are confirmed by re-running the work end-to-end in a throwaway git worktree with the candidate injected."
+      "body": "Single-shot steps replay through cheaper models from your selected replay provider on the exact inputs from the log, and a judge from a different model family scores each candidate against the output you already accepted, with a quality floor of 0.90 by default. Steps that call tools are confirmed by re-running the work end-to-end in a throwaway git worktree with the candidate injected."
     },
     {
       "label": "04 · Approve",
@@ -77,8 +77,8 @@
       "source": "is_error"
     },
     {
-      "field": "cost baseline",
-      "source": "model + tokens via OpenRouter pricing"
+      "field": "historical cost",
+      "source": "not present in Claude Code logs"
     }
   ],
   "detection": "type · message.content[].tool_use · parentUuid",
@@ -88,8 +88,8 @@
       "body": "Every assistant turn carries its model and token usage. The audit replays the single-shot ones through cheaper candidates and reports, per step family, where the big model is earning its price and where a smaller one held at the quality floor."
     },
     {
-      "title": "Put a per-step price on a session",
-      "body": "The session log carries token counts (including cache reads and writes) and rightmodeler turns them into per-step dollars using the recorded model and OpenRouter pricing, so the report shows where spend concentrates before it proposes anything."
+      "title": "Understand the session's token use",
+      "body": "The session log carries token counts, including cache reads and writes, but not dollar cost. Missing historical step costs stay unknown, while candidate calls are priced through your selected replay provider."
     },
     {
       "title": "Audit an agent built on Claude Code",
@@ -113,7 +113,7 @@
     },
     {
       "q": "Does my code leave my machine?",
-      "a": "Replays send step inputs (which for a coding session include your prompts and code) to candidate models through OpenRouter with your own API key, the same shape of call Claude Code already makes to its provider. There is no rightmodeler server and no account; nothing else holds your traces."
+      "a": "Replays send step inputs (which for a coding session include your prompts and code) to candidate models through your selected replay provider with your own key, the same shape of call Claude Code already makes to its provider. There is no rightmodeler server and no account; nothing else holds your traces."
     },
     {
       "q": "Will it always find savings?",

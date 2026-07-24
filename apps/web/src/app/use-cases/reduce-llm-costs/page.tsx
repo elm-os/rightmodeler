@@ -51,7 +51,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Do I need new instrumentation?",
-    a: "No. rightmodeler reads the traces you already emit across eight formats, folds them into one per-step schema, and runs offline. Nothing sits in your request path.",
+    a: "No. rightmodeler reads the traces you already emit across nine formats, folds them into one per-step schema, and runs offline. Nothing sits in your request path.",
   },
 ];
 

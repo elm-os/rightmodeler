@@ -7,7 +7,7 @@
   "description": "Point rightmodeler at OTLP span exports carrying gen_ai.* attributes. It replays each step on cheaper models and proves which swaps hold up against shipped output.",
   "h1": "rightmodeler + OpenTelemetry",
   "lede": "If your stack emits gen_ai.* spans, the evidence already exists. rightmodeler reads OTel GenAI telemetry from any OTLP pipeline (no bespoke integration required) and proves which steps can run on a cheaper model.",
-  "tldr": "rightmodeler reads OTLP span exports through a dedicated OTel GenAI adapter: any pipeline that emits gen_ai.* attributes (whatever framework or language produced them) normalizes into one per-step schema. Each successful step is replayed through cheaper candidates on OpenRouter and judged against the output you already shipped, with a 0.90 quality floor by default.",
+  "tldr": "rightmodeler reads OTLP span exports through a dedicated OTel GenAI adapter: any pipeline that emits gen_ai.* attributes (whatever framework or language produced them) normalizes into one per-step schema. Each successful step is replayed through cheaper candidates on your selected replay provider and judged against the output you already shipped, with a 0.90 quality floor by default.",
   "steps": [
     {
       "label": "01 · Export",
@@ -22,7 +22,7 @@
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against shipped output",
-      "body": "Single-shot steps are replayed through cheaper OpenRouter models on the exact inputs recorded in your spans, and a judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you shipped, with a 0.90 quality floor by default. Steps with tool calls or loops are confirmed by re-running your pipeline end-to-end instead."
+      "body": "Single-shot steps are replayed through cheaper models from your selected replay provider on the exact inputs recorded in your spans, and a judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you shipped, with a 0.90 quality floor by default. Steps with tool calls or loops are confirmed by re-running your pipeline end-to-end instead."
     },
     {
       "label": "04 · Approve",
@@ -73,8 +73,8 @@
       "source": "span status"
     },
     {
-      "field": "cost baseline",
-      "source": "derived from model + usage via OpenRouter pricing"
+      "field": "historical cost",
+      "source": "not present in OTel spans"
     }
   ],
   "detection": "gen_ai.request.model · gen_ai.input.messages",
@@ -88,13 +88,13 @@
       "body": "Services in different languages that share nothing but the semantic conventions normalize into one per-step schema, so a single audit covers the Python agent and the TypeScript sidecar alike, and shows which steps in each genuinely earn a frontier model."
     },
     {
-      "title": "A model bill from telemetry you already emit",
-      "body": "OTel spans do not carry cost, so rightmodeler derives it from gen_ai.request.model and gen_ai.usage.*_tokens via OpenRouter's pricing table, turning observability exhaust into a per-step cost baseline with proven, cheaper alternatives attached."
+      "title": "Compare candidate pricing from telemetry",
+      "body": "OTel spans usually do not carry cost, so missing historical step costs stay unknown. The audit prices candidate calls through your selected replay provider while testing cheaper alternatives against the output you shipped."
     }
   ],
   "limits": [
     "It reads OTLP span files on disk, JSON or JSONL. It does not connect to your collector, subscribe to a live OTLP endpoint, or scrape your tracing backend.",
-    "Replay needs real payloads. Many GenAI instrumentations leave message-content capture off by default, and spans without gen_ai.input.messages can be counted and costed but not replayed.",
+    "Replay needs real payloads. Many GenAI instrumentations leave message-content capture off by default, and spans without gen_ai.input.messages can be counted but not replayed.",
     "A step that calls tools or loops cannot be judged from its span alone. rightmodeler confirms those by re-running your actual pipeline code end-to-end in a throwaway git worktree with the candidate model injected.",
     "The audit prefers silence to guessing: thin evidence yields an abstention, and step families that touch auth, payments, migrations, deploys, or secrets are flagged rather than recommended for a swap.",
     "It is a report, not a collector processor or a gateway. Your OTel pipeline keeps exporting spans; rightmodeler never sits in the request path."
@@ -118,7 +118,7 @@
     },
     {
       "q": "Does my span data leave my machine?",
-      "a": "Replays send step inputs to candidate models through OpenRouter using your own API key, the same shape of call your service already makes to a provider. There is no rightmodeler server and no account; nothing else touches your spans."
+      "a": "Replays send step inputs to candidate models through your selected replay provider using your own key, the same shape of call your service already makes to a provider. There is no rightmodeler server and no account; nothing else touches your spans."
     },
     {
       "q": "Will it always find savings?",

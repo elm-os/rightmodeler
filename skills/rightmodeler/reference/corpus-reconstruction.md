@@ -15,9 +15,10 @@ and feed it straight into `orchestrate.py`, skipping `ingest.py`.
 2. **Recover the exact prompts.** Copy the system/user prompt templates verbatim
    from the app source (the module that makes the LLM call). Do not paraphrase —
    the replay must send what production sends.
-3. **Resolve model IDs.** Apps log bare names (`claude-sonnet-5`); OpenRouter needs
-   catalog IDs (`anthropic/claude-sonnet-5`). `model_info()` resolves unambiguous
-   bare names, but bake full IDs into the corpus to be explicit.
+3. **Resolve model IDs.** Match logged names against the active provider's live
+   catalog. Hosted routes generally use `creator/model` IDs; LiteLLM may expose
+   operator-defined aliases. `model_info()` resolves exact catalog IDs and supported
+   unambiguous variants, but bake the provider's catalog ID into the corpus.
 4. **Pick N cases per family.** ~8 diverse cases per family is enough to run the
    per-family pass-rate bar in `report.py`; one case proves nothing.
 5. **Emit `normalized.json` and `pipeline.json`** (schemas below), then run
@@ -43,7 +44,7 @@ so `analyze.py` doesn't mistake repeated step names for a loop:
       "order": 0,
       "kind": "llm",
       "name": "summary",
-      "model": "anthropic/claude-sonnet-5",
+      "model": "<catalog-model-id>",
       "system_prompt": "<verbatim system prompt from app source>",
       "input_messages": [{ "role": "user", "content": "<the stored input>" }],
       "output_text": "<the stored accepted output>",
@@ -68,7 +69,7 @@ so `analyze.py` doesn't mistake repeated step names for a loop:
       "step_id": "summary-00",
       "name": "summary",
       "family": "summary",
-      "model": "anthropic/claude-sonnet-5",
+      "model": "<catalog-model-id>",
       "replay_mode": "single_shot",
       "evaluator": "reference",
       "risk": "normal"
