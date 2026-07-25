@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.com/schemas/agent-run-ledger.schema.json",
+  "title": "Agent Run Ledger Entry",
+  "type": "object",
+  "$defs": {
+    "evaluation": {
+      "type": "object",
+      "required": [
+        "step_id",
+        "candidate_model",
+        "price_at_eval",
+        "score",
+        "est_savings_pct",
+        "passes",
+        "complete",
+        "source"
+      ],
+      "properties": {
+        "step_id": { "type": "string", "minLength": 1 },
+        "candidate_model": { "type": "string", "minLength": 1 },
+        "price_at_eval": { "type": "number", "minimum": 0 },
+        "score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "est_savings_pct": { "type": "number" },
+        "passes": { "type": "boolean" },
+        "complete": { "type": "boolean" },
+        "source": {
+          "type": "string",
+          "enum": ["replay", "price_rerank"]
+        },
+        "verdict": { "type": ["string", "null"] },
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "abstain_reason": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "incumbent": {
+      "type": "object",
+      "required": ["step_id", "model", "price"],
+      "properties": {
+        "step_id": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "price": { "type": "number", "minimum": 0 },
+        "baseline_score": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "guard": {
+          "type": ["string", "null"],
+          "enum": ["delisted", "price_rise", null]
+        }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": ["step_id", "candidate_model", "decision"],
+      "properties": {
+        "step_id": { "type": "string", "minLength": 1 },
+        "candidate_model": { "type": "string", "minLength": 1 },
+        "decision": {
+          "type": "string",
+          "enum": ["proposed", "merged", "closed"]
+        },
+        "pr_ref": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "run_id",
+    "started_at",
+    "catalog_digest",
+    "outcome",
+    "spend_usd",
+    "evaluations",
+    "incumbents",
+    "deferred",
+    "decisions"
+  ],
+  "properties": {
+    "version": { "type": "string", "enum": ["1"] },
+    "run_id": { "type": "string", "minLength": 1 },
+    "started_at": { "type": "string", "minLength": 1 },
+    "catalog_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "pipeline_digest": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["proposal", "abstention", "deferral", "abort"]
+    },
+    "outcome_detail": { "type": ["string", "null"] },
+    "spend_usd": { "type": "number", "minimum": 0 },
+    "evaluations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evaluation" }
+    },
+    "incumbents": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/incumbent" }
+    },
+    "deferred": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step_id", "candidate_model"],
+        "properties": {
+          "step_id": { "type": "string", "minLength": 1 },
+          "candidate_model": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/decision" }
+    }
+  },
+  "additionalProperties": false
+}

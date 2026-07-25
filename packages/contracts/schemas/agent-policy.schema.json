@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.com/schemas/agent-policy.schema.json",
+  "title": "Agent Policy",
+  "type": "object",
+  "required": [
+    "version",
+    "quality_floor",
+    "min_saving_pct",
+    "max_cost_per_run_usd",
+    "never_touch",
+    "schedule"
+  ],
+  "properties": {
+    "version": { "type": "string", "enum": ["1"] },
+    "quality_floor": { "type": "number", "minimum": 0, "maximum": 1 },
+    "min_saving_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+    "max_cost_per_run_usd": { "type": "number", "exclusiveMinimum": 0 },
+    "never_touch": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "schedule": {
+      "type": "string",
+      "enum": ["daily", "weekly", "monthly"]
+    }
+  },
+  "additionalProperties": false
+}

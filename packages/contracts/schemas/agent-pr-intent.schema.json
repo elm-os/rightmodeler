@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmodeler.com/schemas/agent-pr-intent.schema.json",
+  "title": "Agent PR Intent",
+  "type": "object",
+  "required": [
+    "version",
+    "run_id",
+    "step_id",
+    "current_model",
+    "candidate_model",
+    "branch",
+    "title",
+    "body",
+    "replacements",
+    "receipts",
+    "reason"
+  ],
+  "properties": {
+    "version": { "type": "string", "enum": ["1"] },
+    "run_id": { "type": "string", "minLength": 1 },
+    "step_id": { "type": "string", "minLength": 1 },
+    "current_model": { "type": "string", "minLength": 1 },
+    "candidate_model": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "body": { "type": "string", "minLength": 1 },
+    "replacements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "count"],
+        "properties": {
+          "file": { "type": "string", "minLength": 1 },
+          "count": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "receipts": {
+      "type": "object",
+      "required": [
+        "quality_score",
+        "quality_floor",
+        "est_savings_pct",
+        "min_saving_pct",
+        "sample_size",
+        "judge",
+        "run_cost_usd"
+      ],
+      "properties": {
+        "quality_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "quality_floor": { "type": "number", "minimum": 0, "maximum": 1 },
+        "est_savings_pct": { "type": "number" },
+        "min_saving_pct": { "type": "number" },
+        "sample_size": { "type": "integer", "minimum": 1 },
+        "judge": { "type": "string", "minLength": 1 },
+        "run_cost_usd": { "type": "number", "minimum": 0 },
+        "corpus_version_id": { "type": ["string", "null"] },
+        "corpus_age_days": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["new_model", "price_drop", "incumbent_guard"]
+    },
+    "evidence_ref": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}
