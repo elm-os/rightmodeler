@@ -50,6 +50,14 @@ Mode A feeds the candidate the incumbent model's clean recorded prefix. It struc
 cannot observe self-conditioning and is optimistic by construction for any step that
 consumes model-authored ancestor output.
 
+For steps whose pipeline map records `prefix_provenance: "model_authored"`, measure
+that optimism on a sampled subset by running the same cases and candidate through both
+arms. Report the named Mode A optimism delta as `Mode A pass rate - Mode B pass rate`,
+together with both arm rates and the paired case sample size. This is a customer- and
+family-specific empirical estimate, measured rather than projected. It assumes neither
+constant per-step accuracy nor independent steps. Steps with an external prefix have no
+self-conditioning exposure and do not need the second arm.
+
 - Use `temperature=0` and a fixed `seed` for the deterministic arm. It is not bit-exact
   because GPU float non-associativity and MoE routing can still drift. However, N repeated
   runs with those fixed settings are effectively one draw, not a distribution, so a
@@ -66,6 +74,19 @@ For multi-step / tool-calling / looping steps, and to confirm any shortlisted sw
 doesn't cascade. We re-run the user's **real pipeline code** with only the LLM swapped,
 so tools actually fire and loops actually run. This is the "watch out for cascading
 failures" box.
+
+Mode B starts from the original task input and lets the candidate author every model
+output in its own history. Starting from a downstream step's recorded input would retain
+the incumbent's healed prefix and is not a valid Mode B arm. If orchestration lacks a
+runnable pipeline or comparable un-healed trajectory evidence, it records a terminal
+abstention with that evidence gap instead of leaving the family pending.
+
+To supply the paired arm during orchestration, pass `--run-command` and either
+`--codebase` or a pipeline map containing `codebase`. The command's `{task}` file
+contains the trajectory-root `system_prompt` and `input_messages`, plus
+`target_step_id`. Its last JSON output must repeat that `target_step_id` and provide
+comparable `output_text` or `tool_calls` with authoritative `cost_usd`. Use
+`--mode-a-optimism-sample-size` to cap the stable per-family sample.
 
 ### 1. Model injection (no user-code edits)
 

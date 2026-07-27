@@ -7,5 +7,47 @@
     "model": "x",
     "source": "imported"
   },
-  "results": []
+  "results": [
+    {
+      "case_id": "case-1",
+      "output_text": "representative",
+      "cost_usd": 0.02,
+      "evidence_refs": ["replay/x/case-1"],
+      "samples": [
+        {
+          "output_text": "representative",
+          "cost_usd": 0.01,
+          "cost_is_estimate": false,
+          "duration_ms": 10,
+          "seed": 7,
+          "temperature": 0,
+          "replay_error": null
+        },
+        {
+          "output_text": "dispersion one",
+          "cost_usd": 0.02,
+          "cost_is_estimate": false,
+          "duration_ms": 20,
+          "seed": 8,
+          "temperature": null,
+          "replay_error": null
+        },
+        {
+          "output_text": "",
+          "cost_usd": 0,
+          "cost_is_estimate": false,
+          "duration_ms": 30,
+          "seed": 9,
+          "temperature": null,
+          "replay_error": "provider error"
+        }
+      ]
+    },
+    {
+      "case_id": "legacy-case",
+      "output_text": "legacy result without samples",
+      "cost_usd": 0.01,
+      "evidence_refs": ["import/legacy-case"]
+    }
+  ]
 }

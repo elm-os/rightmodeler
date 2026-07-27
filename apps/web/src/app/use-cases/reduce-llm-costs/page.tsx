@@ -7,7 +7,7 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { Reveal } from "@/components/reveal";
-import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
+import { ILLUSTRATIVE_SCORECARD, TRACE_SOURCES } from "@/lib/product-facts";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
@@ -52,7 +52,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Do I need new instrumentation?",
-    a: "No. rightmodeler reads the traces you already emit across nine formats, folds them into one per-step schema, and runs offline. Nothing sits in your request path.",
+    a: `No. rightmodeler reads the traces you already emit across ${TRACE_SOURCES.length} formats, folds them into one per-step schema, and runs offline. Nothing sits in your request path.`,
   },
 ];
 

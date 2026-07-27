@@ -37,7 +37,7 @@ const TERMS: { term: string; slug: string; def: string }[] = [
   {
     term: "Quality floor",
     slug: "quality-floor",
-    def: "The minimum reference-agreement score a candidate must clear to be recommended; below it, the current model stays. rightmodeler's default is 0.90, and it's configurable.",
+    def: `The minimum reference-agreement score a candidate must clear to be recommended; below it, the current model stays. rightmodeler's default is ${ILLUSTRATIVE_SCORECARD.floor}, and it's configurable.`,
   },
   {
     term: "Cascade risk",

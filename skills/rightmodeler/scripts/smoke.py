@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
+
+import httpx
 
 from analyze import analyze
 from common import md_text, resolve_env_var, untrusted_block
@@ -22,6 +25,7 @@ from provider import (
     VercelAIGatewayProvider,
     get_provider,
 )
+from reference_audit import build_worksheet, tabulate_worksheet
 from report import family_recommendations, render, render_snapshot, wilson_interval
 from replay import ReplayError, _digest, replay_cases
 from replay_step import replay_step
@@ -37,6 +41,128 @@ PROVIDER_ENV = (
     "LITELLM_PROXY_API_KEY",
     "LITELLM_PROXY_API_BASE",
 )
+
+
+class OfflineNetworkError(RuntimeError):
+    pass
+
+
+class OfflineTransport(httpx.BaseTransport):
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        raise OfflineNetworkError(
+            f"blocked outbound {request.method} request to {request.url.host}"
+        )
+
+
+class OfflineAsyncTransport(httpx.AsyncBaseTransport):
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        raise OfflineNetworkError(
+            f"blocked outbound {request.method} request to {request.url.host}"
+        )
+
+
+@contextmanager
+def offline_network_guard():
+    original_client_init = httpx.Client.__init__
+    original_async_client_init = httpx.AsyncClient.__init__
+    transport = OfflineTransport()
+    async_transport = OfflineAsyncTransport()
+
+    def guarded_client_init(client, *args, **kwargs):
+        kwargs.update(transport=transport, mounts=None, proxy=None, trust_env=False)
+        original_client_init(client, *args, **kwargs)
+
+    def guarded_async_client_init(client, *args, **kwargs):
+        kwargs.update(transport=async_transport, mounts=None, proxy=None, trust_env=False)
+        original_async_client_init(client, *args, **kwargs)
+
+    httpx.Client.__init__ = guarded_client_init
+    httpx.AsyncClient.__init__ = guarded_async_client_init
+    try:
+        yield
+    finally:
+        httpx.Client.__init__ = original_client_init
+        httpx.AsyncClient.__init__ = original_async_client_init
+
+
+def offline_network_guard_smoke():
+    try:
+        httpx.get("https://offline-guard.invalid/probe")
+    except OfflineNetworkError as error:
+        print(f"[offline guard] {error}")
+    else:
+        raise AssertionError("offline network guard should block outbound HTTP")
+
+
+def reference_audit_smoke():
+    source = {
+        "version": "1",
+        "bundle_id": "audit-smoke",
+        "runs": [
+            {
+                "id": f"case-{index}",
+                "prompt": f"Task {index}",
+                "final_output": f"Accepted output {index}",
+                "success": True,
+                "interestingness": index,
+                "judge_verdict": "equivalent",
+            }
+            for index in range(12)
+        ],
+    }
+    first = build_worksheet(source, sample_size=4, seed=73)
+    second = build_worksheet(source, sample_size=4, seed=73)
+    first_ids = [case["case_id"] for case in first["cases"]]
+    second_ids = [case["case_id"] for case in second["cases"]]
+    assert first_ids == second_ids
+    assert first["population_size"] == 12
+    assert first["sampling_method"] == "seeded uniform random sample without replacement"
+    assert "judge_verdict" not in json.dumps(first)
+    assert "interestingness" not in json.dumps(first)
+
+    corpus_version_id = "sha256:" + "a" * 64
+    corpus = {
+        "source_bundle_id": "audit-smoke",
+        "corpus_version_id": corpus_version_id,
+        "cases": [
+            {"case_id": f"golden-{index}", "source_run_id": f"case-{index}"} for index in range(3)
+        ],
+    }
+    corpus_worksheet = build_worksheet(source, sample_size=2, seed=73, corpus=corpus)
+    assert corpus_worksheet["corpus_version_id"] == corpus_version_id
+    assert corpus_worksheet["population_size"] == 3
+    assert all(case["case_id"].startswith("golden-") for case in corpus_worksheet["cases"])
+
+    normalized_worksheet = build_worksheet(
+        {
+            "steps": [
+                {
+                    "step_id": "step-1",
+                    "system_prompt": "Answer exactly.",
+                    "input_messages": [{"role": "user", "content": "Task"}],
+                    "output_text": "Accepted output",
+                    "success": {"accepted": True},
+                    "judge_verdict": "equivalent",
+                }
+            ]
+        },
+        sample_size=1,
+        seed=73,
+    )
+    assert normalized_worksheet["cases"][0]["case_id"] == "step-1"
+    assert "judge_verdict" not in json.dumps(normalized_worksheet)
+
+    for case, verdict in zip(
+        first["cases"],
+        ("correct", "incorrect", "ambiguous", "correct"),
+        strict=True,
+    ):
+        case["review"] = {"verdict": verdict, "note": f"Reviewed {case['case_id']}"}
+    result = tabulate_worksheet(first)
+    assert result["corpus_version_id"].startswith("sha256:")
+    assert result["verdict_counts"] == {"correct": 2, "incorrect": 1, "ambiguous": 1}
+    assert result["disagreement"]["rate"] == 0.5
+    assert result["reference_correctness_ceiling"]["estimate"] == 0.5
 
 
 def provider_selection_smoke():
@@ -603,6 +729,298 @@ def orchestrate_unresolved_model_smoke():
     assert "ghost/model" in warnings[0]
 
 
+def orchestrate_mode_a_optimism_smoke():
+    import orchestrate
+
+    pipeline_steps = [
+        {
+            "step_id": f"exposed-{index}",
+            "name": f"exposed step {index}",
+            "family": "support_draft",
+            "model": "current/model",
+            "replay_mode": "e2e",
+            "prefix_provenance": "model_authored",
+            "evaluator": "reference",
+            "risk": "normal",
+        }
+        for index in range(3)
+    ]
+    pipeline_steps.append(
+        {
+            "step_id": "external",
+            "name": "external step",
+            "family": "support_draft",
+            "model": "current/model",
+            "replay_mode": "e2e",
+            "prefix_provenance": "external",
+            "evaluator": "reference",
+            "risk": "normal",
+        }
+    )
+    normalized_steps = []
+    for pipeline_step in pipeline_steps:
+        sid = pipeline_step["step_id"]
+        trajectory_id = f"trajectory-{sid}"
+        if pipeline_step["prefix_provenance"] == "model_authored":
+            normalized_steps.append(
+                {
+                    "step_id": f"root-{sid}",
+                    "trajectory_id": trajectory_id,
+                    "system_prompt": f"root system:{sid}",
+                    "input_messages": [{"role": "user", "content": f"root task:{sid}"}],
+                    "output_text": f"incumbent ancestor:{sid}",
+                }
+            )
+            input_messages = [
+                {"role": "user", "content": f"root task:{sid}"},
+                {"role": "assistant", "content": f"incumbent ancestor:{sid}"},
+            ]
+        else:
+            input_messages = [{"role": "user", "content": f"external task:{sid}"}]
+        normalized_steps.append(
+            {
+                "step_id": sid,
+                "trajectory_id": trajectory_id,
+                "model": "current/model",
+                "input_messages": input_messages,
+                "output_text": "reference",
+            }
+        )
+    normalized = {"steps": normalized_steps}
+    sampled_ids = orchestrate._optimism_sample_ids(pipeline_steps, 2)
+    assert len(sampled_ids) == 2
+    mode_a_calls = []
+    mode_b_calls = []
+    mode_b_failure = sorted(sampled_ids)[0]
+
+    def fake_shortlist(*_args, **_kwargs):
+        return [
+            {
+                "id": "candidate/model",
+                "blended_price": 0.001,
+                "est_savings_vs_current": 0.5,
+            }
+        ]
+
+    def fake_replay_step(_orr, step, model, **_kwargs):
+        mode_a_calls.append((step["step_id"], step["input_messages"][-1]["content"]))
+        sample = {
+            "text": f"mode-a:{step['step_id']}",
+            "tool_calls": [],
+            "cost": 0.01,
+            "cost_is_estimate": False,
+            "duration_ms": 10,
+            "served_by": model,
+            "seed": 7,
+            "temperature": 0.0,
+            "error": None,
+        }
+        return {
+            "text": sample["text"],
+            "tool_calls": [],
+            "cost": 0.01,
+            "cost_is_estimate": False,
+            "samples": [sample],
+            "error": None,
+        }
+
+    def fake_run_e2e(codebase, run_command, task_input, model, timeout):
+        assert codebase == "/fixture/codebase"
+        assert run_command == "python fixture.py --task {task}"
+        assert timeout == 30
+        task = json.loads(Path(task_input).read_text())
+        sid = task["target_step_id"]
+        invalid_payloads = {
+            "invalid-cost/model": {"output_text": "invalid cost", "cost_usd": -1},
+            "invalid-output/model": {"output_text": {"bad": True}, "cost_usd": 0.01},
+            "invalid-tools/model": {
+                "output_text": "invalid tools",
+                "tool_calls": ["not an object"],
+                "cost_usd": 0.01,
+            },
+        }
+        if model in invalid_payloads:
+            return {
+                "ok": True,
+                "stdout": json.dumps(
+                    {
+                        "target_step_id": sid,
+                        **invalid_payloads[model],
+                    }
+                ),
+                "stderr": "",
+            }
+        assert model == "candidate/model"
+        expected_input = [
+            {
+                "role": "user",
+                "content": f"external task:{sid}" if sid == "external" else f"root task:{sid}",
+            }
+        ]
+        assert task["input_messages"] == expected_input
+        assert "incumbent ancestor" not in json.dumps(task)
+        if sid != "external":
+            assert task["system_prompt"] == f"root system:{sid}"
+        mode_b_calls.append((sid, task["input_messages"][0]["content"]))
+        return {
+            "ok": True,
+            "stdout": json.dumps(
+                {
+                    "target_step_id": sid,
+                    "output_text": f"mode-b:{sid}",
+                    "tool_calls": [],
+                    "cost_usd": 0.02,
+                }
+            ),
+            "stderr": "",
+        }
+
+    def fake_judge_outputs(*_args, candidate, **_kwargs):
+        passed = candidate.startswith("mode-a:") or candidate != f"mode-b:{mode_b_failure}"
+        return {
+            "verdict": "equivalent" if passed else "divergent",
+            "score": 1.0 if passed else 0.0,
+            "order_consistent": True,
+            "judge": "judge/model",
+            "justification": "fixed optimism smoke verdict",
+        }
+
+    previous_provider = orchestrate.get_provider
+    previous_shortlist = orchestrate.shortlist
+    previous_replay_step = orchestrate.replay_step
+    previous_judge_outputs = orchestrate.judge_outputs
+    previous_run_e2e = orchestrate.run_e2e
+    orchestrate.get_provider = lambda: object()
+    orchestrate.shortlist = fake_shortlist
+    orchestrate.replay_step = fake_replay_step
+    orchestrate.judge_outputs = fake_judge_outputs
+    orchestrate.run_e2e = fake_run_e2e
+    mode_b_runner = orchestrate._command_mode_b_runner(
+        "/fixture/codebase", "python fixture.py --task {task}", 30
+    )
+    try:
+        summary = orchestrate.run(
+            {"steps": pipeline_steps},
+            normalized,
+            0.9,
+            1,
+            None,
+            None,
+            1,
+            2,
+            mode_b_runner=mode_b_runner,
+            optimism_sample_size=2,
+        )
+        invalid_cost = mode_b_runner(
+            {"system_prompt": None, "input_messages": [{"role": "user", "content": "root"}]},
+            {"step_id": "invalid-cost"},
+            {"id": "invalid-cost/model"},
+        )
+        invalid_output = mode_b_runner(
+            {"system_prompt": None, "input_messages": [{"role": "user", "content": "root"}]},
+            {"step_id": "invalid-output"},
+            {"id": "invalid-output/model"},
+        )
+        invalid_tools = mode_b_runner(
+            {"system_prompt": None, "input_messages": [{"role": "user", "content": "root"}]},
+            {"step_id": "invalid-tools"},
+            {"id": "invalid-tools/model"},
+        )
+    finally:
+        orchestrate.get_provider = previous_provider
+        orchestrate.shortlist = previous_shortlist
+        orchestrate.replay_step = previous_replay_step
+        orchestrate.judge_outputs = previous_judge_outputs
+        orchestrate.run_e2e = previous_run_e2e
+
+    assert {sid for sid, _ in mode_a_calls} == sampled_ids
+    assert {sid for sid, _ in mode_b_calls} == {step["step_id"] for step in pipeline_steps}
+    assert "external" not in {sid for sid, _ in mode_a_calls}
+    assert all(content == f"incumbent ancestor:{sid}" for sid, content in mode_a_calls)
+    assert all(
+        content == (f"external task:{sid}" if sid == "external" else f"root task:{sid}")
+        for sid, content in mode_b_calls
+    )
+    assert all(step["needs_e2e"] is False for step in summary["steps"])
+    assert all(step["verdict"] in ("swap", "no_swap") for step in summary["steps"])
+    assert "finite non-negative" in invalid_cost["error"]
+    assert "output_text must be a string" in invalid_output["error"]
+    assert "tool_calls must be a list of objects" in invalid_tools["error"]
+    optimism = summary["mode_a_optimism"]
+    assert optimism["name"] == "mode_a_optimism_pass_rate_delta"
+    assert optimism["sample_size"] == 2
+    assert len(optimism["families"]) == 1
+    family = optimism["families"][0]
+    assert family["family"] == "support_draft"
+    assert family["candidate_model"] == "candidate/model"
+    assert family["sample_size"] == 2
+    assert family["mode_a_pass_rate"] == 1.0
+    assert family["mode_b_pass_rate"] == 0.5
+    assert family["pass_rate_delta"] == 0.5
+
+
+def orchestrate_e2e_abstention_smoke():
+    import orchestrate
+
+    pipeline = {
+        "steps": [
+            {
+                "step_id": "e2e-step",
+                "name": "multi-step family",
+                "family": "tool_agent",
+                "model": "current/model",
+                "replay_mode": "e2e",
+                "prefix_provenance": "model_authored",
+                "evaluator": "trajectory",
+                "risk": "normal",
+            }
+        ]
+    }
+    normalized = {
+        "steps": [
+            {
+                "step_id": "e2e-step",
+                "model": "current/model",
+                "input_messages": [{"role": "user", "content": "Complete the task."}],
+                "output_text": "reference",
+            }
+        ]
+    }
+    assert (
+        orchestrate._mode_b_root_input(
+            normalized["steps"][0], normalized["steps"], "model_authored"
+        )
+        is None
+    )
+
+    previous_provider = orchestrate.get_provider
+    previous_shortlist = orchestrate.shortlist
+    orchestrate.get_provider = lambda: object()
+    orchestrate.shortlist = lambda *_args, **_kwargs: [
+        {
+            "id": "candidate/model",
+            "blended_price": 0.001,
+            "est_savings_vs_current": 0.5,
+        }
+    ]
+    try:
+        summary = orchestrate.run(pipeline, normalized, 0.9, 1, None, None, 1, 1)
+    finally:
+        orchestrate.get_provider = previous_provider
+        orchestrate.shortlist = previous_shortlist
+
+    step = summary["steps"][0]
+    assert step["needs_e2e"] is False
+    assert step["abstain"] is True
+    assert step["verdict"] == "abstain"
+    assert "E2E execution was unavailable" in step["abstain_reason"]
+    assert "evidence gap" in step["abstain_reason"]
+    assert summary["needs_e2e"] == 0
+    report = render(summary, None)
+    assert step["abstain_reason"] in report
+    assert "## Needs code-execution confirmation" not in report
+
+
 def provider_env_smoke():
     env = _provider_env(OPENROUTER_CONFIG, "test-key")
     assert env["RIGHTMODELER_REPLAY_BASE_URL"] == OPENROUTER_CONFIG.base_url
@@ -636,6 +1054,9 @@ def replay_sampling_smoke():
         def __init__(self):
             self.calls = []
 
+        def price_per_token(self, _model):
+            return 0.000001, 0.000001
+
         def chat(self, model, messages, **kwargs):
             self.calls.append(kwargs)
             temperature = kwargs["temperature"]
@@ -646,6 +1067,7 @@ def replay_sampling_smoke():
                 "tool_calls": [],
                 "cost": 0.01,
                 "cost_is_estimate": False,
+                "duration_ms": seed - 30,
                 "model": model,
                 "error": None,
             }
@@ -669,6 +1091,7 @@ def replay_sampling_smoke():
     ]
     assert first["text"] == first["samples"][0]["text"] == "representative"
     assert first["tool_calls"] == first["samples"][0]["tool_calls"]
+    assert [sample["duration_ms"] for sample in first["samples"]] == [11, 12, 13, 14, 15]
     assert [call["temperature"] for call in first_provider.calls] == [
         0.0,
         None,
@@ -695,6 +1118,146 @@ def replay_sampling_smoke():
     assert with_dispersion_error["samples"][1]["error"] == "dispersion failed"
     assert with_dispersion_error["samples"][1]["seed"] == 42
     assert with_dispersion_error["samples"][1]["temperature"] is None
+
+    bundle = replay_cases(
+        [{"case_id": "case-1", "source_run_id": "step-1"}],
+        {
+            "steps": [
+                {
+                    "step_id": "step-1",
+                    "input_messages": [{"role": "user", "content": "Say hello."}],
+                }
+            ]
+        },
+        "candidate/model",
+        0.05,
+        "sha256:" + "b" * 64,
+        orr=FakeProvider(),
+        runs=3,
+        base_seed=41,
+    )
+    samples = bundle["results"][0]["samples"]
+    assert len(samples) == 3
+    assert [sample["output_text"] for sample in samples] == [
+        "representative",
+        "dispersion-42",
+        "dispersion-43",
+    ]
+    assert [sample["duration_ms"] for sample in samples] == [11, 12, 13]
+
+
+def reliability_metrics_smoke():
+    import orchestrate
+
+    fixed_samples = [
+        {
+            "cost_usd": cost,
+            "duration_ms": duration,
+            "replay_error": "recorded failure" if index == 2 else None,
+        }
+        for index, (cost, duration) in enumerate(
+            zip((0.01, 0.02, 0.03, 0.04, 0.05), (10, 20, 30, 40, 50), strict=True)
+        )
+    ]
+    resource = orchestrate._resource_consistency(fixed_samples)
+    expected = math.exp(-math.sqrt(2) / 3)
+    assert resource["status"] == "available"
+    assert resource["population"] == "all_runs"
+    assert abs(resource["value"] - expected) < 1e-12
+    assert (
+        abs(
+            resource["coefficients_of_variation"]["cost_usd"]
+            - resource["coefficients_of_variation"]["duration_ms"]
+        )
+        < 1e-12
+    )
+
+    degenerate = orchestrate._outcome_consistency([{"passes": True}])
+    assert degenerate["status"] == "degenerate"
+    assert degenerate["value"] is None
+
+    replay_samples = [
+        {
+            "text": "representative fail",
+            "tool_calls": [],
+            "cost": 0.01,
+            "cost_is_estimate": False,
+            "duration_ms": 10,
+            "served_by": "candidate/model",
+            "seed": 7,
+            "temperature": 0.0,
+            "error": None,
+        },
+        {
+            "text": "dispersion pass one",
+            "tool_calls": [],
+            "cost": 0.02,
+            "cost_is_estimate": False,
+            "duration_ms": 20,
+            "served_by": "candidate/model",
+            "seed": 8,
+            "temperature": None,
+            "error": None,
+        },
+        {
+            "text": "dispersion pass two",
+            "tool_calls": [],
+            "cost": 0.03,
+            "cost_is_estimate": False,
+            "duration_ms": 30,
+            "served_by": "candidate/model",
+            "seed": 9,
+            "temperature": None,
+            "error": None,
+        },
+    ]
+    judged = []
+
+    def fake_replay_step(*_args, **_kwargs):
+        return {
+            "text": replay_samples[0]["text"],
+            "tool_calls": [],
+            "cost": 0.02,
+            "cost_is_estimate": False,
+            "samples": replay_samples,
+            "error": None,
+        }
+
+    def fake_judge_outputs(*_args, candidate, **_kwargs):
+        judged.append(candidate)
+        passed = candidate.startswith("dispersion")
+        return {
+            "verdict": "equivalent" if passed else "divergent",
+            "score": 1.0 if passed else 0.0,
+            "order_consistent": True,
+            "judge": "judge/model",
+            "justification": "fixed smoke verdict",
+        }
+
+    previous_replay_step = orchestrate.replay_step
+    previous_judge_outputs = orchestrate.judge_outputs
+    orchestrate.replay_step = fake_replay_step
+    orchestrate.judge_outputs = fake_judge_outputs
+    try:
+        result = orchestrate.evaluate_candidate(
+            object(),
+            {
+                "model": "reference/model",
+                "output_text": "reference",
+                "input_messages": [{"role": "user", "content": "Task"}],
+            },
+            {"id": "candidate/model", "blended_price": 0.001},
+            0.9,
+            3,
+        )
+    finally:
+        orchestrate.replay_step = previous_replay_step
+        orchestrate.judge_outputs = previous_judge_outputs
+
+    assert judged == [sample["text"] for sample in replay_samples]
+    assert [sample["passes"] for sample in result["samples"]] == [False, True, True]
+    assert result["passes"] is False
+    assert abs(result["reliability"]["c_out"]["value"] - 1 / 9) < 1e-12
 
 
 def vercel_replay_sampling_smoke():
@@ -752,6 +1315,7 @@ def vercel_replay_sampling_smoke():
     assert len({sample["text"] for sample in result["samples"]}) > 1
     assert [sample["seed"] for sample in result["samples"]] == [91, 92, 93]
     assert [sample["temperature"] for sample in result["samples"]] == [0.0, None, None]
+    assert all(sample["duration_ms"] >= 0 for sample in result["samples"])
     assert result["text"] == "representative"
 
 
@@ -880,7 +1444,7 @@ def shortlist_smoke():
     assert [model["id"] for model in result] == [structured["id"]]
 
 
-def main():
+def run_smoke():
     previous_key = os.environ.pop("OPENROUTER_API_KEY", None)
     original_cwd = Path.cwd()
     try:
@@ -900,6 +1464,7 @@ def main():
             os.environ["OPENROUTER_API_KEY"] = previous_key
 
     provider_selection_smoke()
+    reference_audit_smoke()
     judge_selection_smoke()
     untrusted_block_smoke()
     judge_prompt_smoke()
@@ -909,9 +1474,12 @@ def main():
     tui_render_smoke()
     swappable_summary_smoke()
     orchestrate_unresolved_model_smoke()
+    orchestrate_mode_a_optimism_smoke()
+    orchestrate_e2e_abstention_smoke()
     provider_env_smoke()
     provider_cost_smoke()
     replay_sampling_smoke()
+    reliability_metrics_smoke()
     vercel_replay_sampling_smoke()
     replay_cache_version_smoke()
     shortlist_smoke()
@@ -1166,6 +1734,12 @@ def main():
         assert "Release gates" in render_snapshot(snapshot)
         assert report_path.exists()
         assert summary_path.exists()
+
+
+def main():
+    with offline_network_guard():
+        offline_network_guard_smoke()
+        run_smoke()
 
 
 if __name__ == "__main__":

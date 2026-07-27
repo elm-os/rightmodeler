@@ -16,6 +16,7 @@ from pipeline.__main__ import (
     normalize_run,
     validate_schema,
 )
+from pipeline.scorecards import _overall_status, _ratio_metric, compute_scorecards
 
 
 # --- infer_task_family: unambiguous inputs only ---------------------------
@@ -316,6 +317,7 @@ def test_structured_evaluation_emits_passing_snapshot(tmp_path):
 
     snapshot = json.loads(output_path.read_text())
     assert result == output_path
+    assert snapshot["version"] == "2"
     assert snapshot["case_verdicts"][0]["terminal_verdict"] == "pass"
     assert snapshot["summary"] == {
         "total_cases": 1,
@@ -508,6 +510,37 @@ def _scorecard_corpus_and_candidate(
     return _structured_corpus_and_candidate(tmp_path, results=results, cases=cases)
 
 
+@pytest.mark.parametrize(
+    ("denominator", "expected_status"),
+    [(9, "indeterminate"), (10, "pass"), (11, "pass")],
+)
+def test_ratio_metric_evidence_threshold_boundaries(denominator, expected_status):
+    metric = _ratio_metric(denominator, denominator, 0.9, [], "census")
+
+    assert metric["status"] == expected_status
+
+
+def test_ratio_metric_gates_on_point_estimate_not_interval():
+    metric = _ratio_metric(9, 10, 0.9, [], "census")
+
+    assert metric["value"] == metric["threshold"] == 0.9
+    assert metric["ci_low"] < metric["threshold"]
+    assert metric["status"] == "pass"
+
+
+def test_ratio_metric_reports_wilson_interval():
+    metric = _ratio_metric(20, 20, 0.9, [], "census")
+
+    assert metric["ci_low"] == 0.838875
+    assert metric["ci_high"] == 1.0
+    assert metric["ci_method"] == "wilson"
+    assert metric["alpha"] == 0.05
+
+
+def test_indeterminate_gate_cannot_make_overall_status_pass():
+    assert _overall_status([{"status": "indeterminate"}]) == "review"
+
+
 def test_scorecard_thresholds_keep_abstentions_out_of_quality(tmp_path):
     corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(
         tmp_path, failing_indexes={9}
@@ -522,7 +555,51 @@ def test_scorecard_thresholds_keep_abstentions_out_of_quality(tmp_path):
     assert snapshot["scorecards"]["safe_opportunity_recall"]["value"] == 0.9
     assert snapshot["scorecards"]["confidence"]["level"] == "medium"
     assert snapshot["scorecards"]["speed"]["status"] == "pass"
+    assert snapshot["scorecards"]["quality"]["overall"]["population"] == "census"
+    assert snapshot["scorecards"]["quality"]["overall"]["generalization"] == "corpus_only"
     validate_schema(snapshot, "benchmark-snapshot")
+
+
+def test_scorecard_marks_partial_corpus_coverage_as_sample(tmp_path):
+    corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(tmp_path)
+    evaluate_structured(corpus_path, candidate_path, output_path)
+    snapshot = json.loads(output_path.read_text())
+
+    scorecards, _ = compute_scorecards(
+        json.loads(corpus_path.read_text()),
+        json.loads(candidate_path.read_text()),
+        snapshot["case_verdicts"][:-1],
+    )
+
+    assert scorecards["quality"]["overall"]["population"] == "sample"
+
+
+def test_horizon_diagnostic_compounds_only_when_length_is_known(tmp_path):
+    corpus_path, candidate_path, output_path = _scorecard_corpus_and_candidate(
+        tmp_path, failing_indexes={9}
+    )
+    evaluate_structured(corpus_path, candidate_path, output_path)
+    snapshot = json.loads(output_path.read_text())
+    unavailable = snapshot["scorecards"]["horizon_diagnostic"]
+
+    assert unavailable["status"] == "unavailable"
+    assert unavailable["assumptions_violated"] is True
+    assert "horizon_diagnostic" not in {gate["id"] for gate in snapshot["gates"]}
+
+    corpus = json.loads(corpus_path.read_text())
+    corpus["trajectory_length"] = 20
+    scorecards, gates = compute_scorecards(
+        corpus,
+        json.loads(candidate_path.read_text()),
+        snapshot["case_verdicts"],
+    )
+    horizon = scorecards["horizon_diagnostic"]
+
+    # A 0.90 per-step pass rate compounds to roughly 12 percent over 20 steps.
+    assert horizon["end_to_end_pass_rate"] == 0.121577
+    assert horizon["status"] == "available"
+    assert horizon["ci_low"] < horizon["end_to_end_pass_rate"] < horizon["ci_high"]
+    assert "horizon_diagnostic" not in {gate["id"] for gate in gates}
 
 
 def test_scorecard_required_abstention_is_separate_from_quality(tmp_path):

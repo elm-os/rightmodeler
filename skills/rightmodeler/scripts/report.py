@@ -34,16 +34,42 @@ def family_rollup(steps: list[dict]) -> dict:
     fams: dict[str, dict] = {}
     for s in steps:
         fam = s.get("family") or "general"
-        f = fams.setdefault(fam, {"current": s.get("current_model"), "n": 0, "cands": {}})
+        f = fams.setdefault(
+            fam,
+            {
+                "current": s.get("current_model"),
+                "n": 0,
+                "trajectory_ids": set(),
+                "trajectory_available": True,
+                "cands": {},
+            },
+        )
         f["n"] += 1
+        if s.get("trajectory_id") is None:
+            f["trajectory_available"] = False
+        else:
+            f["trajectory_ids"].add(s["trajectory_id"])
         for c in s.get("candidates", []):
             if "model" not in c:  # shortlist-only entry (e2e step), never replayed
                 continue
             cc = f["cands"].setdefault(
-                c["model"], {"passes": 0, "scores": [], "errors": 0, "save": None, "price": None}
+                c["model"],
+                {
+                    "passes": 0,
+                    "non_hedge_passes": 0,
+                    "hedges": 0,
+                    "scores": [],
+                    "errors": 0,
+                    "save": None,
+                    "price": None,
+                },
             )
             cc["scores"].append(c.get("score") or 0.0)
             cc["passes"] += bool(c.get("passes"))
+            if c.get("order_consistent") is False:
+                cc["hedges"] += 1
+            else:
+                cc["non_hedge_passes"] += bool(c.get("passes"))
             cc["errors"] += bool(c.get("error"))
             if cc["save"] is None and c.get("est_savings") is not None:
                 cc["save"] = c["est_savings"]
@@ -77,12 +103,18 @@ def _ranked_candidates(family: dict) -> list[dict]:
     for model, candidate in compared:
         cases = len(candidate["scores"])
         ci_low, ci_high = wilson_interval(candidate["passes"], cases, comparisons)
+        hedges = candidate.get("hedges", 0)
+        non_hedge_passes = candidate.get("non_hedge_passes", candidate["passes"])
         candidates.append(
             {
                 "model": model,
                 "passes": candidate["passes"],
                 "cases": cases,
                 "pass_rate": candidate["passes"] / cases,
+                "hedges": hedges,
+                "hedge_rate": hedges / cases,
+                "hedges_to_fail_pass_rate": non_hedge_passes / cases,
+                "hedges_to_pass_pass_rate": (non_hedge_passes + hedges) / cases,
                 "ci_low": ci_low,
                 "ci_high": ci_high,
                 "avg_quality": sum(candidate["scores"]) / cases,
@@ -114,6 +146,8 @@ def family_recommendations(rollup: dict) -> list[dict]:
     recs = []
     for fam, f in rollup.items():
         candidates = _ranked_candidates(f)
+        n_trajectories = len(f["trajectory_ids"]) if f.get("trajectory_available") else None
+        cases_per_trajectory = f["n"] / n_trajectories if n_trajectories else None
         if f["n"] < MIN_REVIEW_CASES:
             pick = None
             case_label = "case" if f["n"] == 1 else "cases"
@@ -155,6 +189,11 @@ def family_recommendations(rollup: dict) -> list[dict]:
                 "family": fam,
                 "current_model": f["current"],
                 "cases": f["n"],
+                "n_trajectories": n_trajectories,
+                "cases_per_trajectory": cases_per_trajectory,
+                "trajectory_flagged": (
+                    cases_per_trajectory > 1 if cases_per_trajectory is not None else None
+                ),
                 "recommended_model": pick["model"] if pick else None,
                 "pass_rate": pick["pass_rate"] if pick else None,
                 "avg_quality": pick["avg_quality"] if pick else None,
@@ -220,15 +259,45 @@ def render(results: dict, decisions: dict | None) -> str:
             f"within each family. Overlapping intervals are tied. At realistic sample "
             f"sizes, one large tie group is common and expected._"
         )
+        lines.append(
+            "_Hedge sensitivity bands recompute the pass rate with every order-inconsistent "
+            "judgement treated as a fail or as a pass. With the verdict score mapping, any "
+            "quality floor in (0.8, 1.0] is exactly the test that both orderings said "
+            "equivalent. The ordinal scale therefore collapses to a unanimous Bernoulli "
+            "outcome, which legitimises the Wilson interval._"
+        )
+        lines.append(
+            "_Wilson still assumes independent cases. Self-conditioning within a trajectory "
+            "can correlate sibling outcomes, making the interval anticonservative and too "
+            "narrow. The trajectory diagnostic flags when case count exceeds trajectory count._"
+        )
         lines.append("")
         for fam, f in rollup.items():
             lines.append(f"### {fam}: current `{md_text(f['current'])}` ({f['n']} cases)")
             lines.append("")
-            lines.append(
-                "| Rank | Candidate | Pass | Simultaneous interval | Avg quality | Savings | Errors |"
-            )
-            lines.append("|---:|---|---:|---:|---:|---:|---:|")
             r = recs[fam]
+            if r["n_trajectories"] is None:
+                lines.append(
+                    "_Trajectory diagnostic: unavailable because `trajectory_id` is absent._"
+                )
+            else:
+                trajectory_label = "trajectory" if r["n_trajectories"] == 1 else "trajectories"
+                diagnostic = (
+                    " **Flagged: sibling cases may make the Wilson interval too narrow.**"
+                    if r["trajectory_flagged"]
+                    else ""
+                )
+                lines.append(
+                    f"_Trajectory diagnostic: n_cases={r['cases']}, "
+                    f"n_trajectories={r['n_trajectories']} {trajectory_label}, "
+                    f"cases_per_trajectory={r['cases_per_trajectory']:.2f}.{diagnostic}_"
+                )
+            lines.append("")
+            lines.append(
+                "| Rank | Candidate | Pass | Simultaneous interval | Hedge rate | "
+                "Hedge sensitivity band | Avg quality | Savings | Errors |"
+            )
+            lines.append("|---:|---|---:|---:|---:|---:|---:|---:|---:|")
             for candidate in r["candidates"]:
                 rank = f"{candidate['rank']} (tie)" if candidate["tied"] else str(candidate["rank"])
                 save = (
@@ -240,6 +309,9 @@ def render(results: dict, decisions: dict | None) -> str:
                     f"| {rank} | `{candidate['model']}` | "
                     f"{candidate['passes']}/{candidate['cases']} | "
                     f"[{candidate['ci_low']:.3f}, {candidate['ci_high']:.3f}] | "
+                    f"{candidate['hedge_rate']:.0%} | "
+                    f"[{candidate['hedges_to_fail_pass_rate']:.0%}, "
+                    f"{candidate['hedges_to_pass_pass_rate']:.0%}] | "
                     f"{candidate['avg_quality']:.2f} | {save} | {candidate['errors']} |"
                 )
             if r["recommended_model"]:

@@ -19,7 +19,7 @@ class ReplayError(ValueError):
     pass
 
 
-_REPLAY_CACHE_VERSION = 2
+_REPLAY_CACHE_VERSION = 3
 
 
 class ReplayBudget:
@@ -112,7 +112,7 @@ def _single_shot_estimate(orr, step, model, runs, max_tokens):
 
 def _normalize_result(case_id, bundle_ref, response, duration_ms):
     error = response.get("error")
-    return {
+    result = {
         "case_id": case_id,
         "output_text": response.get("text") or "",
         "cost_usd": response.get("cost") or 0.0,
@@ -121,6 +121,20 @@ def _normalize_result(case_id, bundle_ref, response, duration_ms):
         "evidence_refs": [bundle_ref],
         "replay_error": error,
     }
+    if response.get("samples"):
+        result["samples"] = [
+            {
+                "output_text": sample.get("text") or "",
+                "cost_usd": sample.get("cost") or 0.0,
+                "cost_is_estimate": bool(sample.get("cost_is_estimate")),
+                "duration_ms": sample.get("duration_ms"),
+                "seed": sample.get("seed"),
+                "temperature": sample.get("temperature"),
+                "replay_error": sample.get("error"),
+            }
+            for sample in response["samples"]
+        ]
+    return result
 
 
 def _parse_e2e_response(response):

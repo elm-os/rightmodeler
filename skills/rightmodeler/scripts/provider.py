@@ -179,10 +179,16 @@ class Provider:
         max_retries: int = 4,
     ) -> dict:
         """Returns a normalized dict:
-        {text, tool_calls, model, cost, cost_is_estimate, usage, raw, error}
+        {text, tool_calls, model, cost, cost_is_estimate, duration_ms, usage, raw, error}
         Never raises on model/HTTP errors — returns {"error": ...} so the
         orchestrator can record a failed candidate and move on.
         """
+        started = time.perf_counter()
+
+        def with_duration(response: dict) -> dict:
+            response["duration_ms"] = round((time.perf_counter() - started) * 1000, 3)
+            return response
+
         body: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -229,12 +235,14 @@ class Provider:
                 backoff *= 2
                 continue
             if r.status_code >= 400:
-                return {"error": f"HTTP {r.status_code}: {text[:300]}", "model": model}
+                return with_duration(
+                    {"error": f"HTTP {r.status_code}: {text[:300]}", "model": model}
+                )
             data = r.json()
             if "error" in data:
-                return {"error": self._redact(str(data["error"])), "model": model}
-            return self._normalize(data, r.headers)
-        return {"error": f"exhausted retries: {last_err}", "model": model}
+                return with_duration({"error": self._redact(str(data["error"])), "model": model})
+            return with_duration(self._normalize(data, r.headers))
+        return with_duration({"error": f"exhausted retries: {last_err}", "model": model})
 
     def _apply_provider_preferences(self, body: dict[str, Any], require_parameters: bool) -> None:
         return None

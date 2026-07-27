@@ -85,7 +85,7 @@
     },
     {
       "q": "Can rightmodeler ingest my LiteLLM proxy logs?",
-      "a": "Yes. rightmodeler has a dedicated adapter for LiteLLM StandardLoggingPayload logs, and LiteLLM is one of the nine source formats the ingester autodetects."
+      "a": "Yes. rightmodeler has a dedicated adapter for LiteLLM StandardLoggingPayload logs, and LiteLLM is one of the source formats the ingester autodetects."
     },
     {
       "q": "My pipeline uses the Anthropic SDK. How does the swap work?",

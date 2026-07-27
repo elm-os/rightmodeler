@@ -171,6 +171,37 @@ whether each step is single-shot vs multi-step/tool/loop, detected **task famili
 the strongest available evaluator per step. Read `pipeline.json` and summarize it to
 the user before spending money.
 
+Before opening any judge output or trusting a report, audit a seeded uniform sample
+of the accepted references:
+
+```bash
+uv run python scripts/reference_audit.py sample \
+  .rightmodeler/normalized.json \
+  --size 30 \
+  --seed 20260726 \
+  --out .rightmodeler/reference-audit-worksheet.json
+```
+
+The source may be the skill's normalized trace or the historical run bundle that
+backs a pipeline corpus. When auditing an exact compiled corpus, also pass
+`--corpus .rightmodeler/corpus/benchmark-cases.json`. Choose a sample size no larger
+than the accepted-output population. The worksheet contains only each task, its
+accepted output, and blank `review.verdict` and `review.note` fields. It deliberately
+excludes judge verdicts. Complete every verdict as `correct`, `incorrect`, or
+`ambiguous` without consulting model-judge results, then tabulate it:
+
+```bash
+uv run python scripts/reference_audit.py tabulate \
+  .rightmodeler/reference-audit-worksheet.json \
+  --out .rightmodeler/reference-audit-result.json
+```
+
+The result records the corpus content version, sampled case digest, verdict counts,
+and a 95% Wilson interval. It conservatively counts both incorrect and ambiguous
+references as disagreement. Treat `1 - disagreement rate` as the estimated
+reference-correctness ceiling on every downstream agreement metric. Statistical
+precision below that ceiling does not make the accepted references more correct.
+
 ### Phase 2 — Replicate & brute-force (find cheaper swaps)
 
 For each step/task family, shortlist candidate cheaper models and test them:

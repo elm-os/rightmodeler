@@ -150,6 +150,23 @@ export default function HowItWorksPage() {
             </div>
           </div>
 
+          <Reveal
+            delay={0.08}
+            className="mt-12 border-t border-ash-border pt-8"
+          >
+            <p className="font-display text-heading-sm text-midnight-ink">
+              How to read confidence.
+            </p>
+            <p className="mt-2 max-w-xl text-body text-driftwood">
+              Hard checks run before a model judge. When judgment is needed, a
+              cross-family judge scores both output orders. Evidence counts show
+              what earned the confidence band, and the evidence type limits how
+              high that band can go. Confidence applies only to the prompt,
+              inputs, and runs evaluated. It measures agreement with what you
+              shipped, not proof of correctness.
+            </p>
+          </Reveal>
+
           <Reveal delay={0.1} className="mt-12 border-t border-ash-border pt-8">
             <p className="font-display text-heading-sm text-midnight-ink">
               Not observability. Not a runtime gateway.
