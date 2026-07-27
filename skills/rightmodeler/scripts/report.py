@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import os
 
-from common import dump_json, load_json
+from common import dump_json, load_json, md_text
 
 # a candidate must clear the quality floor in at least this fraction of a
 # family's cases before a swap is recommended — one lucky case is not evidence
@@ -121,7 +121,7 @@ def render(results: dict, decisions: dict | None) -> str:
         )
         lines.append("")
         for fam, f in multi.items():
-            lines.append(f"### {fam} — current `{f['current']}` ({f['n']} cases)")
+            lines.append(f"### {fam} — current `{md_text(f['current'])}` ({f['n']} cases)")
             lines.append("")
             lines.append("| Candidate | Pass | Avg quality | Savings | Errors |")
             lines.append("|---|---|---|---|---|")
@@ -154,7 +154,8 @@ def render(results: dict, decisions: dict | None) -> str:
         if not best:
             continue
         lines.append(
-            f"| {s['name'] or s['step_id']} | {s['family']} | `{s['current_model']}` | "
+            f"| {md_text(s['name'] or s['step_id'])} | {s['family']} | "
+            f"`{md_text(s['current_model'])}` | "
             f"`{best['model']}` | {(best.get('est_savings') or 0):.0%} | "
             f"{_format_cost(best.get('replay_cost'), best.get('cost_is_estimate', False))} | "
             f"{best['score']:.2f} ({best['verdict']}) | {s['evaluator']} | {confidence(s)} |"
@@ -171,7 +172,9 @@ def render(results: dict, decisions: dict | None) -> str:
         lines.append("")
         for s in e2e:
             cands = ", ".join(f"`{c['id']}`" for c in s.get("candidates", [])[:3])
-            lines.append(f"- **{s['name'] or s['step_id']}** ({s['family']}): candidates {cands}")
+            lines.append(
+                f"- **{md_text(s['name'] or s['step_id'])}** ({s['family']}): candidates {cands}"
+            )
         lines.append("")
 
     abst = [s for s in steps if s.get("abstain") or (not s.get("best") and not s.get("needs_e2e"))]
@@ -179,7 +182,7 @@ def render(results: dict, decisions: dict | None) -> str:
         lines.append("## No substitution recommended")
         for s in abst:
             reason = s.get("abstain_reason", "no cheaper candidate passed the quality floor")
-            lines.append(f"- **{s['name'] or s['step_id']}** ({s['family']}): {reason}")
+            lines.append(f"- **{md_text(s['name'] or s['step_id'])}** ({s['family']}): {reason}")
         lines.append("")
 
     lines.append("## Methodology & caveats")

@@ -68,6 +68,24 @@ def untrusted_block(label: str, text: Any, cap: int = UNTRUSTED_CAP) -> str:
     return f"<<<UNTRUSTED {label}>>>\n{body}\n<<<END UNTRUSTED {label}>>>"
 
 
+_MD_UNSAFE = str.maketrans({"|": "\\|", "`": "'"})
+
+
+def md_text(text: Any, limit: int = 120) -> str:
+    """Flatten trace-derived text for interpolation into a Markdown line.
+
+    Trace `name`, `step_id`, and `model` values are outsider-authored. A newline
+    ends a table row and lets a trace forge rows of its own, an unescaped pipe
+    ends a cell, and a stray backtick opens a code span the rest of the line
+    inherits. Collapse whitespace, neutralize both, and cap the length so trace
+    prose cannot flood a report the agent reads back. The backtick is replaced
+    rather than escaped so the result is also safe inside a code span, which is
+    how model ids are rendered.
+    """
+    flat = " ".join(str(text if text is not None else "").split()).translate(_MD_UNSAFE)
+    return f"{flat[: limit - 1]}…" if len(flat) > limit else flat
+
+
 def _parse_env_value(raw: str) -> str:
     value = raw.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
