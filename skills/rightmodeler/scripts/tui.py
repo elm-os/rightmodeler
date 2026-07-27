@@ -19,7 +19,7 @@ import argparse
 import os
 import sys
 
-from common import load_json, dump_json
+from common import flatten, load_json, dump_json
 
 
 DECISION_STYLE = {
@@ -83,6 +83,7 @@ def _fmt_score(v):
 def run_rich_fallback(results: dict, rows: list[dict]) -> int:
     from rich.console import Console
     from rich.table import Table
+    from rich.text import Text
 
     c = Console()
     t = Table(title="rightmodeler - recommendations (read-only; no TTY for interactive TUI)")
@@ -90,11 +91,13 @@ def run_rich_fallback(results: dict, rows: list[dict]) -> int:
         t.add_column(col, overflow="fold")
     for r in rows:
         flag = "CASCADE-E2E" if r["cascade"] else ("HIGH-RISK" if r["risk"] == "high" else "")
+        # Text() cells are never markup-parsed: a trace name containing "[/x]"
+        # would otherwise raise MarkupError and kill this whole render.
         t.add_row(
-            r["name"],
+            Text(flatten(r["name"])),
             r["family"],
-            r["current"],
-            r["candidate"],
+            Text(flatten(r["current"])),
+            Text(flatten(r["candidate"])),
             _fmt_pct(r["savings"]),
             _fmt_score(r["score"]),
             r["evidence"],
@@ -194,12 +197,14 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
                 flag = Text("CASCADE", style="bold cyan")
             elif r["risk"] == "high":
                 flag = Text("HIGH-RISK", style="bold red")
-            swap = f"{r['current']} → {r['candidate']}"
+            # Textual's default_cell_formatter runs Text.from_markup on str cells,
+            # so trace-derived values go in as Text to stay literal.
+            swap = f"{flatten(r['current'])} → {flatten(r['candidate'])}"
             return (
                 Text(label, style=style),
-                r["name"],
+                Text(flatten(r["name"])),
                 r["family"],
-                swap,
+                Text(swap),
                 _fmt_pct(r["savings"]),
                 _fmt_score(r["score"]),
                 r["evidence"],
@@ -214,10 +219,10 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
             r = self.rows[idx]
             d = self.query_one("#detail", Static)
             body = Text()
-            body.append(f"{r['name']}  ", style="bold")
+            body.append(f"{flatten(r['name'])}  ", style="bold")
             body.append(f"[{r['family']}]\n\n", style="dim")
-            body.append(f"current:   {r['current']}\n")
-            body.append(f"candidate: {r['candidate']}\n")
+            body.append(f"current:   {flatten(r['current'])}\n")
+            body.append(f"candidate: {flatten(r['candidate'])}\n")
             body.append(
                 f"savings:   {_fmt_pct(r['savings'])}    quality: {_fmt_score(r['score'])} "
                 f"({r['verdict']})\n"

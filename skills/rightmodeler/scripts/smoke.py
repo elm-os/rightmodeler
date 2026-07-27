@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
@@ -391,6 +391,54 @@ def report_render_smoke():
     assert "$0.012300 est." in md
 
 
+def tui_render_smoke():
+    from tui import _rows, run_rich_fallback
+
+    # "[/nope]" closes a tag that was never opened. Rich renders str table cells
+    # through the markup parser and Textual's default_cell_formatter calls
+    # Text.from_markup, so before Text() wrapping this raised MarkupError and
+    # killed the whole render — on the no-TTY path an agent session always hits.
+    hostile = "[/nope] step [red]pwned[/red]\nsecond line " + "q" * 200
+    results = {
+        "steps": [
+            {
+                "step_id": "s1",
+                "name": hostile,
+                "family": "pr_summary",
+                "current_model": hostile,
+                "evaluator": "reference",
+                "candidates": [],
+                "best": {
+                    "model": "cheap/model",
+                    "score": 1.0,
+                    "verdict": "equivalent",
+                    "est_savings": 0.5,
+                    "justification": "ok",
+                    "candidate_output": "",
+                },
+            }
+        ]
+    }
+    rows = _rows(results)
+    assert rows[0]["name"] == hostile  # untouched in the data model, sanitized at render
+
+    previous_columns = os.environ.get("COLUMNS")
+    os.environ["COLUMNS"] = "400"  # keep cells on one line so the assertions are exact
+    buf = StringIO()
+    try:
+        with redirect_stdout(buf):
+            assert run_rich_fallback(results, rows) == 0
+    finally:
+        os.environ.pop("COLUMNS", None)
+        if previous_columns is not None:
+            os.environ["COLUMNS"] = previous_columns
+
+    out = buf.getvalue()
+    assert "[/nope] step [red]pwned[/red]" in out  # shown literally, never parsed
+    assert "q" * 200 not in out  # capped
+    assert "…" in out
+
+
 def provider_env_smoke():
     env = _provider_env(OPENROUTER_CONFIG, "test-key")
     assert env["RIGHTMODELER_REPLAY_BASE_URL"] == OPENROUTER_CONFIG.base_url
@@ -500,6 +548,7 @@ def main():
     judge_prompt_smoke()
     task_text_smoke()
     report_render_smoke()
+    tui_render_smoke()
     provider_env_smoke()
     provider_cost_smoke()
     shortlist_smoke()

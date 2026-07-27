@@ -71,19 +71,27 @@ def untrusted_block(label: str, text: Any, cap: int = UNTRUSTED_CAP) -> str:
 _MD_UNSAFE = str.maketrans({"|": "\\|", "`": "'"})
 
 
+def flatten(text: Any, limit: int = 120) -> str:
+    """Collapse trace-derived text to a single capped line.
+
+    Trace `name`, `step_id`, and `model` values are outsider-authored and
+    unbounded. A newline lets them break out of whatever row or cell they are
+    rendered into; the length lets them flood a view the agent reads back.
+    """
+    flat = " ".join(str(text if text is not None else "").split())
+    return f"{flat[: limit - 1]}…" if len(flat) > limit else flat
+
+
 def md_text(text: Any, limit: int = 120) -> str:
     """Flatten trace-derived text for interpolation into a Markdown line.
 
-    Trace `name`, `step_id`, and `model` values are outsider-authored. A newline
-    ends a table row and lets a trace forge rows of its own, an unescaped pipe
-    ends a cell, and a stray backtick opens a code span the rest of the line
-    inherits. Collapse whitespace, neutralize both, and cap the length so trace
-    prose cannot flood a report the agent reads back. The backtick is replaced
+    On top of `flatten`, an unescaped pipe ends a table cell and a stray backtick
+    opens a code span the rest of the line inherits. The backtick is replaced
     rather than escaped so the result is also safe inside a code span, which is
-    how model ids are rendered.
+    how model ids are rendered. `str.translate` is single-pass, so the escaped
+    output cannot be escaped a second time.
     """
-    flat = " ".join(str(text if text is not None else "").split()).translate(_MD_UNSAFE)
-    return f"{flat[: limit - 1]}…" if len(flat) > limit else flat
+    return flatten(text, limit).translate(_MD_UNSAFE)
 
 
 def _parse_env_value(raw: str) -> str:
