@@ -439,6 +439,63 @@ def tui_render_smoke():
     assert "…" in out
 
 
+def orchestrate_unresolved_model_smoke():
+    import orchestrate
+
+    def pstep(sid, model):
+        return {
+            "step_id": sid,
+            "name": f"step {sid}",
+            "family": "general",
+            "model": model,
+            "replay_mode": "single_shot",
+            "evaluator": "reference",
+            "risk": "normal",
+        }
+
+    # step order matters: the unresolvable one must not stop the ones after it
+    pipeline = {
+        "steps": [pstep("s1", "ghost/model"), pstep("s2", ""), pstep("s3", "openai/gpt-4o")]
+    }
+    normalized = {"steps": [{"step_id": "s1"}, {"step_id": "s2"}, {"step_id": "s3"}]}
+
+    def fake_shortlist(orr, current_model, **kwargs):
+        if current_model != "openai/gpt-4o":
+            raise ValueError(
+                f"current model {current_model!r} was not found in the provider catalog; "
+                "pass --current with an exact catalog model ID or canonical slug"
+            )
+        return []  # resolves fine, just nothing cheaper
+
+    previous_provider = orchestrate.get_provider
+    previous_shortlist = orchestrate.shortlist
+    orchestrate.get_provider = lambda: object()  # never used: no candidate is ever replayed
+    orchestrate.shortlist = fake_shortlist
+    err = StringIO()
+    try:
+        with redirect_stderr(err):
+            summary = orchestrate.run(pipeline, normalized, 0.9, 3, None, None, 1, 2)
+    finally:
+        orchestrate.get_provider = previous_provider
+        orchestrate.shortlist = previous_shortlist
+
+    assert summary["total_steps"] == 3, summary  # nothing aborted the run
+    unresolved, empty, resolved = summary["steps"]
+    for entry in (unresolved, empty):
+        assert entry["abstain"] is True
+        assert "never tested" in entry["abstain_reason"]
+        assert entry["best"] is None
+    # an unresolvable model must not read as "we tested it and found nothing"
+    assert resolved["abstain_reason"] == "no cheaper candidate with required capabilities"
+    assert resolved.get("abstain") is False
+    assert summary["abstained"] == 2
+    assert summary["swappable"] == 0
+
+    warnings = [line for line in err.getvalue().splitlines() if "not tested" in line]
+    assert len(warnings) == 2, warnings
+    assert "ghost/model" in warnings[0]
+
+
 def provider_env_smoke():
     env = _provider_env(OPENROUTER_CONFIG, "test-key")
     assert env["RIGHTMODELER_REPLAY_BASE_URL"] == OPENROUTER_CONFIG.base_url
@@ -549,6 +606,7 @@ def main():
     task_text_smoke()
     report_render_smoke()
     tui_render_smoke()
+    orchestrate_unresolved_model_smoke()
     provider_env_smoke()
     provider_cost_smoke()
     shortlist_smoke()

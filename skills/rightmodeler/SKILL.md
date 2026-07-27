@@ -214,6 +214,12 @@ candidate was never actually tested — its 0.00 scores are API failures, not qu
 verdicts. Fix the cause (see `candidate_errors` in results.json for the error text)
 and re-run those steps with `--only`/`--merge-into` before drawing conclusions.
 
+A `[warn] i/N <step_id> not tested` line means that step's recorded model was missing or
+matched nothing in the active provider's catalog, so nothing could be priced or replayed
+for it. The step abstains and the run continues. Reconcile the trace's model name with a
+catalog ID (or switch to a provider whose catalog carries it) and re-run that step before
+reporting it as "no viable swap".
+
 ### Phase 3 — Result (TUI + report)
 
 Launch the interactive per-step approval TUI, then export:

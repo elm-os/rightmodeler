@@ -20,7 +20,7 @@ import argparse
 import concurrent.futures as cf
 from datetime import datetime, timezone
 
-from common import dump_json, eprint, load_json
+from common import dump_json, eprint, flatten, load_json
 from judge import judge_outputs
 from provider import get_provider
 from replay_step import replay_step
@@ -160,9 +160,27 @@ def run(
             continue
 
         needs_tools = bool(step.get("tool_calls") or step.get("available_tools"))
-        cands = shortlist(
-            orr, pstep.get("model") or "", need_tools=needs_tools, top=top, allow=allow, deny=deny
-        )
+        try:
+            cands = shortlist(
+                orr,
+                pstep.get("model") or "",
+                need_tools=needs_tools,
+                top=top,
+                allow=allow,
+                deny=deny,
+            )
+        except ValueError as exc:
+            # the step's model string comes from the trace, so it can be missing or
+            # name something the catalog has never heard of. Abstain on this step
+            # rather than aborting every step after it.
+            entry["abstain"] = True
+            entry["abstain_reason"] = (
+                "current model did not resolve in the provider catalog, so no candidate "
+                "could be priced against it and this step was never tested"
+            )
+            _progress(entry)
+            eprint(f"[warn]    {i}/{total} {sid} not tested: {flatten(str(exc), 200)}")
+            continue
         if not cands:
             entry["abstain_reason"] = "no cheaper candidate with required capabilities"
             _progress(entry)
