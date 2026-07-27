@@ -154,7 +154,7 @@ def _wilson_interval(successes: int, total: int) -> tuple[float, float]:
     return max(0.0, center - margin), min(1.0, center + margin)
 
 
-def tabulate_worksheet(worksheet: dict) -> dict:
+def tabulate_worksheet(worksheet: dict, auditor: str | None = None) -> dict:
     if worksheet.get("kind") != "rightmodeler-reference-audit-worksheet":
         raise ValueError("not a rightmodeler reference audit worksheet")
     cases = worksheet.get("cases")
@@ -188,6 +188,10 @@ def tabulate_worksheet(worksheet: dict) -> dict:
     return {
         "version": "1",
         "kind": "rightmodeler-reference-audit-result",
+        # Who reviewed matters: a model verdict and a human verdict do not carry the same
+        # weight, and a model auditor can share a blind spot with whatever produced the
+        # accepted output. Unset means unrecorded, which is weaker evidence than either.
+        "auditor": auditor,
         "corpus_version_id": worksheet["corpus_version_id"],
         "source_bundle_id": worksheet.get("source_bundle_id"),
         "seed": worksheet["seed"],
@@ -232,6 +236,11 @@ def main() -> int:
     tabulate = commands.add_parser("tabulate")
     tabulate.add_argument("worksheet")
     tabulate.add_argument("--out", required=True)
+    tabulate.add_argument(
+        "--auditor",
+        help="who reviewed, for example 'human:alex' or 'model:gpt-5.6-sol'. "
+        "A model verdict and a human verdict are not equivalent evidence.",
+    )
 
     args = parser.parse_args()
     try:
@@ -245,7 +254,7 @@ def main() -> int:
             dump_json(worksheet, args.out)
             print("sampled case IDs:", ", ".join(case["case_id"] for case in worksheet["cases"]))
         else:
-            result = tabulate_worksheet(load_json(args.worksheet))
+            result = tabulate_worksheet(load_json(args.worksheet), args.auditor)
             dump_json(result, args.out)
             print(
                 "reference disagreement:",
