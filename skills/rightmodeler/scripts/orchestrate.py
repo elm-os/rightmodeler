@@ -1,9 +1,9 @@
 """Brute-force cheaper-model search over the pipeline.
 
 Strategy (per user's design):
-  1. Per-step shortlist  — for single_shot steps, replay through each candidate and
+  1. Per-step shortlist: for single_shot steps, replay through each candidate and
      judge vs the accepted output; keep the cheapest model above the quality floor.
-  2. E2E confirm         — for e2e steps (or to confirm a shortlisted swap), the skill
+  2. E2E confirm: for e2e steps (or to confirm a shortlisted swap), the skill
      drives run_pipeline.py separately (needs a run command). Here we mark those steps
      as 'needs_e2e' with the shortlist so the orchestrator/TUI can request confirmation.
 
@@ -84,7 +84,7 @@ def evaluate_candidate(orr, step, cand, floor, runs, judge_model=None) -> dict:
 
 def _candidate_errors(results: list[dict]) -> dict:
     """Per-candidate API-error tally. A candidate that errors on every call was
-    never actually tested — without this, hard failures (bad routing, 404s) look
+    never actually tested; without this, hard failures (bad routing, 404s) look
     identical to judged quality failures (score 0.00)."""
     tally: dict[str, dict] = {}
     for r in results:
@@ -99,12 +99,16 @@ def _candidate_errors(results: list[dict]) -> dict:
     return {m: t for m, t in tally.items() if t["errors"]}
 
 
+def swappable_count(results: list[dict]) -> int:
+    return sum(1 for result in results if result.get("best"))
+
+
 def summarize(results: list[dict], floor: float) -> dict:
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "quality_floor": floor,
         "total_steps": len(results),
-        "swappable": sum(1 for r in results if r.get("best")),
+        "swappable": swappable_count(results),
         "needs_e2e": sum(1 for r in results if r.get("needs_e2e")),
         "abstained": sum(1 for r in results if r.get("abstain")),
         "candidate_errors": _candidate_errors(results),
@@ -153,7 +157,7 @@ def run(
 
         if entry["abstain"]:
             entry["abstain_reason"] = (
-                "high-risk task family — recommend no swap without human review"
+                "high-risk task family; recommend no swap without human review"
             )
             _progress(entry)
             eprint(f"[abstain] {i}/{total} {sid} ({pstep.get('name')}) high-risk")
@@ -190,7 +194,7 @@ def run(
         if entry["needs_e2e"]:
             entry["candidates"] = cands
             entry["note"] = (
-                "multi-step/tool/loop — confirm via run_pipeline.py E2E replay before swapping"
+                "multi-step/tool/loop; confirm via run_pipeline.py E2E replay before swapping"
             )
             _progress(entry)
             eprint(
@@ -288,7 +292,7 @@ def main() -> int:
     for m, t in result["candidate_errors"].items():
         if t["errors"] == t["attempts"]:
             eprint(
-                f"[warn] {m} errored on ALL {t['attempts']} calls — never actually "
+                f"[warn] {m} errored on ALL {t['attempts']} calls; never actually "
                 f"tested, do NOT read its 0.00 scores as a quality verdict. "
                 f"example: {t['example']}"
             )

@@ -1,0 +1,29 @@
+{
+  "version": "",
+  "evidence_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "baseline_snapshot_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "issue_class": "ingestion",
+  "next_action": "fix-ingestion",
+  "status": "draft",
+  "trigger_case_ids": [],
+  "proposed_change": {
+    "type": "none",
+    "content": null,
+    "affected_files": [],
+    "validation_commands": []
+  },
+  "proof": {
+    "target_gate_ids": [],
+    "baseline_gate_statuses": {},
+    "post_fix_snapshot_id": null,
+    "holdout_snapshot_id": null,
+    "target_improved": false,
+    "regressed_gate_ids": [],
+    "validation": {
+      "status": "not_run",
+      "commands": [],
+      "evidence_refs": []
+    }
+  },
+  "residual_risks": []
+}

@@ -18,6 +18,7 @@ import { HeroGradient } from "@/components/hero-gradient";
 import { ArrowRightIcon, GitHubIcon } from "@/components/icons";
 import { ProgressiveBlur } from "@/components/progressive-blur";
 import { Reveal } from "@/components/reveal";
+import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 
 // Strong ease-out curve (docs/design.md § Motion) as a motion-friendly tuple.
@@ -48,8 +49,8 @@ type LedgerRow = {
   dim?: boolean; // the abstain row is de-emphasised to fog; its verdict stays ink
 };
 
-// The exact five illustrative rows from the brief. Row 2 sits at quality 0.88 — below the 0.90
-// floor stated in the title bar — which is why it is still ⚙ pending with a CASCADE hold rather
+// The exact five illustrative rows from the brief. Row 2 sits below the quality floor stated in
+// the title bar — which is why it is still ⚙ pending with a CASCADE hold rather
 // than an auto-✓. Row 5 is the pratfall/trust payoff: the tool declining to gamble.
 const ROWS: LedgerRow[] = [
   {
@@ -62,7 +63,7 @@ const ROWS: LedgerRow[] = [
     from: "gpt-4.1",
     to: "gpt-4o-mini",
     save: "72%",
-    quality: "0.94",
+    quality: ILLUSTRATIVE_SCORECARD.approved,
     evidence: "reference+judge",
     flag: null,
   },
@@ -76,7 +77,7 @@ const ROWS: LedgerRow[] = [
     from: "claude-opus-4",
     to: "llama-3.3-70b",
     save: "41%",
-    quality: "0.88",
+    quality: ILLUSTRATIVE_SCORECARD.pending,
     evidence: "trajectory",
     flag: { label: "CASCADE" },
   },
@@ -90,7 +91,7 @@ const ROWS: LedgerRow[] = [
     from: "gpt-4o",
     to: "gpt-4o-mini",
     save: "68%",
-    quality: "1.00",
+    quality: ILLUSTRATIVE_SCORECARD.deterministic,
     evidence: "deterministic",
     flag: null,
   },
@@ -104,7 +105,7 @@ const ROWS: LedgerRow[] = [
     from: "gpt-4o",
     to: "deepseek-chat",
     save: "55%",
-    quality: "0.91",
+    quality: ILLUSTRATIVE_SCORECARD.alternative,
     evidence: "reference",
     flag: null,
   },
@@ -156,14 +157,14 @@ export function Hero() {
               </p>
 
               <h1 className="mt-5 font-display text-heading-lg text-balance text-midnight-ink sm:text-display">
-                Prove which models you can safely downgrade.
+                Measure cheaper models against what you shipped.
               </h1>
 
               <p className="mt-6 max-w-2xl text-subheading text-driftwood">
                 rightmodeler replays your real agent traces through cheaper
                 models, judges each output against what you already shipped, and
-                shows exactly where you can cut cost, with evidence and
-                confidence on every call.
+                reports agreement, cost, evidence, sample size, and every
+                abstention.
               </p>
 
               {/* Labelled proof number. Not boxed (the ledger is the only framed artifact) and
@@ -202,7 +203,7 @@ export function Hero() {
           <div className="mt-14 sm:mt-16">
             <div className="mb-3 flex justify-end">
               <span className="font-mono text-caption text-fog">
-                Illustrative, not measured results
+                {ILLUSTRATIVE_SCORECARD.label}, not measured results
               </span>
             </div>
             <ApprovalTable />
@@ -224,14 +225,14 @@ function ApprovalTable() {
 
   return (
     <div className="relative overflow-hidden rounded-xl border border-ash-border bg-warm-sand">
-      {/* Title bar — artifact name (left) and a real methodology fact (right): the default 0.90
-          quality floor, which explains why Row 2 at 0.88 is held rather than approved. */}
+      {/* Title bar — artifact name (left) and a real methodology fact (right): the default quality
+          floor, which explains why Row 2 is held rather than approved. */}
       <div className="flex items-center justify-between gap-4 border-b border-ash-border px-4 py-3">
         <span className="min-w-0 truncate font-mono text-caption text-driftwood">
           rightmodeler · per-step approval
         </span>
         <span className="shrink-0 font-mono text-caption text-fog">
-          5 steps · quality floor 0.90
+          5 steps · quality floor {ILLUSTRATIVE_SCORECARD.floor}
         </span>
       </div>
 

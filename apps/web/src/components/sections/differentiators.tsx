@@ -79,10 +79,9 @@ export function Differentiators() {
             The strongest thing a recommender can do is refuse.
           </h2>
           <p className="mt-5 max-w-[62ch] text-subheading text-driftwood">
-            rightmodeler proves cheaper-model swaps on your own runs. Three
-            fields ride on every recommendation and keep the proof checkable —
-            when it won&rsquo;t switch, what a swap would break, and the
-            evidence behind the score.
+            rightmodeler measures cheaper candidates against outputs you
+            accepted. Evidence, sample size, and confidence ride on every
+            recommendation, and every abstention explains why it stopped.
           </p>
         </Reveal>
 

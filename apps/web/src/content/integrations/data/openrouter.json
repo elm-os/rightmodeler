@@ -63,7 +63,7 @@
       "body": "Because usage.cost reports the actual charge per call, the report compares what a step costs today against what the candidate charged in replay. No per-token arithmetic across incompatible tokenizers, no stale pricing tables."
     },
     {
-      "title": "Capability-safe shortlists",
+      "title": "Capability-compatible shortlists",
       "body": "supported_parameters filtering plus provider.require_parameters means a candidate that can't do tool calling or structured output never reaches the bench, so a verdict is never flattered by a model that quietly skipped the hard part."
     }
   ],

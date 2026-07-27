@@ -112,19 +112,20 @@ export function Body() {
 
       <P>
         And it does one thing a dashboard cannot. Crucible runs the rightmodeler
-        proof loop continuously, the same replay-and-judge engine you can{" "}
+        measurement loop continuously, the same replay-and-judge engine you can{" "}
         <A href="https://github.com/elm-os/rightmodeler">run by hand today</A>.
         So when it finds a layer overpaying for its work, it does not just chart
-        the problem. It proves the cheaper model that holds your quality, and
-        keeps the stack it watches right-sized.
+        the problem. It measures cheaper candidates against accepted outputs and
+        reports the evidence, sample size, and abstentions.
       </P>
 
       <P>
-        Seeing is the foundation. It is the half of the vision that makes the
-        other half safe: once you can see every layer and prove every claim,
-        changing models stops being frightening. What happens when a brand-new
-        model ships on a Tuesday, and why that should end as a pull request in
-        your repo, is <A href="/blog/the-tuesday-problem">part two</A>.
+        Seeing is the foundation. It makes model changes reviewable: once you
+        can see every layer and inspect candidate agreement with accepted
+        outputs, the decision arrives with evidence instead of a guess. What
+        happens when a brand-new model ships on a Tuesday, and why that should
+        end as a pull request in your repo, is{" "}
+        <A href="/blog/the-tuesday-problem">part two</A>.
       </P>
 
       <P>
@@ -164,9 +165,9 @@ None of this is exotic. It is the ordinary decency we already extend to database
 
 [Crucible](https://www.rightmodeler.com/crucible) is that instrument panel. It connects over MCP to the tracing you already emit, no new SDK, no re-instrumentation, and it never sits in your request path. It watches passively: cost per layer, speed per step, failed tool calls, silent retries, and quality regressions as they happen.
 
-And it does one thing a dashboard cannot. Crucible runs the rightmodeler proof loop continuously, the same replay-and-judge engine you can [run by hand today](https://github.com/elm-os/rightmodeler). So when it finds a layer overpaying for its work, it does not just chart the problem. It proves the cheaper model that holds your quality, and keeps the stack it watches right-sized.
+And it does one thing a dashboard cannot. Crucible runs the rightmodeler measurement loop continuously, the same replay-and-judge engine you can [run by hand today](https://github.com/elm-os/rightmodeler). So when it finds a layer overpaying for its work, it does not just chart the problem. It measures cheaper candidates against accepted outputs and reports the evidence, sample size, and abstentions.
 
-Seeing is the foundation. It is the half of the vision that makes the other half safe: once you can see every layer and prove every claim, changing models stops being frightening. What happens when a brand-new model ships on a Tuesday, and why that should end as a pull request in your repo, is [part two](https://www.rightmodeler.com/blog/the-tuesday-problem).
+Seeing is the foundation. It makes model changes reviewable: once you can see every layer and inspect candidate agreement with accepted outputs, the decision arrives with evidence instead of a guess. What happens when a brand-new model ships on a Tuesday, and why that should end as a pull request in your repo, is [part two](https://www.rightmodeler.com/blog/the-tuesday-problem).
 
 Crucible is in early access. Join the waitlist on [the Crucible page](https://www.rightmodeler.com/crucible) and we will send one note when it opens.
 `;

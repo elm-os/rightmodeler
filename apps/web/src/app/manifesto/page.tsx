@@ -13,12 +13,13 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { Reveal } from "@/components/reveal";
+import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
-  title: "Prove it. Don't guess.",
+  title: "Measure it. Don't guess.",
   description:
-    "The rightmodeler manifesto: nobody should downgrade a model on vibes. The case for evidence-backed model downgrading, proven on your own traces, not benchmarks.",
+    "The rightmodeler manifesto: nobody should downgrade a model on vibes. Measure candidates against accepted outputs on your own traces, then review the evidence.",
   path: "/manifesto",
   image: "/social/manifesto.png",
 });
@@ -26,11 +27,11 @@ export const metadata: Metadata = pageMetadata({
 const FAQ: FaqItem[] = [
   {
     q: "What is evidence-backed model downgrading?",
-    a: "Moving a step to a cheaper model only after proving, on your own traces, that quality holds against the output you already shipped. The decision is backed by evidence: replays, scores, and a confidence level, not a benchmark or a hunch.",
+    a: "Reviewing a cheaper candidate only after measuring its output against the output you accepted for the same input. The decision is backed by replays, reference-agreement scores, sample size, and confidence, not a benchmark or a hunch.",
   },
   {
     q: "How is this different from observability?",
-    a: "Observability shows you what happened. It doesn't replay your steps through cheaper models, judge the results, or change anything. rightmodeler proves a specific swap is safe and applies it in your repo: detect, prove, fix.",
+    a: "Observability shows you what happened. It doesn't replay your steps through cheaper models, measure agreement with accepted outputs, or prepare a repo edit. rightmodeler reports the evidence and applies only the changes you approve.",
   },
   {
     q: "Is it safe to downgrade automatically?",
@@ -317,7 +318,9 @@ function ReviewMockup() {
           <p className="font-sans text-[15px] font-medium text-midnight-ink">
             Review the evidence
           </p>
-          <span className="font-mono text-caption text-fog">illustrative</span>
+          <span className="font-mono text-caption text-fog">
+            {ILLUSTRATIVE_SCORECARD.label}
+          </span>
         </div>
 
         <div className="mt-3 rounded-lg border border-ash-border bg-warm-sand p-3.5">
@@ -331,7 +334,8 @@ function ReviewMockup() {
             swap: summarize step to gpt-5.4-mini
           </p>
           <p className="mt-1 font-mono text-[12px] text-fog">
-            Q 0.94 · 85% cheaper · 214 traces replayed
+            Q {ILLUSTRATIVE_SCORECARD.approved} · 85% cheaper · 214 traces
+            replayed
           </p>
         </div>
 
@@ -370,7 +374,7 @@ const CLAIMS: {
   },
   {
     title: "A category, not a feature.",
-    body: "Evidence-backed model downgrading: detect, prove, fix. A report you run today, pull requests next, continuous with Crucible.",
+    body: "Evidence-backed model downgrading: detect, measure, review. A report you run today, pull requests next, continuous with Crucible.",
     Mockup: ReviewMockup,
   },
 ];
@@ -405,7 +409,7 @@ export default function ManifestoPage() {
 
       <PageHero
         eyebrow="Manifesto"
-        title="Prove it. Don't guess."
+        title="Measure it. Don't guess."
         lede="A model downgrade is a real decision. It deserves evidence, not a vibe."
       />
 

@@ -1,0 +1,17 @@
+{
+  "version": "",
+  "event_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "evidence_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "event_type": "approved",
+  "actor": "x",
+  "timestamp": "1970-01-01T00:00:00Z",
+  "reason": null,
+  "repository_revision": "0000000000000000000000000000000000000000",
+  "affected_files": [],
+  "pre_apply_digests": {},
+  "post_apply_digests": {},
+  "validation": {
+    "status": "not_run",
+    "command_results": []
+  }
+}

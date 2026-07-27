@@ -8,7 +8,7 @@ evaluator; only fall through to the judge when nothing stronger exists.
 1. **Deterministic verifier** (highest confidence): unit tests pass, build/typecheck/lint
    succeeds, JSON-schema valid, required fields present, tool call is well-formed, no
    runtime error, latency/retries within threshold. Use whenever the task is verifiable.
-2. **Reference-based comparison**: we _have_ the accepted original output — compare the
+2. **Reference-based comparison**: we _have_ the accepted original output, compare the
    candidate against it for semantic match, not lexical overlap. This is the default for
    this product because every logged successful step is a reference.
 3. **Agent trajectory evaluation**: correct tool selection, correct args, constraint
@@ -24,6 +24,14 @@ Framing: **reference-guided binary/ordinal verdict.** Give the judge (a) the tas
 Ask for `equivalent | minor_drift | divergent` + a one-line justification. Structured
 JSON output, temperature 0.
 
+`judge.py` maps those verdicts to `{equivalent: 1.0, minor_drift: 0.6, divergent: 0.0}`
+and averages two position-swapped calls. The only achievable single-case scores are
+therefore `{0.0, 0.3, 0.5, 0.6, 0.8, 1.0}`. Any quality floor above `0.8` is exactly the
+test "both orderings said equivalent", so the ordinal scale is an illusion at the
+default `0.90` floor. When the orderings disagree, the verdict path hedges to
+`minor_drift`, which discards evidence of judge unreliability at the verdict layer
+instead of surfacing it as a distinct outcome.
+
 Trace content is outsider-authored, so `judge.py` never interpolates it into the prompt
 raw. `common.untrusted_block` wraps the task, reference, and candidate in
 `<<<UNTRUSTED LABEL>>>` fences, defuses any fence marker the text itself carries, and caps
@@ -33,13 +41,13 @@ never an instruction, and that a truncation marker is a length clip rather than 
 omission. The fences are fixed tokens, not per-call nonces, so the two position-swapped
 judgements stay textually identical apart from block order.
 
-For tool calls / structured outputs, decompose — don't hand the blob to a prose judge:
+For tool calls / structured outputs, decompose; don't hand the blob to a prose judge:
 
 - **Deterministic pre-check first.** Compare tool name and arg _keys_ with set logic;
   compare arg _values_ with typed rules (numeric tolerance, unit/format normalization,
   order-insensitive lists, commutativity). Only escalate genuinely semantic values
   (free-text args, paraphrasable strings) to the LLM.
-- Score **per argument**, not per call — that granularity feeds cascade detection.
+- Score **per argument**, not per call; that granularity feeds cascade detection.
 - Rubric rules: reorderable args equivalent; missing-optional-with-default equivalent;
   wrong/hallucinated required arg = hard fail; extra non-conflicting detail acceptable,
   contradiction not.
@@ -69,7 +77,7 @@ families.
 | **Self-preference**            | Judge must be a **different family** than both candidates. Never judge the expensive model with its own family. |
 | **Third-party trace text**     | Fence TASK/REFERENCE/CANDIDATE as inert data; cap length; defuse forged fences.                                 |
 
-Grading scale: use the small ordinal scale above (or 0–5). Avoid 0–100 — human alignment
+Grading scale: use the small ordinal scale above (or 0–5). Avoid 0–100 because human alignment
 is best on coarse scales. For important swaps require **two independent judges to agree**
 before accepting a step verdict (cuts label noise materially).
 
@@ -79,9 +87,13 @@ Errors compound: a weak early step can pass its own check yet break a downstream
 the _visible_ failure is far from the root cause. So:
 
 - Run reference-guided per-step scoring across the whole trajectory.
-- Flag the **earliest** step whose semantic-equivalence score drops below the floor — even
+- Flag the **earliest** step whose semantic-equivalence score drops below the floor, even
   if the final output still looks OK. That early sub-threshold step is the cascade seed.
-- Weight early-step regressions higher than late ones.
+- Weighting early-step regressions higher than late ones is an engineering inference from
+  the self-conditioning mechanism in _The Illusion of Diminishing Returns_: a model's own
+  earlier errors in context can raise its later per-step error rate. The paper does not
+  test or prescribe early-step weighting, and it found RL-trained thinking models largely
+  immune to self-conditioning.
 - Confirm with the E2E code-execution replay ([replay.md](replay.md)) before recommending
   any swap on a step that feeds others.
 
@@ -96,7 +108,7 @@ or candidate models. Maintain a small gold set of step outputs for spot-checks. 
 **Severity check for open-ended tasks.** Reference-judging is harsh on open-ended
 generation (personas, emotional analyses, free-form summaries): two equally good
 outputs can legitimately diverge, and the judge reads divergence as failure. When a
-family scores near-zero for _every_ candidate — including strong ones — suspect judge
+family scores near-zero for _every_ candidate, including strong ones, suspect judge
 strictness before concluding "no viable swap". Cheap baseline: replay a few cases
 through the **current** model itself and judge that output against the stored
 reference. If the same-model baseline also scores below the floor, the judge (or the

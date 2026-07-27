@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import argparse
 import os
+from statistics import NormalDist
 
 from common import dump_json, load_json, md_text
 
 # a candidate must clear the quality floor in at least this fraction of a
-# family's cases before a swap is recommended — one lucky case is not evidence
+# family's cases before a swap is recommended; one lucky case is not evidence
 PASS_FRAC = 0.75
+MIN_REVIEW_CASES = 10
+CONFIDENCE = 0.95
 
 
 def _format_cost(value, cost_is_estimate: bool = False) -> str:
@@ -49,24 +52,117 @@ def family_rollup(steps: list[dict]) -> dict:
     return fams
 
 
+def wilson_interval(passes: int, cases: int, comparisons: int = 1) -> tuple[float, float]:
+    """Two-sided Wilson interval with a Bonferroni correction."""
+    alpha = (1 - CONFIDENCE) / comparisons
+    z = NormalDist().inv_cdf(1 - alpha / 2)
+    rate = passes / cases
+    z2 = z * z
+    denominator = 1 + z2 / cases
+    center = (rate + z2 / (2 * cases)) / denominator
+    margin = z * ((rate * (1 - rate) + z2 / (4 * cases)) / cases) ** 0.5 / denominator
+    return max(0.0, center - margin), min(1.0, center + margin)
+
+
+def _intervals_overlap(left: dict, right: dict) -> bool:
+    return left["ci_low"] <= right["ci_high"] and right["ci_low"] <= left["ci_high"]
+
+
+def _ranked_candidates(family: dict) -> list[dict]:
+    compared = [
+        (model, candidate) for model, candidate in family["cands"].items() if candidate["scores"]
+    ]
+    comparisons = len(compared)
+    candidates = []
+    for model, candidate in compared:
+        cases = len(candidate["scores"])
+        ci_low, ci_high = wilson_interval(candidate["passes"], cases, comparisons)
+        candidates.append(
+            {
+                "model": model,
+                "passes": candidate["passes"],
+                "cases": cases,
+                "pass_rate": candidate["passes"] / cases,
+                "ci_low": ci_low,
+                "ci_high": ci_high,
+                "avg_quality": sum(candidate["scores"]) / cases,
+                "estimated_savings": candidate["save"],
+                "blended_price": candidate["price"],
+                "errors": candidate["errors"],
+            }
+        )
+
+    remaining = sorted(
+        candidates, key=lambda candidate: (-candidate["pass_rate"], candidate["model"])
+    )
+    ranked = []
+    rank = 1
+    while remaining:
+        leader = remaining[0]
+        group = [candidate for candidate in remaining if _intervals_overlap(leader, candidate)]
+        tied = len(group) > 1
+        for candidate in group:
+            candidate["rank"] = rank
+            candidate["tied"] = tied
+            ranked.append(candidate)
+        remaining = [candidate for candidate in remaining if candidate not in group]
+        rank += 1
+    return ranked
+
+
 def family_recommendations(rollup: dict) -> list[dict]:
     recs = []
     for fam, f in rollup.items():
-        viable = []
-        for model, cc in f["cands"].items():
-            cases = len(cc["scores"])
-            if cases and cc["passes"] / cases >= PASS_FRAC:
-                viable.append((cc["price"] if cc["price"] is not None else 9e9, model, cc))
-        pick = min(viable) if viable else None
+        candidates = _ranked_candidates(f)
+        if f["n"] < MIN_REVIEW_CASES:
+            pick = None
+            case_label = "case" if f["n"] == 1 else "cases"
+            reason = (
+                f"family evidence has only {f['n']} {case_label}; "
+                f"at least {MIN_REVIEW_CASES} are required"
+            )
+        else:
+            viable = [
+                candidate
+                for candidate in candidates
+                if candidate["rank"] == 1
+                and candidate["cases"] >= MIN_REVIEW_CASES
+                and candidate["pass_rate"] >= PASS_FRAC
+            ]
+            pick = (
+                min(
+                    viable,
+                    key=lambda candidate: (
+                        candidate["blended_price"]
+                        if candidate["blended_price"] is not None
+                        else 9e9,
+                        candidate["model"],
+                    ),
+                )
+                if viable
+                else None
+            )
+            reason = (
+                None
+                if pick
+                else (
+                    f"no top-ranked candidate had at least {MIN_REVIEW_CASES} cases "
+                    f"and an uncorrected pass rate of at least {PASS_FRAC:.0%}"
+                )
+            )
         recs.append(
             {
                 "family": fam,
                 "current_model": f["current"],
                 "cases": f["n"],
-                "recommended_model": pick[1] if pick else None,
-                "pass_rate": (pick[2]["passes"] / len(pick[2]["scores"])) if pick else None,
-                "avg_quality": (sum(pick[2]["scores"]) / len(pick[2]["scores"])) if pick else None,
-                "estimated_savings": pick[2]["save"] if pick else None,
+                "recommended_model": pick["model"] if pick else None,
+                "pass_rate": pick["pass_rate"] if pick else None,
+                "avg_quality": pick["avg_quality"] if pick else None,
+                "estimated_savings": pick["estimated_savings"] if pick else None,
+                "recommendation_reason": reason,
+                "simultaneous_confidence": CONFIDENCE,
+                "bonferroni_comparisons": len(candidates),
+                "candidates": candidates,
             }
         )
     return recs
@@ -91,7 +187,7 @@ def render(results: dict, decisions: dict | None) -> str:
     steps = results["steps"]
     decisions = decisions or {}
 
-    lines = ["# Cheaper Models — Recommendation Report", ""]
+    lines = ["# Cheaper Models: Recommendation Report", ""]
     lines.append(
         f"_Generated {results.get('generated_at', '')}, quality floor "
         f"{results.get('quality_floor')}._"
@@ -111,28 +207,41 @@ def render(results: dict, decisions: dict | None) -> str:
     lines.append("")
 
     rollup = family_rollup(steps)
-    multi = {f: v for f, v in rollup.items() if v["n"] > 1}
-    if multi:
+    if rollup:
         recs = {r["family"]: r for r in family_recommendations(rollup)}
         lines.append("## Per-family results across cases")
         lines.append(
-            f"_A swap is recommended only when a candidate clears the quality floor in "
-            f"≥{PASS_FRAC:.0%} of a family's cases — a per-step win on one case is noise._"
+            f"_Family recommendations require at least {MIN_REVIEW_CASES} cases and still use "
+            f"the uncorrected pass-rate bar of {PASS_FRAC:.0%}. Multiplicity correction "
+            f"applies to rankings, not that family recommendation gate._"
+        )
+        lines.append(
+            f"_Rankings use {CONFIDENCE:.0%} Wilson intervals with Bonferroni correction "
+            f"within each family. Overlapping intervals are tied. At realistic sample "
+            f"sizes, one large tie group is common and expected._"
         )
         lines.append("")
-        for fam, f in multi.items():
-            lines.append(f"### {fam} — current `{md_text(f['current'])}` ({f['n']} cases)")
+        for fam, f in rollup.items():
+            lines.append(f"### {fam}: current `{md_text(f['current'])}` ({f['n']} cases)")
             lines.append("")
-            lines.append("| Candidate | Pass | Avg quality | Savings | Errors |")
-            lines.append("|---|---|---|---|---|")
-            for model, cc in sorted(f["cands"].items(), key=lambda kv: kv[1]["price"] or 9e9):
-                cases = len(cc["scores"])
-                save = f"{cc['save']:.0%}" if cc["save"] is not None else "?"
-                lines.append(
-                    f"| `{model}` | {cc['passes']}/{cases} | "
-                    f"{sum(cc['scores']) / cases:.2f} | {save} | {cc['errors']} |"
-                )
+            lines.append(
+                "| Rank | Candidate | Pass | Simultaneous interval | Avg quality | Savings | Errors |"
+            )
+            lines.append("|---:|---|---:|---:|---:|---:|---:|")
             r = recs[fam]
+            for candidate in r["candidates"]:
+                rank = f"{candidate['rank']} (tie)" if candidate["tied"] else str(candidate["rank"])
+                save = (
+                    f"{candidate['estimated_savings']:.0%}"
+                    if candidate["estimated_savings"] is not None
+                    else "?"
+                )
+                lines.append(
+                    f"| {rank} | `{candidate['model']}` | "
+                    f"{candidate['passes']}/{candidate['cases']} | "
+                    f"[{candidate['ci_low']:.3f}, {candidate['ci_high']:.3f}] | "
+                    f"{candidate['avg_quality']:.2f} | {save} | {candidate['errors']} |"
+                )
             if r["recommended_model"]:
                 lines.append(
                     f"\n**→ swap to `{r['recommended_model']}`** "
@@ -140,7 +249,7 @@ def render(results: dict, decisions: dict | None) -> str:
                     f"{r['avg_quality']:.2f}, ~{(r['estimated_savings'] or 0):.0%} cheaper)"
                 )
             else:
-                lines.append("\n**→ KEEP** — no candidate cleared the bar")
+                lines.append(f"\n**No family recommendation**: {r['recommendation_reason']}")
             lines.append("")
 
     lines.append("## Recommended substitutions")
@@ -167,7 +276,7 @@ def render(results: dict, decisions: dict | None) -> str:
         lines.append("## Needs code-execution confirmation (cascade risk)")
         lines.append(
             "These steps are multi-step / tool-calling / looping. Single-shot replay is "
-            "not trustworthy — confirm with `run_pipeline.py` before swapping."
+            "not trustworthy; confirm with `run_pipeline.py` before swapping."
         )
         lines.append("")
         for s in e2e:

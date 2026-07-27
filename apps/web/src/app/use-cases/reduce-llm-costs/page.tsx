@@ -7,21 +7,22 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { Reveal } from "@/components/reveal";
+import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "Reduce LLM costs",
   description:
-    "Cut your agent's model bill without guessing. rightmodeler proves which steps can move to cheaper models on your own traces, with evidence and a quality floor on every call.",
+    "Cut your agent's model bill without guessing. rightmodeler measures cheaper candidates against accepted outputs and reports agreement, evidence, sample size, and abstentions.",
   path: "/use-cases/reduce-llm-costs",
   image: "/social/reduce-llm-costs.png",
 });
 
-// ── The before/after band: five muted failures against five proven answers, item for item,
+// ── The before/after band: five muted failures against five measured answers, item for item,
 // separated by dotted hairlines the way the reference draws them.
 
 const BEFORE: string[] = [
-  "Every step runs the frontier model, because nobody can prove a cheaper one holds.",
+  "Every step runs the frontier model, because nobody has measured a cheaper candidate on accepted outputs.",
   "Swaps happen on vibes: a leaderboard, a launch thread, a hunch. Regressions ship silently.",
   "The invoice is one number. Which step spent it, nobody can say.",
   "Evaluating one candidate properly is a two-day project, so it stays unscheduled.",
@@ -29,8 +30,8 @@ const BEFORE: string[] = [
 ];
 
 const AFTER: string[] = [
-  "Every step is audited on your own traces, and the safe swaps are proven per step.",
-  "Candidates are judged against the output you already shipped, with a quality floor.",
+  "Every step is audited on your own traces, with candidate agreement measured per step.",
+  "Candidates are judged against the output you accepted, with a reference-agreement floor.",
   "The report has line items: save, quality, evidence, and confidence for every call.",
   "One command on the traces you already have. No new SDK, nothing in your request path.",
   "Weak evidence means abstain: the frontier model stays exactly where it earns its price.",
@@ -39,7 +40,7 @@ const AFTER: string[] = [
 const FAQ: { q: string; a: string }[] = [
   {
     q: "Will cutting cost hurt quality?",
-    a: "Only if you downgrade blind. rightmodeler proves each swap against the output you already shipped and enforces a quality floor, so a step moves to a cheaper model only when quality holds. When it can't prove that, it abstains and keeps the frontier model.",
+    a: "The audit does not establish ground-truth quality. It measures each candidate against the output you accepted, reports the evidence and sample size, and abstains when they are weak. You review that evidence before changing a model.",
   },
   {
     q: "How much can I save?",
@@ -47,7 +48,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Do I have to switch models everywhere?",
-    a: "No. The audit is per step, not all-or-nothing. Adopt one safe swap and leave the rest on the frontier model.",
+    a: "No. The audit is per step, not all-or-nothing. Approve one recommendation and leave the rest on the current model.",
   },
   {
     q: "Do I need new instrumentation?",
@@ -66,17 +67,17 @@ function LedgerMockup() {
     {
       step: "summarize",
       swap: "gpt-5.6 → gpt-5.4-mini",
-      meta: "save 85% · Q 0.94",
+      meta: `save 85% · Q ${ILLUSTRATIVE_SCORECARD.approved}`,
     },
     {
       step: "extract_json",
       swap: "gpt-5.5 → gpt-5.4-nano",
-      meta: "save 96% · Q 1.00",
+      meta: `save 96% · Q ${ILLUSTRATIVE_SCORECARD.deterministic}`,
     },
     {
       step: "sql_generation",
       swap: "gpt-5.6 → gpt-5.4",
-      meta: "save 50% · Q 0.91",
+      meta: `save 50% · Q ${ILLUSTRATIVE_SCORECARD.alternative}`,
     },
     {
       step: "auth_code_edit",
@@ -95,7 +96,7 @@ function LedgerMockup() {
             rightmodeler · per-step report
           </span>
           <span className="shrink-0 font-mono text-caption text-fog">
-            illustrative
+            {ILLUSTRATIVE_SCORECARD.label}
           </span>
         </div>
         <div className="divide-y divide-ash-border">
@@ -164,7 +165,7 @@ function ConfigMockup() {
           </Ln>
           <Ln>
             {"  floor: "}
-            <V>0.90</V>
+            <V>{ILLUSTRATIVE_SCORECARD.floor}</V>
             {","}
           </Ln>
           <Ln>
@@ -197,7 +198,7 @@ export default function ReduceLlmCostsPage() {
       <PageHero
         eyebrow="Use case · Reduce LLM costs"
         title="Cut your agent's model bill without guessing."
-        lede="Find the steps that overpay for a frontier model, and prove the cheaper swap before you ship it."
+        lede="Measure cheaper candidates against outputs you accepted, then review the evidence, sample size, and abstentions before you change a model."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
@@ -278,7 +279,8 @@ export default function ReduceLlmCostsPage() {
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
                     One command installs the skill. The report runs on the
-                    traces you already have and hands you the safe swaps.
+                    traces you already have and hands you recommendations with
+                    their evidence.
                   </p>
                   <div className="mt-5">
                     <GithubButton />
@@ -297,8 +299,9 @@ export default function ReduceLlmCostsPage() {
                     Then make it continuous
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
-                    The agent will ship safe swaps as pull requests, and
-                    Crucible keeps every layer watched. Both are on the way.
+                    The agent will open evidence-backed model-change pull
+                    requests, and Crucible keeps every layer watched. Both are
+                    on the way.
                   </p>
                   <div className="mt-5 flex flex-wrap gap-2.5">
                     <Link href="/agent" className={pillPrimary}>

@@ -1,0 +1,128 @@
+{
+  "version": "",
+  "snapshot_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "corpus_version_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "candidate_bundle_id": "x",
+  "candidate": {
+    "id": "x",
+    "model": "x",
+    "source": "imported"
+  },
+  "case_verdicts": [],
+  "summary": {
+    "total_cases": 0,
+    "pass_count": 0,
+    "fail_count": 0,
+    "abstain_count": 0,
+    "coverage": 0
+  },
+  "cost": {
+    "candidate_cost_usd": 0,
+    "evaluation_cost_usd": 0,
+    "total_cost_usd": 0
+  },
+  "timing": {
+    "availability": "available",
+    "available_case_count": 0,
+    "missing_case_count": 0
+  },
+  "evidence": {
+    "available_case_count": 0,
+    "missing_case_count": 0,
+    "references": []
+  },
+  "scorecards": {
+    "safety": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "threshold": null,
+      "status": "unavailable",
+      "evidence_refs": [],
+      "details": {}
+    },
+    "quality": {
+      "overall": {
+        "value": null,
+        "numerator": 0,
+        "denominator": 0,
+        "threshold": null,
+        "status": "unavailable",
+        "evidence_refs": [],
+        "details": {}
+      },
+      "by_family": {}
+    },
+    "recommendation_precision": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "threshold": null,
+      "status": "unavailable",
+      "evidence_refs": [],
+      "details": {}
+    },
+    "safe_opportunity_recall": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "threshold": null,
+      "status": "unavailable",
+      "evidence_refs": [],
+      "details": {}
+    },
+    "required_abstention": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "threshold": null,
+      "status": "unavailable",
+      "evidence_refs": [],
+      "details": {}
+    },
+    "coverage": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "threshold": null,
+      "status": "unavailable",
+      "evidence_refs": [],
+      "details": {}
+    },
+    "speed": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "threshold": null,
+      "status": "unavailable",
+      "evidence_refs": [],
+      "details": {}
+    },
+    "confidence": {
+      "level": "abstain",
+      "status": "unavailable",
+      "sample_count": 0,
+      "pass_rate": null,
+      "evidence_refs": []
+    },
+    "remediation": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "threshold": null,
+      "status": "unavailable",
+      "evidence_refs": [],
+      "details": {}
+    },
+    "cost": {
+      "value": null,
+      "numerator": 0,
+      "denominator": 0,
+      "threshold": null,
+      "status": "unavailable",
+      "evidence_refs": [],
+      "details": {}
+    }
+  },
+  "gates": []
+}

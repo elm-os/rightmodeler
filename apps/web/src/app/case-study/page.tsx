@@ -14,7 +14,7 @@ import { SITE_URL } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "Case studies",
   description:
-    "How real teams right-sized their AI stacks with rightmodeler: per-workload routing policies, dramatically lower inference cost, and quality bars that hold.",
+    "Two per-workload routing studies with modeled savings; B:Side also reports a measured 100% pass rate on a 20-query benchmark.",
   path: "/case-study",
 });
 
@@ -44,9 +44,10 @@ export default function CaseStudiesPage() {
             What right-sizing actually saves.
           </h1>
           <p className="mt-6 text-subheading text-driftwood">
-            Real agent stacks, routed onto the models and reasoning effort each
-            workload actually needs. The savings are modeled honestly, and the
-            quality bars are measured, not assumed.
+            Both studies report modeled savings from per-workload routing.
+            B:Side also reports a measured 100% pass rate on its 20-query
+            benchmark; iAM360 reports its routing and validation procedure
+            without a measured quality result.
           </p>
         </Reveal>
 

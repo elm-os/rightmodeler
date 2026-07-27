@@ -12,7 +12,7 @@ from analyze import analyze
 from common import md_text, resolve_env_var, untrusted_block
 from ingest import detect_format
 from judge import judge_outputs, pick_judge
-from orchestrate import _task_text
+from orchestrate import _task_text, summarize
 from provider import (
     LITELLM_CONFIG,
     OPENROUTER_CONFIG,
@@ -22,8 +22,9 @@ from provider import (
     VercelAIGatewayProvider,
     get_provider,
 )
-from report import render, render_snapshot
-from replay import ReplayError, replay_cases
+from report import family_recommendations, render, render_snapshot, wilson_interval
+from replay import ReplayError, _digest, replay_cases
+from replay_step import replay_step
 from run_pipeline import _provider_env
 from shortlist import shortlist
 from workflow import run_workflow
@@ -384,11 +385,88 @@ def report_render_smoke():
     assert "| forged | row | here |" not in md
     assert "z" * 300 not in md
     assert md.count("…") == 4  # two table rows, the e2e bullet, the abstain bullet
-    assert "### pr_summary — current `openai/gpt-4o'evil\\|col`" in md
+    assert "### pr_summary: current `openai/gpt-4o'evil\\|col`" in md
 
     # the untouched parts of the report still render
     assert "Recommendation Report" in md
     assert "$0.012300 est." in md
+
+
+def family_statistics_smoke():
+    expected = {
+        (0, 1): (0.0, 0.793450685623),
+        (1, 1): (0.206549314377, 1.0),
+        (0, 10): (0.0, 0.277532799863),
+        (5, 10): (0.236593090513, 0.763406909487),
+        (10, 10): (0.722467200137, 1.0),
+        (0, 20): (0.0, 0.161125158053),
+        (10, 20): (0.299298008198, 0.700701991802),
+        (20, 20): (0.838874841947, 1.0),
+        (0, 50): (0.0, 0.071347599133),
+        (25, 50): (0.366445143168, 0.633554856832),
+        (50, 50): (0.928652400867, 1.0),
+    }
+    for inputs, bounds in expected.items():
+        actual = wilson_interval(*inputs)
+        assert all(abs(got - want) < 1e-12 for got, want in zip(actual, bounds)), (
+            inputs,
+            actual,
+        )
+
+    uncorrected = wilson_interval(8, 10)
+    corrected_four = wilson_interval(8, 10, 4)
+    corrected_eight = wilson_interval(8, 10, 8)
+    widths = [high - low for low, high in (uncorrected, corrected_four, corrected_eight)]
+    assert widths[0] < widths[1] < widths[2], widths
+
+    perfect_four = wilson_interval(20, 20, 4)
+    fifteen_four = wilson_interval(15, 20, 4)
+    five_four = wilson_interval(5, 20, 4)
+    assert abs(perfect_four[0] - 0.762237746934) < 1e-12
+    assert abs(fifteen_four[0] - 0.471211304734) < 1e-12
+    assert abs(fifteen_four[1] - 0.909907568732) < 1e-12
+    assert perfect_four[0] <= fifteen_four[1]
+    assert perfect_four[0] > five_four[1]
+
+    def candidate(passes, cases, price):
+        return {
+            "passes": passes,
+            "scores": [1.0] * cases,
+            "errors": 0,
+            "save": 0.5,
+            "price": price,
+        }
+
+    def recommendation(candidates, cases=20):
+        rollup = {
+            "general": {
+                "current": "current/model",
+                "n": cases,
+                "cands": candidates,
+            }
+        }
+        return family_recommendations(rollup)[0]
+
+    ranked = recommendation(
+        {
+            "perfect/model": candidate(20, 20, 0.02),
+            "fifteen/model": candidate(15, 20, 0.01),
+            "middle/model": candidate(10, 20, 0.005),
+            "five/model": candidate(5, 20, 0.001),
+        }
+    )
+    by_model = {candidate["model"]: candidate for candidate in ranked["candidates"]}
+    assert ranked["bonferroni_comparisons"] == 4
+    assert by_model["perfect/model"]["rank"] == by_model["fifteen/model"]["rank"] == 1
+    assert by_model["perfect/model"]["tied"] and by_model["fifteen/model"]["tied"]
+    assert by_model["five/model"]["rank"] > by_model["perfect/model"]["rank"]
+    assert by_model["perfect/model"]["ci_low"] == perfect_four[0]
+    assert ranked["recommended_model"] == "fifteen/model"
+
+    sparse = recommendation({"lucky/model": candidate(1, 1, 0.01)}, cases=1)
+    assert sparse["recommended_model"] is None
+    assert "only 1 case" in sparse["recommendation_reason"]
+    assert "at least 10" in sparse["recommendation_reason"]
 
 
 def tui_render_smoke():
@@ -397,7 +475,7 @@ def tui_render_smoke():
     # "[/nope]" closes a tag that was never opened. Rich renders str table cells
     # through the markup parser and Textual's default_cell_formatter calls
     # Text.from_markup, so before Text() wrapping this raised MarkupError and
-    # killed the whole render — on the no-TTY path an agent session always hits.
+    # killed the whole render; on the no-TTY path an agent session always hits.
     hostile = "[/nope] step [red]pwned[/red]\nsecond line " + "q" * 200
     results = {
         "steps": [
@@ -437,6 +515,35 @@ def tui_render_smoke():
     assert "[/nope] step [red]pwned[/red]" in out  # shown literally, never parsed
     assert "q" * 200 not in out  # capped
     assert "…" in out
+
+
+def swappable_summary_smoke():
+    from tui import _rows, run_rich_fallback
+
+    steps = [
+        {
+            "step_id": "s1",
+            "name": "zero-score fixture",
+            "family": "general",
+            "current_model": "current/model",
+            "evaluator": "reference",
+            "candidates": [],
+            "best": {
+                "model": "candidate/model",
+                "score": 0.0,
+                "verdict": "divergent",
+                "est_savings": 0.5,
+            },
+        }
+    ]
+    results = summarize(steps, 0.9)
+    assert results["swappable"] == 1
+    assert "Viable single-shot swaps found: **1**" in render(results, None)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        assert run_rich_fallback(results, _rows(results)) == 0
+    assert "Swappable single-shot: 1" in output.getvalue()
 
 
 def orchestrate_unresolved_model_smoke():
@@ -524,6 +631,199 @@ def provider_cost_smoke():
     assert provider._cost({"usage": {}}, {}) == (0.0123, True)
 
 
+def replay_sampling_smoke():
+    class FakeProvider:
+        def __init__(self):
+            self.calls = []
+
+        def chat(self, model, messages, **kwargs):
+            self.calls.append(kwargs)
+            temperature = kwargs["temperature"]
+            seed = kwargs["seed"]
+            text = "representative" if temperature == 0.0 else f"dispersion-{seed}"
+            return {
+                "text": text,
+                "tool_calls": [],
+                "cost": 0.01,
+                "cost_is_estimate": False,
+                "model": model,
+                "error": None,
+            }
+
+    step = {"input_messages": [{"role": "user", "content": "Say hello."}]}
+    first_provider = FakeProvider()
+    first = replay_step(first_provider, step, "candidate/model", runs=5, base_seed=41)
+    second = replay_step(FakeProvider(), step, "candidate/model", runs=5, base_seed=41)
+
+    assert len({sample["text"] for sample in first["samples"]}) > 1
+    assert [sample["seed"] for sample in first["samples"]] == [41, 42, 43, 44, 45]
+    assert [sample["temperature"] for sample in first["samples"]] == [
+        0.0,
+        None,
+        None,
+        None,
+        None,
+    ]
+    assert [sample["seed"] for sample in first["samples"]] == [
+        sample["seed"] for sample in second["samples"]
+    ]
+    assert first["text"] == first["samples"][0]["text"] == "representative"
+    assert first["tool_calls"] == first["samples"][0]["tool_calls"]
+    assert [call["temperature"] for call in first_provider.calls] == [
+        0.0,
+        None,
+        None,
+        None,
+        None,
+    ]
+
+    class DispersionErrorProvider(FakeProvider):
+        def chat(self, model, messages, **kwargs):
+            if kwargs["temperature"] is None:
+                return {"model": model, "error": "dispersion failed"}
+            return super().chat(model, messages, **kwargs)
+
+    with_dispersion_error = replay_step(
+        DispersionErrorProvider(),
+        step,
+        "candidate/model",
+        runs=2,
+        base_seed=41,
+    )
+    assert with_dispersion_error["error"] is None
+    assert with_dispersion_error["text"] == "representative"
+    assert with_dispersion_error["samples"][1]["error"] == "dispersion failed"
+    assert with_dispersion_error["samples"][1]["seed"] == 42
+    assert with_dispersion_error["samples"][1]["temperature"] is None
+
+
+def vercel_replay_sampling_smoke():
+    class FakeResponse:
+        status_code = 200
+        headers = {}
+        text = ""
+
+        def __init__(self, data):
+            self.data = data
+
+        def json(self):
+            return self.data
+
+    class FakeClient:
+        def __init__(self):
+            self.bodies = []
+
+        def post(self, path, json):
+            assert path == "/chat/completions"
+            self.bodies.append(json)
+            if json.get("temperature") == 0.0:
+                text = "representative"
+            else:
+                text = f"gateway-default-sample-{len(self.bodies)}"
+            return FakeResponse(
+                {
+                    "model": json["model"],
+                    "choices": [
+                        {
+                            "message": {"content": text},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"cost": 0},
+                }
+            )
+
+    provider = object.__new__(VercelAIGatewayProvider)
+    provider.api_key = "test"
+    provider._client = FakeClient()
+    result = replay_step(
+        provider,
+        {"input_messages": [{"role": "user", "content": "Say hello."}]},
+        "candidate/model",
+        runs=3,
+        base_seed=91,
+    )
+
+    assert all("seed" not in body for body in provider._client.bodies)
+    assert provider._client.bodies[0]["temperature"] == 0.0
+    # Vercel does not accept our seed, so dispersion relies on the routed
+    # model's non-zero default temperature when the field is omitted.
+    assert all("temperature" not in body for body in provider._client.bodies[1:])
+    assert len({sample["text"] for sample in result["samples"]}) > 1
+    assert [sample["seed"] for sample in result["samples"]] == [91, 92, 93]
+    assert [sample["temperature"] for sample in result["samples"]] == [0.0, None, None]
+    assert result["text"] == "representative"
+
+
+def replay_cache_version_smoke():
+    case = {"case_id": "case-1", "source_run_id": "s1"}
+    step = {
+        "step_id": "s1",
+        "input_messages": [{"role": "user", "content": "Say hello."}],
+    }
+    legacy_key = _digest(
+        {
+            "case": case,
+            "step": step,
+            "pipeline_step": None,
+            "candidate_model": "cheap-model",
+            "mode": "single_shot",
+            "runs": 1,
+            "max_tokens": 1024,
+            "run_command": None,
+        }
+    )
+    legacy_result = {
+        "case_id": "case-1",
+        "output_text": "legacy",
+        "cost_usd": 0.0,
+        "cost_is_estimate": False,
+        "duration_ms": 0.0,
+        "evidence_refs": ["legacy"],
+        "replay_error": None,
+    }
+
+    class FakeProvider:
+        def price_per_token(self, _model):
+            return 0.000001, 0.000001
+
+    calls = []
+
+    def single_shot_runner(*_args, base_seed, **_kwargs):
+        calls.append(base_seed)
+        return {
+            "text": f"fresh-{base_seed}",
+            "cost": 0.01,
+            "cost_is_estimate": False,
+            "error": None,
+        }
+
+    with tempfile.TemporaryDirectory() as replay_tmp:
+        cache = Path(replay_tmp) / "cache.json"
+        cache.write_text(json.dumps({legacy_key: legacy_result}))
+        kwargs = {
+            "cases": [case],
+            "normalized": {"steps": [step]},
+            "candidate_model": "cheap-model",
+            "max_cost_usd": 0.05,
+            "corpus_version_id": "sha256:" + "b" * 64,
+            "cache_path": cache,
+            "orr": FakeProvider(),
+            "single_shot_runner": single_shot_runner,
+        }
+        first = replay_cases(**kwargs, base_seed=41)
+        second = replay_cases(**kwargs, base_seed=41)
+        changed_seed = replay_cases(**kwargs, base_seed=42)
+
+    assert first["replay"]["cache_hits"] == 0
+    assert first["replay"]["cache_misses"] == 1
+    assert first["results"][0]["output_text"] == "fresh-41"
+    assert second["replay"]["cache_hits"] == 1
+    assert changed_seed["replay"]["cache_hits"] == 0
+    assert changed_seed["results"][0]["output_text"] == "fresh-42"
+    assert calls == [41, 42]
+
+
 def shortlist_smoke():
     class FakeProvider:
         def __init__(self, catalog):
@@ -605,10 +905,15 @@ def main():
     judge_prompt_smoke()
     task_text_smoke()
     report_render_smoke()
+    family_statistics_smoke()
     tui_render_smoke()
+    swappable_summary_smoke()
     orchestrate_unresolved_model_smoke()
     provider_env_smoke()
     provider_cost_smoke()
+    replay_sampling_smoke()
+    vercel_replay_sampling_smoke()
+    replay_cache_version_smoke()
     shortlist_smoke()
 
     detected = detect_format(

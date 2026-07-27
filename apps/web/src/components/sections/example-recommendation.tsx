@@ -9,6 +9,7 @@
 
 import { AnimatedNumber } from "@/components/animated-number";
 import { Reveal } from "@/components/reveal";
+import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 
 type Rung = {
   tier: string;
@@ -28,14 +29,14 @@ const LADDER: Rung[] = [
 ];
 
 const RISKS = [
-  "The match is judged, not proven — medium confidence means shadow it before you rely on it live.",
+  "The score measures agreement, not correctness. Medium confidence means shadow it before you rely on it live.",
   "Evidence is tied to this prompt and these runs; re-judge if the pr_summary prompt changes.",
 ];
 
 const ROLLOUT = [
   "Shadow gpt-4o-mini on the next pr_summary runs — no live traffic.",
   "Diff each summary against the gpt-4.1 output you already ship.",
-  "Promote to default only once quality holds at or above the 0.90 floor. Keep gpt-4.1 as the fallback.",
+  `Promote to default only once reference agreement stays at or above the ${ILLUSTRATIVE_SCORECARD.floor} floor. Keep gpt-4.1 as the fallback.`,
 ];
 
 export function ExampleRecommendation() {
@@ -66,7 +67,7 @@ export function ExampleRecommendation() {
                 rightmodeler · recommendation · pr_summary
               </p>
               <p className="font-mono text-caption text-fog">
-                [ illustrative example ]
+                [ {ILLUSTRATIVE_SCORECARD.label} example ]
               </p>
             </div>
 
@@ -76,7 +77,7 @@ export function ExampleRecommendation() {
                 Recommended downgrade
               </p>
               <h3 className="mt-2 font-display text-heading-lg text-midnight-ink">
-                Safe to downgrade.
+                Candidate for review.
               </h3>
               {/* Swap couplet — direction carried by monochrome hierarchy, not hue */}
               <p className="mt-3 font-mono text-body">
@@ -107,15 +108,16 @@ export function ExampleRecommendation() {
                   </div>
                   <div>
                     <span className="font-display text-heading tabular-nums text-midnight-ink sm:text-display">
-                      0.94
+                      {ILLUSTRATIVE_SCORECARD.approved}
                     </span>
                     <p className="mt-1 font-mono text-caption text-driftwood">
-                      quality score · floor 0.90
+                      quality score · floor {ILLUSTRATIVE_SCORECARD.floor}
                     </p>
                   </div>
                 </div>
                 <p className="mt-4 font-mono text-caption text-fog">
-                  cost reduction · quality score — illustrative example
+                  cost reduction · quality score, {ILLUSTRATIVE_SCORECARD.label}{" "}
+                  example
                 </p>
               </div>
             </div>

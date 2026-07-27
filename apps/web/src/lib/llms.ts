@@ -10,7 +10,7 @@ import { SITE_NAME, SITE_URL, REPO_URL, RUN_COMMAND } from "@/lib/site";
 // One-paragraph summary for the llms.txt blockquote. Stands alone: an LLM should grasp the whole
 // platform (skill, agent, Crucible) and the key caveat (the skill is a report, not a gateway).
 const SUMMARY =
-  "rightmodeler keeps AI agents on the right model at every step. The rightmodeler skill, free on GitHub, replays your real agent traces through cheaper models and proves which swaps are safe, with evidence and confidence on every call. rightmodeler agent, coming soon, watches new model releases and opens evidence-backed model-swap pull requests in your repo. Crucible, in early access, is the analytics and optimization suite that shows what every layer of your agent system costs, how fast it runs, and where it fails, and keeps your stack right-sized continuously. The skill is a report you run on your own traces, not a runtime gateway.";
+  "rightmodeler keeps AI agents on the right model at every step. The rightmodeler skill, free on GitHub, replays your real agent traces through cheaper models, measures each candidate against the output you accepted, and reports the evidence, sample size, and abstentions. rightmodeler agent, coming soon, watches new model releases and opens evidence-backed model-change pull requests in your repo. Crucible, in early access, is the analytics and optimization suite that shows what every layer of your agent system costs, how fast it runs, and where it fails, and keeps your stack right-sized continuously. The skill is a report you run on your own traces, not a runtime gateway.";
 
 // Product overview in Markdown for llms-context.txt (indented code block avoids backticks here).
 const OVERVIEW = `## What it is
@@ -19,15 +19,15 @@ ${SITE_NAME} is the model layer for teams running multi-agent LLM systems. New m
 
 Three offerings:
 
-- The ${SITE_NAME} skill (available now): an audit you run on your own traces. It replays your real agent traces through cheaper candidate models, judges each output against what you already shipped, and produces a per-step recommendation report with evidence and confidence on every call. It is a report, not a runtime gateway; it never sits in your request path.
-- ${SITE_NAME} agent (coming soon): the same proof loop, continuous. It watches new model releases, replays them against your traces, and when a swap clears your quality floor and preferences it opens a pull request in your repo with the evidence attached. Model migrations become code review.
+- The ${SITE_NAME} skill (available now): an audit you run on your own traces. It replays your real agent traces through cheaper candidate models, measures each output against what you already accepted, and produces a per-step recommendation report with reference agreement, evidence, sample size, and abstentions. It is a report, not a runtime gateway; it never sits in your request path.
+- ${SITE_NAME} agent (coming soon): the same measurement loop, continuous. It watches new model releases, replays them against your traces, and when a candidate clears your configured reference-agreement floor and preferences it opens a pull request in your repo with the evidence attached. Model migrations become code review.
 - Crucible (early access): the analytics and optimization suite for your agents. Cost per layer, speed per step, failed tool calls and regressions as they happen, connected over MCP, while it keeps your model stack right-sized continuously.
 
-## How the proof works
+## How the measurement works
 
 - Replay your real agent traces through candidate models.
-- Judge each output against what you already shipped in production, using reference-based and judge-based evaluation.
-- Abstain when the evidence is weak. A tool that always finds savings is not measuring anything, so ${SITE_NAME} also tells you when not to switch.
+- Measure each output against what you already accepted in production, using reference-based and judge-based evaluation. This measures agreement with shipped output, not ground-truth correctness.
+- Report the evidence and sample size, and abstain when they are weak. A tool that always finds savings is not measuring anything, so ${SITE_NAME} also tells you when not to switch.
 
 ## Get started
 
@@ -43,25 +43,25 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/how-it-works",
     title: "How it works",
     description:
-      "Detect, prove, fix: how rightmodeler replays your traces through cheaper models, judges each output against what you already shipped, and applies the safe swaps.",
+      "Detect, measure, review: how rightmodeler replays your traces through cheaper models, measures each output against what you accepted, and reports evidence, sample size, and abstentions.",
   },
   {
     path: "/use-cases/reduce-llm-costs",
     title: "Reduce LLM costs",
     description:
-      "Cut your agent's model bill without guessing: prove which steps can move to cheaper models on your own traces.",
+      "Cut your agent's model bill without guessing: measure cheaper candidates against accepted outputs and review the evidence before changing a model.",
   },
   {
     path: "/case-study",
     title: "Case studies",
     description:
-      "How real teams right-sized their AI stacks with rightmodeler: per-workload routing policies, dramatically lower inference cost, and quality bars that hold.",
+      "How real teams modeled lower inference cost with per-workload routing policies; B:Side also reports a measured 100% pass rate on a 20-query benchmark.",
   },
   {
     path: "/case-study/bside",
     title: "Case study: B:Side Assist",
     description:
-      "How rightmodeler right-sized AI Assist's 11 AI layers with a per-workload routing policy: 70.8% lower projected inference cost, 53.3% faster responses, 114.3% higher throughput, and a measured 100% quality pass rate.",
+      "How rightmodeler right-sized AI Assist's 11 AI layers with a per-workload routing policy: 70.8% lower projected inference cost, 53.3% faster responses, 114.3% higher throughput, and a measured 100% pass rate on a 20-query benchmark.",
   },
   {
     path: "/case-study/iam360",
@@ -79,7 +79,7 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/manifesto",
     title: "Manifesto",
     description:
-      "Prove it, don't guess: the case for evidence-backed model downgrading.",
+      "Measure it, don't guess: the case for evidence-backed model downgrading.",
   },
   {
     path: "/glossary",

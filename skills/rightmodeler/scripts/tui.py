@@ -20,6 +20,7 @@ import os
 import sys
 
 from common import flatten, load_json, dump_json
+from orchestrate import swappable_count
 
 
 DECISION_STYLE = {
@@ -48,12 +49,12 @@ def _rows(results: dict) -> list[dict]:
                 "step_id": s["step_id"],
                 "name": s.get("name") or s["step_id"],
                 "family": s.get("family", ""),
-                "current": s.get("current_model") or "—",
+                "current": s.get("current_model") or "n/a",
                 "candidate": (best or {}).get("model")
                 or (
                     (s.get("candidates") or [{}])[0].get("id")
                     or (s.get("candidates") or [{}])[0].get("model")
-                    or "—"
+                    or "n/a"
                 ),
                 "savings": (best or {}).get("est_savings"),
                 "score": (best or {}).get("score"),
@@ -73,11 +74,11 @@ def _rows(results: dict) -> list[dict]:
 
 
 def _fmt_pct(v):
-    return f"{v:.0%}" if isinstance(v, (int, float)) else "—"
+    return f"{v:.0%}" if isinstance(v, (int, float)) else "n/a"
 
 
 def _fmt_score(v):
-    return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
+    return f"{v:.2f}" if isinstance(v, (int, float)) else "n/a"
 
 
 def run_rich_fallback(results: dict, rows: list[dict]) -> int:
@@ -104,7 +105,7 @@ def run_rich_fallback(results: dict, rows: list[dict]) -> int:
             flag,
         )
     c.print(t)
-    swappable = sum(1 for r in rows if r["score"] and not r["cascade"])
+    swappable = swappable_count(results["steps"])
     c.print(
         f"[bold]Swappable single-shot:[/] {swappable}   "
         f"[cyan]needs E2E:[/] {sum(1 for r in rows if r['cascade'])}   "
@@ -230,12 +231,12 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
             body.append(f"evidence:  {r['evidence']}    risk: {r['risk']}\n")
             if r["cascade"]:
                 body.append(
-                    "\n⚙ multi-step/tool/loop — confirm with run_pipeline.py "
+                    "\n⚙ multi-step/tool/loop; confirm with run_pipeline.py "
                     "before swapping (cascade risk)\n",
                     style="cyan",
                 )
             body.append("\njudge / note:\n", style="bold")
-            body.append((r["justification"] or "—") + "\n")
+            body.append((r["justification"] or "n/a") + "\n")
             if r["candidate_output"]:
                 body.append("\ncandidate output (truncated):\n", style="bold")
                 body.append(r["candidate_output"][:1200] + "\n", style="dim")

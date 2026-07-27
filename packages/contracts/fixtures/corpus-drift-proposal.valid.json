@@ -1,0 +1,19 @@
+{
+  "version": "",
+  "proposal_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "parent_corpus_version_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "candidate_definition_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "status": "proposed",
+  "proposed_changes": [
+    {
+      "action": "add",
+      "case_id": "x",
+      "signal": "input",
+      "detail": "x"
+    }
+  ],
+  "signals": [],
+  "exposed_holdout_case_ids": [],
+  "replacement_holdout_case_ids": [],
+  "approval": null
+}

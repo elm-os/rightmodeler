@@ -1,0 +1,11 @@
+{
+  "version": "",
+  "bundle_id": "x",
+  "corpus_version_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "candidate": {
+    "id": "x",
+    "model": "x",
+    "source": "imported"
+  },
+  "results": []
+}

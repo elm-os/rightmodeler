@@ -171,7 +171,7 @@ class Provider:
         tools: list[dict] | None = None,
         tool_choice: Any | None = None,
         response_format: dict | None = None,
-        temperature: float = 0.0,
+        temperature: float | None = 0.0,
         seed: int | None = 7,
         max_tokens: int | None = None,
         require_parameters: bool = True,
@@ -186,8 +186,9 @@ class Provider:
         body: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
         }
+        if temperature is not None:
+            body["temperature"] = temperature
         if seed is not None and self.supports_seed:
             body["seed"] = seed
         if max_tokens:

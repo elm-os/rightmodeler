@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Reveal } from "@/components/reveal";
+import { ILLUSTRATIVE_SCORECARD, TRACE_SOURCES } from "@/lib/product-facts";
 
 // HowItWorks: the methodology as one continuous, top-to-bottom pipeline spine.
 // The 01–04 ordinals are junctions on a static ash-border spine (a genuine ordered
@@ -42,16 +43,12 @@ export function HowItWorks() {
     {
       n: "01",
       title: "Ingest & normalize",
-      sentence:
-        "Point it at the traces you already emit. It autodetects the format across nine sources and folds every run into one per-step schema.",
+      sentence: `Point it at the traces you already emit. It autodetects the format across ${TRACE_SOURCES.length} sources and folds every run into one per-step schema.`,
       substance: (
         <div className="flex flex-col gap-y-2 font-mono text-[13px]">
-          <Row label="reads">
-            Claude Code · Codex · LangSmith / LangGraph · OpenAI SDK · Langfuse
-            · Braintrust · Phoenix · OTel GenAI · LiteLLM
-          </Row>
+          <Row label="reads">{TRACE_SOURCES.join(" · ")}</Row>
           <Row label="folds">
-            9 sources{arrow}
+            {TRACE_SOURCES.length} sources{arrow}
             <span className="text-midnight-ink">1 per-step schema</span>
           </Row>
         </div>
@@ -79,7 +76,7 @@ export function HowItWorks() {
       n: "03",
       title: "Replay & judge",
       sentence:
-        "Shortlist cheaper models from your selected replay provider and re-run each step on your real inputs. Single-shot steps replay in isolation; tool and loop steps re-execute their code in a sandboxed git worktree, so cascades surface before you ship them.",
+        "Shortlist cheaper models from your selected replay provider and re-run each step on your real inputs. Single-shot steps replay in isolation; tool and loop steps re-execute their code in a sandboxed git worktree, so the report can flag cascade risk.",
       substance: (
         <div className="flex flex-col gap-y-2 font-mono text-[13px]">
           <Row label="replay">
@@ -108,7 +105,7 @@ export function HowItWorks() {
       n: "04",
       title: "Approve & report",
       sentence:
-        "Nothing swaps on its own. You approve each downgrade in the TUI and get a per-step report: savings, quality, evidence, confidence, and cascade flags. When the evidence isn’t there, it abstains and keeps the frontier model.",
+        "Nothing swaps on its own. You review each candidate in the TUI and get a per-step report: cost, reference agreement, sample size, evidence, confidence, and cascade flags. When the evidence isn’t there, it abstains and keeps the current model.",
       substance: (
         <div className="font-mono text-[13px]">
           <div className="border-b border-ash-border px-1 pb-2 text-driftwood">
@@ -126,7 +123,9 @@ export function HowItWorks() {
                 {dot}gpt-4.1{arrow}gpt-4o-mini{dot}
                 <span className="text-midnight-ink">72%</span>
                 {dot}
-                <span className="text-midnight-ink">0.94</span>
+                <span className="text-midnight-ink">
+                  {ILLUSTRATIVE_SCORECARD.approved}
+                </span>
                 {dot}n/a
               </div>
               <div className="px-1 py-1">
@@ -137,7 +136,8 @@ export function HowItWorks() {
             </div>
           </div>
           <p className="px-1 pt-3 text-caption text-fog">
-            illustrative example: no savings figure until it runs on your traces
+            {ILLUSTRATIVE_SCORECARD.label} example: no savings figure until it
+            runs on your traces
           </p>
         </div>
       ),
@@ -154,12 +154,12 @@ export function HowItWorks() {
             How it works · 01-04
           </p>
           <h2 className="mt-4 text-balance font-display text-heading text-midnight-ink sm:text-heading-lg">
-            Four steps from your own traces to a swap you can defend.
+            Four steps from your own traces to a model decision you can review.
           </h2>
           <p className="mt-4 text-body text-driftwood">
-            It proves each swap on runs you already shipped: a report, not a
-            runtime gateway. Follow one step down the pipeline: raw trace to an
-            approved, or abstained, decision.
+            It measures each candidate against outputs you already accepted: a
+            report, not a runtime gateway. Follow one step down the pipeline:
+            raw trace to an approved, or abstained, decision.
           </p>
         </Reveal>
 
