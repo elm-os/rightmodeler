@@ -40,6 +40,12 @@ available_tools, params}` from `normalized.json`, send it to a candidate model t
 the active replay provider, and return the candidate output for the judge to compare
 against the recorded `output_text`. Cheap, fast, parallelizable.
 
+Replay input is deliberately **not** sanitized: sending the step's exact recorded request
+is the measurement, and filtering roles or truncating tool descriptions would validate a
+swap against a request the user's code never sends. The trust boundary sits downstream
+instead. The candidate output is treated as untrusted and fenced before it reaches the
+judge (`common.untrusted_block`, see [judge.md](judge.md)), and no tool is executed here.
+
 - Set `temperature=0` and a fixed `seed`. Know the limits: temp=0 makes token _selection_
   deterministic but GPU float non-associativity / MoE routing still drift — expect
   ~95–99% reproducibility, not bit-exact. For important steps, run N times and compare

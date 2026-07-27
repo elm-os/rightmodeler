@@ -49,6 +49,25 @@ def read_jsonl(path: str | Path) -> list[dict]:
     return out
 
 
+UNTRUSTED_CAP = 24000
+
+
+def untrusted_block(label: str, text: Any, cap: int = UNTRUSTED_CAP) -> str:
+    """Fence outsider-authored trace text so an LLM prompt reads it as inert data.
+
+    `label` must be a caller-owned constant (TASK / REFERENCE / CANDIDATE), never
+    trace-derived. The body is capped with a visible truncation marker first, then
+    any fence marker the text itself carries is defused, so third-party content
+    cannot close the block early and inject instructions.
+    """
+    body = "" if text is None else str(text)
+    if len(body) > cap:
+        body = f"{body[:cap]}\n[truncated: {len(body) - cap} more chars]"
+    body = body.replace("<<<UNTRUSTED", "<<<-UNTRUSTED")
+    body = body.replace("<<<END UNTRUSTED", "<<<-END UNTRUSTED")
+    return f"<<<UNTRUSTED {label}>>>\n{body}\n<<<END UNTRUSTED {label}>>>"
+
+
 def _parse_env_value(raw: str) -> str:
     value = raw.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:

@@ -24,6 +24,15 @@ Framing: **reference-guided binary/ordinal verdict.** Give the judge (a) the tas
 Ask for `equivalent | minor_drift | divergent` + a one-line justification. Structured
 JSON output, temperature 0.
 
+Trace content is outsider-authored, so `judge.py` never interpolates it into the prompt
+raw. `common.untrusted_block` wraps the task, reference, and candidate in
+`<<<UNTRUSTED LABEL>>>` fences, defuses any fence marker the text itself carries, and caps
+each block at `UNTRUSTED_CAP` (24000 chars) with a visible `[truncated: N more chars]`
+marker. The system prompt tells the judge that fenced content is data to be judged and
+never an instruction, and that a truncation marker is a length clip rather than an
+omission. The fences are fixed tokens, not per-call nonces, so the two position-swapped
+judgements stay textually identical apart from block order.
+
 For tool calls / structured outputs, decompose — don't hand the blob to a prose judge:
 
 - **Deterministic pre-check first.** Compare tool name and arg _keys_ with set logic;
@@ -58,6 +67,7 @@ families.
 | **Position** (favors slot A/B) | Run both orderings; keep only order-consistent verdicts; randomize order.                                       |
 | **Verbosity/length**           | Penalize length in rubric; require per-criterion justification; structured JSON verdict.                        |
 | **Self-preference**            | Judge must be a **different family** than both candidates. Never judge the expensive model with its own family. |
+| **Third-party trace text**     | Fence TASK/REFERENCE/CANDIDATE as inert data; cap length; defuse forged fences.                                 |
 
 Grading scale: use the small ordinal scale above (or 0–5). Avoid 0–100 — human alignment
 is best on coarse scales. For important swaps require **two independent judges to agree**

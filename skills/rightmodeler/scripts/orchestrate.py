@@ -27,6 +27,11 @@ from replay_step import replay_step
 from shortlist import shortlist
 
 
+# Trace-supplied roles are outsider text; anything unrecognized is flattened so a
+# trace cannot forge pseudo-role framing inside the judge's task summary.
+_ROLES = {"system", "user", "assistant", "tool", "developer"}
+
+
 def _reference_text(step: dict) -> str:
     return step.get("output_text") or "\n".join(
         str(m.get("content", "")) for m in step.get("output_messages") or []
@@ -36,10 +41,11 @@ def _reference_text(step: dict) -> str:
 def _task_text(step: dict) -> str:
     parts = []
     if step.get("system_prompt"):
-        parts.append(f"[system] {step['system_prompt'][:1000]}")
+        parts.append(f"[system] {str(step['system_prompt'])[:1000]}")
     for m in (step.get("input_messages") or [])[-4:]:
-        parts.append(f"[{m.get('role', 'user')}] {str(m.get('content', ''))[:1000]}")
-    return "\n".join(parts) or step.get("name", "task")
+        role = str(m.get("role") or "user").lower()
+        parts.append(f"[{role if role in _ROLES else 'other'}] {str(m.get('content', ''))[:1000]}")
+    return "\n".join(parts) or str(step.get("name") or "task")
 
 
 def evaluate_candidate(orr, step, cand, floor, runs, judge_model=None) -> dict:
@@ -70,7 +76,7 @@ def evaluate_candidate(orr, step, cand, floor, runs, judge_model=None) -> dict:
         "score": verdict["score"],
         "order_consistent": verdict.get("order_consistent"),
         "judge": verdict.get("judge"),
-        "justification": verdict.get("justification"),
+        "justification": str(verdict.get("justification") or "")[:500],
         "passes": verdict["score"] >= floor and verdict.get("order_consistent", True),
         "error": None,
     }

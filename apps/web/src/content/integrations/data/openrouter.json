@@ -12,7 +12,7 @@
     {
       "label": "01 · Key",
       "title": "One key, found where you keep it",
-      "body": "Create a key at openrouter.ai and export OPENROUTER_API_KEY, or drop it in your project's .env; the skill checks the environment first, then walks up from the working directory until it finds a .env that defines it. Preflight calls GET /key to confirm the key works and how many credits remain before anything spends."
+      "body": "Create a key at openrouter.ai and set OPENROUTER_API_KEY yourself, in your shell or your project's .env; the skill checks the environment first, then walks up from the working directory until it finds a .env that defines it. It never asks you to send the key value and never writes it for you. Preflight calls GET /key to confirm the key works and how many credits remain before anything spends."
     },
     {
       "label": "02 · Shortlist",
@@ -38,8 +38,8 @@
         "command": "export OPENROUTER_API_KEY=sk-or-..."
       },
       {
-        "comment": "# or keep it in the project; the skill walks up to find .env",
-        "command": "echo 'OPENROUTER_API_KEY=sk-or-...' >> .env"
+        "comment": "# or persist it for the project; the skill walks up to find .env",
+        "command": "printf 'OPENROUTER_API_KEY=%s\\n' \"$OPENROUTER_API_KEY\" >> .env"
       },
       {
         "comment": "# then point the skill at any exported trace",

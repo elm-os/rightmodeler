@@ -118,6 +118,11 @@ class Provider:
     def _headers(self) -> dict[str, str]:
         return {}
 
+    def _redact(self, text: str) -> str:
+        """Upstream error bodies reach results.json and judge justifications, and a
+        self-hosted LiteLLM proxy can echo whatever it likes on 401/403."""
+        return text.replace(self.api_key, "[redacted]") if self.api_key else text
+
     # -- catalog ---------------------------------------------------------
     def list_models(self, refresh: bool = False) -> list[dict]:
         if self._catalog is None or refresh:
@@ -206,26 +211,27 @@ class Provider:
                 time.sleep(backoff)
                 backoff *= 2
                 continue
+            text = self._redact(r.text)  # redact before slicing: a cut key still works
             if (
                 r.status_code in (404, 503)
                 and body.get("provider", {}).get("require_parameters")
-                and "no endpoints found" in r.text.lower()
+                and "no endpoints found" in text.lower()
             ):
                 # OpenRouter can reject strict parameter routing when no endpoint
                 # advertises every supplied parameter. Drop the preference and retry.
                 body.pop("provider")
-                last_err = f"HTTP {r.status_code} with require_parameters: {r.text[:200]}"
+                last_err = f"HTTP {r.status_code} with require_parameters: {text[:200]}"
                 continue
             if r.status_code in (429, 402, 500, 502, 503):
-                last_err = f"HTTP {r.status_code}: {r.text[:200]}"
+                last_err = f"HTTP {r.status_code}: {text[:200]}"
                 time.sleep(backoff)
                 backoff *= 2
                 continue
             if r.status_code >= 400:
-                return {"error": f"HTTP {r.status_code}: {r.text[:300]}", "model": model}
+                return {"error": f"HTTP {r.status_code}: {text[:300]}", "model": model}
             data = r.json()
             if "error" in data:
-                return {"error": str(data["error"]), "model": model}
+                return {"error": self._redact(str(data["error"])), "model": model}
             return self._normalize(data, r.headers)
         return {"error": f"exhausted retries: {last_err}", "model": model}
 
