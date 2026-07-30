@@ -12,7 +12,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Reduce LLM costs",
   description:
-    "Cut your agent's model bill without guessing. rightmodeler proves which steps can move to cheaper models on your own traces, with evidence and a quality floor on every call.",
+    "Cut your agent's model bill without guessing. rightmodeler proves safe moves to cheaper models on your traces, with evidence and a quality floor.",
   path: "/use-cases/reduce-llm-costs",
   image: "/social/reduce-llm-costs.png",
 });

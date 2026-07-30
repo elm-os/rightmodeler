@@ -13,7 +13,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "How it works",
   description:
-    "How rightmodeler works: it detects inefficient model calls, proves on your own traces which downgrades are safe against what you already shipped, and applies the fix in your repo. Detect, prove, fix.",
+    "How rightmodeler detects inefficient model calls, proves safe swaps on your traces, and applies evidence-backed fixes in your repo. Detect, prove, fix.",
   path: "/how-it-works",
   image: "/social/how-it-works.png",
 });

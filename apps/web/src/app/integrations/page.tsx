@@ -12,7 +12,7 @@ import { SITE_URL } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "Integrations",
   description:
-    "Every tool rightmodeler works with: the trace formats it reads (LangSmith, Langfuse, Braintrust, Phoenix, OpenAI SDK, Claude Code, Codex, OTel GenAI) and the infrastructure it replays through.",
+    "Connect rightmodeler to LangSmith, Langfuse, Braintrust, Phoenix, OpenAI SDK, Claude Code, Codex, OTel GenAI, and supported replay infrastructure.",
   path: "/integrations",
   image: "/social/integrations.png",
 });

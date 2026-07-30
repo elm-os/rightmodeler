@@ -4,7 +4,7 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "Claude Code integration: replay sessions on cheaper models",
-  "description": "Run the rightmodeler skill on ~/.claude/projects: it replays every session step through cheaper models, judges each against what you accepted, and reports the safe swaps.",
+  "description": "Run rightmodeler on Claude Code sessions to replay each step through cheaper models, judge outputs against accepted results, and report safe swaps.",
   "h1": "rightmodeler + Claude Code",
   "lede": "rightmodeler runs inside the tool that wrote the traces. Claude Code already keeps every session on disk, so the audit starts with no export step, no SDK, and no re-instrumentation.",
   "tldr": "rightmodeler is itself a Claude Code skill, and Claude Code already writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter folds each assistant turn into a per-step schema, replays the successful ones through cheaper models from your selected replay provider, and judges every candidate against the output you already accepted.",

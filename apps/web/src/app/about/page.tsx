@@ -19,7 +19,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "About",
   description:
-    "rightmodeler proves which models you can safely downgrade: detect, prove, fix. An open-source tool for teams running multi-agent LLM systems. What we're building, and why.",
+    "Meet rightmodeler, the open-source tool that proves which model downgrades preserve quality on real traces and reports the evidence behind each swap.",
   path: "/about",
 });
 

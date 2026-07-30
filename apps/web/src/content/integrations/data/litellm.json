@@ -4,7 +4,7 @@
   "category": "replay-method",
   "categoryLabel": "Replay method · E2E",
   "title": "LiteLLM integration: end-to-end replay on cheaper models",
-  "description": "rightmodeler re-runs your real pipeline with a LiteLLM proxy injecting the cheaper candidate, tools fire, loops run, and the report shows whether the swap survived.",
+  "description": "Replay your real pipeline through a LiteLLM proxy, let tools and loops run, and use rightmodeler to verify whether each model swap survives.",
   "h1": "rightmodeler + LiteLLM",
   "lede": "When a step calls tools or loops, judging one replayed completion is not proof. rightmodeler re-runs your real pipeline with a LiteLLM proxy swapping the model underneath, your code unmodified, the candidate doing the actual work.",
   "tldr": "A LiteLLM proxy can be rightmodeler's replay provider: set RIGHTMODELER_PROVIDER=litellm and candidate and judge calls use the proxy's live catalog, while x-litellm-response-cost supplies each call's charge when present. LiteLLM also remains the documented injection method for end-to-end replay, where you set litellm_params.api_base to the active replay provider and your pipeline re-runs unmodified in a throwaway git worktree.",

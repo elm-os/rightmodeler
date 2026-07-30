@@ -4,7 +4,7 @@
   "category": "trace-source-generic",
   "categoryLabel": "Trace source · autodetected",
   "title": "Braintrust integration: replay spans on cheaper models",
-  "description": "Fetch Braintrust span rows and rightmodeler replays each step through cheaper models, judges every candidate against the output you shipped, and reports the safe swaps.",
+  "description": "Replay Braintrust span rows through cheaper models, judge each candidate against what shipped, and use rightmodeler to report safe swaps.",
   "h1": "rightmodeler + Braintrust",
   "lede": "Braintrust scores your agent against your evals. rightmodeler puts the same span rows to a different test: which steps survive on a cheaper model, judged against the outputs you already shipped.",
   "tldr": "rightmodeler autodetects Braintrust span rows by their span_id and root_span_id keys, folds them into its per-step schema with a best-effort generic adapter, and replays each successful step through cheaper candidates on your selected replay provider. A cross-family judge scores every candidate against what you shipped: the reference is your production output, not a benchmark suite.",
