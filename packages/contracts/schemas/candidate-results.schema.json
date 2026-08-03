@@ -4,6 +4,28 @@
   "title": "Candidate Results",
   "type": "object",
   "$defs": {
+    "sample": {
+      "type": "object",
+      "required": [
+        "output_text",
+        "cost_usd",
+        "cost_is_estimate",
+        "duration_ms",
+        "seed",
+        "temperature",
+        "replay_error"
+      ],
+      "properties": {
+        "output_text": { "type": "string" },
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "cost_is_estimate": { "type": "boolean" },
+        "duration_ms": { "type": "number", "minimum": 0 },
+        "seed": { "type": "integer" },
+        "temperature": { "type": ["number", "null"] },
+        "replay_error": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
     "replay": {
       "type": "object",
       "required": [
@@ -159,6 +181,11 @@
           "duration_ms": { "type": ["number", "null"], "minimum": 0 },
           "baseline_duration_ms": { "type": ["number", "null"], "minimum": 0 },
           "replay_error": { "type": ["string", "null"] },
+          "samples": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/sample" }
+          },
           "evidence_refs": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }

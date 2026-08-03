@@ -416,16 +416,16 @@ export default function BsideCaseStudyPage() {
 
           <H2>At scale</H2>
           <P>
-            Per-query savings look small until you multiply them. At the
-            evaluation prices, the modeled cost reduction compounds:
+            The evaluation covered 20 queries. Applying its modeled per-query
+            cost difference linearly gives:
           </P>
         </Prose>
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
             title="ai assist · savings at volume"
-            meta="modeled at current pricing"
-            footer="projected at current Standard pricing · scales linearly with volume"
+            meta="linear projection from 20 queries"
+            footer="projected from the 20-query evaluation · current Standard pricing"
           >
             <div className="grid grid-cols-1 divide-y divide-ash-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
               <StatCell label="saved per 1,000 queries">
@@ -449,8 +449,8 @@ export default function BsideCaseStudyPage() {
           <P>
             This is what rightmodeler produces: not a cheaper model, a policy.
             Eleven workloads, each on the smallest model and reasoning effort
-            that provably holds its quality bar, with Terra and Sol kept for the
-            work that deserves them.
+            that met its configured benchmark bar, with Terra and Sol kept for
+            the work that deserves them.
           </P>
           <PullQuote>&ldquo;{study.testimonial.quote}&rdquo;</PullQuote>
           <P>

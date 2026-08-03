@@ -8,6 +8,7 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { WaitlistForm } from "@/components/sections/waitlist-form";
+import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
@@ -21,7 +22,10 @@ export const metadata: Metadata = pageMetadata({
 // The guardrails record — the agent moves only inside these. Rendered as an illustrative config
 // slab in the policy section; label/value rows keep the mono block aligned like a real file.
 const POLICY: { key: string; value: string }[] = [
-  { key: "quality_floor", value: "0.90 · judged against shipped outputs" },
+  {
+    key: "quality_floor",
+    value: `${ILLUSTRATIVE_SCORECARD.floor} · judged against shipped outputs`,
+  },
   { key: "min_saving", value: "20% per step" },
   { key: "latency", value: "p95 within current budget" },
   { key: "providers", value: "allow openai · anthropic · google · meta" },

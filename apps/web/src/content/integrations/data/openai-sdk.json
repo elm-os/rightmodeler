@@ -4,9 +4,9 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "OpenAI SDK integration: replay logs on cheaper models",
-  "description": "Point rightmodeler at your OpenAI SDK request log and it replays every call through cheaper models, judges each output against what you shipped, and reports the safe swaps.",
+  "description": "Point rightmodeler at your OpenAI SDK request log and it replays every call through cheaper models, measures each output against what you accepted, and reports the evidence, sample size, and abstentions.",
   "h1": "rightmodeler + the OpenAI SDK",
-  "lede": "No tracing platform required. rightmodeler reads the request/response log your code already writes around the OpenAI SDK and proves, call by call, which ones can move to a cheaper model.",
+  "lede": "No tracing platform required. rightmodeler reads the request and response log your code already writes around the OpenAI SDK, measures cheaper candidates against accepted outputs, and reports the result call by call.",
   "tldr": "rightmodeler reads per-line OpenAI SDK request+response dumps with a dedicated adapter: each logged call becomes a step, with no tracing platform in between. Successful steps are replayed through cheaper candidates on your selected replay provider and judged against the output you already shipped, with a quality floor of 0.90 by default; tool-using steps are confirmed by re-running your pipeline with the SDK redirected to the candidate.",
   "steps": [
     {
@@ -93,7 +93,7 @@
       "body": "You don't need LangSmith, Langfuse, or an OTel collector to get a model audit. A plain JSONL log of your OpenAI SDK calls is enough for the full per-step treatment: replay, judge, verdict, report."
     },
     {
-      "title": "Prove a swap before you edit a model string",
+      "title": "Measure a candidate before you edit a model string",
       "body": "In OpenAI SDK code the model is a hardcoded string, and changing it is an act of faith. Replay last week's log first and read the verdict per call (judged against outputs your users already accepted) before the string changes."
     },
     {
@@ -119,7 +119,7 @@
     },
     {
       "q": "Does rightmodeler replace my observability setup?",
-      "a": "No. It is an offline audit that answers one question your logs don't: which calls can move to a cheaper model without losing quality. If you later adopt LangSmith, Langfuse, or OTel GenAI, rightmodeler reads those traces too, same skill, different adapter."
+      "a": "No. It is an offline audit that measures cheaper candidates against the outputs you accepted and reports the evidence for each call. If you later adopt LangSmith, Langfuse, or OTel GenAI, rightmodeler reads those traces too, same skill, different adapter."
     },
     {
       "q": "My code hardcodes the OpenAI client. How can it replay end-to-end?",

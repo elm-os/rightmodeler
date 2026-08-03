@@ -34,13 +34,14 @@ is present, the skill selects OpenRouter, then the Vercel AI Gateway, then LiteL
 To choose explicitly, optionally set `RIGHTMODELER_PROVIDER` to `openrouter`,
 `vercel-ai-gateway`, or `litellm`.
 
-Put the variables in your project root `.env`, or export them in your shell. The
-skill checks the process environment first, then looks up the current repo tree
-for a project `.env`.
+Put the variables in your project root `.env`, or export them in your shell. You
+set them yourself: the skill never asks you to send a key value and never writes
+one for you. It checks the process environment first, then looks up the current
+repo tree for a project `.env`.
 
 On first run, `rightmodeler` should bootstrap its Python environment, run
-preflight, ask only for missing inputs like the API key or trace path, then
-continue in the same workflow once you reply.
+preflight, name anything still missing such as an unset provider variable or a
+trace path, then continue in the same workflow once you reply.
 
 ## What it does
 

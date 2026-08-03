@@ -19,6 +19,9 @@ class ReplayError(ValueError):
     pass
 
 
+_REPLAY_CACHE_VERSION = 3
+
+
 class ReplayBudget:
     def __init__(self, max_cost_usd, projected_cost_usd):
         if not math.isfinite(max_cost_usd) or max_cost_usd <= 0:
@@ -109,7 +112,7 @@ def _single_shot_estimate(orr, step, model, runs, max_tokens):
 
 def _normalize_result(case_id, bundle_ref, response, duration_ms):
     error = response.get("error")
-    return {
+    result = {
         "case_id": case_id,
         "output_text": response.get("text") or "",
         "cost_usd": response.get("cost") or 0.0,
@@ -118,6 +121,20 @@ def _normalize_result(case_id, bundle_ref, response, duration_ms):
         "evidence_refs": [bundle_ref],
         "replay_error": error,
     }
+    if response.get("samples"):
+        result["samples"] = [
+            {
+                "output_text": sample.get("text") or "",
+                "cost_usd": sample.get("cost") or 0.0,
+                "cost_is_estimate": bool(sample.get("cost_is_estimate")),
+                "duration_ms": sample.get("duration_ms"),
+                "seed": sample.get("seed"),
+                "temperature": sample.get("temperature"),
+                "replay_error": sample.get("error"),
+            }
+            for sample in response["samples"]
+        ]
+    return result
 
 
 def _parse_e2e_response(response):
@@ -167,6 +184,7 @@ def replay_cases(
     orr=None,
     pipeline=None,
     runs=1,
+    base_seed=7,
     max_tokens=1024,
     codebase=None,
     run_command=None,
@@ -189,12 +207,14 @@ def replay_cases(
         mode = _mode_for_step(step, pipeline_step)
         cache_key = _digest(
             {
+                "replay_cache_version": _REPLAY_CACHE_VERSION,
                 "case": case,
                 "step": step,
                 "pipeline_step": pipeline_step,
                 "candidate_model": candidate_model,
                 "mode": mode,
                 "runs": runs,
+                "base_seed": base_seed,
                 "max_tokens": max_tokens,
                 "run_command": run_command,
             }
@@ -235,7 +255,12 @@ def replay_cases(
         try:
             if mode == "single_shot":
                 response = single_shot_runner(
-                    orr, step, candidate_model, runs=runs, max_tokens=max_tokens
+                    orr,
+                    step,
+                    candidate_model,
+                    runs=runs,
+                    max_tokens=max_tokens,
+                    base_seed=base_seed,
                 )
             else:
                 response = _run_e2e_case(
@@ -314,6 +339,7 @@ def main():
     parser.add_argument("--cache", default=".rightmodeler/replay-cache.json")
     parser.add_argument("--out", default=".rightmodeler/input/candidate-results.json")
     parser.add_argument("--runs", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--max-tokens", type=int, default=1024)
     parser.add_argument("--codebase")
     parser.add_argument("--run-command")
@@ -341,6 +367,7 @@ def main():
         orr=orr,
         pipeline=pipeline,
         runs=args.runs,
+        base_seed=args.seed,
         max_tokens=args.max_tokens,
         codebase=args.codebase,
         run_command=args.run_command,

@@ -48,7 +48,7 @@ def build_snapshot(corpus, candidate_bundle, verdicts):
     candidate_cost = sum(verdict["cost_usd"] for verdict in verdicts)
     scorecards, gates = compute_scorecards(corpus, candidate_bundle, verdicts)
     snapshot_without_id = {
-        "version": "1",
+        "version": "2",
         "corpus_version_id": corpus["corpus_version_id"],
         "candidate_bundle_id": candidate_bundle["bundle_id"],
         "candidate": candidate_bundle["candidate"],

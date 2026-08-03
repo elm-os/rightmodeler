@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
-    "check": "pnpm run check-types && pnpm run build",
+    "test": "node --test scripts/check-content.test.mjs",
+    "check-content": "node scripts/check-content.mjs",
+    "check": "pnpm run check-content && pnpm run test && pnpm run check-types && pnpm run build",
     "check-types": "next typegen && tsc --noEmit"
   },
   "dependencies": {

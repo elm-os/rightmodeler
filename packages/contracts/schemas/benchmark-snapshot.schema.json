@@ -224,6 +224,12 @@
         "denominator",
         "threshold",
         "status",
+        "population",
+        "generalization",
+        "ci_low",
+        "ci_high",
+        "ci_method",
+        "alpha",
         "evidence_refs",
         "details"
       ],
@@ -234,7 +240,17 @@
         "threshold": { "type": ["number", "null"] },
         "status": {
           "type": "string",
-          "enum": ["pass", "fail", "review", "unavailable"]
+          "enum": ["pass", "fail", "review", "unavailable", "indeterminate"]
+        },
+        "population": { "type": "string", "enum": ["census", "sample"] },
+        "generalization": { "const": "corpus_only" },
+        "ci_low": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "ci_high": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "ci_method": { "type": ["string", "null"], "enum": ["wilson", null] },
+        "alpha": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "maximum": 1
         },
         "evidence_refs": {
           "type": "array",
@@ -271,6 +287,70 @@
       },
       "additionalProperties": false
     },
+    "horizon_diagnostic": {
+      "type": "object",
+      "required": [
+        "label",
+        "status",
+        "diagnostic_only",
+        "trajectory_length",
+        "per_step_pass_rate",
+        "end_to_end_pass_rate",
+        "ci_low",
+        "ci_high",
+        "ci_method",
+        "alpha",
+        "generalization",
+        "assumptions_violated",
+        "assumptions",
+        "evidence_refs",
+        "reason"
+      ],
+      "properties": {
+        "label": { "const": "compounded-end-to-end-pass-rate" },
+        "status": { "type": "string", "enum": ["available", "unavailable"] },
+        "diagnostic_only": { "const": true },
+        "trajectory_length": { "type": ["integer", "null"], "minimum": 1 },
+        "per_step_pass_rate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "end_to_end_pass_rate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "ci_low": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "ci_high": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "ci_method": {
+          "type": ["string", "null"],
+          "enum": ["wilson_power", null]
+        },
+        "alpha": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "generalization": { "const": "corpus_only" },
+        "assumptions_violated": { "const": true },
+        "assumptions": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "constant per-step accuracy" },
+            { "const": "independent steps" },
+            { "const": "no self-correction" }
+          ],
+          "items": false
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "reason": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
     "gate": {
       "type": "object",
       "required": [
@@ -285,7 +365,7 @@
         "id": { "type": "string", "minLength": 1 },
         "status": {
           "type": "string",
-          "enum": ["pass", "fail", "review", "unavailable"]
+          "enum": ["pass", "fail", "review", "unavailable", "indeterminate"]
         },
         "threshold": { "type": ["number", "null"] },
         "observed": { "type": ["number", "null"] },
@@ -313,7 +393,7 @@
     "gates"
   ],
   "properties": {
-    "version": { "type": "string" },
+    "version": { "const": "2" },
     "snapshot_id": {
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
@@ -498,6 +578,7 @@
         "coverage",
         "speed",
         "confidence",
+        "horizon_diagnostic",
         "remediation",
         "cost"
       ],
@@ -521,6 +602,7 @@
         "coverage": { "$ref": "#/$defs/scorecard_metric" },
         "speed": { "$ref": "#/$defs/scorecard_metric" },
         "confidence": { "$ref": "#/$defs/confidence" },
+        "horizon_diagnostic": { "$ref": "#/$defs/horizon_diagnostic" },
         "remediation": { "$ref": "#/$defs/scorecard_metric" },
         "cost": { "$ref": "#/$defs/scorecard_metric" }
       },

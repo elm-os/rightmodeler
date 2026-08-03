@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     // Missing config is our fault, not the visitor's — log loudly, fail honestly.
-    console.error("RESEND_API_KEY is not set — cannot send feedback email.");
+    console.error("RESEND_API_KEY is not set: cannot send feedback email.");
     return Response.json(
       { error: "Feedback is temporarily unavailable. Please try again later." },
       { status: 500 },

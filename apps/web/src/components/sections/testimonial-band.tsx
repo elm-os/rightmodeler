@@ -82,6 +82,14 @@ export function TestimonialBand() {
                   </span>
                 </figcaption>
 
+                {/* Company voice, not the customer's. The quote above is reproduced verbatim,
+                    so the sample size behind its figures belongs beside it, not inside it. */}
+                {active.testimonial.evidenceNote ? (
+                  <p className="mt-2 text-caption text-fog">
+                    {active.testimonial.evidenceNote}
+                  </p>
+                ) : null}
+
                 <div className="mt-5">
                   <Link
                     href={`/case-study/${active.slug}`}

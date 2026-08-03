@@ -125,7 +125,7 @@ export function Platform() {
             The platform
           </p>
           <h2 className="mt-4 max-w-2xl font-display text-heading text-balance text-midnight-ink sm:text-heading-lg">
-            See everything. Prove what&rsquo;s better. Switch by pull request.
+            See everything. Measure candidates. Review the pull request.
           </h2>
         </Reveal>
 

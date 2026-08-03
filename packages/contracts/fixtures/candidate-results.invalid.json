@@ -1,0 +1,30 @@
+{
+  "version": "",
+  "bundle_id": "x",
+  "corpus_version_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "candidate": {
+    "id": "x",
+    "model": "x",
+    "source": "imported"
+  },
+  "results": [
+    {
+      "case_id": "case-1",
+      "output_text": "representative",
+      "cost_usd": 0.01,
+      "evidence_refs": ["replay/x/case-1"],
+      "samples": [
+        {
+          "output_text": "representative",
+          "cost_usd": 0.01,
+          "cost_is_estimate": false,
+          "duration_ms": 10,
+          "seed": 7,
+          "temperature": 0,
+          "replay_error": null,
+          "undeclared": true
+        }
+      ]
+    }
+  ]
+}

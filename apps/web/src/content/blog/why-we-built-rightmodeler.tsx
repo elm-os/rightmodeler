@@ -9,7 +9,7 @@ export const meta: PostMeta = {
   slug: "why-we-built-rightmodeler",
   title: "We were picking models by vibes. Then the bill arrived.",
   description:
-    "We picked models by instinct for years, then defaulted to the frontier model and paid for it. rightmodeler proves which downgrades your traces can survive.",
+    "We picked models by instinct for years, then defaulted to the frontier model and paid for it. rightmodeler measures candidates against outputs you accepted.",
   excerpt:
     "We shipped agentic systems for years while guessing which model belonged at which step. rightmodeler is the tool we kept rebuilding by hand to stop guessing, made properly.",
   kicker: "Founding story",
@@ -78,23 +78,20 @@ export function Body() {
         capability this task does not actually use? We had the same experience
         elsewhere, at a consumer app running at volume and at a fintech team
         that could not afford a quality regression, where the strong model was
-        carrying steps that did not need it and we had no clean way to prove it.
+        carrying steps that did not need it and we had no clean way to measure
+        candidate agreement on our own workload.
       </P>
 
       <H2>Not every step is a hard problem</H2>
 
       <P>
-        Here is what we actually wanted, and it is not complicated. The same
-        quality of output we were already shipping, with a cheaper model running
-        on the layers that do not need a frontier brain. Most multi-agent
-        architectures are not made of hard reasoning. They are made of plumbing.
-        A step that extracts fields from a document. A step that routes a
-        request to the right branch. A step that summarizes what happened so the
-        next step has context. A cheap model is often perfectly good at all of
-        it. gpt-4o-mini, llama-3.3-70b, or deepseek-chat can handle extraction
-        and routing and summarizing without a meaningful drop in quality. The
-        expensive model, claude-opus-4 or gpt-4.1, should be spending your money
-        on the genuinely hard reasoning steps, not on every step by default.
+        Here is the structural opportunity. Many multi-agent architectures
+        contain narrow, well-specified steps: extracting fields from a document,
+        routing a request to the right branch, or summarizing context for the
+        next step. Cheaper models are often reasonable candidates for work like
+        this. That is a hypothesis to test per workload, not a result to assume.
+        A frontier model should earn its price on genuinely hard reasoning, not
+        inherit every step by default.
       </P>
 
       <PullQuote>
@@ -103,14 +100,14 @@ export function Body() {
       </PullQuote>
 
       <P>
-        The intuition is easy. Proving it for your system is the actual work. A
-        blind swap is easy and worthless. You can drop gpt-4o-mini into a step
-        in thirty seconds. What you cannot do in thirty seconds is know whether
-        it quietly got worse. Cheaper models fail in ways that do not throw
-        errors. The extraction still returns valid JSON, it is just wrong on the
-        edge cases. The summary still reads fine, it just dropped the one detail
-        that mattered downstream. You do not find out from a stack trace. You
-        find out from a user, later, when it is expensive.
+        The intuition is easy. Measuring it for your system is the actual work.
+        A blind swap is easy and worthless. You can drop a cheaper candidate
+        into a step in thirty seconds. What you cannot do in thirty seconds is
+        know whether it quietly got worse. Cheaper models fail in ways that do
+        not throw errors. The extraction still returns valid JSON, it is just
+        wrong on the edge cases. The summary still reads fine, it just dropped
+        the one detail that mattered downstream. You do not find out from a
+        stack trace. You find out from a user, later, when it is expensive.
       </P>
 
       <H2>We had built this before, more than once</H2>
@@ -123,8 +120,8 @@ export function Body() {
         broke. It was never a product. It was a folder of scripts and a
         spreadsheet, stood up under deadline because we needed the answer and no
         one was going to hand it to us. And every time we bothered, it paid for
-        itself, usually by telling us that some step we had been anxious about
-        was safe to downgrade after all.
+        itself, usually by showing that a candidate matched our accepted output
+        closely enough to merit a downgrade review.
       </P>
 
       <H2>Everyone had the same problem</H2>
@@ -134,12 +131,13 @@ export function Body() {
         to other people building these systems, across teams and companies, we
         kept hearing the identical description of the identical problem.
         Everyone had defaulted to the frontier model. Everyone suspected they
-        were overpaying. Almost nobody had a rigorous way to know which swaps
-        were safe, so almost nobody swapped anything, because the downside of a
-        silent quality regression was scarier than the bill. At some point the
-        pattern was obvious enough that guessing looked less like a habit and
-        more like a liability. So we decided to build it properly, as a product,
-        instead of rebuilding it by hand for the fourth time.
+        were overpaying. Almost nobody had a rigorous way to measure cheaper
+        candidates against outputs they had accepted, so almost nobody changed
+        anything, because the downside of a silent quality regression was
+        scarier than the bill. At some point the pattern was obvious enough that
+        guessing looked less like a habit and more like a liability. So we
+        decided to build it properly, as a product, instead of rebuilding it by
+        hand for the fourth time.
       </P>
 
       <H2>A report, not a gateway</H2>
@@ -160,18 +158,18 @@ export function Body() {
         The part we are most attached to is that it can say no. When the cheaper
         model’s outputs do not hold up, or the sample is too thin to be sure, it
         declines to recommend the swap and tells you so. A tool that always
-        finds savings is not measuring anything. The value is a verdict you can
-        trust in both directions, including the boring, expensive verdict where
-        the frontier model was the right call all along.
+        finds savings is not measuring anything. The value is a report you can
+        inspect in both directions, including the boring, expensive result where
+        there is not enough evidence to recommend a change.
       </P>
 
       <P>
         We spent years picking models by feel and calling it judgment. It was
         not judgment. It was a guess we had stopped noticing. The fix was never
-        a better instinct. It was evidence, drawn from the traces you have
-        already run, telling you which parts of your stack can get cheaper
-        without getting worse. The honest way to find out is the same way we
-        always found out. Point it at your own traces and read what comes back.
+        a better instinct. It was evidence drawn from traces we had already run,
+        showing which candidates matched accepted outputs closely enough to
+        review. The honest next step is the same one we always took. Point it at
+        your own traces and read what comes back.
       </P>
     </Prose>
   );
@@ -193,29 +191,29 @@ Defaulting to the strongest model is defensible right up until the invoice arriv
 
 For an internal tool you might never notice. For a consumer-facing app at real volume it is brutal, and it gets worse on exactly the trajectory you want, which is up and to the right. The reward for growth is a larger bill for work a cheaper model could have done.
 
-We felt this most sharply while building the agentic systems for [bsideassist.com](https://bsideassist.com) at B:Side Capital and Fund. It is a real product with real users, and it made the problem concrete. New models kept shipping every few weeks, each with its own benchmarks and its own promises, and every release forced the same question we could not answer with confidence: are we paying for capability this task does not actually use? We had the same experience elsewhere, at a consumer app running at volume and at a fintech team that could not afford a quality regression, where the strong model was carrying steps that did not need it and we had no clean way to prove it.
+We felt this most sharply while building the agentic systems for [bsideassist.com](https://bsideassist.com) at B:Side Capital and Fund. It is a real product with real users, and it made the problem concrete. New models kept shipping every few weeks, each with its own benchmarks and its own promises, and every release forced the same question we could not answer with confidence: are we paying for capability this task does not actually use? We had the same experience elsewhere, at a consumer app running at volume and at a fintech team that could not afford a quality regression, where the strong model was carrying steps that did not need it and we had no clean way to measure candidate agreement on our own workload.
 
 ## Not every step is a hard problem
 
-Here is what we actually wanted, and it is not complicated. The same quality of output we were already shipping, with a cheaper model running on the layers that do not need a frontier brain. Most multi-agent architectures are not made of hard reasoning. They are made of plumbing. A step that extracts fields from a document. A step that routes a request to the right branch. A step that summarizes what happened so the next step has context. A cheap model is often perfectly good at all of it. gpt-4o-mini, llama-3.3-70b, or deepseek-chat can handle extraction and routing and summarizing without a meaningful drop in quality. The expensive model, claude-opus-4 or gpt-4.1, should be spending your money on the genuinely hard reasoning steps, not on every step by default.
+Here is the structural opportunity. Many multi-agent architectures contain narrow, well-specified steps: extracting fields from a document, routing a request to the right branch, or summarizing context for the next step. Cheaper models are often reasonable candidates for work like this. That is a hypothesis to test per workload, not a result to assume. A frontier model should earn its price on genuinely hard reasoning, not inherit every step by default.
 
 > The expensive model should earn its price on the hard reasoning, not on every step that happens to sit next to it.
 
-The intuition is easy. Proving it for your system is the actual work. A blind swap is easy and worthless. You can drop gpt-4o-mini into a step in thirty seconds. What you cannot do in thirty seconds is know whether it quietly got worse. Cheaper models fail in ways that do not throw errors. The extraction still returns valid JSON, it is just wrong on the edge cases. The summary still reads fine, it just dropped the one detail that mattered downstream. You do not find out from a stack trace. You find out from a user, later, when it is expensive.
+The intuition is easy. Measuring it for your system is the actual work. A blind swap is easy and worthless. You can drop a cheaper candidate into a step in thirty seconds. What you cannot do in thirty seconds is know whether it quietly got worse. Cheaper models fail in ways that do not throw errors. The extraction still returns valid JSON, it is just wrong on the edge cases. The summary still reads fine, it just dropped the one detail that mattered downstream. You do not find out from a stack trace. You find out from a user, later, when it is expensive.
 
 ## We had built this before, more than once
 
-So more than once, internally and on client work, we hand-built a version of the check. We took the traces we had already run through the strong model, replayed them through a cheaper one, and compared the two outputs step by step to see where the cheap model held and where it broke. It was never a product. It was a folder of scripts and a spreadsheet, stood up under deadline because we needed the answer and no one was going to hand it to us. And every time we bothered, it paid for itself, usually by telling us that some step we had been anxious about was safe to downgrade after all.
+So more than once, internally and on client work, we hand-built a version of the check. We took the traces we had already run through the strong model, replayed them through a cheaper one, and compared the two outputs step by step to see where the cheap model held and where it broke. It was never a product. It was a folder of scripts and a spreadsheet, stood up under deadline because we needed the answer and no one was going to hand it to us. And every time we bothered, it paid for itself, usually by showing that a candidate matched our accepted output closely enough to merit a downgrade review.
 
 ## Everyone had the same problem
 
-We assumed this was a quirk of how we worked. It was not. As we talked to other people building these systems, across teams and companies, we kept hearing the identical description of the identical problem. Everyone had defaulted to the frontier model. Everyone suspected they were overpaying. Almost nobody had a rigorous way to know which swaps were safe, so almost nobody swapped anything, because the downside of a silent quality regression was scarier than the bill. At some point the pattern was obvious enough that guessing looked less like a habit and more like a liability. So we decided to build it properly, as a product, instead of rebuilding it by hand for the fourth time.
+We assumed this was a quirk of how we worked. It was not. As we talked to other people building these systems, across teams and companies, we kept hearing the identical description of the identical problem. Everyone had defaulted to the frontier model. Everyone suspected they were overpaying. Almost nobody had a rigorous way to measure cheaper candidates against outputs they had accepted, so almost nobody changed anything, because the downside of a silent quality regression was scarier than the bill. At some point the pattern was obvious enough that guessing looked less like a habit and more like a liability. So we decided to build it properly, as a product, instead of rebuilding it by hand for the fourth time.
 
 ## A report, not a gateway
 
 rightmodeler replays your real agent traces through cheaper models. For each step, it judges the cheaper model's output against what you already shipped in production, the output you have already decided is good enough. Then it produces a recommendation report: which downgrades hold up under evidence, and which do not. It runs on your own traces, not synthetic prompts, so the results reflect your actual workload and not a benchmark. It is a report, not a runtime gateway. It does not sit in your request path, route your traffic, or add a hop to your latency budget. You read the evidence, and you decide what to change and when.
 
-The part we are most attached to is that it can say no. When the cheaper model's outputs do not hold up, or the sample is too thin to be sure, it declines to recommend the swap and tells you so. A tool that always finds savings is not measuring anything. The value is a verdict you can trust in both directions, including the boring, expensive verdict where the frontier model was the right call all along.
+The part we are most attached to is that it can say no. When the cheaper model's outputs do not hold up, or the sample is too thin to be sure, it declines to recommend the swap and tells you so. A tool that always finds savings is not measuring anything. The value is a report you can inspect in both directions, including the boring, expensive result where there is not enough evidence to recommend a change.
 
-We spent years picking models by feel and calling it judgment. It was not judgment. It was a guess we had stopped noticing. The fix was never a better instinct. It was evidence, drawn from the traces you have already run, telling you which parts of your stack can get cheaper without getting worse. The honest way to find out is the same way we always found out. Point it at your own traces and read what comes back.
+We spent years picking models by feel and calling it judgment. It was not judgment. It was a guess we had stopped noticing. The fix was never a better instinct. It was evidence drawn from traces we had already run, showing which candidates matched accepted outputs closely enough to review. The honest next step is the same one we always took. Point it at your own traces and read what comes back.
 `;

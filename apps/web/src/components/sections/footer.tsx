@@ -17,11 +17,11 @@ export function Footer() {
       <div className="mx-auto w-full max-w-4xl">
         <Reveal className="border-t border-ash-border pt-8">
           <h2 className="max-w-xl text-balance font-display text-heading text-midnight-ink sm:text-heading-lg lg:text-display">
-            Every step, on the right model. Proven, not guessed.
+            Every model decision, measured and reviewable.
           </h2>
           <p className="mt-5 max-w-md text-body text-driftwood">
-            The skill proves it on your traces today. The agent ships it as a
-            pull request. Crucible keeps watch.
+            The skill measures candidates on your traces today. The agent opens
+            the evidence as a pull request. Crucible keeps watch.
           </p>
         </Reveal>
 

@@ -119,6 +119,13 @@ def _detect_one(r: dict) -> str:
     # Codex
     if keys >= {"timestamp", "type", "payload"} and isinstance(r.get("payload"), dict):
         return "codex_cli"
+    # LiteLLM proxy StandardLoggingPayload (s3/gcs/file/custom-callback logging)
+    if (
+        "call_type" in keys
+        and "messages" in keys
+        and ("response_cost" in keys or "startTime" in keys)
+    ):
+        return "litellm"
     # LangSmith run tree
     if "run_type" in keys or {"trace_id", "parent_run_id"} & keys:
         return "langsmith"
@@ -134,13 +141,6 @@ def _detect_one(r: dict) -> str:
         return "braintrust"
     if "observations" in keys or ("traceId" in keys and "usageDetails" in keys):
         return "langfuse"
-    # LiteLLM proxy StandardLoggingPayload (s3/gcs/file/custom-callback logging)
-    if (
-        "call_type" in keys
-        and "messages" in keys
-        and ("response_cost" in keys or "startTime" in keys)
-    ):
-        return "litellm"
     # OpenAI JSONL
     if "messages" in keys and ("model" in keys or "response" in keys):
         return "openai_jsonl"
@@ -155,6 +155,9 @@ def _step(order: int, **kw: Any) -> dict:
         "step_id": kw.get("step_id", f"s{order}"),
         "parent_id": kw.get("parent_id"),
         "case_id": kw.get("case_id"),
+        "trajectory_id": kw.get("trajectory_id"),
+        "step_index": kw.get("step_index"),
+        "trajectory_length": kw.get("trajectory_length"),
         "order": order,
         "kind": kw.get("kind", "llm"),
         "name": kw.get("name", ""),
@@ -173,6 +176,38 @@ def _step(order: int, **kw: Any) -> dict:
         "raw": kw.get("raw", {}),
     }
     return base
+
+
+def _source_trajectory_id(source_format: str, raw: dict) -> Any:
+    if source_format == "claude_code":
+        return raw.get("sessionId")
+    if source_format == "openai_jsonl":
+        return raw.get("case_id")
+    if source_format in ("langsmith", "litellm"):
+        return raw.get("trace_id")
+    if source_format in ("otel_genai", "openinference"):
+        return (
+            raw.get("trace_id") or raw.get("traceId") or (raw.get("context") or {}).get("trace_id")
+        )
+    if source_format == "braintrust":
+        return raw.get("root_span_id")
+    if source_format == "langfuse":
+        return raw.get("traceId")
+    return None
+
+
+def _add_trajectory_metadata(steps: list[dict], source_format: str) -> None:
+    trajectories: dict[Any, list[dict]] = {}
+    for step in steps:
+        if step["trajectory_id"] is None:
+            step["trajectory_id"] = _source_trajectory_id(source_format, step["raw"])
+        trajectory_id = step["trajectory_id"]
+        if trajectory_id is not None:
+            trajectories.setdefault(trajectory_id, []).append(step)
+    for trajectory in trajectories.values():
+        for index, step in enumerate(trajectory):
+            step["step_index"] = index
+            step["trajectory_length"] = len(trajectory)
 
 
 def _content_to_text(content: Any) -> str | None:
@@ -253,6 +288,7 @@ def adapt_codex(records: list[dict]) -> list[dict]:
     steps = []
     order = 0
     model = None
+    trajectory_id = None
     outputs: dict[str, Any] = {}
     for rec in records:
         payload = rec.get("payload") or {}
@@ -262,11 +298,14 @@ def adapt_codex(records: list[dict]) -> list[dict]:
             model = payload.get("model", model)
     for rec in records:
         payload = rec.get("payload") or {}
+        if rec.get("type") == "session_meta":
+            trajectory_id = payload.get("id")
         ptype = payload.get("type")
         if ptype == "message":
             steps.append(
                 _step(
                     order,
+                    trajectory_id=trajectory_id,
                     kind="llm",
                     name="message",
                     model=model,
@@ -295,6 +334,7 @@ def adapt_codex(records: list[dict]) -> list[dict]:
             steps.append(
                 _step(
                     order,
+                    trajectory_id=trajectory_id,
                     kind="tool",
                     name=payload.get("name"),
                     model=model,
@@ -410,7 +450,8 @@ def adapt_litellm(records: list[dict]) -> list[dict]:
 def adapt_langsmith(records: list[dict]) -> list[dict]:
     steps = []
 
-    def walk(run: dict, order_ref: list[int]) -> None:
+    def walk(run: dict, order_ref: list[int], trajectory_id: Any) -> None:
+        trajectory_id = run.get("trace_id") or trajectory_id
         rt = run.get("run_type", "chain")
         extra = run.get("extra") or {}
         meta = extra.get("metadata") or {}
@@ -424,6 +465,7 @@ def adapt_langsmith(records: list[dict]) -> list[dict]:
                 order_ref[0],
                 step_id=run.get("id", f"s{order_ref[0]}"),
                 parent_id=run.get("parent_run_id"),
+                trajectory_id=trajectory_id,
                 kind={"llm": "llm", "tool": "tool", "retriever": "retriever"}.get(rt, "chain"),
                 name=run.get("name", rt),
                 model=meta.get("ls_model_name")
@@ -449,11 +491,14 @@ def adapt_langsmith(records: list[dict]) -> list[dict]:
         )
         order_ref[0] += 1
         for child in run.get("child_runs") or []:
-            walk(child, order_ref)
+            walk(child, order_ref, trajectory_id)
 
     order_ref = [0]
     for run in records:
-        walk(run, order_ref)
+        root_trajectory_id = run.get("trace_id")
+        if root_trajectory_id is None and run.get("parent_run_id") is None:
+            root_trajectory_id = run.get("id")
+        walk(run, order_ref, root_trajectory_id)
     return steps
 
 
@@ -558,7 +603,9 @@ def normalize(path: str) -> dict:
     fmt = detect_format(records)
     adapter = ADAPTERS.get(fmt, adapt_generic)
     steps = adapter(records)
+    _add_trajectory_metadata(steps, fmt)
     return {
+        "version": "1",
         "trace_id": os.path.basename(path.rstrip("/")),
         "source_format": fmt,
         "session_id": None,
