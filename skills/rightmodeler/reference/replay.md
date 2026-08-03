@@ -33,27 +33,60 @@ the run as bounded.
 
 Two replay modes. Pick per step based on `analyze.py`'s classification.
 
-## Mode A — per-step isolated replay (`replay_step.py`)
+## Mode A: per-step isolated replay (`replay_step.py`)
 
 For single-shot LLM steps only. Take the step's exact `{system_prompt, input_messages,
 available_tools, params}` from `normalized.json`, send it to a candidate model through
 the active replay provider, and return the candidate output for the judge to compare
 against the recorded `output_text`. Cheap, fast, parallelizable.
 
-- Set `temperature=0` and a fixed `seed`. Know the limits: temp=0 makes token _selection_
-  deterministic but GPU float non-associativity / MoE routing still drift — expect
-  ~95–99% reproducibility, not bit-exact. For important steps, run N times and compare
-  the distribution, not one sample.
+Replay input is deliberately **not** sanitized: sending the step's exact recorded request
+is the measurement, and filtering roles or truncating tool descriptions would validate a
+swap against a request the user's code never sends. The trust boundary sits downstream
+instead. The candidate output is treated as untrusted and fenced before it reaches the
+judge (`common.untrusted_block`, see [judge.md](judge.md)), and no tool is executed here.
+
+Mode A feeds the candidate the incumbent model's clean recorded prefix. It structurally
+cannot observe self-conditioning and is optimistic by construction for any step that
+consumes model-authored ancestor output.
+
+For steps whose pipeline map records `prefix_provenance: "model_authored"`, measure
+that optimism on a sampled subset by running the same cases and candidate through both
+arms. Report the named Mode A optimism delta as `Mode A pass rate - Mode B pass rate`,
+together with both arm rates and the paired case sample size. This is a customer- and
+family-specific empirical estimate, measured rather than projected. It assumes neither
+constant per-step accuracy nor independent steps. Steps with an external prefix have no
+self-conditioning exposure and do not need the second arm.
+
+- Use `temperature=0` and a fixed `seed` for the deterministic arm. It is not bit-exact
+  because GPU float non-associativity and MoE routing can still drift. However, N repeated
+  runs with those fixed settings are effectively one draw, not a distribution, so a
+  consistency statistic computed from them measures nothing. This arm is the measurement
+  comparable to the recorded run and remains authoritative for pass or fail. A separate
+  dispersion arm must vary its sampling parameters and record them per sample.
 - If the step had `available_tools`, keep them in the request and compare the tool call
-  the candidate _chooses_ (name + args) — a single-shot tool-selection step is still
+  the candidate _chooses_ (name + args); a single-shot tool-selection step is still
   legitimately single-shot as long as the tool isn't executed here.
 
-## Mode B — code-execution E2E replay (`run_pipeline.py`)
+## Mode B: code-execution E2E replay (`run_pipeline.py`)
 
 For multi-step / tool-calling / looping steps, and to confirm any shortlisted swap
 doesn't cascade. We re-run the user's **real pipeline code** with only the LLM swapped,
 so tools actually fire and loops actually run. This is the "watch out for cascading
 failures" box.
+
+Mode B starts from the original task input and lets the candidate author every model
+output in its own history. Starting from a downstream step's recorded input would retain
+the incumbent's healed prefix and is not a valid Mode B arm. If orchestration lacks a
+runnable pipeline or comparable un-healed trajectory evidence, it records a terminal
+abstention with that evidence gap instead of leaving the family pending.
+
+To supply the paired arm during orchestration, pass `--run-command` and either
+`--codebase` or a pipeline map containing `codebase`. The command's `{task}` file
+contains the trajectory-root `system_prompt` and `input_messages`, plus
+`target_step_id`. Its last JSON output must repeat that `target_step_id` and provide
+comparable `output_text` or `tool_calls` with authoritative `cost_usd`. Use
+`--mode-a-optimism-sample-size` to cap the stable per-family sample.
 
 ### 1. Model injection (no user-code edits)
 
@@ -89,12 +122,12 @@ Preference order:
    patch `langchain_openai.ChatOpenAI.__init__` / `langchain_anthropic.ChatAnthropic` /
    `langchain.chat_models.init_chat_model` / `openai.OpenAI` before importing user code.
    `init_chat_model(configurable_fields="any", config_prefix=...)` is the clean hook when
-   the code already uses it — override model per-invoke via `config={"configurable": {...}}`.
+   the code already uses it; override model per-invoke via `config={"configurable": {...}}`.
 
 ### 2. Faithful replay
 
 - **Seed from the recorded task input** (initial user message / graph input), then let the
-  agent loop live — do NOT feed back the recorded assistant/tool turns; we want the cheap
+  agent loop live; do NOT feed back the recorded assistant/tool turns. We want the cheap
   model's _own_ trajectory from the same start.
 - **Tool policy (per tool):**
   - _Mock from trace_ for side-effecting / non-deterministic / expensive tools (writes,
@@ -112,7 +145,7 @@ Preference order:
 
 ### 3. Safe execution (sandbox)
 
-The agent runs shell/file/network tools — treat as untrusted. Local default:
+The agent runs shell/file/network tools, so treat it as untrusted. Local default:
 **ephemeral `git worktree` + fresh venv**, ideally inside Docker.
 
 ```bash
@@ -122,7 +155,7 @@ python3 -m venv /tmp/cm-replay-$RUN/.venv
 git worktree remove /tmp/cm-replay-$RUN   # always clean up
 ```
 
-Worktrees isolate _files_, not runtime — they don't stop port/DB/secret clobbering or
+Worktrees isolate _files_, not runtime. They don't stop port/DB/secret clobbering or
 real network calls. So also: restrict egress to the active replay provider + required
 endpoints, inject
 throwaway secrets, and for arbitrary generated code escalate to Docker/gVisor or an E2B/
@@ -147,7 +180,9 @@ Compare original vs cheap run on three axes: **tool-call sequence** (ordered/uno
 set of `(name, args)`), **step/loop count + cost delta**, **final output**. Use
 `agentevals` trajectory-match (deterministic, for tool-selection regressions) + a
 trajectory LLM-judge (for valid-but-different paths and final-answer quality). Aggregate
-over N runs — majority trajectory + score distribution — because of determinism limits.
+over a dispersion arm that varies and records sampling parameters per sample, then report
+the trajectory and score distributions. Keep the deterministic arm authoritative for
+pass or fail.
 
 Sources: active-provider compatibility docs in [providers/](providers/), LiteLLM
 proxy/wildcard routing, vcrpy/respx, git worktrees, LangGraph

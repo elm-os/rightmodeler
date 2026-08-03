@@ -69,7 +69,7 @@ Input quality varies by customer, so the framework must make best use of availab
 
 1. Ingest historical runs.
 2. Normalize prompts, outputs, tool calls, model metadata, costs, and success signals.
-3. Infer task families from the data.
+3. Assign task families with the built-in classification rules.
 4. Select the strongest available evaluation method for each task family.
 5. Replay or re-run representative tasks across candidate cheaper models.
 6. Score candidate models against task-specific success criteria.
@@ -78,7 +78,11 @@ Input quality varies by customer, so the framework must make best use of availab
 
 ## 8. Task Family Detection
 
-The framework should invent task family labels automatically.
+The current framework assigns task family labels with the first matching rule in
+`skills/rightmodeler/scripts/analyze.py`. It uses eight hard-coded regular expressions
+for `pr_summary`, `test_generation`, `bug_fix`, `sql_generation`, `code_review`,
+`doc_rewrite`, `support_draft`, and `tool_agent`, followed by a `general` catch-all.
+There is no override at any layer. Automatic data-driven label inference is future scope.
 
 Examples:
 
@@ -260,7 +264,7 @@ MVP must support:
 
 - Upload or local ingestion of historical run bundles.
 - Schema normalization for prompts, outputs, tool calls, model, tokens, cost, and success signals.
-- Automatic task family inference.
+- Rule-based task family classification with a `general` catch-all.
 - Configurable candidate model list.
 - Cost calculation.
 - At least three evaluator types:
@@ -279,6 +283,7 @@ Possible follow-on products:
 - Continuous eval monitoring.
 - Regression alerts when cheaper model quality drops.
 - Human review workflow for approving task families and recommendations.
+- Automatic data-driven task family inference and label overrides.
 - Integration with LangSmith, Braintrust, OpenAI Evals, Phoenix, or internal tracing systems.
 - Provider price syncing.
 - Team-level dashboards.
@@ -337,3 +342,13 @@ Mitigations:
 - LLM-as-a-judge survey: https://arxiv.org/html/2411.15594v6
 - Position bias in LLM-as-a-judge systems: https://aclanthology.org/2025.ijcnlp-long.18.pdf
 - Reference-guided multi-judge evaluation for free-form QA: https://aclanthology.org/2025.winlp-main.37.pdf
+- Rabanser, Kapoor, Kirgis, Liu, Utpala, and Narayanan. "Towards a Science of AI Agent Reliability." ICML 2026. arXiv:2602.16666.
+- Boyeau, Angelopoulos, Li, Yosef, Malik, and Jordan. "AutoEval Done Right: Using Synthetic Data for Model Evaluation." ICML 2025, PMLR 267:5276-5290. arXiv:2403.07008.
+- Sinha, Arun, Goel, Staab, and Geiping. "The Illusion of Diminishing Returns: Measuring Long Horizon Execution in LLMs." ICLR 2026. arXiv:2509.09677.
+- Gui, Jin, and Ren. "Conformal Alignment: Knowing When to Trust Foundation Models with Guarantees." NeurIPS 2024. arXiv:2405.10301.
+- Wu, Nair, and Candes. "Efficient Evaluation of LLM Performance with Statistical Guarantees." arXiv preprint, 2026. arXiv:2601.20251.
+
+Do not repeat two corrected claims from earlier research drafts:
+
+- The roughly 50% effective-sample-size improvement applies only to experiments with non-LLM autoraters. With an LLM autorater, the reported improvement is 20-25%.
+- Horizon growth in step accuracy is hyperbolic, not exponential. The paper uses exponential growth only for horizon over calendar time.

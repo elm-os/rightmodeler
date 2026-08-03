@@ -34,7 +34,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Is it a gateway?",
-    a: "No. Crucible reads your traces passively and never sits in your request path. Your traffic keeps flowing through your own keys and routes; Crucible watches, measures, and proves.",
+    a: "No. Crucible reads your traces passively and never sits in your request path. Your traffic keeps flowing through your own keys and routes; Crucible watches, measures, and reports.",
   },
 ];
 

@@ -4,6 +4,7 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { Reveal } from "@/components/reveal";
+import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 import { SITE_URL } from "@/lib/site";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
@@ -21,22 +22,22 @@ const TERMS: { term: string; slug: string; def: string }[] = [
   {
     term: "Evidence-backed model downgrading",
     slug: "evidence-backed-model-downgrading",
-    def: "Moving a step to a cheaper model only after proving, on your own traces, that quality holds against the output you already shipped. The decision rests on replays and scores, not a benchmark or a hunch.",
+    def: "Reviewing a step for a cheaper model after measuring candidate output against the output you accepted for the same input. The decision rests on reference agreement, evidence, and sample size, not a benchmark or a hunch.",
   },
   {
     term: "Model downgrade audit",
     slug: "model-downgrade-audit",
-    def: "A pass over your traces that checks, step by step, which model calls could move to a cheaper model without losing quality, and which can't.",
+    def: "A pass over your traces that measures each cheaper candidate against the accepted output for the same input, reports the evidence and sample size, and records where it abstains.",
   },
   {
-    term: "Downgrade-safe",
-    slug: "downgrade-safe",
-    def: "A step whose cheaper-model output holds up against the shipped reference with enough evidence and confidence to swap. The opposite of a step the audit abstains on.",
+    term: "Swap candidate",
+    slug: "swap-candidate",
+    def: "A cheaper model whose output agrees closely enough with the accepted reference to merit review. This is evidence of agreement with shipped output, not proof of correctness.",
   },
   {
     term: "Quality floor",
     slug: "quality-floor",
-    def: "The minimum quality score a downgrade must clear to be recommended; below it, the frontier model stays. rightmodeler's default is 0.90, and it's configurable.",
+    def: `The minimum reference-agreement score a candidate must clear to be recommended; below it, the current model stays. rightmodeler's default is ${ILLUSTRATIVE_SCORECARD.floor}, and it's configurable.`,
   },
   {
     term: "Cascade risk",
@@ -46,17 +47,17 @@ const TERMS: { term: string; slug: string; def: string }[] = [
   {
     term: "Abstain",
     slug: "abstain",
-    def: "The audit's decision to make no recommendation when the evidence is too weak to prove a swap is safe. A tool that always finds savings isn't measuring anything.",
+    def: "The audit's decision to make no recommendation when the evidence or sample is too weak to support one. A tool that always finds savings isn't measuring anything.",
   },
   {
     term: "Reference evidence",
     slug: "reference-evidence",
-    def: "Grading a cheaper model's output against the output you already shipped for the same input, rather than against a synthetic gold answer. Your production result is the reference.",
+    def: "Grading a cheaper model's output against the output you already accepted for the same input, rather than against a gold answer. The production result is the reference, not ground truth.",
   },
   {
     term: "LLM-as-judge",
     slug: "llm-as-judge",
-    def: "Using a separate model, from a different family than either candidate, to score one output against another, so nothing grades its own work.",
+    def: "Using a separate model, from a different family than either compared model, to score agreement between two outputs, so nothing grades its own work.",
   },
   {
     term: "Trace",
@@ -72,11 +73,11 @@ const byIdSlug = (slug: string) => TERMS.find((t) => t.slug === slug)!;
 const THEMES: { title: string; intro: string; slugs: string[] }[] = [
   {
     title: "The decision",
-    intro: "The words for calling a swap safe.",
+    intro: "The words for reviewing a candidate swap.",
     slugs: [
       "evidence-backed-model-downgrading",
       "model-downgrade-audit",
-      "downgrade-safe",
+      "swap-candidate",
     ],
   },
   {
@@ -136,13 +137,13 @@ const V = ({ children }: { children: React.ReactNode }) => (
   <span className="text-midnight-ink">{children}</span>
 );
 
-// The decision, as it lands in a repo: the frontier model commented out, the proven swap in its
+// The decision, as it lands in a repo: the frontier model commented out, the recommended swap in its
 // place, the receipts in the trailing comments.
 function DecisionArtifact() {
   return (
     <CodeCard>
       <Ln>
-        <C>{"// steps/summarize.ts"}</C>
+        <C>{`// steps/summarize.ts · ${ILLUSTRATIVE_SCORECARD.label}`}</C>
       </Ln>
       <Ln />
       <Ln>{"export const summarize = step({"}</Ln>
@@ -161,9 +162,9 @@ function DecisionArtifact() {
       </Ln>
       <Ln>
         {"  floor: "}
-        <V>0.90</V>
+        <V>{ILLUSTRATIVE_SCORECARD.floor}</V>
         {",  "}
-        <C>{"// Q 0.94 clears it"}</C>
+        <C>{`// Q ${ILLUSTRATIVE_SCORECARD.approved} clears it`}</C>
       </Ln>
       <Ln>{"});"}</Ln>
     </CodeCard>
@@ -181,6 +182,9 @@ function FloorArtifact() {
       className="absolute inset-0 h-full w-full"
       aria-hidden
     >
+      <text x="24" y="28" className="fill-fog font-mono" fontSize="14">
+        {ILLUSTRATIVE_SCORECARD.label} scores
+      </text>
       <defs>
         <filter
           id="floor-pill-shadow"
@@ -241,7 +245,7 @@ function FloorArtifact() {
             fontSize="16"
             fontWeight="500"
           >
-            llama-4-nano · 0.62
+            {`llama-4-nano · ${ILLUSTRATIVE_SCORECARD.lower}`}
           </text>
 
           <g opacity="0.7">
@@ -264,7 +268,7 @@ function FloorArtifact() {
             fontSize="16"
             fontWeight="500"
           >
-            gpt-5.4-nano · 0.71
+            {`gpt-5.4-nano · ${ILLUSTRATIVE_SCORECARD.middle}`}
           </text>
 
           {/* the one that cleared it: white pill, rounded cap, soft shadow, ink label */}
@@ -285,7 +289,7 @@ function FloorArtifact() {
             fontSize="17"
             fontWeight="500"
           >
-            gpt-5.4-mini · 0.94 · clears the floor
+            {`gpt-5.4-mini · ${ILLUSTRATIVE_SCORECARD.approved} · clears the floor`}
           </text>
         </g>
       </g>

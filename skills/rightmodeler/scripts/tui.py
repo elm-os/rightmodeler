@@ -19,7 +19,8 @@ import argparse
 import os
 import sys
 
-from common import load_json, dump_json
+from common import flatten, load_json, dump_json
+from orchestrate import swappable_count
 
 
 DECISION_STYLE = {
@@ -48,12 +49,12 @@ def _rows(results: dict) -> list[dict]:
                 "step_id": s["step_id"],
                 "name": s.get("name") or s["step_id"],
                 "family": s.get("family", ""),
-                "current": s.get("current_model") or "—",
+                "current": s.get("current_model") or "n/a",
                 "candidate": (best or {}).get("model")
                 or (
                     (s.get("candidates") or [{}])[0].get("id")
                     or (s.get("candidates") or [{}])[0].get("model")
-                    or "—"
+                    or "n/a"
                 ),
                 "savings": (best or {}).get("est_savings"),
                 "score": (best or {}).get("score"),
@@ -73,16 +74,17 @@ def _rows(results: dict) -> list[dict]:
 
 
 def _fmt_pct(v):
-    return f"{v:.0%}" if isinstance(v, (int, float)) else "—"
+    return f"{v:.0%}" if isinstance(v, (int, float)) else "n/a"
 
 
 def _fmt_score(v):
-    return f"{v:.2f}" if isinstance(v, (int, float)) else "—"
+    return f"{v:.2f}" if isinstance(v, (int, float)) else "n/a"
 
 
 def run_rich_fallback(results: dict, rows: list[dict]) -> int:
     from rich.console import Console
     from rich.table import Table
+    from rich.text import Text
 
     c = Console()
     t = Table(title="rightmodeler - recommendations (read-only; no TTY for interactive TUI)")
@@ -90,18 +92,20 @@ def run_rich_fallback(results: dict, rows: list[dict]) -> int:
         t.add_column(col, overflow="fold")
     for r in rows:
         flag = "CASCADE-E2E" if r["cascade"] else ("HIGH-RISK" if r["risk"] == "high" else "")
+        # Text() cells are never markup-parsed: a trace name containing "[/x]"
+        # would otherwise raise MarkupError and kill this whole render.
         t.add_row(
-            r["name"],
+            Text(flatten(r["name"])),
             r["family"],
-            r["current"],
-            r["candidate"],
+            Text(flatten(r["current"])),
+            Text(flatten(r["candidate"])),
             _fmt_pct(r["savings"]),
             _fmt_score(r["score"]),
             r["evidence"],
             flag,
         )
     c.print(t)
-    swappable = sum(1 for r in rows if r["score"] and not r["cascade"])
+    swappable = swappable_count(results["steps"])
     c.print(
         f"[bold]Swappable single-shot:[/] {swappable}   "
         f"[cyan]needs E2E:[/] {sum(1 for r in rows if r['cascade'])}   "
@@ -194,12 +198,14 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
                 flag = Text("CASCADE", style="bold cyan")
             elif r["risk"] == "high":
                 flag = Text("HIGH-RISK", style="bold red")
-            swap = f"{r['current']} → {r['candidate']}"
+            # Textual's default_cell_formatter runs Text.from_markup on str cells,
+            # so trace-derived values go in as Text to stay literal.
+            swap = f"{flatten(r['current'])} → {flatten(r['candidate'])}"
             return (
                 Text(label, style=style),
-                r["name"],
+                Text(flatten(r["name"])),
                 r["family"],
-                swap,
+                Text(swap),
                 _fmt_pct(r["savings"]),
                 _fmt_score(r["score"]),
                 r["evidence"],
@@ -214,10 +220,10 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
             r = self.rows[idx]
             d = self.query_one("#detail", Static)
             body = Text()
-            body.append(f"{r['name']}  ", style="bold")
+            body.append(f"{flatten(r['name'])}  ", style="bold")
             body.append(f"[{r['family']}]\n\n", style="dim")
-            body.append(f"current:   {r['current']}\n")
-            body.append(f"candidate: {r['candidate']}\n")
+            body.append(f"current:   {flatten(r['current'])}\n")
+            body.append(f"candidate: {flatten(r['candidate'])}\n")
             body.append(
                 f"savings:   {_fmt_pct(r['savings'])}    quality: {_fmt_score(r['score'])} "
                 f"({r['verdict']})\n"
@@ -225,12 +231,12 @@ def run_textual(results: dict, rows: list[dict], out_path: str) -> int:
             body.append(f"evidence:  {r['evidence']}    risk: {r['risk']}\n")
             if r["cascade"]:
                 body.append(
-                    "\n⚙ multi-step/tool/loop — confirm with run_pipeline.py "
+                    "\n⚙ multi-step/tool/loop; confirm with run_pipeline.py "
                     "before swapping (cascade risk)\n",
                     style="cyan",
                 )
             body.append("\njudge / note:\n", style="bold")
-            body.append((r["justification"] or "—") + "\n")
+            body.append((r["justification"] or "n/a") + "\n")
             if r["candidate_output"]:
                 body.append("\ncandidate output (truncated):\n", style="bold")
                 body.append(r["candidate_output"][:1200] + "\n", style="dim")

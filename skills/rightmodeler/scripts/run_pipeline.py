@@ -170,21 +170,28 @@ def run(
                 "CM_SWAP_MODEL": swap_model,
                 "PYTHONPATH": "/app/.cm_shim",
             }
-            for name, value in docker_env.items():
-                docker.extend(["-e", f"{name}={value}"])
+            for name in docker_env:
+                docker.extend(["-e", name])
             docker.extend(["python:3.12-slim", "bash", "-lc", cmd])
-            proc = sh(docker, timeout=timeout)
+            # `-e NAME` forwards the value from this process, so the key never
+            # lands in the host process table.
+            proc = sh(docker, timeout=timeout, env={**env, **docker_env})
         else:
             proc = subprocess.run(
                 cmd, shell=True, cwd=wt, env=env, capture_output=True, text=True, timeout=timeout
             )
 
+        # the child ran with the key in its environment; a pipeline that dumps
+        # os.environ on failure would otherwise persist it into the results bundle
+        def scrub(text: str) -> str:
+            return text.replace(key, "[redacted]") if key else text
+
         return {
             "swap_model": swap_model,
             "head": head,
             "returncode": proc.returncode,
-            "stdout": proc.stdout[-20000:],
-            "stderr": proc.stderr[-8000:],
+            "stdout": scrub(proc.stdout)[-20000:],
+            "stderr": scrub(proc.stderr)[-8000:],
             "worktree": wt,
             "ok": proc.returncode == 0,
         }

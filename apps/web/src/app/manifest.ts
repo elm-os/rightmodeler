@@ -9,7 +9,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "rightmodeler",
     short_name: "rightmodeler",
     description:
-      "Replay real agent traces through cheaper models and prove which swaps are safe.",
+      "Replay real agent traces through cheaper models and measure each candidate against accepted outputs.",
     start_url: "/",
     display: "standalone",
     background_color: "#fdfcfc",

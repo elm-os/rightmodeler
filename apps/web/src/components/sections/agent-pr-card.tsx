@@ -13,6 +13,7 @@
 import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
 import { AnimatedNumber } from "@/components/animated-number";
+import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 
 // Strong ease-out curve (docs/design.md § Motion) as a motion-friendly tuple.
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -87,7 +88,7 @@ export function AgentPrCard() {
           rightmodeler agent · pull request
         </span>
         <span className="shrink-0 font-mono text-caption text-fog">
-          illustrative
+          {ILLUSTRATIVE_SCORECARD.label}
         </span>
       </div>
 
@@ -105,8 +106,11 @@ export function AgentPrCard() {
           className="flex flex-col gap-y-1.5 px-4 py-3"
         >
           <Row label="quality">
-            <span className="text-midnight-ink">0.94</span> vs 0.95 shipped ·
-            floor 0.90 · medium
+            <span className="text-midnight-ink">
+              {ILLUSTRATIVE_SCORECARD.approved}
+            </span>{" "}
+            vs {ILLUSTRATIVE_SCORECARD.shipped} shipped · floor{" "}
+            {ILLUSTRATIVE_SCORECARD.floor} · medium
           </Row>
           <Row label="p95 latency">
             <span className="text-midnight-ink">-38%</span> vs current

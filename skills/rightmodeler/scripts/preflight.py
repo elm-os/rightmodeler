@@ -22,7 +22,7 @@ def main() -> int:
     key = provider.api_key
     where = provider.key_source or "unknown source"
     print(f"[ok] selected provider: {config.name}")
-    print(f"[ok] {config.env_key} loaded from {where} (…{key[-4:]})")
+    print(f"[ok] {config.env_key} loaded from {where}")
     for url in config.docs:
         print(f"[info] provider docs: {url}")
 

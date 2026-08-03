@@ -14,7 +14,7 @@ const VEIL =
   "radial-gradient(130% 115% at 24% 30%, rgba(253,252,252,0.82) 0%, rgba(253,252,252,0.34) 46%, rgba(253,252,252,0) 74%)";
 
 const description =
-  "Field notes from the rightmodeler team on keeping agents on the right models: proving swaps, watching every layer, and shipping migrations as pull requests.";
+  "Field notes from the rightmodeler team on measuring candidate models, watching every layer, and reviewing model changes as pull requests.";
 const preview = socialImage(
   "/social/blog.png",
   "The rightmodeler blog: research notes on running agents on the right models",
@@ -85,9 +85,8 @@ export default function BlogIndexPage() {
               Notes on running agents on the right models.
             </h1>
             <p className="mt-6 max-w-xl text-subheading text-driftwood">
-              How we prove model swaps, watch every layer, and turn migrations
-              into code review, without giving up the quality you already
-              shipped.
+              How we measure candidates against accepted outputs, watch every
+              layer, and turn model changes into code review.
             </p>
           </Reveal>
         </div>

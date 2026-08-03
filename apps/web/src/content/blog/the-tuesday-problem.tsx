@@ -66,14 +66,13 @@ export function Body() {
       <P>
         We spent years on that treadmill ourselves; the{" "}
         <A href="/blog/why-we-built-rightmodeler">founding story</A> is mostly
-        about it. The arithmetic is uncomfortable. Comparable models routinely
-        sit ten times apart on price, and a step that could run dramatically
-        cheaper keeps burning money on every call, every retry, every user,
-        every day, for exactly as long as the evaluation stays unscheduled.
-        Skipping the question does not make it free. It makes it compound. And
-        it cuts the other way too: sometimes the new model is simply better at
-        the same price, and the cost of not deciding is shipping worse quality
-        than you could.
+        about it. The arithmetic is uncomfortable. The price spread across
+        plausible candidates can be large, and an over-provisioned step keeps
+        burning money on every call, every retry, every user, every day, for
+        exactly as long as the evaluation stays unscheduled. Skipping the
+        question does not make it free. It makes it compound. And it cuts the
+        other way too: a new release may perform better at a similar price, so
+        declining to evaluate it can also leave quality on the table.
       </P>
 
       <PullQuote>
@@ -98,20 +97,21 @@ export function Body() {
       <P>
         So here is the shape we are building toward.{" "}
         <A href="/agent">rightmodeler agent</A> watches every release. When a
-        new model could beat a step in your stack, it replays that step on your
-        real traces in a sandbox, judges the outputs against what you already
-        shipped, and checks the result against your preferences file: your
-        quality floor, your minimum saving, your latency budget, the providers
-        you allow, the steps it must never touch.
+        new model merits evaluation for a step in your stack, it replays that
+        step on your real traces in a sandbox, measures the outputs against what
+        you already accepted, and checks the result against your preferences
+        file: your agreement floor, your minimum saving, your latency budget,
+        the providers you allow, the steps it must never touch.
       </P>
 
       <P>
         When a candidate clears the bar, it opens a pull request in your repo.
         The diff is one line. Attached to it are the receipts: quality scores
-        judged against your shipped outputs, the cost delta, the latency delta,
-        the confidence, and the replayed traces behind all of it. Your Tuesday
-        shrinks to code review. You read the evidence, maybe spot-check a trace,
-        and merge or close. It never merges on its own.
+        measured against your accepted outputs, the cost delta, the latency
+        delta, the confidence, the sample size, and the replayed traces behind
+        all of it. Your Tuesday shrinks to code review. You read the evidence,
+        maybe spot-check a trace, and merge or close. It never merges on its
+        own.
       </P>
 
       <P>
@@ -123,7 +123,7 @@ export function Body() {
       <H2>Today, and next Tuesday</H2>
 
       <P>
-        The proof engine already exists. The{" "}
+        The measurement engine already exists. The{" "}
         <A href="https://github.com/elm-os/rightmodeler">rightmodeler skill</A>{" "}
         runs the same replay-and-judge loop on your own traces today, one
         command to install. The agent takes that loop and gives it a calendar.
@@ -155,7 +155,7 @@ Done properly, the evaluation looks like this. Pull a few hundred real traces. B
 
 The alternative is what most teams actually do: nothing. Keep paying yesterday's price for yesterday's model and tell yourself you will evaluate next sprint. Or worse, swap on vibes because the timeline was excited, and find out from a user which edge cases got worse.
 
-We spent years on that treadmill ourselves; the [founding story](https://www.rightmodeler.com/blog/why-we-built-rightmodeler) is mostly about it. The arithmetic is uncomfortable. Comparable models routinely sit ten times apart on price, and a step that could run dramatically cheaper keeps burning money on every call, every retry, every user, every day, for exactly as long as the evaluation stays unscheduled. Skipping the question does not make it free. It makes it compound. And it cuts the other way too: sometimes the new model is simply better at the same price, and the cost of not deciding is shipping worse quality than you could.
+We spent years on that treadmill ourselves; the [founding story](https://www.rightmodeler.com/blog/why-we-built-rightmodeler) is mostly about it. The arithmetic is uncomfortable. The price spread across plausible candidates can be large, and an over-provisioned step keeps burning money on every call, every retry, every user, every day, for exactly as long as the evaluation stays unscheduled. Skipping the question does not make it free. It makes it compound. And it cuts the other way too: a new release may perform better at a similar price, so declining to evaluate it can also leave quality on the table.
 
 > Evaluating one model once is a project. Evaluating every model forever is a job.
 
@@ -165,15 +165,15 @@ Engineers are not bad at the judgment part. Given the replays, the scores, and t
 
 ## A migration should be a pull request
 
-So here is the shape we are building toward. [rightmodeler agent](https://www.rightmodeler.com/agent) watches every release. When a new model could beat a step in your stack, it replays that step on your real traces in a sandbox, judges the outputs against what you already shipped, and checks the result against your preferences file: your quality floor, your minimum saving, your latency budget, the providers you allow, the steps it must never touch.
+So here is the shape we are building toward. [rightmodeler agent](https://www.rightmodeler.com/agent) watches every release. When a new model merits evaluation for a step in your stack, it replays that step on your real traces in a sandbox, measures the outputs against what you already accepted, and checks the result against your preferences file: your agreement floor, your minimum saving, your latency budget, the providers you allow, the steps it must never touch.
 
-When a candidate clears the bar, it opens a pull request in your repo. The diff is one line. Attached to it are the receipts: quality scores judged against your shipped outputs, the cost delta, the latency delta, the confidence, and the replayed traces behind all of it. Your Tuesday shrinks to code review. You read the evidence, maybe spot-check a trace, and merge or close. It never merges on its own.
+When a candidate clears the bar, it opens a pull request in your repo. The diff is one line. Attached to it are the receipts: quality scores measured against your accepted outputs, the cost delta, the latency delta, the confidence, the sample size, and the replayed traces behind all of it. Your Tuesday shrinks to code review. You read the evidence, maybe spot-check a trace, and merge or close. It never merges on its own.
 
 And when no candidate clears the bar, there is no PR. The agent abstains, exactly like the engine it is built on, because a tool that always finds a swap is not measuring anything.
 
 ## Today, and next Tuesday
 
-The proof engine already exists. The [rightmodeler skill](https://github.com/elm-os/rightmodeler) runs the same replay-and-judge loop on your own traces today, one command to install. The agent takes that loop and gives it a calendar. It is in active development; join the waitlist on [the agent page](https://www.rightmodeler.com/agent) and we will send one note when early access opens.
+The measurement engine already exists. The [rightmodeler skill](https://github.com/elm-os/rightmodeler) runs the same replay-and-judge loop on your own traces today, one command to install. The agent takes that loop and gives it a calendar. It is in active development; join the waitlist on [the agent page](https://www.rightmodeler.com/agent) and we will send one note when early access opens.
 
 This is part two of the vision. Part one is about seeing: why your agent bill has no line items, and what [Crucible does about it](https://www.rightmodeler.com/blog/the-bill-nobody-can-read).
 `;

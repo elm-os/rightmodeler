@@ -32,6 +32,10 @@ export type CaseStudy = {
     jobTitle: string;
     sameAs: string[];
     org: { name: string; url: string; sameAs: string[] };
+    /** Our own note on what the customer's figures rest on. The quote is theirs and is
+        reproduced verbatim; this line is company voice, so it carries the sample size a
+        reader needs to weigh the numbers. */
+    evidenceNote?: string;
   };
 };
 
@@ -40,7 +44,8 @@ export const BSIDE: CaseStudy = {
   company: "B:Side Assist",
   website: "https://www.bsideassist.com",
   title: "From brute-force reasoning to precision routing",
-  headline: "70.8% lower inference cost. Quality held at a measured 100%.",
+  headline:
+    "70.8% lower inference cost. Quality held at 100% across a 20-query benchmark.",
   excerpt:
     "AI Assist's 11 AI layers moved from all Terra · xhigh to a per-workload routing policy: 53.3% faster, 114.3% more throughput, zero points of quality lost.",
   tagline: "financial intelligence · 11 workloads",
@@ -75,6 +80,8 @@ export const BSIDE: CaseStudy = {
       url: "https://www.bsidecapital.org",
       sameAs: ["https://www.linkedin.com/company/bsidecapital"],
     },
+    evidenceNote:
+      "Measured on a 20-query benchmark against the outputs B:Side had accepted.",
   },
 };
 

@@ -189,14 +189,14 @@ export default function Iam360CaseStudyPage() {
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
             title="iam360 · routed outcome"
-            meta="modeled vs all terra · xhigh"
-            footer="representative request · modeled against a hypothetical all terra · xhigh starting point"
+            meta="modeled from 1 representative request"
+            footer="million-request figure is a linear projection from one representative request · hypothetical all terra · xhigh baseline"
           >
             <div className="grid grid-cols-1 divide-y divide-ash-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               <StatCell label="lower cost per request">
                 <span className="tabular-nums">56-57%</span>
               </StatCell>
-              <StatCell label="saved per million requests">
+              <StatCell label="projected savings per million requests">
                 <span className="tabular-nums">$41,000</span>
               </StatCell>
               <StatCell label="from routing alone, at identical usage">
@@ -337,14 +337,17 @@ export default function Iam360CaseStudyPage() {
           </P>
 
           <H2>At scale</H2>
-          <P>At the same representative token shape, the savings compound:</P>
+          <P>
+            The model uses one representative request shape. Applying its
+            per-request cost difference linearly gives:
+          </P>
         </Prose>
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
             title="iam360 · savings at volume"
-            meta="representative token shape"
-            footer="modeled at current pricing · scales linearly with volume"
+            meta="linear projection from 1 representative request"
+            footer="projected from one representative request · current pricing"
           >
             <div className="grid grid-cols-1 divide-y divide-ash-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
               <StatCell label="saved per 100,000 requests">
@@ -360,9 +363,8 @@ export default function Iam360CaseStudyPage() {
         <Prose>
           <P>
             This is what rightmodeler produces: a routing policy where every job
-            runs on the smallest model and reasoning effort that holds its
-            quality bar, with the flagship kept, and sometimes promoted, for the
-            work that deserves it.
+            is assigned under the stated validation procedure, with the flagship
+            kept, and sometimes promoted, for the work that deserves it.
           </P>
           <PullQuote>&ldquo;{study.testimonial.quote}&rdquo;</PullQuote>
           <P>

@@ -19,7 +19,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "About",
   description:
-    "rightmodeler proves which models you can safely downgrade: detect, prove, fix. An open-source tool for teams running multi-agent LLM systems. What we're building, and why.",
+    "rightmodeler measures cheaper candidates against outputs you accepted, then reports the evidence, sample size, and abstentions. An open-source tool for teams running multi-agent LLM systems.",
   path: "/about",
 });
 
@@ -30,14 +30,14 @@ const organizationLd = {
   url: SITE_URL,
   logo: `${SITE_URL}/icon.png`,
   description:
-    "rightmodeler keeps AI agents on the right model: it proves safe swaps on your real traces, ships model upgrades as evidence-backed pull requests, and watches every layer with Crucible.",
+    "rightmodeler measures candidate models against accepted outputs on real traces, opens evidence-backed model-change pull requests, and watches every layer with Crucible.",
   sameAs: [X_URL, LINKEDIN_URL, REDDIT_URL, REPO_URL, GITHUB_ORG_URL],
 };
 
 const FAQ: FaqItem[] = [
   {
     q: "What is rightmodeler?",
-    a: "An open-source tool for teams running multi-agent LLM systems. It proves, on your own traces, which model calls can move to a cheaper model without losing quality, then applies the safe swaps in your repo.",
+    a: "An open-source tool for teams running multi-agent LLM systems. It replays your own traces through cheaper candidates, measures each result against the output you accepted, and reports the evidence, sample size, and abstentions before you approve a repo edit.",
   },
   {
     q: "Is it open source?",
@@ -45,7 +45,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How is it different from observability or a gateway?",
-    a: "Observability shows you problems; a runtime gateway hijacks live traffic. rightmodeler proves the fix on your own traces and applies it in your repo: detect, prove, fix. Nothing runs in your request path.",
+    a: "Observability shows you problems; a runtime gateway intercepts live traffic. rightmodeler replays candidates against accepted outputs, reports the evidence and abstentions, and applies only the edits you approve. Nothing runs in your request path.",
   },
 ];
 
@@ -58,7 +58,7 @@ export default function AboutPage() {
       <PageHero
         eyebrow="About"
         title="About rightmodeler"
-        lede="Proof over guesswork, for the models your agents run on."
+        lede="Measured evidence over guesswork, for the models your agents run on."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
@@ -67,23 +67,24 @@ export default function AboutPage() {
         <div className="mx-auto max-w-2xl space-y-6 px-6 py-16 sm:px-8 sm:py-20">
           <p className="text-subheading text-driftwood">
             rightmodeler is an open-source tool for teams running multi-agent
-            LLM systems. It answers one question with evidence: which model
-            calls can move to a cheaper model without losing quality?
+            LLM systems. It measures how closely cheaper candidates match the
+            outputs you already accepted, one call at a time.
           </p>
           <p className="text-body text-driftwood">
             The mission is simple:{" "}
             <span className="font-medium text-midnight-ink">
               no model decision on vibes
             </span>
-            . rightmodeler detects inefficient calls, proves the safe swaps on
-            your own traces against what you already shipped, and applies the
-            fix in your repo. A report and an edit, never a runtime gateway.
+            . rightmodeler detects inefficient calls, measures candidates
+            against what you already shipped, and reports the evidence, sample
+            size, and abstentions before applying an edit you approve. A report
+            and an edit, never a runtime gateway.
           </p>
           <p className="text-body text-driftwood">
             rightmodeler is an ELM-OS project. The skill is available today;
             rightmodeler agent, which ships swaps as pull requests, and
             Crucible, the analytics and optimization suite, are built on the
-            same proof loop and coming next.
+            same evidence loop and coming next.
           </p>
 
           <div className="pt-2">

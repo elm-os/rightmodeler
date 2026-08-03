@@ -12,7 +12,7 @@ import { DEFAULT_SOCIAL_IMAGE, socialImage } from "@/lib/seo";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 const description =
-  "Keep your agents on the right model: prove safe swaps from your real traces, ship model upgrades as evidence-backed PRs, and watch every layer with Crucible.";
+  "Measure candidate models against outputs you accepted, review the evidence, sample size, and abstentions, then ship approved model changes as pull requests.";
 const preview = socialImage(
   DEFAULT_SOCIAL_IMAGE,
   "Keep your agents on the right model: rightmodeler",
@@ -26,7 +26,7 @@ const websiteLd = {
 
 export const metadata: Metadata = {
   title: {
-    absolute: "rightmodeler: prove which models you can safely downgrade",
+    absolute: "rightmodeler: measure candidates against what you shipped",
   },
   description,
   alternates: { canonical: "/" },

@@ -6,13 +6,13 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { getAllIntegrations } from "@/content/integrations";
+import { TRACE_SOURCES } from "@/lib/product-facts";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Integrations",
-  description:
-    "Every tool rightmodeler works with: the trace formats it reads (LangSmith, Langfuse, Braintrust, Phoenix, OpenAI SDK, Claude Code, Codex, OTel GenAI) and the infrastructure it replays through.",
+  description: `Every tool rightmodeler works with: the trace formats it reads (${TRACE_SOURCES.join(", ")}) and the infrastructure it replays through.`,
   path: "/integrations",
   image: "/social/integrations.png",
 });
@@ -76,7 +76,7 @@ export default function IntegrationsPage() {
       <PageHero
         eyebrow="Integrations"
         title="Works with the traces you already have."
-        lede="No new SDK and nothing in your request path: rightmodeler reads the traces your agent already emits, replays them through cheaper models, and proves which swaps are safe."
+        lede="No new SDK and nothing in your request path: rightmodeler reads the traces your agent already emits, measures cheaper candidates against accepted outputs, and reports the evidence, sample size, and abstentions."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
