@@ -61,13 +61,13 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/case-study/bside",
     title: "Case study: B:Side Assist",
     description:
-      "How rightmodeler right-sized AI Assist's 11 AI layers with a per-workload routing policy: 70.8% lower projected inference cost, 53.3% faster responses, 114.3% higher throughput, and a measured 100% pass rate on a 20-query benchmark.",
+      "How rightmodeler right-sized AI Assist's 11 AI layers: 70.8% lower projected inference cost and a measured 100% pass rate on a 20-query benchmark.",
   },
   {
     path: "/case-study/iam360",
     title: "Case study: iAM360",
     description:
-      "How iAM360 used rightmodeler's routing and evidence framework to cut modeled AI cost per request by 56-57%, while upgrading its hardest coaching paths from Terra to Sol.",
+      "How iAM360 used rightmodeler to cut modeled AI cost per request by 56-57% while upgrading its hardest coaching paths from Terra to Sol.",
   },
   {
     path: "/integrations",

@@ -14,7 +14,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "How it works",
   description:
-    "How rightmodeler works: it detects inefficient calls, measures cheaper candidates against outputs you accepted, and reports the evidence, sample size, and abstentions. Detect, measure, review.",
+    "How rightmodeler detects inefficient calls, measures cheaper candidates against outputs you accepted, and reports the evidence. Detect, measure, review.",
   path: "/how-it-works",
   image: "/social/how-it-works.png",
 });

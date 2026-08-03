@@ -14,7 +14,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "rightmodeler agent (coming soon)",
   description:
-    "rightmodeler agent watches every new model release, replays it against your real agent traces, and opens an evidence-backed model-swap pull request in your repo when a change clears your bar. Join the waitlist.",
+    "rightmodeler agent tests new model releases against your real traces and opens evidence-backed model-swap pull requests when a change clears your bar.",
   path: "/agent",
   image: "/social/agent.png",
 });
