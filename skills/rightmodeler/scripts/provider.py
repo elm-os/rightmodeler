@@ -118,6 +118,11 @@ class Provider:
     def _headers(self) -> dict[str, str]:
         return {}
 
+    def _redact(self, text: str) -> str:
+        """Upstream error bodies reach results.json and judge justifications, and a
+        self-hosted LiteLLM proxy can echo whatever it likes on 401/403."""
+        return text.replace(self.api_key, "[redacted]") if self.api_key else text
+
     # -- catalog ---------------------------------------------------------
     def list_models(self, refresh: bool = False) -> list[dict]:
         if self._catalog is None or refresh:
@@ -166,7 +171,7 @@ class Provider:
         tools: list[dict] | None = None,
         tool_choice: Any | None = None,
         response_format: dict | None = None,
-        temperature: float = 0.0,
+        temperature: float | None = 0.0,
         seed: int | None = 7,
         max_tokens: int | None = None,
         require_parameters: bool = True,
@@ -174,15 +179,22 @@ class Provider:
         max_retries: int = 4,
     ) -> dict:
         """Returns a normalized dict:
-        {text, tool_calls, model, cost, cost_is_estimate, usage, raw, error}
+        {text, tool_calls, model, cost, cost_is_estimate, duration_ms, usage, raw, error}
         Never raises on model/HTTP errors — returns {"error": ...} so the
         orchestrator can record a failed candidate and move on.
         """
+        started = time.perf_counter()
+
+        def with_duration(response: dict) -> dict:
+            response["duration_ms"] = round((time.perf_counter() - started) * 1000, 3)
+            return response
+
         body: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
         }
+        if temperature is not None:
+            body["temperature"] = temperature
         if seed is not None and self.supports_seed:
             body["seed"] = seed
         if max_tokens:
@@ -206,28 +218,31 @@ class Provider:
                 time.sleep(backoff)
                 backoff *= 2
                 continue
+            text = self._redact(r.text)  # redact before slicing: a cut key still works
             if (
                 r.status_code in (404, 503)
                 and body.get("provider", {}).get("require_parameters")
-                and "no endpoints found" in r.text.lower()
+                and "no endpoints found" in text.lower()
             ):
                 # OpenRouter can reject strict parameter routing when no endpoint
                 # advertises every supplied parameter. Drop the preference and retry.
                 body.pop("provider")
-                last_err = f"HTTP {r.status_code} with require_parameters: {r.text[:200]}"
+                last_err = f"HTTP {r.status_code} with require_parameters: {text[:200]}"
                 continue
             if r.status_code in (429, 402, 500, 502, 503):
-                last_err = f"HTTP {r.status_code}: {r.text[:200]}"
+                last_err = f"HTTP {r.status_code}: {text[:200]}"
                 time.sleep(backoff)
                 backoff *= 2
                 continue
             if r.status_code >= 400:
-                return {"error": f"HTTP {r.status_code}: {r.text[:300]}", "model": model}
+                return with_duration(
+                    {"error": f"HTTP {r.status_code}: {text[:300]}", "model": model}
+                )
             data = r.json()
             if "error" in data:
-                return {"error": str(data["error"]), "model": model}
-            return self._normalize(data, r.headers)
-        return {"error": f"exhausted retries: {last_err}", "model": model}
+                return with_duration({"error": self._redact(str(data["error"])), "model": model})
+            return with_duration(self._normalize(data, r.headers))
+        return with_duration({"error": f"exhausted retries: {last_err}", "model": model})
 
     def _apply_provider_preferences(self, body: dict[str, Any], require_parameters: bool) -> None:
         return None

@@ -34,7 +34,9 @@ def _gate_map(snapshot):
 
 def _failed_or_weak_gates(snapshot):
     return [
-        gate for gate in snapshot["gates"] if gate["status"] in {"fail", "review", "unavailable"}
+        gate
+        for gate in snapshot["gates"]
+        if gate["status"] in {"fail", "review", "unavailable", "indeterminate"}
     ]
 
 
@@ -159,7 +161,8 @@ def _proof(baseline, post_fix, holdout, target_gate_ids, validation):
     return {
         "target_gate_ids": target_gate_ids,
         "baseline_gate_statuses": {
-            gate_id: gate["status"] for gate_id, gate in sorted(baseline_gates.items())
+            gate_id: "review" if gate["status"] == "indeterminate" else gate["status"]
+            for gate_id, gate in sorted(baseline_gates.items())
         },
         "post_fix_snapshot_id": post_fix["snapshot_id"] if post_fix else None,
         "holdout_snapshot_id": holdout["snapshot_id"] if holdout else None,

@@ -51,7 +51,7 @@ const FAILURES: Feature = {
 const RIGHTSIZED: Feature = {
   title: "Continuously right-sized",
   caption:
-    "Every new trace is audited as it arrives, so the stack never drifts.",
+    "Every new trace is audited as it arrives, and each audit reports its own evidence, sample size, and abstentions.",
   img: "/crucible/rightsized.jpg",
 };
 const MCP: Feature = {

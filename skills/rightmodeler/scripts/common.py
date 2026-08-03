@@ -49,6 +49,51 @@ def read_jsonl(path: str | Path) -> list[dict]:
     return out
 
 
+UNTRUSTED_CAP = 24000
+
+
+def untrusted_block(label: str, text: Any, cap: int = UNTRUSTED_CAP) -> str:
+    """Fence outsider-authored trace text so an LLM prompt reads it as inert data.
+
+    `label` must be a caller-owned constant (TASK / REFERENCE / CANDIDATE), never
+    trace-derived. The body is capped with a visible truncation marker first, then
+    any fence marker the text itself carries is defused, so third-party content
+    cannot close the block early and inject instructions.
+    """
+    body = "" if text is None else str(text)
+    if len(body) > cap:
+        body = f"{body[:cap]}\n[truncated: {len(body) - cap} more chars]"
+    body = body.replace("<<<UNTRUSTED", "<<<-UNTRUSTED")
+    body = body.replace("<<<END UNTRUSTED", "<<<-END UNTRUSTED")
+    return f"<<<UNTRUSTED {label}>>>\n{body}\n<<<END UNTRUSTED {label}>>>"
+
+
+_MD_UNSAFE = str.maketrans({"|": "\\|", "`": "'"})
+
+
+def flatten(text: Any, limit: int = 120) -> str:
+    """Collapse trace-derived text to a single capped line.
+
+    Trace `name`, `step_id`, and `model` values are outsider-authored and
+    unbounded. A newline lets them break out of whatever row or cell they are
+    rendered into; the length lets them flood a view the agent reads back.
+    """
+    flat = " ".join(str(text if text is not None else "").split())
+    return f"{flat[: limit - 1]}…" if len(flat) > limit else flat
+
+
+def md_text(text: Any, limit: int = 120) -> str:
+    """Flatten trace-derived text for interpolation into a Markdown line.
+
+    On top of `flatten`, an unescaped pipe ends a table cell and a stray backtick
+    opens a code span the rest of the line inherits. The backtick is replaced
+    rather than escaped so the result is also safe inside a code span, which is
+    how model ids are rendered. `str.translate` is single-pass, so the escaped
+    output cannot be escaped a second time.
+    """
+    return flatten(text, limit).translate(_MD_UNSAFE)
+
+
 def _parse_env_value(raw: str) -> str:
     value = raw.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:

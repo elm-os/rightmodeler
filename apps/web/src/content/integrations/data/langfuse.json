@@ -3,10 +3,10 @@
   "name": "Langfuse",
   "category": "trace-source-generic",
   "categoryLabel": "Trace source · autodetected",
-  "title": "Langfuse integration: prove cheaper models on real traces",
+  "title": "Langfuse integration: measure cheaper models on real traces",
   "description": "Export Langfuse observations to disk and rightmodeler replays each step through cheaper models, judging every candidate against the output you already shipped.",
   "h1": "rightmodeler + Langfuse",
-  "lede": "Langfuse already records what every generation cost and produced. rightmodeler replays those observations through cheaper models and reports, step by step, which swaps hold.",
+  "lede": "Langfuse already records what every generation cost and produced. rightmodeler replays those observations through cheaper models and reports agreement, evidence, sample size, and abstentions step by step.",
   "tldr": "rightmodeler autodetects Langfuse exports by their traceId, observations, and usageDetails keys, then normalizes them with its generic adapter, a best-effort pass that pulls model, input messages, and output per record and keeps the rest in raw. Each successful step is replayed through cheaper candidates from your selected replay provider and judged against the output you already shipped, with a 0.90 quality floor by default.",
   "steps": [
     {
@@ -98,7 +98,7 @@
     },
     {
       "q": "Does rightmodeler replace Langfuse?",
-      "a": "No. Langfuse observes, scores, and debugs your agent in production; rightmodeler is an offline audit of the traces it produced, answering one question your dashboards don't: which steps can move to a cheaper model without losing quality."
+      "a": "No. Langfuse observes, scores, and debugs your agent in production; rightmodeler is an offline audit that measures cheaper candidates against the outputs you accepted and reports the evidence."
     },
     {
       "q": "What does it do with Langfuse's cost data?",

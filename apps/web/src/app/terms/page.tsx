@@ -75,7 +75,7 @@ export default function TermsPage() {
             numbers shown on this site are illustrative examples, labeled as
             such. They are not measurements of your workload and not a promise
             of results. What you can actually save is exactly what the tool
-            exists to prove, on your own traces.
+            exists to measure, on your own traces.
           </P>
 
           <H2>Acceptable use</H2>
