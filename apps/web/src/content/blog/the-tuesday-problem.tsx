@@ -11,7 +11,7 @@ export const meta: PostMeta = {
   slug: "the-tuesday-problem",
   title: "The Tuesday problem.",
   description:
-    "A new model drops every few weeks, and evaluating it properly is a project nobody budgets. Part two of the rightmodeler vision: the agent that turns model migrations into pull requests.",
+    "Why evaluating every new model becomes a project nobody budgets. Part two of the rightmodeler vision: turning model migrations into pull requests.",
   excerpt:
     "The group chat asks: are we switching? And everyone goes quiet. Part two of our vision: why model migrations should arrive as pull requests with the evidence attached.",
   kicker: "The vision · Part two",

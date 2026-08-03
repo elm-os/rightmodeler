@@ -11,7 +11,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Glossary",
   description:
-    "The model-downgrade glossary: plain definitions for evidence-backed model downgrading, quality floor, cascade risk, abstain, reference evidence, LLM-as-judge, and more.",
+    "Plain definitions for model downgrading, quality floors, cascade risk, abstention, reference evidence, LLM-as-judge, and other rightmodeler terms.",
   path: "/glossary",
   image: "/social/glossary.png",
 });

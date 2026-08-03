@@ -12,7 +12,7 @@ import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Integrations",
-  description: `Every tool rightmodeler works with: the trace formats it reads (${TRACE_SOURCES.join(", ")}) and the infrastructure it replays through.`,
+  description: `Every tool rightmodeler works with: the ${TRACE_SOURCES.length} trace formats it reads and the infrastructure it replays through.`,
   path: "/integrations",
   image: "/social/integrations.png",
 });

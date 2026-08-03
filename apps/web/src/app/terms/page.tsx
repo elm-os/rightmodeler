@@ -10,7 +10,7 @@ import { CONTACT_EMAIL } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "Terms of service",
   description:
-    "The terms that govern use of the rightmodeler website, in plain English: pre-release products may change, figures are illustrative, and the software is licensed in its repository.",
+    "Read the rightmodeler website terms, including pre-release product changes, illustrative figures, repository licensing, and acceptable use.",
   path: "/terms",
 });
 

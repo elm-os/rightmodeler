@@ -4,7 +4,7 @@
   "category": "replay-engine",
   "categoryLabel": "Replay engine",
   "title": "OpenRouter integration: one key, every candidate model",
-  "description": "Set one OPENROUTER_API_KEY and rightmodeler shortlists cheaper candidates from the live catalog, replays your steps at temperature 0, and prices every swap with usage.cost.",
+  "description": "Use one OpenRouter API key to shortlist cheaper models, replay steps at temperature 0, and price every swap with provider-reported usage costs.",
   "h1": "rightmodeler + OpenRouter",
   "lede": "Every candidate call in a rightmodeler audit (shortlist, replay, judge, price) runs through OpenRouter on your own key. It is the engine of the audit, not a source of traces.",
   "tldr": "rightmodeler uses OpenRouter as its replay engine: /models builds the shortlist of cheaper candidates that support what each step needs, /chat/completions runs the replays at temperature 0 and the cross-family judge, and usage.cost prices every call at what was actually charged, never token-count guesses. One OPENROUTER_API_KEY on your side is the whole integration.",

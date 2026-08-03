@@ -19,7 +19,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "About",
   description:
-    "rightmodeler measures cheaper candidates against outputs you accepted, then reports the evidence, sample size, and abstentions. An open-source tool for teams running multi-agent LLM systems.",
+    "rightmodeler measures cheaper candidates against outputs you accepted, then reports the evidence and abstentions. Open source, for multi-agent LLM teams.",
   path: "/about",
 });
 

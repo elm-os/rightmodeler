@@ -14,7 +14,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Crucible (coming soon)",
   description:
-    "Crucible is the analytics and optimization suite for your AI agents: cost per layer, speed per step, failures as they happen, and a model stack that keeps itself right-sized. Join the waitlist.",
+    "Crucible tracks AI agent cost, speed, and failures by layer, then helps keep your model stack right-sized. Join the waitlist.",
   path: "/crucible",
   image: "/social/crucible.png",
 });
