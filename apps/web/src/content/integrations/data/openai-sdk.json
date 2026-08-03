@@ -4,7 +4,7 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "OpenAI SDK integration: replay logs on cheaper models",
-  "description": "Point rightmodeler at your OpenAI SDK request log and it replays every call through cheaper models, measures each output against what you accepted, and reports the evidence, sample size, and abstentions.",
+  "description": "Point rightmodeler at your OpenAI SDK request log: it replays every call through cheaper models and measures each output against what you accepted.",
   "h1": "rightmodeler + the OpenAI SDK",
   "lede": "No tracing platform required. rightmodeler reads the request and response log your code already writes around the OpenAI SDK, measures cheaper candidates against accepted outputs, and reports the result call by call.",
   "tldr": "rightmodeler reads per-line OpenAI SDK request+response dumps with a dedicated adapter: each logged call becomes a step, with no tracing platform in between. Successful steps are replayed through cheaper candidates on your selected replay provider and judged against the output you already shipped, with a quality floor of 0.90 by default; tool-using steps are confirmed by re-running your pipeline with the SDK redirected to the candidate.",

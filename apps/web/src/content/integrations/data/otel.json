@@ -4,7 +4,7 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "OTel GenAI integration: replay spans on cheaper models",
-  "description": "Point rightmodeler at OTLP span exports carrying gen_ai.* attributes. It replays each step on cheaper models and measures candidate agreement with accepted output.",
+  "description": "Point rightmodeler at OTLP span exports with gen_ai.* attributes. It replays each step on cheaper models and measures candidate agreement with accepted output.",
   "h1": "rightmodeler + OpenTelemetry",
   "lede": "If your stack emits gen_ai.* spans, the inputs and accepted outputs already exist. rightmodeler reads OTel GenAI telemetry from any OTLP pipeline (no bespoke integration required), measures cheaper candidates against those outputs, and reports the evidence.",
   "tldr": "rightmodeler reads OTLP span exports through a dedicated OTel GenAI adapter: any pipeline that emits gen_ai.* attributes (whatever framework or language produced them) normalizes into one per-step schema. Each successful step is replayed through cheaper candidates on your selected replay provider and judged against the output you already shipped, with a 0.90 quality floor by default.",

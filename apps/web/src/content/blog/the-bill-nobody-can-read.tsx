@@ -11,7 +11,7 @@ export const meta: PostMeta = {
   slug: "the-bill-nobody-can-read",
   title: "The bill nobody can read.",
   description:
-    "Why your agent bill has no line items, and what to do about it. Part one of the rightmodeler vision: Crucible, the analytics and optimization suite for AI agents.",
+    "Why your agent bill has no line items, and what to do about it. Part one of the rightmodeler vision: Crucible for AI agent analytics and optimization.",
   excerpt:
     "An agent feature ships, the invoice arrives as one number, and nobody can say which layer spent it. Part one of our vision: giving agents the instruments every other system already has.",
   kicker: "The vision · Part one",

@@ -50,7 +50,7 @@ export const BSIDE: CaseStudy = {
     "AI Assist's 11 AI layers moved from all Terra · xhigh to a per-workload routing policy: 53.3% faster, 114.3% more throughput, zero points of quality lost.",
   tagline: "financial intelligence · 11 workloads",
   description:
-    "How rightmodeler right-sized AI Assist's 11 AI layers with a per-workload routing policy: 70.8% lower projected inference cost, 53.3% faster responses, 114.3% higher throughput, and a measured 100% quality pass rate.",
+    "How rightmodeler right-sized AI Assist's 11 AI layers: 70.8% lower projected inference cost and a measured 100% pass rate on a 20-query benchmark.",
   date: "2026-07-22",
   readingMinutes: 4,
   logo: {
@@ -97,7 +97,7 @@ export const IAM360: CaseStudy = {
     "The AI coach now routes every job to the right level of intelligence: Sol for complex coaching, Terra for moderate analysis, small validated models for routine work.",
   tagline: "fitness + wellness · ai coach",
   description:
-    "How iAM360 used rightmodeler's routing and evidence framework to cut modeled AI cost per request by 56-57%, while upgrading its hardest coaching paths from Terra to Sol.",
+    "How iAM360 used rightmodeler to cut modeled AI cost per request by 56-57% while upgrading its hardest coaching paths from Terra to Sol.",
   date: "2026-07-22",
   readingMinutes: 5,
   logo: {

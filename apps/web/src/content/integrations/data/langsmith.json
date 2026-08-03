@@ -4,7 +4,7 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "LangSmith integration: replay traces on cheaper models",
-  "description": "Export a LangSmith run tree and rightmodeler replays each step through cheaper models, measures every output against what you accepted, and reports the evidence, sample size, and abstentions.",
+  "description": "Export a LangSmith run tree: rightmodeler replays each step through cheaper models and measures every output against what you accepted.",
   "h1": "rightmodeler + LangSmith",
   "lede": "Your LangSmith traces already hold the inputs and accepted outputs. rightmodeler replays them through cheaper models and reports candidate agreement, evidence, sample size, and abstentions step by step.",
   "tldr": "rightmodeler reads exported LangSmith run trees with a dedicated adapter, replays each successful step through cheaper candidates on your selected replay provider, and judges every output against the one you already shipped, so a LangSmith-instrumented agent gets right-sized without new instrumentation.",
