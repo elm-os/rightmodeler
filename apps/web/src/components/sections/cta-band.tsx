@@ -44,7 +44,7 @@ export function CtaBand() {
               <span aria-hidden className="select-none text-fog">
                 #{" "}
               </span>
-              It’s a report, not a runtime gateway. Prove the savings on your
+              It’s a report, not a runtime gateway. Measure the savings on your
               own data first.
             </p>
           </Reveal>

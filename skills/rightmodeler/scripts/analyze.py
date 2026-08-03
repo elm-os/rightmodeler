@@ -30,7 +30,38 @@ FAMILY_HINTS = [
 ]
 
 
-def classify_step(step: dict, steps: list[dict]) -> dict:
+def _trajectory_key(step: dict) -> tuple[str, object] | None:
+    if step.get("trajectory_id") is not None:
+        return ("trajectory", step["trajectory_id"])
+    if step.get("case_id") is not None:
+        return ("case", step["case_id"])
+    return None
+
+
+def _contains_text(value: object, text: str) -> bool:
+    if isinstance(value, str):
+        return text in value
+    if isinstance(value, list):
+        return any(_contains_text(item, text) for item in value)
+    if isinstance(value, dict):
+        return any(_contains_text(item, text) for item in value.values())
+    return False
+
+
+def _consumes_output(producer: dict, consumer: dict) -> bool:
+    if producer.get("kind") not in ("llm", "agent"):
+        return False
+    output = producer.get("output_text")
+    if not isinstance(output, str) or not output.strip():
+        return False
+    return any(
+        _contains_text(message.get("content"), output.strip())
+        for message in consumer.get("input_messages") or []
+        if isinstance(message, dict)
+    )
+
+
+def classify_step(step: dict, steps: list[dict], source_format: str | None = None) -> dict:
     has_tools = bool(step.get("tool_calls"))
     # loop: same node name appears more than once within the same case. Steps from
     # different cases (benchmark corpora set case_id per example) are independent
@@ -38,17 +69,36 @@ def classify_step(step: dict, steps: list[dict]) -> dict:
     name = step.get("name")
     case = step.get("case_id")
     repeats = (
-        sum(1 for s in steps if s.get("name") == name and name and s.get("case_id") == case) > 1
+        case is not None
+        and sum(1 for s in steps if s.get("name") == name and name and s.get("case_id") == case) > 1
     )
-    # feeds downstream: any later step references this as parent
-    sid = step.get("step_id")
-    feeds = any(s.get("parent_id") == sid for s in steps)
-    multi = has_tools or repeats or feeds or step.get("kind") in ("agent", "chain")
+    index = next(i for i, candidate in enumerate(steps) if candidate is step)
+    trajectory = _trajectory_key(step)
+    earlier = [
+        s for s in steps[:index] if trajectory is not None and _trajectory_key(s) == trajectory
+    ]
+    later = [
+        s for s in steps[index + 1 :] if trajectory is not None and _trajectory_key(s) == trajectory
+    ]
+    consumes = any(_consumes_output(producer, step) for producer in earlier)
+    feeds = any(_consumes_output(step, consumer) for consumer in later)
+    if consumes:
+        prefix_provenance = "model_authored"
+    elif trajectory is None:
+        prefix_provenance = "unknown"
+    elif not earlier:
+        prefix_provenance = "external"
+    elif source_format in ("claude_code", "codex_cli") or not step.get("input_messages"):
+        prefix_provenance = "unknown"
+    else:
+        prefix_provenance = "external"
+    multi = has_tools or repeats or feeds or consumes or step.get("kind") in ("agent", "chain")
     return {
         "replay_mode": "e2e" if multi else "single_shot",
         "has_tools": has_tools,
         "in_loop": repeats,
         "feeds_downstream": feeds,
+        "prefix_provenance": prefix_provenance,
     }
 
 
@@ -79,10 +129,11 @@ def infer_family(step: dict) -> str:
 
 def analyze(normalized: dict, codebase: str | None) -> dict:
     steps = normalized.get("steps", [])
+    source_format = normalized.get("source_format")
     families = defaultdict(lambda: {"steps": [], "models": set(), "cost_usd": 0.0, "n": 0})
     mapped = []
     for step in steps:
-        cls = classify_step(step, steps)
+        cls = classify_step(step, steps, source_format)
         fam = infer_family(step)
         evaluator = pick_evaluator(step, cls)
         risk = (
@@ -102,6 +153,7 @@ def analyze(normalized: dict, codebase: str | None) -> dict:
             "model": step.get("model"),
             "family": fam,
             "replay_mode": cls["replay_mode"],
+            "prefix_provenance": cls["prefix_provenance"],
             "evaluator": evaluator,
             "risk": risk,
             "accepted": step.get("success", {}).get("accepted", True),

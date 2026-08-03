@@ -158,6 +158,27 @@ def test_diagnosis_keeps_missing_evidence_as_review(tmp_path):
     validate_schema(evidence, "remediation-evidence")
 
 
+def test_diagnosis_keeps_indeterminate_gates_in_remediation(tmp_path):
+    snapshot = _snapshot(
+        tmp_path,
+        {
+            "case_id": "case-1",
+            "output_text": '{"status":"open"}',
+            "cost_usd": 0.01,
+            "duration_ms": 100,
+            "evidence_refs": ["candidate/case-1"],
+        },
+    )
+    quality_gate = next(gate for gate in snapshot["gates"] if gate["id"] == "quality")
+
+    evidence = diagnose_snapshot(snapshot)
+
+    assert quality_gate["status"] == "indeterminate"
+    assert "quality" in evidence["proof"]["target_gate_ids"]
+    assert evidence["proof"]["baseline_gate_statuses"]["quality"] == "review"
+    validate_schema(evidence, "remediation-evidence")
+
+
 def test_diagnose_command_writes_evidence_artifact(tmp_path, monkeypatch, capsys):
     snapshot = _snapshot(tmp_path, _failure_result())
     snapshot_path = tmp_path / "snapshot.json"

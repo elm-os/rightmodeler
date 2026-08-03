@@ -34,6 +34,13 @@ Coverage reports the proportions that are recommended, rejected, abstained,
 review-only, and unavailable. This prevents a system from appearing accurate by
 abstaining on most of the corpus.
 
+### Census versus sample
+
+When the full corpus is replayed, its pass rate is an exact census over that
+corpus: it has zero sampling error and full generalization risk. Full coverage
+resolves only case-selection uncertainty. Judge noise and one-draw-per-case
+sampling noise remain.
+
 ## Target confidence policy
 
 A recommendation is eligible only when its family quality score is at least
@@ -53,7 +60,9 @@ A recommendation is eligible only when its family quality score is at least
 A calibrated LLM judge can support medium confidence in v1 only when it has at
 least 20 frozen human labels, correlation of at least `0.80`, Cohen's kappa of
 at least `0.60`, and order-consistent verdicts. Judge evidence alone cannot
-produce high confidence in v1.
+produce high confidence in v1. This is target policy, not implemented behavior,
+and it is not planned in the current cycle because the prediction-powered
+estimator it would serve is blocked on a labeling-workflow change.
 
 ## Speed
 
@@ -137,4 +146,6 @@ zero-cost imported benchmarks, and bounded replay budget gates.
 The current implementation does not yet enforce per-family quality, evaluator-
 specific confidence sample sizes, judge correlation or Cohen's kappa, aggregate
 diagnosis accuracy, or remediation-proof rates in benchmark release decisions.
-Those requirements are acceptance criteria for the future target v1 policy.
+The judge calibration thresholds remain target policy but are deferred beyond
+the current cycle for the labeling-workflow reason above. The other requirements
+are acceptance criteria for the future target v1 policy.

@@ -8,17 +8,18 @@ import { RelatedLinks } from "@/components/sections/related-links";
 import { Tldr } from "@/components/sections/tldr";
 import { JsonLd } from "@/components/json-ld";
 import { Reveal } from "@/components/reveal";
+import { TRACE_SOURCES } from "@/lib/product-facts";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "How it works",
   description:
-    "How rightmodeler detects inefficient model calls, proves safe swaps on your traces, and applies evidence-backed fixes in your repo. Detect, prove, fix.",
+    "How rightmodeler detects inefficient calls, measures cheaper candidates against outputs you accepted, and reports the evidence. Detect, measure, review.",
   path: "/how-it-works",
   image: "/social/how-it-works.png",
 });
 
-// The three-step spine, Detect → Prove → Fix. `line` is the machine-vernacular substance slab under
+// The three-step spine, Detect → Measure → Review. `line` is the machine-vernacular substance slab under
 // each card (mono, ink-on-recessed-slab), echoing sections/how-it-works.tsx on the home page.
 const STEPS: {
   n: string;
@@ -30,30 +31,30 @@ const STEPS: {
   {
     n: "01",
     name: "Detect",
-    body: "Point it at the traces you already emit. rightmodeler autodetects the format across nine sources and folds every run into one per-step schema, with no new SDK and no re-instrumentation.",
+    body: `Point it at the traces you already emit. rightmodeler autodetects the format across ${TRACE_SOURCES.length} sources and folds every run into one per-step schema, with no new SDK and no re-instrumentation.`,
     label: "reads",
-    line: "Claude Code · Codex · LangSmith / LangGraph · OpenAI SDK · Langfuse · Braintrust · Phoenix · OTel GenAI · LiteLLM  →  1 per-step schema",
+    line: `${TRACE_SOURCES.join(" · ")}  →  1 per-step schema`,
   },
   {
     n: "02",
-    name: "Prove",
-    body: "It replays each step through cheaper candidates on your real inputs and judges every output against what you already shipped. Each swap gets a save %, a quality score, the evidence behind it, and a risk flag, and it abstains when the evidence is weak.",
+    name: "Measure",
+    body: "It replays each step through cheaper candidates on your real inputs and measures every output against what you accepted. Each candidate gets a cost delta, reference-agreement score, evidence count, and risk flag, and it abstains when the evidence is weak.",
     label: "scores",
-    line: "save % · quality · evidence · risk flag  →  verdict + confidence · abstain on high-risk",
+    line: "cost · agreement · evidence count · risk flag  →  recommendation + confidence · abstain on high-risk",
   },
   {
     n: "03",
-    name: "Fix",
-    body: "You approve each safe swap and rightmodeler applies it in your repo via the Skill. A report and an edit, never a live intercept. You decide what to swap, and when.",
+    name: "Review",
+    body: "You review each recommendation and rightmodeler applies only the edits you approve via the Skill. A report and an edit, never a live intercept. You decide what to change, and when.",
     label: "applies",
-    line: "approved swap in your repo, via the Skill · nothing changes without your approval",
+    line: "approved model edit in your repo, via the Skill · nothing changes without your approval",
   },
 ];
 
 const FAQ: FaqItem[] = [
   {
     q: "Which traces are supported?",
-    a: "Nine formats, autodetected: Claude Code, Codex, LangSmith / LangGraph, the OpenAI SDK, Langfuse, Braintrust, Phoenix, OpenTelemetry GenAI, and LiteLLM StandardLoggingPayload. rightmodeler folds them all into one per-step schema, so you point it at the traces you already emit, with no new instrumentation.",
+    a: `${TRACE_SOURCES.length} formats, autodetected: ${TRACE_SOURCES.slice(0, -1).join(", ")}, and ${TRACE_SOURCES.at(-1)}. rightmodeler folds them all into one per-step schema, so you point it at the traces you already emit, with no new instrumentation.`,
   },
   {
     q: "Does it touch production?",
@@ -73,7 +74,7 @@ export default function HowItWorksPage() {
       <PageHero
         eyebrow="How it works"
         title="How rightmodeler works"
-        lede="Detect, prove, fix. The whole loop, run on the traces you already have."
+        lede="Detect, measure, review. The whole loop, run on the traces you already have."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
@@ -87,7 +88,8 @@ export default function HowItWorksPage() {
               <span className="text-midnight-ink">
                 what you already shipped
               </span>
-              , and applies the safe swaps in your repo.
+              , then reports the evidence, sample size, and abstentions for your
+              review.
             </Tldr>
           </Reveal>
 
@@ -95,7 +97,7 @@ export default function HowItWorksPage() {
               No card fills; warm-sand barely separates from the canvas, so depth
               comes from the spine, the display-face step titles, and a
               hairline-topped machine-output line per step. Numbering is earned:
-              this is a real Detect -> Prove -> Fix sequence. */}
+              this is a real Detect -> Measure -> Review sequence. */}
           <div className="relative mt-14">
             <div
               aria-hidden
@@ -148,14 +150,31 @@ export default function HowItWorksPage() {
             </div>
           </div>
 
+          <Reveal
+            delay={0.08}
+            className="mt-12 border-t border-ash-border pt-8"
+          >
+            <p className="font-display text-heading-sm text-midnight-ink">
+              How to read confidence.
+            </p>
+            <p className="mt-2 max-w-xl text-body text-driftwood">
+              Hard checks run before a model judge. When judgment is needed, a
+              cross-family judge scores both output orders. Evidence counts show
+              what earned the confidence band, and the evidence type limits how
+              high that band can go. Confidence applies only to the prompt,
+              inputs, and runs evaluated. It measures agreement with what you
+              shipped, not proof of correctness.
+            </p>
+          </Reveal>
+
           <Reveal delay={0.1} className="mt-12 border-t border-ash-border pt-8">
             <p className="font-display text-heading-sm text-midnight-ink">
               Not observability. Not a runtime gateway.
             </p>
             <p className="mt-2 max-w-xl text-body text-driftwood">
               Observability only shows you problems; a gateway hijacks live
-              traffic. rightmodeler proves the fix on runs you already shipped,
-              then applies it in your repo.
+              traffic. rightmodeler measures candidates on runs you already
+              shipped, then applies only the edits you approve.
             </p>
           </Reveal>
 

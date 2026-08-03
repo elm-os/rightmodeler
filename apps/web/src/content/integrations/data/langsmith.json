@@ -4,9 +4,9 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "LangSmith integration: replay traces on cheaper models",
-  "description": "Export a LangSmith run tree and rightmodeler replays each step through cheaper models, judges every output against what you shipped, and reports the safe swaps.",
+  "description": "Export a LangSmith run tree: rightmodeler replays each step through cheaper models and measures every output against what you accepted.",
   "h1": "rightmodeler + LangSmith",
-  "lede": "Your LangSmith traces already hold the evidence. rightmodeler replays them through cheaper models and proves, step by step, which swaps are safe.",
+  "lede": "Your LangSmith traces already hold the inputs and accepted outputs. rightmodeler replays them through cheaper models and reports candidate agreement, evidence, sample size, and abstentions step by step.",
   "tldr": "rightmodeler reads exported LangSmith run trees with a dedicated adapter, replays each successful step through cheaper candidates on your selected replay provider, and judges every output against the one you already shipped, so a LangSmith-instrumented agent gets right-sized without new instrumentation.",
   "steps": [
     {
@@ -80,7 +80,7 @@
       "body": "Every node in a LangGraph run lands as its own step, so the audit shows which nodes genuinely need a frontier model and which are paying for capability they never use."
     },
     {
-      "title": "Prove a swap before you ship it",
+      "title": "Measure a candidate before you change a model",
       "body": "Instead of trialing a cheaper model in production and watching dashboards, replay last week's run trees and read the verdict per step, judged against outputs your users already accepted."
     },
     {
@@ -101,7 +101,7 @@
     },
     {
       "q": "Does rightmodeler replace LangSmith?",
-      "a": "No. LangSmith observes your agent in production; rightmodeler is an offline audit that answers one question your dashboards don't: which steps can move to a cheaper model without losing quality. They work on the same traces."
+      "a": "No. LangSmith observes your agent in production; rightmodeler is an offline audit that measures cheaper candidates against the outputs you accepted and reports the evidence. They work on the same traces."
     },
     {
       "q": "Does it work with LangGraph?",

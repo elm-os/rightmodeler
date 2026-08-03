@@ -6,7 +6,7 @@
   "title": "Codex CLI integration: replay sessions on cheaper models",
   "description": "Run rightmodeler on Codex sessions to replay each step through cheaper models and judge every output against the result you accepted.",
   "h1": "rightmodeler + Codex CLI",
-  "lede": "Codex CLI already writes every session to disk as a rollout log. rightmodeler reads those files where they sit and proves, step by step, which calls a cheaper model could have handled.",
+  "lede": "Codex CLI already writes every session to disk as a rollout log. rightmodeler reads those files where they sit, measures cheaper candidates against accepted outputs, and reports the result step by step.",
   "tldr": "rightmodeler ingests Codex CLI rollout logs straight from ~/.codex/sessions with a dedicated adapter, no export step, because the JSONL files are already on your machine. Each successful step is replayed through cheaper candidates on your selected replay provider and judged against the output you already accepted, so everyday Codex sessions become the evidence for which model each kind of step really needs.",
   "steps": [
     {

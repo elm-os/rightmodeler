@@ -1,6 +1,6 @@
-"""Compute conservative v1 scorecards and release gates."""
+"""Compute conservative v2 scorecards and release gates."""
 
-from math import ceil, floor
+from math import ceil, floor, sqrt
 
 
 THRESHOLDS = {
@@ -14,6 +14,8 @@ THRESHOLDS = {
     "cost": 0.0,
 }
 MIN_REVIEW_CASES = 10
+WILSON_ALPHA = 0.05
+WILSON_Z = 1.959963984540054
 
 
 def _percentile(values, quantile):
@@ -29,35 +31,102 @@ def _percentile(values, quantile):
     return round(values[lower] + (values[upper] - values[lower]) * weight, 3)
 
 
-def _metric(value, numerator, denominator, threshold, status, evidence_refs, details=None):
+def _metric(
+    value,
+    numerator,
+    denominator,
+    threshold,
+    status,
+    evidence_refs,
+    details=None,
+    *,
+    population,
+    ci_low=None,
+    ci_high=None,
+    ci_method=None,
+    alpha=None,
+):
     return {
         "value": value,
         "numerator": numerator,
         "denominator": denominator,
         "threshold": threshold,
         "status": status,
+        "population": population,
+        "generalization": "corpus_only",
+        "ci_low": ci_low,
+        "ci_high": ci_high,
+        "ci_method": ci_method,
+        "alpha": alpha,
         "evidence_refs": sorted(set(evidence_refs)),
         "details": details or {},
     }
 
 
-def _ratio_metric(numerator, denominator, threshold, evidence_refs, details=None):
+def _wilson_interval(numerator, denominator):
+    value = numerator / denominator
+    z_squared = WILSON_Z**2
+    scale = 1 + z_squared / denominator
+    center = (value + z_squared / (2 * denominator)) / scale
+    margin = (
+        WILSON_Z
+        * sqrt(value * (1 - value) / denominator + z_squared / (4 * denominator**2))
+        / scale
+    )
+    return round(max(0, center - margin), 6), round(min(1, center + margin), 6)
+
+
+def _ratio_metric(numerator, denominator, threshold, evidence_refs, population, details=None):
+    """Report a binomial ratio with a non-gating Wilson interval.
+
+    Census covers case selection only. Judge noise and one-draw-per-case sampling
+    noise remain even at full corpus coverage.
+    """
     if not denominator:
         return _metric(
-            None, numerator, denominator, threshold, "unavailable", evidence_refs, details
+            None,
+            numerator,
+            denominator,
+            threshold,
+            "unavailable",
+            evidence_refs,
+            details,
+            population=population,
+            ci_method="wilson",
+            alpha=WILSON_ALPHA,
         )
     value = numerator / denominator
+    ci_low, ci_high = _wilson_interval(numerator, denominator)
+    # Gate on the point estimate. A 20/20 Wilson lower bound is 0.839, so using
+    # ci_low would reject a flawless candidate against the 0.90 quality floor.
     status = (
-        "review" if denominator < MIN_REVIEW_CASES else "pass" if value >= threshold else "fail"
+        "indeterminate"
+        if denominator < MIN_REVIEW_CASES
+        else "pass"
+        if value >= threshold
+        else "fail"
     )
-    return _metric(value, numerator, denominator, threshold, status, evidence_refs, details)
+    return _metric(
+        value,
+        numerator,
+        denominator,
+        threshold,
+        status,
+        evidence_refs,
+        details,
+        population=population,
+        ci_low=ci_low,
+        ci_high=ci_high,
+        ci_method="wilson",
+        alpha=WILSON_ALPHA,
+    )
 
 
 def _references(verdicts):
     return [reference for verdict in verdicts for reference in verdict["evidence_refs"]]
 
 
-def _quality_scorecard(cases, verdicts):
+def _quality_scorecard(cases, verdicts, population):
     case_by_id = {case["case_id"]: case for case in cases}
     eligible = [
         verdict
@@ -71,6 +140,7 @@ def _quality_scorecard(cases, verdicts):
         len(eligible),
         THRESHOLDS["quality"],
         _references(eligible),
+        population,
         {"eligible_case_count": len(eligible)},
     )
     by_family = {}
@@ -86,12 +156,13 @@ def _quality_scorecard(cases, verdicts):
             len(family_verdicts),
             THRESHOLDS["quality"],
             _references(family_verdicts),
+            population,
             {"eligible_case_count": len(family_verdicts)},
         )
     return {"overall": overall, "by_family": by_family}
 
 
-def _label_scorecards(cases, verdicts):
+def _label_scorecards(cases, verdicts, population):
     case_by_id = {case["case_id"]: case for case in cases}
     labeled = [
         (case_by_id[verdict["case_id"]], verdict)
@@ -110,6 +181,7 @@ def _label_scorecards(cases, verdicts):
         len(predicted),
         THRESHOLDS["recommendation_precision"],
         refs,
+        population,
         {"labeled_case_count": len(labeled)},
     )
     recall = _ratio_metric(
@@ -117,12 +189,13 @@ def _label_scorecards(cases, verdicts):
         safe_opportunities,
         THRESHOLDS["safe_opportunity_recall"],
         refs,
+        population,
         {"labeled_case_count": len(labeled)},
     )
     return precision, recall
 
 
-def _abstention_scorecard(cases, verdicts):
+def _abstention_scorecard(cases, verdicts, population):
     case_by_id = {case["case_id"]: case for case in cases}
     required = [
         verdict
@@ -137,22 +210,24 @@ def _abstention_scorecard(cases, verdicts):
         len(required),
         THRESHOLDS["required_abstention"],
         _references(required),
+        population,
         {"required_case_count": len(required)},
     )
 
 
-def _coverage_scorecard(verdicts):
+def _coverage_scorecard(verdicts, population):
     covered = sum(bool(verdict["evidence_refs"]) for verdict in verdicts)
     return _ratio_metric(
         covered,
         len(verdicts),
         THRESHOLDS["coverage"],
         _references(verdicts),
+        population,
         {"abstain_count": sum(verdict["terminal_verdict"] == "abstain" for verdict in verdicts)},
     )
 
 
-def _speed_scorecard(cases, candidate_bundle):
+def _speed_scorecard(cases, candidate_bundle, population):
     case_ids = {case["case_id"] for case in cases}
     paired = [
         result
@@ -195,6 +270,7 @@ def _speed_scorecard(cases, candidate_bundle):
             "unavailable",
             refs,
             details,
+            population=population,
         )
     status = "fail" if p95_regression > THRESHOLDS["speed_p95_regression"] else "pass"
     return _metric(
@@ -205,6 +281,7 @@ def _speed_scorecard(cases, candidate_bundle):
         status,
         refs,
         details,
+        population=population,
     )
 
 
@@ -252,7 +329,11 @@ def _overall_status(gates):
         return "review"
     if "unavailable" in statuses:
         return "review"
-    return "pass"
+    if "indeterminate" in statuses:
+        return "review"
+    if statuses == {"pass"}:
+        return "pass"
+    raise ValueError(f"unsupported gate status: {sorted(statuses)}")
 
 
 def _faster_claim_status(speed):
@@ -267,14 +348,55 @@ def _faster_claim_status(speed):
     return "review"
 
 
+def _horizon_diagnostic(corpus, quality):
+    trajectory_length = corpus.get("trajectory_length")
+    per_step = quality["overall"]
+    available = trajectory_length is not None and per_step["value"] is not None
+    reason = None
+    if trajectory_length is None:
+        reason = "trajectory length is not present in the corpus"
+    elif per_step["value"] is None:
+        reason = "per-step pass rate is unavailable"
+    return {
+        "label": "compounded-end-to-end-pass-rate",
+        "status": "available" if available else "unavailable",
+        "diagnostic_only": True,
+        "trajectory_length": trajectory_length,
+        "per_step_pass_rate": per_step["value"],
+        "end_to_end_pass_rate": round(per_step["value"] ** trajectory_length, 6)
+        if available
+        else None,
+        "ci_low": round(per_step["ci_low"] ** trajectory_length, 6) if available else None,
+        "ci_high": round(per_step["ci_high"] ** trajectory_length, 6) if available else None,
+        "ci_method": "wilson_power" if available else None,
+        "alpha": per_step["alpha"] if available else None,
+        "generalization": "corpus_only",
+        "assumptions_violated": True,
+        "assumptions": [
+            "constant per-step accuracy",
+            "independent steps",
+            "no self-correction",
+        ],
+        "evidence_refs": per_step["evidence_refs"],
+        "reason": reason,
+    }
+
+
 def compute_scorecards(corpus, candidate_bundle, verdicts):
-    quality = _quality_scorecard(corpus["cases"], verdicts)
-    precision, recall = _label_scorecards(corpus["cases"], verdicts)
-    abstention = _abstention_scorecard(corpus["cases"], verdicts)
-    coverage = _coverage_scorecard(verdicts)
-    speed = _speed_scorecard(corpus["cases"], candidate_bundle)
+    population = (
+        "census"
+        if {verdict["case_id"] for verdict in verdicts}
+        == {case["case_id"] for case in corpus["cases"]}
+        else "sample"
+    )
+    quality = _quality_scorecard(corpus["cases"], verdicts, population)
+    precision, recall = _label_scorecards(corpus["cases"], verdicts, population)
+    abstention = _abstention_scorecard(corpus["cases"], verdicts, population)
+    coverage = _coverage_scorecard(verdicts, population)
+    speed = _speed_scorecard(corpus["cases"], candidate_bundle, population)
     faster_claim_status = _faster_claim_status(speed)
     confidence = _confidence_scorecard(quality)
+    horizon = _horizon_diagnostic(corpus, quality)
     case_by_id = {case["case_id"]: case for case in corpus["cases"]}
     unsafe_recommendations = [
         verdict
@@ -295,6 +417,7 @@ def compute_scorecards(corpus, candidate_bundle, verdicts):
         safety_status,
         unsafe_refs,
         {"unsafe_recommendation_count": len(unsafe_recommendations)},
+        population=population,
     )
     remediation = _metric(
         None,
@@ -304,6 +427,7 @@ def compute_scorecards(corpus, candidate_bundle, verdicts):
         "unavailable",
         [],
         {"reason": "remediation proof is not part of benchmark snapshots yet"},
+        population=population,
     )
     cost_value = candidate_bundle.get("evaluation_cost_usd", 0)
     cost = _metric(
@@ -314,6 +438,7 @@ def compute_scorecards(corpus, candidate_bundle, verdicts):
         "pass" if cost_value == 0 else "fail",
         _references(verdicts),
         {"candidate_cost_usd": sum(verdict["cost_usd"] for verdict in verdicts)},
+        population=population,
     )
     scorecards = {
         "safety": safety,
@@ -324,6 +449,7 @@ def compute_scorecards(corpus, candidate_bundle, verdicts):
         "coverage": coverage,
         "speed": speed,
         "confidence": confidence,
+        "horizon_diagnostic": horizon,
         "remediation": remediation,
         "cost": cost,
     }

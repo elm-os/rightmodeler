@@ -4,9 +4,9 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "Phoenix integration: replay spans on cheaper models",
-  "description": "Replay Phoenix OpenInference spans through cheaper models, judge each output against what shipped, and use rightmodeler to report proven swaps.",
+  "description": "Export OpenInference spans from Phoenix: rightmodeler replays each step on cheaper models and measures every output against what you accepted.",
   "h1": "rightmodeler + Phoenix",
-  "lede": "Phoenix already records your agent as OpenInference spans: model, messages, token counts. rightmodeler replays those spans through cheaper candidates and reports, per step, which swaps hold quality.",
+  "lede": "Phoenix already records your agent as OpenInference spans: model, messages, token counts. rightmodeler replays those spans through cheaper candidates and reports agreement, evidence, sample size, and abstentions per step.",
   "tldr": "rightmodeler reads Phoenix traces in their native OpenInference span format with a dedicated adapter: it detects openinference.span.kind and llm.* attributes, un-flattens the dotted message keys, and folds every span into one per-step schema. Each successful step is then replayed through cheaper candidates on your selected replay provider and judged against the output you already shipped, right-sizing without new instrumentation.",
   "steps": [
     {
@@ -84,8 +84,8 @@
       "body": "Phoenix traces frameworks through OpenInference instrumentors, so whether the spans came from LlamaIndex, LangChain, or your own tracer, every LLM call lands as a step with its model, messages, and token counts, and the audit shows which steps genuinely need the model they are on."
     },
     {
-      "title": "Prove the downgrade before Phoenix sees drift",
-      "body": "The usual order is swap first, then watch the dashboards. rightmodeler inverts it: replay recorded spans through the candidate model offline, read the judge's verdict against outputs your users already accepted, and ship only what proved out."
+      "title": "Measure the candidate before Phoenix sees drift",
+      "body": "The usual order is swap first, then watch the dashboards. rightmodeler inverts it: replay recorded spans through the candidate model offline, inspect agreement with outputs your users already accepted, and review the evidence before changing a model."
     },
     {
       "title": "Compare candidate pricing for costless spans",
@@ -106,7 +106,7 @@
     },
     {
       "q": "Does rightmodeler replace Phoenix?",
-      "a": "No. Phoenix watches and evaluates your agent in production; rightmodeler runs after the fact, on exported spans, to prove which steps can move to a cheaper model. Different jobs, same traces."
+      "a": "No. Phoenix watches and evaluates your agent in production; rightmodeler runs after the fact, on exported spans, to measure cheaper candidates against accepted outputs. Different jobs, same traces."
     },
     {
       "q": "Do I need an Arize account or API key?",

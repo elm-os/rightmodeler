@@ -51,7 +51,7 @@
   "detection": "",
   "useCases": [
     {
-      "title": "Prove a swap survives tool calls and loops",
+      "title": "Measure a candidate across tool calls and loops",
       "body": "A step that chooses tools cannot be judged from one replayed completion. The end-to-end re-run shows whether the candidate picks the same calls with the same arguments, stays out of extra loop iterations, and still lands the final output."
     },
     {
@@ -85,7 +85,7 @@
     },
     {
       "q": "Can rightmodeler ingest my LiteLLM proxy logs?",
-      "a": "Yes. rightmodeler has a dedicated adapter for LiteLLM StandardLoggingPayload logs, and LiteLLM is one of the nine source formats the ingester autodetects."
+      "a": "Yes. rightmodeler has a dedicated adapter for LiteLLM StandardLoggingPayload logs, and LiteLLM is one of the source formats the ingester autodetects."
     },
     {
       "q": "My pipeline uses the Anthropic SDK. How does the swap work?",
