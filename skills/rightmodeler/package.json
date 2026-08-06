@@ -1,6 +1,7 @@
 {
   "name": "@rightmodeler/rightmodeler-skill",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "build": "mkdir -p build && uv run python -m compileall scripts && printf ok > build/skill-build.txt",

@@ -3,12 +3,18 @@
 // a sibling module and add one entry below. Sorted newest-first for listings.
 
 import type { Post } from "@/content/blog/types";
+import * as nobodyCanPredictTheBill from "@/content/blog/nobody-can-predict-the-bill";
 import * as theBillNobodyCanRead from "@/content/blog/the-bill-nobody-can-read";
 import * as theTuesdayProblem from "@/content/blog/the-tuesday-problem";
 import * as whyWeBuiltRightmodeler from "@/content/blog/why-we-built-rightmodeler";
 
 // The two vision posts share a date; the stable sort keeps this order (part one above part two).
 const posts: Post[] = [
+  {
+    meta: nobodyCanPredictTheBill.meta,
+    Body: nobodyCanPredictTheBill.Body,
+    markdown: nobodyCanPredictTheBill.markdown,
+  },
   {
     meta: theBillNobodyCanRead.meta,
     Body: theBillNobodyCanRead.Body,
