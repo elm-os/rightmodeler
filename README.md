@@ -1,7 +1,9 @@
 # rightmodeler
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
+
 rightmodeler proves, from your own agent traces, where a cheaper model can replace
-an expensive one without breaking quality.
+an expensive one without breaking quality. It is open source under the MIT license.
 
 ## Install the skill
 
@@ -51,57 +53,17 @@ trace path, then continue in the same workflow once you reply.
 - Flags cascade risk and abstains when the evidence is weak
 - Writes working artifacts under `.rightmodeler/`
 
-## Local validation
+## Contributing
 
-From the repo root:
-
-```bash
-pnpm install
-pnpm format
-pnpm check
-npx skills add . --skill rightmodeler --agent codex --yes --copy
-```
+Contributions are welcome. [CONTRIBUTING.md](.github/CONTRIBUTING.md) covers the
+setup, the workspace layout, the commands, and the pull request conventions.
 
 The canonical skill source lives in `skills/rightmodeler`. Do not edit generated
 copies under `.agents/skills/` or `.claude/skills/`.
 
-## Contributor setup
-
-Requirements:
-
-- Node.js 20+
-- `pnpm` 11
-- Python 3.12+
-- `uv`
-
-Install workspace dependencies and sync the Python environments:
-
-```bash
-pnpm install
-cd apps/pipeline && uv sync
-cd ../../skills/rightmodeler && uv sync
-cd ../..
-```
-
-Shared repo commands:
-
-```bash
-pnpm format
-pnpm lint
-pnpm check-types
-pnpm check
-pnpm build
-```
-
-Useful package-local commands:
-
-```bash
-pnpm --filter ./apps/pipeline run smoke
-pnpm --filter ./apps/pipeline run ingest -- --input .rightmodeler/input/source.json
-pnpm --filter ./apps/pipeline run analyze -- --input .rightmodeler/input/historical-run-bundle.json
-pnpm --filter ./apps/pipeline run report -- --analysis-input .rightmodeler/analysis/task-families.json
-pnpm --filter ./skills/rightmodeler run check
-```
+To report a security issue, follow [SECURITY.md](.github/SECURITY.md) rather than
+opening a public issue. Participation is governed by our
+[Code of Conduct](.github/CODE_OF_CONDUCT.md).
 
 ## Generated artifacts
 
@@ -119,3 +81,7 @@ Expected layout:
 
 This directory is the current handoff boundary between the Python pipeline and the
 rest of the repo.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a capability, a trace format, or a change in behavior.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that rightmodeler cannot do today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+      description: Describe the behavior you want. Be concrete where you can.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Workarounds you tried, or other tools that solve part of this.
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a pull request for this.
