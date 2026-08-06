@@ -1,0 +1,77 @@
+name: Bug report
+description: Something in the skill, pipeline, or site is broken.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. If this is a security issue, stop here and follow
+        [SECURITY.md](https://github.com/elm-os/rightmodeler/blob/main/.github/SECURITY.md) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what did you get instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The commands you ran, in order.
+      placeholder: |
+        1. npx skills add elm-os/rightmodeler --skill rightmodeler
+        2. Invoked rightmodeler in ...
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen
+      options:
+        - The rightmodeler skill
+        - The Python pipeline (apps/pipeline)
+        - The website (rightmodeler.com)
+        - Install or setup
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: trace-source
+    attributes:
+      label: Trace source and format
+      description: Which runtime produced the traces you pointed it at?
+      placeholder: Claude Code, Codex, LangSmith, OpenTelemetry, ...
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Replay provider
+      options:
+        - OpenRouter
+        - Vercel AI Gateway
+        - LiteLLM proxy
+        - Not applicable
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `node --version`, `python --version`, and `uv --version`.
+      placeholder: node v20.11.0, Python 3.12.4, uv 0.11.26
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Paste the error. Redact API keys and anything from your own traces.
+      render: shell

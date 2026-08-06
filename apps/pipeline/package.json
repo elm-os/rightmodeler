@@ -1,6 +1,7 @@
 {
   "name": "pipeline",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "build": "mkdir -p build && uv run python -m compileall src && printf ok > build/pipeline-build.txt",
     "format": "uv run ruff format src",

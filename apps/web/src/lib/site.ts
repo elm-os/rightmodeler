@@ -11,6 +11,10 @@ export const REPO_URL = "https://github.com/elm-os/rightmodeler";
 export const RUN_COMMAND =
   "npx skills add elm-os/rightmodeler --skill rightmodeler";
 
+// The MIT grant itself. Linked from the footer's legal row, so the license the site
+// claims is always one click away.
+export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+
 // Public contact for the legal pages (privacy policy, terms of service).
 export const CONTACT_EMAIL = "rightmodeler@gmail.com";
 

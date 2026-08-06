@@ -17,6 +17,9 @@ apps/pipeline/.venv/
 skills/rightmodeler/.venv/
 __pycache__/
 *.pyc
+outputs/
+tmp/
+.playwright-mcp/
 .DS_Store
 .env
 .env.*

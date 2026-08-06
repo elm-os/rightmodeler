@@ -35,7 +35,7 @@ Run the skill on your own traces:
 
     ${RUN_COMMAND}
 
-Source: ${REPO_URL}`;
+Source: ${REPO_URL} (open source, MIT licensed)`;
 
 // Marketing / SEO pages, listed so language models can discover and cite them alongside the posts.
 const PAGES: { path: string; title: string; description: string }[] = [
@@ -155,7 +155,7 @@ ${SITE_NAME} is a developer tool from ELM-OS for teams running multi-agent LLM s
 ## Product
 
 - [${SITE_NAME}](${SITE_URL}): Home. What it does, how the evidence-backed downgrade report works, and the first command to run.
-- [GitHub repository](${REPO_URL}): Source code and the pipeline you run on your own traces.
+- [GitHub repository](${REPO_URL}): Source code and the pipeline you run on your own traces. Open source under the MIT license.
 
 ## Pages
 

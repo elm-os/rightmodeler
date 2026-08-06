@@ -5,7 +5,7 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
-import { CONTACT_EMAIL } from "@/lib/site";
+import { CONTACT_EMAIL, LICENSE_URL, REPO_URL } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Terms of service",
@@ -59,14 +59,13 @@ export default function TermsPage() {
 
           <H2>The software</H2>
           <P>
-            The rightmodeler code is distributed through its{" "}
-            <A href="https://github.com/elm-os/rightmodeler">
-              GitHub repository
-            </A>{" "}
-            and is governed by the license and notices in that repository, not
-            by these terms. Running it is your responsibility: it works against
-            your own traces with your own API keys, and you review every change
-            it recommends before applying it.
+            rightmodeler is open source. The code is distributed through its{" "}
+            <A href={REPO_URL}>GitHub repository</A> under the{" "}
+            <A href={LICENSE_URL}>MIT license</A>, and is governed by that
+            license and the notices in that repository, not by these terms.
+            Running it is your responsibility: it works against your own traces
+            with your own API keys, and you review every change it recommends
+            before applying it.
           </P>
 
           <H2>Illustrative figures</H2>

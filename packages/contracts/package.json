@@ -1,6 +1,7 @@
 {
   "name": "@repo/contracts",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "exports": {
     "./schemas/*": "./schemas/*"

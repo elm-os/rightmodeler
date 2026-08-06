@@ -1,5 +1,6 @@
 ---
 name: rightmodeler
+license: MIT
 description: >-
   Find where an agent pipeline can swap frontier models for cheaper ones without
   losing quality. Ingests the user's agent trace logs, replays successful steps
