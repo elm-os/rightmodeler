@@ -7,6 +7,7 @@ import Link from "next/link";
 import { LogoMark } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { SocialLinks } from "@/components/sections/social-links";
+import { LICENSE_URL } from "@/lib/site";
 
 const linkClass =
   "rounded-sm text-driftwood transition-colors duration-150 ease-out hover:text-midnight-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midnight-ink focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white";
@@ -91,6 +92,14 @@ export function Footer() {
             >
               Terms of service
             </Link>
+            <a
+              href={LICENSE_URL}
+              target="_blank"
+              rel="noreferrer noopener"
+              className={`font-mono text-caption ${linkClass}`}
+            >
+              MIT license
+            </a>
           </nav>
           <p className="font-mono text-caption text-fog">
             rightmodeler · © 2026 rightmodeler · an ELM-OS project

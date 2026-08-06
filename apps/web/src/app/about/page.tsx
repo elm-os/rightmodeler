@@ -41,7 +41,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Is it open source?",
-    a: "Yes. The rightmodeler skill is on GitHub and free to run on your own traces today. rightmodeler agent, which opens evidence-backed swap PRs, and Crucible, the analytics and optimization suite, are the products being built on top of it.",
+    a: "Yes, MIT licensed. The rightmodeler skill is on GitHub and free to run, fork, and modify on your own traces today. rightmodeler agent, which opens evidence-backed swap PRs, and Crucible, the analytics and optimization suite, are the products being built on top of it.",
   },
   {
     q: "How is it different from observability or a gateway?",

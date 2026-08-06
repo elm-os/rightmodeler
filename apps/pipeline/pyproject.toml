@@ -3,6 +3,7 @@ name = "pipeline"
 version = "0.1.0"
 description = "Batch pipeline for cheaper-model analysis"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
   "jsonschema>=4.25.0,<5",

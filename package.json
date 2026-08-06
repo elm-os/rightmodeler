@@ -2,6 +2,7 @@
   "name": "rightmodeler",
   "private": true,
   "description": "Replay real agent traces through cheaper models to prove which swaps are safe.",
+  "license": "MIT",
   "homepage": "https://www.rightmodeler.com",
   "repository": {
     "type": "git",
