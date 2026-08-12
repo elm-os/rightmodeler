@@ -29,8 +29,11 @@ const models = [
   },
 ];
 
-function json(response, status, body) {
-  response.writeHead(status, { "content-type": "application/json" });
+function json(response, status, body, headers = {}) {
+  response.writeHead(status, {
+    "content-type": "application/json",
+    ...headers,
+  });
   response.end(JSON.stringify(body));
 }
 
@@ -41,6 +44,8 @@ async function readJson(request) {
 }
 
 export async function startStubProvider({ port }) {
+  const rateLimitedKeys = new Set();
+  let hitCount = 0;
   const server = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/v1/models") {
       json(response, 200, { object: "list", data: models });
@@ -48,22 +53,50 @@ export async function startStubProvider({ port }) {
     }
 
     if (request.method === "POST" && request.url === "/v1/chat/completions") {
+      hitCount += 1;
+      const hitHeaders = { "x-stub-hit-count": String(hitCount) };
+      const rateLimitKey = request.headers["x-stub-429-once"];
+      if (
+        typeof rateLimitKey === "string" &&
+        !rateLimitedKeys.has(rateLimitKey)
+      ) {
+        rateLimitedKeys.add(rateLimitKey);
+        json(
+          response,
+          429,
+          { error: { message: "Stub rate limit." } },
+          { ...hitHeaders, "retry-after": "0" },
+        );
+        return;
+      }
+
       let body;
       try {
         body = await readJson(request);
       } catch {
-        json(response, 400, {
-          error: { message: "Request body must be valid JSON." },
-        });
+        json(
+          response,
+          400,
+          {
+            error: { message: "Request body must be valid JSON." },
+          },
+          hitHeaders,
+        );
         return;
       }
 
       if (body.stream === true) {
-        json(response, 400, {
-          error: {
-            message: "Streaming is not supported by the Phase A stub provider.",
+        json(
+          response,
+          400,
+          {
+            error: {
+              message:
+                "Streaming is not supported by the Phase A stub provider.",
+            },
           },
-        });
+          hitHeaders,
+        );
         return;
       }
 
@@ -73,27 +106,33 @@ export async function startStubProvider({ port }) {
         .digest("hex")
         .slice(0, 16);
       const promptTokens = Math.max(8, Math.ceil(messageText.length / 4));
-      const completionTokens = 12;
-      json(response, 200, {
-        id: `stub-${digest}`,
-        object: "chat.completion",
-        model: body.model,
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: `Deterministic reply ${digest}`,
+      const empty = request.headers["x-stub-empty"] !== undefined;
+      const completionTokens = empty ? 0 : 12;
+      json(
+        response,
+        200,
+        {
+          id: `stub-${digest}`,
+          object: "chat.completion",
+          model: body.model,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: empty ? "" : `Deterministic reply ${digest}`,
+              },
+              finish_reason: "stop",
             },
-            finish_reason: "stop",
+          ],
+          usage: {
+            prompt_tokens: promptTokens,
+            completion_tokens: completionTokens,
+            total_tokens: promptTokens + completionTokens,
           },
-        ],
-        usage: {
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-          total_tokens: promptTokens + completionTokens,
         },
-      });
+        hitHeaders,
+      );
       return;
     }
 
@@ -108,6 +147,7 @@ export async function startStubProvider({ port }) {
   const address = server.address();
   return {
     port: address.port,
+    getHitCount: () => hitCount,
     close: () =>
       new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
