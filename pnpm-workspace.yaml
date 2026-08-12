@@ -1,7 +1,9 @@
 packages:
   - apps/*
   - packages/*
+  - harness/packages/*
   - skills/*
 allowBuilds:
+  esbuild: true
   sharp: true
   unrs-resolver: true

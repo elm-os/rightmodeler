@@ -1,0 +1,25 @@
+{
+  "name": "rightmodeler",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "rightmodeler": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit",
+    "check": "tsc --noEmit && vitest run"
+  },
+  "dependencies": {
+    "@rightmodeler/core": "workspace:*",
+    "commander": "^14",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}
