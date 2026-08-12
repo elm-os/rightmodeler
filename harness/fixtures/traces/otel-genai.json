@@ -1,0 +1,610 @@
+[
+  {
+    "traceId": "trace-summarize-01",
+    "span_id": "span-summarize-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The city opened two cooling centers after three days above 100 degrees."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The city opened two cooling centers during a three-day heat wave. The centers provide residents relief from temperatures above 100 degrees."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 28,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-02",
+    "span_id": "span-summarize-02",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "A community garden donated 240 pounds of produce to the neighborhood pantry this month."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The community garden donated 240 pounds of produce this month. The food went to the neighborhood pantry."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 29,
+      "gen_ai.usage.output_tokens": 22,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-03",
+    "span_id": "span-summarize-03",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Rail service will add six morning trains beginning Monday, reducing peak wait times by eight minutes."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Six morning trains will be added starting Monday. Peak wait times are expected to fall by eight minutes."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 33,
+      "gen_ai.usage.output_tokens": 24,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-04",
+    "span_id": "span-summarize-04",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Researchers found the restored wetland now supports 18 bird species, up from seven before restoration."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The restored wetland supports 18 bird species. Before restoration, researchers observed only seven species."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 32,
+      "gen_ai.usage.output_tokens": 23,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-01",
+    "span_id": "span-support-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-104 has shown packed for two days. Can you check it?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-104",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-104" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 42,
+      "gen_ai.usage.output_tokens": 18,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-02",
+    "span_id": "span-support-02",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Please find the delivery status for order ORD-205."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-205",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-205" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 38,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-pii-01",
+    "span_id": "span-support-pii-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-306 is late. Reply to demo.person@example.test or call +1-202-555-0147."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-306",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-306" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 49,
+      "gen_ai.usage.output_tokens": 18,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-04",
+    "span_id": "span-support-04",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Has order ORD-407 left the warehouse yet?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-407",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-407" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 36,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-05",
+    "span_id": "span-summarize-05",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The county added evening bus service on three routes after a six-month pilot."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Three county bus routes now offer evening service. The expansion follows a six-month pilot."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 29,
+      "gen_ai.usage.output_tokens": 21,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-05",
+    "span_id": "span-support-05",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Check whether order ORD-417 is ready for pickup."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-417",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-417" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 36,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-trajectory-a",
+    "span_id": "span-trajectory-a-01",
+    "parent_span_id": null,
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "summarize",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-508 shipped Tuesday and is expected Friday."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-508 shipped Tuesday. Its expected arrival is Friday."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 25,
+      "gen_ai.usage.output_tokens": 16,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-trajectory-a",
+    "span_id": "span-trajectory-a-02",
+    "parent_span_id": "span-trajectory-a-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Confirm the current status for ORD-508."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-508",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-508" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-trajectory-b",
+    "span_id": "span-trajectory-b-01",
+    "parent_span_id": null,
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "summarize",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-609 was delayed by weather and received a Monday estimate."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Weather delayed order ORD-609. Its updated delivery estimate is Monday."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 27,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-trajectory-b",
+    "span_id": "span-trajectory-b-02",
+    "parent_span_id": "span-trajectory-b-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.prompt.name": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Look up ORD-609 before drafting the response."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-609",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-609" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 37,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  }
+]
