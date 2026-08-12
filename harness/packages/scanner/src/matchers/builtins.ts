@@ -56,9 +56,11 @@ const callMatchers: Matcher[] = [
     noiseTier: "precise",
     filePatterns: javascriptFiles,
     examples: [
-      'anthropic.messages.create({ model: "acme/large-1", messages, max_tokens: 200 })',
+      'import Anthropic from "@anthropic-ai/sdk";\nanthropic.messages.create({ model: "acme/large-1", messages, max_tokens: 200 })',
     ],
     pattern: /\b(?<callee>[A-Za-z_$][\w$]*\.messages\.create)\s*\(/,
+    fileAnchor:
+      /(?:\bimport\s+(?:[^;\n]*?\s+from\s*)?["']@anthropic-ai\/sdk["']|\brequire\s*\(\s*["']@anthropic-ai\/sdk["']\s*\)|\bimport\s*\(\s*["']@anthropic-ai\/sdk["']\s*\))/,
     label: "Anthropic messages",
   }),
   createCallMatcher({
@@ -98,8 +100,12 @@ const callMatchers: Matcher[] = [
     description: "LiteLLM Python completion calls",
     noiseTier: "precise",
     filePatterns: pythonFiles,
-    examples: ['litellm.completion(model="acme/large-1", messages=[])'],
+    examples: [
+      'import litellm\nlitellm.completion(model="acme/large-1", messages=[])',
+    ],
     pattern: /\b(?<callee>(?:litellm\.)?completion)\s*\(/,
+    fileAnchor:
+      /^\s*(?:from\s+litellm(?:\.[A-Za-z_]\w*)*\s+import\b|import\s+(?:[A-Za-z_]\w*\s*,\s*)*litellm\b)/m,
     label: "LiteLLM completion",
   }),
   createCallMatcher({

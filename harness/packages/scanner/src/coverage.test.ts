@@ -81,6 +81,28 @@ describe("tech detection and coverage policy", () => {
     ]);
   });
 
+  it.each(["langchain-openai==0.1", "langchain_anthropic==0.2"])(
+    "parses the Python dependency name in %s and ignores comments",
+    async (requirement) => {
+      const root = await mkdtemp(
+        join(tmpdir(), "rightmodeler-scanner-python-"),
+      );
+      temporaryDirectories.push(root);
+      await writeFile(
+        join(root, "requirements.txt"),
+        `${requirement}\n# openai is deliberately unused\n`,
+      );
+
+      expect(detectTech(root).aiDependencies).toEqual([
+        {
+          language: "python",
+          name: "langchain",
+          manifestPath: "requirements.txt",
+        },
+      ]);
+    },
+  );
+
   it("fails when a detected dependency language has no call sites", () => {
     const result = evaluateCoverage({
       stepRecords: [step("src/agent.py")],

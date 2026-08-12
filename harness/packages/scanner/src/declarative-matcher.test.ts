@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   compileDeclarativeMatchers,
   declarativeMatcherSpecSchema,
-  DeclarativeMatcherError,
   type DeclarativeMatcherErrorCode,
 } from "./index.js";
 
@@ -25,18 +24,18 @@ function validSpec() {
 }
 
 function expectCode(input: unknown, code: DeclarativeMatcherErrorCode): void {
-  try {
-    compileDeclarativeMatchers(input as readonly unknown[]);
-    throw new Error("Expected compilation to fail");
-  } catch (error) {
-    expect(error).toBeInstanceOf(DeclarativeMatcherError);
-    expect((error as DeclarativeMatcherError).code).toBe(code);
-  }
+  const result = compileDeclarativeMatchers(input as readonly unknown[]);
+  expect(result.matchers).toEqual([]);
+  expect(result.rejections.map((rejection) => rejection.code)).toContain(code);
 }
 
 describe("declarative matcher compiler", () => {
   it("compiles validated data into a working matcher", () => {
-    const [matcher] = compileDeclarativeMatchers([validSpec()]);
+    const {
+      matchers: [matcher],
+      rejections,
+    } = compileDeclarativeMatchers([validSpec()]);
+    expect(rejections).toEqual([]);
     expect(matcher!.closesSurfaceIds).toEqual(["custom-framework"]);
     expect(matcher!.match("customCall(input)", "src/model.ts")).toHaveLength(1);
   });
@@ -67,14 +66,74 @@ describe("declarative matcher compiler", () => {
     expectCode([spec], "REDOS_RISK");
   });
 
+  it.each([
+    "((?:[A-Za-z_]\\w*\\.)+)create\\s*\\(",
+    "^[a-z]+@([a-z]+\\.)+[a-z]+$",
+  ])("accepts a separated nested quantifier in %s", (source) => {
+    const spec = validSpec();
+    spec.patterns[0]!.regex.source = source;
+    spec.examples = [
+      source.startsWith("^")
+        ? "person@example.com"
+        : "client.chat.completions.create(",
+    ];
+
+    expect(compileDeclarativeMatchers([spec]).rejections).toEqual([]);
+  });
+
   it("rejects a glob that matches every file", () => {
     const spec = validSpec();
     spec.filePatterns = ["**"];
     expectCode([spec], "GLOB_BREADTH");
   });
 
+  it("rejects a path-traversing glob", () => {
+    const spec = validSpec();
+    spec.filePatterns = ["../../**/*.ts"];
+    expectCode([spec], "PATH_TRAVERSAL");
+  });
+
+  it.each(["\\b", ".", "(?=c)"])(
+    "rejects the match-explosion pattern %s",
+    (source) => {
+      const spec = validSpec();
+      spec.patterns[0]!.regex.source = source;
+      spec.examples = ["customCall(input)"];
+      expectCode([spec], "MATCH_EXPLOSION");
+    },
+  );
+
   it("rejects a slug collision within the spec set", () => {
-    expectCode([validSpec(), validSpec()], "SLUG_COLLISION");
+    const result = compileDeclarativeMatchers([validSpec(), validSpec()]);
+    expect(result.matchers).toHaveLength(1);
+    expect(result.rejections).toEqual([
+      expect.objectContaining({
+        slug: "custom-model-call",
+        code: "SLUG_COLLISION",
+      }),
+    ]);
+  });
+
+  it("keeps valid siblings when another spec is rejected", () => {
+    const bad = { ...validSpec(), slug: "bad-matcher", noiseTier: "extreme" };
+    const result = compileDeclarativeMatchers([validSpec(), bad]);
+
+    expect(result.matchers.map(({ slug }) => slug)).toEqual([
+      "custom-model-call",
+    ]);
+    expect(result.rejections).toEqual([
+      expect.objectContaining({ slug: "bad-matcher", code: "INVALID_SPEC" }),
+    ]);
+  });
+
+  it("reports every named rejection for one spec", () => {
+    const spec = validSpec();
+    spec.filePatterns = ["**"];
+    spec.patterns[0]!.regex.flags = "g";
+
+    expect(
+      compileDeclarativeMatchers([spec]).rejections.map(({ code }) => code),
+    ).toEqual(expect.arrayContaining(["GLOB_BREADTH", "INVALID_FLAGS"]));
   });
 
   it("rejects an example not covered by a declared pattern in schema refinement", () => {

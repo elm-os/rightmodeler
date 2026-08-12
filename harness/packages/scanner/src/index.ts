@@ -2,11 +2,12 @@ export {
   compileDeclarativeMatchers,
   declarativeMatcherSpecsSchema,
   declarativeMatcherSpecSchema,
-  DeclarativeMatcherError,
 } from "./declarative-matcher.js";
 export type {
   DeclarativeMatcher,
+  DeclarativeMatcherCompilation,
   DeclarativeMatcherErrorCode,
+  DeclarativeMatcherRejection,
   DeclarativeMatcherSpec,
 } from "./declarative-matcher.js";
 export { coveragePolicy, evaluateCoverage } from "./coverage.js";

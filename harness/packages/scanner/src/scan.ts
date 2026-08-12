@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 import {
   computeStepId,
@@ -52,21 +52,28 @@ function capabilityRequirements(candidate: CandidateMatch): string[] {
   return requirements;
 }
 
-export function scan(rootDir: string, registry: MatcherRegistry): StepRecord[] {
+export function scan(
+  rootDir: string,
+  registry: MatcherRegistry,
+  projectId: string,
+): StepRecord[] {
   const absoluteRoot = resolve(rootDir);
-  const projectId = basename(absoluteRoot);
   const records: StepRecord[] = [];
+  const matchers = registry.getAll();
 
   for (const absolutePath of sourceFiles(absoluteRoot)) {
     const normalizedPath = relative(absoluteRoot, absolutePath)
       .split(sep)
       .join("/");
+    const fileMatchers = matchers.filter((matcher) =>
+      matchesFilePatterns(normalizedPath, matcher.filePatterns),
+    );
+    if (fileMatchers.length === 0) continue;
     const content = readFileSync(absolutePath, "utf8").replaceAll("\r\n", "\n");
     const contentHash = createHash("sha256").update(content).digest("hex");
     const seen = new Set<string>();
 
-    for (const matcher of registry.getAll()) {
-      if (!matchesFilePatterns(normalizedPath, matcher.filePatterns)) continue;
+    for (const matcher of fileMatchers) {
       for (const candidate of matcher.match(content, normalizedPath)) {
         const key = candidateKey(candidate);
         if (seen.has(key)) continue;

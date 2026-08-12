@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -22,7 +22,7 @@ afterEach(async () => {
 
 describe("scan", () => {
   it("finds every planted call site with its capability hints", () => {
-    const records = scan(demoApp, createMatcherRegistry());
+    const records = scan(demoApp, createMatcherRegistry(), "demo-project");
 
     expect(records.map(({ callSite }) => callSite.matcherSlug).sort()).toEqual([
       "cfg-litellm-yaml",
@@ -96,17 +96,48 @@ describe("scan", () => {
     temporaryDirectories.push(root);
     await cp(demoApp, root, { recursive: true });
     const registry = createMatcherRegistry();
-    const before = scan(root, registry).find(
+    const before = scan(root, registry, "demo-project").find(
       ({ callSite }) => callSite.matcherSlug === "js-ai-sdk-generate-text",
     )!;
     const filePath = join(root, "src/summarize.ts");
     const content = await readFile(filePath, "utf8");
     await writeFile(filePath, `\n${content}`);
-    const after = scan(root, registry).find(
+    const after = scan(root, registry, "demo-project").find(
       ({ callSite }) => callSite.matcherSlug === "js-ai-sdk-generate-text",
     )!;
 
     expect(after.callSite.line).toBe(before.callSite.line + 1);
     expect(after.stepId).toBe(before.stepId);
+  });
+
+  it("keeps identity stable across differently named roots", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "rightmodeler-scanner-roots-"));
+    temporaryDirectories.push(parent);
+    const firstRoot = join(parent, "demo-app");
+    const secondRoot = join(parent, "demo-app-clone");
+    await Promise.all([
+      cp(demoApp, firstRoot, { recursive: true }),
+      cp(demoApp, secondRoot, { recursive: true }),
+    ]);
+    const registry = createMatcherRegistry();
+
+    const firstIds = scan(firstRoot, registry, "same-project").map(
+      ({ stepId }) => stepId,
+    );
+    const secondIds = scan(secondRoot, registry, "same-project").map(
+      ({ stepId }) => stepId,
+    );
+
+    expect(secondIds).toEqual(firstIds);
+  });
+
+  it("does not read files outside the registered file patterns", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-scanner-filter-"));
+    temporaryDirectories.push(root);
+    const binaryPath = join(root, "artifact.bin");
+    await writeFile(binaryPath, "unreadable");
+    await chmod(binaryPath, 0o000);
+
+    expect(scan(root, createMatcherRegistry(), "demo-project")).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
 export type DetectedLanguage = "javascript" | "python";
@@ -57,26 +57,36 @@ function manifests(rootDir: string): string[] {
   return found.sort();
 }
 
-function packageDependencyNames(value: unknown): string[] {
+function packageDependencyNames(value: unknown, field?: string): string[] {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return [];
+  if (field !== undefined) {
+    return packageDependencyNames(
+      Object.getOwnPropertyDescriptor(value, field)?.value,
+    );
+  }
   return Object.keys(value);
 }
 
-function pythonManifestHas(content: string, dependency: string): boolean {
-  const escaped = dependency.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(
-    `(?:^|["'\\s])${escaped}(?=["'\\s=<>!~;,\\[]|$)`,
-    "im",
-  ).test(content);
+function pythonManifestDependencies(content: string): Set<string> {
+  const withoutComments = content
+    .split("\n")
+    .map((line) => line.replace(/#.*/, ""))
+    .join("\n");
+  const names = new Set<string>();
+  const pattern =
+    /(?:^|["'\s])([A-Za-z0-9][A-Za-z0-9._-]*)(?=\s*(?:[<>=!~;,\["']|$))/gim;
+  for (const match of withoutComments.matchAll(pattern)) {
+    const name = match[1]!.toLowerCase();
+    names.add(/^langchain[-_]/.test(name) ? "langchain" : name);
+  }
+  return names;
 }
 
 export function detectTech(rootDir: string): DetectedTech {
   const absoluteRoot = resolve(rootDir);
   const dependencies: DetectedAiDependency[] = [];
   const languages = new Set<DetectedLanguage>();
-
-  if (!existsSync(absoluteRoot)) return { languages: [], aiDependencies: [] };
 
   for (const manifest of manifests(absoluteRoot)) {
     const manifestPath = relative(absoluteRoot, manifest).split(sep).join("/");
@@ -85,19 +95,11 @@ export function detectTech(rootDir: string): DetectedTech {
     if (name === "package.json") {
       languages.add("javascript");
       const parsed: unknown = JSON.parse(content);
-      if (
-        typeof parsed !== "object" ||
-        parsed === null ||
-        Array.isArray(parsed)
-      ) {
-        throw new Error(`Expected an object in ${manifestPath}`);
-      }
-      const packageJson = parsed as Record<string, unknown>;
-      const names = new Set([
-        ...packageDependencyNames(packageJson.dependencies),
-        ...packageDependencyNames(packageJson.devDependencies),
-        ...packageDependencyNames(packageJson.peerDependencies),
-      ]);
+      const names = new Set(
+        ["dependencies", "devDependencies", "peerDependencies"].flatMap(
+          (field) => packageDependencyNames(parsed, field),
+        ),
+      );
       for (const dependency of [...nodeDependencies].sort()) {
         if (names.has(dependency)) {
           dependencies.push({
@@ -111,8 +113,9 @@ export function detectTech(rootDir: string): DetectedTech {
     }
 
     languages.add("python");
+    const names = pythonManifestDependencies(content);
     for (const dependency of pythonDependencies) {
-      if (pythonManifestHas(content, dependency)) {
+      if (names.has(dependency)) {
         dependencies.push({
           language: "python",
           name: dependency,

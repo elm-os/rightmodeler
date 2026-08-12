@@ -65,11 +65,7 @@ export function evaluateCoverage(input: {
       languageFiles.length === 0 ? 0 : matchedFiles.size / languageFiles.length;
 
     if (
-      input.stepRecords.every(
-        (record) =>
-          !fileUniverse.has(record.callSite.path) ||
-          fileLanguage(record.callSite.path) !== language,
-      ) &&
+      matchedFiles.size === 0 &&
       coveragePolicy.aiDependencyZeroMatchIsFailure
     ) {
       failures.push({

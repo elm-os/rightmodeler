@@ -7,30 +7,43 @@ interface CallMatcherOptions {
   filePatterns: readonly string[];
   examples: readonly string[];
   pattern: RegExp;
+  fileAnchor?: RegExp;
   label: string;
   needsStructuredOutput?: boolean;
   needsTools?: boolean;
 }
 
-function maskComments(content: string, includeHashComments: boolean): string {
+function maskNonCode(content: string, includeHashComments: boolean): string {
   let masked = "";
-  let quote: string | null = null;
-  for (let index = 0; index < content.length; index += 1) {
+  let index = 0;
+  while (index < content.length) {
     const character = content[index]!;
     const next = content[index + 1];
-    if (quote !== null) {
-      masked += character;
-      if (character === "\\") {
-        masked += next ?? "";
-        index += 1;
-      } else if (character === quote) {
-        quote = null;
-      }
-      continue;
-    }
     if (character === '"' || character === "'" || character === "`") {
-      quote = character;
-      masked += character;
+      const delimiterLength =
+        includeHashComments &&
+        character !== "`" &&
+        content[index + 1] === character &&
+        content[index + 2] === character
+          ? 3
+          : 1;
+      const delimiter = character.repeat(delimiterLength);
+      masked += " ".repeat(delimiterLength);
+      index += delimiterLength;
+      while (index < content.length) {
+        if (content.startsWith(delimiter, index)) {
+          masked += " ".repeat(delimiterLength);
+          index += delimiterLength;
+          break;
+        }
+        const stringCharacter = content[index]!;
+        masked += stringCharacter === "\n" ? "\n" : " ";
+        index += 1;
+        if (stringCharacter === "\\" && index < content.length) {
+          masked += content[index] === "\n" ? "\n" : " ";
+          index += 1;
+        }
+      }
       continue;
     }
     if (character === "/" && next === "/") {
@@ -38,7 +51,6 @@ function maskComments(content: string, includeHashComments: boolean): string {
         masked += " ";
         index += 1;
       }
-      masked += "\n";
       continue;
     }
     if (character === "/" && next === "*") {
@@ -53,7 +65,7 @@ function maskComments(content: string, includeHashComments: boolean): string {
       }
       if (index < content.length) {
         masked += "  ";
-        index += 1;
+        index += 2;
       }
       continue;
     }
@@ -62,10 +74,10 @@ function maskComments(content: string, includeHashComments: boolean): string {
         masked += " ";
         index += 1;
       }
-      masked += "\n";
       continue;
     }
     masked += character;
+    index += 1;
   }
   return masked;
 }
@@ -215,7 +227,13 @@ export function createCallMatcher(options: CallMatcherOptions): Matcher {
     filePatterns: options.filePatterns,
     examples: options.examples,
     match(content, filePath) {
-      const searchable = maskComments(content, filePath.endsWith(".py"));
+      if (
+        options.fileAnchor !== undefined &&
+        !options.fileAnchor.test(content)
+      ) {
+        return [];
+      }
+      const searchable = maskNonCode(content, filePath.endsWith(".py"));
       const flags = options.pattern.flags.replaceAll("g", "");
       const pattern = new RegExp(options.pattern.source, `${flags}g`);
       const matches: CandidateMatch[] = [];

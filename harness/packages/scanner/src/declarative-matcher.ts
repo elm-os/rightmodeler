@@ -3,36 +3,22 @@ import { z } from "zod";
 import { candidateFromText, extractCallText } from "./matchers/utils.js";
 import type { CandidateMatch, Matcher } from "./types.js";
 
-export type DeclarativeMatcherErrorCode =
-  | "INVALID_REGEX"
-  | "INVALID_FLAGS"
-  | "EMPTY_STRING_MATCH"
-  | "REDOS_RISK"
-  | "GLOB_BREADTH"
-  | "SLUG_COLLISION"
-  | "EXAMPLE_UNMATCHED"
-  | "MISSING_SURFACE_IDS";
-
-export class DeclarativeMatcherError extends Error {
-  readonly code: DeclarativeMatcherErrorCode;
-
-  constructor(code: DeclarativeMatcherErrorCode, message: string) {
-    super(message);
-    this.name = "DeclarativeMatcherError";
-    this.code = code;
-  }
-}
-
-const errorCodes = new Set<DeclarativeMatcherErrorCode>([
+const declarativeMatcherErrorCodes = [
+  "INVALID_SPEC",
   "INVALID_REGEX",
   "INVALID_FLAGS",
   "EMPTY_STRING_MATCH",
   "REDOS_RISK",
   "GLOB_BREADTH",
+  "PATH_TRAVERSAL",
+  "MATCH_EXPLOSION",
   "SLUG_COLLISION",
   "EXAMPLE_UNMATCHED",
   "MISSING_SURFACE_IDS",
-]);
+] as const;
+
+export type DeclarativeMatcherErrorCode =
+  (typeof declarativeMatcherErrorCodes)[number];
 
 function issue(
   context: z.RefinementCtx,
@@ -43,7 +29,8 @@ function issue(
   context.addIssue({
     code: "custom",
     path,
-    message: `[${code}] ${message}`,
+    message,
+    params: { code },
   });
 }
 
@@ -74,9 +61,22 @@ function parsedRegex(value: z.infer<typeof regexValueSchema>): ParsedRegex {
 }
 
 function hasRedosRisk(source: string): boolean {
+  const separatedQuantifier =
+    /(\[[^\]]+\]|\\[wWdDsS]|\\.|[A-Za-z0-9_])(\*|\+|\{\d+(?:,\d*)?\})(?=(\\[^A-Za-z0-9]|[A-Za-z0-9_]))/g;
+  const simplified = source.replace(
+    separatedQuantifier,
+    (quantifiedAtom, atom: string, _quantifier: string, boundary: string) => {
+      const boundaryCharacter = boundary.startsWith("\\")
+        ? boundary.slice(1)
+        : boundary;
+      return new RegExp(`^(?:${atom})$`).test(boundaryCharacter)
+        ? quantifiedAtom
+        : atom;
+    },
+  );
   const nestedQuantifier =
     /\((?:[^()]|\([^()]*\))*?(?:[*+]|\{\d+(?:,\d*)?\})(?:[^()]|\([^()]*\))*\)\s*(?:[*+]|\{\d+(?:,\d*)?\})/;
-  if (nestedQuantifier.test(source.replace(/\s+/g, ""))) return true;
+  if (nestedQuantifier.test(simplified.replace(/\s+/g, ""))) return true;
 
   for (const match of source.matchAll(
     /\((?:\?:)?([^()]*(?:\|[^()]*)+)\)\s*(?:[*+]|\{\d+(?:,\d*)?\})/g,
@@ -96,6 +96,26 @@ function hasRedosRisk(source: string): boolean {
           return true;
         }
       }
+    }
+  }
+  return false;
+}
+
+const matchExplosionSample = Array.from(
+  { length: 64 },
+  (_, index) =>
+    `const client${index} = createClient(); client${index}.chat.completions.create({ model: "sample" });`,
+).join("\n");
+const matchExplosionCandidatesPerKilobyte = 25;
+
+function hasMatchExplosion(regex: RegExp): boolean {
+  const probe = new RegExp(regex.source, `${regex.flags}g`);
+  const kilobytes = Buffer.byteLength(matchExplosionSample, "utf8") / 1024;
+  let candidates = 0;
+  for (const _match of matchExplosionSample.matchAll(probe)) {
+    candidates += 1;
+    if (candidates / kilobytes > matchExplosionCandidatesPerKilobyte) {
+      return true;
     }
   }
   return false;
@@ -126,10 +146,18 @@ export const declarativeMatcherSpecSchema = z
     filePatterns: z.array(z.string().trim().min(1)).min(1),
     patterns: z.array(patternSchema).min(1),
     examples: z.array(z.string().min(1)).min(1),
-    closesSurfaceIds: z.array(z.string().trim().min(1)).optional(),
+    closesSurfaceIds: z.array(z.string().trim().min(1)).min(1),
   })
   .superRefine((spec, context) => {
     for (const [index, filePattern] of spec.filePatterns.entries()) {
+      if (filePattern.includes("..")) {
+        issue(
+          context,
+          "PATH_TRAVERSAL",
+          ["filePatterns", index],
+          "file pattern must not contain path traversal",
+        );
+      }
       if (isBroadGlob(filePattern)) {
         issue(
           context,
@@ -139,18 +167,6 @@ export const declarativeMatcherSpecSchema = z
         );
       }
     }
-    if (
-      spec.closesSurfaceIds === undefined ||
-      spec.closesSurfaceIds.length === 0
-    ) {
-      issue(
-        context,
-        "MISSING_SURFACE_IDS",
-        ["closesSurfaceIds"],
-        "at least one coverage surface identifier is required",
-      );
-    }
-
     const compiled: RegExp[] = [];
     for (const [index, pattern] of spec.patterns.entries()) {
       const { source, flags } = parsedRegex(pattern.regex);
@@ -190,6 +206,15 @@ export const declarativeMatcherSpecSchema = z
           "REDOS_RISK",
           ["patterns", index, "regex"],
           "regular expression has a risky quantified shape",
+        );
+        continue;
+      }
+      if (hasMatchExplosion(regex)) {
+        issue(
+          context,
+          "MATCH_EXPLOSION",
+          ["patterns", index, "regex"],
+          "regular expression produces more than 25 candidates per KB",
         );
         continue;
       }
@@ -233,20 +258,40 @@ export interface DeclarativeMatcher extends Matcher {
   readonly closesSurfaceIds: readonly string[];
 }
 
-function parseSpecs(inputs: readonly unknown[]): DeclarativeMatcherSpec[] {
-  try {
-    return declarativeMatcherSpecsSchema.parse(inputs);
-  } catch (error) {
-    if (!(error instanceof z.ZodError)) throw error;
-    const message =
-      error.issues[0]?.message ?? "declarative matcher is invalid";
-    const match = /^\[([A-Z_]+)\]\s*(.*)$/.exec(message);
-    const code = match?.[1] as DeclarativeMatcherErrorCode | undefined;
-    if (code !== undefined && errorCodes.has(code)) {
-      throw new DeclarativeMatcherError(code, match?.[2] ?? message);
-    }
-    throw error;
+export interface DeclarativeMatcherRejection {
+  readonly slug: string;
+  readonly code: DeclarativeMatcherErrorCode;
+  readonly message: string;
+}
+
+export interface DeclarativeMatcherCompilation {
+  readonly matchers: readonly DeclarativeMatcher[];
+  readonly rejections: readonly DeclarativeMatcherRejection[];
+}
+
+function inputSlug(input: unknown): string {
+  if (typeof input !== "object" || input === null || !("slug" in input)) {
+    return "<invalid>";
   }
+  return typeof input.slug === "string" && input.slug.length > 0
+    ? input.slug
+    : "<invalid>";
+}
+
+function isErrorCode(value: unknown): value is DeclarativeMatcherErrorCode {
+  return declarativeMatcherErrorCodes.some((code) => code === value);
+}
+
+function rejectionCode(
+  issueValue: z.ZodError["issues"][number],
+): DeclarativeMatcherErrorCode {
+  if (issueValue.code === "custom" && isErrorCode(issueValue.params?.code)) {
+    return issueValue.params.code;
+  }
+  if (issueValue.path[0] === "closesSurfaceIds") {
+    return "MISSING_SURFACE_IDS";
+  }
+  return "INVALID_SPEC";
 }
 
 function calleeFromMatch(match: string, fallback: string): string {
@@ -258,8 +303,34 @@ function calleeFromMatch(match: string, fallback: string): string {
 
 export function compileDeclarativeMatchers(
   inputs: readonly unknown[],
-): DeclarativeMatcher[] {
-  return parseSpecs(inputs).map((spec) => {
+): DeclarativeMatcherCompilation {
+  const matchers: DeclarativeMatcher[] = [];
+  const rejections: DeclarativeMatcherRejection[] = [];
+  const seen = new Set<string>();
+
+  for (const input of inputs) {
+    const parsed = declarativeMatcherSpecSchema.safeParse(input);
+    if (!parsed.success) {
+      const slug = inputSlug(input);
+      rejections.push(
+        ...parsed.error.issues.map((issueValue) => ({
+          slug,
+          code: rejectionCode(issueValue),
+          message: issueValue.message,
+        })),
+      );
+      continue;
+    }
+    const spec = parsed.data;
+    if (seen.has(spec.slug)) {
+      rejections.push({
+        slug: spec.slug,
+        code: "SLUG_COLLISION",
+        message: `duplicate matcher slug ${spec.slug}`,
+      });
+      continue;
+    }
+    seen.add(spec.slug);
     const patterns = spec.patterns.map((pattern) => {
       const { source, flags } = parsedRegex(pattern.regex);
       return {
@@ -267,17 +338,16 @@ export function compileDeclarativeMatchers(
         label: pattern.label,
       };
     });
-    return {
+    matchers.push({
       slug: spec.slug,
       description: spec.description,
       noiseTier: spec.noiseTier,
       filePatterns: [...spec.filePatterns],
       examples: [...spec.examples],
-      closesSurfaceIds: [...spec.closesSurfaceIds!],
+      closesSurfaceIds: [...spec.closesSurfaceIds],
       match(content): CandidateMatch[] {
         const matches: CandidateMatch[] = [];
         for (const pattern of patterns) {
-          pattern.regex.lastIndex = 0;
           for (const match of content.matchAll(pattern.regex)) {
             const position = match.index;
             const matchedText = extractCallText(content, position);
@@ -295,6 +365,8 @@ export function compileDeclarativeMatchers(
         }
         return matches;
       },
-    };
-  });
+    });
+  }
+
+  return { matchers, rejections };
 }
