@@ -1,0 +1,469 @@
+import type { JsonValue } from "@rightmodeler/core";
+
+export interface ModelPricing {
+  input: number;
+  output: number;
+}
+
+export interface ModelCatalogEntry {
+  id: string;
+  family: string;
+  contextLength: number;
+  pricing: ModelPricing;
+  supportsTools: boolean;
+  supportsStructuredOutput: boolean;
+}
+
+export type ChatMessage = Record<string, JsonValue>;
+
+export interface ChatRequest {
+  model: string;
+  messages: readonly ChatMessage[];
+  temperature?: number;
+  maxOutputTokens?: number;
+  tools?: JsonValue;
+  toolChoice?: JsonValue;
+  responseFormat?: JsonValue;
+  headers?: Readonly<Record<string, string>>;
+  onAttempt?: (attempt: ProviderAttempt) => void | Promise<void>;
+}
+
+export interface ChatResponse {
+  content: string;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+  costUsd: number;
+  costIsEstimate: boolean;
+}
+
+export interface ProviderAttempt extends ChatResponse {
+  outcome: "completed" | "provider_error";
+}
+
+export interface ProviderClient {
+  listModels(): Promise<ModelCatalogEntry[]>;
+  chat(request: ChatRequest): Promise<ChatResponse>;
+}
+
+export interface CreateProviderOptions {
+  baseUrl: string;
+  apiKeyEnv: string;
+  maxConcurrency?: number;
+}
+
+export class BlockedError extends Error {
+  readonly kind = "rate-limit" as const;
+
+  constructor(message = "Provider retries exhausted due to rate limiting") {
+    super(message);
+    this.name = "BlockedError";
+  }
+}
+
+class ProviderHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, body: string) {
+    super(`Provider request failed with HTTP ${status}: ${body}`);
+    this.name = "ProviderHttpError";
+    this.status = status;
+  }
+}
+
+export class ProviderConfigurationError extends Error {}
+
+class AdaptiveLimiter {
+  private readonly ceiling: number;
+  private cap: number;
+  private active = 0;
+  private successStreak = 0;
+  private readonly waiters: Array<() => void> = [];
+
+  constructor(ceiling: number) {
+    if (!Number.isSafeInteger(ceiling) || ceiling < 1) {
+      throw new Error("maxConcurrency must be a positive integer");
+    }
+    this.ceiling = ceiling;
+    this.cap = ceiling;
+  }
+
+  async run<T>(operation: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await operation();
+    } finally {
+      this.active -= 1;
+      this.drain();
+    }
+  }
+
+  rateLimited(): void {
+    this.cap = Math.max(1, Math.floor(this.cap / 2));
+    this.successStreak = 0;
+  }
+
+  failed(): void {
+    this.successStreak = 0;
+  }
+
+  succeeded(): void {
+    if (this.cap >= this.ceiling) return;
+    this.successStreak += 1;
+    if (this.successStreak >= this.cap) {
+      this.cap += 1;
+      this.successStreak = 0;
+      this.drain();
+    }
+  }
+
+  private acquire(): Promise<void> {
+    if (this.active < this.cap) {
+      this.active += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.waiters.push(() => {
+        this.active += 1;
+        resolve();
+      });
+    });
+  }
+
+  private drain(): void {
+    while (this.active < this.cap) {
+      const next = this.waiters.shift();
+      if (next === undefined) return;
+      next();
+    }
+  }
+}
+
+interface PhysicalResponse {
+  response: Response;
+  apiKey: string;
+}
+
+const retryAttempts = 5;
+
+function objectValue(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function nonnegativeNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative number`);
+  }
+  return value;
+}
+
+function tokenCount(value: unknown, label: string): number {
+  const count = nonnegativeNumber(value, label);
+  if (!Number.isSafeInteger(count)) {
+    throw new Error(`${label} must be an integer`);
+  }
+  return count;
+}
+
+function price(value: unknown, label: string): number {
+  if (value === undefined || value === null || value === "") return 0;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return nonnegativeNumber(parsed, label);
+}
+
+function redact(value: string, apiKey: string): string {
+  return apiKey.length === 0 ? value : value.split(apiKey).join("[redacted]");
+}
+
+function retryDelay(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter !== null) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+    const date = Date.parse(retryAfter);
+    if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+  }
+  const backoff = 100 * 2 ** (attempt - 1);
+  return backoff + Math.random() * backoff * 0.25;
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function isRetryable(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+function normalizeModel(value: unknown, index: number): ModelCatalogEntry {
+  const model = objectValue(value, `models[${index}]`);
+  if (typeof model.id !== "string" || model.id.length === 0) {
+    throw new Error(`models[${index}].id must be a non-empty string`);
+  }
+  const rawPricing = objectValue(
+    model.pricing ?? {},
+    `models[${index}].pricing`,
+  );
+  const capabilities = objectValue(
+    model.capabilities ?? {},
+    `models[${index}].capabilities`,
+  );
+  const supported = Array.isArray(model.supported_parameters)
+    ? model.supported_parameters
+    : [];
+  if (!supported.every((parameter) => typeof parameter === "string")) {
+    throw new Error(
+      `models[${index}].supported_parameters must contain strings`,
+    );
+  }
+  const rawContext =
+    model.context_length ??
+    model.context_window ??
+    model.max_context_tokens ??
+    0;
+  const contextLength = tokenCount(
+    rawContext,
+    `models[${index}].context_length`,
+  );
+
+  return {
+    id: model.id,
+    family: model.id.split("/", 1)[0]!,
+    contextLength,
+    pricing: {
+      input: price(
+        rawPricing.prompt ?? rawPricing.input ?? rawPricing.input_per_token,
+        `models[${index}].pricing.input`,
+      ),
+      output: price(
+        rawPricing.completion ??
+          rawPricing.output ??
+          rawPricing.output_per_token,
+        `models[${index}].pricing.output`,
+      ),
+    },
+    supportsTools: supported.includes("tools") || capabilities.tools === true,
+    supportsStructuredOutput:
+      supported.includes("structured_outputs") ||
+      capabilities.structured_outputs === true ||
+      capabilities.structured_output === true ||
+      capabilities.structuredOutput === true,
+  };
+}
+
+function normalizeUsage(value: unknown): ChatResponse["usage"] {
+  const usage = objectValue(value, "chat response usage");
+  return {
+    inputTokens: tokenCount(usage.prompt_tokens, "usage.prompt_tokens"),
+    outputTokens: tokenCount(
+      usage.completion_tokens,
+      "usage.completion_tokens",
+    ),
+  };
+}
+
+export function createProvider(options: CreateProviderOptions): ProviderClient {
+  const baseUrl = options.baseUrl.replace(/\/$/, "");
+  const limiter = new AdaptiveLimiter(options.maxConcurrency ?? 8);
+  let catalog: ModelCatalogEntry[] | undefined;
+  let catalogRequest: Promise<ModelCatalogEntry[]> | undefined;
+
+  function apiKey(): string {
+    const value = process.env[options.apiKeyEnv];
+    if (value === undefined || value.length === 0) {
+      throw new ProviderConfigurationError(
+        `Provider API key environment variable is not set: ${options.apiKeyEnv}`,
+      );
+    }
+    return value;
+  }
+
+  async function physicalFetch(
+    path: string,
+    init: RequestInit,
+  ): Promise<PhysicalResponse> {
+    const key = apiKey();
+    const headers = new Headers(init.headers);
+    headers.set("authorization", `Bearer ${key}`);
+    return limiter.run(async () => {
+      try {
+        const response = await fetch(`${baseUrl}${path}`, {
+          ...init,
+          headers,
+        });
+        if (response.status === 429) limiter.rateLimited();
+        else if (response.ok) limiter.succeeded();
+        else limiter.failed();
+        return { response, apiKey: key };
+      } catch (error) {
+        limiter.failed();
+        throw error;
+      }
+    });
+  }
+
+  async function withRetries(
+    path: string,
+    init: RequestInit,
+    onRejectedAttempt?: (attempt: ProviderAttempt) => void | Promise<void>,
+  ): Promise<PhysicalResponse> {
+    for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
+      let result: PhysicalResponse;
+      try {
+        result = await physicalFetch(path, init);
+      } catch (error) {
+        if (error instanceof ProviderConfigurationError) throw error;
+        await onRejectedAttempt?.({
+          outcome: "provider_error",
+          content: "",
+          usage: { inputTokens: 0, outputTokens: 0 },
+          costUsd: 0,
+          costIsEstimate: true,
+        });
+        throw error;
+      }
+      if (result.response.ok) {
+        return result;
+      }
+
+      await onRejectedAttempt?.({
+        outcome: "provider_error",
+        content: "",
+        usage: { inputTokens: 0, outputTokens: 0 },
+        costUsd: 0,
+        costIsEstimate: true,
+      });
+
+      if (isRetryable(result.response.status)) {
+        if (attempt === retryAttempts) {
+          throw new BlockedError(
+            `Provider retries exhausted after HTTP ${result.response.status}`,
+          );
+        }
+        await result.response.body?.cancel();
+        await sleep(retryDelay(result.response, attempt));
+        continue;
+      }
+
+      const body = redact(await result.response.text(), result.apiKey);
+      throw new ProviderHttpError(result.response.status, body.slice(0, 300));
+    }
+    throw new BlockedError();
+  }
+
+  async function fetchCatalog(): Promise<ModelCatalogEntry[]> {
+    const { response, apiKey: requestKey } = await withRetries("/models", {
+      method: "GET",
+    });
+    let value: unknown;
+    try {
+      value = JSON.parse(await response.text());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Invalid model catalog JSON: ${redact(message, requestKey)}`,
+      );
+    }
+    const envelope = objectValue(value, "model catalog");
+    if (!Array.isArray(envelope.data)) {
+      throw new Error("model catalog data must be an array");
+    }
+    catalog = envelope.data.map(normalizeModel);
+    return catalog;
+  }
+
+  function listModels(): Promise<ModelCatalogEntry[]> {
+    if (catalog !== undefined) return Promise.resolve(catalog);
+    if (catalogRequest !== undefined) return catalogRequest;
+    catalogRequest = fetchCatalog().finally(() => {
+      catalogRequest = undefined;
+    });
+    return catalogRequest;
+  }
+
+  async function chat(request: ChatRequest): Promise<ChatResponse> {
+    const models = await listModels();
+    const body = {
+      model: request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      max_tokens: request.maxOutputTokens,
+      tools: request.tools,
+      tool_choice: request.toolChoice,
+      response_format: request.responseFormat,
+      stream: false,
+    };
+    const { response, apiKey: requestKey } = await withRetries(
+      "/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          ...request.headers,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+      request.onAttempt,
+    );
+
+    let normalized: ChatResponse;
+    try {
+      const value: unknown = JSON.parse(await response.text());
+      const envelope = objectValue(value, "chat response");
+      if (!Array.isArray(envelope.choices) || envelope.choices.length === 0) {
+        throw new Error("chat response choices must be a non-empty array");
+      }
+      const choice = objectValue(envelope.choices[0], "chat response choice");
+      const message = objectValue(choice.message, "chat response message");
+      if (typeof message.content !== "string" && message.content !== null) {
+        throw new Error(
+          "chat response message content must be a string or null",
+        );
+      }
+      const usage = normalizeUsage(envelope.usage);
+      const usageObject = objectValue(envelope.usage, "chat response usage");
+      const reportedCost = usageObject.cost;
+      let costUsd: number;
+      let costIsEstimate: boolean;
+      if (reportedCost !== undefined && reportedCost !== null) {
+        costUsd = price(reportedCost, "usage.cost");
+        costIsEstimate = false;
+      } else {
+        const model = models.find((item) => item.id === request.model);
+        if (model === undefined) {
+          throw new Error(
+            `Requested model is absent from the catalog: ${request.model}`,
+          );
+        }
+        costUsd =
+          usage.inputTokens * model.pricing.input +
+          usage.outputTokens * model.pricing.output;
+        costIsEstimate = true;
+      }
+      normalized = {
+        content: message.content ?? "",
+        usage,
+        costUsd,
+        costIsEstimate,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await request.onAttempt?.({
+        outcome: "provider_error",
+        content: "",
+        usage: { inputTokens: 0, outputTokens: 0 },
+        costUsd: 0,
+        costIsEstimate: true,
+      });
+      throw new Error(`Invalid chat response: ${redact(message, requestKey)}`);
+    }
+    await request.onAttempt?.({ outcome: "completed", ...normalized });
+    return normalized;
+  }
+
+  return { listModels, chat };
+}
