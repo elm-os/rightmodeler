@@ -101,7 +101,7 @@ describe("trace adapters", () => {
     const runs = otelGenAiAdapter.adapt(records);
     const trajectory = runs.find((run) => run.traceId === "trace-trajectory-a");
 
-    expect(runs).toHaveLength(12);
+    expect(runs).toHaveLength(15);
     expect(trajectory?.steps).toHaveLength(2);
     expect(trajectory?.steps.map((step) => step.stepIndex)).toEqual([0, 1]);
     expect(trajectory?.steps.map((step) => step.trajectoryId)).toEqual([
@@ -232,8 +232,12 @@ describe("corpus", () => {
     expect(second.corpusVersionId).toBe(first.corpusVersionId);
     expect(second.cases).toEqual(first.cases);
     expect(first.strata).toEqual([
-      { family: "summarize", corpusShare: 0.5, trafficShare: 0.5 },
-      { family: "support", corpusShare: 0.5, trafficShare: 0.5 },
+      {
+        family: "summarize",
+        corpusShare: 10 / 17,
+        trafficShare: 10 / 17,
+      },
+      { family: "support", corpusShare: 7 / 17, trafficShare: 7 / 17 },
     ]);
     expect(
       first.cases.every(

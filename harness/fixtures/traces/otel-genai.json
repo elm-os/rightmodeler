@@ -620,5 +620,146 @@
       "gen_ai.usage.output_tokens": 17,
       "rightmodeler.accepted": true
     }
+  },
+  {
+    "traceId": "trace-summarize-06",
+    "startTimeUnixNano": "1500",
+    "span_id": "span-summarize-06",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The library extended weekend hours after Saturday attendance doubled during the spring trial."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The library extended its weekend hours. Saturday attendance doubled during the spring trial."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 30,
+      "gen_ai.usage.output_tokens": 19,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-07",
+    "startTimeUnixNano": "1600",
+    "span_id": "span-summarize-07",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "A school solar project generated 18 percent more electricity than forecast in its first quarter."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The school solar project beat its forecast in the first quarter. It generated 18 percent more electricity than expected."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 22,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-08",
+    "startTimeUnixNano": "1700",
+    "span_id": "span-summarize-08",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The park planted 75 native trees along the creek to reduce erosion before the rainy season."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The park planted 75 native trees beside the creek. The work aims to reduce erosion before the rainy season."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 30,
+      "gen_ai.usage.output_tokens": 21,
+      "rightmodeler.accepted": true
+    }
   }
 ]

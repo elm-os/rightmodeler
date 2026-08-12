@@ -6,14 +6,22 @@
   "bin": {
     "rightmodeler": "./dist/cli.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @rightmodeler/scanner build && pnpm --filter @rightmodeler/kernel build && pnpm --filter @rightmodeler/replay build && tsc -p tsconfig.json",
     "check-types": "tsc --noEmit",
-    "check": "tsc --noEmit && vitest run"
+    "check": "pnpm run build && tsc --noEmit && vitest run"
   },
   "dependencies": {
     "@rightmodeler/core": "workspace:*",
     "@rightmodeler/kernel": "workspace:*",
+    "@rightmodeler/replay": "workspace:*",
+    "@rightmodeler/scanner": "workspace:*",
     "commander": "^14",
     "zod": "^4"
   },
