@@ -14,10 +14,12 @@
     "check": "tsc --noEmit && vitest run"
   },
   "dependencies": {
+    "canonicalize": "^3.0.0",
     "zod": "^4"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "fast-check": "^4.9.0",
     "typescript": "^5",
     "vitest": "^3"
   }

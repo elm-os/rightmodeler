@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { corePlaceholder } from "./index.js";
+import {
+  executionSchema,
+  FsStore,
+  PluginRegistry,
+  stepKey,
+  stepRecordSchema,
+} from "./index.js";
 
 describe("core package", () => {
-  it("exports its placeholder", () => {
-    expect(corePlaceholder).toBe("core");
+  it("exports the foundation contracts", () => {
+    expect(executionSchema).toBeDefined();
+    expect(stepRecordSchema).toBeDefined();
+    expect(FsStore).toBeDefined();
+    expect(PluginRegistry).toBeDefined();
+    expect(stepKey("project", "step")).toBe("project/steps/step.json");
   });
 });
