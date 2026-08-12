@@ -55,6 +55,19 @@ export async function startStubProvider({ port }) {
     if (request.method === "POST" && request.url === "/v1/chat/completions") {
       hitCount += 1;
       const hitHeaders = { "x-stub-hit-count": String(hitCount) };
+      if (request.headers["x-stub-echo-auth"] !== undefined) {
+        json(
+          response,
+          400,
+          {
+            error: {
+              message: `Received authorization: ${request.headers.authorization ?? "missing"}`,
+            },
+          },
+          hitHeaders,
+        );
+        return;
+      }
       const rateLimitKey = request.headers["x-stub-429-once"];
       if (
         typeof rateLimitKey === "string" &&

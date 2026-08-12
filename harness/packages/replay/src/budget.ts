@@ -45,14 +45,22 @@ export interface CreateBudgetOptions {
 export class BudgetRefusalError extends Error {
   readonly requiredCapUsd: number;
   readonly authorizedTotalUsd: number;
+  readonly causedByReservations: boolean;
 
-  constructor(requiredCapUsd: number, authorizedTotalUsd: number) {
+  constructor(
+    requiredCapUsd: number,
+    authorizedTotalUsd: number,
+    causedByReservations = false,
+  ) {
     super(
-      `Budget cap is $${formatUsd(authorizedTotalUsd)}; raise it to at least $${formatUsd(requiredCapUsd)} to start this execution`,
+      causedByReservations
+        ? "Budget capacity is reserved by another in-flight execution"
+        : `Budget cap is $${formatUsd(authorizedTotalUsd)}; raise it to at least $${formatUsd(requiredCapUsd)} to start this execution`,
     );
     this.name = "BudgetRefusalError";
     this.requiredCapUsd = requiredCapUsd;
     this.authorizedTotalUsd = authorizedTotalUsd;
+    this.causedByReservations = causedByReservations;
   }
 }
 
@@ -77,41 +85,7 @@ function encode(ledger: BudgetLedger): Buffer {
 }
 
 function decode(body: Uint8Array): BudgetLedger {
-  const value: unknown = JSON.parse(Buffer.from(body).toString("utf8"));
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Budget ledger must be an object");
-  }
-  const ledger = value as Record<string, unknown>;
-  if (
-    (ledger.authorizedTotalUsd !== undefined &&
-      (typeof ledger.authorizedTotalUsd !== "number" ||
-        !Number.isFinite(ledger.authorizedTotalUsd) ||
-        ledger.authorizedTotalUsd < 0)) ||
-    typeof ledger.spentUsd !== "number" ||
-    !Number.isFinite(ledger.spentUsd) ||
-    ledger.spentUsd < 0 ||
-    typeof ledger.reservations !== "object" ||
-    ledger.reservations === null ||
-    Array.isArray(ledger.reservations)
-  ) {
-    throw new Error("Budget ledger is invalid");
-  }
-  const reservations = ledger.reservations as Record<string, unknown>;
-  for (const [reservationId, amount] of Object.entries(reservations)) {
-    if (
-      reservationId.length === 0 ||
-      typeof amount !== "number" ||
-      !Number.isFinite(amount) ||
-      amount < 0
-    ) {
-      throw new Error("Budget ledger contains an invalid reservation");
-    }
-  }
-  return {
-    authorizedTotalUsd: ledger.authorizedTotalUsd as number | undefined,
-    spentUsd: ledger.spentUsd,
-    reservations: reservations as Record<string, number>,
-  };
+  return JSON.parse(Buffer.from(body).toString("utf8")) as BudgetLedger;
 }
 
 function reservedTotal(ledger: BudgetLedger): number {
@@ -140,10 +114,10 @@ export function createBudget(options: CreateBudgetOptions): Budget {
         fenceToken: 0,
       };
     }
-    const ledger = decode(entry.body);
-    if (ledger.authorizedTotalUsd !== options.authorizedTotalUsd) {
-      throw new Error("Configured budget cap does not match the stored ledger");
-    }
+    const ledger = {
+      ...decode(entry.body),
+      authorizedTotalUsd: options.authorizedTotalUsd,
+    };
     return { ledger, version: entry.version, fenceToken: entry.fenceToken };
   }
 
@@ -161,15 +135,17 @@ export function createBudget(options: CreateBudgetOptions): Budget {
 
     for (;;) {
       const current = await load();
-      const requiredCapUsd =
-        current.ledger.spentUsd + reservedTotal(current.ledger) + worstCaseUsd;
+      const requiredCapUsd = current.ledger.spentUsd + worstCaseUsd;
+      const capacityRequiredUsd =
+        requiredCapUsd + reservedTotal(current.ledger);
       if (
         current.ledger.authorizedTotalUsd !== undefined &&
-        requiredCapUsd > current.ledger.authorizedTotalUsd
+        capacityRequiredUsd > current.ledger.authorizedTotalUsd
       ) {
         throw new BudgetRefusalError(
           requiredCapUsd,
           current.ledger.authorizedTotalUsd,
+          requiredCapUsd <= current.ledger.authorizedTotalUsd,
         );
       }
       const next: BudgetLedger = {

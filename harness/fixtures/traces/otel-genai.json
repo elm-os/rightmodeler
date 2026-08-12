@@ -1,6 +1,7 @@
 [
   {
     "traceId": "trace-summarize-01",
+    "startTimeUnixNano": "100",
     "span_id": "span-summarize-01",
     "name": "chat",
     "kind": "CLIENT",
@@ -10,7 +11,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "summarize",
+      "rightmodeler.family": "summarize",
       "gen_ai.system_instructions": [
         {
           "type": "text",
@@ -47,6 +48,7 @@
   },
   {
     "traceId": "trace-summarize-02",
+    "startTimeUnixNano": "200",
     "span_id": "span-summarize-02",
     "name": "chat",
     "kind": "CLIENT",
@@ -56,7 +58,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "summarize",
+      "rightmodeler.family": "summarize",
       "gen_ai.system_instructions": [
         {
           "type": "text",
@@ -93,6 +95,7 @@
   },
   {
     "traceId": "trace-summarize-03",
+    "startTimeUnixNano": "300",
     "span_id": "span-summarize-03",
     "name": "chat",
     "kind": "CLIENT",
@@ -102,7 +105,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "summarize",
+      "rightmodeler.family": "summarize",
       "gen_ai.system_instructions": [
         {
           "type": "text",
@@ -139,6 +142,7 @@
   },
   {
     "traceId": "trace-summarize-04",
+    "startTimeUnixNano": "400",
     "span_id": "span-summarize-04",
     "name": "chat",
     "kind": "CLIENT",
@@ -148,7 +152,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "summarize",
+      "rightmodeler.family": "summarize",
       "gen_ai.system_instructions": [
         {
           "type": "text",
@@ -185,6 +189,7 @@
   },
   {
     "traceId": "trace-support-01",
+    "startTimeUnixNano": "500",
     "span_id": "span-support-01",
     "name": "chat",
     "kind": "CLIENT",
@@ -194,7 +199,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "support",
+      "rightmodeler.family": "support",
       "gen_ai.input.messages": [
         {
           "role": "user",
@@ -227,6 +232,7 @@
   },
   {
     "traceId": "trace-support-02",
+    "startTimeUnixNano": "600",
     "span_id": "span-support-02",
     "name": "chat",
     "kind": "CLIENT",
@@ -236,7 +242,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "support",
+      "rightmodeler.family": "support",
       "gen_ai.input.messages": [
         {
           "role": "user",
@@ -269,6 +275,7 @@
   },
   {
     "traceId": "trace-support-pii-01",
+    "startTimeUnixNano": "700",
     "span_id": "span-support-pii-01",
     "name": "chat",
     "kind": "CLIENT",
@@ -278,7 +285,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "support",
+      "rightmodeler.family": "support",
       "gen_ai.input.messages": [
         {
           "role": "user",
@@ -311,6 +318,7 @@
   },
   {
     "traceId": "trace-support-04",
+    "startTimeUnixNano": "800",
     "span_id": "span-support-04",
     "name": "chat",
     "kind": "CLIENT",
@@ -320,7 +328,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "support",
+      "rightmodeler.family": "support",
       "gen_ai.input.messages": [
         {
           "role": "user",
@@ -353,6 +361,7 @@
   },
   {
     "traceId": "trace-summarize-05",
+    "startTimeUnixNano": "900",
     "span_id": "span-summarize-05",
     "name": "chat",
     "kind": "CLIENT",
@@ -362,7 +371,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "summarize",
+      "rightmodeler.family": "summarize",
       "gen_ai.system_instructions": [
         {
           "type": "text",
@@ -399,6 +408,7 @@
   },
   {
     "traceId": "trace-support-05",
+    "startTimeUnixNano": "1000",
     "span_id": "span-support-05",
     "name": "chat",
     "kind": "CLIENT",
@@ -408,7 +418,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "support",
+      "rightmodeler.family": "support",
       "gen_ai.input.messages": [
         {
           "role": "user",
@@ -441,6 +451,7 @@
   },
   {
     "traceId": "trace-trajectory-a",
+    "startTimeUnixNano": "1100",
     "span_id": "span-trajectory-a-01",
     "parent_span_id": null,
     "name": "chat",
@@ -451,7 +462,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "summarize",
+      "rightmodeler.family": "summarize",
       "gen_ai.input.messages": [
         {
           "role": "user",
@@ -482,6 +493,7 @@
   },
   {
     "traceId": "trace-trajectory-a",
+    "startTimeUnixNano": "1200",
     "span_id": "span-trajectory-a-02",
     "parent_span_id": "span-trajectory-a-01",
     "name": "chat",
@@ -492,7 +504,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "support",
+      "rightmodeler.family": "support",
       "gen_ai.input.messages": [
         {
           "role": "user",
@@ -525,6 +537,7 @@
   },
   {
     "traceId": "trace-trajectory-b",
+    "startTimeUnixNano": "1300",
     "span_id": "span-trajectory-b-01",
     "parent_span_id": null,
     "name": "chat",
@@ -535,7 +548,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "summarize",
+      "rightmodeler.family": "summarize",
       "gen_ai.input.messages": [
         {
           "role": "user",
@@ -566,6 +579,7 @@
   },
   {
     "traceId": "trace-trajectory-b",
+    "startTimeUnixNano": "1400",
     "span_id": "span-trajectory-b-02",
     "parent_span_id": "span-trajectory-b-01",
     "name": "chat",
@@ -576,7 +590,7 @@
       "gen_ai.provider.name": "acme",
       "gen_ai.request.model": "acme/large-1",
       "gen_ai.response.model": "acme/large-1",
-      "gen_ai.prompt.name": "support",
+      "rightmodeler.family": "support",
       "gen_ai.input.messages": [
         {
           "role": "user",

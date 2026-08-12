@@ -15,6 +15,7 @@ export const DEFAULT_PASS_FRACTION = 0.75;
 const AGGREGATION_BOOTSTRAP_RESAMPLES = 2_000;
 
 export const ABSTAIN_REASONS = [
+  "insufficient_availability",
   "excluded_fraction_exceeded",
   "insufficient_review_trials",
   "insufficient_distinct_steps",
@@ -138,15 +139,19 @@ export type FamilyVerdict = FamilyVerdictBase &
 
 export interface AggregateOptions {
   readonly gatePolicyVersion: string;
+  readonly qualityFloor: number;
+  readonly availabilityFloor: number;
 }
 
 export function aggregate(
   facts: readonly AggregationFact[],
-  { gatePolicyVersion }: AggregateOptions,
+  { gatePolicyVersion, qualityFloor, availabilityFloor }: AggregateOptions,
 ): FamilyVerdict[] {
   if (gatePolicyVersion.length === 0) {
     throw new TypeError("gatePolicyVersion must not be empty");
   }
+  validateFloor(qualityFloor, "qualityFloor");
+  validateFloor(availabilityFloor, "availabilityFloor");
 
   const executionIds = new Set<string>();
   const groups = new Map<string, AggregationFact[]>();
@@ -176,13 +181,17 @@ export function aggregate(
   }
 
   return [...groups.values()]
-    .map((group) => aggregateGroup(group, gatePolicyVersion))
+    .map((group) =>
+      aggregateGroup(group, gatePolicyVersion, qualityFloor, availabilityFloor),
+    )
     .sort(compareVerdicts);
 }
 
 function aggregateGroup(
   facts: readonly AggregationFact[],
   gatePolicyVersion: string,
+  qualityFloor: number,
+  availabilityFloor: number,
 ): FamilyVerdict {
   const first = facts[0]!;
   assertConsistentGroup(facts, first);
@@ -263,7 +272,8 @@ function aggregateGroup(
   ).length;
   const abstainReason = findAbstainReason({
     evaluatorKinds,
-    excludedFraction,
+    availability,
+    availabilityFloor,
     requiresDeterministicEvidence: facts.some(
       (fact) => fact.requiresDeterministicEvidence,
     ),
@@ -309,6 +319,10 @@ function aggregateGroup(
         ...base,
         decision: decide({
           unsafeSubstitutions,
+          weakestWorstCaseBound: weakest.worstCaseBound,
+          qualityFloor,
+          availabilityLowerBound: availability.lowerBound,
+          availabilityFloor,
         }),
       }
     : { ...base, decision: "abstain", abstainReason };
@@ -346,11 +360,6 @@ function aggregateEvaluatorKind(
       fact.orderConsistent !== false &&
       Boolean(fact.assessment!.passed),
   );
-  const uncertaintyOutcomes = outcomesByTrajectory(
-    included,
-    (fact) =>
-      Boolean(fact.assessment!.passed) && fact.orderConsistent !== false,
-  );
   const clustered = hasRepeatedTrajectory(worstCaseOutcomes);
   const nTrajectories = Object.keys(includedOutcomes).length;
   const nDistinctSteps = new Set(included.map((fact) => fact.execution.stepId))
@@ -358,7 +367,7 @@ function aggregateEvaluatorKind(
   const conditionalInterval = clustered
     ? included.length === 0
       ? { point: 0, lower: 0, upper: 1 }
-      : clusterBootstrap(uncertaintyOutcomes, {
+      : clusterBootstrap(includedOutcomes, {
           resamples: AGGREGATION_BOOTSTRAP_RESAMPLES,
           seed: stableSeed(`${evidenceQuestionId}\0${evaluatorKind}\0quality`),
         })
@@ -432,7 +441,8 @@ function aggregateAvailability(
 
 function findAbstainReason(input: {
   readonly evaluatorKinds: readonly EvaluatorKindVerdict[];
-  readonly excludedFraction: number;
+  readonly availability: AvailabilityVerdict;
+  readonly availabilityFloor: number;
   readonly requiresDeterministicEvidence: boolean;
   readonly hasDeterministicEvidence: boolean;
   readonly requiredAbstentions: number;
@@ -441,9 +451,6 @@ function findAbstainReason(input: {
   readonly nExecutions: number;
   readonly hasCompleteEvaluatorCoverage: boolean;
 }): AbstainReason | undefined {
-  if (input.excludedFraction > EXCLUDED_FRACTION_MAX) {
-    return "excluded_fraction_exceeded";
-  }
   if (input.evaluatorKinds.some((kind) => kind.trials < MIN_REVIEW_TRIALS)) {
     return "insufficient_review_trials";
   }
@@ -473,16 +480,42 @@ function findAbstainReason(input: {
   if (!input.hasCompleteEvaluatorCoverage) {
     return "incomplete_evaluator_coverage";
   }
+  if (input.availability.lowerBound < input.availabilityFloor) {
+    return "insufficient_availability";
+  }
+  if (
+    input.evaluatorKinds.some(
+      (kind) => kind.excludedFraction > EXCLUDED_FRACTION_MAX,
+    )
+  ) {
+    return "excluded_fraction_exceeded";
+  }
   return undefined;
 }
 
 function decide(input: {
   readonly unsafeSubstitutions: number;
+  readonly weakestWorstCaseBound: number;
+  readonly qualityFloor: number;
+  readonly availabilityLowerBound: number;
+  readonly availabilityFloor: number;
 }): Exclude<FamilyDecision, "abstain"> {
   if (input.unsafeSubstitutions > 0) {
     return "reject";
   }
+  if (
+    input.weakestWorstCaseBound >= input.qualityFloor &&
+    input.availabilityLowerBound >= input.availabilityFloor
+  ) {
+    return "recommend";
+  }
   return "inconclusive";
+}
+
+function validateFloor(value: number, name: string): void {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new RangeError(`${name} must be between 0 and 1`);
+  }
 }
 
 function lowerBound(

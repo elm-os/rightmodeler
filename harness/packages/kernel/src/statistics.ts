@@ -20,6 +20,10 @@ export interface ClusterBootstrapOptions {
   comparisons?: number;
 }
 
+export interface ClusterBootstrapInterval extends Interval {
+  method: "percentile" | "finite_sample_envelope";
+}
+
 export function wilson(
   passes: number,
   n: number,
@@ -83,7 +87,7 @@ export function clusterBootstrap(
     confidence = 0.95,
     comparisons = 1,
   }: ClusterBootstrapOptions,
-): Interval {
+): ClusterBootstrapInterval {
   if (!Number.isSafeInteger(resamples) || resamples < 1) {
     throw new RangeError("resamples must be a positive safe integer");
   }
@@ -156,16 +160,18 @@ export function clusterBootstrap(
     confidence,
     comparisons,
   );
+  const percentileLower = percentile(bootstrapPoints, alpha / 2);
+  const percentileUpper = percentile(bootstrapPoints, 1 - alpha / 2);
+  const lower = Math.min(percentileLower, finiteSampleInterval.lower);
+  const upper = Math.max(percentileUpper, finiteSampleInterval.upper);
   return {
     point,
-    lower: Math.min(
-      percentile(bootstrapPoints, alpha / 2),
-      finiteSampleInterval.lower,
-    ),
-    upper: Math.max(
-      percentile(bootstrapPoints, 1 - alpha / 2),
-      finiteSampleInterval.upper,
-    ),
+    lower,
+    upper,
+    method:
+      lower === percentileLower && upper === percentileUpper
+        ? "percentile"
+        : "finite_sample_envelope",
   };
 }
 

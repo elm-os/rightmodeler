@@ -1,16 +1,13 @@
 import {
   canonicalJson,
   caseKey,
-  casesPrefix,
   computeRunSpecDigest,
   type JsonValue,
   type Store,
 } from "@rightmodeler/core";
-import { z } from "zod";
+import { assignSplits, type CorpusSplit } from "@rightmodeler/kernel";
 
-import { normalizedRunSchema, type NormalizedRun } from "./normalized-run.js";
-
-export type CorpusSplit = "shortlist" | "confirm";
+import type { NormalizedRun } from "./normalized-run.js";
 
 export interface CorpusCaseContent {
   family: string;
@@ -48,10 +45,6 @@ export class CorpusError extends Error {
   }
 }
 
-const corpusOptionsSchema = z.strictObject({
-  seed: z.number().int(),
-});
-
 function familyOf(family: string | undefined): string {
   return family ?? "unclassified";
 }
@@ -86,27 +79,6 @@ function caseContentJson(content: CorpusCaseContent): JsonValue {
   return value;
 }
 
-function assignHalfSplits(cases: CorpusCase[], seed: number): void {
-  const byFamily = new Map<string, CorpusCase[]>();
-  for (const corpusCase of cases) {
-    const familyCases = byFamily.get(corpusCase.content.family) ?? [];
-    familyCases.push(corpusCase);
-    byFamily.set(corpusCase.content.family, familyCases);
-  }
-
-  for (const familyCases of byFamily.values()) {
-    familyCases.sort((left, right) => {
-      const leftOrder = computeRunSpecDigest({ seed, caseId: left.caseId });
-      const rightOrder = computeRunSpecDigest({ seed, caseId: right.caseId });
-      return leftOrder.localeCompare(rightOrder);
-    });
-    const shortlistSize = Math.ceil(familyCases.length / 2);
-    familyCases.forEach((corpusCase, index) => {
-      corpusCase.split = index < shortlistSize ? "shortlist" : "confirm";
-    });
-  }
-}
-
 function buildStrata(
   cases: readonly CorpusCase[],
   runs: readonly NormalizedRun[],
@@ -130,7 +102,7 @@ function buildStrata(
   );
 
   return [...caseCounts.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => compareText(left, right))
     .map(([family, count]) => ({
       family,
       corpusShare: count / cases.length,
@@ -143,10 +115,9 @@ export function buildCorpus(
   options: { seed: number },
 ): Corpus {
   try {
-    const parsedRuns = normalizedRunSchema.array().parse(runs);
-    const { seed } = corpusOptionsSchema.parse(options);
+    const { seed } = options;
     const uniqueCases = new Map<string, CorpusCase>();
-    for (const run of parsedRuns) {
+    for (const run of runs) {
       for (const step of run.steps) {
         const content = caseContent(step);
         const caseId = computeRunSpecDigest(caseContentJson(content));
@@ -162,14 +133,20 @@ export function buildCorpus(
     }
 
     const cases = [...uniqueCases.values()];
-    assignHalfSplits(cases, seed);
-    cases.sort((left, right) => left.caseId.localeCompare(right.caseId));
+    const splits = assignSplits(
+      cases.map(({ caseId }) => caseId),
+      seed,
+    );
+    for (const corpusCase of cases) {
+      corpusCase.split = splits[corpusCase.caseId]!;
+    }
+    cases.sort((left, right) => compareText(left.caseId, right.caseId));
     const caseIds = cases.map(({ caseId }) => caseId);
     return {
       corpusVersionId: computeRunSpecDigest(caseIds),
       seed,
       cases,
-      strata: buildStrata(cases, parsedRuns),
+      strata: buildStrata(cases, runs),
     };
   } catch (error) {
     if (error instanceof CorpusError) throw error;
@@ -202,7 +179,12 @@ export async function writeCorpus(
     );
   }
   await store.putImmutable(
-    `${casesPrefix(projectId)}corpus-${corpus.corpusVersionId}.json`,
+    // Internal Phase A corpus index; not a public contract.
+    `${projectId}/corpus/corpus-${corpus.corpusVersionId}.json`,
     Buffer.from(canonicalJson(corpusManifest(corpus)), "utf8"),
   );
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }

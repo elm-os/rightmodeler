@@ -158,8 +158,8 @@ export function pickJudge(
       "context length",
     ),
     price:
-      priceNumber(model.pricing?.prompt) +
-      priceNumber(model.pricing?.completion),
+      signalNumber(model.pricing?.prompt, "price") +
+      signalNumber(model.pricing?.completion, "price"),
   }));
   const recencies = rawSignals.map((signals) => signals.recency);
   const contexts = rawSignals.map((signals) => signals.context);
@@ -331,14 +331,6 @@ function signalNumber(
     throw new TypeError(`judge catalog ${name} must be finite`);
   }
   return parsed;
-}
-
-function priceNumber(value: number | string | null | undefined): number {
-  try {
-    return signalNumber(value, "price");
-  } catch {
-    return 0;
-  }
 }
 
 const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;

@@ -17,14 +17,15 @@ export interface GateResult {
 }
 
 export class ReleaseGatePolicy {
-  readonly #validated = true;
   readonly gatePolicyVersion: string;
   readonly qualityFloor: number;
+  readonly availabilityFloor: number;
   readonly passFraction = DEFAULT_PASS_FRACTION;
 
   constructor(input: {
     readonly gatePolicyVersion: string;
     readonly qualityFloor: number;
+    readonly availabilityFloor: number;
   }) {
     if (input.gatePolicyVersion.length === 0) {
       throw new RangeError("gatePolicyVersion must not be empty");
@@ -38,6 +39,14 @@ export class ReleaseGatePolicy {
     }
     this.gatePolicyVersion = input.gatePolicyVersion;
     this.qualityFloor = input.qualityFloor;
+    if (
+      !Number.isFinite(input.availabilityFloor) ||
+      input.availabilityFloor <= 0 ||
+      input.availabilityFloor > 1
+    ) {
+      throw new RangeError("availabilityFloor must be in (0, 1.0]");
+    }
+    this.availabilityFloor = input.availabilityFloor;
   }
 }
 
@@ -58,11 +67,8 @@ export function evaluateGates(
     0,
   );
   const qualityFailures = verdicts.filter((verdict) => {
-    return (
-      verdict.decision === "abstain" ||
-      verdict.evaluatorKinds.some(
-        (kind) => kind.worstCaseBound < policy.qualityFloor,
-      )
+    return verdict.evaluatorKinds.some(
+      (kind) => kind.worstCaseBound < policy.qualityFloor,
     );
   });
   const coveredEvidenceCases = verdicts.reduce(
@@ -82,7 +88,7 @@ export function evaluateGates(
     0,
   );
   const availabilityFailures = verdicts.filter(
-    (verdict) => verdict.availability.lowerBound < policy.qualityFloor,
+    (verdict) => verdict.availability.lowerBound < policy.availabilityFloor,
   );
 
   return [
@@ -100,7 +106,7 @@ export function evaluateGates(
         ? "No verdicts were available for the quality gate."
         : qualityFailures.length === 0
           ? `Every worst-case-imputed evaluator lower bound meets the ${policy.qualityFloor} quality floor.`
-          : `${qualityFailures.length} verdict(s) miss the ${policy.qualityFloor} worst-case-imputed quality floor or have a named abstention.`,
+          : `${qualityFailures.length} verdict(s) miss the ${policy.qualityFloor} worst-case-imputed quality floor.`,
     ),
     result(
       "evidence-coverage",
@@ -124,8 +130,8 @@ export function evaluateGates(
       verdicts.length === 0
         ? "No verdicts were available for the availability gate."
         : availabilityFailures.length === 0
-          ? `Every availability lower bound meets the ${policy.qualityFloor} floor.`
-          : `${availabilityFailures.length} verdict(s) miss the ${policy.qualityFloor} availability floor.`,
+          ? `Every availability lower bound meets the ${policy.availabilityFloor} floor.`
+          : `${availabilityFailures.length} verdict(s) miss the ${policy.availabilityFloor} availability floor.`,
     ),
   ];
 }

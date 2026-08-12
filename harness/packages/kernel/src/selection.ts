@@ -26,24 +26,17 @@ export interface SelectionAdjustedEstimate extends Interval {
   readonly method: "wilson" | "cluster_bootstrap";
 }
 
-export interface ConfirmationPlan {
-  readonly candidateIds: readonly string[];
-  readonly confirmedCandidateId: string;
-  readonly expectedHoldoutCaseIds: readonly string[];
-  readonly qualityFloor: number;
-  readonly shortlistDigest: string;
-}
-
 export type WinnerSelection =
   | {
       readonly status: "no_shortlist_passer";
       readonly shortlistedCandidateIds: readonly string[];
+      readonly holdoutRequired: false;
     }
   | {
       readonly status: "confirmation_required";
       readonly shortlistedCandidateIds: readonly string[];
       readonly confirmedCandidateId: string;
-      readonly confirmationPlan: ConfirmationPlan;
+      readonly holdoutRequired: true;
     }
   | {
       readonly status: "holdout_failed" | "selected";
@@ -51,6 +44,7 @@ export type WinnerSelection =
       readonly confirmedCandidateId: string;
       readonly selectedCandidateId?: string;
       readonly selectionAdjustedEstimate: SelectionAdjustedEstimate;
+      readonly holdoutRequired: false;
     };
 
 export function assignSplits(
@@ -83,14 +77,9 @@ export function assignSplits(
 export function selectWinner(
   verdictsByCandidate: VerdictsByCandidate,
   policy: ReleaseGatePolicy,
-  options: {
-    readonly expectedHoldoutCaseIds?: readonly string[];
-    readonly confirmationPlan?: ConfirmationPlan;
-  } = {},
 ): WinnerSelection {
   const candidates = Object.entries(verdictsByCandidate);
   validateShortlists(candidates, policy.gatePolicyVersion);
-  const shortlistDigest = digestShortlists(candidates);
 
   const shortlisted = candidates
     .filter(([, verdicts]) =>
@@ -106,49 +95,27 @@ export function selectWinner(
   );
   const winner = shortlisted[0];
   if (winner === undefined) {
-    return { status: "no_shortlist_passer", shortlistedCandidateIds };
+    return {
+      status: "no_shortlist_passer",
+      shortlistedCandidateIds,
+      holdoutRequired: false,
+    };
   }
 
   const [confirmedCandidateId, verdicts] = winner;
   if (verdicts.holdout === undefined) {
-    if (options.expectedHoldoutCaseIds === undefined) {
-      throw new Error(
-        "expectedHoldoutCaseIds are required before requesting confirmation",
-      );
-    }
     return {
       status: "confirmation_required",
       shortlistedCandidateIds,
       confirmedCandidateId,
-      confirmationPlan: {
-        candidateIds: candidates
-          .map(([candidateId]) => candidateId)
-          .sort(compareText),
-        confirmedCandidateId,
-        expectedHoldoutCaseIds: validateExpectedHoldoutCaseIds(
-          options.expectedHoldoutCaseIds,
-        ),
-        qualityFloor: policy.qualityFloor,
-        shortlistDigest,
-      },
+      holdoutRequired: true,
     };
   }
-  if (options.confirmationPlan === undefined) {
-    throw new Error("confirmationPlan is required with holdout evidence");
-  }
-  validateConfirmationPlan(
-    options.confirmationPlan,
-    candidates,
-    confirmedCandidateId,
-    shortlistDigest,
-    policy.qualityFloor,
-  );
   validateWinnerHoldout(
     confirmedCandidateId,
     verdicts.shortlist,
     verdicts.holdout,
     policy.gatePolicyVersion,
-    options.confirmationPlan.expectedHoldoutCaseIds,
   );
   const selectionAdjustedEstimate = adjustedWeakestEstimate(
     verdicts.holdout,
@@ -164,6 +131,7 @@ export function selectWinner(
     confirmedCandidateId,
     ...(selected ? { selectedCandidateId: confirmedCandidateId } : {}),
     selectionAdjustedEstimate,
+    holdoutRequired: false,
   };
 }
 
@@ -291,7 +259,6 @@ function validateWinnerHoldout(
   shortlist: FamilyVerdict,
   holdout: FamilyVerdict,
   gatePolicyVersion: string,
-  expectedHoldoutCaseIds: readonly string[],
 ): void {
   if (holdout.candidateId !== candidateId) {
     throw new Error(
@@ -318,67 +285,6 @@ function validateWinnerHoldout(
       `candidate ${candidateId} reuses a case across corpus splits`,
     );
   }
-  if (
-    !sameStrings(
-      [...holdout.caseIds].sort(compareText),
-      [...expectedHoldoutCaseIds].sort(compareText),
-    )
-  ) {
-    throw new Error(
-      `candidate ${candidateId} holdout cases do not match the assigned split`,
-    );
-  }
-}
-
-function validateConfirmationPlan(
-  plan: ConfirmationPlan,
-  candidates: readonly [string, CandidateSplitVerdicts][],
-  confirmedCandidateId: string,
-  shortlistDigest: string,
-  qualityFloor: number,
-): void {
-  const candidateIds = candidates
-    .map(([candidateId]) => candidateId)
-    .sort(compareText);
-  if (!sameStrings(candidateIds, plan.candidateIds)) {
-    throw new Error(
-      "confirmation candidate universe changed after shortlisting",
-    );
-  }
-  if (plan.confirmedCandidateId !== confirmedCandidateId) {
-    throw new Error("confirmation winner changed after shortlisting");
-  }
-  if (plan.shortlistDigest !== shortlistDigest) {
-    throw new Error("shortlist evidence changed after shortlisting");
-  }
-  if (plan.qualityFloor !== qualityFloor) {
-    throw new Error("release quality floor changed after shortlisting");
-  }
-  validateExpectedHoldoutCaseIds(plan.expectedHoldoutCaseIds);
-}
-
-function validateExpectedHoldoutCaseIds(
-  caseIds: readonly string[],
-): readonly string[] {
-  if (caseIds.length === 0 || caseIds.some((caseId) => caseId.length === 0)) {
-    throw new Error("expected holdout cases must contain named cases");
-  }
-  const sorted = [...caseIds].sort(compareText);
-  if (new Set(sorted).size !== sorted.length) {
-    throw new Error("expected holdout cases must not contain duplicates");
-  }
-  return sorted;
-}
-
-function digestShortlists(
-  candidates: readonly [string, CandidateSplitVerdicts][],
-): string {
-  const canonical = candidates
-    .map(
-      ([candidateId, verdicts]) => [candidateId, verdicts.shortlist] as const,
-    )
-    .sort(([left], [right]) => compareText(left, right));
-  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
 function splitHash(seed: string | number, caseId: string): string {

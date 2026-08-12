@@ -143,6 +143,21 @@ describe("pickJudge", () => {
         },
       ),
     ).toThrow(/recency/);
+    expect(() =>
+      pickJudge(
+        [
+          {
+            id: "neutral/judge",
+            family: "neutral",
+            pricing: { prompt: "unknown" },
+          },
+        ],
+        {
+          candidateFamily: "candidate",
+          referenceFamily: "reference",
+        },
+      ),
+    ).toThrow(/price/);
   });
 });
 

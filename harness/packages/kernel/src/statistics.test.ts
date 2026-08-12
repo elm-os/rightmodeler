@@ -213,7 +213,12 @@ describe("clusterBootstrap", () => {
       { resamples: 500, seed: 17 },
     );
 
-    expect(interval).toEqual({ point: 0.5, lower: 0, upper: 1 });
+    expect(interval).toEqual({
+      point: 0.5,
+      lower: 0,
+      upper: 1,
+      method: "percentile",
+    });
   });
 
   it("weights the observed point by executions while sampling trajectories", () => {
@@ -238,9 +243,9 @@ describe("clusterBootstrap", () => {
       ]),
     );
 
-    expect(
-      clusterBootstrap(outcomes, { resamples: 500, seed: 9 }).lower,
-    ).toBeCloseTo(wilson(5, 5).lower, 12);
+    const interval = clusterBootstrap(outcomes, { resamples: 500, seed: 9 });
+    expect(interval.lower).toBeCloseTo(wilson(5, 5).lower, 12);
+    expect(interval.method).toBe("finite_sample_envelope");
     expect(
       clusterBootstrap(outcomes, {
         resamples: 500,
@@ -248,6 +253,23 @@ describe("clusterBootstrap", () => {
         comparisons: 100,
       }).lower,
     ).toBeLessThan(0.5);
+  });
+
+  it("reports when the trajectory percentile interval binds", () => {
+    const outcomes = Object.fromEntries(
+      Array.from({ length: 8 }, (_, index) => [
+        `trajectory-${index}`,
+        index < 5 ? [true, true] : [false, false],
+      ]),
+    );
+    const interval = clusterBootstrap(outcomes, {
+      resamples: 2_000,
+      seed: 17,
+    });
+
+    expect(interval.point).toBe(0.625);
+    expect(interval.method).toBe("percentile");
+    expect(interval.lower).not.toBeCloseTo(wilson(10, 16).lower, 4);
   });
 
   it("uses trajectory count, not execution count, for finite-sample uncertainty", () => {

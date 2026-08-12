@@ -14,6 +14,8 @@ function verdicts(
 ) {
   return aggregate(aggregationFacts(count, overrides), {
     gatePolicyVersion: "gate-1",
+    qualityFloor: 0.8,
+    availabilityFloor: 0.8,
   });
 }
 
@@ -30,11 +32,13 @@ describe("ReleaseGatePolicy", () => {
     const policy = new ReleaseGatePolicy({
       gatePolicyVersion: "gate-1",
       qualityFloor: 0.9,
+      availabilityFloor: 0.8,
     });
 
     expect(policy).toEqual({
       gatePolicyVersion: "gate-1",
       qualityFloor: 0.9,
+      availabilityFloor: 0.8,
       passFraction: 0.75,
     });
     expect(
@@ -42,6 +46,7 @@ describe("ReleaseGatePolicy", () => {
         new ReleaseGatePolicy({
           gatePolicyVersion: "gate-1",
           qualityFloor: 0.8,
+          availabilityFloor: 0.8,
         }),
     ).toThrow(/qualityFloor/);
     expect(
@@ -49,6 +54,7 @@ describe("ReleaseGatePolicy", () => {
         new ReleaseGatePolicy({
           gatePolicyVersion: "gate-1",
           qualityFloor: 1.001,
+          availabilityFloor: 0.8,
         }),
     ).toThrow(/qualityFloor/);
   });
@@ -58,6 +64,7 @@ describe("evaluateGates", () => {
   const policy = new ReleaseGatePolicy({
     gatePolicyVersion: "gate-1",
     qualityFloor: 0.8 + Number.EPSILON,
+    availabilityFloor: 0.8 + Number.EPSILON,
   });
 
   it("passes all five release gates for complete safe evidence", () => {
@@ -101,6 +108,8 @@ describe("evaluateGates", () => {
     }));
     const [verdict] = aggregate(facts, {
       gatePolicyVersion: "gate-1",
+      qualityFloor: 0.8,
+      availabilityFloor: 0.8,
     });
     const results = gateMap(evaluateGates([verdict], policy));
 
@@ -120,7 +129,11 @@ describe("evaluateGates", () => {
         aggregationFact(offset + 90, { passed: false }),
       ),
     ]);
-    const [verdict] = aggregate(facts, { gatePolicyVersion: "gate-1" });
+    const [verdict] = aggregate(facts, {
+      gatePolicyVersion: "gate-1",
+      qualityFloor: 0.8,
+      availabilityFloor: 0.8,
+    });
     const results = gateMap(evaluateGates([verdict], policy));
 
     expect(verdict.evaluatorKinds[0]).toMatchObject({ passes: 0, trials: 10 });
@@ -133,16 +146,39 @@ describe("evaluateGates", () => {
       requiredAbstention: true,
       attribution: index < 20 ? "silent-failure" : "ok",
     }));
-    const [verdict] = aggregate(facts, { gatePolicyVersion: "gate-1" });
+    const [verdict] = aggregate(facts, {
+      gatePolicyVersion: "gate-1",
+      qualityFloor: 0.8,
+      availabilityFloor: 0.8,
+    });
     const results = gateMap(evaluateGates([verdict], policy));
 
     expect(verdict).toMatchObject({
       decision: "abstain",
-      abstainReason: "excluded_fraction_exceeded",
+      abstainReason: "insufficient_review_trials",
     });
     expect(results.quality).toBe(false);
     expect(results.availability).toBe(false);
     expect(results["required-abstention"]).toBe(false);
+  });
+
+  it("does not conflate a coverage abstention with a quality failure", () => {
+    const [verdict] = aggregate(
+      aggregationFacts(100, { evidenceCovered: false }),
+      {
+        gatePolicyVersion: "gate-1",
+        qualityFloor: 0.8,
+        availabilityFloor: 0.8,
+      },
+    );
+    const results = gateMap(evaluateGates([verdict], policy));
+
+    expect(verdict).toMatchObject({
+      decision: "abstain",
+      abstainReason: "incomplete_evidence_coverage",
+    });
+    expect(results.quality).toBe(true);
+    expect(results["evidence-coverage"]).toBe(false);
   });
 
   it("gates the worst-case-imputed lower bound rather than raw scores", () => {
@@ -152,10 +188,13 @@ describe("evaluateGates", () => {
     }));
     const [verdict] = aggregate(facts, {
       gatePolicyVersion: "gate-1",
+      qualityFloor: 0.9,
+      availabilityFloor: 0.8,
     });
     const strictPolicy = new ReleaseGatePolicy({
       gatePolicyVersion: "gate-1",
       qualityFloor: 0.9,
+      availabilityFloor: 0.8,
     });
     const results = gateMap(evaluateGates([verdict], strictPolicy));
 
@@ -171,6 +210,7 @@ describe("evaluateGates", () => {
         new ReleaseGatePolicy({
           gatePolicyVersion: "gate-2",
           qualityFloor: 0.9,
+          availabilityFloor: 0.8,
         }),
       ),
     ).toThrow(/gate policy/i);

@@ -56,12 +56,6 @@ export class FormatDetectionError extends Error {
 
 const minimumConfidence = 0.6;
 const ambiguityMargin = 0.1;
-const inferenceOperations = new Set([
-  "chat",
-  "generate_content",
-  "text_completion",
-]);
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -133,10 +127,6 @@ export function detectFormat(
   sample: string,
   adapters: readonly NamedTraceAdapter[],
 ): NamedTraceAdapter {
-  if (adapters.length < 2) {
-    throw new TypeError("Format detection requires at least two adapters");
-  }
-
   const scored = adapters
     .map((adapter) => ({
       adapter,
@@ -284,7 +274,7 @@ function compareStartValues(
   if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
     return leftTime - rightTime;
   }
-  return left.localeCompare(right);
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function otelConfidence(sample: unknown): number {
@@ -321,9 +311,6 @@ function adaptOtel(records: unknown): NormalizedRun[] {
     if (!isRecord(attributes)) continue;
     const operation = attributes["gen_ai.operation.name"];
     if (typeof operation !== "string") continue;
-    if (!inferenceOperations.has(operation)) {
-      continue;
-    }
     if (
       typeof attributes["gen_ai.request.model"] !== "string" &&
       typeof attributes["gen_ai.response.model"] !== "string"
@@ -348,6 +335,15 @@ function adaptOtel(records: unknown): NormalizedRun[] {
   }
 
   return [...grouped.entries()].map(([traceId, spans]) => {
+    if (
+      spans.length > 1 &&
+      spans.some(({ record }) => startValue(record) === undefined)
+    ) {
+      throw new TraceAdaptError(
+        format,
+        `OTel trajectory ${traceId} must provide a start time for every span`,
+      );
+    }
     spans.sort(
       (left, right) =>
         compareStartValues(startValue(left.record), startValue(right.record)) ||
@@ -406,7 +402,10 @@ function adaptOtel(records: unknown): NormalizedRun[] {
       };
       const systemPrompt = textParts(attributes["gen_ai.system_instructions"]);
       if (systemPrompt !== undefined) step.systemPrompt = systemPrompt;
-      const family = optionalString(attributes["gen_ai.prompt.name"]);
+      // Family attribution is v0: prefer the explicit custom attribute, then the legacy heuristic.
+      const family =
+        optionalString(attributes["rightmodeler.family"]) ??
+        optionalString(attributes["gen_ai.prompt.name"]);
       if (family !== undefined) step.family = family;
       const timestamp = startValue(record);
       if (timestamp !== undefined) step.timestamp = timestamp;

@@ -9,7 +9,7 @@ export interface ModelCatalogEntry {
   id: string;
   family: string;
   contextLength: number;
-  pricing: ModelPricing;
+  pricing: ModelPricing | null;
   supportsTools: boolean;
   supportsStructuredOutput: boolean;
 }
@@ -43,11 +43,13 @@ export interface ProviderAttempt extends ChatResponse {
 }
 
 export interface ProviderClient {
+  readonly providerId: string;
   listModels(): Promise<ModelCatalogEntry[]>;
   chat(request: ChatRequest): Promise<ChatResponse>;
 }
 
 export interface CreateProviderOptions {
+  providerId: string;
   baseUrl: string;
   apiKeyEnv: string;
   maxConcurrency?: number;
@@ -55,14 +57,20 @@ export interface CreateProviderOptions {
 
 export class BlockedError extends Error {
   readonly kind = "rate-limit" as const;
+  readonly observedCeiling: number;
 
-  constructor(message = "Provider retries exhausted due to rate limiting") {
-    super(message);
+  constructor(status: number, observedCeiling: number) {
+    super(
+      `Provider retries exhausted after HTTP ${status}; observed concurrency ceiling: ${observedCeiling}`,
+    );
     this.name = "BlockedError";
+    this.observedCeiling = observedCeiling;
   }
 }
 
-class ProviderHttpError extends Error {
+export class ProviderRequestError extends Error {}
+
+export class ProviderHttpError extends ProviderRequestError {
   readonly status: number;
 
   constructor(status: number, body: string) {
@@ -73,6 +81,7 @@ class ProviderHttpError extends Error {
 }
 
 export class ProviderConfigurationError extends Error {}
+export class ProviderResponseError extends ProviderRequestError {}
 
 class AdaptiveLimiter {
   private readonly ceiling: number;
@@ -116,6 +125,10 @@ class AdaptiveLimiter {
       this.successStreak = 0;
       this.drain();
     }
+  }
+
+  get currentCap(): number {
+    return this.cap;
   }
 
   private acquire(): Promise<void> {
@@ -169,8 +182,8 @@ function tokenCount(value: unknown, label: string): number {
   return count;
 }
 
-function price(value: unknown, label: string): number {
-  if (value === undefined || value === null || value === "") return 0;
+function price(value: unknown, label: string): number | null {
+  if (value === undefined || value === null || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(value);
   return nonnegativeNumber(parsed, label);
 }
@@ -208,10 +221,6 @@ function normalizeModel(value: unknown, index: number): ModelCatalogEntry {
     model.pricing ?? {},
     `models[${index}].pricing`,
   );
-  const capabilities = objectValue(
-    model.capabilities ?? {},
-    `models[${index}].capabilities`,
-  );
   const supported = Array.isArray(model.supported_parameters)
     ? model.supported_parameters
     : [];
@@ -220,11 +229,7 @@ function normalizeModel(value: unknown, index: number): ModelCatalogEntry {
       `models[${index}].supported_parameters must contain strings`,
     );
   }
-  const rawContext =
-    model.context_length ??
-    model.context_window ??
-    model.max_context_tokens ??
-    0;
+  const rawContext = model.context_length ?? 0;
   const contextLength = tokenCount(
     rawContext,
     `models[${index}].context_length`,
@@ -234,24 +239,19 @@ function normalizeModel(value: unknown, index: number): ModelCatalogEntry {
     id: model.id,
     family: model.id.split("/", 1)[0]!,
     contextLength,
-    pricing: {
-      input: price(
-        rawPricing.prompt ?? rawPricing.input ?? rawPricing.input_per_token,
+    pricing: (() => {
+      const input = price(
+        rawPricing.prompt ?? rawPricing.input_per_token,
         `models[${index}].pricing.input`,
-      ),
-      output: price(
-        rawPricing.completion ??
-          rawPricing.output ??
-          rawPricing.output_per_token,
+      );
+      const output = price(
+        rawPricing.completion ?? rawPricing.output_per_token,
         `models[${index}].pricing.output`,
-      ),
-    },
-    supportsTools: supported.includes("tools") || capabilities.tools === true,
-    supportsStructuredOutput:
-      supported.includes("structured_outputs") ||
-      capabilities.structured_outputs === true ||
-      capabilities.structured_output === true ||
-      capabilities.structuredOutput === true,
+      );
+      return input === null || output === null ? null : { input, output };
+    })(),
+    supportsTools: supported.includes("tools"),
+    supportsStructuredOutput: supported.includes("structured_outputs"),
   };
 }
 
@@ -301,7 +301,9 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         return { response, apiKey: key };
       } catch (error) {
         limiter.failed();
-        throw error;
+        throw new ProviderRequestError(
+          error instanceof Error ? error.message : String(error),
+        );
       }
     });
   }
@@ -340,9 +342,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
 
       if (isRetryable(result.response.status)) {
         if (attempt === retryAttempts) {
-          throw new BlockedError(
-            `Provider retries exhausted after HTTP ${result.response.status}`,
-          );
+          throw new BlockedError(result.response.status, limiter.currentCap);
         }
         await result.response.body?.cancel();
         await sleep(retryDelay(result.response, attempt));
@@ -352,7 +352,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
       const body = redact(await result.response.text(), result.apiKey);
       throw new ProviderHttpError(result.response.status, body.slice(0, 300));
     }
-    throw new BlockedError();
+    throw new BlockedError(429, limiter.currentCap);
   }
 
   async function fetchCatalog(): Promise<ModelCatalogEntry[]> {
@@ -430,7 +430,9 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
       let costUsd: number;
       let costIsEstimate: boolean;
       if (reportedCost !== undefined && reportedCost !== null) {
-        costUsd = price(reportedCost, "usage.cost");
+        const parsedCost = price(reportedCost, "usage.cost");
+        if (parsedCost === null) throw new Error("usage.cost must be present");
+        costUsd = parsedCost;
         costIsEstimate = false;
       } else {
         const model = models.find((item) => item.id === request.model);
@@ -438,6 +440,9 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
           throw new Error(
             `Requested model is absent from the catalog: ${request.model}`,
           );
+        }
+        if (model.pricing === null) {
+          throw new Error(`Requested model has no pricing: ${request.model}`);
         }
         costUsd =
           usage.inputTokens * model.pricing.input +
@@ -459,11 +464,13 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         costUsd: 0,
         costIsEstimate: true,
       });
-      throw new Error(`Invalid chat response: ${redact(message, requestKey)}`);
+      throw new ProviderResponseError(
+        `Invalid chat response: ${redact(message, requestKey)}`,
+      );
     }
     await request.onAttempt?.({ outcome: "completed", ...normalized });
     return normalized;
   }
 
-  return { listModels, chat };
+  return { providerId: options.providerId, listModels, chat };
 }

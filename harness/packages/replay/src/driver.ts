@@ -6,15 +6,20 @@ import {
   factKey,
   factsPrefix,
   factSchema,
-  jsonValueSchema,
   mintAssessmentId,
   mintAttemptId,
   mintExecutionId,
   requestAttemptSchema,
+  spendEventSchema,
   type Fact,
   type JsonValue,
   type Store,
 } from "@rightmodeler/core";
+import {
+  judgeExecution,
+  type CorpusSplit,
+  type JudgeChat,
+} from "@rightmodeler/kernel";
 
 import {
   BudgetRefusalError,
@@ -26,6 +31,7 @@ import {
   type ChatMessage,
   type ModelCatalogEntry,
   ProviderConfigurationError,
+  ProviderRequestError,
   type ProviderClient,
 } from "./provider.js";
 import type { ReplayStep, StepShortlist } from "./shortlist.js";
@@ -34,7 +40,8 @@ export interface RecordedCase {
   caseId: string;
   stepId: string;
   trajectoryId: string;
-  corpusSplit: string;
+  corpusSplit: CorpusSplit;
+  task: string;
   system?: string;
   messages: readonly ChatMessage[];
   temperature?: number;
@@ -47,38 +54,30 @@ export interface RecordedCase {
   referenceOutput: JsonValue;
 }
 
-export interface JudgeChatRequest {
-  messages: readonly ChatMessage[];
-  temperature: number;
-  stream: false;
-}
-
-export interface JudgeChatResponse {
-  content: string;
-}
-
-export type JudgeChat = (
-  request: JudgeChatRequest,
-) => Promise<JudgeChatResponse>;
-
 export interface ReplayModeAInput {
   steps: readonly ReplayStep[];
   cases: readonly RecordedCase[];
   candidates: readonly StepShortlist[];
   provider: ProviderClient;
-  judgeChat: JudgeChat;
+  judge: {
+    chat: JudgeChat;
+    judgeModel: string;
+  };
   store: Store;
   budget: Budget;
   concurrency: number;
 }
 
-export interface BlockedCell {
+interface BlockedCellBase {
   stepId: string;
   caseId: string;
   candidateId: string;
-  kind: "rate-limit" | "budget";
   message: string;
 }
+
+export type BlockedCell =
+  | (BlockedCellBase & { kind: "budget" })
+  | (BlockedCellBase & { kind: "rate-limit"; observedCeiling: number });
 
 export interface ReplayModeAResult {
   completed: number;
@@ -90,15 +89,6 @@ interface ReplayCell {
   step: ReplayStep;
   recordedCase: RecordedCase;
   candidate: ModelCatalogEntry;
-}
-
-interface JudgeAssessment {
-  evaluatorId: string;
-  metricName: string;
-  score: number;
-  passed: boolean;
-  rubricVersion: string;
-  artifactRef: JsonValue;
 }
 
 function correlationKey(
@@ -165,6 +155,7 @@ function cellsFor(input: ReplayModeAInput): ReplayCell[] {
   for (const step of input.steps) {
     for (const candidate of candidatesByStep.get(step.stepId) ?? []) {
       for (const recordedCase of casesByStep.get(step.stepId) ?? []) {
+        if (recordedCase.corpusSplit !== step.corpusSplit) continue;
         cells.push({ step, recordedCase, candidate });
       }
     }
@@ -181,67 +172,6 @@ function replayMessages(recordedCase: RecordedCase): ChatMessage[] {
       ];
 }
 
-function parseJudgeAssessment(content: string): JudgeAssessment {
-  let value: unknown;
-  try {
-    value = JSON.parse(content);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Judge response was not valid JSON: ${message}`);
-  }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Judge response must be an object");
-  }
-  const assessment = value as Record<string, unknown>;
-  if (
-    typeof assessment.evaluatorId !== "string" ||
-    assessment.evaluatorId.length === 0 ||
-    typeof assessment.metricName !== "string" ||
-    assessment.metricName.length === 0 ||
-    typeof assessment.score !== "number" ||
-    !Number.isFinite(assessment.score) ||
-    typeof assessment.passed !== "boolean" ||
-    typeof assessment.rubricVersion !== "string" ||
-    assessment.rubricVersion.length === 0
-  ) {
-    throw new Error("Judge response is missing required assessment fields");
-  }
-  return {
-    evaluatorId: assessment.evaluatorId,
-    metricName: assessment.metricName,
-    score: assessment.score,
-    passed: assessment.passed,
-    rubricVersion: assessment.rubricVersion,
-    artifactRef: jsonValueSchema.parse(assessment.artifactRef),
-  };
-}
-
-async function assess(
-  judgeChat: JudgeChat,
-  recordedCase: RecordedCase,
-  candidateOutput: string,
-): Promise<JudgeAssessment> {
-  const response = await judgeChat({
-    messages: [
-      {
-        role: "system",
-        content:
-          "Compare the candidate output with the accepted reference. Return only JSON with evaluatorId, metricName, score, passed, rubricVersion, and artifactRef.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          referenceOutput: recordedCase.referenceOutput,
-          candidateOutput,
-        }),
-      },
-    ],
-    temperature: 0,
-    stream: false,
-  });
-  return parseJudgeAssessment(response.content);
-}
-
 export async function replayModeA(
   input: ReplayModeAInput,
 ): Promise<ReplayModeAResult> {
@@ -254,6 +184,7 @@ export async function replayModeA(
   const existing = await terminalCells(input.store, input.budget.projectId);
   const cells = cellsFor(input);
   const result: ReplayModeAResult = { completed: 0, skipped: 0, blocked: [] };
+  const activeRefunds = new Set<Promise<void>>();
   let nextCell = 0;
 
   async function runCell(cell: ReplayCell): Promise<void> {
@@ -267,31 +198,53 @@ export async function replayModeA(
       return;
     }
 
-    let reservation: BudgetReservation;
-    try {
-      reservation = await input.budget.reserveExecution({
-        contextTokens: cell.recordedCase.contextTokens,
-        maxOutputTokens: cell.recordedCase.maxOutputTokens,
-        pricing: cell.candidate.pricing,
-      });
-    } catch (error) {
-      if (error instanceof BudgetRefusalError) {
-        result.blocked.push({
-          stepId: cell.step.stepId,
-          caseId: cell.recordedCase.caseId,
-          candidateId: cell.candidate.id,
-          kind: "budget",
-          message: error.message,
-        });
-        return;
-      }
-      throw error;
+    if (cell.candidate.pricing === null) {
+      throw new ProviderConfigurationError(
+        `Candidate has no pricing: ${cell.candidate.id}`,
+      );
     }
+    let reservation: BudgetReservation;
+    for (;;) {
+      try {
+        reservation = await input.budget.reserveExecution({
+          contextTokens: cell.recordedCase.contextTokens,
+          maxOutputTokens: cell.recordedCase.maxOutputTokens,
+          pricing: cell.candidate.pricing,
+        });
+        break;
+      } catch (error) {
+        if (error instanceof BudgetRefusalError && error.causedByReservations) {
+          const refunds = [...activeRefunds];
+          if (refunds.length > 0) {
+            await Promise.race(refunds);
+          } else {
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          }
+          continue;
+        }
+        if (error instanceof BudgetRefusalError) {
+          result.blocked.push({
+            stepId: cell.step.stepId,
+            caseId: cell.recordedCase.caseId,
+            candidateId: cell.candidate.id,
+            kind: "budget",
+            message: error.message,
+          });
+          return;
+        }
+        throw error;
+      }
+    }
+
+    let resolveRefund = (): void => undefined;
+    const refundComplete = new Promise<void>((resolve) => {
+      resolveRefund = resolve;
+    });
+    activeRefunds.add(refundComplete);
 
     const executionId = mintExecutionId();
     const logicalCallId = randomUUID();
     let actualCostUsd = 0;
-    let attemptWriteError: unknown;
     try {
       let response;
       try {
@@ -305,34 +258,44 @@ export async function replayModeA(
           responseFormat: cell.recordedCase.responseFormat,
           headers: cell.recordedCase.headers,
           onAttempt: async (attempt) => {
-            try {
-              const attemptId = mintAttemptId();
-              await writeFact(
-                input.store,
-                input.budget.projectId,
+            actualCostUsd += attempt.costUsd;
+            const attemptId = mintAttemptId();
+            await writeFact(
+              input.store,
+              input.budget.projectId,
+              attemptId,
+              requestAttemptSchema.parse({
                 attemptId,
-                requestAttemptSchema.parse({
+                logicalCallId,
+                executionId,
+                streamOutcome: attempt.outcome,
+                usage: attempt.usage,
+                costUsd: attempt.costUsd,
+                costIsEstimate: attempt.costIsEstimate,
+              }),
+            );
+            const spendId = randomUUID();
+            await writeFact(
+              input.store,
+              input.budget.projectId,
+              spendId,
+              spendEventSchema.parse({
+                actor: "replay-driver",
+                phase: cell.step.selectionStage ?? cell.step.corpusSplit,
+                costUsd: attempt.costUsd,
+                provider: input.provider.providerId,
+                reconcilableTo: {
                   attemptId,
                   logicalCallId,
                   executionId,
-                  streamOutcome:
-                    attempt.outcome === "completed"
-                      ? "completed"
-                      : "provider_error",
-                  usage: attempt.usage,
-                  costUsd: attempt.costUsd,
+                  candidateId: cell.candidate.id,
                   costIsEstimate: attempt.costIsEstimate,
-                }),
-              );
-            } catch (error) {
-              attemptWriteError = error;
-              throw error;
-            }
+                },
+              }),
+            );
           },
         });
-        actualCostUsd = response.costUsd;
       } catch (error) {
-        if (error === attemptWriteError) throw error;
         if (error instanceof ProviderConfigurationError) throw error;
         if (error instanceof BlockedError) {
           result.blocked.push({
@@ -341,29 +304,33 @@ export async function replayModeA(
             candidateId: cell.candidate.id,
             kind: error.kind,
             message: error.message,
+            observedCeiling: error.observedCeiling,
           });
           return;
         }
-        await writeFact(
-          input.store,
-          input.budget.projectId,
-          executionId,
-          executionSchema.parse({
+        if (error instanceof ProviderRequestError) {
+          await writeFact(
+            input.store,
+            input.budget.projectId,
             executionId,
-            evidenceQuestionId: cell.step.evidenceQuestionId,
-            caseId: cell.recordedCase.caseId,
-            stepId: cell.step.stepId,
-            candidateId: cell.candidate.id,
-            trajectoryId: cell.recordedCase.trajectoryId,
-            corpusSplit: cell.recordedCase.corpusSplit,
-            selectionStage: cell.step.selectionStage ?? "shortlist",
-            terminalOutcome: "failure",
-            finalOutput: null,
-            attribution: "ok",
-          }),
-        );
-        result.completed += 1;
-        return;
+            executionSchema.parse({
+              executionId,
+              evidenceQuestionId: cell.step.evidenceQuestionId,
+              caseId: cell.recordedCase.caseId,
+              stepId: cell.step.stepId,
+              candidateId: cell.candidate.id,
+              trajectoryId: cell.recordedCase.trajectoryId,
+              corpusSplit: cell.recordedCase.corpusSplit,
+              selectionStage: cell.step.selectionStage ?? cell.step.corpusSplit,
+              terminalOutcome: "failure",
+              finalOutput: null,
+              attribution: "lost",
+            }),
+          );
+          result.completed += 1;
+          return;
+        }
+        throw error;
       }
 
       const silentFailure =
@@ -380,7 +347,7 @@ export async function replayModeA(
           candidateId: cell.candidate.id,
           trajectoryId: cell.recordedCase.trajectoryId,
           corpusSplit: cell.recordedCase.corpusSplit,
-          selectionStage: cell.step.selectionStage ?? "shortlist",
+          selectionStage: cell.step.selectionStage ?? cell.step.corpusSplit,
           terminalOutcome: silentFailure ? "failure" : "success",
           finalOutput: response.content,
           attribution: silentFailure ? "silent-failure" : "ok",
@@ -389,11 +356,41 @@ export async function replayModeA(
       result.completed += 1;
       if (silentFailure) return;
 
-      const judged = await assess(
-        input.judgeChat,
-        cell.recordedCase,
-        response.content,
-      );
+      let judgeInvocation = 0;
+      const judged = await judgeExecution({
+        chat: async (request) => {
+          judgeInvocation += 1;
+          try {
+            return await input.judge.chat(request);
+          } finally {
+            const spendId = randomUUID();
+            await writeFact(
+              input.store,
+              input.budget.projectId,
+              spendId,
+              spendEventSchema.parse({
+                actor: "judge",
+                phase: cell.step.selectionStage ?? cell.step.corpusSplit,
+                costUsd: 0,
+                provider: input.provider.providerId,
+                reconcilableTo: {
+                  executionId,
+                  judgeModel: input.judge.judgeModel,
+                  invocation: judgeInvocation,
+                  costUnavailable: true,
+                },
+              }),
+            );
+          }
+        },
+        judgeModel: input.judge.judgeModel,
+        task: cell.recordedCase.task,
+        reference:
+          typeof cell.recordedCase.referenceOutput === "string"
+            ? cell.recordedCase.referenceOutput
+            : JSON.stringify(cell.recordedCase.referenceOutput),
+        candidate: response.content,
+      });
       const assessmentId = mintAssessmentId();
       await writeFact(
         input.store,
@@ -402,11 +399,27 @@ export async function replayModeA(
         assessmentSchema.parse({
           assessmentId,
           executionId,
-          ...judged,
+          evaluatorId: judged.evaluatorId,
+          metricName: judged.metricName,
+          score: judged.score,
+          passed: judged.passed,
+          rubricVersion: judged.rubricVersion,
+          artifactRef: {
+            evidence: judged.artifactRef,
+            verdict: judged.verdict,
+            justification: judged.justification,
+            judgeModel: judged.judgeModel,
+            orderConsistent: judged.orderConsistent,
+          },
         }),
       );
     } finally {
-      await reservation.refund(actualCostUsd);
+      try {
+        await reservation.refund(actualCostUsd);
+      } finally {
+        activeRefunds.delete(refundComplete);
+        resolveRefund();
+      }
     }
   }
 

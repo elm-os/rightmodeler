@@ -1,4 +1,5 @@
 import type { ModelCatalogEntry } from "./provider.js";
+import type { CorpusSplit } from "@rightmodeler/kernel";
 
 export interface ReplayStep {
   stepId: string;
@@ -7,6 +8,7 @@ export interface ReplayStep {
   needsTools: boolean;
   needsStructuredOutput: boolean;
   observedContextTokens: number;
+  corpusSplit: CorpusSplit;
   selectionStage?: string;
 }
 
@@ -24,10 +26,12 @@ export interface ShortlistAbstention {
 export interface StepShortlist {
   stepId: string;
   candidates: ModelCatalogEntry[];
+  droppedByTop: number;
   abstention?: ShortlistAbstention;
 }
 
-function blendedPrice(model: ModelCatalogEntry): number {
+function blendedPrice(model: ModelCatalogEntry): number | null {
+  if (model.pricing === null) return null;
   return (3 * model.pricing.input + model.pricing.output) / 4;
 }
 
@@ -56,6 +60,7 @@ export function shortlist(
       return {
         stepId: step.stepId,
         candidates: [],
+        droppedByTop: 0,
         abstention: {
           kind: "current-model-absent",
           message: `Current model is absent from the provider catalog: ${step.currentModel ?? "unknown"}`,
@@ -63,7 +68,7 @@ export function shortlist(
       };
     }
     const currentPrice = blendedPrice(current);
-    const candidates = catalog
+    const qualified = catalog
       .filter((candidate) => {
         const candidatePrice = blendedPrice(candidate);
         return (
@@ -73,12 +78,16 @@ export function shortlist(
           (!step.needsTools || candidate.supportsTools) &&
           (!step.needsStructuredOutput || candidate.supportsStructuredOutput) &&
           candidate.contextLength >= step.observedContextTokens &&
-          candidatePrice > 0 &&
+          candidatePrice !== null &&
+          currentPrice !== null &&
           candidatePrice < currentPrice
         );
       })
-      .sort((left, right) => blendedPrice(left) - blendedPrice(right))
-      .slice(0, top);
-    return { stepId: step.stepId, candidates };
+      .sort((left, right) => blendedPrice(left)! - blendedPrice(right)!);
+    return {
+      stepId: step.stepId,
+      candidates: qualified.slice(0, top),
+      droppedByTop: Math.max(0, qualified.length - top),
+    };
   });
 }

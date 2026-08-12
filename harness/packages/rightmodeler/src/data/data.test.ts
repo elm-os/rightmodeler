@@ -129,6 +129,42 @@ describe("trace adapters", () => {
     ).toEqual(["summarize", "support"]);
   });
 
+  it("fails loudly when a multi-span trajectory lacks a start time", async () => {
+    const records = parseTraceRecords(await fixture(otelFixtureUrl));
+    const trajectory = records.filter(
+      (record) =>
+        typeof record === "object" &&
+        record !== null &&
+        "traceId" in record &&
+        record.traceId === "trace-trajectory-a",
+    ) as Record<string, unknown>[];
+    const missingTime = trajectory.map((record) => ({ ...record }));
+    delete missingTime[0]!.startTimeUnixNano;
+
+    expect(() => otelGenAiAdapter.adapt(missingTime)).toThrowError(
+      expect.objectContaining({
+        name: "TraceAdaptError",
+        message: expect.stringMatching(/start time/i),
+      }) as TraceAdaptError,
+    );
+  });
+
+  it("adapts future operation names and uses the v0 family fallback", async () => {
+    const records = parseTraceRecords(await fixture(otelFixtureUrl));
+    const source = records[0] as Record<string, unknown>;
+    const sourceAttributes = source.attributes as Record<string, unknown>;
+    const attributes: Record<string, unknown> = {
+      ...sourceAttributes,
+      "gen_ai.operation.name": "future_inference_operation",
+      "gen_ai.prompt.name": "fallback-family",
+    };
+    delete attributes["rightmodeler.family"];
+
+    const [run] = otelGenAiAdapter.adapt([{ ...source, attributes }]);
+
+    expect(run?.steps[0]?.family).toBe("fallback-family");
+  });
+
   it("adapts captured OpenAI request-response pairs", async () => {
     const runs = openAiJsonlAdapter.adapt(
       parseTraceRecords(await fixture(openAiFixtureUrl)),
@@ -166,13 +202,12 @@ describe("scrubRuns", () => {
     );
   });
 
-  it("aborts with a typed error instead of returning partial unscrubbed data", () => {
+  it("wraps invalid normalized input failures as ScrubError", () => {
     const malformed = [
       {
         version: "2",
         traceId: "trace",
         sourceFormat: "test",
-        steps: [{ messages: ["person@example.test"] }],
       },
     ] as unknown as NormalizedRun[];
 
@@ -200,8 +235,106 @@ describe("corpus", () => {
       { family: "summarize", corpusShare: 0.5, trafficShare: 0.5 },
       { family: "support", corpusShare: 0.5, trafficShare: 0.5 },
     ]);
+    expect(
+      first.cases.every(
+        (corpusCase) =>
+          corpusCase.split === "shortlist" || corpusCase.split === "holdout",
+      ),
+    ).toBe(true);
     expect(corpusShare).toBeCloseTo(1, 12);
     expect(trafficShare).toBeCloseTo(1, 12);
+  });
+
+  it("keeps corpus share distinct from observed run traffic share", () => {
+    const runs: NormalizedRun[] = [
+      {
+        version: "2",
+        traceId: "summarize-run",
+        sourceFormat: "test",
+        steps: [
+          {
+            stepIndex: 0,
+            model: "model",
+            messages: ["first"],
+            output: "first output",
+            usage: { inputTokens: 1, outputTokens: 1 },
+            trajectoryId: "summarize-run",
+            family: "summarize",
+          },
+          {
+            stepIndex: 1,
+            model: "model",
+            messages: ["second"],
+            output: "second output",
+            usage: { inputTokens: 1, outputTokens: 1 },
+            trajectoryId: "summarize-run",
+            family: "summarize",
+          },
+        ],
+      },
+      {
+        version: "2",
+        traceId: "support-run",
+        sourceFormat: "test",
+        steps: [
+          {
+            stepIndex: 0,
+            model: "model",
+            messages: ["support"],
+            output: "support output",
+            usage: { inputTokens: 1, outputTokens: 1 },
+            trajectoryId: "support-run",
+            family: "support",
+          },
+        ],
+      },
+    ];
+
+    expect(buildCorpus(runs, { seed: 42 }).strata).toEqual([
+      {
+        family: "summarize",
+        corpusShare: 2 / 3,
+        trafficShare: 1 / 2,
+      },
+      {
+        family: "support",
+        corpusShare: 1 / 3,
+        trafficShare: 1 / 2,
+      },
+    ]);
+  });
+
+  it("keeps corpus identity stable when spans are permuted within a trajectory", async () => {
+    const records = parseTraceRecords(await fixture(otelFixtureUrl));
+    const permuted = [...records];
+    const indexes = permuted.flatMap((record, index) =>
+      typeof record === "object" &&
+      record !== null &&
+      "traceId" in record &&
+      record.traceId === "trace-trajectory-a"
+        ? [index]
+        : [],
+    );
+    const [firstIndex, secondIndex] = indexes;
+    if (firstIndex === undefined || secondIndex === undefined) {
+      throw new Error("fixture trajectory is incomplete");
+    }
+    [permuted[firstIndex], permuted[secondIndex]] = [
+      permuted[secondIndex],
+      permuted[firstIndex],
+    ];
+
+    const original = buildCorpus(
+      scrubRuns(otelGenAiAdapter.adapt(records)).runs,
+      { seed: 42 },
+    );
+    const reordered = buildCorpus(
+      scrubRuns(otelGenAiAdapter.adapt(permuted)).runs,
+      { seed: 42 },
+    );
+
+    expect(reordered.corpusVersionId).toBe(original.corpusVersionId);
+    expect(reordered.cases).toEqual(original.cases);
   });
 
   it("writes each case and manifest immutably and resumes idempotently", async () => {
@@ -215,10 +348,10 @@ describe("corpus", () => {
       await writeCorpus(store, "project", corpus);
       await writeCorpus(store, "project", corpus);
       expect(await store.list("project/cases/")).toHaveLength(
-        corpus.cases.length + 1,
+        corpus.cases.length,
       );
       const manifest = await store.get(
-        `project/cases/corpus-${corpus.corpusVersionId}.json`,
+        `project/corpus/corpus-${corpus.corpusVersionId}.json`,
       );
       expect(
         JSON.parse(Buffer.from(manifest!.body).toString("utf8")).strata,
@@ -242,8 +375,19 @@ describe("reference audit", () => {
     expect(worksheet.cases.every((entry) => "acceptedOutput" in entry)).toBe(
       true,
     );
-    expect(JSON.stringify(worksheet)).not.toContain("modelJudgment");
-    expect(JSON.stringify(worksheet)).not.toContain("modelVerdict");
+    for (const entry of worksheet.cases) {
+      expect(Object.keys(entry).sort()).toEqual(
+        [
+          "acceptedOutput",
+          "caseId",
+          "family",
+          "messages",
+          "note",
+          ...(entry.systemPrompt === undefined ? [] : ["systemPrompt"]),
+          "verdict",
+        ].sort(),
+      );
+    }
   });
 
   it("counts incorrect and ambiguous verdicts as hand-computed disagreement", () => {
@@ -274,12 +418,16 @@ describe("reference audit", () => {
 
     const result = auditTabulate(worksheet).perFamily.support;
     expect(MIN_AUDITED_PER_FAMILY).toBe(10);
-    expect(result).toMatchObject({ n: 10, disagreement: 0.2, ceiling: 0.8 });
-    expect(result?.wilsonLow).toBeCloseTo(0.0566821515, 10);
-    expect(result?.wilsonHigh).toBeCloseTo(0.5098375285, 10);
+    expect(result).toMatchObject({
+      n: 10,
+      disagreement: 0.2,
+      referenceAgreementPoint: 0.8,
+    });
+    expect(result?.wilsonLow).toBeCloseTo(0.0566821514015734, 12);
+    expect(result?.wilsonHigh).toBeCloseTo(0.5098375287101421, 12);
   });
 
-  it("names why a sparse family has no ceiling", () => {
+  it("names why a sparse family has no reference agreement point", () => {
     const worksheet: AuditWorksheet = {
       seed: 1,
       populationSize: 1,
@@ -297,8 +445,8 @@ describe("reference audit", () => {
 
     expect(auditTabulate(worksheet).perFamily.sparse).toMatchObject({
       n: 1,
-      ceiling: null,
-      ceilingReason: "below_minimum_audited_count",
+      referenceAgreementPoint: null,
+      referenceAgreementPointReason: "below_minimum_audited_count",
     });
   });
 });

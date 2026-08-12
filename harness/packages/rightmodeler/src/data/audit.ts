@@ -1,4 +1,5 @@
 import { computeRunSpecDigest, type JsonValue } from "@rightmodeler/core";
+import { wilson } from "@rightmodeler/kernel";
 import { z } from "zod";
 
 import { buildCorpus } from "./corpus.js";
@@ -30,8 +31,9 @@ export interface FamilyAuditResult {
   disagreement: number;
   wilsonLow: number;
   wilsonHigh: number;
-  ceiling: number | null;
-  ceilingReason?: "below_minimum_audited_count";
+  /** Observed agreement point only; the two-sided contamination model is deferred. */
+  referenceAgreementPoint: number | null;
+  referenceAgreementPointReason?: "below_minimum_audited_count";
 }
 
 export interface AuditResult {
@@ -54,7 +56,7 @@ function sampleCases(
     .sort((left, right) => {
       const leftOrder = computeRunSpecDigest({ seed, caseId: left.caseId });
       const rightOrder = computeRunSpecDigest({ seed, caseId: right.caseId });
-      return leftOrder.localeCompare(rightOrder);
+      return leftOrder < rightOrder ? -1 : leftOrder > rightOrder ? 1 : 0;
     })
     .slice(0, size);
 }
@@ -100,18 +102,6 @@ export function auditSample(
   }
 }
 
-function wilson(disagreements: number, total: number): [number, number] {
-  const z = 1.959963984540054;
-  const rate = disagreements / total;
-  const zSquared = z * z;
-  const denominator = 1 + zSquared / total;
-  const center = (rate + zSquared / (2 * total)) / denominator;
-  const margin =
-    (z * Math.sqrt((rate * (1 - rate) + zSquared / (4 * total)) / total)) /
-    denominator;
-  return [Math.max(0, center - margin), Math.min(1, center + margin)];
-}
-
 export function auditTabulate(worksheet: AuditWorksheet): AuditResult {
   try {
     const families = new Map<string, AuditVerdict[]>();
@@ -134,16 +124,21 @@ export function auditTabulate(worksheet: AuditWorksheet): AuditResult {
             (verdict) => verdict !== "correct",
           ).length;
           const disagreement = disagreementCount / n;
-          const [wilsonLow, wilsonHigh] = wilson(disagreementCount, n);
+          const { lower: wilsonLow, upper: wilsonHigh } = wilson(
+            disagreementCount,
+            n,
+          );
           const result: FamilyAuditResult = {
             n,
             disagreement,
             wilsonLow,
             wilsonHigh,
-            ceiling: n >= MIN_AUDITED_PER_FAMILY ? 1 - disagreement : null,
+            referenceAgreementPoint:
+              n >= MIN_AUDITED_PER_FAMILY ? 1 - disagreement : null,
           };
-          if (result.ceiling === null) {
-            result.ceilingReason = "below_minimum_audited_count";
+          if (result.referenceAgreementPoint === null) {
+            result.referenceAgreementPointReason =
+              "below_minimum_audited_count";
           }
           return [family, result];
         }),

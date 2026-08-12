@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@rightmodeler/core": "workspace:*",
+    "@rightmodeler/kernel": "workspace:*",
     "commander": "^14",
     "zod": "^4"
   },

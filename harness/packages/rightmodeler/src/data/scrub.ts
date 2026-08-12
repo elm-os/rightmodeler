@@ -1,6 +1,6 @@
 import type { JsonValue } from "@rightmodeler/core";
 
-import { normalizedRunSchema, type NormalizedRun } from "./normalized-run.js";
+import type { NormalizedRun } from "./normalized-run.js";
 
 export type RedactionKind = "email" | "phone";
 
@@ -61,9 +61,8 @@ function scrubJson(
 
 export function scrubRuns(runs: readonly NormalizedRun[]): ScrubResult {
   try {
-    const parsedRuns = normalizedRunSchema.array().parse(runs);
     const redactions: Redaction[] = [];
-    const scrubbedRuns = parsedRuns.map((run, runIndex) => ({
+    const scrubbedRuns = runs.map((run, runIndex) => ({
       ...run,
       steps: run.steps.map((step) => {
         const kinds = new Set<RedactionKind>();

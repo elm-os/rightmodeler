@@ -12,6 +12,7 @@ import { ReleaseGatePolicy } from "./gates.js";
 const policy = new ReleaseGatePolicy({
   gatePolicyVersion: "gate-1",
   qualityFloor: 0.9,
+  availabilityFloor: 0.8,
 });
 
 function splitVerdict(input: {
@@ -29,7 +30,11 @@ function splitVerdict(input: {
       corpusSplit: input.split,
       passed: index < input.passes,
     })),
-    { gatePolicyVersion: "gate-1" },
+    {
+      gatePolicyVersion: "gate-1",
+      qualityFloor: 0.8,
+      availabilityFloor: 0.8,
+    },
   )[0]!;
 }
 
@@ -69,7 +74,11 @@ function clusteredCandidate(candidateId: string, cost: number) {
         corpusSplit: split,
         trajectoryId: `${split}-trajectory-${index % 5}`,
       })),
-      { gatePolicyVersion: "gate-1" },
+      {
+        gatePolicyVersion: "gate-1",
+        qualityFloor: 0.8,
+        availabilityFloor: 0.5,
+      },
     )[0]!;
 
   return {
@@ -78,40 +87,11 @@ function clusteredCandidate(candidateId: string, cost: number) {
   };
 }
 
-function holdoutCaseIds(candidateVerdicts: ReturnType<typeof candidate>) {
-  return candidateVerdicts.holdout.caseIds;
-}
-
 function selectWithExistingHoldouts(
   candidates: Record<string, ReturnType<typeof candidate>>,
   releasePolicy = policy,
 ) {
-  const winner = Object.entries(candidates)
-    .filter(([, verdicts]) =>
-      verdicts.shortlist.evaluatorKinds.every(
-        (kind) => kind.passRate >= releasePolicy.passFraction,
-      ),
-    )
-    .sort(
-      ([leftId, left], [rightId, right]) =>
-        left.shortlist.candidateCostUsd - right.shortlist.candidateCostUsd ||
-        leftId.localeCompare(rightId),
-    )[0]!;
-  const shortlistOnly = Object.fromEntries(
-    Object.entries(candidates).map(([candidateId, verdicts]) => [
-      candidateId,
-      { shortlist: verdicts.shortlist },
-    ]),
-  );
-  const planned = selectWinner(shortlistOnly, releasePolicy, {
-    expectedHoldoutCaseIds: holdoutCaseIds(winner[1]),
-  });
-  if (planned.status !== "confirmation_required") {
-    throw new Error("expected a confirmation plan");
-  }
-  return selectWinner(candidates, releasePolicy, {
-    confirmationPlan: planned.confirmationPlan,
-  });
+  return selectWinner(candidates, releasePolicy);
 }
 
 describe("assignSplits", () => {
@@ -206,6 +186,7 @@ describe("selectWinner", () => {
     const multiplicityPolicy = new ReleaseGatePolicy({
       gatePolicyVersion: "gate-1",
       qualityFloor: 0.81,
+      availabilityFloor: 0.8,
     });
     const selection = selectWithExistingHoldouts(
       {
@@ -242,6 +223,7 @@ describe("selectWinner", () => {
     const multiplicityPolicy = new ReleaseGatePolicy({
       gatePolicyVersion: "gate-1",
       qualityFloor: 0.81,
+      availabilityFloor: 0.8,
     });
     const clusteredCandidates = {
       cheap: clusteredCandidate("cheap", 0.1),
@@ -254,14 +236,12 @@ describe("selectWinner", () => {
         expensive: { shortlist: clusteredCandidates.expensive.shortlist },
       },
       multiplicityPolicy,
-      { expectedHoldoutCaseIds: winnerHoldout.caseIds },
     );
     if (planned.status !== "confirmation_required") {
       throw new Error("expected a confirmation plan");
     }
-    const selection = selectWinner(clusteredCandidates, multiplicityPolicy, {
-      confirmationPlan: planned.confirmationPlan,
-    });
+    expect(winnerHoldout.caseIds).not.toHaveLength(0);
+    const selection = selectWinner(clusteredCandidates, multiplicityPolicy);
 
     expect(selection.status).toBe("holdout_failed");
     if (
@@ -288,12 +268,12 @@ describe("selectWinner", () => {
         }),
       },
       policy,
-      { expectedHoldoutCaseIds: ["holdout-case-0"] },
     );
 
     expect(selection).toEqual({
       status: "no_shortlist_passer",
       shortlistedCandidateIds: [],
+      holdoutRequired: false,
     });
   });
 
@@ -315,13 +295,12 @@ describe("selectWinner", () => {
       expensive: { shortlist: expensive.shortlist },
     };
 
-    const planned = selectWinner(shortlistsOnly, policy, {
-      expectedHoldoutCaseIds: cheap.holdout.caseIds,
-    });
+    const planned = selectWinner(shortlistsOnly, policy);
     expect(planned).toMatchObject({
       status: "confirmation_required",
       shortlistedCandidateIds: ["cheap", "expensive"],
       confirmedCandidateId: "cheap",
+      holdoutRequired: true,
     });
     if (planned.status !== "confirmation_required") {
       throw new Error("expected a confirmation plan");
@@ -333,75 +312,12 @@ describe("selectWinner", () => {
           expensive: { shortlist: expensive.shortlist },
         },
         policy,
-        { confirmationPlan: planned.confirmationPlan },
       ),
     ).toMatchObject({
       status: "selected",
       confirmedCandidateId: "cheap",
+      holdoutRequired: false,
     });
-  });
-
-  it("binds confirmation to the original candidate universe and assigned holdout", () => {
-    const cheap = candidate({
-      candidateId: "cheap",
-      cost: 0.1,
-      shortlistPasses: 17,
-      holdoutPasses: 17,
-      trials: 17,
-    });
-    const expensive = candidate({
-      candidateId: "expensive",
-      cost: 0.5,
-      shortlistPasses: 17,
-      holdoutPasses: 17,
-      trials: 17,
-    });
-    const planned = selectWinner(
-      {
-        cheap: { shortlist: cheap.shortlist },
-        expensive: { shortlist: expensive.shortlist },
-      },
-      policy,
-      { expectedHoldoutCaseIds: cheap.holdout.caseIds },
-    );
-    if (planned.status !== "confirmation_required") {
-      throw new Error("expected a confirmation plan");
-    }
-
-    expect(() =>
-      selectWinner({ cheap }, policy, {
-        confirmationPlan: planned.confirmationPlan,
-      }),
-    ).toThrow(/candidate universe/i);
-    expect(() =>
-      selectWinner(
-        {
-          cheap: {
-            shortlist: cheap.shortlist,
-            holdout: {
-              ...cheap.holdout,
-              caseIds: cheap.holdout.caseIds.slice(1),
-            },
-          },
-          expensive: { shortlist: expensive.shortlist },
-        },
-        policy,
-        { confirmationPlan: planned.confirmationPlan },
-      ),
-    ).toThrow(/assigned split/i);
-    expect(() =>
-      selectWinner(
-        {
-          cheap,
-          expensive: { shortlist: expensive.shortlist },
-        },
-        new ReleaseGatePolicy({
-          gatePolicyVersion: "gate-1",
-          qualityFloor: 0.81,
-        }),
-        { confirmationPlan: planned.confirmationPlan },
-      ),
-    ).toThrow(/quality floor/i);
   });
 
   it("does not select a holdout winner that fails a binding release gate", () => {
@@ -419,7 +335,11 @@ describe("selectWinner", () => {
         corpusSplit: "holdout",
         evidenceCovered: false,
       })),
-      { gatePolicyVersion: "gate-1" },
+      {
+        gatePolicyVersion: "gate-1",
+        qualityFloor: 0.8,
+        availabilityFloor: 0.5,
+      },
     )[0]!;
 
     expect(

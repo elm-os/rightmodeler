@@ -8,15 +8,16 @@ import {
   FsStore,
   type Fact,
 } from "@rightmodeler/core";
+import type { JudgeChat } from "@rightmodeler/kernel";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  BlockedError,
   BudgetRefusalError,
   createBudget,
   createProvider,
   replayModeA,
   shortlist,
-  type JudgeChat,
   type ModelCatalogEntry,
   type ProviderClient,
   type RecordedCase,
@@ -59,6 +60,7 @@ function step(overrides: Partial<ReplayStep> = {}): ReplayStep {
     needsTools: false,
     needsStructuredOutput: false,
     observedContextTokens: 64,
+    corpusSplit: "shortlist",
     ...overrides,
   };
 }
@@ -69,6 +71,7 @@ function recordedCase(overrides: Partial<RecordedCase> = {}): RecordedCase {
     stepId: "step-1",
     trajectoryId: "trajectory-1",
     corpusSplit: "shortlist",
+    task: "Summarize the recorded case.",
     system: "Keep the recorded request unchanged.",
     messages: [{ role: "user", content: "Summarize this case." }],
     temperature: 0.25,
@@ -82,17 +85,12 @@ function recordedCase(overrides: Partial<RecordedCase> = {}): RecordedCase {
 function judge(counter?: { calls: number }): JudgeChat {
   return async (request) => {
     if (counter !== undefined) counter.calls += 1;
-    expect(request.stream).toBe(false);
-    return {
-      content: JSON.stringify({
-        evaluatorId: "judge-test",
-        metricName: "reference-equivalence",
-        score: 1,
-        passed: true,
-        rubricVersion: "v1",
-        artifactRef: { kind: "inline" },
-      }),
-    };
+    expect(request.temperature).toBe(0);
+    return JSON.stringify({
+      verdict: "equivalent",
+      score: 1,
+      justification: "Equivalent fixture outputs.",
+    });
   };
 }
 
@@ -124,6 +122,7 @@ describe("provider client", () => {
 
   it("normalizes the OpenAI-compatible catalog and estimates missing cost", async () => {
     const provider = createProvider({
+      providerId: "stub-provider",
       baseUrl: baseUrl(stub),
       apiKeyEnv: "REPLAY_TEST_API_KEY",
     });
@@ -135,7 +134,7 @@ describe("provider client", () => {
       family: "acme",
       contextLength: 0,
       pricing: { input: 0.0000002, output: 0.0000008 },
-      supportsTools: true,
+      supportsTools: false,
       supportsStructuredOutput: false,
     });
 
@@ -157,6 +156,7 @@ describe("provider client", () => {
 
   it("reads the API key at call time", async () => {
     const provider = createProvider({
+      providerId: "stub-provider",
       baseUrl: baseUrl(stub),
       apiKeyEnv: "REPLAY_TEST_API_KEY",
     });
@@ -204,8 +204,8 @@ describe("budget reservation", () => {
       else throw error;
     }
 
-    expect(refusal?.requiredCapUsd).toBeCloseTo(0.011);
-    expect(refusal?.message).toContain("$0.011");
+    expect(refusal?.requiredCapUsd).toBeCloseTo(0.005);
+    expect(refusal?.causedByReservations).toBe(true);
     expect((await budget.state()).reservedUsd).toBeCloseTo(0.006);
 
     await first.refund(0.001);
@@ -228,6 +228,65 @@ describe("budget reservation", () => {
     expect(await budget.state()).toMatchObject({
       spentUsd: 3,
       reservedUsd: 0,
+    });
+  });
+
+  it("adopts a raised cap when a stored ledger resumes", async () => {
+    const initial = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.005,
+    });
+    const first = await initial.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 1,
+      pricing: { input: 0.002, output: 0.003 },
+    });
+    await first.refund(0.001);
+
+    const raised = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.02,
+    });
+    const second = await raised.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 1,
+      pricing: { input: 0.004, output: 0.006 },
+    });
+
+    expect(await raised.state()).toMatchObject({
+      authorizedTotalUsd: 0.02,
+      reservedUsd: 0.01,
+    });
+    await second.refund(0.002);
+  });
+
+  it("refuses only when spent plus the next worst case exceeds the cap", async () => {
+    const budget = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.01,
+    });
+    const first = await budget.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 1,
+      pricing: { input: 0.003, output: 0.003 },
+    });
+    await first.refund(0.006);
+
+    await expect(
+      budget.reserveExecution({
+        contextTokens: 1,
+        maxOutputTokens: 1,
+        pricing: { input: 0.002, output: 0.003 },
+      }),
+    ).rejects.toMatchObject({
+      requiredCapUsd: 0.011,
+      causedByReservations: false,
     });
   });
 });
@@ -343,6 +402,7 @@ describe("shortlist", () => {
     );
 
     expect(result[0]?.candidates).toHaveLength(8);
+    expect(result[0]?.droppedByTop).toBe(2);
     expect(result[0]?.candidates.map((candidate) => candidate.id)).toEqual([
       "vendor/candidate-0",
       "vendor/candidate-1",
@@ -353,6 +413,28 @@ describe("shortlist", () => {
       "vendor/candidate-6",
       "vendor/candidate-7",
     ]);
+  });
+
+  it("keeps explicitly free models and excludes unpriced models", () => {
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        ...catalog,
+        {
+          ...catalog[1]!,
+          id: "vendor/free",
+          pricing: { input: 0, output: 0 },
+        },
+        { ...catalog[1]!, id: "vendor/unpriced", pricing: null },
+      ],
+    );
+
+    expect(result[0]?.candidates.map((candidate) => candidate.id)).toContain(
+      "vendor/free",
+    );
+    expect(
+      result[0]?.candidates.map((candidate) => candidate.id),
+    ).not.toContain("vendor/unpriced");
   });
 });
 
@@ -368,6 +450,7 @@ describe("Mode A replay", () => {
     directory = await mkdtemp(join(tmpdir(), "rightmodeler-replay-driver-"));
     store = new FsStore(directory);
     provider = createProvider({
+      providerId: "stub-provider",
       baseUrl: baseUrl(stub),
       apiKeyEnv: "REPLAY_TEST_API_KEY",
       maxConcurrency: 4,
@@ -393,9 +476,11 @@ describe("Mode A replay", () => {
     return replayModeA({
       steps: [step()],
       cases,
-      candidates: [{ stepId: "step-1", candidates: [candidate] }],
+      candidates: [
+        { stepId: "step-1", candidates: [candidate], droppedByTop: 0 },
+      ],
       provider,
-      judgeChat,
+      judge: { chat: judgeChat, judgeModel: "neutral/judge" },
       store,
       budget,
       concurrency: 2,
@@ -411,6 +496,7 @@ describe("Mode A replay", () => {
     const executions = facts.filter(
       (fact) => "executionId" in fact && "caseId" in fact,
     );
+    const spend = facts.filter((fact) => "actor" in fact);
 
     expect(result.blocked).toEqual([]);
     expect(attempts).toHaveLength(2);
@@ -426,12 +512,169 @@ describe("Mode A replay", () => {
       terminalOutcome: "success",
       attribution: "ok",
     });
+    expect(
+      spend.filter((event) => event.actor === "replay-driver"),
+    ).toHaveLength(2);
+    expect(spend.filter((event) => event.actor === "judge")).toHaveLength(2);
+    expect(
+      spend
+        .filter((event) => event.actor === "replay-driver")
+        .reduce((total, event) => total + event.costUsd, 0),
+    ).toBeGreaterThan(0);
+  });
+
+  it("uses kernel judge provenance and records position-swap evidence", async () => {
+    const requests: Parameters<JudgeChat>[0][] = [];
+    await run([recordedCase()], async (request) => {
+      requests.push(request);
+      return JSON.stringify({
+        verdict: "equivalent",
+        score: 1,
+        justification: "Equivalent fixture outputs.",
+      });
+    });
+    const facts = await readFacts(store);
+    const assessment = facts.find((fact) => "assessmentId" in fact);
+
+    expect(requests).toHaveLength(2);
+    expect(requests.every((request) => request.model === "neutral/judge")).toBe(
+      true,
+    );
+    expect(assessment).toMatchObject({
+      evaluatorId: "neutral/judge",
+      metricName: "replacement-quality",
+      rubricVersion: "position-swap-v1",
+      passed: true,
+      artifactRef: {
+        verdict: "equivalent",
+        judgeModel: "neutral/judge",
+        orderConsistent: true,
+      },
+    });
+  });
+
+  it("records a provider 400 as lost rather than a scored failure", async () => {
+    const result = await run([
+      recordedCase({ headers: { "x-stub-echo-auth": "true" } }),
+    ]);
+    const facts = await readFacts(store);
+    const execution = facts.find(
+      (fact) => "caseId" in fact && "terminalOutcome" in fact,
+    );
+
+    expect(result.completed).toBe(1);
+    expect(execution).toMatchObject({
+      terminalOutcome: "failure",
+      finalOutput: null,
+      attribution: "lost",
+    });
+    expect(facts.some((fact) => "assessmentId" in fact)).toBe(false);
+  });
+
+  it("replays only cases assigned to the step corpus split", async () => {
+    const result = await run([
+      recordedCase({ caseId: "shortlist-case", corpusSplit: "shortlist" }),
+      recordedCase({ caseId: "holdout-case", corpusSplit: "holdout" }),
+    ]);
+    const facts = await readFacts(store);
+    const executions = facts.filter(
+      (fact) => "caseId" in fact && "terminalOutcome" in fact,
+    );
+
+    expect(result.completed).toBe(1);
+    expect(executions.map((execution) => execution.caseId)).toEqual([
+      "shortlist-case",
+    ]);
+  });
+
+  it("carries the observed rate-limit ceiling onto a blocked cell", async () => {
+    const delegate = provider;
+    provider = {
+      providerId: delegate.providerId,
+      listModels: () => delegate.listModels(),
+      chat: async () => {
+        throw new BlockedError(429, 2);
+      },
+    };
+
+    const result = await run([recordedCase()]);
+
+    expect(result.blocked).toEqual([
+      expect.objectContaining({
+        kind: "rate-limit",
+        observedCeiling: 2,
+      }),
+    ]);
+  });
+
+  it("waits for a refund before retrying reservation-limited concurrency", async () => {
+    const candidate: ModelCatalogEntry = {
+      id: "vendor/candidate",
+      family: "vendor",
+      contextLength: 100,
+      pricing: { input: 0.006, output: 0.004 },
+      supportsTools: false,
+      supportsStructuredOutput: false,
+    };
+    const delayedProvider: ProviderClient = {
+      providerId: "delayed-provider",
+      listModels: async () => [candidate],
+      chat: async (request) => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const response = {
+          content: "candidate output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          costUsd: 0.001,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+    const budget = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.0111,
+    });
+
+    const result = await replayModeA({
+      steps: [step()],
+      cases: [
+        recordedCase({
+          caseId: "case-1",
+          contextTokens: 1,
+          maxOutputTokens: 1,
+        }),
+        recordedCase({
+          caseId: "case-2",
+          trajectoryId: "trajectory-2",
+          contextTokens: 1,
+          maxOutputTokens: 1,
+        }),
+      ],
+      candidates: [
+        { stepId: "step-1", candidates: [candidate], droppedByTop: 0 },
+      ],
+      provider: delayedProvider,
+      judge: { chat: judge(), judgeModel: "neutral/judge" },
+      store,
+      budget,
+      concurrency: 2,
+    });
+
+    expect(result).toMatchObject({ completed: 2, blocked: [] });
+    expect(await budget.state()).toMatchObject({
+      spentUsd: 0.002,
+      reservedUsd: 0,
+    });
   });
 
   it("replays the recorded request verbatim with only the model swapped", async () => {
     const delegate = provider;
     const requests: Parameters<ProviderClient["chat"]>[0][] = [];
     provider = {
+      providerId: delegate.providerId,
       listModels: () => delegate.listModels(),
       chat: (request) => {
         requests.push(request);
@@ -494,17 +737,19 @@ describe("Mode A replay", () => {
     expect(await readFacts(store)).toHaveLength(factsAfterFirstRun.length);
   });
 
-  it("never persists or throws the environment key value", async () => {
+  it("redacts an echoed authorization key and never persists it", async () => {
     const errors: Error[] = [];
     await run([recordedCase()]);
     try {
       const failingProvider = createProvider({
-        baseUrl: `${baseUrl(stub)}/missing`,
+        providerId: "stub-provider",
+        baseUrl: baseUrl(stub),
         apiKeyEnv: "REPLAY_TEST_API_KEY",
       });
       await failingProvider.chat({
         model: "acme/small-1",
         messages: [{ role: "user", content: "not found" }],
+        headers: { "x-stub-echo-auth": "true" },
       });
     } catch (error) {
       if (error instanceof Error) errors.push(error);
@@ -519,6 +764,7 @@ describe("Mode A replay", () => {
         message: error.message,
       })),
     });
+    expect(errors[0]?.message).toContain("[redacted]");
     expect(serialized).not.toContain(fakeKey);
   });
 });

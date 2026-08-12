@@ -14,7 +14,11 @@ import {
   withExpectedAssignments,
 } from "./__fixtures__/aggregation.js";
 
-const options = { gatePolicyVersion: "gate-1" } as const;
+const options = {
+  gatePolicyVersion: "gate-1",
+  qualityFloor: 0.8,
+  availabilityFloor: 0.8,
+} as const;
 
 describe("aggregate", () => {
   it("partitions by evidence question while pooling judge model and version", () => {
@@ -90,6 +94,53 @@ describe("aggregate", () => {
       rate: 0.85,
     });
     expect(verdict.availability.lowerBound).toBeLessThan(0.8);
+    expect(verdict).toMatchObject({
+      decision: "abstain",
+      abstainReason: "insufficient_availability",
+    });
+  });
+
+  it("recommends when complete evidence clears both aggregate floors", () => {
+    const [verdict] = aggregate(aggregationFacts(20), options);
+
+    expect(verdict.worstCaseBound).toBeGreaterThan(options.qualityFloor);
+    expect(verdict.availability.lowerBound).toBeGreaterThan(
+      options.availabilityFloor,
+    );
+    expect(verdict.decision).toBe("recommend");
+  });
+
+  it("applies the excluded-fraction refusal to each evaluator kind", () => {
+    const expectedEvaluatorAssignments = Array.from(
+      { length: 100 },
+      (_, index) => ({
+        caseId: `case-${index}`,
+        stratumId: "default",
+        evaluatorKind: index < 20 ? "judge" : "deterministic",
+      }),
+    );
+    const facts = [
+      ...Array.from({ length: 20 }, (_, index) =>
+        aggregationFact(index, {
+          evaluatorKind: "judge",
+          attribution: index < 5 ? "lost" : "ok",
+          expectedEvaluatorAssignments,
+        }),
+      ),
+      ...Array.from({ length: 80 }, (_, offset) =>
+        aggregationFact(offset + 20, {
+          evaluatorKind: "deterministic",
+          expectedEvaluatorAssignments,
+        }),
+      ),
+    ];
+
+    expect(
+      aggregate(facts, { ...options, availabilityFloor: 0.7 })[0],
+    ).toMatchObject({
+      decision: "abstain",
+      abstainReason: "excluded_fraction_exceeded",
+    });
   });
 
   it("carries the reference ceiling and leaves Mode A optimism absent", () => {
@@ -112,6 +163,21 @@ describe("aggregate", () => {
     expect(verdict.clusterBootstrapLow).toBeTypeOf("number");
     expect(kind).not.toHaveProperty("naiveInterval");
     expect(kind.clusterBootstrapLow).toBeCloseTo(wilson(5, 5).lower, 12);
+  });
+
+  it("uses trajectory resampling for mixed clustered outcomes", () => {
+    const facts = aggregationFacts(16, (index) => ({
+      passed: index < 10,
+      trajectoryId: `trajectory-${index % 8}`,
+    }));
+    const [verdict] = aggregate(facts, {
+      ...options,
+      qualityFloor: 0.2,
+    });
+    const [kind] = verdict.evaluatorKinds;
+
+    expect(kind.passRate).toBe(0.625);
+    expect(kind.clusterBootstrapLow).not.toBeCloseTo(wilson(10, 16).lower, 4);
   });
 
   it("refuses a naive interval when a repeated trajectory includes an exclusion", () => {
