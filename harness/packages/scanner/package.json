@@ -14,7 +14,8 @@
     "check": "tsc --noEmit && vitest run"
   },
   "dependencies": {
-    "@rightmodeler/core": "workspace:*"
+    "@rightmodeler/core": "workspace:*",
+    "zod": "^4"
   },
   "devDependencies": {
     "@types/node": "^20",
