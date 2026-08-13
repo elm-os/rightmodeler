@@ -5,6 +5,7 @@
 
 import { getAllPosts } from "@/content/blog";
 import { getAllIntegrations } from "@/content/integrations";
+import { getAllComparisons } from "@/content/vs";
 import { SITE_NAME, SITE_URL, REPO_URL, RUN_COMMAND } from "@/lib/site";
 
 // One-paragraph summary for the llms.txt blockquote. Stands alone: an LLM should grasp the whole
@@ -76,6 +77,12 @@ const PAGES: { path: string; title: string; description: string }[] = [
       "Every tool rightmodeler works with: the trace formats it reads and the infrastructure it replays through.",
   },
   {
+    path: "/vs",
+    title: "rightmodeler vs alternatives",
+    description:
+      "Honest comparisons with routers, gateways, and eval platforms: what each tool decides, what it measures, and when to use which.",
+  },
+  {
     path: "/manifesto",
     title: "Manifesto",
     description:
@@ -136,6 +143,14 @@ const integrationLinks = getAllIntegrations()
   )
   .join("\n");
 
+// Comparison pages, resolved from the same registry the /vs routes use.
+const vsLinks = getAllComparisons()
+  .map(
+    (comparison) =>
+      `- [${SITE_NAME} vs ${comparison.name}](${SITE_URL}/vs/${comparison.slug}): ${comparison.description}`,
+  )
+  .join("\n");
+
 // /llms.txt — curated index: H1, blockquote summary, a non-heading context line, then annotated
 // link sections. The reserved "## Optional" section points at the companion context file.
 export function buildLlmsTxt(): string {
@@ -164,6 +179,10 @@ ${pageLinks}
 ## Integrations
 
 ${integrationLinks}
+
+## Comparisons
+
+${vsLinks}
 
 ## Blog
 
@@ -201,6 +220,10 @@ ${pageLinks}
 ## Integration index
 
 ${integrationLinks}
+
+## Comparison index
+
+${vsLinks}
 
 ---
 

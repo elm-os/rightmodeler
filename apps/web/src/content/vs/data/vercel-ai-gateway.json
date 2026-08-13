@@ -1,0 +1,176 @@
+{
+  "slug": "vercel-ai-gateway",
+  "name": "Vercel AI Gateway",
+  "category": "gateway",
+  "verdict": "complement",
+  "verdictLabel": "Complement · same credits, two jobs",
+  "title": "rightmodeler vs Vercel AI Gateway: meter vs measure",
+  "description": "Vercel AI Gateway serves and meters your live model calls. rightmodeler replays your traces to test cheaper models first. Complement: same credits, two jobs.",
+  "h1": "rightmodeler vs Vercel AI Gateway",
+  "lede": "The Gateway sits in your request path and optimizes everything after the model name in the request. rightmodeler runs before any change: it replays the steps you already shipped to ask whether that name is the right one at all.",
+  "integrationSlug": "vercel-ai-gateway",
+  "related": ["openrouter", "litellm", "not-diamond"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "You hire the Vercel AI Gateway to serve model traffic: one key to hundreds of models, automatic retries when a provider fails, and a live meter on every request's cost, latency, and tokens. You hire rightmodeler for the question that meter never asks: is the model named in each request the right one? The audit replays steps you already shipped through cheaper candidates, judges them against the output you accepted, and reports the evidence. The two compose: the Gateway optimizes everything after the model name; the audit questions the name itself."
+    },
+    {
+      "type": "contrast",
+      "left": {
+        "heading": "The Gateway alone: a perfect meter",
+        "items": [
+          "Spend, requests, and latency, attributed per project and per API key, with a per-request log showing the exact fallback path.",
+          "Routing picks providers by recent uptime and latency, and you can sort by cost, time to first token, or throughput.",
+          "The model name in the request is yours. Nothing in the Gateway scores output quality or asks whether a cheaper model would have sufficed."
+        ]
+      },
+      "right": {
+        "heading": "With rightmodeler on top",
+        "items": [
+          "Your shipped steps replay through cheaper candidates at temperature 0, offline, so production never sees an experiment.",
+          "A judge from a neutral third model family scores each replay against the output you accepted: reference evidence (agreement with what you shipped, not proof of correctness).",
+          "A quality floor (a configurable minimum agreement score) guards every recommendation, and thin evidence ends in an abstention (no recommendation at all) instead of a guess."
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "heading": "The meter and the measurement",
+      "intro": "What each one watches, when it acts, and what it can never tell you.",
+      "caption": "vercel-ai-gateway vs rightmodeler",
+      "leftLabel": "Vercel AI Gateway",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "watches",
+          "theirs": "live traffic: requests, tokens, spend, latency",
+          "ours": "recorded steps: the traces you already shipped"
+        },
+        {
+          "dimension": "acts",
+          "theirs": "during the request: routing, retries, fallbacks",
+          "ours": "before the change: replays, judging, a report you review"
+        },
+        {
+          "dimension": "optimizes",
+          "theirs": "the route for the model your code names",
+          "ours": "the model name itself, one step at a time"
+        },
+        {
+          "dimension": "can say",
+          "theirs": "who spent what, and which provider served it",
+          "ours": "which steps could move down, with evidence, sample size, and abstentions"
+        },
+        {
+          "dimension": "can never say",
+          "theirs": "whether a cheaper model would have sufficed",
+          "ours": "anything about a request in flight; it is offline by design"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one gets the call?",
+      "intro": "Three situations, each with the honest winner.",
+      "scenarios": [
+        {
+          "scenario": "A provider has an outage during your launch demo and requests start failing.",
+          "winner": "theirs",
+          "why": "This is a live request that needs saving right now. The Gateway retries across providers automatically, and can apply per-provider timeouts and fall back to backup models you declare. rightmodeler is offline by design and cannot help a request in flight."
+        },
+        {
+          "scenario": "Finance asks which project and which API key spent, say, 400 dollars on inference last week.",
+          "winner": "theirs",
+          "why": "That is a metering question, and the meter is theirs: the dashboard attributes spend, requests, and latency per project and per API key, and every request lands in a searchable log. rightmodeler has no runtime metering at all."
+        },
+        {
+          "scenario": "You already serve production through the Gateway and want the bill lower without breaking quality.",
+          "winner": "both",
+          "why": "The audit spends the Gateway credits you already fund, replays your real steps through candidates from the Gateway's live catalog, and an approved swap ships as a one-line model change, still served through the Gateway. Nothing about your runtime changes except the name."
+        }
+      ]
+    },
+    {
+      "type": "stack",
+      "heading": "Same credits, two jobs",
+      "intro": "A shipped integration makes the Gateway the audit's replay engine.",
+      "paragraphs": [
+        "Set your key and the audit runs on the Gateway you already fund: the candidate shortlist comes from the live model catalog, so it never goes stale; your key pays for both the replays and the judging; and each call is priced from what the Gateway reports. Steps that live in loops or tool chains go through code-execution end-to-end replay, because cascade risk (one step's cheaper output quietly degrading the steps after it) hides from a single-shot test.",
+        "When a swap clears your review, the only diff is the model name; the Gateway keeps serving it. For this audit the Gateway is a bench you borrow, not a dependency you ship."
+      ],
+      "commands": [
+        {
+          "comment": "# the audit's replay engine is the Gateway you already fund",
+          "command": "export AI_GATEWAY_API_KEY=..."
+        },
+        {
+          "comment": "# then run the audit on your exported traces",
+          "command": "claude \"run the rightmodeler skill on ./traces/\""
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "The Gateway serves live traffic and keeps it up. Automatic retries across providers, per-provider timeouts, and model fallbacks handle an outage in real time. rightmodeler never serves a single production request.",
+        "The Gateway meters and controls spend at runtime: a live per-request log, per-project and per-key attribution, and budgets that stop a request before it runs once a cap is hit. rightmodeler only prices the replays it runs during an audit.",
+        "The Gateway is the model access itself: one key to hundreds of models, zero markup on tokens, and you can bring your own provider keys. rightmodeler brings no models; it spends your Gateway credits to test them.",
+        "And the audit's verdicts are hedged on purpose: they establish that a candidate agreed with the output you shipped, and nothing stronger. The production result is the reference, not ground truth."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page leans on",
+      "terms": [
+        {
+          "term": "reference evidence",
+          "def": "How a replay is scored: agreement with the output you actually accepted for that exact step. The production result is the reference, not ground truth.",
+          "slug": "reference-evidence"
+        },
+        {
+          "term": "quality floor",
+          "def": "The configurable minimum agreement score a candidate must clear before the audit recommends it for a step.",
+          "slug": "quality-floor"
+        },
+        {
+          "term": "abstain",
+          "def": "What the audit does when a step's evidence is too thin to support a verdict: it says so and recommends nothing.",
+          "slug": "abstain"
+        },
+        {
+          "term": "cascade risk",
+          "def": "The danger that a cheaper model's slightly different output at one step degrades the steps downstream of it. End-to-end replay exists to surface it.",
+          "slug": "cascade-risk"
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace Vercel AI Gateway?",
+          "a": "No. The Gateway serves and meters your live traffic; rightmodeler is a report you run on traces of traffic already served. Not observability. Not a runtime gateway. It never sits in your request path. An audit actually gives the Gateway more work: replays run through it, and an approved swap keeps serving through it."
+        },
+        {
+          "q": "The Gateway already shows cost per model. Why replay anything?",
+          "a": "The dashboard tells you what each model spent, not whether a cheaper model would have produced the output you accepted. rightmodeler reruns those same steps on cheaper candidates and reports, per step, how closely each one matched what you shipped, with sample size and abstentions attached. The meter prices your model decision; it was never built to make it."
+        },
+        {
+          "q": "Can't I just sort providers by cost in the Gateway?",
+          "a": "Provider sorting changes who serves the model you named; it never changes the model. Budgets and routing act on the route and the cap, not on model choice or quality. Nothing in the Gateway scores output quality; asking whether a different model would have sufficed is the audit's whole job."
+        },
+        {
+          "q": "Do I need a Gateway account to run an audit?",
+          "a": "No. The Gateway is one of the shipped replay engines, not a requirement; the audit can run through another supported provider instead. But if you already fund Gateway credits, the same balance powers the replays, and the report stays a recommendation of a model, not a route."
+        },
+        {
+          "q": "Will the audit always find a cheaper model?",
+          "a": "No. Plenty of steps are already on the cheapest model that can do the work, and a candidate that survives the capability checks can still fall short of the quality floor or leave the judge with too little evidence, which ends in an abstention. Auth, payments, migrations, deploys, and secrets never get a swap offer at all, and every swap that is offered waits on your approval."
+        }
+      ]
+    }
+  ]
+}

@@ -201,6 +201,7 @@ export default function HowItWorksPage() {
                   label: "Cut your model bill",
                 },
                 { href: "/integrations", label: "Integrations" },
+                { href: "/vs", label: "Compare alternatives" },
               ]}
             />
           </div>
