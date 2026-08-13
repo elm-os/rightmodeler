@@ -91,7 +91,7 @@ interface ReplayCell {
   candidate: ModelCatalogEntry;
 }
 
-function correlationKey(
+export function replayCorrelationKey(
   evidenceQuestionId: string,
   caseId: string,
   candidateId: string,
@@ -99,7 +99,7 @@ function correlationKey(
   return JSON.stringify([evidenceQuestionId, caseId, candidateId]);
 }
 
-async function writeFact(
+export async function writeReplayFact(
   store: Store,
   projectId: string,
   factId: string,
@@ -113,7 +113,7 @@ async function writeFact(
   return fact;
 }
 
-async function terminalCells(
+export async function terminalReplayCells(
   store: Store,
   projectId: string,
 ): Promise<Set<string>> {
@@ -127,7 +127,7 @@ async function terminalCells(
     const execution = executionSchema.safeParse(fact);
     if (execution.success) {
       completed.add(
-        correlationKey(
+        replayCorrelationKey(
           execution.data.evidenceQuestionId,
           execution.data.caseId,
           execution.data.candidateId,
@@ -181,14 +181,17 @@ export async function replayModeA(
   if (input.store !== input.budget.store) {
     throw new Error("Replay store must match the budget store");
   }
-  const existing = await terminalCells(input.store, input.budget.projectId);
+  const existing = await terminalReplayCells(
+    input.store,
+    input.budget.projectId,
+  );
   const cells = cellsFor(input);
   const result: ReplayModeAResult = { completed: 0, skipped: 0, blocked: [] };
   const activeRefunds = new Set<Promise<void>>();
   let nextCell = 0;
 
   async function runCell(cell: ReplayCell): Promise<void> {
-    const key = correlationKey(
+    const key = replayCorrelationKey(
       cell.step.evidenceQuestionId,
       cell.recordedCase.caseId,
       cell.candidate.id,
@@ -260,7 +263,7 @@ export async function replayModeA(
           onAttempt: async (attempt) => {
             actualCostUsd += attempt.costUsd;
             const attemptId = mintAttemptId();
-            await writeFact(
+            await writeReplayFact(
               input.store,
               input.budget.projectId,
               attemptId,
@@ -275,7 +278,7 @@ export async function replayModeA(
               }),
             );
             const spendId = randomUUID();
-            await writeFact(
+            await writeReplayFact(
               input.store,
               input.budget.projectId,
               spendId,
@@ -309,7 +312,7 @@ export async function replayModeA(
           return;
         }
         if (error instanceof ProviderRequestError) {
-          await writeFact(
+          await writeReplayFact(
             input.store,
             input.budget.projectId,
             executionId,
@@ -335,7 +338,7 @@ export async function replayModeA(
 
       const silentFailure =
         response.content.length === 0 || response.usage.outputTokens === 0;
-      await writeFact(
+      await writeReplayFact(
         input.store,
         input.budget.projectId,
         executionId,
@@ -364,7 +367,7 @@ export async function replayModeA(
             return await input.judge.chat(request);
           } finally {
             const spendId = randomUUID();
-            await writeFact(
+            await writeReplayFact(
               input.store,
               input.budget.projectId,
               spendId,
@@ -392,7 +395,7 @@ export async function replayModeA(
         candidate: response.content,
       });
       const assessmentId = mintAssessmentId();
-      await writeFact(
+      await writeReplayFact(
         input.store,
         input.budget.projectId,
         assessmentId,

@@ -15,7 +15,7 @@ import { hopByHopHeaders } from "./headers.js";
 import { classifyStream } from "../transport/stream.js";
 
 const maxRequestBytes = 10 * 1024 * 1024;
-const inputBytesPerToken = 4;
+const egressSourceHeader = "x-rightmodeler-egress-source";
 const streamIdleTimeoutMs = Number(
   process.env.RM_STREAM_IDLE_TIMEOUT_MS ?? 30_000,
 );
@@ -127,6 +127,7 @@ function loadState(spoolPath, checkpointPath) {
     spentUsd: 0,
     groups: new Map(),
     attemptIds: new Set(),
+    reservations: new Map(),
   };
 
   for (const row of readJsonLines(checkpointPath, "checkpoint spool")) {
@@ -147,7 +148,28 @@ function loadState(spoolPath, checkpointPath) {
   }
 
   for (const row of readJsonLines(spoolPath, "attempt spool")) {
-    if (!isObject(row) || row.kind !== "request_attempt") continue;
+    if (!isObject(row)) continue;
+    if (row.kind === "attempt_reservation") {
+      if (
+        typeof row.attemptId !== "string" ||
+        typeof row.logicalCallId !== "string" ||
+        !Number.isSafeInteger(row.attemptGroup) ||
+        row.attemptGroup < 1 ||
+        !Number.isFinite(row.reservedUsd) ||
+        row.reservedUsd < 0
+      ) {
+        throw new Error("attempt spool contains an invalid reservation");
+      }
+      state.reservations.set(row.attemptId, row);
+      state.lastAttemptGroup = Math.max(
+        state.lastAttemptGroup,
+        row.attemptGroup,
+      );
+      state.groups.set(row.logicalCallId, row.attemptGroup);
+      state.attemptIds.add(row.attemptId);
+      continue;
+    }
+    if (row.kind !== "request_attempt") continue;
     if (
       !Number.isSafeInteger(row.attemptGroup) ||
       row.attemptGroup < 1 ||
@@ -158,10 +180,15 @@ function loadState(spoolPath, checkpointPath) {
     ) {
       throw new Error("attempt spool contains an invalid request attempt");
     }
+    state.reservations.delete(row.attemptId);
     state.lastAttemptGroup = Math.max(state.lastAttemptGroup, row.attemptGroup);
     state.groups.set(row.logicalCallId, row.attemptGroup);
     state.attemptIds.add(row.attemptId);
     state.spentUsd += row.costUsd;
+  }
+
+  for (const reservation of state.reservations.values()) {
+    state.spentUsd += reservation.reservedUsd;
   }
 
   return state;
@@ -186,6 +213,7 @@ function responseHeaders(headers) {
     if (
       value !== undefined &&
       !hopByHopHeaders.has(name) &&
+      name !== egressSourceHeader &&
       name !== "content-length"
     ) {
       forwarded[name] = value;
@@ -299,7 +327,7 @@ function writeWithBackpressure(stream, chunk) {
   });
 }
 
-function normalizeUsage(usage) {
+function normalizeUsage(usage, maxInputTokens, maxOutputTokens) {
   if (!isObject(usage)) return null;
   const inputTokens =
     usage.prompt_tokens ?? usage.input_tokens ?? usage.inputTokens;
@@ -309,8 +337,10 @@ function normalizeUsage(usage) {
   if (
     !Number.isSafeInteger(inputTokens) ||
     inputTokens < 0 ||
+    inputTokens > maxInputTokens ||
     !Number.isSafeInteger(outputTokens) ||
-    outputTokens < 0
+    outputTokens < 0 ||
+    outputTokens > maxOutputTokens
   ) {
     return null;
   }
@@ -406,6 +436,7 @@ async function forwardStreaming(upstream, outgoing, status, spoolSink) {
     usage: result.usage ?? null,
     spoolPath: result.spoolPath ?? null,
     finishedWithoutSentinel: result.finishedWithoutSentinel === true,
+    upstreamFailed,
   };
 }
 
@@ -436,22 +467,31 @@ async function forwardNonStreaming(upstream, outgoing, status) {
   }
 
   if (clientCancelled) {
-    return { streamOutcome: "client_cancelled", usage: null };
+    return {
+      streamOutcome: "client_cancelled",
+      usage: null,
+      upstreamFailed: false,
+    };
   }
   if (upstreamFailed) {
-    return { streamOutcome: "truncated", usage: null };
+    return { streamOutcome: "truncated", usage: null, upstreamFailed: true };
   }
   if (status >= 400) {
-    return { streamOutcome: "provider_error", usage: null };
+    return {
+      streamOutcome: "provider_error",
+      usage: null,
+      upstreamFailed: false,
+    };
   }
   try {
     const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     return {
       streamOutcome: "completed",
       usage: isObject(body) ? (body.usage ?? null) : null,
+      upstreamFailed: false,
     };
   } catch {
-    return { streamOutcome: "truncated", usage: null };
+    return { streamOutcome: "truncated", usage: null, upstreamFailed: false };
   }
 }
 
@@ -623,9 +663,7 @@ async function main() {
       return;
     }
 
-    const estimatedInputTokens = Math.ceil(
-      forwardedBody.length / inputBytesPerToken,
-    );
+    const estimatedInputTokens = forwardedBody.length;
     const estimatedWorstCaseUsd =
       estimatedInputTokens * pricing.input + maxTokens * pricing.output;
     const requiredLeaseUsd =
@@ -642,6 +680,7 @@ async function main() {
         reason: "budget",
         model,
         estimatedInputTokens,
+        maxOutputTokens: maxTokens,
         estimatedWorstCaseUsd,
         lease: { maxUsd: config.lease.maxUsd },
         requiredLease: { maxUsd: requiredLeaseUsd },
@@ -657,11 +696,35 @@ async function main() {
     reservedUsd += estimatedWorstCaseUsd;
     const attemptId = nextAttemptId(state);
     const responseSpoolPath = join(streamDirectory, `${attemptId}.txt`);
+    appendRow(spoolPath, {
+      kind: "attempt_reservation",
+      runId: config.runId,
+      caseId: config.caseId,
+      stepId,
+      executionId: config.executionId,
+      attemptId,
+      logicalCallId,
+      attemptGroup,
+      model,
+      estimatedInputTokens,
+      maxOutputTokens: maxTokens,
+      reservedUsd: estimatedWorstCaseUsd,
+      startedAt,
+    });
+    state.reservations.set(attemptId, {
+      attemptId,
+      logicalCallId,
+      attemptGroup,
+      reservedUsd: estimatedWorstCaseUsd,
+    });
     try {
       let result = {
         streamOutcome: "truncated",
         usage: null,
         spoolPath: null,
+        upstreamStatus: null,
+        upstreamSource: null,
+        upstreamFailed: false,
       };
       try {
         const upstream = await requestUpstream(
@@ -673,7 +736,12 @@ async function main() {
           streamHardDeadlineMs,
         );
         const status = upstream.statusCode ?? 502;
-        result =
+        const declaredSource = upstream.headers[egressSourceHeader];
+        const upstreamSource =
+          declaredSource === "provider" || declaredSource === "egress"
+            ? declaredSource
+            : null;
+        const forwarded =
           rewritten.stream === true && status < 400
             ? await forwardStreaming(upstream, outgoing, status, {
                 path: responseSpoolPath,
@@ -681,6 +749,12 @@ async function main() {
                 close: () => undefined,
               })
             : await forwardNonStreaming(upstream, outgoing, status);
+        result = {
+          ...forwarded,
+          spoolPath: forwarded.spoolPath ?? null,
+          upstreamStatus: status,
+          upstreamSource: forwarded.upstreamFailed ? "egress" : upstreamSource,
+        };
       } catch {
         if (!outgoing.headersSent) {
           sendJson(outgoing, 502, { error: "Egress request failed." });
@@ -689,7 +763,11 @@ async function main() {
         }
       }
 
-      const usage = normalizeUsage(result.usage);
+      const usage = normalizeUsage(
+        result.usage,
+        estimatedInputTokens,
+        maxTokens,
+      );
       const leaseChargeUsd = usageCharge(usage, pricing, estimatedWorstCaseUsd);
       // The seven core fact fields are attemptId, logicalCallId, executionId,
       // streamOutcome, usage, costUsd, and costIsEstimate. Other fields are spool metadata.
@@ -705,7 +783,10 @@ async function main() {
         attribution: "ok",
         model,
         estimatedInputTokens,
+        maxOutputTokens: maxTokens,
         streamOutcome: result.streamOutcome,
+        upstreamStatus: result.upstreamStatus,
+        upstreamSource: result.upstreamSource,
         ...(result.finishedWithoutSentinel
           ? { finishedWithoutSentinel: true }
           : {}),
@@ -718,6 +799,7 @@ async function main() {
         startedAt,
         endedAt: new Date().toISOString(),
       });
+      state.reservations.delete(attemptId);
       state.spentUsd += leaseChargeUsd;
       if (!outgoing.destroyed && !outgoing.writableEnded) outgoing.end();
     } finally {

@@ -30,6 +30,7 @@ class Step(TypedDict):
 class AppState(TypedDict):
     case_id: str
     input: str
+    headers: dict[str, str]
     route: Literal["lookup", "answer"]
     classification: str
     lookup_result: str
@@ -59,10 +60,17 @@ def client_from_env() -> OpenAI:
     )
 
 
-def call_headers(step: str, case_id: str) -> dict[str, str]:
+def call_headers(
+    step: str, case_id: str, injected: dict[str, str]
+) -> dict[str, str]:
     # Documented correlation-forwarding pattern: execution headers on the client,
     # with step and fresh logical-call identity on each SDK invocation.
+    forwarded = dict(injected)
+    stall_ms = forwarded.pop("x-fault-stall", None)
+    if stall_ms is not None:
+        forwarded["x-stub-hold-before-response-ms"] = stall_ms
     return {
+        **forwarded,
         "x-rm-run": os.environ["RM_RUN_ID"],
         "x-rm-case": case_id,
         "x-rm-execution": os.environ["RM_EXECUTION_ID"],
@@ -82,7 +90,7 @@ def classify(state: AppState) -> dict[str, object]:
             {"role": "user", "content": state["input"]},
         ],
         max_tokens=256,
-        extra_headers=call_headers("classify", state["case_id"]),
+        extra_headers=call_headers("classify", state["case_id"], state["headers"]),
     )
     content = response.choices[0].message.content
     if content is None:
@@ -129,7 +137,7 @@ def lookup(state: AppState) -> dict[str, object]:
         ],
         tool_choice={"type": "function", "function": {"name": "lookup_order"}},
         max_tokens=256,
-        extra_headers=call_headers("lookup", state["case_id"]),
+        extra_headers=call_headers("lookup", state["case_id"], state["headers"]),
     )
     message = response.choices[0].message
     input_order_id = re.search(r"ORD-\d{3}", state["input"])
@@ -166,7 +174,7 @@ def answer(state: AppState) -> dict[str, object]:
             },
         ],
         max_tokens=256,
-        extra_headers=call_headers("answer", state["case_id"]),
+        extra_headers=call_headers("answer", state["case_id"], state["headers"]),
     )
     content = response.choices[0].message.content
     if content is None:
@@ -194,10 +202,17 @@ def run_case(case: dict[str, object]) -> dict[str, object]:
     case_input = case.get("input")
     if not isinstance(case_id, str) or not isinstance(case_input, str):
         raise ValueError("case JSON must contain string caseId and input fields")
+    case_headers = case.get("headers", {})
+    if not isinstance(case_headers, dict) or not all(
+        isinstance(name, str) and isinstance(value, str)
+        for name, value in case_headers.items()
+    ):
+        raise ValueError("case JSON headers must map strings to strings")
     result = build_graph().invoke(
         {
             "case_id": case_id,
             "input": case_input,
+            "headers": case_headers,
             "route": "answer",
             "classification": "",
             "lookup_result": "",
@@ -206,7 +221,9 @@ def run_case(case: dict[str, object]) -> dict[str, object]:
         }
     )
     return {
+        "runId": os.environ["RM_RUN_ID"],
         "caseId": case_id,
+        "executionId": os.environ["RM_EXECUTION_ID"],
         "finalOutput": result["final_output"],
         "steps": result["steps"],
     }

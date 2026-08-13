@@ -8,3 +8,7 @@ await cp(
   new URL("proxy/proxy-runtime.mjs", sourceRoot),
   new URL("proxy/proxy-runtime.mjs", distRoot),
 );
+await cp(
+  new URL("proxy/container-supervisor.mjs", sourceRoot),
+  new URL("proxy/container-supervisor.mjs", distRoot),
+);

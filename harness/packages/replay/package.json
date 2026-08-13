@@ -11,10 +11,11 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p src/proxy/tsconfig.build.json && node src/proxy/build-runtime.mjs",
     "check-types": "tsc --noEmit",
-    "check": "tsc --noEmit && vitest run"
+    "check": "pnpm --filter @rightmodeler/executor build && pnpm build && tsc --noEmit && vitest run"
   },
   "dependencies": {
     "@rightmodeler/core": "workspace:*",
+    "@rightmodeler/executor": "workspace:*",
     "@rightmodeler/kernel": "workspace:*"
   },
   "devDependencies": {

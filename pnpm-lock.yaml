@@ -128,6 +128,9 @@ importers:
       '@rightmodeler/core':
         specifier: workspace:*
         version: link:../core
+      '@rightmodeler/executor':
+        specifier: workspace:*
+        version: link:../executor
       '@rightmodeler/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -136,7 +139,7 @@ importers:
         specifier: ^20
         version: 20.19.43
       openai:
-        specifier: ^7.4.0
+        specifier: 7.4.0
         version: 7.4.0(zod@4.4.3)
       typescript:
         specifier: ^5

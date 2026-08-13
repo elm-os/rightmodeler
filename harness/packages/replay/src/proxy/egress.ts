@@ -33,6 +33,7 @@ function responseHeaders(
     if (
       value !== undefined &&
       !hopByHopHeaders.has(name) &&
+      name !== "x-rightmodeler-egress-source" &&
       !(bodyLength !== undefined && name === "content-length")
     ) {
       forwarded[name] = value;
@@ -62,11 +63,17 @@ function requestHeaders(
   return forwarded;
 }
 
-function json(response: ServerResponse, status: number, body: unknown): void {
+function json(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  source?: "egress",
+): void {
   const bytes = Buffer.from(JSON.stringify(body));
   response.writeHead(status, {
     "content-type": "application/json",
     "content-length": bytes.length,
+    ...(source === undefined ? {} : { "x-rightmodeler-egress-source": source }),
   });
   response.end(bytes);
 }
@@ -106,16 +113,21 @@ export async function startEgressListener(
 
     if (target.origin !== providerBaseUrl.origin) {
       incoming.resume();
-      json(outgoing, 403, { error: "Upstream host is not allowed." });
+      json(outgoing, 403, { error: "Upstream host is not allowed." }, "egress");
       return;
     }
 
     const credential = process.env[options.apiKeyEnv];
     if (credential === undefined || credential.length === 0) {
       incoming.resume();
-      json(outgoing, 500, {
-        error: `Provider credential is unavailable: ${options.apiKeyEnv}`,
-      });
+      json(
+        outgoing,
+        500,
+        {
+          error: `Provider credential is unavailable: ${options.apiKeyEnv}`,
+        },
+        "egress",
+      );
       return;
     }
 
@@ -130,7 +142,10 @@ export async function startEgressListener(
         const status = upstreamResponse.statusCode ?? 502;
         upstreamResponse.once("error", () => outgoing.destroy());
         if (status < 400) {
-          outgoing.writeHead(status, responseHeaders(upstreamResponse.headers));
+          outgoing.writeHead(status, {
+            ...responseHeaders(upstreamResponse.headers),
+            "x-rightmodeler-egress-source": "provider",
+          });
           upstreamResponse.pipe(outgoing);
           return;
         }
@@ -139,10 +154,10 @@ export async function startEgressListener(
         upstreamResponse.on("data", (chunk: Buffer) => chunks.push(chunk));
         upstreamResponse.once("end", () => {
           const body = redactCredential(Buffer.concat(chunks), credential);
-          outgoing.writeHead(
-            status,
-            responseHeaders(upstreamResponse.headers, body.length),
-          );
+          outgoing.writeHead(status, {
+            ...responseHeaders(upstreamResponse.headers, body.length),
+            "x-rightmodeler-egress-source": "provider",
+          });
           outgoing.end(body);
         });
       },
@@ -150,7 +165,7 @@ export async function startEgressListener(
 
     upstream.once("error", () => {
       if (!outgoing.headersSent) {
-        json(outgoing, 502, { error: "Provider request failed." });
+        json(outgoing, 502, { error: "Provider request failed." }, "egress");
       } else {
         outgoing.destroy();
       }

@@ -476,8 +476,15 @@ describe("Mode B proxy and host egress", () => {
 
     const allRows = await readRows(spoolPath(pair.scratch));
     const attempts = allRows.filter((row) => row.kind === "request_attempt");
-    expect(allRows).toHaveLength(2);
+    const reservations = allRows.filter(
+      (row) => row.kind === "attempt_reservation",
+    );
+    expect(allRows).toHaveLength(4);
     expect(attempts).toHaveLength(2);
+    expect(reservations).toHaveLength(2);
+    expect(reservations.map(({ attemptId }) => attemptId)).toEqual(
+      attempts.map(({ attemptId }) => attemptId),
+    );
     expect(attempts[0]).toMatchObject({
       runId,
       caseId,
@@ -685,13 +692,61 @@ describe("Mode B proxy and host egress", () => {
 
     expect(response.status).toBe(502);
     expect(performance.now() - startedAt).toBeLessThan(200);
-    const attempts = await readRows(spoolPath(pair.scratch));
+    const attempts = (await readRows(spoolPath(pair.scratch))).filter(
+      (row) => row.kind === "request_attempt",
+    );
     expect(attempts).toEqual([
       expect.objectContaining({
         kind: "request_attempt",
         logicalCallId: "logical-timeout",
         streamOutcome: "truncated",
         costIsEstimate: true,
+      }),
+    ]);
+  });
+
+  it("marks a post-header upstream reset as an egress failure", async () => {
+    process.env[apiKeyEnv] = credential;
+    const scratch = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-reset-"));
+    scratchDirectories.push(scratch);
+    const provider = createServer((request, response) => {
+      request.resume();
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write('{"choices":[');
+      setImmediate(() => response.socket?.destroy());
+    });
+    servers.push(provider);
+    await new Promise<void>((resolve, reject) => {
+      provider.once("error", reject);
+      provider.listen(0, "127.0.0.1", resolve);
+    });
+    const address = provider.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("Reset provider did not bind a TCP address");
+    }
+    const egress = await startEgressListener({
+      providerBaseUrl: `http://127.0.0.1:${address.port}`,
+      apiKeyEnv,
+    });
+    egressListeners.push(egress);
+    const runtime = await startRuntime(
+      runtimeEnv({ scratch, egressUrl: egress.url }),
+      await createRuntimeBundle(),
+    );
+
+    await callProxy(runtime, "step-reset", "logical-reset")
+      .then((response) => response.arrayBuffer())
+      .catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const attempts = (await readRows(spoolPath(scratch))).filter(
+      (row) => row.kind === "request_attempt",
+    );
+    expect(attempts).toEqual([
+      expect.objectContaining({
+        logicalCallId: "logical-reset",
+        streamOutcome: "truncated",
+        upstreamStatus: 200,
+        upstreamSource: "egress",
       }),
     ]);
   });
@@ -715,7 +770,9 @@ describe("Mode B proxy and host egress", () => {
 
     await response.arrayBuffer().catch(() => undefined);
     expect(performance.now() - startedAt).toBeLessThan(200);
-    const attempts = await readRows(spoolPath(pair.scratch));
+    const attempts = (await readRows(spoolPath(pair.scratch))).filter(
+      (row) => row.kind === "request_attempt",
+    );
     expect(attempts).toEqual([
       expect.objectContaining({
         kind: "request_attempt",
@@ -779,7 +836,7 @@ describe("Mode B proxy and host egress", () => {
     ]);
   });
 
-  it("rehydrates only completed rows after an in-flight request is killed", async () => {
+  it("rehydrates and conservatively retains an in-flight reservation", async () => {
     const pair = await startPair();
     const pending = callProxy(
       pair.runtime,
@@ -792,9 +849,14 @@ describe("Mode B proxy and host egress", () => {
       () => pair.stub.getHitCount() === 1,
       "Stub did not receive the in-flight request",
     );
-    await expect(
-      readdir(join(pair.scratch, "proxy", "attempts")),
-    ).resolves.toEqual([]);
+    const beforeKill = await readRows(spoolPath(pair.scratch));
+    expect(beforeKill).toEqual([
+      expect.objectContaining({
+        kind: "attempt_reservation",
+        logicalCallId: "logical-killed",
+        attemptGroup: 1,
+      }),
+    ]);
     await stopRuntime(pair.runtime, "SIGKILL");
     await pending;
 
@@ -804,7 +866,12 @@ describe("Mode B proxy and host egress", () => {
     await retry.arrayBuffer();
 
     const rows = await readRows(spoolPath(pair.scratch));
+    const reservations = rows.filter(
+      (row) => row.kind === "attempt_reservation",
+    );
     const attempts = rows.filter((row) => row.kind === "request_attempt");
+    expect(reservations).toHaveLength(2);
+    expect(reservations[0]?.attemptId).not.toBe(reservations[1]?.attemptId);
     expect(attempts).toEqual([
       expect.objectContaining({
         logicalCallId: "logical-killed",
@@ -820,7 +887,7 @@ describe("Mode B proxy and host egress", () => {
     const pricing = { input: 0.001, output: 0.002 };
     const forwardedBytes = Buffer.byteLength(JSON.stringify(body));
     const oneRequestLease =
-      Math.ceil(forwardedBytes / 4) * pricing.input + 32 * pricing.output;
+      forwardedBytes * pricing.input + 32 * pricing.output;
     const pair = await startPair({
       pricingTable: { "acme/large-1": pricing },
       maxUsd: oneRequestLease,
@@ -842,9 +909,7 @@ describe("Mode B proxy and host egress", () => {
     expect(Number(firstAttempt?.leaseChargeUsd)).toBeLessThan(
       Number(firstAttempt?.reservedUsd),
     );
-    expect(firstAttempt?.estimatedInputTokens).toBe(
-      Math.ceil(forwardedBytes / 4),
-    );
+    expect(firstAttempt?.estimatedInputTokens).toBe(forwardedBytes);
     const second = await callProxy(
       pair.runtime,
       "step-budget",
