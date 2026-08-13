@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./cloud-sandbox": {
+      "types": "./dist/cloud-sandbox.d.ts",
+      "default": "./dist/cloud-sandbox.js"
     }
   },
   "scripts": {
@@ -18,8 +22,12 @@
     "@rightmodeler/core": "workspace:*"
   },
   "devDependencies": {
+    "@types/async-retry": "^1.4.9",
     "@types/node": "^20",
     "typescript": "^5",
     "vitest": "^3"
+  },
+  "optionalDependencies": {
+    "@vercel/sandbox": "^3.0.0"
   }
 }
