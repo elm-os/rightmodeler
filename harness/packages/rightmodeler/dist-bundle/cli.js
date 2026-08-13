@@ -30416,7 +30416,17 @@ var replayOutputSchema = external_exports.strictObject({
         reason: external_exports.string().min(1)
       })
     )
-  })
+  }),
+  familyBlocks: external_exports.array(
+    external_exports.strictObject({
+      familyId: external_exports.string().min(1),
+      abstainReason: external_exports.strictObject({
+        reason: external_exports.literal("replay_operational_block"),
+        observed: external_exports.number().nonnegative(),
+        required: external_exports.number().nonnegative()
+      })
+    })
+  ).default([])
 });
 var gateResultSchema = external_exports.strictObject({
   id: external_exports.enum([
@@ -31881,6 +31891,7 @@ async function executeReplay(context, inputDigestValue, runId) {
   });
   let completed = 0;
   let skipped = 0;
+  const blockedCellsByFamily = /* @__PURE__ */ new Map();
   const runCells = async (split, assignments) => {
     const candidateFamilies = [
       ...new Set(
@@ -31957,9 +31968,22 @@ async function executeReplay(context, inputDigestValue, runId) {
         });
       }
       if (result2.blocked.length > 0) {
-        throw new Error(
-          `Replay has blocked cells: ${result2.blocked.map(({ message }) => message).join("; ")}`
-        );
+        for (const blocked of result2.blocked) {
+          const familyId = plan.steps.find(
+            ({ stepId }) => stepId === blocked.stepId
+          )?.family;
+          if (familyId === void 0) continue;
+          const blockedCells = blockedCellsByFamily.get(familyId) ?? /* @__PURE__ */ new Set();
+          blockedCells.add(
+            JSON.stringify([
+              split,
+              blocked.stepId,
+              blocked.caseId,
+              blocked.candidateId
+            ])
+          );
+          blockedCellsByFamily.set(familyId, blockedCells);
+        }
       }
       completed += result2.completed;
       skipped += result2.skipped;
@@ -31988,15 +32012,22 @@ async function executeReplay(context, inputDigestValue, runId) {
     aggregateOptions()
   ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
   const shortlistSelections = new Map(
-    Object.keys(plan.sampleSizes).map((family) => [
-      family,
-      selectWinner(
-        verdictsByCandidate(
-          shortlistVerdicts.filter((verdict) => verdict.familyId === family)
-        ),
-        RELEASE_GATE_POLICY
-      )
-    ])
+    Object.keys(plan.sampleSizes).map((family) => {
+      const familyVerdicts = shortlistVerdicts.filter(
+        (verdict) => verdict.familyId === family
+      );
+      const selectionGap = selectionEvidenceGap(
+        familyVerdicts,
+        familyCandidates(plan, candidates, family)
+      );
+      return [
+        family,
+        blockedCellsByFamily.has(family) || selectionGap !== void 0 ? noShortlistSelection() : selectWinner(
+          verdictsByCandidate(familyVerdicts),
+          RELEASE_GATE_POLICY
+        )
+      ];
+    })
   );
   const holdoutCandidates = candidates.map((assignment) => ({
     ...assignment,
@@ -32015,7 +32046,15 @@ async function executeReplay(context, inputDigestValue, runId) {
     completed,
     skipped,
     candidates,
-    evaluation: evaluation()
+    evaluation: evaluation(),
+    familyBlocks: [...blockedCellsByFamily.entries()].sort(([left], [right]) => compareText9(left, right)).map(([familyId, blockedCells]) => ({
+      familyId,
+      abstainReason: {
+        reason: "replay_operational_block",
+        observed: blockedCells.size,
+        required: 0
+      }
+    }))
   });
   return key;
 }
@@ -32033,23 +32072,60 @@ async function executeAggregate(context, inputDigestValue) {
     aggregateOptions(),
     cascadeFindings(facts)
   );
-  const families = buildFamilyOutcomes(plan, allVerdicts);
+  const families = buildFamilyOutcomes(
+    plan,
+    allVerdicts,
+    replay.candidates,
+    replay.familyBlocks
+  );
   await writeFamilyVerdicts(context, families);
   const key = artifactKey(context, "aggregate", inputDigestValue);
   await putImmutableJson(context.store, key, { allVerdicts, families });
   return key;
 }
-function buildFamilyOutcomes(plan, allVerdicts) {
+function buildFamilyOutcomes(plan, allVerdicts, candidates, familyBlocks) {
   const families = [];
   for (const familyId of Object.keys(plan.sampleSizes).sort(compareText9)) {
     const familyVerdicts = allVerdicts.filter(
       (verdict2) => verdict2.familyId === familyId
     );
+    const expectedCandidates = familyCandidates(plan, candidates, familyId);
+    const replayBlock = familyBlocks.find(
+      (block) => block.familyId === familyId
+    );
+    const selectionGap = selectionEvidenceGap(
+      familyVerdicts,
+      expectedCandidates
+    );
+    const abstainReason = replayBlock?.abstainReason ?? selectionGap?.reason;
+    if (abstainReason !== void 0) {
+      families.push(
+        blockedFamilyOutcome(
+          plan,
+          familyId,
+          expectedCandidates.find(
+            ({ id }) => id === selectionGap?.candidateId
+          ) ?? expectedCandidates[0],
+          abstainReason
+        )
+      );
+      continue;
+    }
     const selection = selectWinner(
       verdictsByCandidate(familyVerdicts),
       RELEASE_GATE_POLICY
     );
     const verdict = effectiveVerdict(familyVerdicts, selection);
+    if (verdict === void 0) {
+      families.push(
+        blockedFamilyOutcome(plan, familyId, expectedCandidates[0], {
+          reason: "selection_missing_shortlist_verdicts",
+          observed: 0,
+          required: Math.max(expectedCandidates.length, 1)
+        })
+      );
+      continue;
+    }
     const gates = evaluateGates([verdict], RELEASE_GATE_POLICY);
     const effectiveRecommendation = verdict.decision === "recommend" && selection.status === "selected" && gates.every(({ pass }) => pass);
     const decisionDisplay = verdict.decision === "recommend" && !effectiveRecommendation ? "recommend (gated)" : verdict.decision;
@@ -32064,6 +32140,115 @@ function buildFamilyOutcomes(plan, allVerdicts) {
     families.push(outcome);
   }
   return families;
+}
+function familyCandidates(plan, candidates, familyId) {
+  const familyStepIds = new Set(
+    plan.steps.filter((step) => step.family === familyId).map(({ stepId }) => stepId)
+  );
+  const byId = /* @__PURE__ */ new Map();
+  for (const assignment of candidates) {
+    if (!familyStepIds.has(assignment.stepId)) continue;
+    for (const candidate of assignment.candidates) {
+      byId.set(candidate.id, candidate);
+    }
+  }
+  return [...byId.values()].sort(
+    (left, right) => compareText9(left.id, right.id)
+  );
+}
+function selectionEvidenceGap(verdicts, expectedCandidates) {
+  const shortlistCandidateIds = new Set(
+    verdicts.filter(({ corpusSplit }) => corpusSplit === "shortlist").map(({ candidateId: candidateId3 }) => candidateId3)
+  );
+  const candidateIds = [
+    .../* @__PURE__ */ new Set([
+      ...expectedCandidates.map(({ id }) => id),
+      ...verdicts.map(({ candidateId: candidateId3 }) => candidateId3)
+    ])
+  ].sort(compareText9);
+  if (shortlistCandidateIds.size === 0) {
+    return void 0;
+  }
+  const missingCandidateId = candidateIds.find(
+    (candidateId3) => !shortlistCandidateIds.has(candidateId3)
+  );
+  return missingCandidateId === void 0 ? void 0 : {
+    candidateId: missingCandidateId,
+    reason: {
+      reason: "selection_candidate_verdict_missing",
+      observed: shortlistCandidateIds.size,
+      required: candidateIds.length
+    }
+  };
+}
+function blockedFamilyOutcome(plan, familyId, candidate, abstainReason) {
+  const familyStep = plan.steps.find((step) => step.family === familyId);
+  if (familyStep === void 0) {
+    throw new Error(`Replay plan has no step for family ${familyId}`);
+  }
+  const verdict = {
+    evidenceQuestionId: familyStep.evidenceQuestionId,
+    corpusSplit: "shortlist",
+    familyId,
+    candidateId: candidate?.id ?? "unavailable",
+    candidateFamily: candidate?.family ?? "unknown",
+    caseIds: [],
+    candidateCostUsd: candidate === void 0 ? 0 : blendedPrice2(candidate),
+    gatePolicyVersion: GATE_POLICY_VERSION,
+    referenceCeilingMultiplier: 1,
+    evaluatorKinds: [],
+    weakestEvaluatorKind: "none",
+    nExecutions: 0,
+    nReviewTrials: 0,
+    nTrajectories: 0,
+    nDistinctSteps: 0,
+    excludedExecutions: 0,
+    excludedFraction: 0,
+    assessmentAbsent: 0,
+    assessmentAbsentReasons: [],
+    worstCaseBound: 0,
+    availability: {
+      availableExecutions: 0,
+      executions: 0,
+      rate: 0,
+      lowerBound: 0
+    },
+    unsafeSubstitutions: 0,
+    coveredEvidenceCases: 0,
+    requiredAbstentions: 0,
+    satisfiedRequiredAbstentions: 0,
+    decision: "abstain",
+    abstainReason
+  };
+  return {
+    familyId,
+    verdict,
+    selection: noShortlistSelection(),
+    gates: evaluateGates([verdict], RELEASE_GATE_POLICY),
+    decisionDisplay: "abstain",
+    effectiveRecommendation: false
+  };
+}
+function withFamilyAbstention(family, abstainReason) {
+  const verdict = {
+    ...family.verdict,
+    decision: "abstain",
+    abstainReason
+  };
+  return {
+    ...family,
+    verdict,
+    gates: evaluateGates([verdict], RELEASE_GATE_POLICY),
+    decisionDisplay: "abstain",
+    effectiveRecommendation: false
+  };
+}
+function noShortlistSelection() {
+  return {
+    status: "no_shortlist_passer",
+    shortlistedCandidateIds: [],
+    holdoutRequired: false
+  };
 }
 async function writeFamilyVerdicts(context, families) {
   for (const { familyId, verdict } of families) {
@@ -32097,6 +32282,17 @@ async function executeConfirm(context, inputDigestValue, runId) {
     ).map(({ familyId }) => familyId)
   );
   const confirmations = /* @__PURE__ */ new Map();
+  const confirmationAbstentions = /* @__PURE__ */ new Map();
+  const blockConfirmation = (familyId, abstainReason, blocker) => {
+    confirmationAbstentions.set(familyId, abstainReason);
+    confirmations.set(familyId, {
+      status: "blocked",
+      runSetsUsed: 0,
+      culprits: [],
+      cascadeSeedStepId: null,
+      blocker
+    });
+  };
   let confirmedFamilies = 0;
   if (needsConfirmation.size > 0 && context.modeBConfig === void 0) {
     for (const familyId of needsConfirmation) {
@@ -32164,9 +32360,40 @@ async function executeConfirm(context, inputDigestValue, runId) {
         ({ id }) => id === selectedCandidateId
       );
       if (selectedCatalogEntry === void 0) {
-        throw new Error(
+        blockConfirmation(
+          familyId,
+          {
+            reason: "provider_catalog_drift",
+            observed: 0,
+            required: 1
+          },
           `Selected candidate is absent from the catalog: ${selectedCandidateId}`
         );
+        continue;
+      }
+      const canonicalSwapStepIds = plan.steps.filter((step) => step.family === familyId).map(({ stepId }) => stepId);
+      const missingModelStepId = canonicalSwapStepIds.find((stepId) => {
+        const record2 = configuredRecords.find(
+          (candidate) => candidate.stepId === stepId
+        );
+        return record2 === void 0 || record2.currentModel === null;
+      });
+      if (missingModelStepId !== void 0) {
+        blockConfirmation(
+          familyId,
+          {
+            reason: "confirmation_model_metadata_missing",
+            observed: canonicalSwapStepIds.filter((stepId) => {
+              const record2 = configuredRecords.find(
+                (candidate) => candidate.stepId === stepId
+              );
+              return record2 !== void 0 && record2.currentModel !== null;
+            }).length,
+            required: canonicalSwapStepIds.length
+          },
+          `Configured confirmation step has no current model: ${missingModelStepId}`
+        );
+        continue;
       }
       const referenceFamily = modelFamily(configuredRecords[0].currentModel);
       const judgeModel = pickJudge(judgeCatalog, {
@@ -32174,16 +32401,22 @@ async function executeConfirm(context, inputDigestValue, runId) {
         referenceFamily
       });
       const cases = confirmationCases(scrubbedRuns, targetStepId, familyId);
-      const canonicalSwapStepIds = plan.steps.filter((step) => step.family === familyId).map(({ stepId }) => stepId);
+      if (cases === void 0) {
+        blockConfirmation(
+          familyId,
+          {
+            reason: "confirmation_recorded_content_missing",
+            observed: 0,
+            required: 1
+          },
+          "Recorded confirmation data contains no text content."
+        );
+        continue;
+      }
       const swapSet = canonicalSwapStepIds.map((stepId) => {
         const record2 = configuredRecords.find(
           (candidate) => candidate.stepId === stepId
         );
-        if (record2?.currentModel === null || record2 === void 0) {
-          throw new Error(
-            `Configured confirmation step has no current model: ${stepId}`
-          );
-        }
         return {
           stepId: runtimeByCanonical[stepId],
           currentModel: record2.currentModel,
@@ -32262,9 +32495,21 @@ async function executeConfirm(context, inputDigestValue, runId) {
     aggregateOptions(),
     cascadeFindings(facts)
   );
-  const families = buildFamilyOutcomes(plan, allVerdicts).map((family) => {
+  const families = buildFamilyOutcomes(
+    plan,
+    allVerdicts,
+    replay.candidates,
+    replay.familyBlocks
+  ).map((family) => {
     const confirmation = confirmations.get(family.familyId);
     if (confirmation !== void 0) {
+      const abstainReason = confirmationAbstentions.get(family.familyId);
+      if (abstainReason !== void 0) {
+        return {
+          ...withFamilyAbstention(family, abstainReason),
+          confirmation
+        };
+      }
       const blocked = confirmation.status === "blocked";
       return {
         ...family,
@@ -32352,7 +32597,10 @@ function defaultConfirmMaxRunSets(swapCount) {
   return Math.max(20, 2 ** Math.min(swapCount, 4) + 4);
 }
 function confirmationCases(runs, targetStepId, familyId) {
-  return runs.filter((run) => run.steps.some(({ family }) => family === familyId)).map((run) => {
+  const cases = [];
+  for (const run of runs.filter(
+    (run2) => run2.steps.some(({ family }) => family === familyId)
+  )) {
     const first = run.steps[0];
     const last = run.steps.at(-1);
     if (first === void 0 || last === void 0) {
@@ -32360,7 +32608,10 @@ function confirmationCases(runs, targetStepId, familyId) {
     }
     const input = firstJsonText(first.messages);
     const referenceOutput = firstJsonText(last.output);
-    return {
+    if (input === void 0 || referenceOutput === void 0) {
+      return void 0;
+    }
+    cases.push({
       caseId: `confirm-${run.traceId}`,
       stepId: targetStepId,
       trajectoryId: run.traceId,
@@ -32374,8 +32625,9 @@ function confirmationCases(runs, targetStepId, familyId) {
       maxOutputTokens: 256,
       referenceOutput,
       input
-    };
-  });
+    });
+  }
+  return cases;
 }
 function firstJsonText(value) {
   if (typeof value === "string") return value;
@@ -32388,7 +32640,7 @@ function firstJsonText(value) {
     const text = firstJsonTextOrUndefined(value);
     if (text !== void 0) return text;
   }
-  throw new Error("Recorded confirmation data contains no text content");
+  return void 0;
 }
 function firstJsonTextOrUndefined(value) {
   if (typeof value === "string") return value;
@@ -32645,12 +32897,9 @@ function verdictsByCandidate(verdicts) {
     pending.set(verdict.candidateId, current);
   }
   return Object.fromEntries(
-    [...pending.entries()].map(([candidateId3, candidate]) => {
-      if (candidate.shortlist === void 0) {
-        throw new Error(`Candidate ${candidateId3} has no shortlist verdict`);
-      }
-      return [candidateId3, { ...candidate, shortlist: candidate.shortlist }];
-    })
+    [...pending.entries()].flatMap(
+      ([candidateId3, candidate]) => candidate.shortlist === void 0 ? [] : [[candidateId3, { ...candidate, shortlist: candidate.shortlist }]]
+    )
   );
 }
 function effectiveVerdict(verdicts, selection) {
@@ -32664,7 +32913,7 @@ function effectiveVerdict(verdicts, selection) {
     (left, right) => left.candidateCostUsd - right.candidateCostUsd || compareText9(left.candidateId, right.candidateId)
   )[0];
   if (shortlist2 === void 0) {
-    throw new Error("Family selection has no shortlist verdict");
+    return void 0;
   }
   return shortlist2;
 }

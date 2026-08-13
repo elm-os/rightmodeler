@@ -1,1 +1,0 @@
-{"runId":"e424f368-6030-4f32-8871-47a1576d4a46","caseId":"confirm-trace-langgraph-confirm-18","executionId":"2f82b330-e2ee-40b1-a45b-385e2b8a6875","finalOutput":"Deterministic reply 81d067ab44f20e70","steps":[{"step":"classify","model":"acme/large-1","ok":true},{"step":"lookup","model":"acme/max-1","ok":true},{"step":"answer","model":"acme/large-1","ok":true}]}

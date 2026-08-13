@@ -58,6 +58,18 @@ The exported `ABSTAIN_REASONS` values are:
 - `cascade_isolated`: confirmation isolated a nonempty culprit set. Operationally this produces
   `reject`, even though the reason is part of the exported reason enum.
 - `cascade_inconclusive`: confirmation could not resolve the cascade and produces `abstain`.
+- `selection_candidate_verdict_missing`: a candidate in the swap set reached selection with no
+  shortlist verdict recorded for it.
+- `selection_missing_shortlist_verdicts`: the family reached selection with no shortlist-split
+  verdicts at all, so no winner can be chosen.
+- `replay_operational_block`: replay could not run for the family for an operational reason,
+  such as an exhausted budget lease or a blocked provider; the block is recorded, not scored.
+- `provider_catalog_drift`: the provider catalog no longer carries a model the evidence
+  depends on, so the family cannot be priced or replayed as recorded.
+- `confirmation_model_metadata_missing`: confirmation needed model metadata that the recorded
+  evidence does not carry.
+- `confirmation_recorded_content_missing`: confirmation needed recorded case content that is
+  absent from the store.
 
 Cascade decisions take precedence. Otherwise the kernel chooses the first applicable reason in
 this order: review trials, distinct steps, distinct trajectories, deterministic evidence,

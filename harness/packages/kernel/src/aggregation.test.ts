@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Assessment, CascadeFinding } from "@rightmodeler/core";
 
 import {
+  ABSTAIN_REASONS,
   EXCLUDED_FRACTION_MAX,
   aggregate,
   evaluatorWorstCaseBound,
@@ -44,6 +45,19 @@ function cascadeFinding(
 }
 
 describe("aggregate", () => {
+  it("exports orchestration evidence gaps as typed abstention reasons", () => {
+    expect(ABSTAIN_REASONS).toEqual(
+      expect.arrayContaining([
+        "selection_candidate_verdict_missing",
+        "selection_missing_shortlist_verdicts",
+        "replay_operational_block",
+        "provider_catalog_drift",
+        "confirmation_model_metadata_missing",
+        "confirmation_recorded_content_missing",
+      ]),
+    );
+  });
+
   it("partitions by evidence question while pooling judge model and version", () => {
     const verdicts = aggregate(
       aggregationScenarios.partitionsAndJudgePooling,

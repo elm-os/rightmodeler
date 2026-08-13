@@ -356,6 +356,112 @@ async function startStub(): Promise<StubProvider> {
   return module.startStubProvider({ port: 0 });
 }
 
+async function startRateLimitedStub(): Promise<StubProvider> {
+  const upstream = await startStub();
+  let hitCount = 0;
+  const server = createServer(async (request, response) => {
+    if (request.method === "POST" && request.url === "/v1/chat/completions") {
+      hitCount += 1;
+      response.writeHead(429, {
+        "content-type": "application/json",
+        "retry-after": "0",
+      });
+      response.end(JSON.stringify({ error: { message: "Rate limited." } }));
+      return;
+    }
+    const upstreamResponse = await fetch(
+      `http://127.0.0.1:${upstream.port}${request.url ?? "/"}`,
+      { method: request.method },
+    );
+    response.writeHead(upstreamResponse.status, {
+      "content-type":
+        upstreamResponse.headers.get("content-type") ?? "application/json",
+    });
+    response.end(Buffer.from(await upstreamResponse.arrayBuffer()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    await upstream.close();
+    throw new Error("Rate-limit stub did not bind a TCP port");
+  }
+  return {
+    port: address.port,
+    getHitCount: () => hitCount,
+    close: async () => {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      await upstream.close();
+    },
+  };
+}
+
+async function startCatalogDriftStub(): Promise<StubProvider> {
+  const upstream = await startStub();
+  let hitCount = 0;
+  let catalogRequests = 0;
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const body = Buffer.concat(chunks);
+    const upstreamResponse = await fetch(
+      `http://127.0.0.1:${upstream.port}${request.url ?? "/"}`,
+      {
+        method: request.method,
+        headers: { "content-type": "application/json" },
+        ...(body.length === 0 ? {} : { body }),
+      },
+    );
+    if (request.method === "GET" && request.url === "/v1/models") {
+      catalogRequests += 1;
+      const catalog = (await upstreamResponse.json()) as {
+        object: string;
+        data: Array<{ id: string }>;
+      };
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          ...catalog,
+          data:
+            catalogRequests === 1
+              ? catalog.data
+              : catalog.data.filter(({ id }) => id.startsWith("zeta/")),
+        }),
+      );
+      return;
+    }
+    hitCount += 1;
+    response.writeHead(upstreamResponse.status, {
+      "content-type":
+        upstreamResponse.headers.get("content-type") ?? "application/json",
+    });
+    response.end(Buffer.from(await upstreamResponse.arrayBuffer()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    await upstream.close();
+    throw new Error("Catalog-drift stub did not bind a TCP port");
+  }
+  return {
+    port: address.port,
+    getHitCount: () => hitCount,
+    close: async () => {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      await upstream.close();
+    },
+  };
+}
+
 async function waitForTerminalRun(
   repo: string,
   store: string,
@@ -508,6 +614,53 @@ async function allFileText(root: string): Promise<string> {
   }
   await visit(root);
   return texts.join("\n");
+}
+
+async function removeExecutionFacts(
+  storeRoot: string,
+  predicate: (execution: Record<string, unknown>) => boolean,
+): Promise<void> {
+  const store = new FsStore(storeRoot);
+  for (const key of await store.list(factsPrefix("project"))) {
+    const fact = JSON.parse(await storeText(store, key)) as Record<
+      string,
+      unknown
+    >;
+    if (typeof fact.executionId === "string" && predicate(fact)) {
+      await rm(join(storeRoot, ".rightmodeler-store", "entries", key), {
+        recursive: true,
+      });
+    }
+  }
+}
+
+async function rewriteStageArtifact(
+  storeRoot: string,
+  stage: string,
+  rewrite: (artifact: Record<string, unknown>) => Record<string, unknown>,
+): Promise<void> {
+  const store = new FsStore(storeRoot);
+  const state = JSON.parse(
+    await storeText(store, setupStateKey("project")),
+  ) as {
+    stages: Record<string, { outputKey: string }>;
+  };
+  const outputKey = state.stages[stage]?.outputKey;
+  expect(outputKey).toEqual(expect.any(String));
+  const artifact = JSON.parse(await storeText(store, outputKey!)) as Record<
+    string,
+    unknown
+  >;
+  const entry = await store.get(outputKey!);
+  expect(entry).not.toBeNull();
+  expect(
+    await store.compareAndSwap(
+      outputKey!,
+      entry!.version,
+      Buffer.from(JSON.stringify(rewrite(artifact)), "utf8"),
+      entry!.fenceToken,
+    ),
+  ).toBe(true);
 }
 
 function topologyRecord(
@@ -1157,6 +1310,188 @@ describe("built CLI pipeline", () => {
       expect(await allFileText(storeRoot)).not.toContain(secret);
       expect(reportMarkdown).not.toContain(secret);
       expect(JSON.stringify(reportJson)).not.toContain(secret);
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("abstains and reports every family when shortlist evidence is entirely missing", async () => {
+    const { repo } = await fixtureCopy("missing-shortlist-verdicts");
+    const stub = await startStub();
+    const baseArgs = [
+      "init",
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      "RIGHTMODELER_MISSING_SHORTLIST_API_KEY",
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    try {
+      const replay = await runCli([...baseArgs, "--through", "replay"], {
+        env: { RIGHTMODELER_MISSING_SHORTLIST_API_KEY: secret },
+      });
+      expect(replay.code, replay.stderr).toBe(0);
+      const storeRoot = join(repo, ".rightmodeler");
+      await removeExecutionFacts(storeRoot, () => true);
+
+      const result = await runCli(baseArgs, {
+        env: { RIGHTMODELER_MISSING_SHORTLIST_API_KEY: secret },
+      });
+
+      expect(result.code, result.stderr).toBe(0);
+      const output = jsonOutput(result);
+      const families = output.familyOutcomes as Array<{
+        decisionDisplay: string;
+        effectiveRecommendation: boolean;
+        verdict: { abstainReason?: Record<string, unknown> };
+      }>;
+      expect(families.length).toBeGreaterThan(0);
+      expect(families).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            decisionDisplay: "abstain",
+            effectiveRecommendation: false,
+            verdict: expect.objectContaining({
+              abstainReason: {
+                reason: "selection_missing_shortlist_verdicts",
+                observed: 0,
+                required: expect.any(Number),
+              },
+            }),
+          }),
+        ]),
+      );
+      const report = await storeText(
+        new FsStore(storeRoot),
+        reportKey("project", "report.md"),
+      );
+      expect(report).toContain("selection_missing_shortlist_verdicts");
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("abstains when one candidate is missing its shortlist verdict", async () => {
+    const { repo } = await fixtureCopy("missing-candidate-verdict");
+    const stub = await startStub();
+    const baseArgs = [
+      "init",
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      "RIGHTMODELER_MISSING_CANDIDATE_API_KEY",
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    try {
+      const replay = await runCli([...baseArgs, "--through", "replay"], {
+        env: { RIGHTMODELER_MISSING_CANDIDATE_API_KEY: secret },
+      });
+      expect(replay.code, replay.stderr).toBe(0);
+      const storeRoot = join(repo, ".rightmodeler");
+      const store = new FsStore(storeRoot);
+      const executions = await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) => ({
+          key,
+          fact: JSON.parse(await storeText(store, key)) as Record<
+            string,
+            unknown
+          >,
+        })),
+      );
+      const confirmedCandidate = executions.find(
+        ({ fact }) =>
+          typeof fact.executionId === "string" &&
+          fact.corpusSplit === "holdout" &&
+          typeof fact.candidateId === "string",
+      )?.fact.candidateId;
+      expect(confirmedCandidate).toEqual(expect.any(String));
+      await removeExecutionFacts(
+        storeRoot,
+        (execution) =>
+          execution.corpusSplit === "shortlist" &&
+          execution.candidateId === confirmedCandidate,
+      );
+
+      const result = await runCli(baseArgs, {
+        env: { RIGHTMODELER_MISSING_CANDIDATE_API_KEY: secret },
+      });
+
+      expect(result.code, result.stderr).toBe(0);
+      const output = jsonOutput(result);
+      expect(output.familyOutcomes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            decisionDisplay: "abstain",
+            effectiveRecommendation: false,
+            verdict: expect.objectContaining({
+              abstainReason: {
+                reason: "selection_candidate_verdict_missing",
+                observed: expect.any(Number),
+                required: expect.any(Number),
+              },
+            }),
+          }),
+        ]),
+      );
+      const report = await storeText(store, reportKey("project", "report.md"));
+      expect(report).toContain("selection_candidate_verdict_missing");
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("blocks only affected families when operational replay cells cannot complete", async () => {
+    const { repo } = await fixtureCopy("replay-operational-block");
+    const stub = await startRateLimitedStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_BLOCKED_REPLAY_API_KEY",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_BLOCKED_REPLAY_API_KEY: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const output = jsonOutput(result);
+      const families = output.familyOutcomes as Array<{
+        verdict: { abstainReason?: Record<string, unknown> };
+      }>;
+      expect(families.length).toBeGreaterThan(0);
+      expect(
+        families.every(
+          ({ verdict }) =>
+            verdict.abstainReason?.reason === "replay_operational_block",
+        ),
+      ).toBe(true);
+      expect(families[0]?.verdict.abstainReason).toMatchObject({
+        observed: expect.any(Number),
+        required: 0,
+      });
+      const report = await storeText(
+        new FsStore(join(repo, ".rightmodeler")),
+        reportKey("project", "report.md"),
+      );
+      expect(report).toContain("replay_operational_block");
     } finally {
       await stub.close();
     }
@@ -2020,6 +2355,212 @@ describe("built CLI pipeline", () => {
       await stub.close();
     }
   }, 600_000);
+
+  it("abstains an affected family when the provider catalog drifts before confirmation", async () => {
+    const { root, repo, traces } = await langgraphFixtureCopy("catalog-drift");
+    const modeBConfig = await writeModeBConfig(root, repo, "unused-image");
+    const stub = await startCatalogDriftStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_CATALOG_DRIFT_API_KEY",
+          "--modeb-config",
+          modeBConfig,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_CATALOG_DRIFT_API_KEY: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      expect(jsonOutput(result).familyOutcomes).toContainEqual(
+        expect.objectContaining({
+          familyId: "langgraph_order_lookup",
+          decisionDisplay: "abstain",
+          effectiveRecommendation: false,
+          verdict: expect.objectContaining({
+            abstainReason: {
+              reason: "provider_catalog_drift",
+              observed: 0,
+              required: 1,
+            },
+          }),
+          confirmation: expect.objectContaining({
+            status: "blocked",
+            blocker: expect.stringContaining("absent from the catalog"),
+          }),
+        }),
+      );
+      const report = await storeText(
+        new FsStore(join(repo, ".rightmodeler")),
+        reportKey("project", "report.md"),
+      );
+      expect(report).toContain("provider_catalog_drift");
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
+  it("abstains an affected family when confirmation model metadata is missing", async () => {
+    const { root, repo, traces } = await langgraphFixtureCopy(
+      "confirmation-model-metadata",
+    );
+    const modeBConfig = await writeModeBConfig(root, repo, "unused-image");
+    const stub = await startStub();
+    const baseArgs = [
+      "init",
+      "--traces",
+      traces,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      "RIGHTMODELER_CONFIRMATION_METADATA_API_KEY",
+      "--modeb-config",
+      modeBConfig,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    try {
+      const aggregate = await runCli([...baseArgs, "--through", "aggregate"], {
+        env: { RIGHTMODELER_CONFIRMATION_METADATA_API_KEY: secret },
+      });
+      expect(aggregate.code, aggregate.stderr).toBe(0);
+      const storeRoot = join(repo, ".rightmodeler");
+      await rewriteStageArtifact(storeRoot, "reconcile", (artifact) => ({
+        ...artifact,
+        records: Array.isArray(artifact.records)
+          ? artifact.records.map((record) =>
+              typeof record === "object" && record !== null
+                ? { ...record, currentModel: null }
+                : record,
+            )
+          : artifact.records,
+      }));
+
+      const result = await runCli(baseArgs, {
+        env: { RIGHTMODELER_CONFIRMATION_METADATA_API_KEY: secret },
+      });
+
+      expect(result.code, result.stderr).toBe(0);
+      expect(jsonOutput(result).familyOutcomes).toContainEqual(
+        expect.objectContaining({
+          decisionDisplay: "abstain",
+          effectiveRecommendation: false,
+          verdict: expect.objectContaining({
+            abstainReason: expect.objectContaining({
+              reason: "confirmation_model_metadata_missing",
+            }),
+          }),
+          confirmation: expect.objectContaining({
+            status: "blocked",
+            blocker: expect.stringContaining("has no current model"),
+          }),
+        }),
+      );
+      const report = await storeText(
+        new FsStore(storeRoot),
+        reportKey("project", "report.md"),
+      );
+      expect(report).toContain("confirmation_model_metadata_missing");
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
+  it("abstains an affected family when recorded confirmation text is missing", async () => {
+    const { root, repo, traces } = await langgraphFixtureCopy(
+      "confirmation-recorded-content",
+    );
+    const modeBConfig = await writeModeBConfig(root, repo, "unused-image");
+    const stub = await startStub();
+    const baseArgs = [
+      "init",
+      "--traces",
+      traces,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      "RIGHTMODELER_CONFIRMATION_CONTENT_API_KEY",
+      "--modeb-config",
+      modeBConfig,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    try {
+      const aggregate = await runCli([...baseArgs, "--through", "aggregate"], {
+        env: { RIGHTMODELER_CONFIRMATION_CONTENT_API_KEY: secret },
+      });
+      expect(aggregate.code, aggregate.stderr).toBe(0);
+      const storeRoot = join(repo, ".rightmodeler");
+      await rewriteStageArtifact(storeRoot, "scrub", (artifact) => ({
+        ...artifact,
+        runs: Array.isArray(artifact.runs)
+          ? artifact.runs.map((run) => {
+              if (
+                typeof run !== "object" ||
+                run === null ||
+                !("steps" in run) ||
+                !Array.isArray(run.steps)
+              ) {
+                return run;
+              }
+              return {
+                ...run,
+                steps: run.steps.map((step: unknown, index: number) =>
+                  typeof step === "object" &&
+                  step !== null &&
+                  index === run.steps.length - 1
+                    ? { ...step, output: {} }
+                    : step,
+                ),
+              };
+            })
+          : artifact.runs,
+      }));
+
+      const result = await runCli(baseArgs, {
+        env: { RIGHTMODELER_CONFIRMATION_CONTENT_API_KEY: secret },
+      });
+
+      expect(result.code, result.stderr).toBe(0);
+      expect(jsonOutput(result).familyOutcomes).toContainEqual(
+        expect.objectContaining({
+          decisionDisplay: "abstain",
+          effectiveRecommendation: false,
+          verdict: expect.objectContaining({
+            abstainReason: {
+              reason: "confirmation_recorded_content_missing",
+              observed: 0,
+              required: 1,
+            },
+          }),
+          confirmation: expect.objectContaining({
+            status: "blocked",
+            blocker: expect.stringContaining("no text content"),
+          }),
+        }),
+      );
+      const report = await storeText(
+        new FsStore(storeRoot),
+        reportKey("project", "report.md"),
+      );
+      expect(report).toContain("confirmation_recorded_content_missing");
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
 
   it("marks a confirmation-needing recommendation unconfirmed when Mode B config is absent", async () => {
     const { repo, traces } = await langgraphFixtureCopy("unconfirmed");

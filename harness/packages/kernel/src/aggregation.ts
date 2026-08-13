@@ -26,6 +26,12 @@ export const ABSTAIN_REASONS = [
   "incomplete_evaluator_coverage",
   "cascade_isolated",
   "cascade_inconclusive",
+  "selection_candidate_verdict_missing",
+  "selection_missing_shortlist_verdicts",
+  "replay_operational_block",
+  "provider_catalog_drift",
+  "confirmation_model_metadata_missing",
+  "confirmation_recorded_content_missing",
 ] as const;
 
 export type AbstainReason = (typeof ABSTAIN_REASONS)[number];
