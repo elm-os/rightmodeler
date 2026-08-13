@@ -13,6 +13,7 @@ import {
   runAuditTabulate,
   runApply,
   runPipeline,
+  runWatch,
   type PipelineOptions,
   type PipelineStage,
 } from "./pipeline.js";
@@ -60,6 +61,13 @@ interface ApplyCommandOptions {
   dryRun?: boolean;
 }
 
+interface WatchCommandOptions {
+  owner: string;
+  pr: string;
+  githubBaseUrl: string;
+  githubTokenEnv: string;
+}
+
 export interface ProgramHandle {
   program: Command;
   exitCode(): number;
@@ -72,7 +80,7 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     .description("Find and prove safe model substitutions.")
     .addHelpText(
       "after",
-      "\nExit codes are command-specific: apply uses 0 applied/clean dry-run, 1 refused, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
+      "\nExit codes are command-specific: apply uses 0 applied/clean dry-run, 1 refused, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
     )
     .version(version)
     .option("--repo <dir>", "repository to analyze", process.cwd())
@@ -208,6 +216,41 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     });
     reporter.result(result);
     return result.status === "refused" ? 1 : 0;
+  });
+
+  const watch = program
+    .command("watch")
+    .description("reconcile one open model-swap pull request")
+    .requiredOption("--owner <owner>", "GitHub repository owner")
+    .requiredOption("--pr <number>", "pull request number")
+    .requiredOption("--github-base-url <url>", "GitHub API base URL")
+    .requiredOption(
+      "--github-token-env <name>",
+      "environment variable containing the GitHub token",
+    );
+  run(watch, async (reporter, global) => {
+    const local = watch.opts<WatchCommandOptions>();
+    const prNumber = Number(local.pr);
+    if (!Number.isSafeInteger(prNumber) || prNumber < 1) {
+      throw new Error("--pr must be a positive integer");
+    }
+    const result = await runWatch({
+      repo: global.repo,
+      store: global.store,
+      githubClient: createGithubClient({
+        baseUrl: local.githubBaseUrl,
+        tokenEnv: local.githubTokenEnv,
+      }),
+      owner: local.owner,
+      githubRepo: basename(resolve(global.repo)),
+      prNumber,
+    });
+    reporter.result(result);
+    return result.status === "lock_held"
+      ? 2
+      : result.status === "actions_taken"
+        ? 1
+        : 0;
   });
 
   const report = program

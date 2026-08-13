@@ -368,7 +368,39 @@ export async function startGithubStub({
           completed_at: status === "completed" ? now() : null,
         };
       });
-      repo.checkRuns.set(sha, runs);
+      const combined =
+        body.append === true
+          ? [...(repo.checkRuns.get(sha) ?? []), ...runs]
+          : runs;
+      repo.checkRuns.set(sha, combined);
+      json(response, 200, {
+        total_count: combined.length,
+        check_runs: combined,
+      });
+      return true;
+    }
+
+    if (pathname === "/__test/check-run-conclusions") {
+      const sha = resolveCommit(repo, body.ref);
+      if (sha === undefined || !Array.isArray(body.runs)) {
+        json(response, 422, {
+          message: "A valid ref and runs array are required",
+        });
+        return true;
+      }
+      const runs = repo.checkRuns.get(sha) ?? [];
+      for (const update of body.runs) {
+        const run = runs.find(({ name }) => name === update.name);
+        if (run === undefined || typeof update.conclusion !== "string") {
+          json(response, 422, {
+            message: "Every updated check name must exist with a conclusion",
+          });
+          return true;
+        }
+        run.status = "completed";
+        run.conclusion = update.conclusion;
+        run.completed_at = now();
+      }
       json(response, 200, { total_count: runs.length, check_runs: runs });
       return true;
     }

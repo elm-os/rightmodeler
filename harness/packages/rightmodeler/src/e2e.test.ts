@@ -20,6 +20,7 @@ import {
   confirmPlanKey,
   factsPrefix,
   reportKey,
+  setupStateKey,
   type StepRecord,
   type JsonValue,
   verdictsPrefix,
@@ -930,6 +931,21 @@ describe("built CLI pipeline", () => {
       "--repo",
       repo,
     ];
+    const watchArgs = [
+      "watch",
+      "--owner",
+      "acme",
+      "--pr",
+      "1",
+      "--github-base-url",
+      githubBaseUrl,
+      "--github-token-env",
+      "RIGHTMODELER_GITHUB_E2E_TOKEN",
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
     const env = {
       RIGHTMODELER_APPLY_E2E_API_KEY: secret,
       RIGHTMODELER_GITHUB_E2E_TOKEN: githubToken,
@@ -1013,6 +1029,78 @@ describe("built CLI pipeline", () => {
       });
       expect(pullWrites()).toHaveLength(1);
 
+      const projectStore = new FsStore(join(repo, ".rightmodeler"));
+      const watchLockKey = `project/watch-locks/${createHash("sha256")
+        .update("acme/demo-app")
+        .digest("hex")}/pr-1.json`;
+      expect(
+        await projectStore.compareAndSwap(
+          watchLockKey,
+          0,
+          Buffer.from(
+            JSON.stringify({
+              status: "held",
+              ownerId: "competing-watch",
+              lockedAt: new Date().toISOString(),
+              heartbeatAt: new Date().toISOString(),
+            }),
+            "utf8",
+          ),
+          1,
+        ),
+      ).toBe(true);
+      const hitsBeforeContention = github.getHits().length;
+      const contendedWatch = await runCli(watchArgs, { env });
+      expect(contendedWatch.code).toBe(2);
+      expect(jsonOutput(contendedWatch)).toMatchObject({
+        status: "lock_held",
+        actions: [],
+      });
+      expect(github.getHits()).toHaveLength(hitsBeforeContention);
+      const heldLock = await projectStore.get(watchLockKey);
+      expect(heldLock).not.toBeNull();
+      expect(
+        await projectStore.compareAndSwap(
+          watchLockKey,
+          heldLock!.version,
+          Buffer.from(JSON.stringify({ status: "available" }), "utf8"),
+          heldLock!.fenceToken + 1,
+        ),
+      ).toBe(true);
+
+      expect(
+        (
+          await control("/__test/merge", {
+            owner: "acme",
+            repo: "demo-app",
+            pullNumber: 1,
+          })
+        ).status,
+      ).toBe(200);
+      const watched = await runCli(watchArgs, { env });
+      expect(watched.code).toBe(1);
+      expect(jsonOutput(watched)).toMatchObject({
+        status: "actions_taken",
+        phase: "ended",
+        actions: [
+          expect.objectContaining({ type: "pr_merged" }),
+          expect.objectContaining({ type: "watch_ended" }),
+        ],
+      });
+      const hitsAfterMerge = github.getHits().length;
+      const quietWatch = await runCli(watchArgs, { env });
+      expect(quietWatch.code).toBe(0);
+      expect(jsonOutput(quietWatch)).toMatchObject({ status: "quiet" });
+      expect(github.getHits()).toHaveLength(hitsAfterMerge);
+
+      const afterMerge = await runCli(applyArgs, { env });
+      expect(afterMerge.code).toBe(0);
+      expect(jsonOutput(afterMerge)).toMatchObject({
+        status: "existing",
+        prNumber: 1,
+      });
+      expect(pullWrites()).toHaveLength(1);
+
       const report = await runCli([
         "report",
         "--output",
@@ -1025,8 +1113,8 @@ describe("built CLI pipeline", () => {
         expect.objectContaining({
           repo: "acme/demo-app",
           prNumber: 1,
-          state: "review_requested",
-          eventCount: 3,
+          state: "watch_ended",
+          eventCount: 5,
         }),
       ]);
       expect(
@@ -1035,6 +1123,140 @@ describe("built CLI pipeline", () => {
           reportKey("project", "report.md"),
         ),
       ).toContain("## Apply");
+
+      const rejectingOwner = "acme-reject";
+      expect(
+        (
+          await control("/__test/seed", {
+            owner: rejectingOwner,
+            repo: "demo-app",
+            defaultBranch: "main",
+            sha: head,
+            tree: {
+              src: {
+                "extract.ts": extractSource,
+                "summarize.ts": summarizeSource,
+              },
+            },
+          })
+        ).status,
+      ).toBe(201);
+      expect(
+        (
+          await control(`/repos/${rejectingOwner}/demo-app/git/refs`, {
+            ref: "refs/heads/dummy",
+            sha: head,
+          })
+        ).status,
+      ).toBe(201);
+      expect(
+        (
+          await control(`/repos/${rejectingOwner}/demo-app/pulls`, {
+            title: "Reserve pull number",
+            body: "Fixture setup",
+            head: "dummy",
+            base: "main",
+            draft: true,
+          })
+        ).status,
+      ).toBe(201);
+      const rejectingApplyArgs = applyArgs.map((argument, index) =>
+        applyArgs[index - 1] === "--owner" ? rejectingOwner : argument,
+      );
+      const rejectingWatchArgs = watchArgs.map((argument, index) => {
+        if (watchArgs[index - 1] === "--owner") return rejectingOwner;
+        if (watchArgs[index - 1] === "--pr") return "2";
+        return argument;
+      });
+      const rejectionCandidate = await runCli(rejectingApplyArgs, { env });
+      expect(rejectionCandidate.code).toBe(0);
+      expect(jsonOutput(rejectionCandidate)).toMatchObject({
+        status: "applied",
+        prNumber: 2,
+      });
+      expect(
+        (
+          await control("/__test/close", {
+            owner: rejectingOwner,
+            repo: "demo-app",
+            pullNumber: 2,
+          })
+        ).status,
+      ).toBe(200);
+      const rejectedWatch = await runCli(rejectingWatchArgs, { env });
+      expect(rejectedWatch.code).toBe(1);
+      expect(jsonOutput(rejectedWatch)).toMatchObject({
+        status: "actions_taken",
+        phase: "ended",
+      });
+      const reappliedRejection = await runCli(rejectingApplyArgs, { env });
+      expect(reappliedRejection.code).toBe(1);
+      expect(jsonOutput(reappliedRejection)).toMatchObject({
+        status: "refused",
+        reasons: [
+          expect.objectContaining({
+            code: "previously_rejected",
+            detail: expect.objectContaining({ prNumber: 2 }),
+          }),
+        ],
+      });
+      expect(
+        github
+          .getHits()
+          .filter(
+            ({ method, path }) =>
+              method === "POST" &&
+              path === `/repos/${rejectingOwner}/demo-app/pulls`,
+          ),
+      ).toHaveLength(2);
+
+      const setupBeforeReproof = JSON.parse(
+        await storeText(projectStore, setupStateKey("project")),
+      ) as {
+        stages: { shortlist: { inputDigest: string } };
+      };
+      const verdictKeys = await projectStore.list(verdictsPrefix("project"));
+      expect(verdictKeys.length).toBeGreaterThan(0);
+      const verdictEntry = await projectStore.get(verdictKeys[0]!);
+      expect(verdictEntry).not.toBeNull();
+      const verdictValue = JSON.parse(
+        Buffer.from(verdictEntry!.body).toString("utf8"),
+      ) as Record<string, unknown>;
+      expect(
+        await projectStore.compareAndSwap(
+          verdictKeys[0]!,
+          verdictEntry!.version,
+          Buffer.from(
+            JSON.stringify({
+              ...verdictValue,
+              reproof_requested: true,
+              reproof_request_ids: ["review:reproof-fixture"],
+            }),
+            "utf8",
+          ),
+          verdictEntry!.fenceToken,
+        ),
+      ).toBe(true);
+      const providerHitsBeforeReproof = provider.getHitCount();
+
+      const reproof = await runCli(initArgs, { env });
+
+      expect(reproof.code).toBe(1);
+      expect(provider.getHitCount()).toBeGreaterThan(providerHitsBeforeReproof);
+      const setupAfterReproof = JSON.parse(
+        await storeText(projectStore, setupStateKey("project")),
+      ) as {
+        stages: { shortlist: { inputDigest: string } };
+      };
+      expect(setupAfterReproof.stages.shortlist.inputDigest).not.toBe(
+        setupBeforeReproof.stages.shortlist.inputDigest,
+      );
+      expect(
+        JSON.parse(await storeText(projectStore, verdictKeys[0]!)),
+      ).toMatchObject({
+        reproof_requested: false,
+        reproof_request_ids: ["review:reproof-fixture"],
+      });
     } finally {
       await Promise.all([provider.close(), github.close()]);
     }

@@ -100,6 +100,7 @@ import {
   blastRadius,
   captureConventions,
   resolveOwners,
+  type CapturedConventions,
 } from "./enrich/index.js";
 import {
   createBraintrustEvaluator,
@@ -123,6 +124,7 @@ import {
   type Checkpoint,
   type SetupState,
 } from "./state.js";
+import { watchOnce, type WatchResult } from "./watch/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -412,6 +414,28 @@ export interface ApplyPipelineOptions {
   readonly dryRun: boolean;
 }
 
+export interface WatchPipelineOptions {
+  readonly repo: string;
+  readonly store?: string;
+  readonly githubClient: GithubClient;
+  readonly owner: string;
+  readonly githubRepo: string;
+  readonly prNumber: number;
+}
+
+export type RunApplyResult =
+  | ApplyResult
+  | {
+      readonly status: "refused";
+      readonly reasons: readonly [
+        {
+          readonly code: "previously_rejected";
+          readonly message: string;
+          readonly detail: JsonValue;
+        },
+      ];
+    };
+
 interface FamilyOutcome {
   familyId: string;
   verdict: FamilyVerdict;
@@ -555,8 +579,50 @@ export async function runPipeline(
 
 export async function runApply(
   options: ApplyPipelineOptions,
-): Promise<ApplyResult> {
-  const context = createContext({
+): Promise<RunApplyResult> {
+  const context = createHeadlessContext(options);
+  const prepared = await prepareApply(context);
+  const terminal = await terminalApplyResult({
+    store: context.store,
+    owner: options.owner,
+    repo: options.githubRepo,
+    verdicts: prepared.verdicts,
+  });
+  if (terminal !== null) return terminal;
+  return applySwaps({
+    store: context.store,
+    repoDir: context.repo,
+    githubClient: options.githubClient,
+    owner: options.owner,
+    repo: options.githubRepo,
+    conventions: prepared.conventions,
+    verdicts: prepared.verdicts,
+    dryRun: options.dryRun,
+  });
+}
+
+export async function runWatch(
+  options: WatchPipelineOptions,
+): Promise<WatchResult> {
+  const context = createHeadlessContext(options);
+  const prepared = await prepareApply(context);
+  return watchOnce({
+    store: context.store,
+    repoDir: context.repo,
+    githubClient: options.githubClient,
+    owner: options.owner,
+    repo: options.githubRepo,
+    prNumber: options.prNumber,
+    conventions: prepared.conventions,
+    verdicts: prepared.verdicts,
+  });
+}
+
+function createHeadlessContext(options: {
+  readonly repo: string;
+  readonly store?: string;
+}): PipelineContext {
+  return createContext({
     repo: options.repo,
     store: options.store,
     reporter: new Reporter("human", {
@@ -564,6 +630,12 @@ export async function runApply(
       stderr: () => undefined,
     }),
   });
+}
+
+async function prepareApply(context: PipelineContext): Promise<{
+  readonly verdicts: readonly ApplyVerdict[];
+  readonly conventions: CapturedConventions;
+}> {
   const [scanOutput, decisionOutput, plan, reconciled, corpus] =
     await Promise.all([
       loadScan(context),
@@ -583,15 +655,16 @@ export async function runApply(
     repoDir: context.repo,
     filePaths: records.map(({ callSite }) => callSite.path),
   });
-  const recommended = decisionOutput.families.filter(
-    ({ verdict }) => verdict.decision === "recommend",
-  );
+  const families = decisionOutput.families;
   const radii = blastRadius({
     stepRecords: records,
-    verdicts: recommended.map(({ verdict }) => verdict),
+    verdicts: families.map(({ verdict }) => ({
+      ...verdict,
+      decision: "recommend" as const,
+    })),
     owners: ownerResolutions,
   });
-  const verdicts: ApplyVerdict[] = recommended.map((family) => {
+  const verdicts: ApplyVerdict[] = families.map((family) => {
     const familyRecords = plan.steps
       .filter(({ family: familyId }) => familyId === family.familyId)
       .map(({ stepId }) => records.find((record) => record.stepId === stepId))
@@ -640,16 +713,136 @@ export async function runApply(
       ],
     };
   });
-  return applySwaps({
-    store: context.store,
-    repoDir: context.repo,
-    githubClient: options.githubClient,
-    owner: options.owner,
-    repo: options.githubRepo,
-    conventions: await captureConventions({ repoDir: context.repo }),
+  return {
     verdicts,
-    dryRun: options.dryRun,
+    conventions: await captureConventions({ repoDir: context.repo }),
+  };
+}
+
+function applyRunSpecDigest(
+  owner: string,
+  repo: string,
+  verdicts: readonly ApplyVerdict[],
+): string | null {
+  const selected = verdicts
+    .filter(
+      ({ verdict, cascadeStatus }) =>
+        verdict.decision === "recommend" &&
+        (cascadeStatus === "confirmed" || cascadeStatus === "not-required"),
+    )
+    .sort((left, right) =>
+      compareText(left.verdict.familyId, right.verdict.familyId),
+    );
+  if (selected.length === 0) return null;
+  const evidence = selected[0]!.evidence;
+  const gatePolicyVersion = selected[0]!.verdict.gatePolicyVersion;
+  if (
+    selected.some(
+      ({ verdict, releaseGates, evidence: candidate }) =>
+        releaseGates.some(({ pass }) => !pass) ||
+        candidate.revision !== evidence.revision ||
+        candidate.corpusVersionId !== evidence.corpusVersionId ||
+        verdict.gatePolicyVersion !== gatePolicyVersion,
+    )
+  ) {
+    return null;
+  }
+  const swapSet = selected
+    .flatMap(({ verdict, swaps }) =>
+      swaps.map(({ stepRecord, fromModel, toModel }) => ({
+        familyId: verdict.familyId,
+        stepId: stepRecord.stepId,
+        path: stepRecord.callSite.path,
+        fromModel,
+        toModel,
+      })),
+    )
+    .sort(
+      (left, right) =>
+        compareText(left.familyId, right.familyId) ||
+        compareText(left.path, right.path) ||
+        compareText(left.stepId, right.stepId) ||
+        compareText(left.fromModel, right.fromModel) ||
+        compareText(left.toModel, right.toModel),
+    );
+  return computeRunSpecDigest({
+    repo: `${owner}/${repo}`,
+    evidenceRevision: evidence.revision,
+    swapSet,
+    corpusVersionId: evidence.corpusVersionId,
   });
+}
+
+async function terminalApplyResult({
+  store,
+  owner,
+  repo,
+  verdicts,
+}: {
+  readonly store: Store;
+  readonly owner: string;
+  readonly repo: string;
+  readonly verdicts: readonly ApplyVerdict[];
+}): Promise<RunApplyResult | null> {
+  const runSpecDigest = applyRunSpecDigest(owner, repo, verdicts);
+  if (runSpecDigest === null) return null;
+  const matching = (await readFacts(store, PROJECT_ID))
+    .flatMap((fact) => {
+      const parsed = lifecycleEventSchema.safeParse(fact);
+      return parsed.success && parsed.data.runSpecDigest === runSpecDigest
+        ? [parsed.data]
+        : [];
+    })
+    .sort(
+      (left, right) =>
+        compareText(left.createdAt, right.createdAt) ||
+        lifecycleKindOrder[left.kind] - lifecycleKindOrder[right.kind] ||
+        compareText(left.eventId, right.eventId),
+    );
+  const terminal = [...matching]
+    .reverse()
+    .find(({ kind }) => kind === "pr_closed_rejected" || kind === "pr_merged");
+  if (terminal === undefined || terminal.prNumber === null) return null;
+  if (terminal.kind === "pr_closed_rejected") {
+    return {
+      status: "refused",
+      reasons: [
+        {
+          code: "previously_rejected",
+          message:
+            "This evidence and swap set was previously rejected and requires new evidence before it can be proposed again.",
+          detail: jsonValue({
+            prNumber: terminal.prNumber,
+            rejection: terminal.detail,
+          }),
+        },
+      ],
+    };
+  }
+
+  const opened = matching.find(
+    (event) =>
+      event.kind === "pr_opened" && event.prNumber === terminal.prNumber,
+  );
+  const detail = opened === undefined ? undefined : objectValue(opened.detail);
+  if (
+    opened === undefined ||
+    typeof detail?.branch !== "string" ||
+    typeof detail.title !== "string"
+  ) {
+    throw new Error(
+      `Merged run ${runSpecDigest} has no complete pr_opened lifecycle fact`,
+    );
+  }
+  return {
+    status: "existing",
+    runSpecDigest,
+    prNumber: terminal.prNumber,
+    branch: detail.branch,
+    title: detail.title,
+    reviewers: [],
+    teamReviewers: [],
+  };
 }
 
 function applyCascadeStatus(
@@ -793,9 +986,39 @@ async function inputDigest(
   if (stage === "shortlist") extra.top = SHORTLIST_TOP;
   if (stage === "shortlist") {
     extra.evaluatorPlan = evaluatorPlan(context);
+    const reproofRequests = await readReproofRequests(
+      context.store,
+      context.projectId,
+    );
+    if (reproofRequests.length > 0) {
+      extra.reproofRequests = jsonValue(
+        reproofRequests.map(({ familyId, requestIds }) => ({
+          familyId,
+          requestIds,
+        })),
+      );
+    }
   }
   if (stage === "replay") {
+    const reproofRequests = await readReproofRequests(
+      context.store,
+      context.projectId,
+    );
+    if (
+      context.baseUrl === undefined &&
+      reproofRequests.some(({ requested }) => requested)
+    ) {
+      return undefined;
+    }
     if (context.baseUrl === undefined) return state.stages.replay?.inputDigest;
+    if (reproofRequests.length > 0) {
+      extra.reproofRequests = jsonValue(
+        reproofRequests.map(({ familyId, requestIds }) => ({
+          familyId,
+          requestIds,
+        })),
+      );
+    }
     extra.provider = digest({
       baseUrl: context.baseUrl,
       apiKeyEnv: context.apiKeyEnv,
@@ -1128,6 +1351,11 @@ async function executeShortlist(
   const steps: Array<Omit<ReplayStep, "corpusSplit"> & { family: string }> = [];
   const cases: Array<RecordedCase & { family: string }> = [];
   const sampleSizes: Record<string, number> = {};
+  const reproofRequests = new Map(
+    (await readReproofRequests(context.store, context.projectId)).map(
+      ({ familyId, requestIds }) => [familyId, requestIds] as const,
+    ),
+  );
   const unusedSteps = new Set(replayableSteps.map(({ stepId }) => stepId));
   for (const [familyIndex, family] of families.entries()) {
     const familyCases = corpus.cases.filter(
@@ -1154,14 +1382,18 @@ async function executeShortlist(
     }
     const assignedStepIds = assignedRecords.map(({ stepId }) => stepId);
     assignedStepIds.forEach((stepId) => unusedSteps.delete(stepId));
-    const evidenceQuestionId = computeRunSpecDigest({
-      corpusVersionId: corpus.corpusVersionId,
-      family,
-      stepIds: assignedStepIds,
-      gatePolicyVersion: GATE_POLICY_VERSION,
-      evaluatorPlan: evaluatorPlan(context),
-      replayMode: "single_shot",
-    });
+    const reproofRequestIds = reproofRequests.get(family) ?? [];
+    const evidenceQuestionId = computeRunSpecDigest(
+      jsonValue({
+        corpusVersionId: corpus.corpusVersionId,
+        family,
+        stepIds: assignedStepIds,
+        gatePolicyVersion: GATE_POLICY_VERSION,
+        evaluatorPlan: evaluatorPlan(context),
+        replayMode: "single_shot",
+        ...(reproofRequestIds.length === 0 ? {} : { reproofRequestIds }),
+      }),
+    );
     for (const stepId of assignedStepIds) {
       const record = assignedRecords.find(
         (candidate) => candidate.stepId === stepId,
@@ -1521,10 +1753,27 @@ async function writeFamilyVerdicts(
   families: readonly FamilyOutcome[],
 ): Promise<void> {
   for (const { familyId, verdict } of families) {
+    const key = verdictKey(context.projectId, familyId);
+    const existing = await context.store.get(key);
+    const reproof =
+      existing === null
+        ? undefined
+        : parseReproofRequest(
+            JSON.parse(Buffer.from(existing.body).toString("utf8")),
+            familyId,
+          );
     await putMutableJson(
       context.store,
-      verdictKey(context.projectId, familyId),
-      jsonValue(verdict),
+      key,
+      jsonValue(
+        reproof === undefined
+          ? verdict
+          : {
+              ...verdict,
+              reproof_requested: false,
+              reproof_request_ids: reproof.requestIds,
+            },
+      ),
     );
   }
 }
@@ -2309,6 +2558,12 @@ function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 function reportPath(context: PipelineContext): string {
   return join(context.storeRoot, reportKey(context.projectId, "report.md"));
 }
@@ -2922,6 +3177,61 @@ function parseVerdict(value: unknown): FamilyVerdict {
     throw new Error("Family verdict is malformed");
   }
   return value;
+}
+
+interface ReproofRequest {
+  readonly familyId: string;
+  readonly requested: boolean;
+  readonly requestIds: readonly string[];
+}
+
+function parseReproofRequest(
+  value: unknown,
+  expectedFamilyId?: string,
+): ReproofRequest | undefined {
+  const verdict = parseVerdict(value);
+  if (expectedFamilyId !== undefined && verdict.familyId !== expectedFamilyId) {
+    throw new Error(
+      `Stored verdict for ${expectedFamilyId} has the wrong familyId`,
+    );
+  }
+  const record = value as Record<string, unknown>;
+  const requested = record.reproof_requested;
+  const requestIds = record.reproof_request_ids;
+  if (requested === undefined && requestIds === undefined) return undefined;
+  if (requested !== undefined && typeof requested !== "boolean") {
+    throw new Error(
+      `Stored verdict for ${verdict.familyId} has malformed reproof_requested`,
+    );
+  }
+  if (
+    requestIds !== undefined &&
+    (!Array.isArray(requestIds) ||
+      requestIds.some((requestId) => typeof requestId !== "string"))
+  ) {
+    throw new Error(
+      `Stored verdict for ${verdict.familyId} has malformed reproof_request_ids`,
+    );
+  }
+  return {
+    familyId: verdict.familyId,
+    requested: requested ?? false,
+    requestIds: [...new Set((requestIds ?? []) as string[])].sort(compareText),
+  };
+}
+
+async function readReproofRequests(
+  store: Store,
+  projectId: string,
+): Promise<ReproofRequest[]> {
+  const requests: ReproofRequest[] = [];
+  for (const key of await store.list(verdictsPrefix(projectId))) {
+    const request = parseReproofRequest(await readJson(store, key));
+    if (request !== undefined) requests.push(request);
+  }
+  return requests.sort((left, right) =>
+    compareText(left.familyId, right.familyId),
+  );
 }
 
 async function readCurrentVerdicts(
