@@ -82,18 +82,20 @@ export async function startGithubStub({
     return repositories.get(repoKey(owner, repo));
   }
 
-  function commit(repo, parent, files, message) {
-    const sha = createHash("sha1")
-      .update(
-        JSON.stringify({
-          repository: repo.key,
-          sequence: nextCommit,
-          parent,
-          message,
-          files: [...files].map(([path, file]) => [path, file.sha]),
-        }),
-      )
-      .digest("hex");
+  function commit(repo, parent, files, message, suppliedSha) {
+    const sha =
+      suppliedSha ??
+      createHash("sha1")
+        .update(
+          JSON.stringify({
+            repository: repo.key,
+            sequence: nextCommit,
+            parent,
+            message,
+            files: [...files].map(([path, file]) => [path, file.sha]),
+          }),
+        )
+        .digest("hex");
     nextCommit += 1;
     repo.commits.set(sha, { sha, parent, files: cloneFiles(files), message });
     return sha;
@@ -216,6 +218,12 @@ export async function startGithubStub({
     ) {
       throw new Error("owner, repo, and defaultBranch are required");
     }
+    if (
+      body.sha !== undefined &&
+      (typeof body.sha !== "string" || body.sha.length === 0)
+    ) {
+      throw new Error("sha must be a non-empty string when provided");
+    }
     const key = repoKey(body.owner, body.repo);
     const repo = {
       key,
@@ -232,7 +240,7 @@ export async function startGithubStub({
       nextPull: 1,
     };
     const files = flattenTree(body.tree ?? {});
-    const sha = commit(repo, null, files, "Seed repository");
+    const sha = commit(repo, null, files, "Seed repository", body.sha);
     repo.refs.set(fullRef(body.defaultBranch), sha);
     repositories.set(key, repo);
     return {
@@ -734,12 +742,16 @@ async function selftest() {
   const post = (path, body) =>
     request(path, { method: "POST", body: JSON.stringify(body) });
   try {
+    const initialSha = "0123456789abcdef0123456789abcdef01234567";
     const seeded = await post("/__test/seed", {
       owner: "acme",
       repo: "demo",
       defaultBranch: "main",
+      sha: initialSha,
       tree: { README: "hello" },
     });
+    if (seeded.sha !== initialSha)
+      throw new Error("Expected the supplied seed SHA");
     await post("/__test/advance-base", {
       owner: "acme",
       repo: "demo",

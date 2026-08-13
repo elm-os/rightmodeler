@@ -52,6 +52,10 @@ const evaluatorStubModuleUrl = new URL(
   "../../../fixtures/eval-stub/server.mjs",
   import.meta.url,
 ).href;
+const githubStubModuleUrl = new URL(
+  "../../../fixtures/github-stub/server.mjs",
+  import.meta.url,
+).href;
 const temporaryDirectories: string[] = [];
 const secret = "phase-a-api-key-must-not-persist";
 const execFileAsync = promisify(execFile);
@@ -81,6 +85,25 @@ interface EvaluatorStubModule {
   }): Promise<EvaluatorStub>;
 }
 
+interface GithubStubHit {
+  method: string;
+  path: string;
+  body: unknown;
+}
+
+interface GithubStub {
+  port: number;
+  getHits(): GithubStubHit[];
+  close(): Promise<void>;
+}
+
+interface GithubStubModule {
+  startGithubStub(options: {
+    port: number;
+    token: string;
+  }): Promise<GithubStub>;
+}
+
 interface ChildResult {
   code: number;
   stdout: string;
@@ -102,7 +125,86 @@ async function fixtureCopy(
   temporaryDirectories.push(root);
   const repo = join(root, "demo-app");
   await cp(demoAppPath, repo, { recursive: true });
+  await initializeFixtureRepository(repo);
   return { root, repo };
+}
+
+async function initializeFixtureRepository(repo: string): Promise<void> {
+  await execFileAsync("git", ["-C", repo, "init", "--initial-branch", "main"]);
+  await execFileAsync("git", [
+    "-C",
+    repo,
+    "config",
+    "user.email",
+    "fixture@example.com",
+  ]);
+  await execFileAsync("git", ["-C", repo, "config", "user.name", "Fixture"]);
+  await execFileAsync("git", ["-C", repo, "add", "."]);
+  await execFileAsync("git", [
+    "-C",
+    repo,
+    "commit",
+    "--message",
+    "Seed fixture",
+  ]);
+}
+
+async function narrowDemoFixtureForApply(root: string, repo: string) {
+  await Promise.all([
+    rm(join(repo, "config"), { recursive: true, force: true }),
+    rm(join(repo, "requirements.txt"), { force: true }),
+    rm(join(repo, "src", "model-notes.ts"), { force: true }),
+    rm(join(repo, "src", "support.py"), { force: true }),
+    rm(join(repo, "src", "triage.py"), { force: true }),
+  ]);
+  await writeFile(
+    join(repo, "src", "extract.ts"),
+    [
+      'import { generateText } from "ai";',
+      "",
+      "export async function extractContact(message: string) {",
+      "  return generateText({",
+      '    model: "acme/max-1",',
+      "    prompt: `Extract the contact request: ${message}`,",
+      "  });",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(repo, "package.json"),
+    `${JSON.stringify({ dependencies: { ai: "*" } }, null, 2)}\n`,
+  );
+  const traces = JSON.parse(await readFile(tracesPath, "utf8")) as Array<{
+    attributes?: Record<string, unknown>;
+  }>;
+  const filteredTraces = join(root, "summarize-otel.json");
+  const summarizeTraces = traces
+    .filter(
+      ({ attributes }) => attributes?.["rightmodeler.family"] === "summarize",
+    )
+    .map((trace, index) =>
+      index % 2 === 0
+        ? trace
+        : {
+            ...trace,
+            attributes: {
+              ...trace.attributes,
+              "gen_ai.request.model": "acme/max-1",
+              "gen_ai.response.model": "acme/max-1",
+            },
+          },
+    );
+  await writeFile(filteredTraces, JSON.stringify(summarizeTraces));
+  await execFileAsync("git", ["-C", repo, "add", "--all"]);
+  await execFileAsync("git", [
+    "-C",
+    repo,
+    "commit",
+    "--message",
+    "Narrow apply fixture",
+  ]);
+  return filteredTraces;
 }
 
 async function langgraphFixtureCopy(
@@ -114,6 +216,7 @@ async function langgraphFixtureCopy(
   temporaryDirectories.push(root);
   const repo = join(root, "langgraph-app");
   await cp(langgraphAppPath, repo, { recursive: true });
+  await initializeFixtureRepository(repo);
   const source = JSON.parse(
     await readFile(langgraphTracesPath, "utf8"),
   ) as Array<Record<string, unknown>>;
@@ -257,6 +360,11 @@ async function startEvaluatorStub(
     platformPassDecisions: false,
     ...options,
   });
+}
+
+async function startGithubStub(token: string): Promise<GithubStub> {
+  const module = (await import(githubStubModuleUrl)) as GithubStubModule;
+  return module.startGithubStub({ port: 0, token });
 }
 
 async function startConfirmStub(): Promise<StubProvider> {
@@ -752,6 +860,186 @@ describe("built CLI pipeline", () => {
     }
   }, 60_000);
 
+  it("runs from the demo scan corpus to one idempotent draft pull request", async () => {
+    const { root, repo } = await fixtureCopy("apply");
+    const filteredTraces = await narrowDemoFixtureForApply(root, repo);
+    const provider = await startStub();
+    const githubToken = "github-e2e-token";
+    const github = await startGithubStub(githubToken);
+    const githubBaseUrl = `http://127.0.0.1:${github.port}`;
+    const head = (
+      await execFileAsync("git", ["-C", repo, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      })
+    ).stdout.trim();
+    const summarizeSource = await readFile(
+      join(repo, "src", "summarize.ts"),
+      "utf8",
+    );
+    const extractSource = await readFile(
+      join(repo, "src", "extract.ts"),
+      "utf8",
+    );
+    const control = (path: string, body: Record<string, unknown>) =>
+      fetch(`${githubBaseUrl}${path}`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${githubToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    const seed = () =>
+      control("/__test/seed", {
+        owner: "acme",
+        repo: "demo-app",
+        defaultBranch: "main",
+        sha: head,
+        tree: {
+          src: {
+            "extract.ts": extractSource,
+            "summarize.ts": summarizeSource,
+          },
+        },
+      });
+    expect((await seed()).status).toBe(201);
+
+    const initArgs = [
+      "init",
+      "--traces",
+      filteredTraces,
+      "--base-url",
+      `http://127.0.0.1:${provider.port}/v1`,
+      "--api-key-env",
+      "RIGHTMODELER_APPLY_E2E_API_KEY",
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    const applyArgs = [
+      "apply",
+      "--owner",
+      "acme",
+      "--github-base-url",
+      githubBaseUrl,
+      "--github-token-env",
+      "RIGHTMODELER_GITHUB_E2E_TOKEN",
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    const env = {
+      RIGHTMODELER_APPLY_E2E_API_KEY: secret,
+      RIGHTMODELER_GITHUB_E2E_TOKEN: githubToken,
+    };
+
+    try {
+      const initialized = await runCli(initArgs, { env });
+      expect(initialized.code, initialized.stdout).toBe(1);
+      const initializedOutput = jsonOutput(initialized);
+      expect(initializedOutput).toMatchObject({ recommendationExists: true });
+      const recommended = (
+        initializedOutput.verdicts as Array<{
+          decision: string;
+          caseIds: string[];
+        }>
+      ).find(({ decision }) => decision === "recommend");
+      expect(recommended?.caseIds.length).toBeGreaterThan(0);
+
+      const dryRun = await runCli([...applyArgs, "--dry-run"], { env });
+      expect(dryRun.code).toBe(0);
+      expect(jsonOutput(dryRun)).toMatchObject({ status: "dry_run" });
+      expect(
+        github
+          .getHits()
+          .filter(
+            ({ method, path }) =>
+              !path.startsWith("/__test/") &&
+              ["POST", "PUT", "PATCH", "DELETE"].includes(method),
+          ),
+      ).toEqual([]);
+
+      expect(
+        (
+          await control("/__test/advance-base", {
+            owner: "acme",
+            repo: "demo-app",
+            branch: "main",
+            tree: {},
+          })
+        ).status,
+      ).toBe(200);
+      const refused = await runCli(applyArgs, { env });
+      expect(refused.code).toBe(1);
+      expect(jsonOutput(refused)).toMatchObject({
+        status: "refused",
+        reasons: [expect.objectContaining({ code: "stale_evidence" })],
+      });
+      expect((await seed()).status).toBe(201);
+
+      const applied = await runCli(applyArgs, { env });
+      expect(applied.code).toBe(0);
+      expect(jsonOutput(applied)).toMatchObject({
+        status: "applied",
+        prNumber: 1,
+        teamReviewers: ["models"],
+      });
+
+      const pullWrites = () =>
+        github
+          .getHits()
+          .filter(
+            ({ method, path }) =>
+              method === "POST" && path === "/repos/acme/demo-app/pulls",
+          );
+      expect(pullWrites()).toHaveLength(1);
+      const pullBody = pullWrites()[0]?.body as
+        Record<string, unknown> | undefined;
+      expect(pullBody).toMatchObject({ draft: true, base: "main" });
+      expect(String(pullBody?.body)).toContain("## Summary");
+      expect(String(pullBody?.body)).toContain("## Rightmodeler evidence");
+      expect(String(pullBody?.body)).toContain(recommended!.caseIds[0]!);
+      expect(String(pullBody?.body)).not.toContain(
+        "The city opened two cooling centers",
+      );
+
+      const repeated = await runCli(applyArgs, { env });
+      expect(repeated.code).toBe(0);
+      expect(jsonOutput(repeated)).toMatchObject({
+        status: "existing",
+        prNumber: 1,
+      });
+      expect(pullWrites()).toHaveLength(1);
+
+      const report = await runCli([
+        "report",
+        "--output",
+        "json",
+        "--repo",
+        repo,
+      ]);
+      expect(report.code).toBe(1);
+      expect(jsonOutput(report).apply).toEqual([
+        expect.objectContaining({
+          repo: "acme/demo-app",
+          prNumber: 1,
+          state: "review_requested",
+          eventCount: 3,
+        }),
+      ]);
+      expect(
+        await storeText(
+          new FsStore(join(repo, ".rightmodeler")),
+          reportKey("project", "report.md"),
+        ),
+      ).toContain("## Apply");
+    } finally {
+      await Promise.all([provider.close(), github.close()]);
+    }
+  }, 60_000);
+
   it("prefers a reachable external evaluator, persists every metric, and makes zero judge calls", async () => {
     const { repo } = await fixtureCopy("external-evaluator");
     const modelStub = await startStub();
@@ -1240,6 +1528,7 @@ describe("built CLI pipeline", () => {
       join(repo, "src", "index.ts"),
       "export const message = 'no model call here';\n",
     );
+    await initializeFixtureRepository(repo);
 
     const result = await runCli([
       "init",

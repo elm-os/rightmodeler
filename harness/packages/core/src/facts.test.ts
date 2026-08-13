@@ -8,6 +8,8 @@ import {
   cascadeFindingVerdictSchema,
   executionSchema,
   factSchema,
+  lifecycleEventKindSchema,
+  lifecycleEventSchema,
   requestAttemptSchema,
   spendEventSchema,
   streamOutcomeSchema,
@@ -73,6 +75,23 @@ const cascadeFinding = {
   createdAt: "2026-08-13T12:00:00.000Z",
 };
 
+const lifecycleEvent = {
+  eventId: "event-1",
+  prNumber: null,
+  repo: "elm-os/rightmodeler",
+  familyIds: ["summarize", "extract"],
+  kind: "apply_started",
+  evidence: {
+    revision: "4c67904ae514c592333d8ccdbbee6c0af6eef8131",
+    corpusVersionId: "corpus-3",
+    gatePolicyVersion: "gate-2",
+  },
+  runSpecDigest:
+    "4c67904ae514c592333d8ccdbbee6c0af6eef8131d6bde32aba72eb4f31ef6d6",
+  createdAt: "2026-08-13T12:00:00.000Z",
+  detail: { branch: "rightmodeler/swap-summarize-4c67904a" },
+};
+
 const fixtures: ReadonlyArray<{
   name: string;
   schema: z.ZodType;
@@ -90,6 +109,11 @@ const fixtures: ReadonlyArray<{
     name: "CascadeFinding",
     schema: cascadeFindingSchema,
     value: cascadeFinding,
+  },
+  {
+    name: "LifecycleEvent",
+    schema: lifecycleEventSchema,
+    value: lifecycleEvent,
   },
 ];
 
@@ -152,6 +176,16 @@ describe("fact schemas", () => {
       "isolated",
       "inconclusive",
     ]);
+    expect(lifecycleEventKindSchema.options).toEqual([
+      "apply_started",
+      "pr_opened",
+      "review_requested",
+      "comment_posted",
+      "reproof_started",
+      "pr_closed_rejected",
+      "pr_merged",
+      "watch_ended",
+    ]);
   });
 
   it("rejects negative costs", () => {
@@ -177,6 +211,55 @@ describe("fact schemas", () => {
       cascadeFindingSchema.safeParse({
         ...cascadeFinding,
         createdAt: "not-a-timestamp",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts a positive pull request number after the pull request opens", () => {
+    expect(
+      lifecycleEventSchema.parse({
+        ...lifecycleEvent,
+        kind: "pr_opened",
+        prNumber: 42,
+      }),
+    ).toEqual({ ...lifecycleEvent, kind: "pr_opened", prNumber: 42 });
+  });
+
+  it("rejects invalid lifecycle identities, pull numbers, evidence, and timestamps", () => {
+    const invalidEvents = [
+      { ...lifecycleEvent, eventId: "" },
+      { ...lifecycleEvent, prNumber: 0 },
+      { ...lifecycleEvent, prNumber: -1 },
+      { ...lifecycleEvent, prNumber: 1.5 },
+      { ...lifecycleEvent, repo: "" },
+      { ...lifecycleEvent, familyIds: [""] },
+      { ...lifecycleEvent, kind: "opened" },
+      {
+        ...lifecycleEvent,
+        evidence: { ...lifecycleEvent.evidence, revision: "" },
+      },
+      {
+        ...lifecycleEvent,
+        evidence: { ...lifecycleEvent.evidence, corpusVersionId: "" },
+      },
+      {
+        ...lifecycleEvent,
+        evidence: { ...lifecycleEvent.evidence, gatePolicyVersion: "" },
+      },
+      { ...lifecycleEvent, runSpecDigest: "" },
+      { ...lifecycleEvent, createdAt: "not-a-timestamp" },
+    ];
+
+    for (const event of invalidEvents) {
+      expect(lifecycleEventSchema.safeParse(event).success).toBe(false);
+    }
+  });
+
+  it("rejects extra lifecycle evidence fields", () => {
+    expect(
+      lifecycleEventSchema.safeParse({
+        ...lifecycleEvent,
+        evidence: { ...lifecycleEvent.evidence, unexpected: true },
       }).success,
     ).toBe(false);
   });

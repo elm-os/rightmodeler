@@ -102,11 +102,45 @@ export const cascadeFindingSchema = z
   .readonly();
 export type CascadeFinding = z.infer<typeof cascadeFindingSchema>;
 
+export const lifecycleEventKindSchema = z.enum([
+  "apply_started",
+  "pr_opened",
+  "review_requested",
+  "comment_posted",
+  "reproof_started",
+  "pr_closed_rejected",
+  "pr_merged",
+  "watch_ended",
+]);
+export type LifecycleEventKind = z.infer<typeof lifecycleEventKindSchema>;
+
+export const lifecycleEventSchema = z
+  .strictObject({
+    eventId: requiredStringSchema,
+    prNumber: z.number().int().positive().nullable(),
+    repo: requiredStringSchema,
+    familyIds: z.array(requiredStringSchema),
+    kind: lifecycleEventKindSchema,
+    evidence: z
+      .strictObject({
+        revision: requiredStringSchema,
+        corpusVersionId: requiredStringSchema,
+        gatePolicyVersion: requiredStringSchema,
+      })
+      .readonly(),
+    runSpecDigest: requiredStringSchema,
+    createdAt: z.string().datetime(),
+    detail: jsonValueSchema,
+  })
+  .readonly();
+export type LifecycleEvent = z.infer<typeof lifecycleEventSchema>;
+
 export const factSchema = z.union([
   executionSchema,
   requestAttemptSchema,
   assessmentSchema,
   spendEventSchema,
   cascadeFindingSchema,
+  lifecycleEventSchema,
 ]);
 export type Fact = z.infer<typeof factSchema>;

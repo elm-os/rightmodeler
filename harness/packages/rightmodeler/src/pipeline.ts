@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { promisify } from "node:util";
 
 import {
   assessmentSchema,
@@ -18,6 +20,7 @@ import {
   failRun,
   FsStore,
   jsonValueSchema,
+  lifecycleEventSchema,
   mintAssessmentId,
   reportKey,
   requestAttemptSchema,
@@ -34,6 +37,7 @@ import {
   type CascadeFinding,
   type Fact,
   type JsonValue,
+  type LifecycleEvent,
   type RunMeta,
   type Store,
 } from "@rightmodeler/core";
@@ -87,6 +91,17 @@ import {
   type Corpus,
 } from "./data/index.js";
 import {
+  applySwaps,
+  type ApplyCascadeStatus,
+  type ApplyResult,
+  type ApplyVerdict,
+} from "./apply/index.js";
+import {
+  blastRadius,
+  captureConventions,
+  resolveOwners,
+} from "./enrich/index.js";
+import {
   createBraintrustEvaluator,
   pollEvaluator,
   preferEvaluatorWhenReachable,
@@ -98,6 +113,7 @@ import type {
   EvaluatorCaseResult,
   EvaluatorProvider,
 } from "./evaluators/types.js";
+import type { GithubClient } from "./github/index.js";
 import { ProtocolError, Reporter } from "./protocol.js";
 import {
   putMutableJson,
@@ -107,6 +123,8 @@ import {
   type Checkpoint,
   type SetupState,
 } from "./state.js";
+
+const execFileAsync = promisify(execFile);
 
 export const PIPELINE_STAGES = [
   "scan",
@@ -139,6 +157,7 @@ const RELEASE_GATE_POLICY = new ReleaseGatePolicy({
 });
 
 const scanOutputSchema = z.strictObject({
+  revision: z.string().min(1),
   records: z.array(stepRecordSchema),
 });
 const reconcileOutputSchema = z.strictObject({
@@ -384,6 +403,15 @@ export interface PipelineResult {
   recommendationExists: boolean;
 }
 
+export interface ApplyPipelineOptions {
+  readonly repo: string;
+  readonly store?: string;
+  readonly githubClient: GithubClient;
+  readonly owner: string;
+  readonly githubRepo: string;
+  readonly dryRun: boolean;
+}
+
 interface FamilyOutcome {
   familyId: string;
   verdict: FamilyVerdict;
@@ -523,6 +551,125 @@ export async function runPipeline(
         ({ effectiveRecommendation }) => effectiveRecommendation,
       ) ?? false,
   };
+}
+
+export async function runApply(
+  options: ApplyPipelineOptions,
+): Promise<ApplyResult> {
+  const context = createContext({
+    repo: options.repo,
+    store: options.store,
+    reporter: new Reporter("human", {
+      stdout: () => undefined,
+      stderr: () => undefined,
+    }),
+  });
+  const [scanOutput, decisionOutput, plan, reconciled, corpus] =
+    await Promise.all([
+      loadScan(context),
+      loadDecisionOutput(context),
+      loadReplayPlan(context),
+      loadReconcile(context),
+      loadCorpusSummary(context),
+    ]);
+  const familyByStep = new Map(
+    plan.steps.map(({ stepId, family }) => [stepId, family] as const),
+  );
+  const records = reconciled.records.map((record) => ({
+    ...record,
+    family: familyByStep.get(record.stepId) ?? record.family,
+  }));
+  const ownerResolutions = await resolveOwners({
+    repoDir: context.repo,
+    filePaths: records.map(({ callSite }) => callSite.path),
+  });
+  const recommended = decisionOutput.families.filter(
+    ({ verdict }) => verdict.decision === "recommend",
+  );
+  const radii = blastRadius({
+    stepRecords: records,
+    verdicts: recommended.map(({ verdict }) => verdict),
+    owners: ownerResolutions,
+  });
+  const verdicts: ApplyVerdict[] = recommended.map((family) => {
+    const familyRecords = plan.steps
+      .filter(({ family: familyId }) => familyId === family.familyId)
+      .map(({ stepId }) => records.find((record) => record.stepId === stepId))
+      .filter((record) => record !== undefined);
+    const candidate =
+      family.selection.status === "selected"
+        ? family.selection.selectedCandidateId
+        : undefined;
+    const swaps =
+      candidate === undefined ||
+      familyRecords.some(({ currentModel }) => currentModel === null)
+        ? []
+        : familyRecords.map((stepRecord) => ({
+            stepRecord,
+            fromModel: stepRecord.currentModel!,
+            toModel: candidate,
+          }));
+    const radius = radii.find(({ familyId }) => familyId === family.familyId);
+    if (radius === undefined) {
+      throw new Error(`Missing blast radius for family ${family.familyId}`);
+    }
+    return {
+      verdict: family.verdict,
+      releaseGates: family.gates,
+      cascadeStatus: applyCascadeStatus(family.confirmation?.status),
+      evidence: {
+        revision: scanOutput.revision,
+        corpusVersionId: corpus.corpusVersionId,
+      },
+      swaps,
+      blastRadius: radius,
+      caps: [
+        { name: "top-N shortlist", value: plan.top },
+        {
+          name: "replay sample size",
+          value: plan.sampleSizes[family.familyId] ?? 0,
+        },
+        ...(family.confirmation?.maxRunSets === undefined
+          ? []
+          : [
+              {
+                name: "confirm max run sets",
+                value: family.confirmation.maxRunSets,
+              },
+            ]),
+      ],
+    };
+  });
+  return applySwaps({
+    store: context.store,
+    repoDir: context.repo,
+    githubClient: options.githubClient,
+    owner: options.owner,
+    repo: options.githubRepo,
+    conventions: await captureConventions({ repoDir: context.repo }),
+    verdicts,
+    dryRun: options.dryRun,
+  });
+}
+
+function applyCascadeStatus(
+  status:
+    | "not_required"
+    | "blocked"
+    | "confirmed"
+    | "isolated"
+    | "inconclusive"
+    | undefined,
+): ApplyCascadeStatus {
+  if (status === "not_required") return "not-required";
+  if (
+    status === "confirmed" ||
+    status === "isolated" ||
+    status === "inconclusive"
+  ) {
+    return status;
+  }
+  return "blocked";
 }
 
 function createContext(options: PipelineOptions): PipelineContext {
@@ -760,6 +907,7 @@ async function executeScan(
   context: PipelineContext,
   inputDigestValue: string,
 ): Promise<string> {
+  const revision = await repositoryRevision(context.repo);
   const records = scan(
     context.repo,
     createMatcherRegistry(),
@@ -794,7 +942,7 @@ async function executeScan(
     );
   }
   const key = artifactKey(context, "scan", inputDigestValue);
-  await putImmutableJson(context.store, key, { records });
+  await putImmutableJson(context.store, key, { revision, records });
   await putMutableJson(
     context.store,
     callSiteInventoryKey(context.projectId),
@@ -2330,14 +2478,24 @@ async function repositoryDigest(
   repo: string,
   storeRoot: string,
 ): Promise<string> {
-  return digest(
-    await Promise.all(
+  return digest({
+    revision: await repositoryRevision(repo),
+    files: await Promise.all(
       (await repositoryFiles(repo, storeRoot)).map(async (file) => ({
         path: file.path,
         sha256: sha256(await readFile(file.absolute)),
       })),
     ),
+  });
+}
+
+async function repositoryRevision(repo: string): Promise<string> {
+  const { stdout } = await execFileAsync(
+    "git",
+    ["-C", repo, "rev-parse", "HEAD"],
+    { encoding: "utf8" },
   );
+  return stdout.trim();
 }
 
 function corpusOutput(corpus: Corpus) {
@@ -2460,6 +2618,71 @@ interface ReportData {
     family?: string;
     stepId?: string;
   }>;
+  apply: Array<{
+    runSpecDigest: string;
+    repo: string;
+    prNumber: number | null;
+    familyIds: string[];
+    state: LifecycleEvent["kind"];
+    revision: string;
+    corpusVersionId: string;
+    gatePolicyVersion: string;
+    createdAt: string;
+    eventCount: number;
+  }>;
+}
+
+const lifecycleKindOrder: Record<LifecycleEvent["kind"], number> = {
+  apply_started: 0,
+  pr_opened: 1,
+  review_requested: 2,
+  comment_posted: 3,
+  reproof_started: 4,
+  pr_closed_rejected: 5,
+  pr_merged: 6,
+  watch_ended: 7,
+};
+
+function lifecycleReport(
+  events: readonly LifecycleEvent[],
+): ReportData["apply"] {
+  const grouped = new Map<string, LifecycleEvent[]>();
+  for (const event of events) {
+    grouped.set(event.runSpecDigest, [
+      ...(grouped.get(event.runSpecDigest) ?? []),
+      event,
+    ]);
+  }
+  return [...grouped.entries()]
+    .map(([runSpecDigest, group]) => {
+      const ordered = [...group].sort(
+        (left, right) =>
+          compareText(left.createdAt, right.createdAt) ||
+          lifecycleKindOrder[left.kind] - lifecycleKindOrder[right.kind] ||
+          compareText(left.eventId, right.eventId),
+      );
+      const latest = ordered[ordered.length - 1]!;
+      const prNumber = [...ordered]
+        .reverse()
+        .find((event) => event.prNumber !== null)?.prNumber;
+      return {
+        runSpecDigest,
+        repo: latest.repo,
+        prNumber: prNumber ?? null,
+        familyIds: [...latest.familyIds],
+        state: latest.kind,
+        revision: latest.evidence.revision,
+        corpusVersionId: latest.evidence.corpusVersionId,
+        gatePolicyVersion: latest.evidence.gatePolicyVersion,
+        createdAt: latest.createdAt,
+        eventCount: ordered.length,
+      };
+    })
+    .sort(
+      (left, right) =>
+        compareText(right.createdAt, left.createdAt) ||
+        compareText(left.runSpecDigest, right.runSpecDigest),
+    );
 }
 
 async function buildReport(context: PipelineContext): Promise<ReportData> {
@@ -2476,6 +2699,10 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
   });
   const spends = facts.flatMap((fact) => {
     const parsed = spendEventSchema.safeParse(fact);
+    return parsed.success ? [parsed.data] : [];
+  });
+  const lifecycle = facts.flatMap((fact) => {
+    const parsed = lifecycleEventSchema.safeParse(fact);
     return parsed.success ? [parsed.data] : [];
   });
   const byActor: Record<string, { events: number; costUsd: number }> = {};
@@ -2535,6 +2762,7 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
             ],
       ),
     ],
+    apply: lifecycleReport(lifecycle),
   };
 }
 
@@ -2632,6 +2860,19 @@ function renderReport(report: ReportData): string {
     ),
     "",
   );
+  if (report.apply.length > 0) {
+    lines.push(
+      "## Apply",
+      "",
+      "| Repository | Pull request | Families | State | Revision | Corpus version | Events |",
+      "| --- | --- | --- | --- | --- | --- | --- |",
+      ...report.apply.map(
+        (apply) =>
+          `| ${apply.repo} | ${apply.prNumber ?? ""} | ${apply.familyIds.join(", ")} | ${apply.state} | ${apply.revision} | ${apply.corpusVersionId} | ${apply.eventCount} |`,
+      ),
+      "",
+    );
+  }
   return lines.join("\n");
 }
 
@@ -2783,6 +3024,7 @@ export async function readStatus(options: {
     Assessment: 0,
     SpendEvent: 0,
     CascadeFinding: 0,
+    LifecycleEvent: 0,
   };
   for (const fact of await readFacts(context.store, context.projectId)) {
     if (executionSchema.safeParse(fact).success) factCounts.Execution += 1;
@@ -2794,6 +3036,8 @@ export async function readStatus(options: {
       factCounts.SpendEvent += 1;
     else if (cascadeFindingSchema.safeParse(fact).success)
       factCounts.CascadeFinding += 1;
+    else if (lifecycleEventSchema.safeParse(fact).success)
+      factCounts.LifecycleEvent += 1;
   }
   const corpus = await maybeLoadCorpus(context);
   const runs: RunMeta[] = [];

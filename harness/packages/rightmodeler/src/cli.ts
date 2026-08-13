@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Command, CommanderError, Option } from "commander";
@@ -10,10 +11,12 @@ import {
   readReport,
   readStatus,
   runAuditTabulate,
+  runApply,
   runPipeline,
   type PipelineOptions,
   type PipelineStage,
 } from "./pipeline.js";
+import { createGithubClient } from "./github/index.js";
 import {
   processIo,
   Reporter,
@@ -50,6 +53,13 @@ interface AuditTabulateOptions {
   worksheet?: string;
 }
 
+interface ApplyCommandOptions {
+  owner: string;
+  githubBaseUrl: string;
+  githubTokenEnv: string;
+  dryRun?: boolean;
+}
+
 export interface ProgramHandle {
   program: Command;
   exitCode(): number;
@@ -62,7 +72,7 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     .description("Find and prove safe model substitutions.")
     .addHelpText(
       "after",
-      "\nExit codes: 0 no recommendation; 1 recommendation exists; 2 needs input; 3 budget; >=10 runtime error.\n",
+      "\nExit codes are command-specific: apply uses 0 applied/clean dry-run, 1 refused, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
     )
     .version(version)
     .option("--repo <dir>", "repository to analyze", process.cwd())
@@ -171,6 +181,33 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     });
     reporter.result(result);
     return 0;
+  });
+
+  const apply = program
+    .command("apply")
+    .description("open a draft pull request for proven model swaps")
+    .requiredOption("--owner <owner>", "GitHub repository owner")
+    .requiredOption("--github-base-url <url>", "GitHub API base URL")
+    .requiredOption(
+      "--github-token-env <name>",
+      "environment variable containing the GitHub token",
+    )
+    .option("--dry-run", "run all machine gates without writing GitHub state");
+  run(apply, async (reporter, global) => {
+    const local = apply.opts<ApplyCommandOptions>();
+    const result = await runApply({
+      repo: global.repo,
+      store: global.store,
+      githubClient: createGithubClient({
+        baseUrl: local.githubBaseUrl,
+        tokenEnv: local.githubTokenEnv,
+      }),
+      owner: local.owner,
+      githubRepo: basename(resolve(global.repo)),
+      dryRun: local.dryRun ?? false,
+    });
+    reporter.result(result);
+    return result.status === "refused" ? 1 : 0;
   });
 
   const report = program

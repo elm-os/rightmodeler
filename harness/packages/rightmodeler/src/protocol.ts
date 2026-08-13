@@ -120,6 +120,16 @@ function renderHuman(value: unknown): string {
     if (typeof record?.reportPath === "string") {
       lines.push("", `Report: ${record.reportPath}`);
     }
+    const apply = Array.isArray(record?.apply) ? record.apply : [];
+    if (apply.length > 0) {
+      lines.push(
+        "",
+        "Apply",
+        "Repository | Pull request | Families | State",
+        "--- | --- | --- | ---",
+        ...apply.map(renderApplyRow),
+      );
+    }
     return lines.join("\n");
   }
   if (record !== undefined) {
@@ -128,6 +138,19 @@ function renderHuman(value: unknown): string {
       .join("\n");
   }
   return renderValue(value);
+}
+
+function renderApplyRow(value: unknown): string {
+  const apply = objectValue(value);
+  const familyIds = Array.isArray(apply?.familyIds)
+    ? apply.familyIds.map(String).join(", ")
+    : "";
+  return [
+    String(apply?.repo ?? "unknown"),
+    String(apply?.prNumber ?? ""),
+    familyIds,
+    String(apply?.state ?? "unknown"),
+  ].join(" | ");
 }
 
 function renderFamilyRow(value: unknown): string {
