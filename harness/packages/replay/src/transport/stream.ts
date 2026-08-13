@@ -8,7 +8,7 @@ export type StreamReason =
   | "http"
   | "invalid_event"
   | "provider"
-  | "spool_sink_required";
+  | "spool";
 
 export interface StreamUsage {
   inputTokens: number;
@@ -23,6 +23,7 @@ export interface StreamResult {
   usage: StreamUsage | null;
   chunks: number;
   spoolPath?: string;
+  finishedWithoutSentinel?: true;
 }
 
 export interface StreamSpoolSink {
@@ -37,6 +38,7 @@ export interface ClassifyStreamOptions {
   hardDeadlineMs: number;
   signal?: AbortSignal;
   httpStatus?: number;
+  /** Required before content crosses the spool threshold; omitting it is a programmer error. */
   spoolSink?: StreamSpoolSink;
 }
 
@@ -57,7 +59,6 @@ class ContentCollector {
   private content = "";
   private contentBytes = 0;
   private spooling = false;
-  private closeDeferred = false;
   private pendingWrite: Promise<void> = Promise.resolve();
 
   constructor(
@@ -80,7 +81,7 @@ class ContentCollector {
       this.contentBytes + bytes.byteLength > CONTENT_SPOOL_THRESHOLD_BYTES
     ) {
       if (this.sink === undefined) {
-        throw new StreamParseError(
+        throw new Error(
           "Completion exceeded the in-memory limit without a spool sink",
         );
       }
@@ -97,17 +98,18 @@ class ContentCollector {
     }
   }
 
-  async close(): Promise<void> {
-    if (this.spooling && !this.closeDeferred) await this.sink!.close();
-  }
-
-  deferClose(): void {
-    if (!this.spooling || this.closeDeferred) return;
-    this.closeDeferred = true;
-    void this.pendingWrite
-      .catch(() => undefined)
-      .then(() => this.sink!.close())
-      .catch(() => undefined);
+  async close(): Promise<"write" | "close" | null> {
+    if (!this.spooling) return null;
+    let failure: "write" | "close" | null = null;
+    await this.pendingWrite.catch(() => {
+      failure = "write";
+    });
+    try {
+      await this.sink!.close();
+    } catch {
+      failure = "close";
+    }
+    return failure;
   }
 
   result(): Pick<StreamResult, "content" | "spoolPath"> {
@@ -121,22 +123,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function tokenCount(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new StreamParseError(`${field} must be a non-negative integer`);
+function parseUsage(value: unknown): StreamUsage | null {
+  if (
+    !isRecord(value) ||
+    typeof value.prompt_tokens !== "number" ||
+    typeof value.completion_tokens !== "number" ||
+    typeof value.total_tokens !== "number"
+  ) {
+    return null;
   }
-  return value;
-}
-
-function parseUsage(value: unknown): StreamUsage {
-  if (!isRecord(value)) throw new StreamParseError("usage must be an object");
   return {
-    inputTokens: tokenCount(value.prompt_tokens, "usage.prompt_tokens"),
-    outputTokens: tokenCount(
-      value.completion_tokens,
-      "usage.completion_tokens",
-    ),
-    totalTokens: tokenCount(value.total_tokens, "usage.total_tokens"),
+    inputTokens: value.prompt_tokens,
+    outputTokens: value.completion_tokens,
+    totalTokens: value.total_tokens,
   };
 }
 
@@ -207,43 +206,19 @@ function eventData(event: string): string | null {
   return data.length === 0 ? null : data.join("\n");
 }
 
-function cancelIterator(iterator: AsyncIterator<Uint8Array>): void {
-  if (iterator.return === undefined) return;
-  void iterator.return().catch(() => undefined);
-}
-
 async function releaseIterator(
   iterator: AsyncIterator<Uint8Array>,
 ): Promise<void> {
   if (iterator.return === undefined) return;
-  await iterator.return().catch(() => undefined);
+  await Promise.resolve()
+    .then(() => iterator.return!())
+    .catch(() => undefined);
 }
 
-function parseFailureReason(error: unknown): StreamReason | null {
-  if (!(error instanceof StreamParseError)) return null;
-  return error.message.includes("in-memory limit")
-    ? "spool_sink_required"
-    : "invalid_event";
-}
-
-export function classifyStream(
+export async function classifyStream(
   byteStream: ByteStream,
   options: ClassifyStreamOptions,
 ): Promise<StreamResult> {
-  return parseChatCompletionsStream(byteStream, options);
-}
-
-export async function parseChatCompletionsStream(
-  byteStream: ByteStream,
-  options: ClassifyStreamOptions,
-): Promise<StreamResult> {
-  if (options.format !== "openai-chat-completions") {
-    throw new Error(`Unsupported stream format: ${String(options.format)}`);
-  }
-  if (options.idleTimeoutMs <= 0 || options.hardDeadlineMs <= 0) {
-    throw new Error("Stream timeouts must be positive");
-  }
-
   const iterator = byteStream[Symbol.asyncIterator]();
   let iteratorFinished = false;
   const processingController = new AbortController();
@@ -254,16 +229,26 @@ export async function parseChatCompletionsStream(
   let chunks = 0;
   let usage: StreamUsage | null = null;
   let sawFinish = false;
+  let selectedResult: StreamResult | undefined;
   const result = (
     outcome: StreamOutcome,
     reason?: StreamReason,
-  ): StreamResult => ({
-    outcome,
-    ...(reason === undefined ? {} : { reason }),
-    ...collector.result(),
-    usage,
-    chunks,
-  });
+    finishedWithoutSentinel = false,
+  ): StreamResult => {
+    selectedResult = {
+      outcome,
+      ...(reason === undefined ? {} : { reason }),
+      ...collector.result(),
+      usage,
+      chunks,
+      ...(finishedWithoutSentinel ? { finishedWithoutSentinel: true } : {}),
+    };
+    return selectedResult;
+  };
+  const connectionResult = (): StreamResult =>
+    sawFinish
+      ? result("completed", undefined, true)
+      : result("truncated", "connection");
 
   if (
     options.httpStatus !== undefined &&
@@ -301,7 +286,9 @@ export async function parseChatCompletionsStream(
   const abort = () => terminate("cancelled");
   const stoppedResult = (): StreamResult => {
     if (stopReason === "cancelled") return result("client_cancelled");
-    return sawFinish ? result("completed") : result("truncated", stopReason);
+    return sawFinish
+      ? result("completed", undefined, true)
+      : result("truncated", stopReason);
   };
   const awaitProcessing = async (
     operation: Promise<void>,
@@ -317,7 +304,6 @@ export async function parseChatCompletionsStream(
     ]);
     if (stopped) {
       operation.catch(() => undefined);
-      collector.deferClose();
       return { kind: "stopped" };
     }
     return raced;
@@ -329,10 +315,12 @@ export async function parseChatCompletionsStream(
 
   try {
     for (;;) {
-      const next = iterator.next().then(
-        (value) => ({ kind: "next" as const, value }),
-        () => ({ kind: "connection_error" as const }),
-      );
+      const next = Promise.resolve()
+        .then(() => iterator.next())
+        .then(
+          (value) => ({ kind: "next" as const, value }),
+          () => ({ kind: "connection_error" as const }),
+        );
       const raced = await Promise.race([
         next,
         stop.then(() => ({ kind: "stopped" as const })),
@@ -342,43 +330,16 @@ export async function parseChatCompletionsStream(
         return stoppedResult();
       }
       if (raced.kind === "connection_error") {
-        return sawFinish
-          ? result("completed")
-          : result("truncated", "connection");
+        return connectionResult();
       }
       if (raced.value.done) {
         iteratorFinished = true;
         try {
           buffer += decoder.decode();
         } catch {
-          return result("provider_error", "invalid_event");
+          return connectionResult();
         }
-        if (buffer.trim().length > 0) {
-          try {
-            const data = eventData(buffer);
-            if (data !== null && data !== "[DONE]") {
-              const event = parseEvent(data);
-              if (event.providerError)
-                return result("provider_error", "provider");
-              const processed = await awaitProcessing(
-                collector.append(event.content),
-              );
-              if (processed.kind === "stopped") return stoppedResult();
-              if (processed.kind === "error") throw processed.error;
-              usage = event.usage ?? usage;
-              sawFinish ||= event.finished;
-            } else if (data === "[DONE]") {
-              sawFinish = true;
-            }
-          } catch (error) {
-            const reason = parseFailureReason(error);
-            if (reason === null) throw error;
-            return result("provider_error", reason);
-          }
-        }
-        return sawFinish
-          ? result("completed")
-          : result("truncated", "connection");
+        return connectionResult();
       }
       if (raced.value.value.byteLength === 0) continue;
 
@@ -387,7 +348,7 @@ export async function parseChatCompletionsStream(
       try {
         buffer += decoder.decode(raced.value.value, { stream: true });
       } catch {
-        return result("provider_error", "invalid_event");
+        return connectionResult();
       }
 
       for (;;) {
@@ -410,11 +371,17 @@ export async function parseChatCompletionsStream(
             collector.append(event.content),
           );
           if (processed.kind === "stopped") return stoppedResult();
-          if (processed.kind === "error") throw processed.error;
+          if (processed.kind === "error") {
+            if (processed.error instanceof Error && !options.spoolSink) {
+              throw processed.error;
+            }
+            return result("truncated", "spool");
+          }
         } catch (error) {
-          const reason = parseFailureReason(error);
-          if (reason === null) throw error;
-          return result("provider_error", reason);
+          if (error instanceof StreamParseError) {
+            return result("provider_error", "invalid_event");
+          }
+          throw error;
         }
         usage = event.usage ?? usage;
         sawFinish ||= event.finished;
@@ -424,7 +391,19 @@ export async function parseChatCompletionsStream(
     clearTimeout(idleTimer);
     clearTimeout(hardTimer);
     options.signal?.removeEventListener("abort", abort);
-    if (!iteratorFinished) cancelIterator(iterator);
-    await collector.close();
+    if (!iteratorFinished) void releaseIterator(iterator);
+    const closeFailure = await collector.close();
+    if (
+      closeFailure === "close" ||
+      (closeFailure === "write" &&
+        selectedResult?.reason !== "idle" &&
+        selectedResult?.reason !== "deadline" &&
+        selectedResult?.outcome !== "client_cancelled")
+    ) {
+      if (selectedResult === undefined) return result("truncated", "spool");
+      selectedResult.outcome = "truncated";
+      selectedResult.reason = "spool";
+      delete selectedResult.finishedWithoutSentinel;
+    }
   }
 }

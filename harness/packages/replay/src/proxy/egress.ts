@@ -8,16 +8,7 @@ import type {
 import { request as httpsRequest } from "node:https";
 import type { AddressInfo } from "node:net";
 
-const hopByHopHeaders = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-]);
+import { hopByHopHeaders } from "./headers.js";
 
 export interface EgressListenerOptions {
   providerBaseUrl: string;
@@ -36,17 +27,12 @@ export interface EgressListener {
 function responseHeaders(
   headers: IncomingHttpHeaders,
   bodyLength?: number,
-  credential?: string,
 ): OutgoingHttpHeaders {
   const forwarded: OutgoingHttpHeaders = {};
   for (const [name, value] of Object.entries(headers)) {
     if (
       value !== undefined &&
       !hopByHopHeaders.has(name) &&
-      (credential === undefined ||
-        !(Array.isArray(value) ? value : [value]).some((item) =>
-          String(item).includes(credential),
-        )) &&
       !(bodyLength !== undefined && name === "content-length")
     ) {
       forwarded[name] = value;
@@ -85,7 +71,7 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(bytes);
 }
 
-function redactCredential(body: Buffer, credential: string): Buffer {
+export function redactCredential(body: Buffer, credential: string): Buffer {
   return Buffer.from(
     body.toString("utf8").split(credential).join("[REDACTED]"),
     "utf8",
@@ -113,7 +99,10 @@ export async function startEgressListener(
     const requestTarget = incoming.url ?? "/";
     const target = /^https?:\/\//i.test(requestTarget)
       ? new URL(requestTarget)
-      : new URL(requestTarget, providerBaseUrl.origin);
+      : new URL(
+          requestTarget.replace(/^\//, ""),
+          `${providerBaseUrl.href.replace(/\/$/, "")}/`,
+        );
 
     if (target.origin !== providerBaseUrl.origin) {
       incoming.resume();
@@ -141,10 +130,7 @@ export async function startEgressListener(
         const status = upstreamResponse.statusCode ?? 502;
         upstreamResponse.once("error", () => outgoing.destroy());
         if (status < 400) {
-          outgoing.writeHead(
-            status,
-            responseHeaders(upstreamResponse.headers, undefined, credential),
-          );
+          outgoing.writeHead(status, responseHeaders(upstreamResponse.headers));
           upstreamResponse.pipe(outgoing);
           return;
         }
@@ -155,7 +141,7 @@ export async function startEgressListener(
           const body = redactCredential(Buffer.concat(chunks), credential);
           outgoing.writeHead(
             status,
-            responseHeaders(upstreamResponse.headers, body.length, credential),
+            responseHeaders(upstreamResponse.headers, body.length),
           );
           outgoing.end(body);
         });

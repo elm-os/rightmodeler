@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { mkdtemp, open, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import OpenAI from "openai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -34,12 +37,16 @@ function expectedContent(): string {
   return `Deterministic reply ${digest} | café 🚀 漢字`;
 }
 
-function directStream(events: string[]): ReadableStream<Uint8Array> {
+function directStream(
+  events: Array<string | Uint8Array>,
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream({
     start(controller) {
       for (const event of events) {
-        controller.enqueue(encoder.encode(event));
+        controller.enqueue(
+          typeof event === "string" ? encoder.encode(event) : event,
+        );
       }
       controller.close();
     },
@@ -107,7 +114,7 @@ describe("OpenAI transport conformance", () => {
     const { response, body } = await rawStream({
       "x-fault-key": "reset",
       "x-fault-chunk-seed": "31",
-      "x-fault-reset-after-chunks": "8",
+      "x-fault-reset-after-events": "3",
     });
     const result = await classifyStream(body, {
       format: "openai-chat-completions",
@@ -119,6 +126,42 @@ describe("OpenAI transport conformance", () => {
     expect(result).toMatchObject({
       outcome: "truncated",
       reason: "connection",
+    });
+    expect(result.content.length).toBeLessThan(expectedContent().length);
+  });
+
+  it("distinguishes socket death immediately before and after finish_reason", async () => {
+    const before = await rawStream({
+      "x-fault-key": "reset-before-finish",
+      "x-fault-chunk-seed": "31",
+      "x-fault-reset-after-events": "4",
+    });
+    const beforeResult = await classifyStream(before.body, {
+      format: "openai-chat-completions",
+      idleTimeoutMs: 1_000,
+      hardDeadlineMs: 5_000,
+      httpStatus: before.response.status,
+    });
+    const after = await rawStream({
+      "x-fault-key": "reset-after-finish",
+      "x-fault-chunk-seed": "31",
+      "x-fault-reset-after-events": "5",
+    });
+    const afterResult = await classifyStream(after.body, {
+      format: "openai-chat-completions",
+      idleTimeoutMs: 1_000,
+      hardDeadlineMs: 5_000,
+      httpStatus: after.response.status,
+    });
+
+    expect(beforeResult).toMatchObject({
+      outcome: "truncated",
+      reason: "connection",
+    });
+    expect(beforeResult).not.toHaveProperty("finishedWithoutSentinel");
+    expect(afterResult).toMatchObject({
+      outcome: "completed",
+      finishedWithoutSentinel: true,
     });
   });
 
@@ -189,6 +232,7 @@ describe("OpenAI transport conformance", () => {
 
     expect(result.outcome).toBe("completed");
     expect(result.usage).toBeNull();
+    expect(result).not.toHaveProperty("finishedWithoutSentinel");
   });
 
   it("uses the SDK default of two retries to expose one stream after three physical attempts", async () => {
@@ -212,6 +256,36 @@ describe("OpenAI transport conformance", () => {
       content: expectedContent(),
     });
     expect(hitCount.hits).toBe(3);
+  });
+
+  it("disables SDK retries when maxRetries is zero", async () => {
+    const key = "sdk-no-retries";
+    const noRetryClient = new OpenAI({
+      apiKey: "fixture-key",
+      baseURL: `http://127.0.0.1:${server.port}/v1`,
+      maxRetries: 0,
+    });
+
+    await expect(
+      noRetryClient.chat.completions.create(
+        {
+          model: "fixture-model",
+          messages,
+          stream: true,
+        },
+        {
+          headers: {
+            "x-fault-key": key,
+            "x-fault-429-times": "2",
+          },
+        },
+      ),
+    ).rejects.toThrow();
+    const hitCount = await fetch(
+      `http://127.0.0.1:${server.port}/__hits?key=${key}`,
+    ).then((response) => response.json() as Promise<{ hits: number }>);
+
+    expect(hitCount.hits).toBe(1);
   });
 
   it("keeps two concurrent identical requests independent and correctly reassembled", async () => {
@@ -267,6 +341,29 @@ describe("OpenAI transport conformance", () => {
 });
 
 describe("direct stream parser behavior", () => {
+  it("maps a synchronous iterator failure to a resolved connection truncation", async () => {
+    const stream: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            throw new Error("socket died");
+          },
+        };
+      },
+    };
+
+    await expect(
+      classifyStream(stream, {
+        format: "openai-chat-completions",
+        idleTimeoutMs: 100,
+        hardDeadlineMs: 1_000,
+      }),
+    ).resolves.toMatchObject({
+      outcome: "truncated",
+      reason: "connection",
+    });
+  });
+
   it("releases an HTTP error response body without reading it", async () => {
     let cancelled = false;
     const body = new ReadableStream<Uint8Array>({
@@ -296,7 +393,7 @@ describe("direct stream parser behavior", () => {
     expect(result).toMatchObject({ outcome: "provider_error", reason: "http" });
   });
 
-  it("accepts finish_reason as a well-formed finish without a DONE sentinel", async () => {
+  it("marks finish_reason followed by EOF as finished without a sentinel", async () => {
     const chunk = JSON.stringify({
       choices: [
         { index: 0, delta: { content: "finished" }, finish_reason: "stop" },
@@ -309,7 +406,11 @@ describe("direct stream parser behavior", () => {
       hardDeadlineMs: 1_000,
     });
 
-    expect(result).toMatchObject({ outcome: "completed", content: "finished" });
+    expect(result).toMatchObject({
+      outcome: "completed",
+      content: "finished",
+      finishedWithoutSentinel: true,
+    });
   });
 
   it("keeps finish_reason completed when the stream stalls afterward", async () => {
@@ -331,7 +432,11 @@ describe("direct stream parser behavior", () => {
       hardDeadlineMs: 1_000,
     });
 
-    expect(result).toMatchObject({ outcome: "completed", content: "finished" });
+    expect(result).toMatchObject({
+      outcome: "completed",
+      content: "finished",
+      finishedWithoutSentinel: true,
+    });
   });
 
   it("fails loud on a malformed SSE JSON event", async () => {
@@ -350,45 +455,174 @@ describe("direct stream parser behavior", () => {
     });
   });
 
-  it("spools the entire completion once content exceeds one MiB", async () => {
-    const writes: Uint8Array[] = [];
-    let closed = false;
-    const sink: StreamSpoolSink = {
-      path: "/tmp/stream-spool",
-      write(bytes) {
-        writes.push(bytes.slice());
-      },
-      close() {
-        closed = true;
-      },
-    };
-    const content = "x".repeat(CONTENT_SPOOL_THRESHOLD_BYTES) + "🚀";
+  it("preserves numeric usage without validating provider arithmetic", async () => {
     const chunk = JSON.stringify({
-      choices: [{ index: 0, delta: { content }, finish_reason: "stop" }],
-      usage: null,
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: {
+        prompt_tokens: -1,
+        completion_tokens: 1.5,
+        total_tokens: 0.5,
+      },
     });
     const result = await classifyStream(
       directStream([`data: ${chunk}\n\ndata: [DONE]\n\n`]),
       {
         format: "openai-chat-completions",
-        idleTimeoutMs: 1_000,
-        hardDeadlineMs: 5_000,
-        spoolSink: sink,
+        idleTimeoutMs: 100,
+        hardDeadlineMs: 1_000,
       },
     );
 
     expect(result).toMatchObject({
       outcome: "completed",
-      content: "",
-      spoolPath: sink.path,
+      usage: {
+        inputTokens: -1,
+        outputTokens: 1.5,
+        totalTokens: 0.5,
+      },
     });
-    expect(Buffer.concat(writes.map((bytes) => Buffer.from(bytes)))).toEqual(
-      Buffer.from(content),
+  });
+
+  it("classifies a partial JSON event at EOF as a connection truncation", async () => {
+    const result = await classifyStream(directStream(['data: {"choices":']), {
+      format: "openai-chat-completions",
+      idleTimeoutMs: 100,
+      hardDeadlineMs: 1_000,
+    });
+
+    expect(result).toMatchObject({
+      outcome: "truncated",
+      reason: "connection",
+    });
+  });
+
+  it("classifies a trailing partial UTF-8 code point as a connection truncation", async () => {
+    const bytes = new TextEncoder().encode("data: café");
+    const result = await classifyStream(
+      directStream([Buffer.from(bytes.subarray(0, bytes.length - 1))]),
+      {
+        format: "openai-chat-completions",
+        idleTimeoutMs: 100,
+        hardDeadlineMs: 1_000,
+      },
     );
-    expect(closed).toBe(true);
+
+    expect(result).toMatchObject({
+      outcome: "truncated",
+      reason: "connection",
+    });
+  });
+
+  it("flushes the in-memory prefix into a real spool file on a later append", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "rightmodeler-stream-"));
+    const path = join(directory, "completion.txt");
+    const file = await open(path, "w");
+    const sink: StreamSpoolSink = {
+      path,
+      async write(bytes) {
+        await file.write(bytes);
+      },
+      async close() {
+        await file.close();
+      },
+    };
+    const prefix = "x".repeat(CONTENT_SPOOL_THRESHOLD_BYTES);
+    const suffix = "🚀";
+    const first = JSON.stringify({
+      choices: [{ index: 0, delta: { content: prefix }, finish_reason: null }],
+      usage: null,
+    });
+    const second = JSON.stringify({
+      choices: [
+        { index: 0, delta: { content: suffix }, finish_reason: "stop" },
+      ],
+      usage: null,
+    });
+
+    try {
+      const result = await classifyStream(
+        directStream([
+          `data: ${first}\n\n`,
+          `data: ${second}\n\ndata: [DONE]\n\n`,
+        ]),
+        {
+          format: "openai-chat-completions",
+          idleTimeoutMs: 1_000,
+          hardDeadlineMs: 5_000,
+          spoolSink: sink,
+        },
+      );
+
+      expect(result).toMatchObject({
+        outcome: "completed",
+        content: "",
+        spoolPath: path,
+      });
+      expect(await readFile(path)).toEqual(Buffer.from(prefix + suffix));
+    } finally {
+      await file.close().catch(() => undefined);
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("throws a plain programmer error when the spool threshold has no sink", async () => {
+    const content = "x".repeat(CONTENT_SPOOL_THRESHOLD_BYTES + 1);
+    const chunk = JSON.stringify({
+      choices: [{ index: 0, delta: { content }, finish_reason: null }],
+      usage: null,
+    });
+
+    await expect(
+      classifyStream(directStream([`data: ${chunk}\n\n`]), {
+        format: "openai-chat-completions",
+        idleTimeoutMs: 1_000,
+        hardDeadlineMs: 5_000,
+      }),
+    ).rejects.toThrow("without a spool sink");
+  });
+
+  it("maps spool write and close failures to a resolved truncated result", async () => {
+    const content = "x".repeat(CONTENT_SPOOL_THRESHOLD_BYTES + 1);
+    const chunk = JSON.stringify({
+      choices: [{ index: 0, delta: { content }, finish_reason: null }],
+      usage: null,
+    });
+    const events = directStream([`data: ${chunk}\n\n`]);
+    const writeFailure: StreamSpoolSink = {
+      path: "/tmp/write-failure",
+      write() {
+        throw new Error("write failed");
+      },
+      close() {},
+    };
+    const closeFailure: StreamSpoolSink = {
+      path: "/tmp/close-failure",
+      write() {},
+      close() {
+        throw new Error("close failed");
+      },
+    };
+
+    await expect(
+      classifyStream(events, {
+        format: "openai-chat-completions",
+        idleTimeoutMs: 1_000,
+        hardDeadlineMs: 5_000,
+        spoolSink: writeFailure,
+      }),
+    ).resolves.toMatchObject({ outcome: "truncated", reason: "spool" });
+    await expect(
+      classifyStream(directStream([`data: ${chunk}\n\n`]), {
+        format: "openai-chat-completions",
+        idleTimeoutMs: 1_000,
+        hardDeadlineMs: 5_000,
+        spoolSink: closeFailure,
+      }),
+    ).resolves.toMatchObject({ outcome: "truncated", reason: "spool" });
   });
 
   it("applies the hard deadline while a spool write is pending", async () => {
+    let closed = false;
     const sink: StreamSpoolSink = {
       path: "/tmp/slow-stream-spool",
       async write(_bytes, signal) {
@@ -404,7 +638,9 @@ describe("direct stream parser behavior", () => {
           );
         });
       },
-      close() {},
+      close() {
+        closed = true;
+      },
     };
     const content = "x".repeat(CONTENT_SPOOL_THRESHOLD_BYTES + 1);
     const chunk = JSON.stringify({
@@ -421,6 +657,7 @@ describe("direct stream parser behavior", () => {
 
     expect(result).toMatchObject({ outcome: "truncated", reason: "deadline" });
     expect(performance.now() - startedAt).toBeLessThan(200);
+    expect(closed).toBe(true);
   });
 
   it("preserves a multibyte code point split across source chunks", async () => {

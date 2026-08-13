@@ -158,17 +158,21 @@ export async function startStubProvider({ port }) {
             })
           : `Deterministic reply ${digest}`;
       if (body.stream === true) {
-        const streamContent = `${content} snowman: ☃`;
+        const streamContent =
+          request.headers["x-stub-large-stream"] === undefined
+            ? `${content} snowman: ☃`
+            : "x".repeat(1_200_000);
         const midpoint = Math.floor(streamContent.length / 2);
         response.writeHead(200, {
           "content-type": "text/event-stream",
           "cache-control": "no-cache",
           ...hitHeaders,
         });
-        for (const part of [
+        const streamParts = [
           streamContent.slice(0, midpoint),
           streamContent.slice(midpoint),
-        ]) {
+        ];
+        for (const [index, part] of streamParts.entries()) {
           response.write(
             `data: ${JSON.stringify({
               id: `stub-${digest}`,
@@ -183,6 +187,14 @@ export async function startStubProvider({ port }) {
               ],
             })}\n\n`,
           );
+          const stallMs = Number.parseInt(
+            request.headers["x-stub-stall-stream-ms"] ?? "0",
+            10,
+          );
+          if (index === 0 && stallMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, stallMs));
+            if (response.destroyed) return;
+          }
         }
         if (request.headers["x-stub-truncate-stream"] !== undefined) {
           response.end();
@@ -201,6 +213,10 @@ export async function startStubProvider({ port }) {
             },
           })}\n\n`,
         );
+        if (request.headers["x-stub-finish-without-sentinel"] !== undefined) {
+          response.end();
+          return;
+        }
         response.end("data: [DONE]\n\n");
         return;
       }

@@ -1,29 +1,27 @@
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  truncateSync,
+} from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
+import { hopByHopHeaders } from "./headers.js";
+import { classifyStream } from "../transport/stream.js";
+
 const maxRequestBytes = 10 * 1024 * 1024;
-const streamIdleTimeoutMs = 30_000;
-const streamHardDeadlineMs = 300_000;
-const outcomes = new Set([
-  "completed",
-  "provider_error",
-  "client_cancelled",
-  "truncated",
-]);
-const hopByHopHeaders = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-]);
+const inputBytesPerToken = 4;
+const streamIdleTimeoutMs = Number(
+  process.env.RM_STREAM_IDLE_TIMEOUT_MS ?? 30_000,
+);
+const streamHardDeadlineMs = Number(
+  process.env.RM_STREAM_HARD_DEADLINE_MS ?? 300_000,
+);
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -34,14 +32,7 @@ function requiredEnv(name) {
 }
 
 function jsonEnv(name) {
-  try {
-    return JSON.parse(requiredEnv(name));
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      throw new Error(`${name} must be valid JSON`);
-    }
-    throw error;
-  }
+  return JSON.parse(requiredEnv(name));
 }
 
 function isObject(value) {
@@ -49,15 +40,16 @@ function isObject(value) {
 }
 
 function parseConfig() {
-  const swapPolicy = jsonEnv("RM_SWAP_POLICY");
+  const rawSwapPolicy = jsonEnv("RM_SWAP_POLICY");
   if (
-    !isObject(swapPolicy) ||
-    Object.values(swapPolicy).some(
+    !isObject(rawSwapPolicy) ||
+    Object.values(rawSwapPolicy).some(
       (model) => typeof model !== "string" || model.length === 0,
     )
   ) {
     throw new Error("RM_SWAP_POLICY must map step ids to model ids");
   }
+  const swapPolicy = Object.assign(Object.create(null), rawSwapPolicy);
 
   const rawPricing = jsonEnv("RM_PRICING_TABLE");
   if (!isObject(rawPricing)) {
@@ -114,37 +106,32 @@ function readJsonLines(path, label) {
   if (!existsSync(path)) return [];
   const source = readFileSync(path, "utf8");
   if (source.length === 0) return [];
+  const lines = source.split("\n");
+  lines.pop();
   if (!source.endsWith("\n")) {
-    throw new Error(`${label} ends with an incomplete JSONL row`);
+    truncateSync(path, source.lastIndexOf("\n") + 1);
   }
-  return source
-    .slice(0, -1)
-    .split("\n")
-    .map((line, index) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        throw new Error(`${label} has malformed JSON on line ${index + 1}`);
-      }
-    });
+  return lines.map((line, index) => {
+    try {
+      return JSON.parse(line);
+    } catch {
+      throw new Error(`${label} has malformed JSON on line ${index + 1}`);
+    }
+  });
 }
 
-function loadState(config, spoolPath, checkpointPath) {
+function loadState(spoolPath, checkpointPath) {
   const state = {
     seqPos: 0,
     lastAttemptGroup: 0,
     spentUsd: 0,
     groups: new Map(),
     attemptIds: new Set(),
-    completedAttemptIds: new Set(),
-    pendingReservations: new Map(),
   };
 
   for (const row of readJsonLines(checkpointPath, "checkpoint spool")) {
     if (
       !isObject(row) ||
-      Object.keys(row).sort().join(",") !== "attemptGroup,caseId,seqPos" ||
-      row.caseId !== config.caseId ||
       !Number.isSafeInteger(row.seqPos) ||
       row.seqPos <= state.seqPos ||
       !Number.isSafeInteger(row.attemptGroup) ||
@@ -154,99 +141,28 @@ function loadState(config, spoolPath, checkpointPath) {
     }
     state.seqPos = row.seqPos;
     state.lastAttemptGroup = Math.max(state.lastAttemptGroup, row.attemptGroup);
+    if (typeof row.logicalCallId === "string") {
+      state.groups.set(row.logicalCallId, row.attemptGroup);
+    }
   }
 
   for (const row of readJsonLines(spoolPath, "attempt spool")) {
+    if (!isObject(row) || row.kind !== "request_attempt") continue;
     if (
-      !isObject(row) ||
-      !["attempt_reservation", "request_attempt", "blocked"].includes(row.kind)
-    ) {
-      throw new Error("attempt spool contains an invalid row");
-    }
-    if (
-      row.runId !== config.runId ||
-      row.caseId !== config.caseId ||
-      row.executionId !== config.executionId ||
       !Number.isSafeInteger(row.attemptGroup) ||
-      row.attemptGroup < 1
+      row.attemptGroup < 1 ||
+      typeof row.logicalCallId !== "string" ||
+      typeof row.attemptId !== "string" ||
+      !Number.isFinite(row.costUsd) ||
+      row.costUsd < 0
     ) {
-      throw new Error(
-        "attempt spool correlation does not match this execution",
-      );
+      throw new Error("attempt spool contains an invalid request attempt");
     }
     state.lastAttemptGroup = Math.max(state.lastAttemptGroup, row.attemptGroup);
-    if (typeof row.logicalCallId === "string") {
-      const prior = state.groups.get(row.logicalCallId);
-      if (prior !== undefined && prior !== row.attemptGroup) {
-        throw new Error("attempt spool assigns one logical call to two groups");
-      }
-      state.groups.set(row.logicalCallId, row.attemptGroup);
-    } else if (row.logicalCallId !== null) {
-      throw new Error("attempt spool contains an invalid logicalCallId");
-    }
-
-    if (row.kind === "attempt_reservation") {
-      if (
-        typeof row.attemptId !== "string" ||
-        row.attemptId.length === 0 ||
-        state.attemptIds.has(row.attemptId) ||
-        typeof row.stepId !== "string" ||
-        typeof row.logicalCallId !== "string" ||
-        typeof row.model !== "string" ||
-        !Number.isFinite(row.reservedUsd) ||
-        row.reservedUsd < 0 ||
-        typeof row.startedAt !== "string"
-      ) {
-        throw new Error("attempt spool contains an invalid reservation");
-      }
-      state.attemptIds.add(row.attemptId);
-      state.pendingReservations.set(row.attemptId, row);
-    } else if (row.kind === "request_attempt") {
-      if (
-        typeof row.attemptId !== "string" ||
-        row.attemptId.length === 0 ||
-        state.completedAttemptIds.has(row.attemptId) ||
-        !outcomes.has(row.streamOutcome) ||
-        row.costUsd !== null ||
-        !Number.isFinite(row.leaseChargeUsd) ||
-        row.leaseChargeUsd < 0
-      ) {
-        throw new Error("attempt spool contains an invalid request attempt");
-      }
-      state.attemptIds.add(row.attemptId);
-      state.completedAttemptIds.add(row.attemptId);
-      state.pendingReservations.delete(row.attemptId);
-      state.spentUsd += row.leaseChargeUsd;
-    }
+    state.groups.set(row.logicalCallId, row.attemptGroup);
+    state.attemptIds.add(row.attemptId);
+    state.spentUsd += row.costUsd;
   }
-
-  for (const reservation of state.pendingReservations.values()) {
-    appendRow(spoolPath, {
-      kind: "request_attempt",
-      runId: reservation.runId,
-      caseId: reservation.caseId,
-      stepId: reservation.stepId,
-      executionId: reservation.executionId,
-      attemptId: reservation.attemptId,
-      logicalCallId: reservation.logicalCallId,
-      attemptGroup: reservation.attemptGroup,
-      attribution: "ok",
-      model: reservation.model,
-      contextTokensUpperBound: reservation.contextTokensUpperBound,
-      streamOutcome: "truncated",
-      usage: null,
-      responseSpoolPath: null,
-      costUsd: null,
-      reservedUsd: reservation.reservedUsd,
-      leaseChargeUsd: reservation.reservedUsd,
-      recoveryReason: "proxy_restarted",
-      startedAt: reservation.startedAt,
-      endedAt: new Date().toISOString(),
-    });
-    state.completedAttemptIds.add(reservation.attemptId);
-    state.spentUsd += reservation.reservedUsd;
-  }
-  state.pendingReservations.clear();
 
   return state;
 }
@@ -258,6 +174,10 @@ function appendRow(path, row) {
 function header(request, name) {
   const value = request.headers[name];
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function hasDuplicateHeader(request, name) {
+  return (request.headersDistinct[name]?.length ?? 0) > 1;
 }
 
 function responseHeaders(headers) {
@@ -411,179 +331,7 @@ function usageCharge(usage, pricing, reservedUsd) {
   );
 }
 
-function processSseEvent(event, state) {
-  const data = event
-    .split("\n")
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).trimStart())
-    .join("\n");
-  if (data.length === 0) return;
-  if (data === "[DONE]") {
-    state.terminal = true;
-    return;
-  }
-
-  let value;
-  try {
-    value = JSON.parse(data);
-  } catch {
-    state.providerError = true;
-    return;
-  }
-  if (!isObject(value)) {
-    state.providerError = true;
-    return;
-  }
-  if (value.error !== undefined) state.providerError = true;
-  if (value.usage !== undefined) state.usage = value.usage;
-  if (Array.isArray(value.choices)) {
-    for (const choice of value.choices) {
-      if (!isObject(choice)) continue;
-      if (choice.finish_reason !== undefined && choice.finish_reason !== null) {
-        state.terminal = true;
-      }
-    }
-  }
-}
-
-async function inlineClassifyStream(byteStream, options) {
-  const iterator = byteStream[Symbol.asyncIterator]();
-  const decoder = new TextDecoder();
-  const state = {
-    usage: null,
-    chunks: 0,
-    terminal: false,
-    providerError: false,
-    buffer: "",
-  };
-  const deadlineAt = Date.now() + options.hardDeadlineMs;
-
-  try {
-    for (;;) {
-      const remaining = deadlineAt - Date.now();
-      if (remaining <= 0) {
-        return {
-          outcome: "truncated",
-          reason: "deadline",
-          content: "",
-          usage: state.usage,
-          chunks: state.chunks,
-        };
-      }
-
-      const result = await new Promise((resolve, reject) => {
-        let complete = false;
-        const finish = (value) => {
-          if (complete) return;
-          complete = true;
-          clearTimeout(idleTimer);
-          clearTimeout(deadlineTimer);
-          options.signal?.removeEventListener("abort", onAbort);
-          resolve(value);
-        };
-        const onAbort = () => finish({ type: "cancelled" });
-        const idleTimer = setTimeout(
-          () => finish({ type: "idle" }),
-          options.idleTimeoutMs,
-        );
-        const deadlineTimer = setTimeout(
-          () => finish({ type: "deadline" }),
-          remaining,
-        );
-        options.signal?.addEventListener("abort", onAbort, { once: true });
-        iterator.next().then(
-          (next) => finish({ type: "next", next }),
-          (error) => {
-            if (complete) return;
-            complete = true;
-            clearTimeout(idleTimer);
-            clearTimeout(deadlineTimer);
-            options.signal?.removeEventListener("abort", onAbort);
-            reject(error);
-          },
-        );
-      });
-
-      if (result.type === "cancelled") {
-        return {
-          outcome: "client_cancelled",
-          content: "",
-          usage: state.usage,
-          chunks: state.chunks,
-        };
-      }
-      if (result.type === "idle" || result.type === "deadline") {
-        return {
-          outcome: state.terminal ? "completed" : "truncated",
-          ...(state.terminal ? {} : { reason: result.type }),
-          content: "",
-          usage: state.usage,
-          chunks: state.chunks,
-        };
-      }
-      if (result.next.done) break;
-
-      state.chunks += 1;
-      state.buffer += decoder.decode(result.next.value, { stream: true });
-      state.buffer = state.buffer.replaceAll("\r\n", "\n");
-      let boundary = state.buffer.indexOf("\n\n");
-      while (boundary !== -1) {
-        processSseEvent(state.buffer.slice(0, boundary), state);
-        state.buffer = state.buffer.slice(boundary + 2);
-        boundary = state.buffer.indexOf("\n\n");
-      }
-    }
-  } catch {
-    return {
-      outcome: options.signal?.aborted ? "client_cancelled" : "truncated",
-      content: "",
-      usage: state.usage,
-      chunks: state.chunks,
-    };
-  } finally {
-    await iterator.return?.();
-  }
-
-  state.buffer += decoder.decode();
-  if (state.buffer.length > 0) processSseEvent(state.buffer, state);
-  return {
-    outcome: state.providerError
-      ? "provider_error"
-      : state.terminal
-        ? "completed"
-        : "truncated",
-    content: "",
-    usage: state.usage,
-    chunks: state.chunks,
-  };
-}
-
-async function loadClassifier() {
-  try {
-    const transport = await import("../transport/index.js");
-    if (typeof transport.classifyStream !== "function") {
-      throw new Error("transport/index.js does not export classifyStream");
-    }
-    return transport.classifyStream;
-  } catch (error) {
-    if (
-      !isObject(error) ||
-      error.code !== "ERR_MODULE_NOT_FOUND" ||
-      !String(error.message).includes("transport/index.js")
-    ) {
-      throw error;
-    }
-    return inlineClassifyStream;
-  }
-}
-
-async function forwardStreaming(
-  upstream,
-  outgoing,
-  classifyStream,
-  status,
-  spoolSink,
-) {
+async function forwardStreaming(upstream, outgoing, status, spoolSink) {
   outgoing.writeHead(status, responseHeaders(upstream.headers));
   const classifierBytes = new PassThrough();
   classifierBytes.on("error", () => undefined);
@@ -657,6 +405,7 @@ async function forwardStreaming(
         : result.outcome,
     usage: result.usage ?? null,
     spoolPath: result.spoolPath ?? null,
+    finishedWithoutSentinel: result.finishedWithoutSentinel === true,
   };
 }
 
@@ -707,8 +456,7 @@ async function forwardNonStreaming(upstream, outgoing, status) {
 }
 
 function nextAttemptId(state) {
-  let attemptId = randomUUID();
-  while (state.attemptIds.has(attemptId)) attemptId = randomUUID();
+  const attemptId = randomUUID();
   state.attemptIds.add(attemptId);
   return attemptId;
 }
@@ -724,9 +472,8 @@ async function main() {
   mkdirSync(streamDirectory, { recursive: true });
   const spoolPath = join(attemptDirectory, `${config.executionId}.0.jsonl`);
   const checkpointPath = join(checkpointDirectory, `${config.caseId}.jsonl`);
-  const state = loadState(config, spoolPath, checkpointPath);
+  const state = loadState(spoolPath, checkpointPath);
   let reservedUsd = 0;
-  const classifyStream = await loadClassifier();
 
   function checkpoint(logicalCallId) {
     let attemptGroup =
@@ -743,6 +490,7 @@ async function main() {
       caseId: config.caseId,
       seqPos: state.seqPos,
       attemptGroup,
+      logicalCallId,
     });
     return attemptGroup;
   }
@@ -756,7 +504,7 @@ async function main() {
   }) {
     const endedAt = new Date().toISOString();
     appendRow(spoolPath, {
-      kind: "request_attempt",
+      kind: "lost",
       runId: config.runId,
       caseId: config.caseId,
       stepId,
@@ -765,9 +513,10 @@ async function main() {
       logicalCallId,
       attemptGroup,
       attribution: "lost",
-      streamOutcome: "provider_error",
+      streamOutcome: null,
       usage: null,
       costUsd: null,
+      costIsEstimate: false,
       reservedUsd: 0,
       leaseChargeUsd: 0,
       rejectionReason: reason,
@@ -778,19 +527,28 @@ async function main() {
 
   async function handle(incoming, outgoing) {
     const startedAt = new Date().toISOString();
-    const stepId = header(incoming, "x-rm-step");
+    const duplicateStep = hasDuplicateHeader(incoming, "x-rm-step");
+    const stepId = duplicateStep ? null : header(incoming, "x-rm-step");
     const logicalCallId = header(incoming, "x-rm-call");
     const attemptGroup = checkpoint(logicalCallId);
 
-    if (stepId === null || logicalCallId === null) {
+    if (duplicateStep || stepId === null || logicalCallId === null) {
       incoming.resume();
       recordLost({
         attemptGroup,
         logicalCallId,
         stepId,
-        reason: "missing_correlation",
+        reason: duplicateStep
+          ? "duplicate_step_correlation"
+          : "missing_correlation",
         startedAt,
       });
+      if (duplicateStep) {
+        sendJson(outgoing, 400, {
+          error: "Duplicate correlation header: x-rm-step",
+        });
+        return;
+      }
       const missing = stepId === null ? "x-rm-step" : "x-rm-call";
       sendJson(outgoing, 400, {
         error: `Missing required correlation header: ${missing}`,
@@ -865,8 +623,11 @@ async function main() {
       return;
     }
 
+    const estimatedInputTokens = Math.ceil(
+      forwardedBody.length / inputBytesPerToken,
+    );
     const estimatedWorstCaseUsd =
-      forwardedBody.length * pricing.input + maxTokens * pricing.output;
+      estimatedInputTokens * pricing.input + maxTokens * pricing.output;
     const requiredLeaseUsd =
       state.spentUsd + reservedUsd + estimatedWorstCaseUsd;
     if (requiredLeaseUsd > config.lease.maxUsd) {
@@ -880,7 +641,7 @@ async function main() {
         attemptGroup,
         reason: "budget",
         model,
-        contextTokensUpperBound: forwardedBody.length,
+        estimatedInputTokens,
         estimatedWorstCaseUsd,
         lease: { maxUsd: config.lease.maxUsd },
         requiredLease: { maxUsd: requiredLeaseUsd },
@@ -896,77 +657,72 @@ async function main() {
     reservedUsd += estimatedWorstCaseUsd;
     const attemptId = nextAttemptId(state);
     const responseSpoolPath = join(streamDirectory, `${attemptId}.txt`);
-    appendRow(spoolPath, {
-      kind: "attempt_reservation",
-      runId: config.runId,
-      caseId: config.caseId,
-      stepId,
-      executionId: config.executionId,
-      attemptId,
-      logicalCallId,
-      attemptGroup,
-      model,
-      contextTokensUpperBound: forwardedBody.length,
-      reservedUsd: estimatedWorstCaseUsd,
-      startedAt,
-    });
-    let result = {
-      streamOutcome: "truncated",
-      usage: null,
-      spoolPath: null,
-    };
     try {
-      const upstream = await requestUpstream(
-        config.egressUrl,
-        incoming.url ?? "/",
-        incoming.method ?? "POST",
-        requestHeaders(incoming.headers, forwardedBody.length),
-        forwardedBody,
-        streamHardDeadlineMs,
-      );
-      const status = upstream.statusCode ?? 502;
-      result =
-        rewritten.stream === true && status < 400
-          ? await forwardStreaming(upstream, outgoing, classifyStream, status, {
-              path: responseSpoolPath,
-              write: (bytes) => appendFileSync(responseSpoolPath, bytes),
-              close: () => undefined,
-            })
-          : await forwardNonStreaming(upstream, outgoing, status);
-    } catch {
-      if (!outgoing.headersSent) {
-        sendJson(outgoing, 502, { error: "Egress request failed." });
-      } else if (!outgoing.destroyed) {
-        outgoing.destroy();
+      let result = {
+        streamOutcome: "truncated",
+        usage: null,
+        spoolPath: null,
+      };
+      try {
+        const upstream = await requestUpstream(
+          config.egressUrl,
+          incoming.url ?? "/",
+          incoming.method ?? "POST",
+          requestHeaders(incoming.headers, forwardedBody.length),
+          forwardedBody,
+          streamHardDeadlineMs,
+        );
+        const status = upstream.statusCode ?? 502;
+        result =
+          rewritten.stream === true && status < 400
+            ? await forwardStreaming(upstream, outgoing, status, {
+                path: responseSpoolPath,
+                write: (bytes) => appendFileSync(responseSpoolPath, bytes),
+                close: () => undefined,
+              })
+            : await forwardNonStreaming(upstream, outgoing, status);
+      } catch {
+        if (!outgoing.headersSent) {
+          sendJson(outgoing, 502, { error: "Egress request failed." });
+        } else if (!outgoing.destroyed) {
+          outgoing.destroy();
+        }
       }
-    }
 
-    reservedUsd -= estimatedWorstCaseUsd;
-    const usage = normalizeUsage(result.usage);
-    const leaseChargeUsd = usageCharge(usage, pricing, estimatedWorstCaseUsd);
-    state.spentUsd += leaseChargeUsd;
-    appendRow(spoolPath, {
-      kind: "request_attempt",
-      runId: config.runId,
-      caseId: config.caseId,
-      stepId,
-      executionId: config.executionId,
-      attemptId,
-      logicalCallId,
-      attemptGroup,
-      attribution: "ok",
-      model,
-      contextTokensUpperBound: forwardedBody.length,
-      streamOutcome: result.streamOutcome,
-      usage,
-      responseSpoolPath: result.spoolPath,
-      costUsd: null,
-      reservedUsd: estimatedWorstCaseUsd,
-      leaseChargeUsd,
-      startedAt,
-      endedAt: new Date().toISOString(),
-    });
-    if (!outgoing.destroyed && !outgoing.writableEnded) outgoing.end();
+      const usage = normalizeUsage(result.usage);
+      const leaseChargeUsd = usageCharge(usage, pricing, estimatedWorstCaseUsd);
+      // The seven core fact fields are attemptId, logicalCallId, executionId,
+      // streamOutcome, usage, costUsd, and costIsEstimate. Other fields are spool metadata.
+      appendRow(spoolPath, {
+        kind: "request_attempt",
+        runId: config.runId,
+        caseId: config.caseId,
+        stepId,
+        executionId: config.executionId,
+        attemptId,
+        logicalCallId,
+        attemptGroup,
+        attribution: "ok",
+        model,
+        estimatedInputTokens,
+        streamOutcome: result.streamOutcome,
+        ...(result.finishedWithoutSentinel
+          ? { finishedWithoutSentinel: true }
+          : {}),
+        usage,
+        responseSpoolPath: result.spoolPath,
+        costUsd: leaseChargeUsd,
+        costIsEstimate: usage === null,
+        reservedUsd: estimatedWorstCaseUsd,
+        leaseChargeUsd,
+        startedAt,
+        endedAt: new Date().toISOString(),
+      });
+      state.spentUsd += leaseChargeUsd;
+      if (!outgoing.destroyed && !outgoing.writableEnded) outgoing.end();
+    } finally {
+      reservedUsd -= estimatedWorstCaseUsd;
+    }
   }
 
   const server = createServer((incoming, outgoing) => {

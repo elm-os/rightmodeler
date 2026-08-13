@@ -8,8 +8,3 @@ await cp(
   new URL("proxy/proxy-runtime.mjs", sourceRoot),
   new URL("proxy/proxy-runtime.mjs", distRoot),
 );
-await mkdir(new URL("transport/", distRoot), { recursive: true });
-await cp(
-  new URL("transport/stream.js", distRoot),
-  new URL("transport/index.js", distRoot),
-);

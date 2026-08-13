@@ -125,14 +125,15 @@ function seedNumber(seed) {
 function seededChunks(events, seed) {
   const bytes = Buffer.concat(events);
   const boundaries = new Set();
+  let state = seedNumber(seed);
+  const codePointInteriors = [];
   for (let index = 0; index < bytes.length; index += 1) {
-    if (bytes[index] >= 0xc2 && bytes[index] <= 0xf4) {
-      boundaries.add(index + 1);
-      break;
-    }
+    if ((bytes[index] & 0xc0) === 0x80) codePointInteriors.push(index);
+  }
+  if (codePointInteriors.length > 0) {
+    boundaries.add(codePointInteriors[state % codePointInteriors.length]);
   }
 
-  let state = seedNumber(seed);
   let offset = 0;
   while (offset < bytes.length) {
     state ^= state << 13;
@@ -152,17 +153,17 @@ function seededChunks(events, seed) {
   return chunks;
 }
 
-async function writeStream(response, chunks, resetAfter, stallMs) {
+async function writeStream(response, chunks, resetAfterEvents, stallMs) {
   const stallAfter = Math.max(1, Math.floor(chunks.length / 2));
   for (let index = 0; index < chunks.length; index += 1) {
     if (response.destroyed) return;
     response.write(chunks[index]);
     await nextTurn();
-    if (resetAfter > 0 && index + 1 === resetAfter) {
-      response.socket?.destroy();
-      return;
-    }
     if (stallMs > 0 && index + 1 === stallAfter) await sleep(stallMs);
+  }
+  if (resetAfterEvents > 0) {
+    response.socket?.destroy();
+    return;
   }
   response.end();
 }
@@ -182,19 +183,11 @@ export async function startFaultServer({ port }) {
       return;
     }
 
-    const key = header(request, "x-fault-key") ?? "";
-    const hitCount = (hits.get(key) ?? 0) + 1;
-    hits.set(key, hitCount);
+    const key = header(request, "x-fault-key");
+    const hitCount = key === undefined ? 1 : (hits.get(key) ?? 0) + 1;
+    if (key !== undefined) hits.set(key, hitCount);
 
-    let body;
-    try {
-      body = await readJson(request);
-    } catch {
-      json(response, 400, {
-        error: { message: "Request body must be valid JSON." },
-      });
-      return;
-    }
+    const body = await readJson(request);
 
     const slowHeadersMs = headerNumber(request, "x-fault-slow-headers-ms");
     if (slowHeadersMs > 0) await sleep(slowHeadersMs);
@@ -241,12 +234,19 @@ export async function startFaultServer({ port }) {
       header(request, "x-fault-drop-usage") !== undefined,
       header(request, "x-fault-error-event") !== undefined,
     );
+    const resetAfterEvents = headerNumber(
+      request,
+      "x-fault-reset-after-events",
+    );
+    const selectedEvents =
+      resetAfterEvents > 0 ? events.slice(0, resetAfterEvents) : events;
     const seed = header(request, "x-fault-chunk-seed");
-    const chunks = seed === undefined ? events : seededChunks(events, seed);
+    const chunks =
+      seed === undefined ? selectedEvents : seededChunks(selectedEvents, seed);
     await writeStream(
       response,
       chunks,
-      headerNumber(request, "x-fault-reset-after-chunks"),
+      resetAfterEvents,
       headerNumber(request, "x-fault-stall-ms"),
     );
   });

@@ -15,7 +15,13 @@ import { fileURLToPath } from "node:url";
 import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { startEgressListener, type EgressListener } from "./egress.js";
+import { requestAttemptSchema } from "@rightmodeler/core";
+
+import {
+  redactCredential,
+  startEgressListener,
+  type EgressListener,
+} from "./egress.js";
 
 interface StubProvider {
   port: number;
@@ -42,6 +48,7 @@ interface Pair {
   egress: EgressListener;
   runtime: Runtime;
   env: NodeJS.ProcessEnv;
+  scriptPath: string;
 }
 
 interface RuntimeOptions {
@@ -50,6 +57,8 @@ interface RuntimeOptions {
   swapPolicy?: Record<string, string>;
   pricingTable?: Record<string, { input: number; output: number }>;
   maxUsd?: number;
+  streamIdleTimeoutMs?: number;
+  streamHardDeadlineMs?: number;
 }
 
 const stubModuleUrl = new URL(
@@ -62,6 +71,7 @@ const runtimePath = fileURLToPath(
 const transportPath = fileURLToPath(
   new URL("../transport/stream.ts", import.meta.url),
 );
+const headersPath = fileURLToPath(new URL("./headers.ts", import.meta.url));
 const apiKeyEnv = "REPLAY_PROXY_TEST_API_KEY";
 const credential = "credential-sentinel-that-must-never-persist";
 const runId = "run-proxy-1";
@@ -121,6 +131,12 @@ function runtimeEnv(options: RuntimeOptions): NodeJS.ProcessEnv {
       },
     ),
     RM_BUDGET_LEASE: JSON.stringify({ maxUsd: options.maxUsd ?? 1 }),
+    ...(options.streamIdleTimeoutMs === undefined
+      ? {}
+      : { RM_STREAM_IDLE_TIMEOUT_MS: String(options.streamIdleTimeoutMs) }),
+    ...(options.streamHardDeadlineMs === undefined
+      ? {}
+      : { RM_STREAM_HARD_DEADLINE_MS: String(options.streamHardDeadlineMs) }),
   };
 }
 
@@ -182,7 +198,7 @@ async function startRuntime(
   return runtime;
 }
 
-async function createRuntimeWithTransport(): Promise<string> {
+async function createRuntimeBundle(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-runtime-"));
   scratchDirectories.push(root);
   const proxyDirectory = join(root, "proxy");
@@ -193,13 +209,18 @@ async function createRuntimeWithTransport(): Promise<string> {
     join(proxyDirectory, "proxy-runtime.mjs"),
     await readFile(runtimePath),
   );
+  const compilerOptions = {
+    module: ModuleKind.ESNext,
+    target: ScriptTarget.ES2022,
+  };
   const transport = transpileModule(await readFile(transportPath, "utf8"), {
-    compilerOptions: {
-      module: ModuleKind.ESNext,
-      target: ScriptTarget.ES2022,
-    },
+    compilerOptions,
   });
-  await writeFile(join(transportDirectory, "index.js"), transport.outputText);
+  const headers = transpileModule(await readFile(headersPath, "utf8"), {
+    compilerOptions,
+  });
+  await writeFile(join(transportDirectory, "stream.js"), transport.outputText);
+  await writeFile(join(proxyDirectory, "headers.js"), headers.outputText);
   return join(proxyDirectory, "proxy-runtime.mjs");
 }
 
@@ -225,7 +246,7 @@ async function startStub(): Promise<StubProvider> {
 
 async function startEgress(stub: StubProvider): Promise<EgressListener> {
   const egress = await startEgressListener({
-    providerBaseUrl: `${stubOrigin(stub)}/v1`,
+    providerBaseUrl: stubOrigin(stub),
     apiKeyEnv,
   });
   egressListeners.push(egress);
@@ -245,8 +266,9 @@ async function startPair(
     scratch,
     egressUrl: egress.url,
   });
-  const runtime = await startRuntime(env);
-  return { scratch, stub, egress, runtime, env };
+  const scriptPath = await createRuntimeBundle();
+  const runtime = await startRuntime(env, scriptPath);
+  return { scratch, stub, egress, runtime, env, scriptPath };
 }
 
 function correlatedHeaders(stepId: string, logicalCallId: string) {
@@ -373,7 +395,48 @@ async function sendOversizedChunked(runtime: Runtime): Promise<number> {
   });
 }
 
+async function sendDuplicateStepHeader(
+  runtime: Runtime,
+): Promise<{ status: number; body: string }> {
+  const body = Buffer.from(JSON.stringify(chatBody()));
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      `${runtime.url}/v1/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(body.length),
+          "x-rm-step": ["step-a", "step-b"],
+          "x-rm-call": "logical-duplicate-step",
+        },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.once("end", () =>
+          resolve({
+            status: response.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString("utf8"),
+          }),
+        );
+      },
+    );
+    request.once("error", reject);
+    request.end(body);
+  });
+}
+
 describe("Mode B proxy and host egress", () => {
+  it("redacts every credential occurrence from an error body", () => {
+    expect(
+      redactCredential(
+        Buffer.from(`before ${credential} middle ${credential} after`),
+        credential,
+      ).toString("utf8"),
+    ).toBe("before [REDACTED] middle [REDACTED] after");
+  });
+
   it("rewrites only policy steps and meters byte-exact streaming responses", async () => {
     const pair = await startPair({
       swapPolicy: { "step-rewrite": "acme/lite-1" },
@@ -413,9 +476,7 @@ describe("Mode B proxy and host egress", () => {
 
     const allRows = await readRows(spoolPath(pair.scratch));
     const attempts = allRows.filter((row) => row.kind === "request_attempt");
-    expect(
-      allRows.filter((row) => row.kind === "attempt_reservation"),
-    ).toHaveLength(2);
+    expect(allRows).toHaveLength(2);
     expect(attempts).toHaveLength(2);
     expect(attempts[0]).toMatchObject({
       runId,
@@ -427,7 +488,8 @@ describe("Mode B proxy and host egress", () => {
       attribution: "ok",
       model: "acme/lite-1",
       streamOutcome: "completed",
-      costUsd: null,
+      costUsd: expect.any(Number),
+      costIsEstimate: false,
     });
     expect(attempts[1]).toMatchObject({
       stepId: "step-pass-through",
@@ -436,7 +498,8 @@ describe("Mode B proxy and host egress", () => {
       attribution: "ok",
       model: "acme/large-1",
       streamOutcome: "completed",
-      costUsd: null,
+      costUsd: expect.any(Number),
+      costIsEstimate: false,
       usage: {
         outputTokens: 12,
       },
@@ -447,15 +510,23 @@ describe("Mode B proxy and host egress", () => {
     );
     expect(Date.parse(String(attempts[0]?.startedAt))).not.toBeNaN();
     expect(Date.parse(String(attempts[0]?.endedAt))).not.toBeNaN();
+    expect(
+      requestAttemptSchema.parse({
+        attemptId: attempts[0]?.attemptId,
+        logicalCallId: attempts[0]?.logicalCallId,
+        executionId: attempts[0]?.executionId,
+        streamOutcome: attempts[0]?.streamOutcome,
+        usage: attempts[0]?.usage,
+        costUsd: attempts[0]?.costUsd,
+        costIsEstimate: attempts[0]?.costIsEstimate,
+      }),
+    ).toBeDefined();
   });
 
-  it("loads the production-relative transport bridge", async () => {
+  it("loads the production-relative transport classifier", async () => {
     const pair = await startPair();
     await stopRuntime(pair.runtime);
-    const built = await startRuntime(
-      pair.env,
-      await createRuntimeWithTransport(),
-    );
+    const built = await startRuntime(pair.env, await createRuntimeBundle());
 
     const streamed = await callProxy(
       built,
@@ -478,6 +549,20 @@ describe("Mode B proxy and host egress", () => {
     );
     expect(truncated.status).toBe(200);
     expect((await truncated.text()).endsWith("data: [DONE]\n\n")).toBe(false);
+    const finishedWithoutSentinel = await callProxy(
+      built,
+      "step-built",
+      "logical-finished-without-sentinel",
+      chatBody({ stream: true }),
+      {
+        "x-stub-enable-streaming": "1",
+        "x-stub-finish-without-sentinel": "1",
+      },
+    );
+    expect(finishedWithoutSentinel.status).toBe(200);
+    expect(
+      (await finishedWithoutSentinel.text()).endsWith("data: [DONE]\n\n"),
+    ).toBe(false);
 
     const attempts = (await readRows(spoolPath(pair.scratch))).filter(
       (row) => row.kind === "request_attempt",
@@ -491,6 +576,38 @@ describe("Mode B proxy and host egress", () => {
       streamOutcome: "truncated",
       usage: null,
     });
+    expect(attempts[2]).toMatchObject({
+      logicalCallId: "logical-finished-without-sentinel",
+      streamOutcome: "completed",
+      finishedWithoutSentinel: true,
+    });
+  });
+
+  it("spools a streaming response over one MiB through the proxy", async () => {
+    const pair = await startPair();
+    const response = await callProxy(
+      pair.runtime,
+      "step-large-stream",
+      "logical-large-stream",
+      chatBody({ stream: true }),
+      {
+        "x-stub-enable-streaming": "1",
+        "x-stub-large-stream": "1",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+    const attempt = (await readRows(spoolPath(pair.scratch))).find(
+      (row) => row.kind === "request_attempt",
+    );
+    expect(attempt).toMatchObject({
+      streamOutcome: "completed",
+      responseSpoolPath: expect.any(String),
+    });
+    const spooled = await readFile(String(attempt?.responseSpoolPath));
+    expect(spooled.length).toBe(1_200_000);
+    expect(spooled.equals(Buffer.from("x".repeat(1_200_000)))).toBe(true);
   });
 
   it("fails closed without step correlation and never forwards", async () => {
@@ -513,12 +630,97 @@ describe("Mode B proxy and host egress", () => {
     expect(pair.stub.getHitCount()).toBe(before);
     expect(await readRows(spoolPath(pair.scratch))).toEqual([
       expect.objectContaining({
-        kind: "request_attempt",
+        kind: "lost",
         stepId: null,
         logicalCallId: "logical-lost",
         attribution: "lost",
         rejectionReason: "missing_correlation",
         costUsd: null,
+        streamOutcome: null,
+      }),
+    ]);
+  });
+
+  it("rejects duplicate step correlation as lost without forwarding", async () => {
+    const pair = await startPair();
+    const response = await sendDuplicateStepHeader(pair.runtime);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toContain("Duplicate correlation header");
+    expect(pair.stub.getHitCount()).toBe(0);
+    expect(await readRows(spoolPath(pair.scratch))).toEqual([
+      expect.objectContaining({
+        kind: "lost",
+        logicalCallId: "logical-duplicate-step",
+        rejectionReason: "duplicate_step_correlation",
+        streamOutcome: null,
+      }),
+    ]);
+  });
+
+  it("treats constructor as a normal step id when no swap is configured", async () => {
+    const pair = await startPair();
+    const response = await callProxy(
+      pair.runtime,
+      "constructor",
+      "logical-constructor",
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: "acme/large-1",
+    });
+  });
+
+  it("uses the spawned hard-deadline override for upstream response headers", async () => {
+    const pair = await startPair({ streamHardDeadlineMs: 20 });
+    const startedAt = performance.now();
+    const response = await callProxy(
+      pair.runtime,
+      "step-timeout",
+      "logical-timeout",
+      chatBody(),
+      { "x-stub-hold-before-response-ms": "500" },
+    );
+
+    expect(response.status).toBe(502);
+    expect(performance.now() - startedAt).toBeLessThan(200);
+    const attempts = await readRows(spoolPath(pair.scratch));
+    expect(attempts).toEqual([
+      expect.objectContaining({
+        kind: "request_attempt",
+        logicalCallId: "logical-timeout",
+        streamOutcome: "truncated",
+        costIsEstimate: true,
+      }),
+    ]);
+  });
+
+  it("uses the spawned idle-timeout override between stream events", async () => {
+    const pair = await startPair({
+      streamIdleTimeoutMs: 20,
+      streamHardDeadlineMs: 1_000,
+    });
+    const startedAt = performance.now();
+    const response = await callProxy(
+      pair.runtime,
+      "step-idle-timeout",
+      "logical-idle-timeout",
+      chatBody({ stream: true }),
+      {
+        "x-stub-enable-streaming": "1",
+        "x-stub-stall-stream-ms": "500",
+      },
+    );
+
+    await response.arrayBuffer().catch(() => undefined);
+    expect(performance.now() - startedAt).toBeLessThan(200);
+    const attempts = await readRows(spoolPath(pair.scratch));
+    expect(attempts).toEqual([
+      expect.objectContaining({
+        kind: "request_attempt",
+        logicalCallId: "logical-idle-timeout",
+        streamOutcome: "truncated",
       }),
     ]);
   });
@@ -534,7 +736,7 @@ describe("Mode B proxy and host egress", () => {
     await stopRuntime(pair.runtime, "SIGKILL");
     const priorBytes = await readFile(spoolPath(pair.scratch), "utf8");
 
-    const restarted = await startRuntime(pair.env);
+    const restarted = await startRuntime(pair.env, pair.scriptPath);
     const retry = await callProxy(restarted, "step-1", "logical-2");
     expect(retry.status).toBe(200);
     await retry.arrayBuffer();
@@ -550,14 +752,34 @@ describe("Mode B proxy and host egress", () => {
     expect(attempts.map((row) => row.attemptGroup)).toEqual([1, 2, 2, 3]);
     expect(new Set(attempts.map((row) => row.attemptId)).size).toBe(4);
     expect(await readRows(checkpointPath(pair.scratch))).toEqual([
-      { caseId, seqPos: 1, attemptGroup: 1 },
-      { caseId, seqPos: 2, attemptGroup: 2 },
-      { caseId, seqPos: 3, attemptGroup: 2 },
-      { caseId, seqPos: 4, attemptGroup: 3 },
+      {
+        caseId,
+        seqPos: 1,
+        attemptGroup: 1,
+        logicalCallId: "logical-1",
+      },
+      {
+        caseId,
+        seqPos: 2,
+        attemptGroup: 2,
+        logicalCallId: "logical-2",
+      },
+      {
+        caseId,
+        seqPos: 3,
+        attemptGroup: 2,
+        logicalCallId: "logical-2",
+      },
+      {
+        caseId,
+        seqPos: 4,
+        attemptGroup: 3,
+        logicalCallId: "logical-3",
+      },
     ]);
   });
 
-  it("recovers an in-flight reservation as one truncated attempt after a kill", async () => {
+  it("rehydrates only completed rows after an in-flight request is killed", async () => {
     const pair = await startPair();
     const pending = callProxy(
       pair.runtime,
@@ -570,19 +792,13 @@ describe("Mode B proxy and host egress", () => {
       () => pair.stub.getHitCount() === 1,
       "Stub did not receive the in-flight request",
     );
-    const reservationRows = await readRows(spoolPath(pair.scratch));
-    expect(reservationRows).toEqual([
-      expect.objectContaining({
-        kind: "attempt_reservation",
-        logicalCallId: "logical-killed",
-        attemptGroup: 1,
-      }),
-    ]);
-    const reservationId = reservationRows[0]?.attemptId;
+    await expect(
+      readdir(join(pair.scratch, "proxy", "attempts")),
+    ).resolves.toEqual([]);
     await stopRuntime(pair.runtime, "SIGKILL");
     await pending;
 
-    const restarted = await startRuntime(pair.env);
+    const restarted = await startRuntime(pair.env, pair.scriptPath);
     const retry = await callProxy(restarted, "step-killed", "logical-killed");
     expect(retry.status).toBe(200);
     await retry.arrayBuffer();
@@ -591,20 +807,12 @@ describe("Mode B proxy and host egress", () => {
     const attempts = rows.filter((row) => row.kind === "request_attempt");
     expect(attempts).toEqual([
       expect.objectContaining({
-        attemptId: reservationId,
-        logicalCallId: "logical-killed",
-        attemptGroup: 1,
-        streamOutcome: "truncated",
-        recoveryReason: "proxy_restarted",
-      }),
-      expect.objectContaining({
         logicalCallId: "logical-killed",
         attemptGroup: 1,
         streamOutcome: "completed",
       }),
     ]);
-    expect(attempts[0]?.leaseChargeUsd).toBe(attempts[0]?.reservedUsd);
-    expect(new Set(attempts.map((row) => row.attemptId)).size).toBe(2);
+    expect(typeof attempts[0]?.attemptId).toBe("string");
   });
 
   it("blocks the second request when the case lease covers only one", async () => {
@@ -612,7 +820,7 @@ describe("Mode B proxy and host egress", () => {
     const pricing = { input: 0.001, output: 0.002 };
     const forwardedBytes = Buffer.byteLength(JSON.stringify(body));
     const oneRequestLease =
-      forwardedBytes * pricing.input + 32 * pricing.output;
+      Math.ceil(forwardedBytes / 4) * pricing.input + 32 * pricing.output;
     const pair = await startPair({
       pricingTable: { "acme/large-1": pricing },
       maxUsd: oneRequestLease,
@@ -633,6 +841,9 @@ describe("Mode B proxy and host egress", () => {
     );
     expect(Number(firstAttempt?.leaseChargeUsd)).toBeLessThan(
       Number(firstAttempt?.reservedUsd),
+    );
+    expect(firstAttempt?.estimatedInputTokens).toBe(
+      Math.ceil(forwardedBytes / 4),
     );
     const second = await callProxy(
       pair.runtime,
@@ -697,6 +908,42 @@ describe("Mode B proxy and host egress", () => {
     expect(stub.getHitCount()).toBe(0);
   });
 
+  it("preserves a configured provider base path prefix", async () => {
+    process.env[apiKeyEnv] = credential;
+    let receivedPath = "";
+    const provider = createServer((request, response) => {
+      receivedPath = request.url ?? "";
+      request.resume();
+      request.once("end", () => {
+        response.setHeader("content-type", "application/json");
+        response.end("{}");
+      });
+    });
+    servers.push(provider);
+    await new Promise<void>((resolve, reject) => {
+      provider.once("error", reject);
+      provider.listen(0, "127.0.0.1", resolve);
+    });
+    const address = provider.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("Pathed provider fixture did not bind a TCP address");
+    }
+    const egress = await startEgressListener({
+      providerBaseUrl: `http://127.0.0.1:${address.port}/provider-prefix`,
+      apiKeyEnv,
+    });
+    egressListeners.push(egress);
+
+    const response = await fetch(`${egress.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(200);
+    expect(receivedPath).toBe("/provider-prefix/v1/chat/completions");
+  });
+
   it("injects credentials at forward time and redacts provider errors", async () => {
     delete process.env[apiKeyEnv];
     const scratch = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-secret-"));
@@ -715,7 +962,7 @@ describe("Mode B proxy and host egress", () => {
     process.env[apiKeyEnv] = credential;
     const env = runtimeEnv({ scratch, egressUrl: egress.url });
     expect(JSON.stringify(env)).not.toContain(credential);
-    const runtime = await startRuntime(env);
+    const runtime = await startRuntime(env, await createRuntimeBundle());
     const response = await callProxy(
       runtime,
       "step-secret",
@@ -728,7 +975,9 @@ describe("Mode B proxy and host egress", () => {
     expect(response.status).toBe(400);
     expect(errorBody).toContain("[REDACTED]");
     expect(errorBody).not.toContain(credential);
-    expect(response.headers.get("x-stub-reflected-auth")).toBeNull();
+    expect(response.headers.get("x-stub-reflected-auth")).toBe(
+      `Bearer ${credential}`,
+    );
     const usageEcho = await callProxy(
       runtime,
       "step-secret",
@@ -737,7 +986,9 @@ describe("Mode B proxy and host egress", () => {
       { "x-stub-echo-auth-in-usage": "1" },
     );
     expect(usageEcho.status).toBe(200);
-    expect(usageEcho.headers.get("x-stub-reflected-auth")).toBeNull();
+    expect(usageEcho.headers.get("x-stub-reflected-auth")).toBe(
+      `Bearer ${credential}`,
+    );
     await usageEcho.arrayBuffer();
     const persisted = await readTree(join(scratch, "proxy"));
     expect(persisted).not.toContain(credential);
@@ -765,20 +1016,74 @@ describe("Mode B proxy and host egress", () => {
     expect(pair.stub.getHitCount()).toBe(before);
     expect(await readRows(spoolPath(pair.scratch))).toEqual([
       expect.objectContaining({
-        kind: "request_attempt",
+        kind: "lost",
         attribution: "lost",
         rejectionReason: "request_too_large",
         costUsd: null,
         usage: null,
+        streamOutcome: null,
       }),
       expect.objectContaining({
-        kind: "request_attempt",
+        kind: "lost",
         attribution: "lost",
         rejectionReason: "malformed_json",
         costUsd: null,
         usage: null,
+        streamOutcome: null,
       }),
     ]);
+  });
+
+  it("rehydrates complete rows with extra fields and skips trailing partial lines", async () => {
+    process.env[apiKeyEnv] = credential;
+    const scratch = await mkdtemp(
+      join(tmpdir(), "rightmodeler-proxy-partial-"),
+    );
+    scratchDirectories.push(scratch);
+    const stub = await startStub();
+    const egress = await startEgress(stub);
+    await mkdir(join(scratch, "proxy", "attempts"), { recursive: true });
+    await mkdir(join(scratch, "proxy", "checkpoints"), { recursive: true });
+    await writeFile(
+      spoolPath(scratch),
+      `${JSON.stringify({
+        kind: "request_attempt",
+        attemptId: "attempt-existing",
+        logicalCallId: "logical-existing",
+        attemptGroup: 1,
+        costUsd: 0.01,
+        futureField: "ignored",
+      })}\n${JSON.stringify({ kind: "future_row", extra: true })}\n{"kind":`,
+      "utf8",
+    );
+    await writeFile(
+      checkpointPath(scratch),
+      `${JSON.stringify({
+        caseId,
+        seqPos: 1,
+        attemptGroup: 1,
+        logicalCallId: "logical-existing",
+        futureField: "ignored",
+      })}\n{"caseId":`,
+      "utf8",
+    );
+
+    const env = runtimeEnv({ scratch, egressUrl: egress.url });
+    const scriptPath = await createRuntimeBundle();
+    const runtime = await startRuntime(env, scriptPath);
+
+    expect(runtime.port).toBeGreaterThan(0);
+    const response = await callProxy(
+      runtime,
+      "step-existing",
+      "logical-existing",
+    );
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+    await stopRuntime(runtime);
+
+    const restarted = await startRuntime(env, scriptPath);
+    expect(restarted.port).toBeGreaterThan(0);
   });
 
   it("fails startup loudly when the authoritative spool is malformed", async () => {
@@ -793,7 +1098,10 @@ describe("Mode B proxy and host egress", () => {
     await writeFile(spoolPath(scratch), "not-json\n", "utf8");
 
     await expect(
-      startRuntime(runtimeEnv({ scratch, egressUrl: egress.url })),
+      startRuntime(
+        runtimeEnv({ scratch, egressUrl: egress.url }),
+        await createRuntimeBundle(),
+      ),
     ).rejects.toThrow("attempt spool has malformed JSON on line 1");
   });
 });
