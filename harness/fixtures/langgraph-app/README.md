@@ -8,3 +8,7 @@ must isolate `{classify, lookup}` as one minimal failing subset.
 
 The markers do not influence routing or the normal answer prompt, and an answer-only swap
 does not trigger the regression.
+
+Repository metadata covers owner resolution and host conventions: ordered CODEOWNERS rules,
+root and nested agent instructions, an included convention file, an instruction pointer, and a
+pull request template.
