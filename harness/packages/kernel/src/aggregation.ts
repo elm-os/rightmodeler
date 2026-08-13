@@ -1,4 +1,4 @@
-import type { Assessment, Execution } from "@rightmodeler/core";
+import type { Assessment, CascadeFinding, Execution } from "@rightmodeler/core";
 
 import {
   MIN_DISTINCT_STEPS,
@@ -101,6 +101,12 @@ export interface AvailabilityVerdict {
   readonly clusterBootstrapLow?: number;
 }
 
+export interface FamilyCascadeStatus {
+  readonly verdict: CascadeFinding["verdict"];
+  readonly cascadeSeedStepId: string | null;
+  readonly runSetsUsed: number;
+}
+
 interface FamilyVerdictBase {
   readonly evidenceQuestionId: string;
   readonly corpusSplit: string;
@@ -128,6 +134,7 @@ interface FamilyVerdictBase {
   readonly requiredAbstentions: number;
   readonly satisfiedRequiredAbstentions: number;
   readonly modeAOptimismDelta?: number;
+  readonly cascadeStatus?: FamilyCascadeStatus;
 }
 
 export type FamilyVerdict = FamilyVerdictBase &
@@ -151,6 +158,7 @@ export interface AggregateOptions {
 export function aggregate(
   facts: readonly AggregationFact[],
   { gatePolicyVersion, qualityFloor, availabilityFloor }: AggregateOptions,
+  cascadeFindings: readonly CascadeFinding[] = [],
 ): FamilyVerdict[] {
   if (gatePolicyVersion.length === 0) {
     throw new TypeError("gatePolicyVersion must not be empty");
@@ -187,7 +195,13 @@ export function aggregate(
 
   return [...groups.values()]
     .map((group) =>
-      aggregateGroup(group, gatePolicyVersion, qualityFloor, availabilityFloor),
+      aggregateGroup(
+        group,
+        gatePolicyVersion,
+        qualityFloor,
+        availabilityFloor,
+        cascadeFindings,
+      ),
     )
     .sort(compareVerdicts);
 }
@@ -197,6 +211,7 @@ function aggregateGroup(
   gatePolicyVersion: string,
   qualityFloor: number,
   availabilityFloor: number,
+  cascadeFindings: readonly CascadeFinding[],
 ): FamilyVerdict {
   const first = facts[0]!;
   assertConsistentGroup(facts, first);
@@ -308,6 +323,10 @@ function aggregateGroup(
       facts.length,
     ),
   });
+  const cascadeFinding = latestCascadeFinding(cascadeFindings, {
+    familyId: first.familyId,
+    evidenceQuestionId: first.execution.evidenceQuestionId,
+  });
   const base: FamilyVerdictBase = {
     evidenceQuestionId: first.execution.evidenceQuestionId,
     corpusSplit: first.execution.corpusSplit,
@@ -335,6 +354,15 @@ function aggregateGroup(
     coveredEvidenceCases,
     requiredAbstentions,
     satisfiedRequiredAbstentions,
+    ...(cascadeFinding === undefined
+      ? {}
+      : {
+          cascadeStatus: {
+            verdict: cascadeFinding.verdict,
+            cascadeSeedStepId: cascadeFinding.cascadeSeedStepId,
+            runSetsUsed: cascadeFinding.runSetsUsed,
+          },
+        }),
   };
   return abstainReason === undefined
     ? {
@@ -394,11 +422,15 @@ function aggregateEvaluatorKind(
           seed: stableSeed(`${evidenceQuestionId}\0${evaluatorKind}\0quality`),
         })
     : wilson(passes, included.length);
-  const worstCaseBound = lowerBound(
-    worstCaseOutcomes,
-    passes,
-    conditionalFacts.length,
-    stableSeed(`${evidenceQuestionId}\0${evaluatorKind}\0worst-case`),
+  const worstCaseBound = evaluatorWorstCaseBound(
+    conditionalFacts.map((fact) => ({
+      trajectoryId: fact.execution.trajectoryId,
+      passed:
+        fact.execution.attribution === "ok" &&
+        fact.orderConsistent !== false &&
+        Boolean(fact.assessment!.passed),
+    })),
+    `${evidenceQuestionId}\0${evaluatorKind}`,
   );
 
   return {
@@ -594,6 +626,59 @@ function lowerBound(
         seed,
       }).lower
     : wilson(passes, trials).lower;
+}
+
+export function evaluatorWorstCaseBound(
+  observations: readonly {
+    readonly trajectoryId: string;
+    readonly passed: boolean;
+  }[],
+  evidenceQuestionId: string,
+): number {
+  const trajectories = new Map<string, boolean[]>();
+  for (const observation of observations) {
+    if (observation.trajectoryId.length === 0) {
+      throw new TypeError("trajectoryId must not be empty");
+    }
+    const outcomes = trajectories.get(observation.trajectoryId);
+    if (outcomes) {
+      outcomes.push(observation.passed);
+    } else {
+      trajectories.set(observation.trajectoryId, [observation.passed]);
+    }
+  }
+  const outcomes = Object.fromEntries(
+    [...trajectories.entries()].sort(([left], [right]) =>
+      compareText(left, right),
+    ),
+  );
+  return lowerBound(
+    outcomes,
+    observations.filter(({ passed }) => passed).length,
+    observations.length,
+    stableSeed(`${evidenceQuestionId}\0worst-case`),
+  );
+}
+
+function latestCascadeFinding(
+  findings: readonly CascadeFinding[],
+  partition: {
+    readonly familyId: string;
+    readonly evidenceQuestionId: string;
+  },
+): CascadeFinding | undefined {
+  let latest: CascadeFinding | undefined;
+  for (const finding of findings) {
+    if (
+      finding.familyId === partition.familyId &&
+      finding.evidenceQuestionId === partition.evidenceQuestionId &&
+      (latest === undefined ||
+        Date.parse(finding.createdAt) >= Date.parse(latest.createdAt))
+    ) {
+      latest = finding;
+    }
+  }
+  return latest;
 }
 
 function outcomesByTrajectory(

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { CascadeFinding } from "@rightmodeler/core";
 
-import { EXCLUDED_FRACTION_MAX, aggregate } from "./aggregation.js";
+import {
+  EXCLUDED_FRACTION_MAX,
+  aggregate,
+  evaluatorWorstCaseBound,
+} from "./aggregation.js";
 import {
   MIN_DISTINCT_STEPS,
   MIN_DISTINCT_TRAJECTORIES,
@@ -20,6 +25,24 @@ const options = {
   availabilityFloor: 0.8,
 } as const;
 
+function cascadeFinding(
+  overrides: Partial<CascadeFinding> = {},
+): CascadeFinding {
+  return {
+    cascadeId: "cascade-1",
+    familyId: "family-1",
+    evidenceQuestionId: "question-1",
+    swapSetKey: "classify+lookup",
+    verdict: "isolated",
+    culprits: [["classify", "lookup"]],
+    cascadeSeedStepId: "classify",
+    uncertainStepIds: ["lookup"],
+    runSetsUsed: 4,
+    createdAt: "2026-08-13T12:00:00.000Z",
+    ...overrides,
+  };
+}
+
 describe("aggregate", () => {
   it("partitions by evidence question while pooling judge model and version", () => {
     const verdicts = aggregate(
@@ -38,6 +61,43 @@ describe("aggregate", () => {
       ["question-2", 10],
     ]);
     expect(verdicts[0]?.evaluatorKinds[0]?.orderConsistencyRate).toBe(0.5);
+  });
+
+  it("leaves cascade status absent when confirmation has not run", () => {
+    const [verdict] = aggregate(aggregationFacts(20), options);
+
+    expect(verdict).not.toHaveProperty("cascadeStatus");
+  });
+
+  it("uses the latest cascade finding from the family evidence partition", () => {
+    const [verdict] = aggregate(aggregationFacts(20), options, [
+      cascadeFinding({
+        verdict: "confirmed",
+        cascadeSeedStepId: null,
+        runSetsUsed: 1,
+        createdAt: "2026-08-13T11:00:00.000Z",
+      }),
+      cascadeFinding({
+        cascadeId: "other-family",
+        familyId: "family-2",
+        verdict: "inconclusive",
+        runSetsUsed: 9,
+        createdAt: "2026-08-13T13:00:00.000Z",
+      }),
+      cascadeFinding({
+        cascadeId: "latest",
+        verdict: "isolated",
+        cascadeSeedStepId: "classify",
+        runSetsUsed: 4,
+        createdAt: "2026-08-13T12:00:00.000Z",
+      }),
+    ]);
+
+    expect(verdict.cascadeStatus).toEqual({
+      verdict: "isolated",
+      cascadeSeedStepId: "classify",
+      runSetsUsed: 4,
+    });
   });
 
   it("reports evaluator kinds separately and applies the weakest kind", () => {
@@ -178,6 +238,33 @@ describe("aggregate", () => {
 
     expect(kind.passRate).toBe(0.625);
     expect(kind.clusterBootstrapLow).not.toBeCloseTo(wilson(10, 16).lower, 4);
+  });
+
+  it("shares the aggregate worst-case bound calculation", () => {
+    const facts = aggregationFacts(16, (index) => ({
+      passed: index < 10,
+      trajectoryId: `trajectory-${index % 8}`,
+    }));
+    const [kind] = aggregate(facts, {
+      ...options,
+      qualityFloor: 0.2,
+    })[0]!.evaluatorKinds;
+
+    expect(
+      evaluatorWorstCaseBound(
+        facts.map((fact) => ({
+          trajectoryId: fact.execution.trajectoryId,
+          passed: fact.assessment!.passed,
+        })),
+        "question-1\0judge",
+      ),
+    ).toBe(kind!.worstCaseBound);
+  });
+
+  it("rejects unnamed trajectories in worst-case observations", () => {
+    expect(() =>
+      evaluatorWorstCaseBound([{ trajectoryId: "", passed: true }], "q-1"),
+    ).toThrow(/trajectoryId.*empty/i);
   });
 
   it("refuses a naive interval when a repeated trajectory includes an exclusion", () => {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   assessmentSchema,
+  cascadeFindingSchema,
   confirmPlanKey,
   computeRunSpecDigest,
   executionSchema,
@@ -9,16 +10,21 @@ import {
   factsPrefix,
   spendEventSchema,
   type Assessment,
+  type CascadeFinding,
   type Execution,
   type Store,
 } from "@rightmodeler/core";
 import {
   deltaDebug,
+  evaluatorWorstCaseBound,
   judgeExecution,
   type DeltaDebugLogEntry,
   type DeltaDebugTestOutcome,
   type JudgeChat,
+  type ReleaseGatePolicy,
 } from "@rightmodeler/kernel";
+
+export { createDockerExecutor } from "@rightmodeler/executor";
 
 import type { Budget } from "./budget.js";
 import {
@@ -52,6 +58,7 @@ export interface ConfirmPlan {
 
 export interface ConfirmFamily {
   readonly familyId: string;
+  readonly evidenceQuestionId: string;
   readonly stepOrder?: readonly string[];
 }
 
@@ -89,12 +96,13 @@ export interface ConfirmMemberResult {
 }
 
 export interface ConfirmSwapSetInput {
-  readonly family: ConfirmFamily | string;
+  readonly family: ConfirmFamily;
   readonly swapSet: readonly ConfirmSwap[];
   readonly cases: readonly ModeBCase[];
   readonly modeB: ConfirmModeB;
   readonly store: Store;
   readonly budget: ConfirmBudget;
+  readonly policy: ReleaseGatePolicy;
 }
 
 export interface ConfirmSwapSetResult {
@@ -111,6 +119,7 @@ export interface ConfirmSwapSetResult {
 interface FactsIndex {
   readonly executions: readonly Execution[];
   readonly assessments: readonly Assessment[];
+  readonly cascadeFindings: readonly CascadeFinding[];
 }
 
 type RunSetOutcome = DeltaDebugTestOutcome | "ambiguous" | "incomplete";
@@ -332,17 +341,11 @@ function replacePlanItem(
   };
 }
 
-function familyIdOf(family: ConfirmFamily | string): string {
-  const familyId = typeof family === "string" ? family : family.familyId;
-  if (familyId.length === 0) throw new Error("familyId must not be empty");
-  return familyId;
-}
-
 function stepOrderOf(
-  family: ConfirmFamily | string,
+  family: ConfirmFamily,
   swapSet: readonly ConfirmSwap[],
 ): readonly string[] {
-  const order = typeof family === "string" ? undefined : family.stepOrder;
+  const order = family.stepOrder;
   if (order === undefined) return swapSet.map(({ stepId }) => stepId);
   if (
     new Set(order).size !== order.length ||
@@ -355,6 +358,12 @@ function stepOrderOf(
 }
 
 function validateInput(input: ConfirmSwapSetInput): void {
+  if (input.family.familyId.length === 0) {
+    throw new Error("familyId must not be empty");
+  }
+  if (input.family.evidenceQuestionId.length === 0) {
+    throw new Error("family.evidenceQuestionId must not be empty");
+  }
   if (input.swapSet.length === 0) throw new Error("swapSet must not be empty");
   const swapIds = input.swapSet.map(({ stepId }) => stepId);
   if (
@@ -388,6 +397,12 @@ function confirmInputDigest(
   return computeRunSpecDigest({
     kind: "confirm",
     familyId,
+    evidenceQuestionId: input.family.evidenceQuestionId,
+    releaseGatePolicy: {
+      gatePolicyVersion: input.policy.gatePolicyVersion,
+      qualityFloor: input.policy.qualityFloor,
+      availabilityFloor: input.policy.availabilityFloor,
+    },
     swaps: input.swapSet.map((swap) => ({ ...swap })),
     cases: input.cases.map((recordedCase) => ({
       caseId: recordedCase.caseId,
@@ -495,6 +510,7 @@ function candidateId(policy: ModeBSwapPolicy): string {
 async function readFacts(store: Store, projectId: string): Promise<FactsIndex> {
   const executions: Execution[] = [];
   const assessments: Assessment[] = [];
+  const cascadeFindings: CascadeFinding[] = [];
   for (const key of await store.list(factsPrefix(projectId))) {
     const entry = await store.get(key);
     if (entry === null) throw new Error(`Listed fact is missing: ${key}`);
@@ -505,8 +521,10 @@ async function readFacts(store: Store, projectId: string): Promise<FactsIndex> {
     if (execution.success) executions.push(execution.data);
     const assessment = assessmentSchema.safeParse(fact);
     if (assessment.success) assessments.push(assessment.data);
+    const cascadeFinding = cascadeFindingSchema.safeParse(fact);
+    if (cascadeFinding.success) cascadeFindings.push(cascadeFinding.data);
   }
-  return { executions, assessments };
+  return { executions, assessments, cascadeFindings };
 }
 
 function expectedExecutions(
@@ -639,22 +657,31 @@ async function outcomeFromFacts(
   if (executions === "ambiguous") return "ambiguous";
   if (executions.size < input.cases.length) return "incomplete";
 
-  let failed = false;
   let ambiguous = false;
+  const observations: Array<{
+    trajectoryId: string;
+    passed: boolean;
+  }> = [];
   for (const recordedCase of input.cases) {
     const execution = executions.get(recordedCase.caseId)!;
     if (
       execution.attribution === "lost" ||
       execution.attribution === "ambiguous"
     ) {
-      ambiguous = true;
+      observations.push({
+        trajectoryId: execution.trajectoryId,
+        passed: false,
+      });
       continue;
     }
     if (
       execution.terminalOutcome !== "success" ||
       execution.attribution === "silent-failure"
     ) {
-      failed = true;
+      observations.push({
+        trajectoryId: execution.trajectoryId,
+        passed: false,
+      });
       continue;
     }
     const assessment = await assessExecution(
@@ -665,9 +692,16 @@ async function outcomeFromFacts(
       facts.assessments,
     );
     if (assessment === "ambiguous") ambiguous = true;
-    else if (!assessment.passed) failed = true;
+    else {
+      observations.push({
+        trajectoryId: execution.trajectoryId,
+        passed: assessment.passed,
+      });
+    }
   }
-  return failed ? "fail" : ambiguous ? "ambiguous" : "pass";
+  if (ambiguous) return "ambiguous";
+  const bound = evaluatorWorstCaseBound(observations, `${questionId}\0judge`);
+  return bound < input.policy.qualityFloor ? "fail" : "pass";
 }
 
 function finalizedMembers(
@@ -710,7 +744,7 @@ export async function confirmSwapSet(
   input: ConfirmSwapSetInput,
 ): Promise<ConfirmSwapSetResult> {
   validateInput(input);
-  const familyId = familyIdOf(input.family);
+  const familyId = input.family.familyId;
   const stepOrder = stepOrderOf(input.family, input.swapSet);
   const inputDigest = confirmInputDigest(familyId, input);
   const planKey = confirmPlanKey(input.budget.modeB.projectId, familyId);
@@ -844,6 +878,41 @@ export async function confirmSwapSet(
       members,
     };
   });
+
+  const uncertainStepIds = members.flatMap(({ stepId, cascadeStatus }) =>
+    cascadeStatus === "uncertain" ? [stepId] : [],
+  );
+  const cascadeId = deterministicFactId(
+    "cascade",
+    inputDigest,
+    verdict,
+    JSON.stringify(result.culprits),
+    cascadeSeed ?? "",
+    JSON.stringify(uncertainStepIds),
+    String(result.runSetsUsed),
+  );
+  const existingFinding = (
+    await readFacts(input.store, input.budget.modeB.projectId)
+  ).cascadeFindings.find((finding) => finding.cascadeId === cascadeId);
+  if (existingFinding === undefined) {
+    await writeReplayFact(
+      input.store,
+      input.budget.modeB.projectId,
+      cascadeId,
+      cascadeFindingSchema.parse({
+        cascadeId,
+        familyId,
+        evidenceQuestionId: input.family.evidenceQuestionId,
+        swapSetKey: inputDigest,
+        verdict,
+        culprits: result.culprits,
+        cascadeSeedStepId: cascadeSeed ?? null,
+        uncertainStepIds,
+        runSetsUsed: result.runSetsUsed,
+        createdAt: new Date().toISOString(),
+      }),
+    );
+  }
 
   return {
     familyId,

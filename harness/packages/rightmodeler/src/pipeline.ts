@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 import {
   assessmentSchema,
   callSiteInventoryKey,
   canonicalJson,
+  cascadeFindingSchema,
   completeRun,
   computeRunSpecDigest,
   createRun,
@@ -27,6 +29,7 @@ import {
   verdictKey,
   verdictsPrefix,
   type Assessment,
+  type CascadeFinding,
   type Fact,
   type JsonValue,
   type RunMeta,
@@ -45,12 +48,15 @@ import {
 } from "@rightmodeler/kernel";
 import {
   BudgetRefusalError,
+  confirmSwapSet,
   createBudget,
+  createDockerExecutor,
   createProvider,
   ProviderConfigurationError,
   replayModeA,
   shortlist,
   type ModelCatalogEntry,
+  type ModeBCase,
   type RecordedCase,
   type ReplayStep,
 } from "@rightmodeler/replay";
@@ -97,6 +103,7 @@ export const PIPELINE_STAGES = [
   "shortlist",
   "replay",
   "aggregate",
+  "confirm",
   "report",
 ] as const;
 
@@ -110,6 +117,7 @@ const SHORTLIST_TOP = 3;
 const AVAILABILITY_FLOOR = 0.7;
 const GATE_POLICY_VERSION = "phase-a-v2";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
+const CONFIRM_MAX_RUN_SETS = 20;
 const RELEASE_GATE_POLICY = new ReleaseGatePolicy({
   gatePolicyVersion: GATE_POLICY_VERSION,
   qualityFloor: 0.85,
@@ -118,6 +126,16 @@ const RELEASE_GATE_POLICY = new ReleaseGatePolicy({
 
 const scanOutputSchema = z.strictObject({
   records: z.array(stepRecordSchema),
+});
+const reconcileOutputSchema = z.strictObject({
+  records: z.array(stepRecordSchema),
+  matchedTraceSteps: z.number().int().nonnegative(),
+  ambiguousTraceSteps: z.number().int().nonnegative(),
+  unmatchedTraceSteps: z.number().int().nonnegative(),
+  matchedCallSites: z.number().int().nonnegative(),
+  ambiguousCallSites: z.number().int().nonnegative(),
+  unmatchedCallSites: z.number().int().nonnegative(),
+  ambiguityReasons: z.array(z.string()),
 });
 const ingestOutputSchema = z.strictObject({
   format: z.enum(["otel-genai", "openai-jsonl"]),
@@ -252,15 +270,34 @@ const familyOutcomeSchema = z.strictObject({
   decisionDisplay: z.enum([
     "recommend",
     "recommend (gated)",
+    "recommend (unconfirmed)",
     "reject",
     "abstain",
     "inconclusive",
   ]),
   effectiveRecommendation: z.boolean(),
+  confirmation: z
+    .strictObject({
+      status: z.enum([
+        "not_required",
+        "blocked",
+        "confirmed",
+        "isolated",
+        "inconclusive",
+      ]),
+      runSetsUsed: z.number().int().nonnegative(),
+      culprits: z.array(z.array(z.string().min(1))),
+      cascadeSeedStepId: z.string().min(1).nullable(),
+      blocker: z.string().min(1).optional(),
+    })
+    .optional(),
 });
 const aggregateOutputSchema = z.strictObject({
   allVerdicts: z.array(z.custom<FamilyVerdict>(isFamilyVerdict)),
   families: z.array(familyOutcomeSchema),
+});
+const confirmOutputSchema = aggregateOutputSchema.extend({
+  confirmedFamilies: z.number().int().nonnegative(),
 });
 const auditWorksheetSchema = z.strictObject({
   seed: z.number().int(),
@@ -287,6 +324,8 @@ interface PipelineContext {
   baseUrl?: string;
   apiKeyEnv: string;
   maxCostUsd?: number;
+  modeBConfig?: ModeBConfig;
+  modeBConfigPath?: string;
   reporter: Reporter;
 }
 
@@ -297,6 +336,7 @@ export interface PipelineOptions {
   baseUrl?: string;
   apiKeyEnv?: string;
   maxCostUsd?: number;
+  modeBConfigPath?: string;
   through?: PipelineStage;
   plan?: boolean;
   reporter: Reporter;
@@ -321,9 +361,31 @@ interface FamilyOutcome {
   verdict: FamilyVerdict;
   selection: WinnerSelection;
   gates: GateResult[];
-  decisionDisplay: FamilyVerdict["decision"] | "recommend (gated)";
+  decisionDisplay:
+    FamilyVerdict["decision"] | "recommend (gated)" | "recommend (unconfirmed)";
   effectiveRecommendation: boolean;
+  confirmation?: {
+    status:
+      "not_required" | "blocked" | "confirmed" | "isolated" | "inconclusive";
+    runSetsUsed: number;
+    culprits: string[][];
+    cascadeSeedStepId: string | null;
+    blocker?: string;
+  };
 }
+
+const modeBConfigSchema = z.strictObject({
+  version: z.literal("1"),
+  image: z.string().min(1),
+  appSpec: z.strictObject({
+    mountPath: z.string().min(1),
+    command: z.array(z.string().min(1)).min(1),
+    installCommand: z.array(z.string().min(1)).min(1).optional(),
+  }),
+  stepMap: z.record(z.string().min(1), z.string().min(1)),
+});
+
+export type ModeBConfig = z.infer<typeof modeBConfigSchema>;
 
 export async function planPipeline(
   options: PipelineOptions,
@@ -411,22 +473,22 @@ export async function runPipeline(
 
   const verdicts = await readCurrentVerdicts(context.store, context.projectId);
   const state = await readSetupState(context.store, context.projectId);
-  const aggregateOutput =
+  const decisionOutput =
     state.stages.aggregate === undefined
       ? undefined
-      : await loadAggregateOutput(context);
+      : await loadDecisionOutput(context);
   return {
     stages: await planPipeline(options),
     executedStages,
     verdicts,
-    ...(aggregateOutput === undefined
+    ...(decisionOutput === undefined
       ? {}
-      : { familyOutcomes: aggregateOutput.families }),
+      : { familyOutcomes: decisionOutput.families }),
     ...(state.stages.report === undefined
       ? {}
       : { reportPath: reportPath(context) }),
     recommendationExists:
-      aggregateOutput?.families.some(
+      decisionOutput?.families.some(
         ({ effectiveRecommendation }) => effectiveRecommendation,
       ) ?? false,
   };
@@ -435,6 +497,10 @@ export async function runPipeline(
 function createContext(options: PipelineOptions): PipelineContext {
   const repo = resolve(options.repo);
   const storeRoot = resolve(options.store ?? join(repo, ".rightmodeler"));
+  const modeBConfigPath =
+    options.modeBConfigPath === undefined
+      ? undefined
+      : resolve(options.modeBConfigPath);
   return {
     repo,
     storeRoot,
@@ -444,7 +510,58 @@ function createContext(options: PipelineOptions): PipelineContext {
     baseUrl: options.baseUrl,
     apiKeyEnv: options.apiKeyEnv ?? API_KEY_ENV_DEFAULT,
     maxCostUsd: options.maxCostUsd,
+    ...(modeBConfigPath === undefined
+      ? {}
+      : {
+          modeBConfigPath,
+          modeBConfig: readModeBConfig(modeBConfigPath),
+        }),
     reporter: options.reporter,
+  };
+}
+
+function readModeBConfig(path: string): ModeBConfig {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch (error) {
+    throw new Error(
+      `Invalid --modeb-config file: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const parsed = modeBConfigSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]!;
+    const field =
+      issue.path.length === 0 ? "modebConfig" : issue.path.join(".");
+    throw new Error(`Invalid --modeb-config field ${field}: ${issue.message}`);
+  }
+  if (
+    !parsed.data.appSpec.command.some((part) => part.includes("{caseFile}"))
+  ) {
+    throw new Error(
+      "Invalid --modeb-config field appSpec.command: one argument must contain {caseFile}",
+    );
+  }
+  if (Object.keys(parsed.data.stepMap).length === 0) {
+    throw new Error(
+      "Invalid --modeb-config field stepMap: at least one canonical step is required",
+    );
+  }
+  if (
+    new Set(Object.values(parsed.data.stepMap)).size !==
+    Object.keys(parsed.data.stepMap).length
+  ) {
+    throw new Error(
+      "Invalid --modeb-config field stepMap: runtime step headers must be unique",
+    );
+  }
+  return {
+    ...parsed.data,
+    appSpec: {
+      ...parsed.data.appSpec,
+      mountPath: resolve(dirname(path), parsed.data.appSpec.mountPath),
+    },
   };
 }
 
@@ -476,6 +593,9 @@ async function inputDigest(
   const upstream = state.stages[previous];
   if (upstream === undefined) return undefined;
   const extra: Record<string, JsonValue> = {};
+  if (stage === "reconcile" && context.modeBConfig !== undefined) {
+    extra.stepMap = context.modeBConfig.stepMap;
+  }
   if (stage === "corpus") extra.seed = CORPUS_SEED;
   if (stage === "audit-sample") extra.limit = AUDIT_SAMPLE_LIMIT;
   if (stage === "shortlist") extra.top = SHORTLIST_TOP;
@@ -491,6 +611,29 @@ async function inputDigest(
     extra.gatePolicyVersion = GATE_POLICY_VERSION;
     extra.qualityFloor = RELEASE_GATE_POLICY.qualityFloor;
     extra.availabilityFloor = RELEASE_GATE_POLICY.availabilityFloor;
+  }
+  if (stage === "confirm") {
+    const plan = await loadReplayPlan(context);
+    const reconciled = await loadReconcile(context);
+    const aggregateOutput = await loadAggregateOutput(context);
+    const needsConfirmation = aggregateOutput.families.some(
+      (family) =>
+        family.effectiveRecommendation &&
+        familyNeedsConfirmation(family.familyId, plan, reconciled.records),
+    );
+    extra.modeBConfig =
+      context.modeBConfig === undefined
+        ? "missing"
+        : digest(jsonValue(context.modeBConfig));
+    if (context.modeBConfig !== undefined && needsConfirmation) {
+      if (context.baseUrl === undefined)
+        return state.stages.confirm?.inputDigest;
+      extra.provider = digest({
+        baseUrl: context.baseUrl,
+        apiKeyEnv: context.apiKeyEnv,
+        maxCostUsd: context.maxCostUsd ?? null,
+      });
+    }
   }
   return digest({ stage, upstream: upstream.inputDigest, ...extra });
 }
@@ -516,6 +659,15 @@ async function requiredInputDigest(
       exitCode: 2,
       code: "missing_provider_configuration",
       message: "Provider configuration is required when replay is reached.",
+      remedy:
+        "Pass --base-url <url> and, if needed, --api-key-env <environment-variable-name>.",
+    });
+  }
+  if (stage === "confirm") {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "missing_provider_configuration",
+      message: "Provider configuration is required when confirm is reached.",
       remedy:
         "Pass --base-url <url> and, if needed, --api-key-env <environment-variable-name>.",
     });
@@ -548,6 +700,8 @@ async function executeStage(
       return executeReplay(context, inputDigestValue, runId);
     case "aggregate":
       return executeAggregate(context, inputDigestValue);
+    case "confirm":
+      return executeConfirm(context, inputDigestValue, runId);
     case "report":
       return executeReport(context, inputDigestValue);
   }
@@ -644,12 +798,53 @@ async function executeReconcile(
 ): Promise<string> {
   const scanOutput = await loadScan(context);
   const ingestOutput = await loadIngest(context);
-  const result = reconcile(
-    ingestOutput.runs.flatMap((run) => run.steps),
-    scanOutput.records,
+  const maxTrajectoryLength = Math.max(
+    ...ingestOutput.runs.map(({ steps }) => steps.length),
   );
+  const records = (() => {
+    if (context.modeBConfig !== undefined) {
+      const byId = new Map(
+        scanOutput.records.map((record) => [record.stepId, record]),
+      );
+      return Object.keys(context.modeBConfig.stepMap).map((stepId) => {
+        const record = byId.get(stepId);
+        if (record === undefined) {
+          throw new Error(
+            `Invalid --modeb-config field stepMap.${stepId}: canonical step was not found by scan`,
+          );
+        }
+        return record;
+      });
+    }
+    if (
+      scanOutput.records.length > maxTrajectoryLength &&
+      scanOutput.records.every(({ currentModel }) => currentModel === null)
+    ) {
+      return scanOutput.records.slice(0, maxTrajectoryLength);
+    }
+    return scanOutput.records;
+  })();
+  const normalizedSteps = records.every(
+    ({ currentModel }) => currentModel === null,
+  )
+    ? ingestOutput.runs
+        .filter(({ steps }) => steps.length === records.length)
+        .flatMap(({ steps }) => steps)
+    : ingestOutput.runs.flatMap(({ steps }) => steps);
+  const result = reconcile(normalizedSteps, records);
+  const reconciledRecords = result.callSites.map(
+    ({ stepRecord }) => stepRecord,
+  );
+  for (const record of reconciledRecords) {
+    await putMutableJson(
+      context.store,
+      stepKey(context.projectId, record.stepId),
+      jsonValue(record),
+    );
+  }
   const key = artifactKey(context, "reconcile", inputDigestValue);
   await putImmutableJson(context.store, key, {
+    records: reconciledRecords,
     matchedTraceSteps: result.traceSteps.filter(
       ({ status }) => status === "matched",
     ).length,
@@ -713,7 +908,7 @@ async function executeShortlist(
   context: PipelineContext,
   inputDigestValue: string,
 ): Promise<string> {
-  const records = (await loadScan(context)).records;
+  const records = (await loadReconcile(context)).records;
   const runs = (await loadScrub(context)).runs;
   const corpus = buildCorpus(runs, { seed: CORPUS_SEED });
   const replayableSteps = records.filter(
@@ -845,8 +1040,35 @@ async function executeReplay(
       corpusSplit: split,
       selectionStage: split,
     }));
-  const candidates = shortlist(replaySteps("shortlist"), catalog, {
+  const shortlisted = shortlist(replaySteps("shortlist"), catalog, {
     top: plan.top,
+  });
+  const candidates = shortlisted.map((assignment) => {
+    const family = plan.steps.find(
+      ({ stepId }) => stepId === assignment.stepId,
+    )?.family;
+    if (family === undefined) return assignment;
+    const familyStepIds = new Set(
+      plan.steps
+        .filter((step) => step.family === family)
+        .map(({ stepId }) => stepId),
+    );
+    const familyAssignments = shortlisted.filter(({ stepId }) =>
+      familyStepIds.has(stepId),
+    );
+    const commonIds = new Set(
+      assignment.candidates
+        .map(({ id }) => id)
+        .filter((id) =>
+          familyAssignments.every((candidate) =>
+            candidate.candidates.some((model) => model.id === id),
+          ),
+        ),
+    );
+    return {
+      ...assignment,
+      candidates: assignment.candidates.filter(({ id }) => commonIds.has(id)),
+    };
   });
   const budget = createBudget({
     store: context.store,
@@ -999,10 +1221,23 @@ async function executeAggregate(
 ): Promise<string> {
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
+  const facts = await readFacts(context.store, context.projectId);
   const allVerdicts = aggregate(
     await materializeAggregationFacts(context, plan, replay.candidates),
     aggregateOptions(),
+    cascadeFindings(facts),
   );
+  const families = buildFamilyOutcomes(plan, allVerdicts);
+  await writeFamilyVerdicts(context, families);
+  const key = artifactKey(context, "aggregate", inputDigestValue);
+  await putImmutableJson(context.store, key, { allVerdicts, families });
+  return key;
+}
+
+function buildFamilyOutcomes(
+  plan: z.infer<typeof replayPlanSchema>,
+  allVerdicts: readonly FamilyVerdict[],
+): FamilyOutcome[] {
   const families: FamilyOutcome[] = [];
   for (const familyId of Object.keys(plan.sampleSizes).sort(compareText)) {
     const familyVerdicts = allVerdicts.filter(
@@ -1029,15 +1264,378 @@ async function executeAggregate(
       effectiveRecommendation,
     };
     families.push(outcome);
+  }
+  return families;
+}
+
+async function writeFamilyVerdicts(
+  context: PipelineContext,
+  families: readonly FamilyOutcome[],
+): Promise<void> {
+  for (const { familyId, verdict } of families) {
     await putMutableJson(
       context.store,
       verdictKey(context.projectId, familyId),
       jsonValue(verdict),
     );
   }
-  const key = artifactKey(context, "aggregate", inputDigestValue);
-  await putImmutableJson(context.store, key, { allVerdicts, families });
+}
+
+async function executeConfirm(
+  context: PipelineContext,
+  inputDigestValue: string,
+  runId: string,
+): Promise<string> {
+  const plan = await loadReplayPlan(context);
+  const replay = await loadReplayOutput(context);
+  const reconciled = await loadReconcile(context);
+  const initial = await loadAggregateOutput(context);
+  const needsConfirmation = new Set(
+    initial.families
+      .filter(
+        (family) =>
+          family.effectiveRecommendation &&
+          familyNeedsConfirmation(family.familyId, plan, reconciled.records),
+      )
+      .map(({ familyId }) => familyId),
+  );
+  const confirmations = new Map<
+    string,
+    NonNullable<FamilyOutcome["confirmation"]>
+  >();
+  let confirmedFamilies = 0;
+
+  if (needsConfirmation.size > 0 && context.modeBConfig === undefined) {
+    for (const familyId of needsConfirmation) {
+      confirmations.set(familyId, {
+        status: "blocked",
+        runSetsUsed: 0,
+        culprits: [],
+        cascadeSeedStepId: null,
+        blocker: "Missing --modeb-config for cascade confirmation.",
+      });
+    }
+  } else if (needsConfirmation.size > 0) {
+    if (context.baseUrl === undefined) {
+      throw new Error("Provider base URL is unavailable for confirmation");
+    }
+    const config = context.modeBConfig!;
+    const provider = createProvider({
+      providerId: "configured-provider",
+      baseUrl: context.baseUrl,
+      apiKeyEnv: context.apiKeyEnv,
+    });
+    const catalog = await provider.listModels();
+    const configuredRecords = configuredStepRecords(config, reconciled.records);
+    const orderedRecords = topologicalRecords(configuredRecords);
+    const runtimeByCanonical = config.stepMap;
+    const runtimeRecords = orderedRecords.map((record) => ({
+      stepId: runtimeByCanonical[record.stepId]!,
+      evidenceQuestionId: "pending-confirmation-question",
+      currentModel: record.currentModel,
+      needsTools: record.capabilityRequirements.includes("tools"),
+      needsStructuredOutput:
+        record.capabilityRequirements.includes("structured_output"),
+      observedContextTokens: 0,
+      corpusSplit: "holdout" as const,
+      selectionStage: "confirm",
+    }));
+    const targetStepId = runtimeRecords.at(-1)!.stepId;
+    const scrubbedRuns = (await loadScrub(context)).runs;
+    const judgeCatalog = catalog.map((model) => ({
+      id: model.id,
+      family: model.family,
+      context_length: model.contextLength,
+      pricing:
+        model.pricing === null
+          ? null
+          : {
+              prompt: model.pricing.input,
+              completion: model.pricing.output,
+            },
+      supported_parameters: model.supportsStructuredOutput
+        ? ["structured_outputs"]
+        : [],
+    }));
+    const budget = createBudget({
+      store: context.store,
+      projectId: context.projectId,
+      runId,
+      authorizedTotalUsd: context.maxCostUsd,
+    });
+
+    for (const familyId of [...needsConfirmation].sort(compareText)) {
+      const family = initial.families.find(
+        (candidate) => candidate.familyId === familyId,
+      )!;
+      if (family.selection.status !== "selected") {
+        throw new Error(`Family ${familyId} has no selected candidate`);
+      }
+      const selectedCandidateId = family.selection.selectedCandidateId;
+      if (selectedCandidateId === undefined) {
+        throw new Error(`Family ${familyId} selection has no candidate id`);
+      }
+      const selectedCatalogEntry = catalog.find(
+        ({ id }) => id === selectedCandidateId,
+      );
+      if (selectedCatalogEntry === undefined) {
+        throw new Error(
+          `Selected candidate is absent from the catalog: ${selectedCandidateId}`,
+        );
+      }
+      const referenceFamily = modelFamily(configuredRecords[0]!.currentModel);
+      const judgeModel = pickJudge(judgeCatalog, {
+        candidateFamily: selectedCatalogEntry.family,
+        referenceFamily,
+      });
+      const cases = confirmationCases(scrubbedRuns, targetStepId, familyId);
+      const canonicalSwapStepIds = plan.steps
+        .filter((step) => step.family === familyId)
+        .map(({ stepId }) => stepId);
+      const swapSet = canonicalSwapStepIds.map((stepId) => {
+        const record = configuredRecords.find(
+          (candidate) => candidate.stepId === stepId,
+        );
+        if (record?.currentModel === null || record === undefined) {
+          throw new Error(
+            `Configured confirmation step has no current model: ${stepId}`,
+          );
+        }
+        return {
+          stepId: runtimeByCanonical[stepId]!,
+          currentModel: record.currentModel,
+          candidateModel: selectedCandidateId,
+        };
+      });
+      const result = await confirmSwapSet({
+        family: {
+          familyId,
+          evidenceQuestionId: family.verdict.evidenceQuestionId,
+          stepOrder: orderedRecords
+            .filter(({ stepId }) => canonicalSwapStepIds.includes(stepId))
+            .map(({ stepId }) => runtimeByCanonical[stepId]!),
+        },
+        swapSet,
+        cases,
+        modeB: {
+          input: {
+            executor: createDockerExecutor({
+              maxBytesPerNamespace: 16 * 1024 * 1024,
+            }),
+            egress: {
+              providerId: provider.providerId,
+              providerBaseUrl: modeBProviderBaseUrl(context.baseUrl),
+              apiKeyEnv: context.apiKeyEnv,
+              catalog,
+            },
+            image: config.image,
+            appSpec: {
+              mountPath: config.appSpec.mountPath,
+              command: (caseFile) =>
+                config.appSpec.command.map((part) =>
+                  part.replaceAll("{caseFile}", caseFile),
+                ),
+              ...(config.appSpec.installCommand === undefined
+                ? {}
+                : { installCommand: config.appSpec.installCommand }),
+            },
+            concurrency: 4,
+          },
+          stepRecords: runtimeRecords.map((record) => ({
+            ...record,
+            evidenceQuestionId: family.verdict.evidenceQuestionId,
+          })),
+          judge: {
+            judgeModel,
+            providerId: provider.providerId,
+            chat: async (request) =>
+              (
+                await provider.chat({
+                  model: request.model,
+                  messages: request.messages.map((message) => ({ ...message })),
+                  temperature: request.temperature,
+                  maxOutputTokens: 256,
+                  responseFormat: jsonValue(request.responseFormat),
+                })
+              ).content,
+          },
+        },
+        store: context.store,
+        budget: { modeB: budget, maxRunSets: CONFIRM_MAX_RUN_SETS },
+        policy: RELEASE_GATE_POLICY,
+      });
+      confirmedFamilies += 1;
+      confirmations.set(familyId, {
+        status: result.verdict,
+        runSetsUsed: result.runSetsUsed,
+        culprits: result.culprits.map((culprit) => [...culprit]),
+        cascadeSeedStepId: result.cascadeSeed ?? null,
+      });
+    }
+  }
+
+  const facts = await readFacts(context.store, context.projectId);
+  const allVerdicts = aggregate(
+    await materializeAggregationFacts(context, plan, replay.candidates),
+    aggregateOptions(),
+    cascadeFindings(facts),
+  );
+  const families = buildFamilyOutcomes(plan, allVerdicts).map((family) => {
+    const confirmation = confirmations.get(family.familyId);
+    if (confirmation !== undefined) {
+      const effectiveRecommendation =
+        family.effectiveRecommendation && confirmation.status === "confirmed";
+      return {
+        ...family,
+        confirmation,
+        effectiveRecommendation,
+        decisionDisplay:
+          confirmation.status === "blocked"
+            ? ("recommend (unconfirmed)" as const)
+            : family.verdict.decision === "recommend" &&
+                !effectiveRecommendation
+              ? ("recommend (gated)" as const)
+              : family.decisionDisplay,
+      };
+    }
+    return {
+      ...family,
+      confirmation: {
+        status: "not_required" as const,
+        runSetsUsed: 0,
+        culprits: [],
+        cascadeSeedStepId: null,
+      },
+    };
+  });
+  await writeFamilyVerdicts(context, families);
+  const key = artifactKey(context, "confirm", inputDigestValue);
+  await putImmutableJson(context.store, key, {
+    allVerdicts,
+    families,
+    confirmedFamilies,
+  });
   return key;
+}
+
+function familyNeedsConfirmation(
+  familyId: string,
+  plan: z.infer<typeof replayPlanSchema>,
+  records: readonly z.infer<typeof stepRecordSchema>[],
+): boolean {
+  const ids = new Set(
+    plan.steps
+      .filter((step) => step.family === familyId)
+      .map(({ stepId }) => stepId),
+  );
+  return records.some(
+    (record) =>
+      ids.has(record.stepId) &&
+      !(
+        record.downstreamStepIds.length === 0 &&
+        record.prefixProvenance === "external"
+      ),
+  );
+}
+
+function configuredStepRecords(
+  config: ModeBConfig,
+  records: readonly z.infer<typeof stepRecordSchema>[],
+) {
+  const byId = new Map(records.map((record) => [record.stepId, record]));
+  return Object.keys(config.stepMap).map((stepId) => {
+    const record = byId.get(stepId);
+    if (record === undefined) {
+      throw new Error(
+        `Configured step is missing after reconciliation: ${stepId}`,
+      );
+    }
+    return record;
+  });
+}
+
+function topologicalRecords(
+  records: readonly z.infer<typeof stepRecordSchema>[],
+) {
+  return [...records].sort((left, right) => {
+    if (left.downstreamStepIds.includes(right.stepId)) return -1;
+    if (right.downstreamStepIds.includes(left.stepId)) return 1;
+    return (
+      compareText(left.callSite.path, right.callSite.path) ||
+      left.callSite.line - right.callSite.line
+    );
+  });
+}
+
+function confirmationCases(
+  runs: z.infer<typeof normalizedRunSchema>[],
+  targetStepId: string,
+  familyId: string,
+): ModeBCase[] {
+  return runs
+    .filter((run) => run.steps.some(({ family }) => family === familyId))
+    .map((run) => {
+      const first = run.steps[0];
+      const last = run.steps.at(-1);
+      if (first === undefined || last === undefined) {
+        throw new Error(`Trajectory ${run.traceId} has no confirmation steps`);
+      }
+      const input = firstJsonText(first.messages);
+      const referenceOutput = firstJsonText(last.output);
+      return {
+        caseId: `confirm-${run.traceId}`,
+        stepId: targetStepId,
+        trajectoryId: run.traceId,
+        corpusSplit: "holdout",
+        task: "Reproduce the accepted final response for this recorded trajectory.",
+        ...(first.systemPrompt === undefined
+          ? {}
+          : { system: first.systemPrompt }),
+        messages: chatMessages(first.messages),
+        contextTokens: Math.max(
+          ...run.steps.map(({ usage }) => usage.inputTokens),
+        ),
+        maxOutputTokens: 256,
+        referenceOutput,
+        input,
+      };
+    });
+}
+
+function firstJsonText(value: JsonValue): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const text = firstJsonTextOrUndefined(item);
+      if (text !== undefined) return text;
+    }
+  } else if (value !== null && typeof value === "object") {
+    const text = firstJsonTextOrUndefined(value);
+    if (text !== undefined) return text;
+  }
+  throw new Error("Recorded confirmation data contains no text content");
+}
+
+function firstJsonTextOrUndefined(value: JsonValue): string | undefined {
+  if (typeof value === "string") return value;
+  if (value === null || typeof value !== "object") return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .map(firstJsonTextOrUndefined)
+      .find((item) => item !== undefined);
+  }
+  if (typeof value.content === "string") return value.content;
+  if (typeof value.text === "string") return value.text;
+  return [value.parts, value.messages, value.output]
+    .map(firstJsonTextOrUndefined)
+    .find((item) => item !== undefined);
+}
+
+function cascadeFindings(facts: readonly Fact[]): CascadeFinding[] {
+  return facts.flatMap((fact) => {
+    const parsed = cascadeFindingSchema.safeParse(fact);
+    return parsed.success ? [parsed.data] : [];
+  });
 }
 
 async function materializeAggregationFacts(
@@ -1199,6 +1797,14 @@ function modelFamily(modelId: string | null): string {
   return modelId.split("/", 1)[0] ?? "unknown";
 }
 
+function modeBProviderBaseUrl(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  if (url.pathname.replace(/\/$/, "").endsWith("/v1")) {
+    url.pathname = url.pathname.replace(/\/?v1\/?$/, "/");
+  }
+  return url.href.replace(/\/$/, "");
+}
+
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
@@ -1240,6 +1846,10 @@ async function loadIngest(context: PipelineContext) {
   return loadCurrent(context, "ingest", ingestOutputSchema);
 }
 
+async function loadReconcile(context: PipelineContext) {
+  return loadCurrent(context, "reconcile", reconcileOutputSchema);
+}
+
 async function loadScrub(context: PipelineContext) {
   return loadCurrent(context, "scrub", scrubOutputSchema);
 }
@@ -1258,6 +1868,17 @@ async function loadReplayOutput(context: PipelineContext) {
 
 async function loadAggregateOutput(context: PipelineContext) {
   return loadCurrent(context, "aggregate", aggregateOutputSchema);
+}
+
+async function loadConfirmOutput(context: PipelineContext) {
+  return loadCurrent(context, "confirm", confirmOutputSchema);
+}
+
+async function loadDecisionOutput(context: PipelineContext) {
+  const state = await readSetupState(context.store, context.projectId);
+  return state.stages.confirm === undefined
+    ? loadAggregateOutput(context)
+    : loadConfirmOutput(context);
 }
 
 async function loadCurrent<T>(
@@ -1490,8 +2111,8 @@ interface ReportData {
 }
 
 async function buildReport(context: PipelineContext): Promise<ReportData> {
-  const aggregateOutput = await loadAggregateOutput(context);
-  const verdicts = aggregateOutput.families.map(({ verdict }) => verdict);
+  const decisionOutput = await loadDecisionOutput(context);
+  const verdicts = decisionOutput.families.map(({ verdict }) => verdict);
   const facts = await readFacts(context.store, context.projectId);
   const assessments = facts.flatMap((fact) => {
     const parsed = assessmentSchema.safeParse(fact);
@@ -1522,7 +2143,7 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
   );
   return {
     verdicts,
-    families: aggregateOutput.families,
+    families: decisionOutput.families,
     judgeDisagreement: {
       disagreements: consistency.filter((value) => !value).length,
       assessments: consistency.length,
@@ -1606,6 +2227,15 @@ function renderReport(report: ReportData): string {
           ? `${formatRate(selection.selectionAdjustedEstimate.lower)} to ${formatRate(selection.selectionAdjustedEstimate.upper)} (${selection.selectionAdjustedEstimate.method}, ${selection.selectionAdjustedEstimate.comparisons} comparisons)`
           : "";
       return `| ${family.familyId} | ${selection.status} | ${selection.shortlistedCandidateIds.join(", ")} | ${confirmed} | ${estimate} |`;
+    }),
+    "",
+    "## Confirm",
+    "",
+    "| Family | Status | Run sets used | Cascade seed | Culprits | Blocker |",
+    "| --- | --- | --- | --- | --- | --- |",
+    ...report.families.map((family) => {
+      const confirmation = family.confirmation;
+      return `| ${family.familyId} | ${confirmation?.status ?? "not run"} | ${confirmation?.runSetsUsed ?? 0} | ${confirmation?.cascadeSeedStepId ?? ""} | ${confirmation?.culprits.map((culprit) => culprit.join(" + ")).join("; ") ?? ""} | ${confirmation?.blocker ?? ""} |`;
     }),
     "",
     "## Judge disagreement",
@@ -1743,14 +2373,18 @@ export async function readReport(options: {
   }
   await executeReport(
     context,
-    digest({ stage: "report", upstream: aggregateCheckpoint.inputDigest }),
+    digest({
+      stage: "report",
+      upstream:
+        state.stages.confirm?.inputDigest ?? aggregateCheckpoint.inputDigest,
+    }),
   );
   const report = await buildReport(context);
-  const aggregateOutput = await loadAggregateOutput(context);
+  const decisionOutput = await loadDecisionOutput(context);
   return {
     report,
     reportPath: reportPath(context),
-    recommends: aggregateOutput.families.some(
+    recommends: decisionOutput.families.some(
       ({ effectiveRecommendation }) => effectiveRecommendation,
     ),
   };
@@ -1777,6 +2411,7 @@ export async function readStatus(options: {
     RequestAttempt: 0,
     Assessment: 0,
     SpendEvent: 0,
+    CascadeFinding: 0,
   };
   for (const fact of await readFacts(context.store, context.projectId)) {
     if (executionSchema.safeParse(fact).success) factCounts.Execution += 1;
@@ -1786,6 +2421,8 @@ export async function readStatus(options: {
       factCounts.Assessment += 1;
     else if (spendEventSchema.safeParse(fact).success)
       factCounts.SpendEvent += 1;
+    else if (cascadeFindingSchema.safeParse(fact).success)
+      factCounts.CascadeFinding += 1;
   }
   const corpus = await maybeLoadCorpus(context);
   const runs: RunMeta[] = [];

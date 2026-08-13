@@ -38,6 +38,128 @@ export interface ReconciliationResult<T extends NormalizedStepInput> {
   readonly ambiguousCallSites: readonly ReconciledCallSite[];
 }
 
+function canJoinByTrajectoryPosition<T extends NormalizedStepInput>(
+  normalizedSteps: readonly T[],
+  stepRecords: readonly StepRecord[],
+): boolean {
+  if (
+    stepRecords.length === 0 ||
+    !stepRecords.every(({ currentModel }) => currentModel === null)
+  ) {
+    return false;
+  }
+
+  const indexesByTrajectory = new Map<string, number[]>();
+  for (const step of normalizedSteps) {
+    if (
+      step.trajectoryId === undefined ||
+      step.stepIndex === undefined ||
+      !Number.isInteger(step.stepIndex) ||
+      step.stepIndex < 0
+    ) {
+      return false;
+    }
+    const indexes = indexesByTrajectory.get(step.trajectoryId) ?? [];
+    indexes.push(step.stepIndex);
+    indexesByTrajectory.set(step.trajectoryId, indexes);
+  }
+
+  return (
+    indexesByTrajectory.size > 0 &&
+    [...indexesByTrajectory.values()].every(
+      (indexes) =>
+        indexes.length === stepRecords.length &&
+        [...indexes]
+          .sort((left, right) => left - right)
+          .every((stepIndex, expectedIndex) => stepIndex === expectedIndex),
+    )
+  );
+}
+
+function enrichCallSites<T extends NormalizedStepInput>(
+  traceSteps: readonly ReconciledTraceStep<T>[],
+  stepRecords: readonly StepRecord[],
+): Map<string, StepRecord> {
+  const modelsByStep = new Map<string, Set<string>>();
+  const downstreamByStep = new Map<string, Set<string>>();
+  const firstInEveryTrajectory = new Map<string, boolean>();
+  const stepsByTrajectory = new Map<string, ReconciledTraceStep<T>[]>();
+
+  for (const traceStep of traceSteps) {
+    if (traceStep.status !== "matched" || traceStep.stepId === undefined) {
+      continue;
+    }
+    const models = modelsByStep.get(traceStep.stepId) ?? new Set<string>();
+    models.add(traceStep.normalizedStep.model);
+    modelsByStep.set(traceStep.stepId, models);
+
+    if (
+      traceStep.normalizedStep.trajectoryId !== undefined &&
+      traceStep.normalizedStep.stepIndex !== undefined
+    ) {
+      const trajectory =
+        stepsByTrajectory.get(traceStep.normalizedStep.trajectoryId) ?? [];
+      trajectory.push(traceStep);
+      stepsByTrajectory.set(traceStep.normalizedStep.trajectoryId, trajectory);
+    }
+  }
+
+  for (const trajectory of stepsByTrajectory.values()) {
+    trajectory.sort(
+      (left, right) =>
+        left.normalizedStep.stepIndex! - right.normalizedStep.stepIndex! ||
+        left.traceIndex - right.traceIndex,
+    );
+    for (const [index, traceStep] of trajectory.entries()) {
+      const stepId = traceStep.stepId!;
+      firstInEveryTrajectory.set(
+        stepId,
+        (firstInEveryTrajectory.get(stepId) ?? true) &&
+          traceStep.normalizedStep.stepIndex === 0,
+      );
+      const downstream = downstreamByStep.get(stepId) ?? new Set<string>();
+      for (const later of trajectory.slice(index + 1)) {
+        if (
+          later.stepId !== undefined &&
+          later.stepId !== stepId &&
+          later.normalizedStep.stepIndex! > traceStep.normalizedStep.stepIndex!
+        ) {
+          downstream.add(later.stepId);
+        }
+      }
+      downstreamByStep.set(stepId, downstream);
+    }
+  }
+
+  return new Map(
+    stepRecords.map((record) => {
+      const models = modelsByStep.get(record.stepId);
+      const downstream = downstreamByStep.get(record.stepId);
+      const alwaysFirst = firstInEveryTrajectory.get(record.stepId);
+      return [
+        record.stepId,
+        {
+          ...record,
+          currentModel:
+            record.currentModel === null && models?.size === 1
+              ? [...models][0]!
+              : record.currentModel,
+          downstreamStepIds:
+            downstream === undefined
+              ? record.downstreamStepIds
+              : [...downstream],
+          prefixProvenance:
+            alwaysFirst === undefined
+              ? record.prefixProvenance
+              : alwaysFirst
+                ? "external"
+                : "model_authored",
+        },
+      ];
+    }),
+  );
+}
+
 export function reconcile<T extends NormalizedStepInput>(
   normalizedSteps: readonly T[],
   stepRecords: readonly StepRecord[],
@@ -57,7 +179,20 @@ export function reconcile<T extends NormalizedStepInput>(
     tracesByModel.set(step.model, indexes);
   }
 
+  const joinByTrajectoryPosition = canJoinByTrajectoryPosition(
+    normalizedSteps,
+    stepRecords,
+  );
+
   const traceSteps = normalizedSteps.map((normalizedStep, traceIndex) => {
+    if (joinByTrajectoryPosition) {
+      return {
+        normalizedStep,
+        traceIndex,
+        status: "matched" as const,
+        stepId: stepRecords[normalizedStep.stepIndex!]!.stepId,
+      };
+    }
     const candidates = sitesByModel.get(normalizedStep.model) ?? [];
     if (candidates.length === 1) {
       return {
@@ -79,15 +214,27 @@ export function reconcile<T extends NormalizedStepInput>(
     return { normalizedStep, traceIndex, status: "unmatched" as const };
   });
 
-  const callSites = stepRecords.map((stepRecord) => {
+  const enrichedByStepId = enrichCallSites(traceSteps, stepRecords);
+  const callSites = stepRecords.map((original) => {
+    const stepRecord = enrichedByStepId.get(original.stepId)!;
+    if (joinByTrajectoryPosition) {
+      return {
+        stepRecord,
+        status: "matched" as const,
+        traceIndexes: traceSteps.flatMap((traceStep) =>
+          traceStep.stepId === original.stepId ? [traceStep.traceIndex] : [],
+        ),
+      };
+    }
+
     const traceIndexes =
-      stepRecord.currentModel === null
+      original.currentModel === null
         ? []
-        : (tracesByModel.get(stepRecord.currentModel) ?? []);
+        : (tracesByModel.get(original.currentModel) ?? []);
     const modelSites =
-      stepRecord.currentModel === null
+      original.currentModel === null
         ? []
-        : (sitesByModel.get(stepRecord.currentModel) ?? []);
+        : (sitesByModel.get(original.currentModel) ?? []);
     if (traceIndexes.length > 0 && modelSites.length > 1) {
       return {
         stepRecord,

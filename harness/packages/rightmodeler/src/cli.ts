@@ -33,6 +33,7 @@ interface PipelineCommandOptions {
   baseUrl?: string;
   apiKeyEnv?: string;
   maxCostUsd?: string;
+  modebConfig?: string;
   through?: PipelineStage;
   plan?: boolean;
   yes?: boolean;
@@ -113,7 +114,7 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     if (stage === "audit-sample") continue;
     const command = addPipelineOptions(
       program.command(stage).description(`run through the ${stage} stage`),
-      stage === "replay",
+      stage === "replay" || stage === "confirm",
     );
     run(command, async (reporter, global) => {
       const result = await runPipeline({
@@ -186,7 +187,12 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
 }
 
 function addPipelineOptions(command: Command, provider: boolean): Command {
-  command.option("--traces <path>", "trace input file");
+  command
+    .option("--traces <path>", "trace input file")
+    .option(
+      "--modeb-config <path>",
+      "versioned Mode B runtime configuration JSON file",
+    );
   if (provider) {
     command
       .option("--base-url <url>", "OpenAI-compatible provider base URL")
@@ -229,6 +235,7 @@ function pipelineOptions(
     baseUrl: local.baseUrl,
     apiKeyEnv: local.apiKeyEnv,
     maxCostUsd,
+    modeBConfigPath: local.modebConfig,
     through: local.through,
     plan: local.plan,
     reporter,

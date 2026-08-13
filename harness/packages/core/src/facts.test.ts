@@ -4,7 +4,10 @@ import { z } from "zod";
 import {
   assessmentSchema,
   attributionSchema,
+  cascadeFindingSchema,
+  cascadeFindingVerdictSchema,
   executionSchema,
+  factSchema,
   requestAttemptSchema,
   spendEventSchema,
   streamOutcomeSchema,
@@ -57,6 +60,19 @@ const spendEvent = {
   reconcilableTo: { executionId: "execution-1" },
 };
 
+const cascadeFinding = {
+  cascadeId: "cascade-1",
+  familyId: "family-1",
+  evidenceQuestionId: "question-1",
+  swapSetKey: "classify+lookup",
+  verdict: "isolated",
+  culprits: [["classify", "lookup"]],
+  cascadeSeedStepId: "classify",
+  uncertainStepIds: ["lookup"],
+  runSetsUsed: 4,
+  createdAt: "2026-08-13T12:00:00.000Z",
+};
+
 const fixtures: ReadonlyArray<{
   name: string;
   schema: z.ZodType;
@@ -70,6 +86,11 @@ const fixtures: ReadonlyArray<{
   },
   { name: "Assessment", schema: assessmentSchema, value: assessment },
   { name: "SpendEvent", schema: spendEventSchema, value: spendEvent },
+  {
+    name: "CascadeFinding",
+    schema: cascadeFindingSchema,
+    value: cascadeFinding,
+  },
 ];
 
 describe("fact schemas", () => {
@@ -78,6 +99,7 @@ describe("fact schemas", () => {
     ({ schema, value }) => {
       const roundTripped = JSON.parse(JSON.stringify(value));
       expect(schema.parse(roundTripped)).toEqual(value);
+      expect(factSchema.parse(roundTripped)).toEqual(value);
     },
   );
 
@@ -125,6 +147,11 @@ describe("fact schemas", () => {
       "lost",
       "silent-failure",
     ]);
+    expect(cascadeFindingVerdictSchema.options).toEqual([
+      "confirmed",
+      "isolated",
+      "inconclusive",
+    ]);
   });
 
   it("rejects negative costs", () => {
@@ -134,6 +161,23 @@ describe("fact schemas", () => {
     ).toBe(false);
     expect(
       spendEventSchema.safeParse({ ...spendEvent, costUsd: -0.01 }).success,
+    ).toBe(false);
+  });
+
+  it("rejects invalid cascade counts and timestamps", () => {
+    expect(
+      cascadeFindingSchema.safeParse({ ...cascadeFinding, runSetsUsed: -1 })
+        .success,
+    ).toBe(false);
+    expect(
+      cascadeFindingSchema.safeParse({ ...cascadeFinding, runSetsUsed: 1.5 })
+        .success,
+    ).toBe(false);
+    expect(
+      cascadeFindingSchema.safeParse({
+        ...cascadeFinding,
+        createdAt: "not-a-timestamp",
+      }).success,
     ).toBe(false);
   });
 });

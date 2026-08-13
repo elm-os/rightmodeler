@@ -79,10 +79,34 @@ export const spendEventSchema = z
   .readonly();
 export type SpendEvent = z.infer<typeof spendEventSchema>;
 
+export const cascadeFindingVerdictSchema = z.enum([
+  "confirmed",
+  "isolated",
+  "inconclusive",
+]);
+export type CascadeFindingVerdict = z.infer<typeof cascadeFindingVerdictSchema>;
+
+export const cascadeFindingSchema = z
+  .strictObject({
+    cascadeId: requiredStringSchema,
+    familyId: requiredStringSchema,
+    evidenceQuestionId: requiredStringSchema,
+    swapSetKey: requiredStringSchema,
+    verdict: cascadeFindingVerdictSchema,
+    culprits: z.array(z.array(requiredStringSchema)),
+    cascadeSeedStepId: requiredStringSchema.nullable(),
+    uncertainStepIds: z.array(requiredStringSchema),
+    runSetsUsed: z.number().int().nonnegative(),
+    createdAt: z.string().datetime(),
+  })
+  .readonly();
+export type CascadeFinding = z.infer<typeof cascadeFindingSchema>;
+
 export const factSchema = z.union([
   executionSchema,
   requestAttemptSchema,
   assessmentSchema,
   spendEventSchema,
+  cascadeFindingSchema,
 ]);
 export type Fact = z.infer<typeof factSchema>;

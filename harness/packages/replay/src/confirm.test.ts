@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import {
+  cascadeFindingSchema,
   computeRunSpecDigest,
   confirmPlanKey,
   executionSchema,
@@ -17,6 +18,7 @@ import {
   createDockerExecutor,
   type DockerExecutor,
 } from "@rightmodeler/executor";
+import { ReleaseGatePolicy } from "@rightmodeler/kernel";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { createBudget } from "./budget.js";
@@ -53,6 +55,12 @@ const currentModels: Readonly<Record<string, string>> = {
   lookup: "acme/max-1",
   answer: "acme/large-1",
 };
+const releaseGatePolicy = new ReleaseGatePolicy({
+  gatePolicyVersion: "gate-1",
+  qualityFloor: 0.81,
+  availabilityFloor: 0.8,
+});
+const confirmationCaseCount = 17;
 
 const catalog: ModelCatalogEntry[] = [
   {
@@ -308,6 +316,7 @@ async function testContext(
     input: {
       family: {
         familyId: "orders",
+        evidenceQuestionId: "orders-question",
         stepOrder: ["classify", "lookup", "answer"],
       },
       swapSet: Object.entries(currentModels).map(([stepId, currentModel]) => ({
@@ -315,20 +324,18 @@ async function testContext(
         currentModel,
         candidateModel: "acme/small-1",
       })),
-      cases: [
-        {
-          caseId: "case-1",
-          stepId: "answer",
-          trajectoryId: "trajectory-1",
-          corpusSplit: "holdout",
-          task: "Answer the recorded order request.",
-          messages: [{ role: "user", content: "Where is order ORD-104?" }],
-          contextTokens: 32,
-          maxOutputTokens: 64,
-          referenceOutput: "accepted",
-          input: "Where is order ORD-104?",
-        },
-      ],
+      cases: Array.from({ length: confirmationCaseCount }, (_, index) => ({
+        caseId: `case-${index}`,
+        stepId: "answer",
+        trajectoryId: `trajectory-${index}`,
+        corpusSplit: "holdout",
+        task: "Answer the recorded order request.",
+        messages: [{ role: "user", content: "Where is order ORD-104?" }],
+        contextTokens: 32,
+        maxOutputTokens: 64,
+        referenceOutput: "accepted",
+        input: "Where is order ORD-104?",
+      })),
       modeB: {
         input: {
           executor: unusedExecutor,
@@ -354,6 +361,7 @@ async function testContext(
       },
       store,
       budget: { modeB: modeBBudget, maxRunSets },
+      policy: releaseGatePolicy,
     },
   };
 }
@@ -382,6 +390,19 @@ async function executionCount(store: FsStore): Promise<number> {
   return count;
 }
 
+async function cascadeFindings(store: FsStore) {
+  const findings = [];
+  for (const key of await store.list(factsPrefix(projectId))) {
+    const entry = await store.get(key);
+    if (entry === null) throw new Error(`Missing fact: ${key}`);
+    const parsed = cascadeFindingSchema.safeParse(
+      JSON.parse(Buffer.from(entry.body).toString("utf8")) as unknown,
+    );
+    if (parsed.success) findings.push(parsed.data);
+  }
+  return findings;
+}
+
 function pairFailure(members: ReadonlySet<string>): boolean {
   return members.has("classify") && members.has("lookup");
 }
@@ -405,7 +426,6 @@ async function realModeBContext(swapStepIds: readonly string[]): Promise<{
     store,
     projectId: `${projectId}-modeb`,
     runId: `modeb-${swapStepIds.join("-")}`,
-    authorizedTotalUsd: 1,
   });
   return {
     store,
@@ -413,6 +433,7 @@ async function realModeBContext(swapStepIds: readonly string[]): Promise<{
     input: {
       family: {
         familyId: "orders-modeb",
+        evidenceQuestionId: "orders-modeb-question",
         stepOrder: swapStepIds,
       },
       swapSet: swapStepIds.map((stepId) => ({
@@ -420,20 +441,18 @@ async function realModeBContext(swapStepIds: readonly string[]): Promise<{
         currentModel: currentModels[stepId]!,
         candidateModel: "acme/small-1",
       })),
-      cases: [
-        {
-          caseId: "langgraph-tool-01",
-          stepId: "answer",
-          trajectoryId: "langgraph-tool-01",
-          corpusSplit: "holdout",
-          task: "Answer the recorded order lookup request.",
-          messages: [{ role: "user", content: "Where is order ORD-104?" }],
-          contextTokens: 64,
-          maxOutputTokens: 256,
-          referenceOutput: "Deterministic reply 81d067ab44f20e70",
-          input: "Where is order ORD-104?",
-        },
-      ],
+      cases: Array.from({ length: confirmationCaseCount }, (_, index) => ({
+        caseId: `langgraph-tool-${index}`,
+        stepId: "answer",
+        trajectoryId: `langgraph-tool-${index}`,
+        corpusSplit: "holdout",
+        task: "Answer the recorded order lookup request.",
+        messages: [{ role: "user", content: "Where is order ORD-104?" }],
+        contextTokens: 64,
+        maxOutputTokens: 256,
+        referenceOutput: "Deterministic reply 81d067ab44f20e70",
+        input: "Where is order ORD-104?",
+      })),
       modeB: {
         input: {
           executor: createDockerExecutor({
@@ -456,7 +475,7 @@ async function realModeBContext(swapStepIds: readonly string[]): Promise<{
             ],
             timeoutMs: 30_000,
           },
-          concurrency: 1,
+          concurrency: 2,
         },
         stepRecords: stepRecords(),
         judge: {
@@ -467,6 +486,7 @@ async function realModeBContext(swapStepIds: readonly string[]): Promise<{
       },
       store,
       budget: { modeB: modeBBudget, maxRunSets: 20 },
+      policy: releaseGatePolicy,
     },
   };
 }
@@ -496,6 +516,17 @@ describe("confirmSwapSet", () => {
         status: "pass",
       }),
     ]);
+    expect(await cascadeFindings(context.store)).toEqual([
+      expect.objectContaining({
+        familyId: "orders",
+        evidenceQuestionId: "orders-question",
+        verdict: "confirmed",
+        culprits: [],
+        cascadeSeedStepId: null,
+        uncertainStepIds: [],
+        runSetsUsed: 1,
+      }),
+    ]);
   });
 
   it("isolates the seeded interacting pair and never rejects the answer", async () => {
@@ -522,6 +553,14 @@ describe("confirmSwapSet", () => {
         ({ status }) => status === "pass" || status === "fail",
       ),
     ).toBe(true);
+    expect(await cascadeFindings(context.store)).toEqual([
+      expect.objectContaining({
+        verdict: "isolated",
+        culprits: [["classify", "lookup"]],
+        cascadeSeedStepId: "classify",
+        uncertainStepIds: ["lookup"],
+      }),
+    ]);
   });
 
   it("recovers completed subset facts after death without rerunning that subset", async () => {
@@ -533,7 +572,7 @@ describe("confirmSwapSet", () => {
       "injected process death",
     );
     expect(runner.calls()).toBe(1);
-    expect(await executionCount(context.store)).toBe(1);
+    expect(await executionCount(context.store)).toBe(confirmationCaseCount);
     expect((await readPlan(context.store)).queue[0]?.status).toBe("running");
 
     const resumed = await confirmSwapSet(context.input);
@@ -544,7 +583,45 @@ describe("confirmSwapSet", () => {
       cascadeSeed: "classify",
     });
     expect(runner.calls()).toBe(resumed.runSetsUsed);
-    expect(await executionCount(context.store)).toBe(resumed.runSetsUsed);
+    expect(await executionCount(context.store)).toBe(
+      resumed.runSetsUsed * confirmationCaseCount,
+    );
+  });
+
+  it("does not append a duplicate finding when a completed confirmation reruns", async () => {
+    const runner = fakeRunner(pairFailure);
+    const context = await testContext(runner);
+
+    const first = await confirmSwapSet(context.input);
+    const second = await confirmSwapSet(context.input);
+
+    expect(second).toEqual(first);
+    expect(await cascadeFindings(context.store)).toHaveLength(1);
+    expect(runner.calls()).toBe(first.runSetsUsed);
+  });
+
+  it("uses the release policy quality floor for run-set outcomes", async () => {
+    const runner = fakeRunner(() => false);
+    const context = await testContext(runner);
+
+    const result = await confirmSwapSet({
+      ...context.input,
+      policy: new ReleaseGatePolicy({
+        gatePolicyVersion: "gate-strict",
+        qualityFloor: 0.99,
+        availabilityFloor: 0.8,
+      }),
+    });
+
+    expect(result.verdict).toBe("inconclusive");
+    expect(result.log).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          subset: ["classify", "lookup", "answer"],
+          outcome: "fail",
+        }),
+      ]),
+    );
   });
 
   it("names the next required run-set cap and leaves a resumable frontier", async () => {

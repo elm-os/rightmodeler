@@ -96,8 +96,8 @@ function renderHuman(value: unknown): string {
       : undefined;
   if (families !== undefined) {
     const lines = [
-      "Family | Decision | Evaluator rates | Availability | Worst-case bound | Abstain reason",
-      "--- | --- | --- | --- | --- | ---",
+      "Family | Decision | Evaluator rates | Availability | Worst-case bound | Abstain reason | Confirm | Blocker",
+      "--- | --- | --- | --- | --- | --- | --- | ---",
       ...families.map(renderFamilyRow),
     ];
     if (typeof record?.reportPath === "string") {
@@ -127,6 +127,7 @@ function renderFamilyRow(value: unknown): string {
     .join("; ");
   const availability = objectValue(verdict?.availability);
   const abstention = objectValue(verdict?.abstainReason);
+  const confirmation = objectValue(family?.confirmation);
   const reason =
     abstention === undefined
       ? ""
@@ -138,6 +139,8 @@ function renderFamilyRow(value: unknown): string {
     `${String(availability?.availableExecutions ?? 0)}/${String(availability?.executions ?? 0)} (${formatRate(availability?.rate)})`,
     formatRate(verdict?.worstCaseBound),
     reason,
+    String(confirmation?.status ?? "not run"),
+    String(confirmation?.blocker ?? ""),
   ].join(" | ");
 }
 
