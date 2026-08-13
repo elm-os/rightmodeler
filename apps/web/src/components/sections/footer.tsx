@@ -50,6 +50,9 @@ export function Footer() {
             <Link href="/integrations" className={linkClass}>
               Integrations
             </Link>
+            <Link href="/vs" className={linkClass}>
+              Compare
+            </Link>
             <Link href="/manifesto" className={linkClass}>
               Manifesto
             </Link>

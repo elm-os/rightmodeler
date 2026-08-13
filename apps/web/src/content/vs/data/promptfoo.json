@@ -1,0 +1,147 @@
+{
+  "slug": "promptfoo",
+  "name": "promptfoo",
+  "category": "evals",
+  "verdict": "different-job",
+  "verdictLabel": "Different job · pre-ship tests vs post-ship audit",
+  "title": "rightmodeler vs promptfoo: where tests come from",
+  "description": "promptfoo tests what you ship next against cases you author. rightmodeler audits what you shipped against accepted outputs. Different stages of the same loop.",
+  "h1": "rightmodeler vs promptfoo",
+  "lede": "promptfoo evaluates what you are about to ship against test cases you author. rightmodeler audits what you already shipped against the outputs you accepted, so the real line between them is where the test set comes from.",
+  "integrationSlug": "",
+  "related": ["braintrust", "langsmith", "not-diamond"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Not rivals for the same job. You hire promptfoo to test what you are about to ship: you author the prompts, cases, and assertions, and its CI gate fails the build when a pass rate drops. You hire rightmodeler to audit what you already shipped: the skill reruns each step of your recorded traces on cheaper candidates and scores every proposed swap against the output you accepted, step by step. Red teaming (generating adversarial attacks against your app) is entirely promptfoo's turf, and there is no shipped integration between the two; the handoff is manual, and it works."
+    },
+    {
+      "type": "fork",
+      "left": {
+        "heading": "Your test set is cases you author",
+        "items": [
+          "Nothing has shipped yet, or a prompt is changing and you need proof nothing regressed. For a system with no production history, authored cases are the only possible evidence.",
+          "You want assertions you control, on quality, cost, and latency, run on every pull request, with a build that fails when the pass rate drops.",
+          "You need adversarial cases: prompt injection, jailbreaks, PII leaks, access-control flaws. promptfoo generates these; rightmodeler does not. Start with promptfoo."
+        ]
+      },
+      "right": {
+        "heading": "Your test set is traces you already have",
+        "items": [
+          "Your agent has served real users, and the outputs you accepted are the evidence you trust most.",
+          "You want to know which model belongs at each step without authoring a single case; the skill treats your accepted output as the reference for that exact step.",
+          "You want every step to carry its own verdict, how many samples backed it, and an abstention (the audit recommends nothing for a step when the evidence is thin). Start with rightmodeler."
+        ]
+      }
+    },
+    {
+      "type": "contrast",
+      "left": {
+        "heading": "Benching models with promptfoo alone",
+        "items": [
+          "You name the exact model IDs in promptfooconfig.yaml and author the cases they compete on.",
+          "The matrix view puts outputs side by side across prompts and models; you read it and decide.",
+          "Coverage ends where your authoring did: production steps nobody wrote a case for go unmeasured."
+        ]
+      },
+      "right": {
+        "heading": "With rightmodeler beside your suite",
+        "items": [
+          "Keep the suite. The audit does not touch it, replace it, or sit in your request path.",
+          "Candidates are shortlisted from the active provider's live catalog, not a hand-picked list, replayed at temperature 0 against your real steps, and judged by a neutral third-family judge (a judge model from a family neither the current model nor the candidate belongs to), with deterministic checks preferred before any LLM judge.",
+          "Each verdict carries reference agreement (how often the candidate matched the output you accepted), a quality floor (a configurable minimum that agreement must clear), sample size, and abstentions. Multi-step work replays end to end, so cascade risk (a cheaper step's output quietly breaking the step after it) surfaces before you swap.",
+          "When you approve a swap, the new model ID goes into promptfooconfig.yaml by hand, and your CI gate keeps the decision honest from then on. That handoff is manual today; there is no shipped integration."
+        ]
+      }
+    },
+    {
+      "type": "scenarios",
+      "heading": "Pick by situation",
+      "intro": "Three days at work, and the tool that honestly wins each one.",
+      "scenarios": [
+        {
+          "scenario": "You rewrote your system prompt and need to know nothing regressed before Friday's deploy.",
+          "winner": "theirs",
+          "why": "Pre-ship regression on authored cases is promptfoo's core loop: run the suite, gate the merge in CI, fail the build if the pass rate drops. rightmodeler never evaluates prompts; it changes which model runs a step, never the prompt."
+        },
+        {
+          "scenario": "Security review is next month and you must show your support agent resists prompt injection and does not leak PII.",
+          "winner": "theirs",
+          "why": "Adversarial testing is promptfoo's headline: plugins generate attacks against your app as a black box, covering injection, jailbreaks, PII leaks, and authorization flaws, agents and RAG included. rightmodeler does no red teaming at all."
+        },
+        {
+          "scenario": "Your agent has run in production for months, one expensive model sits on every step, and you want to know which steps a cheaper model can actually hold.",
+          "winner": "ours",
+          "why": "There is no suite to write for this, and writing one would recreate what your traces already contain. The skill turns the traces into the test set: each step reruns on cheaper candidates, each candidate is scored against the answer you shipped, and every verdict arrives with its sample size and any abstentions. The high-risk families (auth, payments, migrations, deploys, secrets) are excluded from swaps outright, and you approve each change."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "What we will not pretend to do",
+      "paragraphs": [
+        "Red teaming and security testing belong to promptfoo, full stop. Plugin-generated attacks on agents and RAG apps, prompt injection, jailbreaks, PII leaks, authorization flaws: rightmodeler does none of this, and an audit will never tell you your agent is safe.",
+        "promptfoo works before an app has ever served a user. rightmodeler requires real traces, so it has nothing to say about a system with no production history.",
+        "promptfoo can run on every pull request and fail the build. The rightmodeler skill has no seat in CI: you invoke it, it reads the traces you hand it, and it leaves a report behind. Not observability. Not a runtime gateway. It runs after the fact, outside your pipeline entirely.",
+        "And the audit's own limits, stated plainly: a passing score means the candidate agreed with what you shipped, not that either answer was correct; the production result is the reference, not ground truth. Thin evidence on a step ends in an abstention, not a guess, and some steps come back with no verdict at all."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Plain words for the terms above",
+      "terms": [
+        {
+          "term": "trace",
+          "def": "The record of an agent run: each step's inputs, outputs, and tool calls. rightmodeler's raw material; promptfoo does not need one.",
+          "slug": "trace"
+        },
+        {
+          "term": "reference evidence",
+          "def": "Agreement between a candidate model's answer and the output you already accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness.",
+          "slug": "reference-evidence"
+        },
+        {
+          "term": "quality floor",
+          "def": "The configurable minimum agreement score a candidate must clear before the audit will recommend it for a step.",
+          "slug": "quality-floor"
+        },
+        {
+          "term": "abstain",
+          "def": "What the audit does when a step's sample is too small or its evidence too mixed: it recommends nothing rather than guessing.",
+          "slug": "abstain"
+        },
+        {
+          "term": "cascade risk",
+          "def": "The chance that a cheaper model's output at one step quietly breaks a later step. Multi-step work replays end to end so it surfaces.",
+          "slug": "cascade-risk"
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace promptfoo?",
+          "a": "No. promptfoo tests what you are about to ship against cases you author, and red-teams it for vulnerabilities. rightmodeler asks a different question of every step you have already shipped, and answers it with receipts: is this the model the step needs? Keep your suite; the skill is a report you run on your own traces, not a runtime gateway."
+        },
+        {
+          "q": "Is there an integration between rightmodeler and promptfoo?",
+          "a": "No shipped integration exists: promptfoo is not a trace source rightmodeler reads and not a replay provider it runs through. The handoff today is manual. Once you approve a swap, the new model ID goes into promptfooconfig.yaml by hand, and the audited step's accepted outputs can become assertions your CI gate enforces on every future change. The harness is designed to plug into the eval framework you already run, but that contract is planned, not shipped."
+        },
+        {
+          "q": "Can promptfoo compare models the way rightmodeler does?",
+          "a": "Both can put models side by side, but the inputs differ. promptfoo compares the exact model IDs you name, on cases you author, in a matrix you read. rightmodeler shortlists candidates from the active provider's live catalog and uses your production traces as the test set, so nothing needs authoring, and every verdict carries reference agreement, sample size, and abstentions. If you have no traces yet, promptfoo is the only option of the two."
+        },
+        {
+          "q": "Is promptfoo still open source now that it is part of OpenAI?",
+          "a": "Yes, as of this writing. promptfoo's own site and README state that promptfoo is part of OpenAI, the CLI remains MIT licensed and actively maintained, and OpenAI has publicly committed to keeping the open-source suite under its current license and to supporting existing customers. Its positioning today leads with AI security, with red teaming, guardrails, and code scanning alongside the original evals."
+        },
+        {
+          "q": "Does rightmodeler test or improve my prompts?",
+          "a": "No. It is not a prompt-improvement or prompt-rewriting tool: it changes which model runs a step, never the prompt. Prompt regressions are exactly what your promptfoo suite is for."
+        }
+      ]
+    }
+  ]
+}

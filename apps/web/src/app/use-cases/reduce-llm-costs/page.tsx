@@ -364,6 +364,7 @@ export default function ReduceLlmCostsPage() {
               { href: "/glossary", label: "Glossary" },
               { href: "/manifesto", label: "Read the manifesto" },
               { href: "/integrations", label: "Integrations" },
+              { href: "/vs", label: "Compare alternatives" },
             ]}
           />
         </div>
