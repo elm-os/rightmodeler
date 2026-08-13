@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -43,3 +47,46 @@ jobs:
 
       - name: Check
         run: pnpm check
+
+  # Fork pull requests can alter executable code, so they must never reach a job that can access brokered credentials.
+  # Before adding any credential, split this into an unprivileged producer and a trusted consumer that accepts only non-executable artifacts.
+  guarded-live:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Create this environment in repository settings with required reviewers before adding any secret to it.
+    environment: harness-live
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.7.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prebuild Mode B fixture image
+        run: |
+          docker pull node:24-bookworm-slim
+          fixture_digest="$(sha256sum harness/fixtures/langgraph-app/requirements.txt | cut -c1-12)"
+          fixture_image="rightmodeler-modeb-langgraph:${fixture_digest}"
+          docker build --tag "${fixture_image}" --file - harness/fixtures/langgraph-app <<'DOCKERFILE'
+          FROM node:24-bookworm-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip && rm -rf /var/lib/apt/lists/*
+          COPY requirements.txt /tmp/requirements.txt
+          RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
+          DOCKERFILE
+
+      - name: Check replay Docker suite
+        run: pnpm --filter @rightmodeler/replay check
