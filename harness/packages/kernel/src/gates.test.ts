@@ -155,7 +155,11 @@ describe("evaluateGates", () => {
 
     expect(verdict).toMatchObject({
       decision: "abstain",
-      abstainReason: "insufficient_review_trials",
+      abstainReason: {
+        reason: "insufficient_review_trials",
+        observed: 0,
+        required: 10,
+      },
     });
     expect(results.quality).toBe(false);
     expect(results.availability).toBe(false);
@@ -175,7 +179,11 @@ describe("evaluateGates", () => {
 
     expect(verdict).toMatchObject({
       decision: "abstain",
-      abstainReason: "incomplete_evidence_coverage",
+      abstainReason: {
+        reason: "incomplete_evidence_coverage",
+        observed: 0,
+        required: 100,
+      },
     });
     expect(results.quality).toBe(true);
     expect(results["evidence-coverage"]).toBe(false);

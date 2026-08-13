@@ -34,8 +34,14 @@ import {
 } from "@rightmodeler/core";
 import {
   aggregate,
+  evaluateGates,
+  pickJudge,
+  ReleaseGatePolicy,
+  selectWinner,
   type AggregationFact,
   type FamilyVerdict,
+  type GateResult,
+  type WinnerSelection,
 } from "@rightmodeler/kernel";
 import {
   BudgetRefusalError,
@@ -48,7 +54,13 @@ import {
   type RecordedCase,
   type ReplayStep,
 } from "@rightmodeler/replay";
-import { createMatcherRegistry, reconcile, scan } from "@rightmodeler/scanner";
+import {
+  createMatcherRegistry,
+  detectTech,
+  evaluateCoverage,
+  reconcile,
+  scan,
+} from "@rightmodeler/scanner";
 import { z } from "zod";
 
 import {
@@ -94,11 +106,15 @@ export type StageState = "complete" | "stale" | "pending";
 const PROJECT_ID = "project";
 const CORPUS_SEED = 42;
 const AUDIT_SAMPLE_LIMIT = 20;
-const SHORTLIST_TOP = 1;
-const QUALITY_FLOOR = 0.7;
+const SHORTLIST_TOP = 3;
 const AVAILABILITY_FLOOR = 0.7;
-const GATE_POLICY_VERSION = "phase-a-v1";
+const GATE_POLICY_VERSION = "phase-a-v2";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
+const RELEASE_GATE_POLICY = new ReleaseGatePolicy({
+  gatePolicyVersion: GATE_POLICY_VERSION,
+  qualityFloor: 0.85,
+  availabilityFloor: AVAILABILITY_FLOOR,
+});
 
 const scanOutputSchema = z.strictObject({
   records: z.array(stepRecordSchema),
@@ -134,7 +150,7 @@ const replayPlanCaseSchema = z.strictObject({
   caseId: z.string().min(1),
   stepId: z.string().min(1),
   trajectoryId: z.string().min(1),
-  corpusSplit: z.literal("shortlist"),
+  corpusSplit: z.enum(["shortlist", "holdout"]),
   task: z.string(),
   system: z.string().optional(),
   messages: z.array(z.record(z.string(), z.json())),
@@ -150,8 +166,6 @@ const replayPlanStepSchema = z.strictObject({
   needsTools: z.boolean(),
   needsStructuredOutput: z.boolean(),
   observedContextTokens: z.number().int().nonnegative(),
-  corpusSplit: z.literal("shortlist"),
-  selectionStage: z.literal("shortlist"),
 });
 const replayPlanSchema = z.strictObject({
   top: z.number().int().positive(),
@@ -188,6 +202,65 @@ const replayOutputSchema = z.strictObject({
         .optional(),
     }),
   ),
+});
+const gateResultSchema = z.strictObject({
+  id: z.enum([
+    "zero-unsafe-substitutions",
+    "quality",
+    "evidence-coverage",
+    "required-abstention",
+    "availability",
+  ]),
+  pass: z.boolean(),
+  reason: z.string(),
+});
+const selectionEstimateSchema = z.strictObject({
+  point: z.number(),
+  lower: z.number(),
+  upper: z.number(),
+  confidence: z.literal(0.95),
+  comparisons: z.number().int().positive(),
+  evaluatorKind: z.string().min(1),
+  method: z.enum(["wilson", "cluster_bootstrap"]),
+});
+const selectionSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("no_shortlist_passer"),
+    shortlistedCandidateIds: z.array(z.string()),
+    holdoutRequired: z.literal(false),
+  }),
+  z.strictObject({
+    status: z.literal("confirmation_required"),
+    shortlistedCandidateIds: z.array(z.string()),
+    confirmedCandidateId: z.string(),
+    holdoutRequired: z.literal(true),
+  }),
+  z.strictObject({
+    status: z.enum(["holdout_failed", "selected"]),
+    shortlistedCandidateIds: z.array(z.string()),
+    confirmedCandidateId: z.string(),
+    selectedCandidateId: z.string().optional(),
+    selectionAdjustedEstimate: selectionEstimateSchema,
+    holdoutRequired: z.literal(false),
+  }),
+]);
+const familyOutcomeSchema = z.strictObject({
+  familyId: z.string().min(1),
+  verdict: z.custom<FamilyVerdict>(isFamilyVerdict),
+  selection: selectionSchema,
+  gates: z.array(gateResultSchema),
+  decisionDisplay: z.enum([
+    "recommend",
+    "recommend (gated)",
+    "reject",
+    "abstain",
+    "inconclusive",
+  ]),
+  effectiveRecommendation: z.boolean(),
+});
+const aggregateOutputSchema = z.strictObject({
+  allVerdicts: z.array(z.custom<FamilyVerdict>(isFamilyVerdict)),
+  families: z.array(familyOutcomeSchema),
 });
 const auditWorksheetSchema = z.strictObject({
   seed: z.number().int(),
@@ -238,6 +311,18 @@ export interface PipelineResult {
   stages: StagePlanEntry[];
   executedStages: PipelineStage[];
   verdicts: FamilyVerdict[];
+  familyOutcomes?: FamilyOutcome[];
+  reportPath?: string;
+  recommendationExists: boolean;
+}
+
+interface FamilyOutcome {
+  familyId: string;
+  verdict: FamilyVerdict;
+  selection: WinnerSelection;
+  gates: GateResult[];
+  decisionDisplay: FamilyVerdict["decision"] | "recommend (gated)";
+  effectiveRecommendation: boolean;
 }
 
 export async function planPipeline(
@@ -277,10 +362,15 @@ export async function runPipeline(
 ): Promise<PipelineResult> {
   const context = createContext(options);
   if (options.plan) {
+    const verdicts = await readCurrentVerdicts(
+      context.store,
+      context.projectId,
+    );
     return {
       stages: await planPipeline(options),
       executedStages: [],
-      verdicts: await readCurrentVerdicts(context.store, context.projectId),
+      verdicts,
+      recommendationExists: false,
     };
   }
 
@@ -319,10 +409,26 @@ export async function runPipeline(
     throw normalizePipelineError(error, context);
   }
 
+  const verdicts = await readCurrentVerdicts(context.store, context.projectId);
+  const state = await readSetupState(context.store, context.projectId);
+  const aggregateOutput =
+    state.stages.aggregate === undefined
+      ? undefined
+      : await loadAggregateOutput(context);
   return {
     stages: await planPipeline(options),
     executedStages,
-    verdicts: await readCurrentVerdicts(context.store, context.projectId),
+    verdicts,
+    ...(aggregateOutput === undefined
+      ? {}
+      : { familyOutcomes: aggregateOutput.families }),
+    ...(state.stages.report === undefined
+      ? {}
+      : { reportPath: reportPath(context) }),
+    recommendationExists:
+      aggregateOutput?.families.some(
+        ({ effectiveRecommendation }) => effectiveRecommendation,
+      ) ?? false,
   };
 }
 
@@ -383,8 +489,8 @@ async function inputDigest(
   }
   if (stage === "aggregate") {
     extra.gatePolicyVersion = GATE_POLICY_VERSION;
-    extra.qualityFloor = QUALITY_FLOOR;
-    extra.availabilityFloor = AVAILABILITY_FLOOR;
+    extra.qualityFloor = RELEASE_GATE_POLICY.qualityFloor;
+    extra.availabilityFloor = RELEASE_GATE_POLICY.availabilityFloor;
   }
   return digest({ stage, upstream: upstream.inputDigest, ...extra });
 }
@@ -456,6 +562,27 @@ async function executeScan(
     createMatcherRegistry(),
     context.projectId,
   );
+  const coverage = evaluateCoverage({
+    stepRecords: records,
+    fileUniverse: (await repositoryFiles(context.repo, context.storeRoot)).map(
+      ({ path }) => path,
+    ),
+    detectedTech: detectTech(context.repo),
+  });
+  if (!coverage.pass) {
+    const failures = coverage.failures
+      .map(
+        (failure) =>
+          `${failure.code}: ${failure.language} (${failure.dependencies.join(", ")})`,
+      )
+      .join("; ");
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "coverage_gate_failed",
+      message: `Scanner coverage gate failed: ${failures}`,
+      remedy: "Add matcher coverage for the listed AI dependency surfaces.",
+    });
+  }
   for (const record of records) {
     await putMutableJson(
       context.store,
@@ -604,9 +731,9 @@ async function executeShortlist(
     (left, right) =>
       corpus.cases.filter(({ content }) => content.family === right).length -
         corpus.cases.filter(({ content }) => content.family === left).length ||
-      left.localeCompare(right),
+      compareText(left, right),
   );
-  const steps: Array<ReplayStep & { family: string }> = [];
+  const steps: Array<Omit<ReplayStep, "corpusSplit"> & { family: string }> = [];
   const cases: Array<RecordedCase & { family: string }> = [];
   const sampleSizes: Record<string, number> = {};
   const unusedSteps = new Set(replayableSteps.map(({ stepId }) => stepId));
@@ -655,28 +782,30 @@ async function executeShortlist(
         needsStructuredOutput:
           record.capabilityRequirements.includes("structured_output"),
         observedContextTokens: 0,
-        corpusSplit: "shortlist",
-        selectionStage: "shortlist",
       });
     }
-    familyCases.forEach((corpusCase, index) => {
-      const step = assignedRecords[index % assignedRecords.length]!;
-      cases.push({
-        family,
-        caseId: corpusCase.caseId,
-        stepId: step.stepId,
-        trajectoryId: corpusCase.content.trajectoryId,
-        corpusSplit: "shortlist",
-        task: `Evaluate the ${family} response for the recorded request.`,
-        ...(corpusCase.content.systemPrompt === undefined
-          ? {}
-          : { system: corpusCase.content.systemPrompt }),
-        messages: chatMessages(corpusCase.content.messages),
-        contextTokens: 0,
-        maxOutputTokens: 256,
-        referenceOutput: corpusCase.content.output,
-      });
-    });
+    for (const split of ["shortlist", "holdout"] as const) {
+      familyCases
+        .filter((corpusCase) => corpusCase.split === split)
+        .forEach((corpusCase, index) => {
+          const step = assignedRecords[index % assignedRecords.length]!;
+          cases.push({
+            family,
+            caseId: corpusCase.caseId,
+            stepId: step.stepId,
+            trajectoryId: corpusCase.content.trajectoryId,
+            corpusSplit: split,
+            task: `Evaluate the ${family} response for the recorded request.`,
+            ...(corpusCase.content.systemPrompt === undefined
+              ? {}
+              : { system: corpusCase.content.systemPrompt }),
+            messages: chatMessages(corpusCase.content.messages),
+            contextTokens: 0,
+            maxOutputTokens: 256,
+            referenceOutput: corpusCase.content.output,
+          });
+        });
+    }
   }
 
   const key = artifactKey(context, "shortlist", inputDigestValue);
@@ -710,53 +839,155 @@ async function executeReplay(
     apiKeyEnv: context.apiKeyEnv,
   });
   const catalog = await provider.listModels();
-  const candidates = shortlist(plan.steps, catalog, { top: plan.top });
+  const replaySteps = (split: "shortlist" | "holdout"): ReplayStep[] =>
+    plan.steps.map((step) => ({
+      ...step,
+      corpusSplit: split,
+      selectionStage: split,
+    }));
+  const candidates = shortlist(replaySteps("shortlist"), catalog, {
+    top: plan.top,
+  });
   const budget = createBudget({
     store: context.store,
     projectId: context.projectId,
     runId,
     authorizedTotalUsd: context.maxCostUsd,
   });
-  const result = await replayModeA({
-    steps: plan.steps,
-    cases: plan.cases,
-    candidates,
-    provider,
-    judge: {
-      judgeModel: "phase-a-reference-judge",
-      chat: async () =>
-        JSON.stringify({
-          verdict: "equivalent",
-          score: 1,
-          justification: "Equivalent under the Phase A reference evaluator.",
-        }),
-    },
-    store: context.store,
-    budget,
-    concurrency: 4,
-  });
-  const budgetBlock = result.blocked.find(({ kind }) => kind === "budget");
-  if (budgetBlock !== undefined) {
-    const requiredCap = requiredCapFromMessage(budgetBlock.message);
-    throw new ProtocolError({
-      exitCode: 3,
-      code: "budget_cap_refusal",
-      message: budgetBlock.message,
-      remedy:
-        requiredCap === undefined
-          ? "Raise --max-cost-usd to the required cap and rerun."
-          : `Rerun with --max-cost-usd ${requiredCap}.`,
-    });
-  }
-  if (result.blocked.length > 0) {
-    throw new Error(
-      `Replay has blocked cells: ${result.blocked.map(({ message }) => message).join("; ")}`,
-    );
-  }
+  let completed = 0;
+  let skipped = 0;
+  const runCells = async (
+    split: "shortlist" | "holdout",
+    assignments: typeof candidates,
+  ): Promise<void> => {
+    const candidateFamilies = [
+      ...new Set(
+        assignments.flatMap(({ candidates }) =>
+          candidates.map(({ family }) => family),
+        ),
+      ),
+    ];
+    for (const candidateFamily of candidateFamilies) {
+      const familyAssignments = assignments.map((assignment) => ({
+        ...assignment,
+        candidates: assignment.candidates.filter(
+          ({ family }) => family === candidateFamily,
+        ),
+      }));
+      const stepIds = new Set(
+        familyAssignments
+          .filter(({ candidates }) => candidates.length > 0)
+          .map(({ stepId }) => stepId),
+      );
+      const referenceFamilies = new Set(
+        plan.steps
+          .filter(({ stepId }) => stepIds.has(stepId))
+          .map(({ currentModel }) => modelFamily(currentModel)),
+      );
+      if (referenceFamilies.size !== 1) {
+        throw new Error(
+          `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
+        );
+      }
+      const referenceFamily = [...referenceFamilies][0]!;
+      const judgeModel = pickJudge(
+        catalog.map((model) => ({
+          id: model.id,
+          family: model.family,
+          context_length: model.contextLength,
+          pricing:
+            model.pricing === null
+              ? null
+              : {
+                  prompt: model.pricing.input,
+                  completion: model.pricing.output,
+                },
+          supported_parameters: model.supportsStructuredOutput
+            ? ["structured_outputs"]
+            : [],
+        })),
+        { candidateFamily, referenceFamily },
+      );
+      const result = await replayModeA({
+        steps: replaySteps(split),
+        cases: plan.cases,
+        candidates: familyAssignments,
+        provider,
+        judge: {
+          judgeModel,
+          chat: async (request) =>
+            (
+              await provider.chat({
+                model: request.model,
+                messages: request.messages.map((message) => ({ ...message })),
+                temperature: request.temperature,
+                maxOutputTokens: 256,
+                responseFormat: jsonValue(request.responseFormat),
+              })
+            ).content,
+        },
+        store: context.store,
+        budget,
+        concurrency: 4,
+      });
+      const budgetBlock = result.blocked.find(({ kind }) => kind === "budget");
+      if (budgetBlock !== undefined) {
+        const requiredCap = requiredCapFromMessage(budgetBlock.message);
+        throw new ProtocolError({
+          exitCode: 3,
+          code: "budget_cap_refusal",
+          message: budgetBlock.message,
+          remedy:
+            requiredCap === undefined
+              ? "Raise --max-cost-usd to the required cap and rerun."
+              : `Rerun with --max-cost-usd ${requiredCap}.`,
+        });
+      }
+      if (result.blocked.length > 0) {
+        throw new Error(
+          `Replay has blocked cells: ${result.blocked.map(({ message }) => message).join("; ")}`,
+        );
+      }
+      completed += result.completed;
+      skipped += result.skipped;
+    }
+  };
+
+  await runCells("shortlist", candidates);
+  const shortlistVerdicts = aggregate(
+    await materializeAggregationFacts(context, plan, candidates),
+    aggregateOptions(),
+  ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
+  const shortlistSelections = new Map(
+    Object.keys(plan.sampleSizes).map((family) => [
+      family,
+      selectWinner(
+        verdictsByCandidate(
+          shortlistVerdicts.filter((verdict) => verdict.familyId === family),
+        ),
+        RELEASE_GATE_POLICY,
+      ),
+    ]),
+  );
+  const holdoutCandidates = candidates.map((assignment) => ({
+    ...assignment,
+    candidates: assignment.candidates.filter((candidate) => {
+      const family = plan.steps.find(
+        ({ stepId }) => stepId === assignment.stepId,
+      )?.family;
+      if (family === undefined) return false;
+      const selection = shortlistSelections.get(family);
+      return (
+        selection?.status === "confirmation_required" &&
+        selection.confirmedCandidateId === candidate.id
+      );
+    }),
+  }));
+  await runCells("holdout", holdoutCandidates);
   const key = artifactKey(context, "replay", inputDigestValue);
   await putImmutableJson(context.store, key, {
-    completed: result.completed,
-    skipped: result.skipped,
+    completed,
+    skipped,
     candidates,
   });
   return key;
@@ -768,10 +999,62 @@ async function executeAggregate(
 ): Promise<string> {
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
+  const allVerdicts = aggregate(
+    await materializeAggregationFacts(context, plan, replay.candidates),
+    aggregateOptions(),
+  );
+  const families: FamilyOutcome[] = [];
+  for (const familyId of Object.keys(plan.sampleSizes).sort(compareText)) {
+    const familyVerdicts = allVerdicts.filter(
+      (verdict) => verdict.familyId === familyId,
+    );
+    const selection = selectWinner(
+      verdictsByCandidate(familyVerdicts),
+      RELEASE_GATE_POLICY,
+    );
+    const verdict = effectiveVerdict(familyVerdicts, selection);
+    const gates = evaluateGates([verdict], RELEASE_GATE_POLICY);
+    const effectiveRecommendation =
+      selection.status === "selected" && gates.every(({ pass }) => pass);
+    const decisionDisplay =
+      verdict.decision === "recommend" && !effectiveRecommendation
+        ? "recommend (gated)"
+        : verdict.decision;
+    const outcome: FamilyOutcome = {
+      familyId,
+      verdict,
+      selection,
+      gates,
+      decisionDisplay,
+      effectiveRecommendation,
+    };
+    families.push(outcome);
+    await putMutableJson(
+      context.store,
+      verdictKey(context.projectId, familyId),
+      jsonValue(verdict),
+    );
+  }
+  const key = artifactKey(context, "aggregate", inputDigestValue);
+  await putImmutableJson(context.store, key, { allVerdicts, families });
+  return key;
+}
+
+async function materializeAggregationFacts(
+  context: PipelineContext,
+  plan: z.infer<typeof replayPlanSchema>,
+  candidates: z.infer<typeof replayOutputSchema>["candidates"],
+): Promise<AggregationFact[]> {
   const facts = await readFacts(context.store, context.projectId);
+  const evidenceQuestionIds = new Set(
+    plan.steps.map(({ evidenceQuestionId }) => evidenceQuestionId),
+  );
   const executions = facts.flatMap((fact) => {
     const parsed = executionSchema.safeParse(fact);
-    return parsed.success ? [parsed.data] : [];
+    return parsed.success &&
+      evidenceQuestionIds.has(parsed.data.evidenceQuestionId)
+      ? [parsed.data]
+      : [];
   });
   const assessments = new Map(
     facts.flatMap((fact) => {
@@ -785,80 +1068,143 @@ async function executeAggregate(
     plan.cases.map((item) => [item.caseId, item.family]),
   );
   const selectedByStep = new Map(
-    replay.candidates.map((item) => [item.stepId, item.candidates]),
+    candidates.map((item) => [item.stepId, item.candidates]),
   );
-  const expectedByFamily = new Map(
-    Object.keys(plan.sampleSizes).map((family) => [
-      family,
-      plan.cases
-        .filter((item) => item.family === family)
-        .map((item) => ({
-          caseId: item.caseId,
-          stratumId: family,
-          evaluatorKind: "judge",
-        })),
-    ]),
-  );
-  const aggregationFacts: AggregationFact[] = executions.map((execution) => {
+  const expectedAssignments = (
+    family: string,
+    candidateId: string,
+    corpusSplit: "shortlist" | "holdout",
+  ) =>
+    plan.cases
+      .filter(
+        (item) =>
+          item.family === family &&
+          item.corpusSplit === corpusSplit &&
+          selectedByStep.get(item.stepId)?.some(({ id }) => id === candidateId),
+      )
+      .map((item) => ({
+        caseId: item.caseId,
+        stratumId: family,
+        evaluatorKind: "judge",
+      }));
+  return executions.flatMap((execution): AggregationFact[] => {
     const family = familyByCase.get(execution.caseId);
     if (family === undefined) {
-      throw new Error(
-        `Replay execution has no assigned family: ${execution.executionId}`,
-      );
+      return [];
     }
     const assessment = assessments.get(execution.executionId);
     const selected = selectedByStep
       .get(execution.stepId)
       ?.find(({ id }) => id === execution.candidateId);
     if (selected === undefined) {
-      throw new Error(
-        `Replay execution has no selected candidate: ${execution.executionId}`,
-      );
+      return [];
     }
     const judge =
       assessment === undefined ? undefined : judgeMetadata(assessment);
-    return {
-      execution,
-      assessment,
-      gatePolicyVersion: GATE_POLICY_VERSION,
-      familyId: family,
-      candidateFamily: selected.family,
-      evaluatorKind: "judge",
-      candidateCostUsd: blendedPrice(selected),
-      referenceCeilingMultiplier: 1,
-      unsafeSubstitution: false,
-      evidenceCovered: true,
-      expectedEvaluatorAssignments: expectedByFamily.get(family)!,
-      stratumId: family,
-      requiredAbstention: false,
-      requiresDeterministicEvidence: false,
-      hasDeterministicEvidence: false,
-      ...(judge === undefined ? {} : judge),
-    };
-  });
-  const verdicts = aggregate(aggregationFacts, {
-    gatePolicyVersion: GATE_POLICY_VERSION,
-    qualityFloor: QUALITY_FLOOR,
-    availabilityFloor: AVAILABILITY_FLOOR,
-  });
-  const byFamily = new Map<string, FamilyVerdict>();
-  for (const verdict of verdicts) {
-    const existing = byFamily.get(verdict.familyId);
-    if (existing !== undefined) {
-      throw new Error(
-        `Phase A expected one candidate verdict for family ${verdict.familyId}`,
-      );
+    if (
+      execution.corpusSplit !== "shortlist" &&
+      execution.corpusSplit !== "holdout"
+    ) {
+      return [];
     }
-    byFamily.set(verdict.familyId, verdict);
-    await putMutableJson(
-      context.store,
-      verdictKey(context.projectId, verdict.familyId),
-      jsonValue(verdict),
-    );
+    return [
+      {
+        execution,
+        assessment,
+        gatePolicyVersion: GATE_POLICY_VERSION,
+        familyId: family,
+        candidateFamily: selected.family,
+        evaluatorKind: "judge",
+        candidateCostUsd: blendedPrice(selected),
+        referenceCeilingMultiplier: 1,
+        unsafeSubstitution: false,
+        evidenceCovered: true,
+        expectedEvaluatorAssignments: expectedAssignments(
+          family,
+          execution.candidateId,
+          execution.corpusSplit,
+        ),
+        stratumId: family,
+        requiredAbstention: false,
+        requiresDeterministicEvidence: false,
+        hasDeterministicEvidence: false,
+        ...(judge === undefined ? {} : judge),
+      },
+    ];
+  });
+}
+
+function aggregateOptions() {
+  return {
+    gatePolicyVersion: RELEASE_GATE_POLICY.gatePolicyVersion,
+    qualityFloor: RELEASE_GATE_POLICY.qualityFloor,
+    availabilityFloor: RELEASE_GATE_POLICY.availabilityFloor,
+  };
+}
+
+function verdictsByCandidate(verdicts: readonly FamilyVerdict[]) {
+  const pending = new Map<
+    string,
+    { shortlist?: FamilyVerdict; holdout?: FamilyVerdict }
+  >();
+  for (const verdict of verdicts) {
+    const current = pending.get(verdict.candidateId) ?? {};
+    if (verdict.corpusSplit === "shortlist") {
+      current.shortlist = verdict;
+    } else {
+      current.holdout = verdict;
+    }
+    pending.set(verdict.candidateId, current);
   }
-  const key = artifactKey(context, "aggregate", inputDigestValue);
-  await putImmutableJson(context.store, key, { verdicts });
-  return key;
+  return Object.fromEntries(
+    [...pending.entries()].map(([candidateId, candidate]) => {
+      if (candidate.shortlist === undefined) {
+        throw new Error(`Candidate ${candidateId} has no shortlist verdict`);
+      }
+      return [candidateId, { ...candidate, shortlist: candidate.shortlist }];
+    }),
+  );
+}
+
+function effectiveVerdict(
+  verdicts: readonly FamilyVerdict[],
+  selection: WinnerSelection,
+): FamilyVerdict {
+  if (
+    selection.status === "selected" ||
+    selection.status === "holdout_failed"
+  ) {
+    const holdout = verdicts.find(
+      (verdict) =>
+        verdict.candidateId === selection.confirmedCandidateId &&
+        verdict.corpusSplit === "holdout",
+    );
+    if (holdout !== undefined) return holdout;
+  }
+  const shortlist = verdicts
+    .filter(({ corpusSplit }) => corpusSplit === "shortlist")
+    .sort(
+      (left, right) =>
+        left.candidateCostUsd - right.candidateCostUsd ||
+        compareText(left.candidateId, right.candidateId),
+    )[0];
+  if (shortlist === undefined) {
+    throw new Error("Family selection has no shortlist verdict");
+  }
+  return shortlist;
+}
+
+function modelFamily(modelId: string | null): string {
+  if (modelId === null) return "unknown";
+  return modelId.split("/", 1)[0] ?? "unknown";
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function reportPath(context: PipelineContext): string {
+  return join(context.storeRoot, reportKey(context.projectId, "report.md"));
 }
 
 async function executeReport(
@@ -908,6 +1254,10 @@ async function loadReplayPlan(context: PipelineContext) {
 
 async function loadReplayOutput(context: PipelineContext) {
   return loadCurrent(context, "replay", replayOutputSchema);
+}
+
+async function loadAggregateOutput(context: PipelineContext) {
+  return loadCurrent(context, "aggregate", aggregateOutputSchema);
 }
 
 async function loadCurrent<T>(
@@ -971,10 +1321,10 @@ function sha256(value: Uint8Array | string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-async function repositoryDigest(
+async function repositoryFiles(
   repo: string,
   storeRoot: string,
-): Promise<string> {
+): Promise<Array<{ absolute: string; path: string }>> {
   const ignored = new Set([
     ".git",
     ".rightmodeler",
@@ -984,7 +1334,7 @@ async function repositoryDigest(
     ".venv",
     "__pycache__",
   ]);
-  const files: Array<{ path: string; sha256: string }> = [];
+  const files: Array<{ absolute: string; path: string }> = [];
   async function visit(directory: string): Promise<void> {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const absolute = join(directory, entry.name);
@@ -993,15 +1343,28 @@ async function repositoryDigest(
         if (!ignored.has(entry.name)) await visit(absolute);
       } else if (entry.isFile()) {
         files.push({
+          absolute,
           path: relative(repo, absolute).split(sep).join("/"),
-          sha256: sha256(await readFile(absolute)),
         });
       }
     }
   }
   await visit(repo);
-  files.sort((left, right) => left.path.localeCompare(right.path));
-  return digest(files);
+  return files.sort((left, right) => compareText(left.path, right.path));
+}
+
+async function repositoryDigest(
+  repo: string,
+  storeRoot: string,
+): Promise<string> {
+  return digest(
+    await Promise.all(
+      (await repositoryFiles(repo, storeRoot)).map(async (file) => ({
+        path: file.path,
+        sha256: sha256(await readFile(file.absolute)),
+      })),
+    ),
+  );
 }
 
 function corpusOutput(corpus: Corpus) {
@@ -1099,6 +1462,7 @@ function isMissing(error: unknown): boolean {
 
 interface ReportData {
   verdicts: FamilyVerdict[];
+  families: FamilyOutcome[];
   judgeDisagreement: {
     disagreements: number;
     assessments: number;
@@ -1117,11 +1481,17 @@ interface ReportData {
       trafficShare: number;
     }>;
   };
-  caps: Array<{ name: string; value: number; family?: string }>;
+  caps: Array<{
+    name: string;
+    value: number;
+    family?: string;
+    stepId?: string;
+  }>;
 }
 
 async function buildReport(context: PipelineContext): Promise<ReportData> {
-  const verdicts = await readCurrentVerdicts(context.store, context.projectId);
+  const aggregateOutput = await loadAggregateOutput(context);
+  const verdicts = aggregateOutput.families.map(({ verdict }) => verdict);
   const facts = await readFacts(context.store, context.projectId);
   const assessments = facts.flatMap((fact) => {
     const parsed = assessmentSchema.safeParse(fact);
@@ -1144,6 +1514,7 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
   }
   const corpus = await loadCorpusSummary(context);
   const plan = await loadReplayPlan(context);
+  const replay = await loadReplayOutput(context);
   const worksheet = await loadCurrent(
     context,
     "audit-sample",
@@ -1151,6 +1522,7 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
   );
   return {
     verdicts,
+    families: aggregateOutput.families,
     judgeDisagreement: {
       disagreements: consistency.filter((value) => !value).length,
       assessments: consistency.length,
@@ -1173,6 +1545,11 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
         family,
         value,
       })),
+      ...replay.candidates.map(({ stepId, droppedByTop }) => ({
+        name: "droppedByTop",
+        stepId,
+        value: droppedByTop,
+      })),
     ],
   };
 }
@@ -1186,7 +1563,8 @@ function renderReport(report: ReportData): string {
     "| Family | Decision | Evaluator rates | Availability | Excluded | Worst-case bound | Confidence band | Abstain reason |",
     "| --- | --- | --- | --- | --- | --- | --- | --- |",
   ];
-  for (const verdict of report.verdicts) {
+  for (const family of report.families) {
+    const verdict = family.verdict;
     const evaluatorRates = verdict.evaluatorKinds
       .map(
         (kind) =>
@@ -1197,10 +1575,38 @@ function renderReport(report: ReportData): string {
       ? `${formatRate(verdict.naiveInterval.lower)} to ${formatRate(verdict.naiveInterval.upper)}`
       : `${formatRate(verdict.clusterBootstrapLow ?? 0)} lower`;
     lines.push(
-      `| ${verdict.familyId} | ${verdict.decision} | ${evaluatorRates} | ${verdict.availability.availableExecutions}/${verdict.availability.executions} (${formatRate(verdict.availability.rate)}) | ${verdict.excludedExecutions}/${verdict.nExecutions} (${formatRate(verdict.excludedFraction)}) | ${formatRate(verdict.worstCaseBound)} | ${confidence} | ${verdict.decision === "abstain" ? verdict.abstainReason : ""} |`,
+      `| ${verdict.familyId} | ${family.decisionDisplay} | ${evaluatorRates} | ${verdict.availability.availableExecutions}/${verdict.availability.executions} (${formatRate(verdict.availability.rate)}) | ${verdict.excludedExecutions}/${verdict.nExecutions} (${formatRate(verdict.excludedFraction)}) | ${formatRate(verdict.worstCaseBound)} | ${confidence} | ${verdict.decision === "abstain" ? formatAbstention(verdict.abstainReason) : ""} |`,
     );
   }
   lines.push(
+    "",
+    "## Gates",
+    "",
+    "| Family | Gate | Result | Reason |",
+    "| --- | --- | --- | --- |",
+    ...report.families.flatMap((family) =>
+      family.gates.map(
+        (gate) =>
+          `| ${family.familyId} | ${gate.id} | ${gate.pass ? "pass" : "fail"} | ${gate.reason} |`,
+      ),
+    ),
+    "",
+    "## Selection",
+    "",
+    "| Family | Status | Shortlisted candidates | Confirmed candidate | Selection-adjusted estimate |",
+    "| --- | --- | --- | --- | --- |",
+    ...report.families.map((family) => {
+      const selection = family.selection;
+      const confirmed =
+        selection.status === "no_shortlist_passer"
+          ? ""
+          : selection.confirmedCandidateId;
+      const estimate =
+        selection.status === "selected" || selection.status === "holdout_failed"
+          ? `${formatRate(selection.selectionAdjustedEstimate.lower)} to ${formatRate(selection.selectionAdjustedEstimate.upper)} (${selection.selectionAdjustedEstimate.method}, ${selection.selectionAdjustedEstimate.comparisons} comparisons)`
+          : "";
+      return `| ${family.familyId} | ${selection.status} | ${selection.shortlistedCandidateIds.join(", ")} | ${confirmed} | ${estimate} |`;
+    }),
     "",
     "## Judge disagreement",
     "",
@@ -1223,11 +1629,23 @@ function renderReport(report: ReportData): string {
     "",
     ...report.caps.map(
       (cap) =>
-        `- ${cap.name}${cap.family === undefined ? "" : ` (${cap.family})`}: ${cap.value}`,
+        `- ${cap.name}${cap.family === undefined ? "" : ` (${cap.family})`}${cap.stepId === undefined ? "" : ` (${cap.stepId})`}: ${cap.value}`,
     ),
     "",
   );
   return lines.join("\n");
+}
+
+function formatAbstention(abstention: {
+  reason: string;
+  observed: number;
+  required: number;
+}): string {
+  return `${abstention.reason} (${formatNumber(abstention.observed)} of ${formatNumber(abstention.required)})`;
+}
+
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : formatRate(value);
 }
 
 function formatRate(value: number): string {
@@ -1243,21 +1661,25 @@ async function readFacts(store: Store, projectId: string): Promise<Fact[]> {
   return facts;
 }
 
-function parseVerdict(value: unknown): FamilyVerdict {
+function isFamilyVerdict(value: unknown): value is FamilyVerdict {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Family verdict must be an object");
+    return false;
   }
   const record = value as Record<string, unknown>;
-  if (
-    typeof record.familyId !== "string" ||
-    !["recommend", "reject", "abstain", "inconclusive"].includes(
+  return (
+    typeof record.familyId === "string" &&
+    ["recommend", "reject", "abstain", "inconclusive"].includes(
       String(record.decision),
-    ) ||
-    !Array.isArray(record.evaluatorKinds)
-  ) {
+    ) &&
+    Array.isArray(record.evaluatorKinds)
+  );
+}
+
+function parseVerdict(value: unknown): FamilyVerdict {
+  if (!isFamilyVerdict(value)) {
     throw new Error("Family verdict is malformed");
   }
-  return value as FamilyVerdict;
+  return value;
 }
 
 async function readCurrentVerdicts(
@@ -1269,7 +1691,7 @@ async function readCurrentVerdicts(
     verdicts.push(parseVerdict(await readJson(store, key)));
   }
   return verdicts.sort((left, right) =>
-    left.familyId.localeCompare(right.familyId),
+    compareText(left.familyId, right.familyId),
   );
 }
 
@@ -1302,7 +1724,11 @@ export async function runAuditTabulate(options: {
 export async function readReport(options: {
   repo: string;
   store?: string;
-}): Promise<{ report: unknown; recommends: boolean }> {
+}): Promise<{
+  report: ReportData;
+  reportPath: string;
+  recommends: boolean;
+}> {
   const context = createContext({
     ...options,
     reporter: new Reporter("human", {
@@ -1319,14 +1745,14 @@ export async function readReport(options: {
     context,
     digest({ stage: "report", upstream: aggregateCheckpoint.inputDigest }),
   );
-  const report = await readJson(
-    context.store,
-    reportKey(context.projectId, "report.json"),
-  );
-  const verdicts = await readCurrentVerdicts(context.store, context.projectId);
+  const report = await buildReport(context);
+  const aggregateOutput = await loadAggregateOutput(context);
   return {
     report,
-    recommends: verdicts.some(({ decision }) => decision === "recommend"),
+    reportPath: reportPath(context),
+    recommends: aggregateOutput.families.some(
+      ({ effectiveRecommendation }) => effectiveRecommendation,
+    ),
   };
 }
 
@@ -1366,7 +1792,7 @@ export async function readStatus(options: {
   for (const key of await context.store.list(runsPrefix(context.projectId))) {
     runs.push(runMetaSchema.parse(await readJson(context.store, key)));
   }
-  runs.sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  runs.sort((left, right) => compareText(right.startedAt, left.startedAt));
   return {
     stepsByStatus: stepCounts,
     factCounts,

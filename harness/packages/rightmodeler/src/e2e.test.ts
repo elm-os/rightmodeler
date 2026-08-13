@@ -1,10 +1,26 @@
 import { spawn } from "node:child_process";
-import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FsStore, reportKey, verdictsPrefix } from "@rightmodeler/core";
+import {
+  FsStore,
+  factsPrefix,
+  reportKey,
+  type JsonValue,
+  verdictsPrefix,
+} from "@rightmodeler/core";
+import { judgeExecution, type JudgeChat } from "@rightmodeler/kernel";
+import { createProvider } from "@rightmodeler/replay";
 import { afterAll, describe, expect, it } from "vitest";
 
 const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
@@ -113,6 +129,55 @@ async function allFileText(root: string): Promise<string> {
 }
 
 describe("built CLI pipeline", () => {
+  it("uses deterministic judge output and exposes seeded position disagreement", async () => {
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_JUDGE_E2E_API_KEY";
+    process.env[apiKeyEnv] = secret;
+    try {
+      const provider = createProvider({
+        providerId: "stub-provider",
+        baseUrl: `http://127.0.0.1:${stub.port}/v1`,
+        apiKeyEnv,
+      });
+      const chat: JudgeChat = async (request) =>
+        (
+          await provider.chat({
+            model: request.model,
+            messages: request.messages,
+            temperature: request.temperature,
+            responseFormat: request.responseFormat as JsonValue,
+          })
+        ).content;
+
+      const normal = await judgeExecution({
+        chat,
+        judgeModel: "zeta/judge-1",
+        task: "Summarize the recorded case.",
+        reference: "Accepted summary",
+        candidate: "Candidate summary",
+      });
+      const seeded = await judgeExecution({
+        chat,
+        judgeModel: "zeta/judge-1",
+        task: "STUB_JUDGE_DISAGREEMENT",
+        reference: "Accepted summary",
+        candidate: "Candidate summary",
+      });
+
+      expect(normal).toMatchObject({
+        verdict: "equivalent",
+        orderConsistent: true,
+      });
+      expect(seeded).toMatchObject({
+        verdict: "minor_drift",
+        orderConsistent: false,
+      });
+    } finally {
+      delete process.env[apiKeyEnv];
+      await stub.close();
+    }
+  });
+
   it("plans from anywhere and proves checkpointed free stages", async () => {
     const { root, repo } = await fixtureCopy("plan");
     const unrelatedCwd = join(root, "unrelated-cwd");
@@ -121,6 +186,9 @@ describe("built CLI pipeline", () => {
     const help = await runCli(["--help"], { cwd: unrelatedCwd });
     expect(help.code).toBe(0);
     expect(help.stdout).toContain("rightmodeler");
+    expect(help.stdout).toContain("0 no recommendation");
+    expect(help.stdout).toContain("1 recommendation exists");
+    expect(help.stdout).toContain(">=10 runtime error");
 
     const initialPlan = await runCli(
       ["init", "--plan", "--output", "json", "--repo", repo],
@@ -191,12 +259,16 @@ describe("built CLI pipeline", () => {
       const first = await runCli(args, {
         env: { RIGHTMODELER_E2E_API_KEY: secret },
       });
-      expect([0, 1]).toContain(first.code);
+      expect(first.code).toBe(1);
       const firstOutput = jsonOutput(first);
       const verdicts = firstOutput.verdicts as Array<{
         familyId: string;
         decision: string;
-        abstainReason?: string;
+        abstainReason?: {
+          reason: string;
+          observed: number;
+          required: number;
+        };
       }>;
       expect(verdicts.map(({ familyId }) => familyId).sort()).toEqual([
         "summarize",
@@ -211,34 +283,112 @@ describe("built CLI pipeline", () => {
         expect.objectContaining({
           familyId: "support",
           decision: "abstain",
-          abstainReason: "insufficient_review_trials",
+          abstainReason: {
+            reason: "insufficient_review_trials",
+            observed: 3,
+            required: 10,
+          },
         }),
+      );
+      const outcomes = firstOutput.familyOutcomes as Array<{
+        familyId: string;
+        effectiveRecommendation: boolean;
+        selection: {
+          status: string;
+          shortlistedCandidateIds: string[];
+          selectedCandidateId?: string;
+          selectionAdjustedEstimate?: { lower: number };
+        };
+        gates: Array<{ pass: boolean }>;
+      }>;
+      const summarize = outcomes.find(
+        ({ familyId }) => familyId === "summarize",
+      );
+      expect(summarize).toMatchObject({
+        effectiveRecommendation: true,
+        selection: {
+          status: "selected",
+          selectionAdjustedEstimate: { lower: expect.any(Number) },
+        },
+        gates: expect.arrayContaining([
+          expect.objectContaining({ pass: true }),
+        ]),
+      });
+      expect(
+        summarize?.selection.shortlistedCandidateIds.length,
+      ).toBeGreaterThan(1);
+      expect(summarize?.selection.shortlistedCandidateIds).toContain(
+        summarize?.selection.selectedCandidateId,
       );
 
       const storeRoot = join(repo, ".rightmodeler");
       const store = new FsStore(storeRoot);
       const reportJson = JSON.parse(
         await storeText(store, reportKey("project", "report.json")),
-      ) as { verdicts: unknown[] };
+      ) as {
+        verdicts: unknown[];
+        families: Array<{ gates: unknown[]; selection: unknown }>;
+      };
       const reportMarkdown = await storeText(
         store,
         reportKey("project", "report.md"),
       );
-      expect(reportMarkdown).toContain("insufficient_review_trials");
+      expect(reportMarkdown).toContain("insufficient_review_trials (3 of 10)");
+      expect(reportMarkdown).toContain("## Gates");
+      expect(reportMarkdown).toContain("## Selection");
+      expect(reportMarkdown).toContain("Selection-adjusted estimate");
       expect(reportMarkdown).toContain("## Caps");
+      expect(reportMarkdown).toContain("droppedByTop");
+      expect(reportJson.families).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            gates: expect.any(Array),
+            selection: expect.objectContaining({ status: "selected" }),
+          }),
+        ]),
+      );
       const storedVerdicts = await Promise.all(
         (await store.list(verdictsPrefix("project"))).map(async (key) =>
           JSON.parse(await storeText(store, key)),
         ),
       );
       expect(reportJson.verdicts).toEqual(storedVerdicts);
+      const facts = (await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      )) as Array<Record<string, unknown>>;
+      const executions = new Map(
+        facts
+          .filter(
+            (fact) =>
+              typeof fact.executionId === "string" &&
+              typeof fact.candidateId === "string",
+          )
+          .map((fact) => [fact.executionId as string, fact]),
+      );
+      const assessments = facts.filter(
+        (fact) =>
+          typeof fact.assessmentId === "string" &&
+          typeof fact.evaluatorId === "string",
+      );
+      expect(assessments.length).toBeGreaterThan(0);
+      for (const assessment of assessments) {
+        const execution = executions.get(assessment.executionId as string);
+        expect(assessment.evaluatorId).toBe("zeta/judge-1");
+        const candidateFamily = String(execution?.candidateId).split("/", 1)[0];
+        const referenceFamily = "acme";
+        const judgeFamily = String(assessment.evaluatorId).split("/", 1)[0];
+        expect(candidateFamily).toBe(referenceFamily);
+        expect([candidateFamily, referenceFamily]).not.toContain(judgeFamily);
+      }
 
       const hitsAfterFirstRun = stub.getHitCount();
       expect(hitsAfterFirstRun).toBeGreaterThan(0);
       const resumed = await runCli(args, {
         env: { RIGHTMODELER_E2E_API_KEY: secret },
       });
-      expect([0, 1]).toContain(resumed.code);
+      expect(resumed.code).toBe(1);
       expect(jsonOutput(resumed).executedStages).toEqual([]);
       expect(stub.getHitCount()).toBe(hitsAfterFirstRun);
 
@@ -253,6 +403,24 @@ describe("built CLI pipeline", () => {
       expect(jsonOutput(reportCommand)).toMatchObject({
         verdicts: reportJson.verdicts,
       });
+      const humanReport = await runCli([
+        "report",
+        "--output",
+        "human",
+        "--repo",
+        repo,
+      ]);
+      expect(humanReport.code).toBe(1);
+      expect(humanReport.stderr).toBe("");
+      expect(humanReport.stdout).toContain(
+        "Family | Decision | Evaluator rates | Availability | Worst-case bound | Abstain reason",
+      );
+      expect(humanReport.stdout).toContain("summarize | recommend");
+      expect(humanReport.stdout).toContain(
+        "insufficient_review_trials (3 of 10)",
+      );
+      expect(humanReport.stdout).toContain("report.md");
+      expect(humanReport.stdout).not.toContain('"verdicts"');
       const statusCommand = await runCli([
         "status",
         "--output",
@@ -264,8 +432,8 @@ describe("built CLI pipeline", () => {
       expect(jsonOutput(statusCommand)).toMatchObject({
         corpusVersion: expect.any(String),
         factCounts: {
-          Execution: 17,
-          Assessment: 17,
+          Execution: 111,
+          Assessment: 111,
         },
       });
 
@@ -298,6 +466,40 @@ describe("built CLI pipeline", () => {
       remedy:
         "Pass --base-url <url> and, if needed, --api-key-env <environment-variable-name>.",
     });
+  });
+
+  it("stops at scan when an AI dependency has no matched call site", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-coverage-"));
+    temporaryDirectories.push(root);
+    const repo = join(root, "app");
+    await mkdir(join(repo, "src"), { recursive: true });
+    await writeFile(
+      join(repo, "package.json"),
+      JSON.stringify({ dependencies: { ai: "1" } }),
+    );
+    await writeFile(
+      join(repo, "src", "index.ts"),
+      "export const message = 'no model call here';\n",
+    );
+
+    const result = await runCli([
+      "init",
+      "--through",
+      "scan",
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      code: "coverage_gate_failed",
+      message: expect.stringContaining("AI_DEPENDENCY_ZERO_MATCH"),
+    });
+    expect(result.stderr).toContain("javascript");
+    expect(result.stderr).toContain("ai");
   });
 
   it("surfaces missing traces and budget refusals at resumable boundaries", async () => {

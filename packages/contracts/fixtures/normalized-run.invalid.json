@@ -1,5 +1,4 @@
 {
-  "version": "2",
-  "traceId": "trace-support-01",
-  "sourceFormat": "otel-genai"
+  "version": "",
+  "bundle_id": ""
 }

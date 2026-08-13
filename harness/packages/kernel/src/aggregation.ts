@@ -27,6 +27,11 @@ export const ABSTAIN_REASONS = [
 ] as const;
 
 export type AbstainReason = (typeof ABSTAIN_REASONS)[number];
+export interface AbstainReasonDetails {
+  readonly reason: AbstainReason;
+  readonly observed: number;
+  readonly required: number;
+}
 export type FamilyDecision =
   "recommend" | "reject" | "abstain" | "inconclusive";
 
@@ -129,7 +134,7 @@ export type FamilyVerdict = FamilyVerdictBase &
   (
     | {
         readonly decision: "abstain";
-        readonly abstainReason: AbstainReason;
+        readonly abstainReason: AbstainReasonDetails;
       }
     | {
         readonly decision: Exclude<FamilyDecision, "abstain">;
@@ -238,6 +243,18 @@ function aggregateGroup(
     [...expectedEvaluatorAssignments].every((assignment) =>
       presentEvaluatorAssignments.has(assignment),
     );
+  const assignmentCounts = new Map<string, number>();
+  for (const fact of facts) {
+    const key = assignmentKey(
+      fact.execution.caseId,
+      fact.stratumId,
+      fact.evaluatorKind,
+    );
+    assignmentCounts.set(key, (assignmentCounts.get(key) ?? 0) + 1);
+  }
+  const completeEvaluatorAssignments = [...expectedEvaluatorAssignments].filter(
+    (assignment) => assignmentCounts.get(assignment) === 1,
+  ).length;
   const weakest = [...evaluatorKinds].sort(
     (left, right) =>
       left.worstCaseBound - right.worstCaseBound ||
@@ -285,6 +302,11 @@ function aggregateGroup(
     coveredEvidenceCases,
     nExecutions: facts.length,
     hasCompleteEvaluatorCoverage,
+    completeEvaluatorAssignments,
+    requiredEvaluatorAssignments: Math.max(
+      expectedEvaluatorAssignments.size,
+      facts.length,
+    ),
   });
   const base: FamilyVerdictBase = {
     evidenceQuestionId: first.execution.evidenceQuestionId,
@@ -450,47 +472,89 @@ function findAbstainReason(input: {
   readonly coveredEvidenceCases: number;
   readonly nExecutions: number;
   readonly hasCompleteEvaluatorCoverage: boolean;
-}): AbstainReason | undefined {
-  if (input.evaluatorKinds.some((kind) => kind.trials < MIN_REVIEW_TRIALS)) {
-    return "insufficient_review_trials";
+  readonly completeEvaluatorAssignments: number;
+  readonly requiredEvaluatorAssignments: number;
+}): AbstainReasonDetails | undefined {
+  const reviewTrials = Math.min(
+    ...input.evaluatorKinds.map((kind) => kind.trials),
+  );
+  if (reviewTrials < MIN_REVIEW_TRIALS) {
+    return abstention(
+      "insufficient_review_trials",
+      reviewTrials,
+      MIN_REVIEW_TRIALS,
+    );
   }
-  if (
-    input.evaluatorKinds.some(
-      (kind) => kind.nDistinctSteps < MIN_DISTINCT_STEPS,
-    )
-  ) {
-    return "insufficient_distinct_steps";
+  const distinctSteps = Math.min(
+    ...input.evaluatorKinds.map((kind) => kind.nDistinctSteps),
+  );
+  if (distinctSteps < MIN_DISTINCT_STEPS) {
+    return abstention(
+      "insufficient_distinct_steps",
+      distinctSteps,
+      MIN_DISTINCT_STEPS,
+    );
   }
-  if (
-    input.evaluatorKinds.some(
-      (kind) => kind.nTrajectories < MIN_DISTINCT_TRAJECTORIES,
-    )
-  ) {
-    return "insufficient_distinct_trajectories";
+  const distinctTrajectories = Math.min(
+    ...input.evaluatorKinds.map((kind) => kind.nTrajectories),
+  );
+  if (distinctTrajectories < MIN_DISTINCT_TRAJECTORIES) {
+    return abstention(
+      "insufficient_distinct_trajectories",
+      distinctTrajectories,
+      MIN_DISTINCT_TRAJECTORIES,
+    );
   }
   if (input.requiresDeterministicEvidence && !input.hasDeterministicEvidence) {
-    return "missing_deterministic_evidence";
+    return abstention("missing_deterministic_evidence", 0, 1);
   }
   if (input.satisfiedRequiredAbstentions < input.requiredAbstentions) {
-    return "required_abstention";
+    return abstention(
+      "required_abstention",
+      input.satisfiedRequiredAbstentions,
+      input.requiredAbstentions,
+    );
   }
   if (input.coveredEvidenceCases < input.nExecutions) {
-    return "incomplete_evidence_coverage";
+    return abstention(
+      "incomplete_evidence_coverage",
+      input.coveredEvidenceCases,
+      input.nExecutions,
+    );
   }
   if (!input.hasCompleteEvaluatorCoverage) {
-    return "incomplete_evaluator_coverage";
+    return abstention(
+      "incomplete_evaluator_coverage",
+      input.completeEvaluatorAssignments,
+      input.requiredEvaluatorAssignments,
+    );
   }
   if (input.availability.lowerBound < input.availabilityFloor) {
-    return "insufficient_availability";
+    return abstention(
+      "insufficient_availability",
+      input.availability.lowerBound,
+      input.availabilityFloor,
+    );
   }
-  if (
-    input.evaluatorKinds.some(
-      (kind) => kind.excludedFraction > EXCLUDED_FRACTION_MAX,
-    )
-  ) {
-    return "excluded_fraction_exceeded";
+  const excludedFraction = Math.max(
+    ...input.evaluatorKinds.map((kind) => kind.excludedFraction),
+  );
+  if (excludedFraction > EXCLUDED_FRACTION_MAX) {
+    return abstention(
+      "excluded_fraction_exceeded",
+      excludedFraction,
+      EXCLUDED_FRACTION_MAX,
+    );
   }
   return undefined;
+}
+
+function abstention(
+  reason: AbstainReason,
+  observed: number,
+  required: number,
+): AbstainReasonDetails {
+  return { reason, observed, required };
 }
 
 function decide(input: {

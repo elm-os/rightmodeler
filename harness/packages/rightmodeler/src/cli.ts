@@ -52,6 +52,10 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
   const program = new Command()
     .name("rightmodeler")
     .description("Find and prove safe model substitutions.")
+    .addHelpText(
+      "after",
+      "\nExit codes: 0 no recommendation; 1 recommendation exists; 2 needs input; 3 budget; >=10 runtime error.\n",
+    )
     .version(version)
     .option("--repo <dir>", "repository to analyze", process.cwd())
     .option("--store <dir>", "store directory")
@@ -93,13 +97,14 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
           stages: await planPipeline(options),
           executedStages: [],
           verdicts: [],
+          recommendationExists: false,
         }
       : await runPipeline(options);
     reporter.result(result);
     return local.plan ||
       (local.through !== undefined && local.through !== "report")
       ? 0
-      : result.verdicts.some(({ decision }) => decision === "recommend")
+      : result.recommendationExists
         ? 1
         : 0;
   });
@@ -165,7 +170,7 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     .description("write report.md and report.json");
   run(report, async (reporter, global) => {
     const result = await readReport(global);
-    reporter.result(result.report);
+    reporter.result({ ...result.report, reportPath: result.reportPath });
     return result.recommends ? 1 : 0;
   });
 

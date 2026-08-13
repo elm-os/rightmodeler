@@ -74,7 +74,7 @@ describe("aggregate", () => {
     expect(verdict.worstCaseBound).toBeCloseTo(wilson(18, 20).lower, 12);
     expect(verdict).toMatchObject({
       decision: "abstain",
-      abstainReason: "excluded_fraction_exceeded",
+      abstainReason: { reason: "excluded_fraction_exceeded" },
     });
   });
 
@@ -96,7 +96,7 @@ describe("aggregate", () => {
     expect(verdict.availability.lowerBound).toBeLessThan(0.8);
     expect(verdict).toMatchObject({
       decision: "abstain",
-      abstainReason: "insufficient_availability",
+      abstainReason: { reason: "insufficient_availability" },
     });
   });
 
@@ -139,7 +139,7 @@ describe("aggregate", () => {
       aggregate(facts, { ...options, availabilityFloor: 0.7 })[0],
     ).toMatchObject({
       decision: "abstain",
-      abstainReason: "excluded_fraction_exceeded",
+      abstainReason: { reason: "excluded_fraction_exceeded" },
     });
   });
 
@@ -221,7 +221,11 @@ describe("aggregate", () => {
     expect(scenario.observed).toBeLessThan(scenario.minimum);
     expect(verdict).toMatchObject({
       decision: "abstain",
-      abstainReason: scenario.reason,
+      abstainReason: {
+        reason: scenario.reason,
+        observed: scenario.observed,
+        required: scenario.minimum,
+      },
     });
   });
 
@@ -233,7 +237,7 @@ describe("aggregate", () => {
 
     expect(aggregate(facts, options)[0]).toMatchObject({
       decision: "abstain",
-      abstainReason: "missing_deterministic_evidence",
+      abstainReason: { reason: "missing_deterministic_evidence" },
     });
   });
 
@@ -264,7 +268,7 @@ describe("aggregate", () => {
 
     expect(aggregate(facts, options)[0]).toMatchObject({
       decision: "abstain",
-      abstainReason: "insufficient_distinct_steps",
+      abstainReason: { reason: "insufficient_distinct_steps" },
     });
   });
 
@@ -286,7 +290,7 @@ describe("aggregate", () => {
 
     expect(aggregate(facts, options)[0]).toMatchObject({
       decision: "abstain",
-      abstainReason: "incomplete_evaluator_coverage",
+      abstainReason: { reason: "incomplete_evaluator_coverage" },
     });
   });
 
@@ -305,7 +309,7 @@ describe("aggregate", () => {
 
     expect(aggregate(facts, options)[0]).toMatchObject({
       decision: "abstain",
-      abstainReason: "incomplete_evaluator_coverage",
+      abstainReason: { reason: "incomplete_evaluator_coverage" },
     });
   });
 
@@ -324,7 +328,7 @@ describe("aggregate", () => {
       )[0],
     ).toMatchObject({
       decision: "abstain",
-      abstainReason: "incomplete_evaluator_coverage",
+      abstainReason: { reason: "incomplete_evaluator_coverage" },
     });
   });
 
@@ -345,7 +349,7 @@ describe("aggregate", () => {
 
     expect(aggregate([...facts, duplicate], options)[0]).toMatchObject({
       decision: "abstain",
-      abstainReason: "incomplete_evaluator_coverage",
+      abstainReason: { reason: "incomplete_evaluator_coverage" },
     });
   });
 
@@ -366,7 +370,7 @@ describe("aggregate", () => {
 
     expect(aggregate(facts, options)[0]).toMatchObject({
       decision: "abstain",
-      abstainReason: "insufficient_review_trials",
+      abstainReason: { reason: "insufficient_review_trials" },
     });
   });
 
@@ -379,7 +383,7 @@ describe("aggregate", () => {
     expect(aggregate(facts, options)[0]).toMatchObject({
       satisfiedRequiredAbstentions: 0,
       decision: "abstain",
-      abstainReason: "required_abstention",
+      abstainReason: { reason: "required_abstention" },
     });
   });
 
@@ -393,7 +397,7 @@ describe("aggregate", () => {
       requiredAbstentions: 1,
       satisfiedRequiredAbstentions: 0,
       decision: "abstain",
-      abstainReason: "required_abstention",
+      abstainReason: { reason: "required_abstention" },
     });
   });
 

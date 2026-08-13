@@ -1,34 +1,5 @@
 {
-  "version": "2",
-  "traceId": "trace-support-01",
-  "sourceFormat": "otel-genai",
-  "steps": [
-    {
-      "stepIndex": 0,
-      "model": "acme/large-1",
-      "systemPrompt": "Help the customer.",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Where is order ORD-104?"
-        }
-      ],
-      "output": {
-        "role": "assistant",
-        "tool_calls": [
-          {
-            "name": "lookup_order",
-            "arguments": { "order_id": "ORD-104" }
-          }
-        ]
-      },
-      "usage": {
-        "inputTokens": 12,
-        "outputTokens": 8
-      },
-      "family": "support",
-      "trajectoryId": "trace-support-01",
-      "timestamp": "2026-08-12T12:00:00Z"
-    }
-  ]
+  "version": "",
+  "bundle_id": "",
+  "runs": []
 }

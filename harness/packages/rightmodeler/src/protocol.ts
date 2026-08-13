@@ -88,5 +88,87 @@ export class Reporter {
 
 function renderHuman(value: unknown): string {
   if (typeof value === "string") return value;
-  return JSON.stringify(value, null, 2);
+  const record = objectValue(value);
+  const families = Array.isArray(record?.families)
+    ? record.families
+    : Array.isArray(record?.familyOutcomes)
+      ? record.familyOutcomes
+      : undefined;
+  if (families !== undefined) {
+    const lines = [
+      "Family | Decision | Evaluator rates | Availability | Worst-case bound | Abstain reason",
+      "--- | --- | --- | --- | --- | ---",
+      ...families.map(renderFamilyRow),
+    ];
+    if (typeof record?.reportPath === "string") {
+      lines.push("", `Report: ${record.reportPath}`);
+    }
+    return lines.join("\n");
+  }
+  if (record !== undefined) {
+    return Object.entries(record)
+      .map(([key, item]) => `${key}: ${renderValue(item)}`)
+      .join("\n");
+  }
+  return renderValue(value);
+}
+
+function renderFamilyRow(value: unknown): string {
+  const family = objectValue(value);
+  const verdict = objectValue(family?.verdict) ?? family;
+  const evaluatorKinds = Array.isArray(verdict?.evaluatorKinds)
+    ? verdict.evaluatorKinds
+    : [];
+  const rates = evaluatorKinds
+    .map((value) => {
+      const kind = objectValue(value);
+      return `${String(kind?.evaluatorKind ?? "unknown")}: ${String(kind?.passes ?? 0)}/${String(kind?.trials ?? 0)} (${formatRate(kind?.passRate)})`;
+    })
+    .join("; ");
+  const availability = objectValue(verdict?.availability);
+  const abstention = objectValue(verdict?.abstainReason);
+  const reason =
+    abstention === undefined
+      ? ""
+      : `${String(abstention.reason)} (${formatNumber(abstention.observed)} of ${formatNumber(abstention.required)})`;
+  return [
+    String(family?.familyId ?? verdict?.familyId ?? "unknown"),
+    String(family?.decisionDisplay ?? verdict?.decision ?? "unknown"),
+    rates,
+    `${String(availability?.availableExecutions ?? 0)}/${String(availability?.executions ?? 0)} (${formatRate(availability?.rate)})`,
+    formatRate(verdict?.worstCaseBound),
+    reason,
+  ].join(" | ");
+}
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function renderValue(value: unknown): string {
+  if (value === null || value === undefined) return String(value);
+  if (Array.isArray(value)) return value.map(renderValue).join(", ");
+  const record = objectValue(value);
+  if (record !== undefined) {
+    return Object.entries(record)
+      .map(([key, item]) => `${key}=${renderValue(item)}`)
+      .join(", ");
+  }
+  return String(value);
+}
+
+function formatNumber(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Number.isInteger(value)
+      ? String(value)
+      : formatRate(value)
+    : String(value ?? 0);
+}
+
+function formatRate(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${(value * 100).toFixed(1)}%`
+    : "0.0%";
 }

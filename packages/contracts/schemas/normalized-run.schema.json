@@ -1,103 +1,55 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rightmodeler.com/schemas/normalized-run.schema.json",
-  "title": "Normalized Run",
+  "title": "Normalized Run Set",
   "type": "object",
-  "required": ["version", "traceId", "sourceFormat", "steps"],
+  "required": ["version", "bundle_id", "runs"],
   "properties": {
     "version": {
-      "const": "2"
+      "type": "string"
     },
-    "traceId": {
-      "type": "string",
-      "minLength": 1
+    "bundle_id": {
+      "type": "string"
     },
-    "sourceFormat": {
-      "type": "string",
-      "minLength": 1
-    },
-    "steps": {
+    "runs": {
       "type": "array",
-      "items": { "$ref": "#/$defs/step" }
-    }
-  },
-  "$defs": {
-    "jsonValue": {
-      "anyOf": [
-        { "type": "null" },
-        { "type": "boolean" },
-        { "type": "number" },
-        { "type": "string" },
-        {
-          "type": "array",
-          "items": { "$ref": "#/$defs/jsonValue" }
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "task_family",
+          "model",
+          "prompt_excerpt",
+          "evidence_signals"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "task_family": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "success": {
+            "type": ["boolean", "null"]
+          },
+          "cost_usd": {
+            "type": ["number", "null"]
+          },
+          "prompt_excerpt": {
+            "type": "string"
+          },
+          "evidence_signals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         },
-        {
-          "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
-        }
-      ]
-    },
-    "usage": {
-      "type": "object",
-      "required": ["inputTokens", "outputTokens"],
-      "properties": {
-        "inputTokens": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "outputTokens": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        }
-      },
-      "additionalProperties": false
-    },
-    "step": {
-      "type": "object",
-      "required": [
-        "stepIndex",
-        "model",
-        "messages",
-        "output",
-        "usage",
-        "trajectoryId"
-      ],
-      "properties": {
-        "stepIndex": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "model": {
-          "type": "string",
-          "minLength": 1
-        },
-        "systemPrompt": {
-          "type": "string"
-        },
-        "messages": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/jsonValue" }
-        },
-        "output": { "$ref": "#/$defs/jsonValue" },
-        "usage": { "$ref": "#/$defs/usage" },
-        "family": {
-          "type": "string",
-          "minLength": 1
-        },
-        "trajectoryId": {
-          "type": "string",
-          "minLength": 1
-        },
-        "timestamp": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "additionalProperties": false
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false

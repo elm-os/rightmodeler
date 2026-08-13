@@ -27,6 +27,14 @@ const models = [
     capabilities: { chat: true, tools: true },
     pricing: { input_per_token: 0.000002, output_per_token: 0.000006 },
   },
+  {
+    id: "zeta/judge-1",
+    object: "model",
+    capabilities: { chat: true, tools: false },
+    context_length: 128_000,
+    supported_parameters: ["structured_outputs"],
+    pricing: { input_per_token: 0.000004, output_per_token: 0.000012 },
+  },
 ];
 
 function json(response, status, body, headers = {}) {
@@ -121,6 +129,19 @@ export async function startStubProvider({ port }) {
       const promptTokens = Math.max(8, Math.ceil(messageText.length / 4));
       const empty = request.headers["x-stub-empty"] !== undefined;
       const completionTokens = empty ? 0 : 12;
+      const judgeVerdict =
+        messageText.includes("STUB_JUDGE_DISAGREEMENT") &&
+        Number.parseInt(digest[0], 16) % 2 === 0
+          ? "divergent"
+          : "equivalent";
+      const content =
+        body.model === "zeta/judge-1"
+          ? JSON.stringify({
+              verdict: judgeVerdict,
+              score: judgeVerdict === "equivalent" ? 1 : 0,
+              justification: `Deterministic judge result ${digest}.`,
+            })
+          : `Deterministic reply ${digest}`;
       json(
         response,
         200,
@@ -133,7 +154,7 @@ export async function startStubProvider({ port }) {
               index: 0,
               message: {
                 role: "assistant",
-                content: empty ? "" : `Deterministic reply ${digest}`,
+                content: empty ? "" : content,
               },
               finish_reason: "stop",
             },
@@ -175,7 +196,7 @@ async function selftest() {
     const catalog = await fetch(`${baseUrl}/v1/models`).then((response) =>
       response.json(),
     );
-    if (catalog.data?.length !== 4) throw new Error("Expected four models.");
+    if (catalog.data?.length !== 5) throw new Error("Expected five models.");
 
     const request = {
       model: "acme/small-1",
