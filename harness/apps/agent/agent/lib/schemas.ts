@@ -31,7 +31,7 @@ export const replayStartInputSchema = harnessInputSchema.extend({
 });
 
 export const replayStatusInputSchema = harnessInputSchema.extend({
-  runId: z.string().regex(/^replay_[0-9a-f]{64}$/u),
+  runId: z.string().regex(/^replay-[0-9a-f]{64}$/u),
 });
 
 export const openSwapPrInputSchema = harnessInputSchema.extend({

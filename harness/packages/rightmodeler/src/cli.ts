@@ -1,18 +1,25 @@
 #!/usr/bin/env node
 
+import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Command, CommanderError, Option } from "commander";
 
 import {
   PIPELINE_STAGES,
+  beginDetachedReplayWorker,
+  claimDetachedReplay,
+  estimateReplay,
+  listApprovedSwapSets,
+  listWatchablePullRequests,
   planPipeline,
+  readActiveDetachedReplay,
   readReport,
+  readRunStatus,
   readStatus,
   runAuditTabulate,
-  runApply,
   runCorpusImport,
   runPipeline,
   runResultExport,
@@ -20,6 +27,11 @@ import {
   type PipelineOptions,
   type PipelineStage,
 } from "./pipeline.js";
+import {
+  applySwaps,
+  type ApplySwapsOptions,
+  type ApplySwapsResult,
+} from "./apply/index.js";
 import { createGithubClient } from "./github/index.js";
 import {
   processIo,
@@ -54,6 +66,9 @@ interface PipelineCommandOptions {
   through?: PipelineStage;
   plan?: boolean;
   yes?: boolean;
+  detach?: boolean;
+  internalRunId?: string;
+  approvedRun?: string;
 }
 
 interface AuditTabulateOptions {
@@ -85,9 +100,14 @@ interface ApplyCommandOptions {
 
 interface WatchCommandOptions {
   owner: string;
+  githubRepo: string;
   pr: string;
   githubBaseUrl: string;
   githubTokenEnv: string;
+}
+
+interface StatusCommandOptions {
+  run?: string;
 }
 
 export interface ProgramHandle {
@@ -157,20 +177,78 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
         : 0;
   });
 
+  const estimate = addPipelineOptions(
+    program
+      .command("estimate")
+      .description("project replay spend before paid model calls"),
+    true,
+  ).option(
+    "--approved-run <digest>",
+    "scope projection to one merged approved swap",
+  );
+  run(estimate, async (reporter, global) => {
+    const options = pipelineOptions(
+      global,
+      estimate.opts<PipelineCommandOptions>(),
+      reporter,
+    );
+    await runPipeline({ ...options, through: "shortlist" });
+    reporter.result(await estimateReplay(options));
+    return 0;
+  });
+
   for (const stage of PIPELINE_STAGES.slice(0, -1)) {
     if (stage === "audit-sample" || stage === "corpus") continue;
     const command = addPipelineOptions(
       program.command(stage).description(`run through the ${stage} stage`),
       stage === "replay" || stage === "confirm",
     );
+    if (stage === "replay") {
+      command
+        .option("--detach", "enqueue replay and return its run identifier")
+        .option(
+          "--approved-run <digest>",
+          "regression-test one merged approved swap",
+        )
+        .addOption(new Option("--internal-run-id <runId>").hideHelp());
+    }
     run(command, async (reporter, global) => {
+      const local = command.opts<PipelineCommandOptions>();
+      const options = pipelineOptions(global, local, reporter);
+      const replayTarget =
+        stage === "replay" && local.approvedRun !== undefined
+          ? "aggregate"
+          : stage;
+      if (stage === "replay" && local.detach) {
+        if (local.internalRunId !== undefined) {
+          throw new Error("--detach cannot be combined with --internal-run-id");
+        }
+        const claim = await claimDetachedReplay({
+          ...options,
+          through: replayTarget,
+        });
+        if (!claim.terminal) {
+          await startDetachedReplay(global, local, claim.runId);
+        }
+        reporter.result(claim);
+        return 0;
+      }
+      if (
+        stage === "replay" &&
+        local.internalRunId !== undefined &&
+        !(await beginDetachedReplayWorker(options, local.internalRunId))
+      ) {
+        reporter.result(
+          await readRunStatus({ ...global, runId: local.internalRunId }),
+        );
+        return 0;
+      }
       const result = await runPipeline({
-        ...pipelineOptions(
-          global,
-          command.opts<PipelineCommandOptions>(),
-          reporter,
-        ),
-        through: stage,
+        ...options,
+        through: replayTarget,
+        ...(stage === "replay" && local.internalRunId !== undefined
+          ? { existingRunId: local.internalRunId }
+          : {}),
       });
       reporter.result(result);
       return 0;
@@ -303,15 +381,12 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     .option("--dry-run", "run all machine gates without writing GitHub state");
   run(apply, async (reporter, global) => {
     const local = apply.opts<ApplyCommandOptions>();
-    const result = await runApply({
+    const result = await applySwaps({
       repo: global.repo,
       store: global.store,
-      githubClient: createGithubClient({
-        baseUrl: local.githubBaseUrl,
-        tokenEnv: local.githubTokenEnv,
-      }),
       owner: local.owner,
-      githubRepo: basename(resolve(global.repo)),
+      githubBaseUrl: local.githubBaseUrl,
+      githubTokenEnv: local.githubTokenEnv,
       dryRun: local.dryRun ?? false,
     });
     reporter.result(result);
@@ -322,6 +397,7 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     .command("watch")
     .description("reconcile one open model-swap pull request")
     .requiredOption("--owner <owner>", "GitHub repository owner")
+    .requiredOption("--github-repo <repo>", "GitHub repository name")
     .requiredOption("--pr <number>", "pull request number")
     .requiredOption("--github-base-url <url>", "GitHub API base URL")
     .requiredOption(
@@ -342,7 +418,7 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
         tokenEnv: local.githubTokenEnv,
       }),
       owner: local.owner,
-      githubRepo: basename(resolve(global.repo)),
+      githubRepo: local.githubRepo,
       prNumber,
     });
     reporter.result(result);
@@ -364,9 +440,15 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
 
   const status = program
     .command("status")
-    .description("summarize the current store");
+    .description("summarize the current store")
+    .option("--run <runId>", "report one detached replay run");
   run(status, async (reporter, global) => {
-    reporter.result(await readStatus(global));
+    const runId = status.opts<StatusCommandOptions>().run;
+    reporter.result(
+      runId === undefined
+        ? await readStatus(global)
+        : await readRunStatus({ ...global, runId }),
+    );
     return 0;
   });
 
@@ -447,6 +529,12 @@ function pipelineOptions(
   local: PipelineCommandOptions,
   reporter: Reporter,
 ): PipelineOptions {
+  if (
+    local.approvedRun !== undefined &&
+    !/^[0-9a-f]{64}$/u.test(local.approvedRun)
+  ) {
+    throw new Error("--approved-run must be a SHA-256 run-spec digest");
+  }
   const maxCostUsd =
     local.maxCostUsd === undefined ? undefined : Number(local.maxCostUsd);
   if (
@@ -496,6 +584,7 @@ function pipelineOptions(
           evaluator: evaluatorConfig(local, evaluatorGateThreshold),
         }),
     modeBConfigPath: local.modebConfig,
+    approvedRunSpecDigest: local.approvedRun,
     through: local.through,
     plan: local.plan,
     reporter,
@@ -680,6 +769,101 @@ function collectOption(value: string, previous?: string[]): string[] {
   return [...(previous ?? []), value];
 }
 
+async function startDetachedReplay(
+  global: GlobalOptions,
+  local: PipelineCommandOptions,
+  runId: string,
+): Promise<void> {
+  const args = [
+    fileURLToPath(import.meta.url),
+    "--repo",
+    resolve(global.repo),
+    "--output",
+    "json",
+  ];
+  if (global.store !== undefined) {
+    args.push("--store", resolve(global.store));
+  }
+  args.push("replay");
+  appendCliOption(
+    args,
+    "--traces",
+    local.traces === undefined ? undefined : resolve(local.traces),
+  );
+  appendCliOption(
+    args,
+    "--modeb-config",
+    local.modebConfig === undefined ? undefined : resolve(local.modebConfig),
+  );
+  appendCliOption(args, "--base-url", local.baseUrl);
+  appendCliOption(args, "--api-key-env", local.apiKeyEnv);
+  appendCliOption(args, "--max-cost-usd", local.maxCostUsd);
+  appendCliOption(args, "--approved-run", local.approvedRun);
+  appendCliOption(args, "--evaluator", local.evaluator);
+  appendCliOption(args, "--evaluator-base-url", local.evaluatorBaseUrl);
+  appendCliOption(args, "--evaluator-api-key-env", local.evaluatorApiKeyEnv);
+  appendCliOption(
+    args,
+    "--evaluator-public-key-env",
+    local.evaluatorPublicKeyEnv,
+  );
+  appendCliOption(args, "--evaluator-project-id", local.evaluatorProjectId);
+  appendCliOption(
+    args,
+    "--evaluator-command",
+    detachedCommand(local.evaluatorCommand),
+  );
+  appendCliOption(
+    args,
+    "--evaluator-config",
+    local.evaluatorConfig === undefined
+      ? undefined
+      : resolve(local.evaluatorConfig),
+  );
+  for (const scorer of local.evaluatorScorer ?? []) {
+    appendCliOption(args, "--evaluator-scorer", scorer);
+  }
+  appendCliOption(args, "--evaluator-gate-metric", local.evaluatorGateMetric);
+  appendCliOption(
+    args,
+    "--evaluator-gate-threshold",
+    local.evaluatorGateThreshold,
+  );
+  appendCliOption(args, "--internal-run-id", runId);
+
+  await new Promise<void>((resolveSpawn, rejectSpawn) => {
+    const child = spawn(process.execPath, args, {
+      cwd: resolve(global.repo),
+      detached: true,
+      env: process.env,
+      stdio: "ignore",
+    });
+    child.once("error", rejectSpawn);
+    child.once("spawn", () => {
+      child.unref();
+      resolveSpawn();
+    });
+  });
+}
+
+function detachedCommand(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return value.startsWith("./") ||
+    value.startsWith("../") ||
+    value.includes("/") ||
+    value.includes("\\")
+    ? resolve(value)
+    : value;
+}
+
+function appendCliOption(
+  args: string[],
+  flag: string,
+  value: string | undefined,
+): void {
+  if (value !== undefined) args.push(flag, value);
+}
+
 export async function executeCli(
   argv: readonly string[],
   io: CliIo = processIo,
@@ -710,3 +894,11 @@ const isEntryPoint =
 if (isEntryPoint) {
   process.exitCode = await executeCli(process.argv.slice(2));
 }
+
+export {
+  applySwaps,
+  listApprovedSwapSets,
+  listWatchablePullRequests,
+  readActiveDetachedReplay,
+};
+export type { ApplySwapsOptions, ApplySwapsResult };

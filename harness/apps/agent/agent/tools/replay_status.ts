@@ -1,14 +1,14 @@
 import { defineTool } from "eve/tools";
 
-import { readReplayStatus } from "../lib/replay.js";
+import { runCli } from "../lib/cli.js";
 import { replayStatusInputSchema } from "../lib/schemas.js";
 
 export const replayStatusTool = defineTool({
   description:
-    "Read one replay run's append-only event record once. This tool never sleeps or polls internally.",
+    "Read one persisted replay run once, including progress and terminality. This tool never sleeps or polls internally.",
   inputSchema: replayStatusInputSchema,
   async execute(input) {
-    return readReplayStatus(input.repo, input.store, input.runId);
+    return (await runCli("status", ["--run", input.runId], input)).result;
   },
 });
 

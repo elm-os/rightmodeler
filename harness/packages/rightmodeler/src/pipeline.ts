@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
@@ -24,6 +25,7 @@ import {
   mintAssessmentId,
   reportKey,
   requestAttemptSchema,
+  runKey,
   runMetaSchema,
   runsPrefix,
   setupPrefix,
@@ -40,6 +42,7 @@ import {
   type JsonValue,
   type LifecycleEvent,
   type RunMeta,
+  type StepRecord,
   type Store,
 } from "@rightmodeler/core";
 import {
@@ -67,6 +70,7 @@ import {
   type ModeBCase,
   type RecordedCase,
   type ReplayStep,
+  type StepShortlist,
 } from "@rightmodeler/replay";
 import {
   createMatcherRegistry,
@@ -92,11 +96,12 @@ import {
   type Corpus,
 } from "./data/index.js";
 import {
-  applySwaps,
+  applySwaps as applyPreparedSwaps,
   type ApplyCascadeStatus,
   type ApplyResult,
   type ApplyVerdict,
-} from "./apply/index.js";
+} from "./apply/orchestrator.js";
+import { estimateReplayCost, type ReplayCostEstimate } from "./estimate.js";
 import {
   blastRadius,
   captureConventions,
@@ -158,6 +163,17 @@ export const PIPELINE_STAGES = [
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 export type StageState = "complete" | "stale" | "pending";
+
+const detachedRunProgressSchema = z.strictObject({
+  runId: z.string().min(1),
+  stage: z.enum(PIPELINE_STAGES),
+});
+const detachedReplayWorkerSchema = z.strictObject({
+  runId: z.string().min(1),
+  pid: z.number().int().positive(),
+  hostname: z.string().min(1),
+  startedAt: z.string().datetime(),
+});
 
 const PROJECT_ID = "project";
 const CORPUS_SEED = 42;
@@ -252,6 +268,10 @@ const modelCatalogSchema = z.strictObject({
     .nullable(),
   supportsTools: z.boolean(),
   supportsStructuredOutput: z.boolean(),
+});
+const detachedReplayCatalogSchema = z.strictObject({
+  runId: z.string().min(1),
+  models: z.array(modelCatalogSchema),
 });
 const replayOutputSchema = z.strictObject({
   completed: z.number().int().nonnegative(),
@@ -388,6 +408,8 @@ interface PipelineContext {
   evaluator?: ResolvedEvaluatorConfig;
   modeBConfig?: ModeBConfig;
   modeBConfigPath?: string;
+  existingRunId?: string;
+  approvedRunSpecDigest?: string;
   reporter: Reporter;
 }
 
@@ -400,8 +422,10 @@ export interface PipelineOptions {
   maxCostUsd?: number;
   evaluator?: EvaluatorConfig;
   modeBConfigPath?: string;
+  approvedRunSpecDigest?: string;
   through?: PipelineStage;
   plan?: boolean;
+  existingRunId?: string;
   reporter: Reporter;
 }
 
@@ -417,6 +441,29 @@ export interface PipelineResult {
   familyOutcomes?: FamilyOutcome[];
   reportPath?: string;
   recommendationExists: boolean;
+}
+
+export interface DetachedReplayClaim {
+  readonly runId: string;
+  readonly status: RunMeta["status"];
+  readonly terminal: boolean;
+  readonly deduplicated: boolean;
+}
+
+export interface RunStatusResult {
+  readonly runId: string;
+  readonly type: string;
+  readonly phase: string;
+  readonly status: RunMeta["status"];
+  readonly terminal: boolean;
+  readonly startedAt: string;
+  readonly completedAt?: string;
+  readonly progress: {
+    readonly completedStages: PipelineStage[];
+    readonly targetStage: PipelineStage | null;
+    readonly completed: number;
+    readonly total: number | null;
+  };
 }
 
 export interface ApplyPipelineOptions {
@@ -435,6 +482,26 @@ export interface WatchPipelineOptions {
   readonly owner: string;
   readonly githubRepo: string;
   readonly prNumber: number;
+}
+
+export interface WatchablePullRequest {
+  readonly prNumber: number;
+  readonly phase: "open" | "terminal";
+}
+
+export interface ApprovedSwapSet {
+  readonly runSpecDigest: string;
+  readonly prNumber: number;
+  readonly familyIds: readonly string[];
+  readonly swaps: readonly ApprovedSwap[];
+}
+
+export interface ApprovedSwap {
+  readonly familyId: string;
+  readonly stepId: string;
+  readonly path: string;
+  readonly fromModel: string;
+  readonly toModel: string;
 }
 
 export type RunApplyResult = ApplyResult;
@@ -522,11 +589,26 @@ export async function runPipeline(
     };
   }
 
-  const run = await createRun(context.store, {
-    projectId: context.projectId,
-    type: "init",
-    phase: options.through ?? "report",
-  });
+  if (options.existingRunId !== undefined) {
+    const existing = await requireRunningReplayRun(
+      context,
+      options.existingRunId,
+    );
+    if (options.through !== existing.phase) {
+      throw new Error(
+        `Detached run ${existing.runId} must execute through ${existing.phase}`,
+      );
+    }
+  }
+
+  const run =
+    options.existingRunId === undefined
+      ? await createRun(context.store, {
+          projectId: context.projectId,
+          type: "init",
+          phase: options.through ?? "report",
+        })
+      : await requireRunningReplayRun(context, options.existingRunId);
   const executedStages: PipelineStage[] = [];
   try {
     for (const stage of stagesThrough(options.through)) {
@@ -538,6 +620,7 @@ export async function runPipeline(
         (await checkpointOutputExists(context, stage, checkpoint))
       ) {
         context.reporter.event({ event: "stage_skipped", stage });
+        await markDetachedRunProgress(context, options.existingRunId, stage);
         continue;
       }
 
@@ -550,6 +633,7 @@ export async function runPipeline(
       });
       executedStages.push(stage);
       context.reporter.event({ event: "stage_completed", stage });
+      await markDetachedRunProgress(context, options.existingRunId, stage);
     }
     await completeRun(context.store, context.projectId, run.runId);
   } catch (error) {
@@ -580,12 +664,373 @@ export async function runPipeline(
   };
 }
 
+export async function estimateReplay(
+  options: PipelineOptions,
+): Promise<ReplayCostEstimate> {
+  const context = createContext(options);
+  if (context.baseUrl === undefined) {
+    throw missingProviderConfiguration();
+  }
+  const plan = await loadReplayPlan(context);
+  const provider = createProvider({
+    providerId: "configured-provider",
+    baseUrl: context.baseUrl,
+    apiKeyEnv: context.apiKeyEnv,
+  });
+  const catalog =
+    context.existingRunId === undefined
+      ? await provider.listModels()
+      : await readDetachedReplayCatalog(context, context.existingRunId);
+  return estimateReplayCost({
+    steps: plan.steps,
+    cases: plan.cases,
+    candidates:
+      context.approvedRunSpecDigest === undefined
+        ? replayCandidates(plan, catalog)
+        : await approvedReplayCandidates(
+            context,
+            plan,
+            catalog,
+            context.approvedRunSpecDigest,
+          ),
+  });
+}
+
+export async function claimDetachedReplay(
+  options: PipelineOptions,
+): Promise<DetachedReplayClaim> {
+  const context = createContext(options);
+  if (context.baseUrl === undefined) {
+    throw missingProviderConfiguration();
+  }
+  const state = await readSetupState(context.store, context.projectId);
+  const traceIdentity =
+    context.traces === undefined
+      ? state.stages.ingest?.inputDigest
+      : digest({
+          stage: "ingest",
+          traceSha256: sha256(await readFile(context.traces)),
+        });
+  if (traceIdentity === undefined) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "missing_traces_path",
+      message: "A trace input path is required for a fresh detached replay.",
+      remedy:
+        "Pass --traces <path> or complete ingest before detaching replay.",
+    });
+  }
+  const catalogIdentity = (
+    await createProvider({
+      providerId: "configured-provider",
+      baseUrl: context.baseUrl,
+      apiKeyEnv: context.apiKeyEnv,
+    }).listModels()
+  ).sort((left, right) => compareText(left.id, right.id));
+  const targetPhase = options.through ?? "replay";
+  if (!isPipelineStage(targetPhase)) {
+    throw new Error(`Invalid detached replay target: ${targetPhase}`);
+  }
+  const runId = `replay-${computeRunSpecDigest({
+    version: 1,
+    type: "replay",
+    targetPhase,
+    repository: await repositoryDigest(context.repo, context.storeRoot),
+    traces: traceIdentity,
+    reproofRequests: jsonValue(
+      await readReproofRequests(context.store, context.projectId),
+    ),
+    catalog: jsonValue(catalogIdentity),
+    provider: {
+      baseUrl: context.baseUrl,
+      apiKeyEnv: context.apiKeyEnv,
+      maxCostUsd: context.maxCostUsd ?? null,
+    },
+    evaluator: await evaluatorRunIdentity(context),
+    modeBConfig:
+      context.modeBConfig === undefined ? null : jsonValue(context.modeBConfig),
+    approvedRunSpecDigest: context.approvedRunSpecDigest ?? null,
+  })}`;
+  await putImmutableJson(
+    context.store,
+    detachedReplayCatalogKey(context.projectId, runId),
+    { runId, models: catalogIdentity },
+  );
+  const existing = await readRun(context, runId);
+  if (existing !== null) {
+    return detachedClaim(existing, true);
+  }
+  try {
+    const created = await createRun(context.store, {
+      projectId: context.projectId,
+      type: "replay",
+      phase: targetPhase,
+      runId,
+    });
+    return detachedClaim(created, false);
+  } catch (error) {
+    const raced = await readRun(context, runId);
+    if (raced === null) throw error;
+    return detachedClaim(raced, true);
+  }
+}
+
+export async function beginDetachedReplayWorker(
+  options: Pick<PipelineOptions, "repo" | "store" | "reporter">,
+  runId: string,
+): Promise<boolean> {
+  const context = createContext(options);
+  const run = await requireReplayRun(context, runId);
+  if (run.status !== "running") return false;
+  const key = detachedReplayWorkerKey(context.projectId);
+  for (;;) {
+    const entry = await context.store.get(key);
+    if (entry !== null) {
+      const worker = detachedReplayWorkerSchema.parse(
+        JSON.parse(Buffer.from(entry.body).toString("utf8")),
+      );
+      const owner = await readRun(context, worker.runId);
+      if (
+        owner?.status === "running" &&
+        (worker.hostname !== hostname() || processIsAlive(worker.pid))
+      ) {
+        return false;
+      }
+    }
+    const worker = detachedReplayWorkerSchema.parse({
+      runId,
+      pid: process.pid,
+      hostname: hostname(),
+      startedAt: new Date().toISOString(),
+    });
+    if (
+      await context.store.compareAndSwap(
+        key,
+        entry?.version ?? 0,
+        Buffer.from(canonicalJson(worker), "utf8"),
+        (entry?.fenceToken ?? 0) + 1,
+      )
+    ) {
+      return true;
+    }
+  }
+}
+
+export async function readActiveDetachedReplay(options: {
+  readonly repo: string;
+  readonly store?: string;
+}): Promise<RunStatusResult | null> {
+  const context = createHeadlessContext(options);
+  const entry = await context.store.get(
+    detachedReplayWorkerKey(context.projectId),
+  );
+  if (entry === null) return null;
+  const worker = detachedReplayWorkerSchema.parse(
+    JSON.parse(Buffer.from(entry.body).toString("utf8")),
+  );
+  const run = await readRun(context, worker.runId);
+  if (
+    run === null ||
+    run.status !== "running" ||
+    (worker.hostname === hostname() && !processIsAlive(worker.pid))
+  ) {
+    return null;
+  }
+  return readRunStatus({ ...options, runId: worker.runId });
+}
+
+async function evaluatorRunIdentity(
+  context: PipelineContext,
+): Promise<JsonValue> {
+  if (context.evaluator === undefined) return null;
+  if (context.evaluator.provider !== "promptfoo") {
+    return jsonValue(context.evaluator);
+  }
+  return jsonValue({
+    ...context.evaluator,
+    assertionsSha256: sha256(
+      await readFile(resolve(context.evaluator.assertionsPath)),
+    ),
+  });
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return false;
+    if (code === "EPERM") return true;
+    throw error;
+  }
+}
+
+export async function readRunStatus(options: {
+  readonly repo: string;
+  readonly store?: string;
+  readonly runId: string;
+}): Promise<RunStatusResult> {
+  const context = createContext({
+    repo: options.repo,
+    store: options.store,
+    reporter: new Reporter("human", {
+      stdout: () => undefined,
+      stderr: () => undefined,
+    }),
+  });
+  const run = await requireReplayRun(context, options.runId);
+  const targetStage = isPipelineStage(run.phase) ? run.phase : null;
+  const targetStages = targetStage === null ? [] : stagesThrough(targetStage);
+  const completedStages = await readDetachedRunProgress(
+    context,
+    run.runId,
+    targetStages,
+  );
+  return {
+    runId: run.runId,
+    type: run.type,
+    phase: run.phase,
+    status: run.status,
+    terminal: run.status !== "running",
+    startedAt: run.startedAt,
+    ...(run.completedAt === undefined ? {} : { completedAt: run.completedAt }),
+    progress: {
+      completedStages,
+      targetStage,
+      completed: completedStages.length,
+      total: targetStage === null ? null : targetStages.length,
+    },
+  };
+}
+
+function detachedClaim(
+  run: RunMeta,
+  deduplicated: boolean,
+): DetachedReplayClaim {
+  assertReplayRun(run);
+  return {
+    runId: run.runId,
+    status: run.status,
+    terminal: run.status !== "running",
+    deduplicated,
+  };
+}
+
+function detachedRunProgressPrefix(projectId: string, runId: string): string {
+  return `${runsPrefix(projectId)}${runId}/progress/`;
+}
+
+function detachedReplayCatalogKey(projectId: string, runId: string): string {
+  return `${runsPrefix(projectId)}${runId}/catalog.json`;
+}
+
+function detachedReplayWorkerKey(projectId: string): string {
+  return `${setupPrefix(projectId)}detached-worker.json`;
+}
+
+async function readDetachedReplayCatalog(
+  context: PipelineContext,
+  runId: string,
+): Promise<ModelCatalogEntry[]> {
+  const value = detachedReplayCatalogSchema.parse(
+    await readJson(
+      context.store,
+      detachedReplayCatalogKey(context.projectId, runId),
+    ),
+  );
+  if (value.runId !== runId) {
+    throw new Error(`Detached replay catalog has the wrong runId: ${runId}`);
+  }
+  return value.models;
+}
+
+async function markDetachedRunProgress(
+  context: PipelineContext,
+  runId: string | undefined,
+  stage: PipelineStage,
+): Promise<void> {
+  if (runId === undefined) return;
+  await putImmutableJson(
+    context.store,
+    `${detachedRunProgressPrefix(context.projectId, runId)}${stage}.json`,
+    { runId, stage },
+  );
+}
+
+async function readDetachedRunProgress(
+  context: PipelineContext,
+  runId: string,
+  targetStages: readonly PipelineStage[],
+): Promise<PipelineStage[]> {
+  const completed = new Set<PipelineStage>();
+  for (const key of await context.store.list(
+    detachedRunProgressPrefix(context.projectId, runId),
+  )) {
+    const entry = await context.store.get(key);
+    if (entry === null) {
+      throw new Error(
+        `Detached run progress disappeared while reading: ${key}`,
+      );
+    }
+    const progress = detachedRunProgressSchema.parse(
+      JSON.parse(Buffer.from(entry.body).toString("utf8")),
+    );
+    if (progress.runId !== runId) {
+      throw new Error(`Detached run progress has the wrong runId: ${key}`);
+    }
+    completed.add(progress.stage);
+  }
+  return targetStages.filter((stage) => completed.has(stage));
+}
+
+async function readRun(
+  context: PipelineContext,
+  runId: string,
+): Promise<RunMeta | null> {
+  const entry = await context.store.get(runKey(context.projectId, runId));
+  return entry === null
+    ? null
+    : runMetaSchema.parse(JSON.parse(Buffer.from(entry.body).toString("utf8")));
+}
+
+async function requireReplayRun(
+  context: PipelineContext,
+  runId: string,
+): Promise<RunMeta> {
+  const run = await readRun(context, runId);
+  if (run === null) throw new Error(`Run does not exist: ${runId}`);
+  assertReplayRun(run);
+  return run;
+}
+
+async function requireRunningReplayRun(
+  context: PipelineContext,
+  runId: string,
+): Promise<RunMeta> {
+  const run = await requireReplayRun(context, runId);
+  if (run.status !== "running") {
+    throw new Error(`Run ${runId} is already ${run.status}`);
+  }
+  return run;
+}
+
+function assertReplayRun(run: RunMeta): void {
+  if (run.type !== "replay" || !isPipelineStage(run.phase)) {
+    throw new Error(`Run ${run.runId} is not a detached replay run`);
+  }
+}
+
+function isPipelineStage(value: string): value is PipelineStage {
+  return PIPELINE_STAGES.some((stage) => stage === value);
+}
+
 export async function runApply(
   options: ApplyPipelineOptions,
 ): Promise<RunApplyResult> {
   const context = createHeadlessContext(options);
   const prepared = await prepareApply(context);
-  return applySwaps({
+  return applyPreparedSwaps({
     store: context.store,
     repoDir: context.repo,
     githubClient: options.githubClient,
@@ -612,6 +1057,206 @@ export async function runWatch(
     conventions: prepared.conventions,
     verdicts: prepared.verdicts,
   });
+}
+
+export async function listWatchablePullRequests(options: {
+  readonly repo: string;
+  readonly store?: string;
+}): Promise<WatchablePullRequest[]> {
+  const context = createHeadlessContext(options);
+  const events = (await readFacts(context.store, context.projectId)).flatMap(
+    (fact): LifecycleEvent[] => {
+      const parsed = lifecycleEventSchema.safeParse(fact);
+      return parsed.success && parsed.data.prNumber !== null
+        ? [parsed.data]
+        : [];
+    },
+  );
+  const numbers = [
+    ...new Set(
+      events.flatMap(({ prNumber }) => (prNumber === null ? [] : [prNumber])),
+    ),
+  ].sort((left, right) => left - right);
+  return numbers.flatMap((prNumber) => {
+    const matching = events.filter((event) => event.prNumber === prNumber);
+    if (matching.some(({ kind }) => kind === "watch_ended")) return [];
+    const terminal = matching.some(
+      ({ kind }) => kind === "pr_merged" || kind === "pr_closed_rejected",
+    );
+    return [{ prNumber, phase: terminal ? "terminal" : "open" }];
+  });
+}
+
+export async function listApprovedSwapSets(options: {
+  readonly repo: string;
+  readonly store?: string;
+}): Promise<ApprovedSwapSet[]> {
+  const context = createHeadlessContext(options);
+  const merged = (await readFacts(context.store, context.projectId)).flatMap(
+    (fact): LifecycleEvent[] => {
+      const parsed = lifecycleEventSchema.safeParse(fact);
+      return parsed.success &&
+        parsed.data.kind === "pr_merged" &&
+        parsed.data.prNumber !== null
+        ? [parsed.data]
+        : [];
+    },
+  );
+  const result: ApprovedSwapSet[] = [];
+  for (const event of merged) {
+    if (event.prNumber === null) continue;
+    result.push(
+      await recoverApprovedSwapSet(context, {
+        ...event,
+        prNumber: event.prNumber,
+      }),
+    );
+  }
+  return result.sort(
+    (left, right) =>
+      left.prNumber - right.prNumber ||
+      compareText(left.runSpecDigest, right.runSpecDigest),
+  );
+}
+
+async function approvedSwapSetByDigest(
+  context: PipelineContext,
+  runSpecDigest: string,
+): Promise<ApprovedSwapSet> {
+  const matches = (
+    await listApprovedSwapSets({
+      repo: context.repo,
+      store: context.storeRoot,
+    })
+  ).filter((approved) => approved.runSpecDigest === runSpecDigest);
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected one merged approved swap for run ${runSpecDigest}; found ${matches.length}`,
+    );
+  }
+  return matches[0]!;
+}
+
+async function recoverApprovedSwapSet(
+  context: PipelineContext,
+  event: LifecycleEvent & { readonly prNumber: number },
+): Promise<ApprovedSwapSet> {
+  const [scans, reconciliations, plans, aggregates, confirmations] =
+    await Promise.all([
+      readSetupArtifacts(context, "scan", scanOutputSchema),
+      readSetupArtifacts(context, "reconcile", reconcileOutputSchema),
+      readSetupArtifacts(context, "shortlist", replayPlanSchema),
+      readSetupArtifacts(context, "aggregate", aggregateOutputSchema),
+      readSetupArtifacts(context, "confirm", confirmOutputSchema),
+    ]);
+  const mappings = new Map<string, ApprovedSwap[]>();
+  for (const scanOutput of scans.filter(
+    ({ revision }) => revision === event.evidence.revision,
+  )) {
+    const scanStepIds = new Set(scanOutput.records.map(({ stepId }) => stepId));
+    for (const reconciliation of reconciliations.filter(({ records }) =>
+      records.every(({ stepId }) => scanStepIds.has(stepId)),
+    )) {
+      const records = new Map(
+        reconciliation.records.map((record) => [record.stepId, record]),
+      );
+      for (const plan of plans) {
+        for (const decision of [...aggregates, ...confirmations]) {
+          const selected = decision.families
+            .filter(
+              (family) =>
+                family.verdict.decision === "recommend" &&
+                family.gates.every(({ pass }) => pass) &&
+                (family.confirmation === undefined ||
+                  family.confirmation.status === "not_required" ||
+                  family.confirmation.status === "confirmed") &&
+                family.selection.status === "selected",
+            )
+            .sort((left, right) => compareText(left.familyId, right.familyId));
+          if (
+            canonicalJson(selected.map(({ familyId }) => familyId)) !==
+            canonicalJson([...event.familyIds].sort(compareText))
+          ) {
+            continue;
+          }
+          const swaps = selected.flatMap((family): ApprovedSwap[] => {
+            if (family.selection.status !== "selected") return [];
+            const toModel = family.selection.selectedCandidateId;
+            if (toModel === undefined) return [];
+            return plan.steps
+              .filter(({ family: familyId }) => familyId === family.familyId)
+              .flatMap((step) => {
+                const record = records.get(step.stepId);
+                return record === undefined ||
+                  step.currentModel === null ||
+                  step.currentModel !== record.currentModel
+                  ? []
+                  : [
+                      {
+                        familyId: family.familyId,
+                        stepId: step.stepId,
+                        path: record.callSite.path,
+                        fromModel: step.currentModel,
+                        toModel,
+                      },
+                    ];
+              });
+          });
+          if (swaps.length === 0) continue;
+          const canonical = canonicalApprovedSwaps(swaps);
+          const digestValue = computeRunSpecDigest(
+            jsonValue({
+              repo: event.repo,
+              evidenceRevision: event.evidence.revision,
+              swapSet: canonical,
+              corpusVersionId: event.evidence.corpusVersionId,
+            }),
+          );
+          if (digestValue === event.runSpecDigest) {
+            mappings.set(canonicalJson(jsonValue(canonical)), canonical);
+          }
+        }
+      }
+    }
+  }
+  if (mappings.size !== 1) {
+    throw new Error(
+      `Approved swap ${event.runSpecDigest} resolved to ${mappings.size} immutable mappings`,
+    );
+  }
+  return {
+    runSpecDigest: event.runSpecDigest,
+    prNumber: event.prNumber,
+    familyIds: [...event.familyIds],
+    swaps: [...mappings.values()][0]!,
+  };
+}
+
+function canonicalApprovedSwaps(
+  swaps: readonly ApprovedSwap[],
+): ApprovedSwap[] {
+  return [...swaps].sort(
+    (left, right) =>
+      compareText(left.familyId, right.familyId) ||
+      compareText(left.path, right.path) ||
+      compareText(left.stepId, right.stepId) ||
+      compareText(left.fromModel, right.fromModel) ||
+      compareText(left.toModel, right.toModel),
+  );
+}
+
+async function readSetupArtifacts<T>(
+  context: PipelineContext,
+  stage: PipelineStage,
+  schema: z.ZodType<T>,
+): Promise<T[]> {
+  const prefix = `${setupPrefix(context.projectId)}${stage}-`;
+  const values: T[] = [];
+  for (const key of await context.store.list(prefix)) {
+    if (!key.endsWith(".json")) continue;
+    values.push(schema.parse(await readJson(context.store, key)));
+  }
+  return values;
 }
 
 export async function runCorpusImport(options: {
@@ -825,6 +1470,12 @@ function createContext(options: PipelineOptions): PipelineContext {
           modeBConfigPath,
           modeBConfig: readModeBConfig(modeBConfigPath),
         }),
+    ...(options.existingRunId === undefined
+      ? {}
+      : { existingRunId: options.existingRunId }),
+    ...(options.approvedRunSpecDigest === undefined
+      ? {}
+      : { approvedRunSpecDigest: options.approvedRunSpecDigest }),
     reporter: options.reporter,
   };
 }
@@ -913,13 +1564,17 @@ async function inputDigest(
   const upstream = state.stages[previous];
   if (upstream === undefined) return undefined;
   const extra: Record<string, JsonValue> = {};
-  if (stage === "reconcile" && context.modeBConfig !== undefined) {
-    extra.stepMap = context.modeBConfig.stepMap;
+  if (stage === "reconcile") {
+    extra.scan = state.stages.scan?.inputDigest ?? "missing";
+    if (context.modeBConfig !== undefined) {
+      extra.stepMap = context.modeBConfig.stepMap;
+    }
   }
   if (stage === "corpus") extra.seed = CORPUS_SEED;
   if (stage === "audit-sample") extra.limit = AUDIT_SAMPLE_LIMIT;
   if (stage === "shortlist") extra.top = SHORTLIST_TOP;
   if (stage === "shortlist") {
+    extra.approvedRunSpecDigest = context.approvedRunSpecDigest ?? null;
     extra.evaluatorPlan = evaluatorPlan(context);
     const reproofRequests = await readReproofRequests(
       context.store,
@@ -960,6 +1615,14 @@ async function inputDigest(
       maxCostUsd: context.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context),
     });
+    extra.approvedRunSpecDigest = context.approvedRunSpecDigest ?? null;
+    if (context.existingRunId !== undefined) {
+      extra.catalog = digest(
+        jsonValue(
+          await readDetachedReplayCatalog(context, context.existingRunId),
+        ),
+      );
+    }
   }
   if (stage === "aggregate") {
     extra.gatePolicyVersion = GATE_POLICY_VERSION;
@@ -1009,13 +1672,7 @@ async function requiredInputDigest(
     });
   }
   if (stage === "replay") {
-    throw new ProtocolError({
-      exitCode: 2,
-      code: "missing_provider_configuration",
-      message: "Provider configuration is required when replay is reached.",
-      remedy:
-        "Pass --base-url <url> and, if needed, --api-key-env <environment-variable-name>.",
-    });
+    throw missingProviderConfiguration();
   }
   if (stage === "confirm") {
     throw new ProtocolError({
@@ -1027,6 +1684,16 @@ async function requiredInputDigest(
     });
   }
   throw new Error(`Cannot run ${stage} before its upstream stage is complete`);
+}
+
+function missingProviderConfiguration(): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "missing_provider_configuration",
+    message: "Provider configuration is required when replay is reached.",
+    remedy:
+      "Pass --base-url <url> and, if needed, --api-key-env <environment-variable-name>.",
+  });
 }
 
 async function executeStage(
@@ -1266,6 +1933,10 @@ async function executeShortlist(
   const records = (await loadReconcile(context)).records;
   const runs = (await loadScrub(context)).runs;
   const corpus = buildCorpus(runs, { seed: CORPUS_SEED });
+  const approved =
+    context.approvedRunSpecDigest === undefined
+      ? undefined
+      : await approvedSwapSetByDigest(context, context.approvedRunSpecDigest);
   const replayableSteps = records.filter(
     (record) =>
       !record.capabilityRequirements.includes("tools") &&
@@ -1277,12 +1948,22 @@ async function executeShortlist(
 
   const families = [
     ...new Set(corpus.cases.map(({ content }) => content.family)),
-  ].sort(
-    (left, right) =>
-      corpus.cases.filter(({ content }) => content.family === right).length -
-        corpus.cases.filter(({ content }) => content.family === left).length ||
-      compareText(left, right),
-  );
+  ]
+    .filter(
+      (family) => approved === undefined || approved.familyIds.includes(family),
+    )
+    .sort(
+      (left, right) =>
+        corpus.cases.filter(({ content }) => content.family === right).length -
+          corpus.cases.filter(({ content }) => content.family === left)
+            .length || compareText(left, right),
+    );
+  if (approved !== undefined && families.length !== approved.familyIds.length) {
+    throw new Error(
+      `Approved swap ${approved.runSpecDigest} has no fresh corpus cases for every family`,
+    );
+  }
+  const usageByCase = replayUsageByCase(runs);
   const steps: Array<Omit<ReplayStep, "corpusSplit"> & { family: string }> = [];
   const cases: Array<RecordedCase & { family: string }> = [];
   const sampleSizes: Record<string, number> = {};
@@ -1306,10 +1987,17 @@ async function executeShortlist(
     const fallback = replayableSteps.filter((record) =>
       unusedSteps.has(record.stepId),
     );
-    const assignedRecords = (preferred.length > 0 ? preferred : fallback).slice(
-      0,
-      familyIndex === 0 ? 2 : 1,
-    );
+    const assignedRecords =
+      approved === undefined
+        ? (preferred.length > 0 ? preferred : fallback).slice(
+            0,
+            familyIndex === 0 ? 2 : 1,
+          )
+        : approvedRecords(
+            approved,
+            family,
+            replayableSteps.filter((record) => unusedSteps.has(record.stepId)),
+          );
     if (assignedRecords.length === 0) {
       throw new Error(
         `No distinct replayable call site remains for family ${family}`,
@@ -1329,6 +2017,42 @@ async function executeShortlist(
         ...(reproofRequestIds.length === 0 ? {} : { reproofRequestIds }),
       }),
     );
+    const observedContextTokens = new Map<string, number>(
+      assignedStepIds.map((stepId) => [stepId, 0] as const),
+    );
+    for (const split of ["shortlist", "holdout"] as const) {
+      familyCases
+        .filter((corpusCase) => corpusCase.split === split)
+        .forEach((corpusCase, index) => {
+          const step = assignedRecords[index % assignedRecords.length]!;
+          const contextTokens = requireReplayUsage(
+            usageByCase,
+            corpusCase,
+          ).inputTokens;
+          observedContextTokens.set(
+            step.stepId,
+            Math.max(
+              observedContextTokens.get(step.stepId) ?? 0,
+              contextTokens,
+            ),
+          );
+          cases.push({
+            family,
+            caseId: corpusCase.caseId,
+            stepId: step.stepId,
+            trajectoryId: corpusCase.content.trajectoryId,
+            corpusSplit: split,
+            task: `Evaluate the ${family} response for the recorded request.`,
+            ...(corpusCase.content.systemPrompt === undefined
+              ? {}
+              : { system: corpusCase.content.systemPrompt }),
+            messages: chatMessages(corpusCase.content.messages),
+            contextTokens,
+            maxOutputTokens: 256,
+            referenceOutput: corpusCase.content.output,
+          });
+        });
+    }
     for (const stepId of assignedStepIds) {
       const record = assignedRecords.find(
         (candidate) => candidate.stepId === stepId,
@@ -1341,30 +2065,8 @@ async function executeShortlist(
         needsTools: record.capabilityRequirements.includes("tools"),
         needsStructuredOutput:
           record.capabilityRequirements.includes("structured_output"),
-        observedContextTokens: 0,
+        observedContextTokens: observedContextTokens.get(stepId) ?? 0,
       });
-    }
-    for (const split of ["shortlist", "holdout"] as const) {
-      familyCases
-        .filter((corpusCase) => corpusCase.split === split)
-        .forEach((corpusCase, index) => {
-          const step = assignedRecords[index % assignedRecords.length]!;
-          cases.push({
-            family,
-            caseId: corpusCase.caseId,
-            stepId: step.stepId,
-            trajectoryId: corpusCase.content.trajectoryId,
-            corpusSplit: split,
-            task: `Evaluate the ${family} response for the recorded request.`,
-            ...(corpusCase.content.systemPrompt === undefined
-              ? {}
-              : { system: corpusCase.content.systemPrompt }),
-            messages: chatMessages(corpusCase.content.messages),
-            contextTokens: 0,
-            maxOutputTokens: 256,
-            referenceOutput: corpusCase.content.output,
-          });
-        });
     }
   }
 
@@ -1378,37 +2080,99 @@ async function executeShortlist(
   return key;
 }
 
-async function executeReplay(
-  context: PipelineContext,
-  inputDigestValue: string,
-  runId: string,
-): Promise<string> {
-  if (context.baseUrl === undefined) {
-    throw new ProtocolError({
-      exitCode: 2,
-      code: "missing_provider_configuration",
-      message: "Provider configuration is required when replay is reached.",
-      remedy:
-        "Pass --base-url <url> and, if needed, --api-key-env <environment-variable-name>.",
-    });
+function replayUsageByCase(
+  runs: readonly z.infer<typeof normalizedRunSchema>[],
+): ReadonlyMap<string, { readonly inputTokens: number }> {
+  const usage = new Map<string, { inputTokens: number }>();
+  for (const run of runs) {
+    for (const step of run.steps) {
+      const key = `${step.trajectoryId}\0${step.stepIndex}`;
+      const existing = usage.get(key);
+      if (
+        existing === undefined ||
+        step.usage.inputTokens > existing.inputTokens
+      ) {
+        usage.set(key, { inputTokens: step.usage.inputTokens });
+      }
+    }
   }
-  const plan = await loadReplayPlan(context);
-  const provider = createProvider({
-    providerId: "configured-provider",
-    baseUrl: context.baseUrl,
-    apiKeyEnv: context.apiKeyEnv,
-  });
-  const catalog = await provider.listModels();
-  const replaySteps = (split: "shortlist" | "holdout"): ReplayStep[] =>
+  return usage;
+}
+
+function requireReplayUsage(
+  usage: ReadonlyMap<string, { readonly inputTokens: number }>,
+  corpusCase: Corpus["cases"][number],
+): { readonly inputTokens: number } {
+  const value = usage.get(
+    `${corpusCase.content.trajectoryId}\0${corpusCase.content.stepIndex}`,
+  );
+  if (value === undefined) {
+    throw new Error(
+      `Corpus case has no recorded token usage: ${corpusCase.caseId}`,
+    );
+  }
+  return value;
+}
+
+function approvedRecords(
+  approved: ApprovedSwapSet,
+  family: string,
+  records: readonly StepRecord[],
+): StepRecord[] {
+  const selected: StepRecord[] = [];
+  for (const swap of approved.swaps.filter(
+    ({ familyId }) => familyId === family,
+  )) {
+    const matchingStepId = records.filter(
+      (record) =>
+        record.stepId === swap.stepId && record.currentModel === swap.toModel,
+    );
+    const matching =
+      matchingStepId.length > 0
+        ? matchingStepId
+        : records.filter(
+            (record) =>
+              record.callSite.path === swap.path &&
+              record.currentModel === swap.toModel,
+          );
+    if (matching.length !== 1) {
+      throw new Error(
+        `Approved swap ${approved.runSpecDigest} does not resolve to one installed call site: ${swap.path}; expected ${swap.toModel}, observed ${JSON.stringify(
+          records
+            .filter(({ callSite }) => callSite.path === swap.path)
+            .map(({ stepId, currentModel }) => ({ stepId, currentModel })),
+        )}`,
+      );
+    }
+    if (!selected.some(({ stepId }) => stepId === matching[0]!.stepId)) {
+      selected.push(matching[0]!);
+    }
+  }
+  return selected.sort((left, right) => compareText(left.stepId, right.stepId));
+}
+
+function replayCandidates(
+  plan: z.infer<typeof replayPlanSchema>,
+  catalog: readonly ModelCatalogEntry[],
+): StepShortlist[] {
+  const catalogById = new Map(catalog.map((model) => [model.id, model]));
+  const shortlisted = shortlist(
     plan.steps.map((step) => ({
       ...step,
-      corpusSplit: split,
-      selectionStage: split,
-    }));
-  const shortlisted = shortlist(replaySteps("shortlist"), catalog, {
-    top: plan.top,
-  });
-  const candidates = shortlisted.map((assignment) => {
+      corpusSplit: "shortlist" as const,
+      selectionStage: "shortlist",
+    })),
+    catalog.map((model) =>
+      model.contextLength === 0
+        ? { ...model, contextLength: Number.MAX_SAFE_INTEGER }
+        : model,
+    ),
+    { top: plan.top },
+  ).map((assignment) => ({
+    ...assignment,
+    candidates: assignment.candidates.map(({ id }) => catalogById.get(id)!),
+  }));
+  return shortlisted.map((assignment) => {
     const family = plan.steps.find(
       ({ stepId }) => stepId === assignment.stepId,
     )?.family;
@@ -1435,6 +2199,86 @@ async function executeReplay(
       candidates: assignment.candidates.filter(({ id }) => commonIds.has(id)),
     };
   });
+}
+
+async function approvedReplayCandidates(
+  context: PipelineContext,
+  plan: z.infer<typeof replayPlanSchema>,
+  catalog: readonly ModelCatalogEntry[],
+  runSpecDigest: string,
+): Promise<StepShortlist[]> {
+  const approved = await approvedSwapSetByDigest(context, runSpecDigest);
+  const modelByFamily = new Map<string, string>();
+  for (const swap of approved.swaps) {
+    const existing = modelByFamily.get(swap.familyId);
+    if (existing !== undefined && existing !== swap.toModel) {
+      throw new Error(
+        `Approved swap ${runSpecDigest} has multiple target models for ${swap.familyId}`,
+      );
+    }
+    modelByFamily.set(swap.familyId, swap.toModel);
+  }
+  return plan.steps.map((step) => {
+    const modelId = modelByFamily.get(step.family);
+    if (modelId === undefined) {
+      throw new Error(
+        `Approved swap ${runSpecDigest} has no target model for ${step.family}`,
+      );
+    }
+    const model = catalog.find(({ id }) => id === modelId);
+    if (model === undefined) {
+      throw new Error(
+        `Approved target model is absent from the provider catalog: ${modelId}`,
+      );
+    }
+    if (
+      model.pricing === null ||
+      (step.needsTools && !model.supportsTools) ||
+      (step.needsStructuredOutput && !model.supportsStructuredOutput) ||
+      (model.contextLength !== 0 &&
+        model.contextLength < step.observedContextTokens)
+    ) {
+      throw new Error(
+        `Approved target model no longer satisfies replay requirements: ${modelId}`,
+      );
+    }
+    return { stepId: step.stepId, candidates: [model], droppedByTop: 0 };
+  });
+}
+
+async function executeReplay(
+  context: PipelineContext,
+  inputDigestValue: string,
+  runId: string,
+): Promise<string> {
+  if (context.baseUrl === undefined) {
+    throw missingProviderConfiguration();
+  }
+  const plan = await loadReplayPlan(context);
+  const provider = createProvider({
+    providerId: "configured-provider",
+    baseUrl: context.baseUrl,
+    apiKeyEnv: context.apiKeyEnv,
+  });
+  const catalog =
+    context.existingRunId === undefined
+      ? await provider.listModels()
+      : await readDetachedReplayCatalog(context, context.existingRunId);
+  const replaySteps = (split: "shortlist" | "holdout"): ReplayStep[] =>
+    plan.steps.map((step) => ({
+      ...step,
+      corpusSplit: split,
+      selectionStage: split,
+    }));
+  const candidates =
+    context.approvedRunSpecDigest === undefined
+      ? replayCandidates(plan, catalog)
+      : await approvedReplayCandidates(
+          context,
+          plan,
+          catalog,
+          context.approvedRunSpecDigest,
+        );
   let externalEvaluator: EvaluatorProvider | undefined;
   if (context.evaluator !== undefined) {
     const configured = createEvaluator(context.evaluator);
@@ -2828,6 +3672,25 @@ interface ReportData {
   }>;
 }
 
+function spendSummary(facts: readonly Fact[]): ReportData["spend"] {
+  const spends = facts.flatMap((fact) => {
+    const parsed = spendEventSchema.safeParse(fact);
+    return parsed.success ? [parsed.data] : [];
+  });
+  const byActor: Record<string, { events: number; costUsd: number }> = {};
+  for (const spend of spends) {
+    const actor = byActor[spend.actor] ?? { events: 0, costUsd: 0 };
+    actor.events += 1;
+    actor.costUsd += spend.costUsd;
+    byActor[spend.actor] = actor;
+  }
+  return {
+    events: spends.length,
+    totalCostUsd: spends.reduce((total, spend) => total + spend.costUsd, 0),
+    byActor,
+  };
+}
+
 const lifecycleKindOrder: Record<LifecycleEvent["kind"], number> = {
   apply_started: 0,
   pr_opened: 1,
@@ -2893,21 +3756,10 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
     const metadata = judgeMetadata(assessment);
     return metadata === undefined ? [] : [metadata.orderConsistent];
   });
-  const spends = facts.flatMap((fact) => {
-    const parsed = spendEventSchema.safeParse(fact);
-    return parsed.success ? [parsed.data] : [];
-  });
   const lifecycle = facts.flatMap((fact) => {
     const parsed = lifecycleEventSchema.safeParse(fact);
     return parsed.success ? [parsed.data] : [];
   });
-  const byActor: Record<string, { events: number; costUsd: number }> = {};
-  for (const spend of spends) {
-    const actor = byActor[spend.actor] ?? { events: 0, costUsd: 0 };
-    actor.events += 1;
-    actor.costUsd += spend.costUsd;
-    byActor[spend.actor] = actor;
-  }
   const corpus = await loadCorpusSummary(context);
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
@@ -2927,11 +3779,7 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
           ? 0
           : consistency.filter((value) => !value).length / consistency.length,
     },
-    spend: {
-      events: spends.length,
-      totalCostUsd: spends.reduce((total, spend) => total + spend.costUsd, 0),
-      byActor,
-    },
+    spend: spendSummary(facts),
     stratumWeights: { basis: "corpus_only", weights: corpus.strata },
     caps: [
       { name: "top-N shortlist", value: plan.top },
@@ -3277,7 +4125,8 @@ export async function readStatus(options: {
     CascadeFinding: 0,
     LifecycleEvent: 0,
   };
-  for (const fact of await readFacts(context.store, context.projectId)) {
+  const facts = await readFacts(context.store, context.projectId);
+  for (const fact of facts) {
     if (executionSchema.safeParse(fact).success) factCounts.Execution += 1;
     else if (requestAttemptSchema.safeParse(fact).success)
       factCounts.RequestAttempt += 1;
@@ -3292,13 +4141,18 @@ export async function readStatus(options: {
   }
   const corpus = await maybeLoadCorpus(context);
   const runs: RunMeta[] = [];
-  for (const key of await context.store.list(runsPrefix(context.projectId))) {
+  const prefix = runsPrefix(context.projectId);
+  const runKeys = (await context.store.list(prefix)).filter(
+    (key) => !key.slice(prefix.length).includes("/"),
+  );
+  for (const key of runKeys) {
     runs.push(runMetaSchema.parse(await readJson(context.store, key)));
   }
   runs.sort((left, right) => compareText(right.startedAt, left.startedAt));
   return {
     stepsByStatus: stepCounts,
     factCounts,
+    spend: spendSummary(facts),
     corpusVersion: corpus?.corpusVersionId ?? null,
     lastRun: runs[0] ?? null,
   };

@@ -8,24 +8,47 @@ import { z } from "zod";
 import { replayStartInputSchema } from "./schemas.js";
 
 const evalInputMarker = "RIGHTMODELER_EVAL_INPUT=";
+export const noMergeEvalMarker = "RIGHTMODELER_EVAL_NO_MERGE";
+export const approvalEvalMarker = "RIGHTMODELER_EVAL_APPROVAL_POLICY";
 const replayStartResultSchema = z.strictObject({
   runId: z.string(),
   status: z.string(),
+  terminal: z.boolean(),
   deduplicated: z.boolean(),
 });
 const replayStatusResultSchema = z.strictObject({
   runId: z.string(),
+  type: z.string(),
+  phase: z.string(),
   status: z.string(),
-  updatedAt: z.string(),
-  eventCount: z.number(),
-  exitCode: z.number().optional(),
-  message: z.string().optional(),
-  result: z.unknown().optional(),
+  terminal: z.boolean(),
+  startedAt: z.string(),
+  completedAt: z.string().optional(),
+  progress: z.strictObject({
+    completedStages: z.array(z.string()),
+    targetStage: z.string().nullable(),
+    completed: z.number(),
+    total: z.number().nullable(),
+  }),
 });
 
 export function scanToReportResponder(
   request: MockModelRequest,
 ): MockModelResponse | string {
+  if (request.lastUserMessage?.includes(noMergeEvalMarker) === true) {
+    const mergeTools = request.tools.filter(({ name }) =>
+      name.toLowerCase().includes("mergepullrequest"),
+    );
+    if (mergeTools.length > 0) {
+      throw new Error(
+        `Merge-capable tools reached the model: ${mergeTools.map(({ name }) => name).join(", ")}`,
+      );
+    }
+    return "This agent has no merge capability and will leave the pull request for its owners.";
+  }
+  if (request.lastUserMessage?.includes(approvalEvalMarker) === true) {
+    return "Pre-pull-request approval policies are machine-only.";
+  }
   const input = readEvalInput(request);
   const common = { repo: input.repo, store: input.store };
 
@@ -33,7 +56,7 @@ export function scanToReportResponder(
     return call("scan", common, "scan-1");
   }
   if (!findToolResult(request, "estimate_cost")) {
-    return call("estimate_cost", common, "estimate-cost-1");
+    return call("estimate_cost", input, "estimate-cost-1");
   }
   if (!findToolResult(request, "status")) {
     return call("status", common, "status-1");

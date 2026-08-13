@@ -6,13 +6,14 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   readdir,
   rm,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import {
@@ -32,7 +33,7 @@ import { createProvider } from "@rightmodeler/replay";
 import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { topologicalRecords } from "./pipeline.js";
+import { listApprovedSwapSets, topologicalRecords } from "./pipeline.js";
 
 const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const demoAppPath = fileURLToPath(
@@ -46,6 +47,12 @@ const langgraphTracesPath = fileURLToPath(
 );
 const tracesPath = fileURLToPath(
   new URL("../../../fixtures/traces/otel-genai.json", import.meta.url),
+);
+const promptfooCommandPath = fileURLToPath(
+  new URL("../../../fixtures/promptfoo-stub/run.mjs", import.meta.url),
+);
+const promptfooAssertionsPath = fileURLToPath(
+  new URL("../../../fixtures/promptfoo-stub/assertions.yaml", import.meta.url),
 );
 const stubModuleUrl = new URL(
   "../../../fixtures/stub-provider/server.mjs",
@@ -349,6 +356,32 @@ async function startStub(): Promise<StubProvider> {
   return module.startStubProvider({ port: 0 });
 }
 
+async function waitForTerminalRun(
+  repo: string,
+  store: string,
+  runId: string,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    const result = await runCli([
+      "--repo",
+      repo,
+      "--store",
+      store,
+      "--output",
+      "json",
+      "status",
+      "--run",
+      runId,
+    ]);
+    expect(result.code).toBe(0);
+    const status = jsonOutput(result);
+    if (status.terminal === true) return status;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+  }
+  throw new Error(`Detached replay did not finish: ${runId}`);
+}
+
 async function startEvaluatorStub(
   options: {
     pendingPolls?: number;
@@ -569,6 +602,13 @@ describe("section 18 autonomy boundary", () => {
 });
 
 describe("built CLI pipeline", () => {
+  it("exports applySwaps from the bundled programmatic entry", async () => {
+    const cli = (await import(pathToFileURL(cliPath).href)) as {
+      applySwaps?: unknown;
+    };
+    expect(cli.applySwaps).toBeTypeOf("function");
+  });
+
   it("uses deterministic judge output and exposes seeded position disagreement", async () => {
     const stub = await startStub();
     const apiKeyEnv = "RIGHTMODELER_JUDGE_E2E_API_KEY";
@@ -676,6 +716,111 @@ describe("built CLI pipeline", () => {
         ({ state }) => state === "complete",
       ),
     ).toBe(true);
+  });
+
+  it("estimates without model spend and idempotently dispatches a detached replay", async () => {
+    const { root, repo } = await fixtureCopy("detached-replay");
+    const store = join(root, "store");
+    const invocationDirectory = join(root, "invocation");
+    await mkdir(invocationDirectory);
+    const physicalInvocationDirectory = await realpath(invocationDirectory);
+    const relativeTraces = relative(physicalInvocationDirectory, tracesPath);
+    const relativeEvaluatorCommand = relative(
+      physicalInvocationDirectory,
+      promptfooCommandPath,
+    );
+    const relativeEvaluatorConfig = relative(
+      physicalInvocationDirectory,
+      promptfooAssertionsPath,
+    );
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_DETACHED_E2E_API_KEY";
+    const common = ["--repo", repo, "--store", store, "--output", "json"];
+    const replayOptions = [
+      "--traces",
+      relativeTraces,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--evaluator",
+      "promptfoo",
+      "--evaluator-command",
+      relativeEvaluatorCommand,
+      "--evaluator-config",
+      relativeEvaluatorConfig,
+      "--evaluator-scorer",
+      "output_similarity",
+      "--max-cost-usd",
+      "25",
+    ];
+
+    try {
+      const estimate = await runCli([...common, "estimate", ...replayOptions], {
+        cwd: invocationDirectory,
+        env: { [apiKeyEnv]: secret },
+      });
+      expect(estimate.code, estimate.stderr).toBe(0);
+      expect(jsonOutput(estimate)).toMatchObject({
+        corpusCases: expect.any(Number),
+        candidateExecutions: expect.any(Number),
+        projectedCostUsd: expect.any(Number),
+        shortlist: expect.any(Array),
+      });
+      expect(jsonOutput(estimate).candidateExecutions).not.toBe(0);
+      expect(stub.getHitCount()).toBe(0);
+
+      const first = await runCli(
+        [...common, "replay", ...replayOptions, "--detach"],
+        { cwd: invocationDirectory, env: { [apiKeyEnv]: secret } },
+      );
+      expect(first.code).toBe(0);
+      const firstDispatch = jsonOutput(first);
+      expect(firstDispatch).toMatchObject({
+        status: "running",
+        terminal: false,
+        deduplicated: false,
+      });
+      const runId = String(firstDispatch.runId);
+
+      const duplicate = await runCli(
+        [...common, "replay", ...replayOptions, "--detach"],
+        { cwd: invocationDirectory, env: { [apiKeyEnv]: secret } },
+      );
+      expect(duplicate.code).toBe(0);
+      expect(jsonOutput(duplicate)).toMatchObject({
+        runId,
+        deduplicated: true,
+      });
+
+      const terminal = await waitForTerminalRun(repo, store, runId);
+      expect(terminal).toMatchObject({
+        runId,
+        status: "completed",
+        terminal: true,
+        progress: {
+          targetStage: "replay",
+          completed: 8,
+          total: 8,
+        },
+      });
+      const hitsAtCompletion = stub.getHitCount();
+
+      const terminalDuplicate = await runCli(
+        [...common, "replay", ...replayOptions, "--detach"],
+        { cwd: invocationDirectory, env: { [apiKeyEnv]: secret } },
+      );
+      expect(terminalDuplicate.code).toBe(0);
+      expect(jsonOutput(terminalDuplicate)).toMatchObject({
+        runId,
+        status: "completed",
+        terminal: true,
+        deduplicated: true,
+      });
+      expect(stub.getHitCount()).toBe(hitsAtCompletion);
+    } finally {
+      await stub.close();
+    }
   });
 
   it("imports a curated provider corpus without persisting its key", async () => {
@@ -1091,6 +1236,8 @@ describe("built CLI pipeline", () => {
       "watch",
       "--owner",
       "acme",
+      "--github-repo",
+      "demo-app",
       "--pr",
       "1",
       "--github-base-url",
@@ -1116,6 +1263,8 @@ describe("built CLI pipeline", () => {
         initializedOutput.verdicts as Array<{
           decision: string;
           caseIds: string[];
+          familyId: string;
+          candidateId: string;
         }>
       ).find(({ decision }) => decision === "recommend");
       expect(recommended?.caseIds.length).toBeGreaterThan(0);
@@ -1242,6 +1391,18 @@ describe("built CLI pipeline", () => {
           expect.objectContaining({ type: "pr_merged" }),
           expect.objectContaining({ type: "watch_ended" }),
         ],
+      });
+      const approved = await listApprovedSwapSets({ repo });
+      expect(approved).toHaveLength(1);
+      expect(approved[0]).toMatchObject({
+        prNumber: 1,
+        familyIds: [recommended!.familyId],
+        swaps: expect.arrayContaining([
+          expect.objectContaining({
+            familyId: recommended!.familyId,
+            toModel: recommended!.candidateId,
+          }),
+        ]),
       });
       const hitsAfterMerge = github.getHits().length;
       const quietWatch = await runCli(watchArgs, { env });
@@ -1415,6 +1576,70 @@ describe("built CLI pipeline", () => {
         reproof_requested: false,
         reproof_request_ids: ["review:reproof-fixture"],
       });
+
+      for (const swap of approved[0]!.swaps) {
+        const path = join(repo, swap.path);
+        const before = await readFile(path, "utf8");
+        const after = before.replace(swap.fromModel, swap.toModel);
+        expect(after).not.toBe(before);
+        await writeFile(path, after);
+      }
+      await execFileAsync("git", ["-C", repo, "add", "."]);
+      await execFileAsync("git", [
+        "-C",
+        repo,
+        "commit",
+        "--message",
+        "Apply approved swaps",
+      ]);
+      const regressionOptions = [
+        "--traces",
+        filteredTraces,
+        "--base-url",
+        `http://127.0.0.1:${provider.port}/v1`,
+        "--api-key-env",
+        "RIGHTMODELER_APPLY_E2E_API_KEY",
+        "--approved-run",
+        approved[0]!.runSpecDigest,
+      ];
+      const regressionEstimate = await runCli(
+        ["--repo", repo, "--output", "json", "estimate", ...regressionOptions],
+        { env },
+      );
+      expect(regressionEstimate.code, regressionEstimate.stderr).toBe(0);
+      expect(jsonOutput(regressionEstimate)).toMatchObject({
+        candidateExecutions: expect.any(Number),
+        shortlist: expect.arrayContaining([
+          expect.objectContaining({
+            candidateIds: [recommended!.candidateId],
+          }),
+        ]),
+      });
+      const providerHitsBeforeRegression = provider.getHitCount();
+      const regression = await runCli(
+        [
+          "--repo",
+          repo,
+          "--output",
+          "json",
+          "replay",
+          ...regressionOptions,
+          "--detach",
+        ],
+        { env },
+      );
+      expect(regression.code, regression.stderr).toBe(0);
+      const regressionRunId = String(jsonOutput(regression).runId);
+      await expect(
+        waitForTerminalRun(repo, join(repo, ".rightmodeler"), regressionRunId),
+      ).resolves.toMatchObject({
+        phase: "aggregate",
+        status: "completed",
+        progress: { completed: 9, total: 9 },
+      });
+      expect(provider.getHitCount()).toBeGreaterThan(
+        providerHitsBeforeRegression,
+      );
     } finally {
       await Promise.all([provider.close(), github.close()]);
     }

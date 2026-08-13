@@ -1,19 +1,15 @@
 import { defineTool } from "eve/tools";
 
 import { runCli } from "../lib/cli.js";
-import { harnessInputSchema } from "../lib/schemas.js";
+import { replayCliArguments } from "../lib/replay.js";
+import { replayStartInputSchema } from "../lib/schemas.js";
 
 export const estimateCostTool = defineTool({
   description:
-    "Preview the resumable pipeline before replay. The current CLI does not expose a dollar estimate, so this tool reports that limit explicitly instead of inventing one.",
-  inputSchema: harnessInputSchema,
+    "Project replay spend from the current corpus, real shortlist, and current provider catalog without making paid model calls.",
+  inputSchema: replayStartInputSchema,
   async execute(input) {
-    const plan = (await runCli("init", ["--plan"], input)).result;
-    return {
-      available: false,
-      reason: "The installed CLI exposes a stage plan but no cost estimate.",
-      plan,
-    };
+    return (await runCli("estimate", replayCliArguments(input), input)).result;
   },
 });
 

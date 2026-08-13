@@ -1,0 +1,1 @@
+{"runId":"7d47dfe7-1d01-4149-8443-e07c404b669e","caseId":"confirm-trace-langgraph-confirm-23","executionId":"cc7e2f60-7904-4227-97fb-dfc8c6987ea2","finalOutput":"The order lookup result could not be verified.","steps":[{"step":"classify","model":"acme/large-1","ok":true},{"step":"lookup","model":"acme/max-1","ok":true},{"step":"answer","model":"acme/large-1","ok":true}]}

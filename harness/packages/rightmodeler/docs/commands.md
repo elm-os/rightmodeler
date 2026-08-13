@@ -22,6 +22,7 @@ Options:
 
 Commands:
   init [options]       run the resumable Phase A pipeline
+  estimate [options]   project replay spend before paid model calls
   scan [options]       run through the scan stage
   ingest [options]     run through the ingest stage
   reconcile [options]  run through the reconcile stage
@@ -36,7 +37,7 @@ Commands:
   apply [options]      open a draft pull request for proven model swaps
   watch [options]      reconcile one open model-swap pull request
   report               write report.md and report.json
-  status               summarize the current store
+  status [options]     summarize the current store
   help [command]       display help for command
 ```
 
@@ -79,6 +80,43 @@ Options:
                                       "aggregate", "confirm", "report")
   --yes                               accept defaults (reserved for future
                                       prompts)
+  -h, --help                          display help for command
+```
+
+## `rightmodeler estimate`
+
+```text
+Usage: rightmodeler estimate [options]
+
+project replay spend before paid model calls
+
+Options:
+  --traces <path>                     trace input file
+  --modeb-config <path>               versioned Mode B runtime configuration
+                                      JSON file
+  --base-url <url>                    OpenAI-compatible provider base URL
+  --api-key-env <name>                environment variable containing the
+                                      provider API key
+  --max-cost-usd <amount>             maximum replay spend in USD
+  --evaluator <provider>              external evaluator provider (choices:
+                                      "braintrust", "langfuse", "langsmith",
+                                      "promptfoo")
+  --evaluator-base-url <url>          external evaluator API base URL
+  --evaluator-api-key-env <name>      environment variable containing the
+                                      evaluator API key
+  --evaluator-public-key-env <name>   environment variable containing the
+                                      Langfuse public key
+  --evaluator-project-id <id>         Braintrust project or LangSmith dataset
+                                      identifier
+  --evaluator-command <path>          promptfoo executable path or command
+  --evaluator-config <path>           promptfoo assertions configuration file
+  --evaluator-scorer <name>           external evaluator scorer name
+                                      (repeatable)
+  --evaluator-gate-metric <name>      scorer metric used for release gates
+  --evaluator-gate-threshold <value>  fallback pass threshold when the evaluator
+                                      omits a pass decision
+  --approved-run <digest>             scope projection to one merged approved
+                                      swap
   -h, --help                          display help for command
 ```
 
@@ -179,6 +217,9 @@ Options:
   --evaluator-gate-metric <name>      scorer metric used for release gates
   --evaluator-gate-threshold <value>  fallback pass threshold when the evaluator
                                       omits a pass decision
+  --detach                            enqueue replay and return its run
+                                      identifier
+  --approved-run <digest>             regression-test one merged approved swap
   -h, --help                          display help for command
 ```
 
@@ -348,6 +389,7 @@ reconcile one open model-swap pull request
 
 Options:
   --owner <owner>            GitHub repository owner
+  --github-repo <repo>       GitHub repository name
   --pr <number>              pull request number
   --github-base-url <url>    GitHub API base URL
   --github-token-env <name>  environment variable containing the GitHub token
@@ -373,5 +415,6 @@ Usage: rightmodeler status [options]
 summarize the current store
 
 Options:
-  -h, --help  display help for command
+  --run <runId>  report one detached replay run
+  -h, --help     display help for command
 ```

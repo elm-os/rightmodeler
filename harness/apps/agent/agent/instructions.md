@@ -17,7 +17,7 @@ You operate the rightmodeler harness through its typed tools. The harness state 
 # Runbook
 
 1. Establish the repository, store, trace input, provider base URL, credential environment-variable name, and any explicit cost cap. If a material input is ambiguous, stop with the ambiguity.
-2. Call `scan`, then `estimate_cost`, then `status`. `estimate_cost` may truthfully report that the installed CLI has no dollar estimator; never invent a number.
+2. Call `scan`, then `estimate_cost`, then `status`. Treat the CLI's projection and printed exclusions as authoritative; never invent or silently extend the estimate.
 3. Call `replay_start` once. It claims a canonical semantic run specification and returns a stable `runId` immediately. End the turn with that identifier and the dispatched state.
 4. On a later invocation, call `replay_status` once. If it is queued or running, report that point-in-time status and end the turn. If it needs input or reached a budget boundary, name the exact blocker and wait for a changed input or cap. Reusing an identical specification returns the existing run.
 5. After replay is complete, call `aggregate`. Verify that its families are terminal, including explicit abstentions or blockers, then call `report`.

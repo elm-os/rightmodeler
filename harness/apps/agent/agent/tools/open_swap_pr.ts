@@ -1,7 +1,7 @@
 import { defineTool } from "eve/tools";
 
+import { applySwaps } from "@rightmodeler/cli";
 import { machineApproval } from "../lib/approval.js";
-import { runCli } from "../lib/cli.js";
 import { openSwapPrInputSchema } from "../lib/schemas.js";
 
 export const openSwapPrTool = defineTool({
@@ -10,22 +10,7 @@ export const openSwapPrTool = defineTool({
   inputSchema: openSwapPrInputSchema,
   approval: machineApproval,
   async execute(input) {
-    const args = [
-      "--owner",
-      input.owner,
-      "--github-base-url",
-      input.githubBaseUrl,
-      "--github-token-env",
-      input.githubTokenEnv,
-    ];
-    if (input.dryRun === true) args.push("--dry-run");
-    return (
-      await runCli("apply", args, {
-        repo: input.repo,
-        store: input.store,
-        acceptedExitCodes: [0, 1],
-      })
-    ).result;
+    return applySwaps(input);
   },
 });
 

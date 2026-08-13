@@ -3490,12 +3490,12 @@ var {
 } = import_index.default;
 
 // src/pipeline.ts
-import { execFile as execFile6 } from "node:child_process";
-import { createHash as createHash7 } from "node:crypto";
+import { execFile as execFile7 } from "node:child_process";
+import { createHash as createHash10 } from "node:crypto";
 import { readFileSync as readFileSync5 } from "node:fs";
-import { mkdir as mkdir3, readFile as readFile7, readdir as readdir3, writeFile as writeFile3 } from "node:fs/promises";
-import { dirname as dirname5, join as join11, relative as relative6, resolve as resolve5, sep as sep4 } from "node:path";
-import { promisify as promisify5 } from "node:util";
+import { mkdir as mkdir3, readFile as readFile8, readdir as readdir3, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname as dirname5, join as join12, relative as relative6, resolve as resolve5, sep as sep4 } from "node:path";
+import { promisify as promisify6 } from "node:util";
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -24872,7 +24872,7 @@ function attributes(span) {
   if (!Array.isArray(span.attributes)) return {};
   return Object.fromEntries(
     span.attributes.flatMap(
-      (attribute) => isRecord4(attribute) && typeof attribute.key === "string" ? [[attribute.key, otlpValue(attribute.value)]] : []
+      (attribute2) => isRecord4(attribute2) && typeof attribute2.key === "string" ? [[attribute2.key, otlpValue(attribute2.value)]] : []
     )
   );
 }
@@ -27851,6 +27851,1355 @@ function objectValue2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
 }
 
+// src/evaluators/shared.ts
+function resolveScoringConfig(config2) {
+  if (config2.scorers.length === 0) {
+    throw new Error("At least one evaluator scorer must be configured");
+  }
+  if (config2.scorers.some((scorer) => scorer.length === 0)) {
+    throw new Error("Evaluator scorer names must not be empty");
+  }
+  if (new Set(config2.scorers).size !== config2.scorers.length) {
+    throw new Error("Evaluator scorer names must not contain duplicates");
+  }
+  if (config2.gateThreshold !== void 0 && !Number.isFinite(config2.gateThreshold)) {
+    throw new Error("Evaluator gateThreshold must be a finite number");
+  }
+  const gateMetric = config2.gateMetric ?? (config2.scorers.length === 1 ? config2.scorers[0] : void 0);
+  if (gateMetric === void 0) {
+    throw new Error(
+      `Multiple evaluator scorers are configured; choose --evaluator-gate-metric from: ${config2.scorers.join(", ")}`
+    );
+  }
+  if (!config2.scorers.includes(gateMetric)) {
+    throw new Error(
+      `Evaluator gate metric ${gateMetric} is not a configured scorer; choose from: ${config2.scorers.join(", ")}`
+    );
+  }
+  return {
+    scorers: [...config2.scorers],
+    gateMetric,
+    ...config2.gateThreshold === void 0 ? {} : { gateThreshold: config2.gateThreshold }
+  };
+}
+function requireText(value, label) {
+  if (value.length === 0) throw new Error(`${label} must not be empty`);
+  return value;
+}
+function environmentSecret(name, label) {
+  const value = process.env[name];
+  if (value === void 0 || value.length === 0) {
+    throw new Error(`${label} environment variable is not set: ${name}`);
+  }
+  return value;
+}
+function redactSecrets(value, secrets) {
+  return secrets.reduce(
+    (redacted, secret) => secret.length === 0 ? redacted : redacted.replaceAll(secret, "[redacted]"),
+    value
+  );
+}
+async function responseJson(response, label, secrets) {
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `${label} request failed with ${response.status}: ${redactSecrets(text, secrets)}`
+    );
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      `${label} returned invalid JSON: ${redactSecrets(text, secrets)}`
+    );
+  }
+}
+function apiRoot(baseUrl, suffix) {
+  return `${baseUrl.replace(/\/+$/, "")}${suffix}`;
+}
+var metadataSchema = external_exports.record(external_exports.string(), external_exports.unknown()).optional();
+function metadataString(metadata, ...names) {
+  for (const name of names) {
+    const value = metadata?.[name];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return void 0;
+}
+function metadataBoolean(metadata, ...names) {
+  for (const name of names) {
+    const value = metadata?.[name];
+    if (typeof value === "boolean") return value;
+  }
+  return null;
+}
+
+// src/evaluators/corpus-import.ts
+var braintrustItemSchema = external_exports.object({
+  id: external_exports.string().min(1),
+  input: external_exports.json(),
+  expected: external_exports.json(),
+  metadata: external_exports.record(external_exports.string(), external_exports.unknown()).default({})
+});
+var braintrustPageSchema = external_exports.object({
+  events: external_exports.array(braintrustItemSchema),
+  cursor: external_exports.string().nullable().optional()
+});
+var langsmithItemSchema = external_exports.object({
+  id: external_exports.string().min(1),
+  inputs: external_exports.json(),
+  outputs: external_exports.json(),
+  metadata: external_exports.record(external_exports.string(), external_exports.unknown()).default({})
+});
+var langfuseItemSchema = external_exports.object({
+  id: external_exports.string().min(1),
+  status: external_exports.enum(["ACTIVE", "ARCHIVED"]),
+  input: external_exports.json(),
+  expectedOutput: external_exports.json(),
+  metadata: external_exports.record(external_exports.string(), external_exports.unknown()).default({})
+});
+var langfusePageSchema = external_exports.object({
+  data: external_exports.array(langfuseItemSchema),
+  meta: external_exports.object({
+    page: external_exports.number().int().positive(),
+    totalPages: external_exports.number().int().nonnegative()
+  })
+});
+async function importCorpus(config2, options) {
+  requireText(config2.dataset, "Corpus import dataset");
+  requireText(config2.baseUrl, "Corpus import baseUrl");
+  requireText(config2.apiKeyEnv, "Corpus import apiKeyEnv");
+  const items = await fetchProviderItems(config2);
+  if (items.length === 0) {
+    throw new Error(
+      `Cannot import an empty ${config2.provider} dataset: ${config2.dataset}`
+    );
+  }
+  const unique = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    const content = importedContent(config2.provider, item);
+    const caseId = computeRunSpecDigest(contentJson(content));
+    unique.set(caseId, { caseId, content, split: "shortlist" });
+  }
+  const unsplitCases = [...unique.values()];
+  const splits = assignSplits(
+    unsplitCases.map(({ caseId }) => caseId),
+    options.seed
+  );
+  const cases = unsplitCases.map((item) => ({
+    ...item,
+    split: splits[item.caseId]
+  }));
+  cases.sort((left, right) => left.caseId.localeCompare(right.caseId));
+  const counts = /* @__PURE__ */ new Map();
+  for (const item of cases) {
+    counts.set(item.content.family, (counts.get(item.content.family) ?? 0) + 1);
+  }
+  const strata = [...counts.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([family, count]) => ({
+    family,
+    corpusShare: count / cases.length,
+    trafficShare: count / cases.length
+  }));
+  return {
+    corpusVersionId: computeRunSpecDigest(cases.map(({ caseId }) => caseId)),
+    seed: options.seed,
+    cases,
+    strata
+  };
+}
+async function writeImportedCorpus(store, projectId2, corpus) {
+  for (const item of corpus.cases) {
+    await store.putImmutable(
+      caseKey(projectId2, item.caseId),
+      Buffer.from(canonicalJson(contentJson(item.content)), "utf8")
+    );
+  }
+  await store.putImmutable(
+    `${projectId2}/corpus/corpus-${corpus.corpusVersionId}.json`,
+    Buffer.from(
+      canonicalJson({
+        corpusVersionId: corpus.corpusVersionId,
+        seed: corpus.seed,
+        cases: corpus.cases.map(({ caseId, content, split }) => ({
+          caseId,
+          family: content.family,
+          split,
+          referenceSource: content.referenceSource,
+          referenceVerified: content.referenceVerified,
+          referenceProvider: content.referenceProvider,
+          referenceItemId: content.referenceItemId
+        })),
+        strata: corpus.strata.map((item) => ({ ...item }))
+      }),
+      "utf8"
+    )
+  );
+}
+async function fetchProviderItems(config2) {
+  const auth = providerAuth(config2);
+  const request = async (path) => {
+    const response = await fetch(apiRoot(config2.baseUrl, path), {
+      headers: auth.headers
+    });
+    return responseJson(
+      response,
+      `${providerName(config2.provider)} corpus`,
+      auth.secrets
+    );
+  };
+  switch (config2.provider) {
+    case "braintrust": {
+      const latest = /* @__PURE__ */ new Map();
+      let cursor;
+      do {
+        const query = new URLSearchParams({ limit: "100" });
+        if (cursor !== void 0) query.set("cursor", cursor);
+        const page = braintrustPageSchema.parse(
+          await request(
+            `/v1/dataset/${encodeURIComponent(config2.dataset)}/fetch?${query.toString()}`
+          )
+        );
+        for (const event of page.events) {
+          if (!latest.has(event.id)) {
+            latest.set(event.id, {
+              id: event.id,
+              input: event.input,
+              expected: event.expected,
+              metadata: event.metadata
+            });
+          }
+        }
+        cursor = page.cursor ?? void 0;
+      } while (cursor !== void 0);
+      return [...latest.values()];
+    }
+    case "langsmith": {
+      const items = [];
+      let offset = 0;
+      for (; ; ) {
+        const query = new URLSearchParams({
+          dataset: config2.dataset,
+          limit: "100",
+          offset: String(offset)
+        });
+        const page = external_exports.array(langsmithItemSchema).parse(await request(`/api/v1/examples?${query.toString()}`));
+        items.push(
+          ...page.map((item) => ({
+            id: item.id,
+            input: item.inputs,
+            expected: item.outputs,
+            metadata: item.metadata
+          }))
+        );
+        if (page.length < 100) return items;
+        offset += page.length;
+      }
+    }
+    case "langfuse": {
+      const items = [];
+      let pageNumber = 1;
+      for (; ; ) {
+        const query = new URLSearchParams({
+          datasetName: config2.dataset,
+          page: String(pageNumber),
+          limit: "100"
+        });
+        const page = langfusePageSchema.parse(
+          await request(`/api/public/dataset-items?${query.toString()}`)
+        );
+        items.push(
+          ...page.data.flatMap(
+            (item) => item.status === "ARCHIVED" ? [] : [
+              {
+                id: item.id,
+                input: item.input,
+                expected: item.expectedOutput,
+                metadata: item.metadata
+              }
+            ]
+          )
+        );
+        if (pageNumber >= page.meta.totalPages) return items;
+        pageNumber += 1;
+      }
+    }
+  }
+}
+function providerAuth(config2) {
+  const apiKey = environmentSecret(config2.apiKeyEnv, "Corpus provider API key");
+  if (config2.provider === "langfuse") {
+    if (config2.publicKeyEnv === void 0) {
+      throw new Error("Langfuse corpus import requires publicKeyEnv");
+    }
+    const publicKey = environmentSecret(
+      config2.publicKeyEnv,
+      "Corpus provider public key"
+    );
+    const encoded = Buffer.from(`${publicKey}:${apiKey}`, "utf8").toString(
+      "base64"
+    );
+    return {
+      headers: { authorization: `Basic ${encoded}` },
+      secrets: [publicKey, apiKey, encoded, `Basic ${encoded}`]
+    };
+  }
+  return config2.provider === "braintrust" ? {
+    headers: { authorization: `Bearer ${apiKey}` },
+    secrets: [apiKey]
+  } : { headers: { "x-api-key": apiKey }, secrets: [apiKey] };
+}
+function importedContent(provider, item) {
+  const input = objectValue3(item.input);
+  const messages = Array.isArray(input?.messages) ? input.messages.map((message) => external_exports.json().parse(message)) : [
+    {
+      role: "user",
+      content: typeof item.input === "string" ? item.input : canonicalJson(item.input)
+    }
+  ];
+  const systemPrompt = stringValue(input?.systemPrompt) ?? stringValue(input?.system) ?? stringValue(item.metadata.systemPrompt);
+  return {
+    family: stringValue(item.metadata.family) ?? "unclassified",
+    model: stringValue(item.metadata.model) ?? "curated-reference",
+    ...systemPrompt === void 0 ? {} : { systemPrompt },
+    messages,
+    output: item.expected,
+    trajectoryId: `${provider}:${item.id}`,
+    stepIndex: typeof item.metadata.stepIndex === "number" && Number.isSafeInteger(item.metadata.stepIndex) && item.metadata.stepIndex >= 0 ? item.metadata.stepIndex : 0,
+    referenceSource: "curated",
+    referenceVerified: item.metadata.reference_verified === true,
+    referenceProvider: provider,
+    referenceItemId: item.id
+  };
+}
+function contentJson(content) {
+  return {
+    family: content.family,
+    model: content.model,
+    ...content.systemPrompt === void 0 ? {} : { systemPrompt: content.systemPrompt },
+    messages: content.messages,
+    output: content.output,
+    trajectoryId: content.trajectoryId,
+    stepIndex: content.stepIndex,
+    referenceSource: content.referenceSource,
+    referenceVerified: content.referenceVerified,
+    referenceProvider: content.referenceProvider,
+    referenceItemId: content.referenceItemId
+  };
+}
+function objectValue3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+}
+function stringValue(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function providerName(provider) {
+  return provider === "langsmith" ? "LangSmith" : provider === "langfuse" ? "Langfuse" : "Braintrust";
+}
+
+// src/evaluators/langfuse.ts
+import { createHash as createHash5 } from "node:crypto";
+var healthSchema = external_exports.object({ status: external_exports.string().min(1) });
+var otelResponseSchema = external_exports.object({ partialSuccess: external_exports.unknown().optional() });
+var scoreSchema = external_exports.object({
+  id: external_exports.string().min(1),
+  name: external_exports.string().min(1),
+  value: external_exports.union([external_exports.number(), external_exports.boolean(), external_exports.string()]),
+  dataType: external_exports.enum(["NUMERIC", "BOOLEAN", "CATEGORICAL", "TEXT", "CORRECTION"]),
+  metadata: metadataSchema,
+  subject: external_exports.discriminatedUnion("kind", [
+    external_exports.object({ kind: external_exports.literal("trace"), id: external_exports.string().min(1) }),
+    external_exports.object({
+      kind: external_exports.literal("observation"),
+      id: external_exports.string().min(1),
+      traceId: external_exports.string().min(1)
+    }),
+    external_exports.object({ kind: external_exports.literal("session"), id: external_exports.string().min(1) }),
+    external_exports.object({ kind: external_exports.literal("experiment"), id: external_exports.string().min(1) })
+  ])
+});
+var scoresSchema = external_exports.object({
+  data: external_exports.array(scoreSchema),
+  meta: external_exports.object({ cursor: external_exports.string().nullable().optional() })
+});
+function resolveLangfuseEvaluatorConfig(config2) {
+  return {
+    baseUrl: requireText(config2.baseUrl, "Evaluator baseUrl"),
+    publicKeyEnv: requireText(config2.publicKeyEnv, "Evaluator publicKeyEnv"),
+    apiKeyEnv: requireText(config2.apiKeyEnv, "Evaluator apiKeyEnv"),
+    ...resolveScoringConfig(config2)
+  };
+}
+function createLangfuseEvaluator(input) {
+  const config2 = resolveLangfuseEvaluatorConfig(input);
+  const runs = /* @__PURE__ */ new Map();
+  const fetchedScores = /* @__PURE__ */ new Map();
+  const credentials = () => {
+    const publicKey = environmentSecret(
+      config2.publicKeyEnv,
+      "Evaluator public key"
+    );
+    const secretKey = environmentSecret(config2.apiKeyEnv, "Evaluator API key");
+    const encoded = Buffer.from(`${publicKey}:${secretKey}`, "utf8").toString(
+      "base64"
+    );
+    return {
+      authorization: `Basic ${encoded}`,
+      secrets: [publicKey, secretKey, encoded, `Basic ${encoded}`]
+    };
+  };
+  const requestJson = async (path, init) => {
+    const auth = credentials();
+    const response = await fetch(apiRoot(config2.baseUrl, path), {
+      ...init,
+      headers: {
+        authorization: auth.authorization,
+        ...init?.body === void 0 ? {} : {
+          "content-type": "application/json",
+          "x-langfuse-ingestion-version": "4"
+        }
+      }
+    });
+    return responseJson(response, "Langfuse evaluator", auth.secrets);
+  };
+  const fetchScores = async (providerRunId) => {
+    const run = runs.get(providerRunId);
+    if (run === void 0) {
+      throw new Error(`Unknown Langfuse evaluator run: ${providerRunId}`);
+    }
+    const traceIds = [...run.identities.values()].map(({ traceId }) => traceId);
+    const scores = [];
+    let cursor;
+    do {
+      const query = new URLSearchParams({
+        traceId: traceIds.join(","),
+        name: config2.scorers.join(","),
+        fields: "details,subject",
+        limit: "100"
+      });
+      if (cursor !== void 0) query.set("cursor", cursor);
+      const parsed2 = scoresSchema.parse(
+        await requestJson(`/api/public/v3/scores?${query.toString()}`)
+      );
+      scores.push(...parsed2.data);
+      cursor = parsed2.meta.cursor ?? void 0;
+    } while (cursor !== void 0);
+    fetchedScores.set(providerRunId, scores);
+    return scores;
+  };
+  return {
+    id: "langfuse",
+    async detectAvailability() {
+      let auth;
+      try {
+        auth = credentials();
+      } catch {
+        return false;
+      }
+      let response;
+      try {
+        response = await fetch(apiRoot(config2.baseUrl, "/api/public/health"), {
+          headers: { authorization: auth.authorization }
+        });
+      } catch {
+        return false;
+      }
+      if (!response.ok) return false;
+      const text = await response.text();
+      try {
+        healthSchema.parse(JSON.parse(text));
+      } catch (error51) {
+        throw new Error(
+          `Langfuse evaluator availability response was invalid: ${redactSecrets(error51 instanceof Error ? error51.message : text, auth.secrets)}`
+        );
+      }
+      return true;
+    },
+    async launch(input2) {
+      const providerRunId = hashHex({
+        experimentName: input2.experimentName,
+        caseIds: input2.cases.map(({ caseId }) => caseId)
+      });
+      const identities = new Map(
+        input2.cases.map((item) => {
+          const traceId = hashHex({ providerRunId, caseId: item.caseId }).slice(
+            0,
+            32
+          );
+          return [
+            item.caseId,
+            {
+              traceId,
+              observationId: hashHex({ traceId, root: true }).slice(0, 16)
+            }
+          ];
+        })
+      );
+      otelResponseSchema.parse(
+        await requestJson("/api/public/otel/v1/traces", {
+          method: "POST",
+          body: JSON.stringify(
+            langfuseExperimentPayload({
+              providerRunId,
+              experimentName: input2.experimentName,
+              cases: input2.cases,
+              identities,
+              scorerNames: config2.scorers
+            })
+          )
+        })
+      );
+      runs.set(providerRunId, { cases: [...input2.cases], identities });
+      return { providerRunId };
+    },
+    async status(providerRunId) {
+      const run = runs.get(providerRunId);
+      if (run === void 0) {
+        throw new Error(`Unknown Langfuse evaluator run: ${providerRunId}`);
+      }
+      const scores = await fetchScores(providerRunId);
+      const available = new Set(
+        scores.flatMap((score) => {
+          const traceId = scoreTraceId(score);
+          return traceId === void 0 ? [] : [`${traceId}\0${score.name}`];
+        })
+      );
+      const complete = [...run.identities.values()].every(
+        ({ traceId }) => config2.scorers.every((name) => available.has(`${traceId}\0${name}`))
+      );
+      return complete ? "complete" : "pending";
+    },
+    async collect(providerRunId) {
+      const run = runs.get(providerRunId);
+      if (run === void 0) {
+        throw new Error(`Unknown Langfuse evaluator run: ${providerRunId}`);
+      }
+      const scores = fetchedScores.get(providerRunId) ?? await fetchScores(providerRunId);
+      const caseByTrace = new Map(
+        [...run.identities.entries()].map(([caseId, { traceId }]) => [
+          traceId,
+          caseId
+        ])
+      );
+      const byCase = /* @__PURE__ */ new Map();
+      for (const score of scores) {
+        if (!config2.scorers.includes(score.name)) continue;
+        const traceId = scoreTraceId(score);
+        const caseId = traceId === void 0 ? void 0 : caseByTrace.get(traceId);
+        if (caseId === void 0) continue;
+        const item = byCase.get(caseId) ?? { metrics: [], scoreIds: [] };
+        item.metrics.push(scoreMetric(score));
+        item.scoreIds.push(score.id);
+        byCase.set(caseId, item);
+      }
+      return [...byCase.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([caseId, item]) => ({
+        caseId,
+        metrics: item.metrics.sort(
+          (left, right) => left.metricName.localeCompare(right.metricName)
+        ),
+        artifactRef: {
+          providerRunId,
+          scoreIds: item.scoreIds.sort()
+        }
+      }));
+    }
+  };
+}
+function langfuseExperimentPayload(input) {
+  const now = BigInt(Date.now()) * 1000000n;
+  return {
+    resourceSpans: [
+      {
+        resource: {
+          attributes: [attribute("service.name", "rightmodeler")]
+        },
+        scopeSpans: [
+          {
+            scope: { name: "rightmodeler", version: "1" },
+            spans: input.cases.map((item, index) => {
+              const identity = input.identities.get(item.caseId);
+              return {
+                traceId: identity.traceId,
+                spanId: identity.observationId,
+                name: "rightmodeler-evaluation-item",
+                kind: 1,
+                startTimeUnixNano: String(now + BigInt(index)),
+                endTimeUnixNano: String(now + BigInt(index + 1)),
+                attributes: [
+                  attribute("langfuse.experiment.id", input.providerRunId),
+                  attribute("langfuse.experiment.name", input.experimentName),
+                  attribute(
+                    "langfuse.experiment.dataset.id",
+                    input.datasetId ?? `rightmodeler-${input.providerRunId}`
+                  ),
+                  attribute("langfuse.experiment.item.id", item.caseId),
+                  attribute(
+                    "langfuse.experiment.item.root_observation_id",
+                    identity.observationId
+                  ),
+                  attribute(
+                    "langfuse.experiment.item.expected_output",
+                    JSON.stringify(item.expected)
+                  ),
+                  attribute(
+                    "langfuse.observation.input",
+                    JSON.stringify(item.input)
+                  ),
+                  attribute(
+                    "langfuse.observation.output",
+                    JSON.stringify(item.output)
+                  ),
+                  ...input.scorerNames === void 0 ? [] : [
+                    attribute(
+                      "langfuse.experiment.item.metadata.scorers",
+                      input.scorerNames.join(",")
+                    )
+                  ]
+                ],
+                status: { code: 1 }
+              };
+            })
+          }
+        ]
+      }
+    ]
+  };
+}
+function stableLangfuseIdentity(value) {
+  const traceId = hashHex(value).slice(0, 32);
+  return {
+    traceId,
+    observationId: hashHex({ traceId, root: true }).slice(0, 16)
+  };
+}
+function attribute(key, value) {
+  return { key, value: { stringValue: value } };
+}
+function scoreTraceId(score) {
+  if (score.subject.kind === "trace") return score.subject.id;
+  if (score.subject.kind === "observation") return score.subject.traceId;
+  return void 0;
+}
+function scoreMetric(score) {
+  if (score.dataType === "NUMERIC" && typeof score.value === "number") {
+    return {
+      metricName: score.name,
+      score: score.value,
+      passed: metadataBoolean(score.metadata, "passed", "pass"),
+      ...rubric2(score)
+    };
+  }
+  if (score.dataType === "BOOLEAN" && typeof score.value === "boolean") {
+    return {
+      metricName: score.name,
+      score: score.value ? 1 : 0,
+      passed: score.value,
+      ...rubric2(score)
+    };
+  }
+  if (score.dataType === "CATEGORICAL" && typeof score.value === "string") {
+    const normalized = score.value.toLowerCase();
+    if (["pass", "passed", "true"].includes(normalized)) {
+      return {
+        metricName: score.name,
+        score: 1,
+        passed: true,
+        ...rubric2(score)
+      };
+    }
+    if (["fail", "failed", "false"].includes(normalized)) {
+      return {
+        metricName: score.name,
+        score: 0,
+        passed: false,
+        ...rubric2(score)
+      };
+    }
+  }
+  throw new Error(
+    `Langfuse evaluator score ${score.id} has unsupported ${score.dataType} value`
+  );
+}
+function rubric2(score) {
+  const rubricVersion = metadataString(
+    score.metadata,
+    "rubricVersion",
+    "rubric_version"
+  );
+  return rubricVersion === void 0 ? {} : { rubricVersion };
+}
+function hashHex(value) {
+  return createHash5("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+// src/evaluators/langsmith.ts
+import { createHash as createHash6 } from "node:crypto";
+var sessionSchema = external_exports.object({ id: external_exports.string().min(1) });
+var feedbackEntrySchema = external_exports.object({
+  score: external_exports.number().optional(),
+  value: external_exports.union([external_exports.string(), external_exports.boolean(), external_exports.number()]).optional(),
+  feedback_source: external_exports.object({ metadata: external_exports.record(external_exports.string(), external_exports.unknown()).nullish() }).optional()
+});
+var feedbackSummarySchema = external_exports.union([
+  external_exports.number(),
+  external_exports.object({
+    avg: external_exports.number(),
+    pass: external_exports.boolean().optional(),
+    rubric_version: external_exports.string().min(1).optional()
+  }),
+  external_exports.array(feedbackEntrySchema).min(1)
+]);
+var queriedRunSchema = external_exports.object({
+  id: external_exports.string().min(1),
+  reference_example_id: external_exports.string().min(1).nullable().optional(),
+  error: external_exports.unknown().nullable().optional(),
+  feedback_stats: external_exports.record(external_exports.string(), feedbackSummarySchema).default({})
+});
+var runsSchema = external_exports.object({ runs: external_exports.array(queriedRunSchema) });
+function resolveLangsmithEvaluatorConfig(config2) {
+  const scoring = resolveScoringConfig({
+    ...config2,
+    scorers: config2.scorers.map(scorerMetric),
+    gateMetric: config2.gateMetric === void 0 ? void 0 : scorerMetric(config2.gateMetric)
+  });
+  return {
+    baseUrl: requireText(config2.baseUrl, "Evaluator baseUrl"),
+    apiKeyEnv: requireText(config2.apiKeyEnv, "Evaluator apiKeyEnv"),
+    datasetId: requireText(config2.datasetId, "Evaluator datasetId"),
+    ...scoring,
+    evaluatorRules: config2.scorers.map((scorer) => ({
+      metricName: scorerMetric(scorer),
+      ruleId: scorerRule(scorer)
+    }))
+  };
+}
+function createLangsmithEvaluator(input) {
+  const config2 = resolveLangsmithEvaluatorConfig(input);
+  const expectedRuns = /* @__PURE__ */ new Map();
+  const fetchedRuns = /* @__PURE__ */ new Map();
+  const requestJson = async (path, init) => {
+    const apiKey = environmentSecret(config2.apiKeyEnv, "Evaluator API key");
+    const response = await fetch(apiRoot(config2.baseUrl, path), {
+      ...init,
+      headers: {
+        "x-api-key": apiKey,
+        ...init?.body === void 0 ? {} : { "content-type": "application/json" }
+      }
+    });
+    return responseJson(response, "LangSmith evaluator", [apiKey]);
+  };
+  const fetchRuns = async (providerRunId) => {
+    const parsed2 = runsSchema.parse(
+      await requestJson("/api/v1/runs/query", {
+        method: "POST",
+        body: JSON.stringify({
+          session: [providerRunId],
+          is_root: true,
+          select: ["id", "reference_example_id", "error", "feedback_stats"]
+        })
+      })
+    );
+    fetchedRuns.set(providerRunId, parsed2.runs);
+    return parsed2.runs;
+  };
+  return {
+    id: "langsmith",
+    async detectAvailability() {
+      const apiKey = process.env[config2.apiKeyEnv];
+      if (apiKey === void 0 || apiKey.length === 0) return false;
+      let response;
+      try {
+        response = await fetch(
+          apiRoot(config2.baseUrl, "/api/v1/datasets?limit=1"),
+          {
+            headers: { "x-api-key": apiKey }
+          }
+        );
+      } catch {
+        return false;
+      }
+      if (!response.ok) return false;
+      const text = await response.text();
+      try {
+        external_exports.array(external_exports.unknown()).parse(JSON.parse(text));
+      } catch (error51) {
+        throw new Error(
+          `LangSmith evaluator availability response was invalid: ${redactSecrets(error51 instanceof Error ? error51.message : text, [apiKey])}`
+        );
+      }
+      return true;
+    },
+    async launch(input2) {
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const session = sessionSchema.parse(
+        await requestJson("/api/v1/sessions", {
+          method: "POST",
+          body: JSON.stringify({
+            start_time: now,
+            reference_dataset_id: config2.datasetId,
+            name: input2.experimentName
+          })
+        })
+      );
+      const runIds = /* @__PURE__ */ new Map();
+      for (const item of input2.cases) {
+        const runId = stableUuid({
+          sessionId: session.id,
+          caseId: item.caseId
+        });
+        await requestJson("/api/v1/runs", {
+          method: "POST",
+          body: JSON.stringify({
+            id: runId,
+            name: "rightmodeler-evaluation-item",
+            run_type: "chain",
+            inputs: item.input,
+            start_time: now,
+            reference_example_id: item.caseId,
+            session_id: session.id,
+            extra: {
+              metadata: {
+                rightmodeler_expected: item.expected,
+                rightmodeler_case_id: item.caseId
+              }
+            }
+          })
+        });
+        await requestJson(`/api/v1/runs/${runId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ outputs: item.output, end_time: now })
+        });
+        runIds.set(runId, item.caseId);
+      }
+      await requestJson(`/api/v1/sessions/${session.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ end_time: now })
+      });
+      for (const { ruleId } of config2.evaluatorRules) {
+        await requestJson(`/api/v1/runs/experiments/${session.id}/evaluate`, {
+          method: "POST",
+          body: JSON.stringify({ rule_id: ruleId })
+        });
+      }
+      expectedRuns.set(session.id, runIds);
+      return { providerRunId: session.id };
+    },
+    async status(providerRunId) {
+      const expected = expectedRuns.get(providerRunId);
+      if (expected === void 0) {
+        throw new Error(`Unknown LangSmith evaluator run: ${providerRunId}`);
+      }
+      const runs = await fetchRuns(providerRunId);
+      if (runs.some((run) => run.error !== void 0 && run.error !== null)) {
+        return "failed";
+      }
+      const complete = runs.length === expected.size && runs.every(
+        (run) => expected.has(run.id) && config2.scorers.every(
+          (metricName) => run.feedback_stats[metricName] !== void 0
+        )
+      );
+      return complete ? "complete" : "pending";
+    },
+    async collect(providerRunId) {
+      const expected = expectedRuns.get(providerRunId);
+      if (expected === void 0) {
+        throw new Error(`Unknown LangSmith evaluator run: ${providerRunId}`);
+      }
+      const runs = fetchedRuns.get(providerRunId) ?? await fetchRuns(providerRunId);
+      return runs.flatMap((run) => {
+        const caseId = expected.get(run.id);
+        if (caseId === void 0 || run.error !== void 0 && run.error !== null) {
+          return [];
+        }
+        const metrics = config2.scorers.flatMap((metricName) => {
+          const summary = run.feedback_stats[metricName];
+          return summary === void 0 ? [] : [langsmithMetric(metricName, summary)];
+        });
+        return metrics.length === 0 ? [] : [
+          {
+            caseId,
+            metrics,
+            artifactRef: { providerRunId, runId: run.id }
+          }
+        ];
+      });
+    }
+  };
+}
+function langsmithMetric(metricName, summary) {
+  if (typeof summary === "number") {
+    return { metricName, score: summary, passed: null };
+  }
+  if (!Array.isArray(summary)) {
+    return {
+      metricName,
+      score: summary.avg,
+      passed: summary.pass ?? null,
+      ...summary.rubric_version === void 0 ? {} : { rubricVersion: summary.rubric_version }
+    };
+  }
+  const latest = summary.at(-1);
+  const score = latest.score ?? (typeof latest.value === "boolean" ? latest.value ? 1 : 0 : typeof latest.value === "number" ? latest.value : void 0);
+  if (score === void 0) {
+    throw new Error(`LangSmith evaluator metric ${metricName} has no score`);
+  }
+  const metadata = latest.feedback_source?.metadata ?? void 0;
+  const valuePass = typeof latest.value === "boolean" ? latest.value : typeof latest.value === "string" ? categoricalPass(latest.value) : null;
+  const rubricVersion = metadataString(
+    metadata ?? void 0,
+    "rubricVersion",
+    "rubric_version"
+  );
+  return {
+    metricName,
+    score,
+    passed: valuePass ?? metadataBoolean(metadata ?? void 0, "passed", "pass"),
+    ...rubricVersion === void 0 ? {} : { rubricVersion }
+  };
+}
+function categoricalPass(value) {
+  const normalized = value.toLowerCase();
+  if (["pass", "passed", "true"].includes(normalized)) return true;
+  if (["fail", "failed", "false"].includes(normalized)) return false;
+  return null;
+}
+function scorerMetric(value) {
+  return value.split("=", 1)[0];
+}
+function scorerRule(value) {
+  const separator = value.indexOf("=");
+  return separator === -1 ? value : value.slice(separator + 1);
+}
+function stableUuid(value) {
+  const hex3 = createHash6("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32);
+  return `${hex3.slice(0, 8)}-${hex3.slice(8, 12)}-4${hex3.slice(13, 16)}-8${hex3.slice(17, 20)}-${hex3.slice(20)}`;
+}
+
+// src/evaluators/promptfoo.ts
+import { execFile as execFile6 } from "node:child_process";
+import { createHash as createHash7 } from "node:crypto";
+import { mkdtemp as mkdtemp3, readFile as readFile7, rm as rm3, writeFile as writeFile3 } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join as join11 } from "node:path";
+import { promisify as promisify5 } from "node:util";
+var execFileAsync5 = promisify5(execFile6);
+var gradingResultSchema = external_exports.object({
+  pass: external_exports.boolean(),
+  score: external_exports.number(),
+  namedScores: external_exports.record(external_exports.string(), external_exports.number()).optional(),
+  metadata: external_exports.record(external_exports.string(), external_exports.unknown()).optional(),
+  componentResults: external_exports.array(
+    external_exports.object({
+      pass: external_exports.boolean(),
+      score: external_exports.number(),
+      metadata: external_exports.record(external_exports.string(), external_exports.unknown()).optional(),
+      assertion: external_exports.object({
+        metric: external_exports.string().min(1).optional(),
+        type: external_exports.string().min(1).optional()
+      }).optional()
+    })
+  ).optional()
+});
+var rowSchema = external_exports.object({
+  testIdx: external_exports.number().int().nonnegative(),
+  success: external_exports.boolean(),
+  score: external_exports.number(),
+  error: external_exports.string().optional(),
+  gradingResult: gradingResultSchema.nullable().optional()
+});
+var outputSchema = external_exports.object({
+  version: external_exports.literal(3),
+  evalId: external_exports.string().nullable().optional(),
+  results: external_exports.object({
+    outputs: external_exports.array(rowSchema)
+  })
+});
+function resolvePromptfooEvaluatorConfig(config2) {
+  return {
+    command: requireText(config2.command, "Promptfoo evaluator command"),
+    assertionsPath: requireText(
+      config2.assertionsPath,
+      "Promptfoo evaluator assertionsPath"
+    ),
+    ...resolveScoringConfig(config2)
+  };
+}
+function createPromptfooEvaluator(input) {
+  const config2 = resolvePromptfooEvaluatorConfig(input);
+  const results = /* @__PURE__ */ new Map();
+  return {
+    id: "promptfoo",
+    async detectAvailability() {
+      try {
+        await execFileAsync5(config2.command, ["--version"], {
+          encoding: "utf8",
+          maxBuffer: 1024 * 1024
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async launch(input2) {
+      const providerRunId = createHash7("sha256").update(
+        JSON.stringify({
+          experimentName: input2.experimentName,
+          caseIds: input2.cases.map(({ caseId }) => caseId)
+        })
+      ).digest("hex");
+      const directory = await mkdtemp3(
+        join11(tmpdir(), "rightmodeler-promptfoo-")
+      );
+      const modelOutputsPath = join11(directory, "model-outputs.json");
+      const resultsPath = join11(directory, "results.json");
+      try {
+        await writeFile3(
+          modelOutputsPath,
+          JSON.stringify(
+            input2.cases.map((item) => ({
+              output: typeof item.output === "string" ? item.output : JSON.stringify(item.output),
+              tags: [item.caseId]
+            }))
+          ),
+          "utf8"
+        );
+        await execFileAsync5(
+          config2.command,
+          [
+            "eval",
+            "--assertions",
+            config2.assertionsPath,
+            "--model-outputs",
+            modelOutputsPath,
+            "--output",
+            resultsPath
+          ],
+          { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }
+        );
+        const parsed2 = outputSchema.parse(
+          JSON.parse(await readFile7(resultsPath, "utf8"))
+        );
+        const rows = parsed2.results.outputs;
+        if (rows.some(({ testIdx }) => testIdx >= input2.cases.length)) {
+          throw new Error(
+            "Promptfoo evaluator output contains an unknown test index"
+          );
+        }
+        results.set(providerRunId, {
+          evalId: parsed2.evalId ?? null,
+          rows,
+          caseIds: input2.cases.map(({ caseId }) => caseId)
+        });
+        return { providerRunId };
+      } finally {
+        await rm3(directory, { recursive: true, force: true });
+      }
+    },
+    async status(providerRunId) {
+      const run = results.get(providerRunId);
+      if (run === void 0) {
+        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
+      }
+      return run.rows.some(({ error: error51 }) => error51 !== void 0) ? "failed" : "complete";
+    },
+    async collect(providerRunId) {
+      const run = results.get(providerRunId);
+      if (run === void 0) {
+        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
+      }
+      return run.rows.flatMap((row) => {
+        if (row.error !== void 0 || row.gradingResult === null) return [];
+        const metrics = promptfooMetrics(row, config2.scorers);
+        return metrics.length === 0 ? [] : [
+          {
+            caseId: run.caseIds[row.testIdx],
+            metrics,
+            artifactRef: {
+              providerRunId,
+              evalId: run.evalId,
+              testIdx: row.testIdx
+            }
+          }
+        ];
+      });
+    }
+  };
+}
+function promptfooMetrics(row, scorers) {
+  const grading = row.gradingResult;
+  if (grading === void 0 || grading === null) return [];
+  if (grading.namedScores !== void 0) {
+    return scorers.flatMap((metricName) => {
+      const score = grading.namedScores?.[metricName];
+      if (score === void 0) return [];
+      const component = grading.componentResults?.find(
+        (item) => item.assertion?.metric === metricName
+      );
+      const rubricVersion2 = metadataString(
+        component?.metadata ?? grading.metadata,
+        "rubricVersion",
+        "rubric_version"
+      );
+      return [
+        {
+          metricName,
+          score,
+          passed: component?.pass ?? metadataBoolean(grading.metadata, `${metricName}_passed`),
+          ...rubricVersion2 === void 0 ? {} : { rubricVersion: rubricVersion2 }
+        }
+      ];
+    });
+  }
+  if (scorers.length !== 1) {
+    throw new Error("Promptfoo evaluator output omits configured named scores");
+  }
+  const rubricVersion = metadataString(
+    grading.metadata,
+    "rubricVersion",
+    "rubric_version"
+  );
+  return [
+    {
+      metricName: scorers[0],
+      score: grading.score,
+      passed: grading.pass,
+      ...rubricVersion === void 0 ? {} : { rubricVersion }
+    }
+  ];
+}
+
+// src/evaluators/registry.ts
+function resolveEvaluatorConfig(config2) {
+  switch (config2.provider) {
+    case "braintrust":
+      return {
+        provider: config2.provider,
+        ...resolveBraintrustEvaluatorConfig(config2)
+      };
+    case "langfuse":
+      return {
+        provider: config2.provider,
+        ...resolveLangfuseEvaluatorConfig(config2)
+      };
+    case "langsmith":
+      return {
+        provider: config2.provider,
+        ...resolveLangsmithEvaluatorConfig(config2)
+      };
+    case "promptfoo":
+      return {
+        provider: config2.provider,
+        ...resolvePromptfooEvaluatorConfig(config2)
+      };
+  }
+}
+function createEvaluator(config2) {
+  switch (config2.provider) {
+    case "braintrust":
+      return createBraintrustEvaluator(config2);
+    case "langfuse":
+      return createLangfuseEvaluator(config2);
+    case "langsmith":
+      return createLangsmithEvaluator(config2);
+    case "promptfoo":
+      return createPromptfooEvaluator(config2);
+  }
+}
+
+// src/evaluators/result-sinks.ts
+var resultExportReceiptSchema = external_exports.object({
+  provider: external_exports.enum(["braintrust", "langfuse"]),
+  providerRunId: external_exports.string().min(1),
+  exportedTrials: external_exports.number().int().nonnegative(),
+  exportedVerdicts: external_exports.number().int().nonnegative()
+});
+var experimentSchema2 = external_exports.object({ id: external_exports.string().min(1) });
+var insertSchema2 = external_exports.object({ row_ids: external_exports.array(external_exports.string()) });
+var otelResponseSchema2 = external_exports.object({ partialSuccess: external_exports.unknown().optional() });
+var scoreResponseSchema = external_exports.object({ id: external_exports.string().min(1) });
+async function exportResults(config2, input) {
+  requireText(input.name, "Result export name");
+  requireText(config2.baseUrl, "Result sink baseUrl");
+  requireText(config2.apiKeyEnv, "Result sink apiKeyEnv");
+  return config2.provider === "braintrust" ? exportToBraintrust(config2, input) : exportToLangfuse(config2, input);
+}
+async function exportToBraintrust(config2, input) {
+  requireText(config2.projectId, "Braintrust result sink projectId");
+  const apiKey = environmentSecret(config2.apiKeyEnv, "Result sink API key");
+  const request = async (path, body) => {
+    const response = await fetch(braintrustUrl(config2.baseUrl, path), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    return responseJson(response, "Braintrust result sink", [apiKey]);
+  };
+  const experiment = experimentSchema2.parse(
+    await request("experiment", {
+      project_id: config2.projectId,
+      name: input.name
+    })
+  );
+  const events = [
+    ...input.trials.map(({ execution, assessments }) => ({
+      id: execution.executionId,
+      input: trialInput(execution),
+      output: execution.finalOutput,
+      scores: Object.fromEntries(
+        assessments.map(({ metricName, score }) => [metricName, score])
+      ),
+      metadata: {
+        kind: "rightmodeler_trial",
+        assessments: assessments.map(assessmentMetadata)
+      }
+    })),
+    ...input.verdicts.map((verdict) => ({
+      id: `verdict-${computeRunSpecDigest(verdict)}`,
+      input: { familyId: verdictFamily(verdict) },
+      output: verdict,
+      metadata: { kind: "rightmodeler_verdict" }
+    }))
+  ];
+  const inserted = insertSchema2.parse(
+    await request(`experiment/${experiment.id}/insert`, { events })
+  );
+  if (inserted.row_ids.length !== events.length) {
+    throw new Error(
+      `Braintrust result sink inserted ${inserted.row_ids.length} of ${events.length} events`
+    );
+  }
+  return receipt(config2.provider, experiment.id, input);
+}
+async function exportToLangfuse(config2, input) {
+  requireText(config2.publicKeyEnv, "Langfuse result sink publicKeyEnv");
+  requireText(config2.datasetId, "Langfuse result sink datasetId");
+  const publicKey = environmentSecret(
+    config2.publicKeyEnv,
+    "Result sink public key"
+  );
+  const apiKey = environmentSecret(config2.apiKeyEnv, "Result sink API key");
+  const encoded = Buffer.from(`${publicKey}:${apiKey}`, "utf8").toString(
+    "base64"
+  );
+  const secrets = [publicKey, apiKey, encoded, `Basic ${encoded}`];
+  const request = async (path, body) => {
+    const response = await fetch(apiRoot(config2.baseUrl, path), {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${encoded}`,
+        "content-type": "application/json",
+        ...path.includes("otel") ? { "x-langfuse-ingestion-version": "4" } : {}
+      },
+      body: JSON.stringify(body)
+    });
+    return responseJson(response, "Langfuse result sink", secrets);
+  };
+  const providerRunId = computeRunSpecDigest({
+    name: input.name,
+    datasetId: config2.datasetId,
+    trialIds: input.trials.map(({ execution }) => execution.executionId),
+    verdicts: [...input.verdicts]
+  });
+  const cases = input.trials.map(({ execution }) => ({
+    caseId: execution.executionId,
+    input: trialInput(execution),
+    expected: null,
+    output: execution.finalOutput
+  }));
+  const identities = new Map(
+    cases.map(({ caseId }) => [
+      caseId,
+      stableLangfuseIdentity({ providerRunId, caseId })
+    ])
+  );
+  otelResponseSchema2.parse(
+    await request(
+      "/api/public/otel/v1/traces",
+      langfuseExperimentPayload({
+        providerRunId,
+        experimentName: input.name,
+        datasetId: config2.datasetId,
+        cases,
+        identities
+      })
+    )
+  );
+  for (const { execution, assessments } of input.trials) {
+    const identity = identities.get(execution.executionId);
+    for (const assessment of assessments) {
+      scoreResponseSchema.parse(
+        await request("/api/public/scores", {
+          id: computeRunSpecDigest({
+            providerRunId,
+            assessmentId: assessment.assessmentId
+          }),
+          traceId: identity.traceId,
+          observationId: identity.observationId,
+          name: assessment.metricName,
+          value: assessment.score,
+          dataType: "NUMERIC",
+          metadata: assessmentMetadata(assessment)
+        })
+      );
+    }
+  }
+  for (const verdict of input.verdicts) {
+    const familyId = verdictFamily(verdict);
+    scoreResponseSchema.parse(
+      await request("/api/public/scores", {
+        id: computeRunSpecDigest({ providerRunId, familyId, verdict }),
+        datasetRunId: providerRunId,
+        name: `rightmodeler.verdict.${familyId}`,
+        value: verdictRecommended(verdict) ? 1 : 0,
+        dataType: "BOOLEAN",
+        metadata: { verdict }
+      })
+    );
+  }
+  return receipt(config2.provider, providerRunId, input);
+}
+function receipt(provider, providerRunId, input) {
+  return {
+    provider,
+    providerRunId,
+    exportedTrials: input.trials.length,
+    exportedVerdicts: input.verdicts.length
+  };
+}
+function trialInput(execution) {
+  return {
+    executionId: execution.executionId,
+    evidenceQuestionId: execution.evidenceQuestionId,
+    caseId: execution.caseId,
+    stepId: execution.stepId,
+    candidateId: execution.candidateId,
+    trajectoryId: execution.trajectoryId,
+    corpusSplit: execution.corpusSplit,
+    selectionStage: execution.selectionStage
+  };
+}
+function assessmentMetadata(assessment) {
+  return {
+    assessmentId: assessment.assessmentId,
+    evaluatorId: assessment.evaluatorId,
+    passed: assessment.passed,
+    rubricVersion: assessment.rubricVersion,
+    artifactRef: assessment.artifactRef
+  };
+}
+function verdictFamily(verdict) {
+  return typeof verdict === "object" && verdict !== null && !Array.isArray(verdict) && typeof verdict.familyId === "string" ? verdict.familyId : computeRunSpecDigest(verdict).slice(0, 12);
+}
+function verdictRecommended(verdict) {
+  return typeof verdict === "object" && verdict !== null && !Array.isArray(verdict) && verdict.decision === "recommend";
+}
+function braintrustUrl(baseUrl, path) {
+  const root = baseUrl.replace(/\/+$/, "");
+  const versioned = root.endsWith("/v1") ? root : `${root}/v1`;
+  return `${versioned}/${path}`;
+}
+
 // src/protocol.ts
 var processIo = {
   stdout: (text) => process.stdout.write(text),
@@ -27934,7 +29283,7 @@ var Reporter = class {
 };
 function renderHuman(value) {
   if (typeof value === "string") return value;
-  const record2 = objectValue3(value);
+  const record2 = objectValue4(value);
   const families = Array.isArray(record2?.families) ? record2.families : Array.isArray(record2?.familyOutcomes) ? record2.familyOutcomes : void 0;
   if (families !== void 0) {
     const lines = [
@@ -27963,7 +29312,7 @@ function renderHuman(value) {
   return renderValue(value);
 }
 function renderApplyRow(value) {
-  const apply = objectValue3(value);
+  const apply = objectValue4(value);
   const familyIds = Array.isArray(apply?.familyIds) ? apply.familyIds.map(String).join(", ") : "";
   return [
     String(apply?.repo ?? "unknown"),
@@ -27973,16 +29322,16 @@ function renderApplyRow(value) {
   ].join(" | ");
 }
 function renderFamilyRow(value) {
-  const family = objectValue3(value);
-  const verdict = objectValue3(family?.verdict) ?? family;
+  const family = objectValue4(value);
+  const verdict = objectValue4(family?.verdict) ?? family;
   const evaluatorKinds = Array.isArray(verdict?.evaluatorKinds) ? verdict.evaluatorKinds : [];
   const rates = evaluatorKinds.map((value2) => {
-    const kind = objectValue3(value2);
+    const kind = objectValue4(value2);
     return `${String(kind?.evaluatorKind ?? "unknown")}: ${String(kind?.passes ?? 0)}/${String(kind?.trials ?? 0)} (${formatRate(kind?.passRate)})`;
   }).join("; ");
-  const availability = objectValue3(verdict?.availability);
-  const abstention2 = objectValue3(verdict?.abstainReason);
-  const confirmation = objectValue3(family?.confirmation);
+  const availability = objectValue4(verdict?.availability);
+  const abstention2 = objectValue4(verdict?.abstainReason);
+  const confirmation = objectValue4(family?.confirmation);
   const reason = abstention2 === void 0 ? "" : typeof abstention2.observed === "number" && typeof abstention2.required === "number" ? `${String(abstention2.reason)} (${formatNumber(abstention2.observed)} of ${formatNumber(abstention2.required)})` : String(abstention2.reason);
   const action2 = typeof confirmation?.requiredMaxRunSets === "number" ? `raise to ${confirmation.requiredMaxRunSets}` : "";
   return [
@@ -27997,13 +29346,13 @@ function renderFamilyRow(value) {
     String(confirmation?.blocker ?? "")
   ].join(" | ");
 }
-function objectValue3(value) {
+function objectValue4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
 }
 function renderValue(value) {
   if (value === null || value === void 0) return String(value);
   if (Array.isArray(value)) return value.map(renderValue).join(", ");
-  const record2 = objectValue3(value);
+  const record2 = objectValue4(value);
   if (record2 !== void 0) {
     return Object.entries(record2).map(([key, item]) => `${key}=${renderValue(item)}`).join(", ");
   }
@@ -28143,10 +29492,10 @@ async function derivePrState({
 }
 
 // src/watch/watch.ts
-import { createHash as createHash6, randomUUID as randomUUID11 } from "node:crypto";
+import { createHash as createHash9, randomUUID as randomUUID11 } from "node:crypto";
 
 // src/watch/lock.ts
-import { createHash as createHash5, randomUUID as randomUUID10 } from "node:crypto";
+import { createHash as createHash8, randomUUID as randomUUID10 } from "node:crypto";
 var staleAfterMs = 5 * 60 * 1e3;
 var availableLockSchema = external_exports.strictObject({ status: external_exports.literal("available") });
 var heldLockSchema = external_exports.strictObject({
@@ -28163,7 +29512,7 @@ function encode4(value) {
   return Buffer.from(JSON.stringify(value), "utf8");
 }
 function lockKey(owner, repo, prNumber) {
-  const repository = createHash5("sha256").update(`${owner.toLowerCase()}/${repo.toLowerCase()}`).digest("hex");
+  const repository = createHash8("sha256").update(`${owner.toLowerCase()}/${repo.toLowerCase()}`).digest("hex");
   return `project/watch-locks/${repository}/pr-${prNumber}.json`;
 }
 function nextFence(value) {
@@ -28441,7 +29790,7 @@ async function markForReproof(store, verdicts, requestId) {
   }
 }
 function ciEventKey(prNumber, headSha, checkIdentities) {
-  const checks = createHash6("sha256").update(JSON.stringify(checkIdentities)).digest("hex");
+  const checks = createHash9("sha256").update(JSON.stringify(checkIdentities)).digest("hex");
   return `ci:${prNumber}:${headSha}:${checks}`;
 }
 function checkIdentity(check2) {
@@ -28465,7 +29814,7 @@ function action(type, detail) {
   return { type, detail };
 }
 function commentMarker(handledEventKey2) {
-  const digest2 = createHash6("sha256").update(handledEventKey2).digest("hex");
+  const digest2 = createHash9("sha256").update(handledEventKey2).digest("hex");
   return `<!-- rightmodeler-watch:${digest2} -->`;
 }
 async function watchOnce(input) {
@@ -28823,7 +30172,7 @@ ${marker}`
 }
 
 // src/pipeline.ts
-var execFileAsync5 = promisify5(execFile6);
+var execFileAsync6 = promisify6(execFile7);
 var PIPELINE_STAGES = [
   "scan",
   "ingest",
@@ -29160,6 +30509,54 @@ async function runWatch(options) {
     verdicts: prepared.verdicts
   });
 }
+async function runCorpusImport(options) {
+  const context = createHeadlessContext(options);
+  const corpus = await importCorpus(options.config, { seed: CORPUS_SEED });
+  await writeImportedCorpus(context.store, context.projectId, corpus);
+  return corpus;
+}
+async function runResultExport(options) {
+  const context = createHeadlessContext(options);
+  const facts = await readFacts2(context.store, context.projectId);
+  const executions = facts.flatMap((fact) => {
+    const parsed2 = executionSchema.safeParse(fact);
+    return parsed2.success ? [parsed2.data] : [];
+  });
+  if (executions.length === 0) {
+    throw new Error("No execution trials are available to export");
+  }
+  const assessments = facts.flatMap((fact) => {
+    const parsed2 = assessmentSchema.safeParse(fact);
+    return parsed2.success ? [parsed2.data] : [];
+  });
+  const verdicts = await readCurrentVerdicts(context.store, context.projectId);
+  const exportDigest = digest({
+    provider: options.config.provider,
+    target: options.config.provider === "braintrust" ? options.config.projectId : options.config.datasetId,
+    executionIds: executions.map(({ executionId }) => executionId).sort(compareText8),
+    assessmentIds: assessments.map(({ assessmentId }) => assessmentId).sort(compareText8),
+    verdicts: jsonValue2(verdicts)
+  });
+  const receiptKey = `${context.projectId}/exports/${options.config.provider}-${exportDigest}.json`;
+  const existing = await context.store.get(receiptKey);
+  if (existing !== null) {
+    return resultExportReceiptSchema.parse(
+      JSON.parse(Buffer.from(existing.body).toString("utf8"))
+    );
+  }
+  const receipt2 = await exportResults(options.config, {
+    name: `rightmodeler-${exportDigest.slice(0, 24)}`,
+    trials: executions.map((execution) => ({
+      execution,
+      assessments: assessments.filter(
+        ({ executionId }) => executionId === execution.executionId
+      )
+    })),
+    verdicts: verdicts.map((verdict) => jsonValue2(verdict))
+  });
+  await putImmutableJson(context.store, receiptKey, receipt2);
+  return receipt2;
+}
 function createHeadlessContext(options) {
   return createContext({
     repo: options.repo,
@@ -29249,7 +30646,7 @@ function applyCascadeStatus(status) {
 }
 function createContext(options) {
   const repo = resolve5(options.repo);
-  const storeRoot = resolve5(options.store ?? join11(repo, ".rightmodeler"));
+  const storeRoot = resolve5(options.store ?? join12(repo, ".rightmodeler"));
   const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve5(options.modeBConfigPath);
   return {
     repo,
@@ -29260,7 +30657,7 @@ function createContext(options) {
     baseUrl: options.baseUrl,
     apiKeyEnv: options.apiKeyEnv ?? API_KEY_ENV_DEFAULT,
     maxCostUsd: options.maxCostUsd,
-    ...options.evaluator === void 0 ? {} : { evaluator: resolveBraintrustEvaluatorConfig(options.evaluator) },
+    ...options.evaluator === void 0 ? {} : { evaluator: resolveEvaluatorConfig(options.evaluator) },
     ...modeBConfigPath === void 0 ? {} : {
       modeBConfigPath,
       modeBConfig: readModeBConfig(modeBConfigPath)
@@ -29308,7 +30705,7 @@ function readModeBConfig(path) {
 }
 function evaluatorPlan(context) {
   return context.evaluator === void 0 ? { evaluatorKind: "judge", gateMetric: "replacement-quality" } : {
-    evaluatorKind: "braintrust",
+    evaluatorKind: context.evaluator.provider,
     scorers: [...context.evaluator.scorers],
     gateMetric: context.evaluator.gateMetric,
     gateThreshold: context.evaluator.gateThreshold ?? null
@@ -29325,7 +30722,7 @@ async function inputDigest(stage, context, state) {
   if (stage === "ingest") {
     if (context.traces === void 0) return state.stages.ingest?.inputDigest;
     try {
-      const body = await readFile7(context.traces);
+      const body = await readFile8(context.traces);
       return digest({ stage, traceSha256: sha256(body) });
     } catch (error51) {
       if (isMissing2(error51)) return void 0;
@@ -29514,7 +30911,7 @@ async function executeIngest(context, inputDigestValue) {
   }
   let text;
   try {
-    text = await readFile7(tracePath, "utf8");
+    text = await readFile8(tracePath, "utf8");
   } catch (error51) {
     if (isMissing2(error51)) {
       throw new ProtocolError({
@@ -29773,7 +31170,7 @@ async function executeReplay(context, inputDigestValue, runId) {
   });
   let externalEvaluator;
   if (context.evaluator !== void 0) {
-    const configured = createBraintrustEvaluator(context.evaluator);
+    const configured = createEvaluator(context.evaluator);
     externalEvaluator = await preferEvaluatorWhenReachable(
       configured,
       (code, message) => context.reporter.warning(code, message)
@@ -30595,7 +31992,7 @@ function compareText8(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 function reportPath(context) {
-  return join11(context.storeRoot, reportKey(context.projectId, "report.md"));
+  return join12(context.storeRoot, reportKey(context.projectId, "report.md"));
 }
 async function executeReport(context, inputDigestValue) {
   const report = await buildReport(context);
@@ -30605,7 +32002,7 @@ async function executeReport(context, inputDigestValue) {
   await putMutableJson(context.store, jsonKey, jsonValue2(report));
   await putMutableText(context.store, markdownKey, markdown);
   await mkdir3(dirname5(reportPath(context)), { recursive: true });
-  await writeFile3(reportPath(context), markdown, "utf8");
+  await writeFile4(reportPath(context), markdown, "utf8");
   return jsonKey;
 }
 async function checkpointOutputExists(context, stage, checkpoint) {
@@ -30615,7 +32012,7 @@ async function checkpointOutputExists(context, stage, checkpoint) {
     return false;
   }
   try {
-    await readFile7(reportPath(context));
+    await readFile8(reportPath(context));
     return true;
   } catch (error51) {
     if (isMissing2(error51)) return false;
@@ -30689,7 +32086,7 @@ function digest(value) {
   return computeRunSpecDigest(value);
 }
 function sha256(value) {
-  return createHash7("sha256").update(value).digest("hex");
+  return createHash10("sha256").update(value).digest("hex");
 }
 async function repositoryFiles(repo, storeRoot) {
   const ignored = /* @__PURE__ */ new Set([
@@ -30704,7 +32101,7 @@ async function repositoryFiles(repo, storeRoot) {
   const files = [];
   async function visit(directory) {
     for (const entry of await readdir3(directory, { withFileTypes: true })) {
-      const absolute = join11(directory, entry.name);
+      const absolute = join12(directory, entry.name);
       if (absolute === storeRoot) continue;
       if (entry.isDirectory()) {
         if (!ignored.has(entry.name)) await visit(absolute);
@@ -30725,13 +32122,13 @@ async function repositoryDigest(repo, storeRoot) {
     files: await Promise.all(
       (await repositoryFiles(repo, storeRoot)).map(async (file2) => ({
         path: file2.path,
-        sha256: sha256(await readFile7(file2.absolute))
+        sha256: sha256(await readFile8(file2.absolute))
       }))
     )
   });
 }
 async function repositoryRevision(repo) {
-  const { stdout } = await execFileAsync5(
+  const { stdout } = await execFileAsync6(
     "git",
     ["-C", repo, "rev-parse", "HEAD"],
     { encoding: "utf8" }
@@ -31095,7 +32492,7 @@ async function runAuditTabulate(options) {
     })
   });
   const worksheet = options.worksheet ? auditWorksheetSchema.parse(
-    JSON.parse(await readFile7(resolve5(options.worksheet), "utf8"))
+    JSON.parse(await readFile8(resolve5(options.worksheet), "utf8"))
   ) : await loadCurrent(context, "audit-sample", auditWorksheetSchema);
   const result2 = auditTabulate(worksheet);
   await putMutableJson(
@@ -31692,7 +33089,7 @@ function createProgram(io = processIo) {
     return local.plan || local.through !== void 0 && local.through !== "report" ? 0 : result2.recommendationExists ? 1 : 0;
   });
   for (const stage of PIPELINE_STAGES.slice(0, -1)) {
-    if (stage === "audit-sample") continue;
+    if (stage === "audit-sample" || stage === "corpus") continue;
     const command = addPipelineOptions(
       program2.command(stage).description(`run through the ${stage} stage`),
       stage === "replay" || stage === "confirm"
@@ -31710,6 +33107,65 @@ function createProgram(io = processIo) {
       return 0;
     });
   }
+  const corpus = addPipelineOptions(
+    program2.command("corpus").description("build or import the replay corpus"),
+    false
+  );
+  run(corpus, async (reporter, global) => {
+    const result2 = await runPipeline({
+      ...pipelineOptions(
+        global,
+        corpus.opts(),
+        reporter
+      ),
+      through: "corpus"
+    });
+    reporter.result(result2);
+    return 0;
+  });
+  const corpusImport = corpus.command("import").description("import a curated provider dataset").requiredOption("--from <provider:dataset>", "provider and dataset").option("--base-url <url>", "dataset provider API base URL").option(
+    "--api-key-env <name>",
+    "environment variable containing the dataset provider API key"
+  ).option(
+    "--public-key-env <name>",
+    "environment variable containing the Langfuse public key"
+  );
+  run(corpusImport, async (reporter, global) => {
+    const local = corpusImport.opts();
+    const source = parseCorpusSource(local.from);
+    const result2 = await runCorpusImport({
+      repo: global.repo,
+      store: global.store,
+      config: corpusImportConfig(source, local)
+    });
+    reporter.result({
+      corpusVersionId: result2.corpusVersionId,
+      caseCount: result2.cases.length,
+      curatedVerifiedCases: result2.cases.filter(
+        ({ content }) => content.referenceVerified
+      ).length
+    });
+    return 0;
+  });
+  const exportCommand = program2.command("export").description("export trials and verdicts to an evaluation provider").addOption(
+    new Option("--to <provider>", "result sink provider").choices(["braintrust", "langfuse"]).makeOptionMandatory()
+  ).option("--base-url <url>", "result sink API base URL").option(
+    "--api-key-env <name>",
+    "environment variable containing the result sink API key"
+  ).option(
+    "--public-key-env <name>",
+    "environment variable containing the Langfuse public key"
+  ).option("--project-id <id>", "Braintrust project identifier").option("--dataset-id <id>", "Langfuse dataset identifier");
+  run(exportCommand, async (reporter, global) => {
+    const local = exportCommand.opts();
+    const result2 = await runResultExport({
+      repo: global.repo,
+      store: global.store,
+      config: resultSinkConfig(local)
+    });
+    reporter.result(result2);
+    return 0;
+  });
   const audit = program2.command("audit").description("manage the reference audit");
   const auditSample2 = addPipelineOptions(
     audit.command("sample").description("write the audit worksheet without blocking"),
@@ -31807,13 +33263,22 @@ function addPipelineOptions(command, provider) {
       new Option(
         "--evaluator <provider>",
         "external evaluator provider"
-      ).choices(["braintrust"])
+      ).choices(["braintrust", "langfuse", "langsmith", "promptfoo"])
     ).option("--evaluator-base-url <url>", "external evaluator API base URL").option(
       "--evaluator-api-key-env <name>",
       "environment variable containing the evaluator API key"
     ).option(
+      "--evaluator-public-key-env <name>",
+      "environment variable containing the Langfuse public key"
+    ).option(
       "--evaluator-project-id <id>",
-      "external evaluator project identifier"
+      "Braintrust project or LangSmith dataset identifier"
+    ).option(
+      "--evaluator-command <path>",
+      "promptfoo executable path or command"
+    ).option(
+      "--evaluator-config <path>",
+      "promptfoo assertions configuration file"
     ).option(
       "--evaluator-scorer <name>",
       "external evaluator scorer name (repeatable)",
@@ -31844,18 +33309,13 @@ function pipelineOptions(global, local, reporter) {
   if (evaluatorGateThreshold !== void 0 && !Number.isFinite(evaluatorGateThreshold)) {
     throw new Error("--evaluator-gate-threshold must be a finite number");
   }
-  const hasEvaluatorCompanion = local.evaluatorBaseUrl !== void 0 || local.evaluatorApiKeyEnv !== void 0 || local.evaluatorProjectId !== void 0 || local.evaluatorScorer !== void 0 || local.evaluatorGateMetric !== void 0 || evaluatorGateThreshold !== void 0;
+  const hasEvaluatorCompanion = local.evaluatorBaseUrl !== void 0 || local.evaluatorApiKeyEnv !== void 0 || local.evaluatorPublicKeyEnv !== void 0 || local.evaluatorProjectId !== void 0 || local.evaluatorCommand !== void 0 || local.evaluatorConfig !== void 0 || local.evaluatorScorer !== void 0 || local.evaluatorGateMetric !== void 0 || evaluatorGateThreshold !== void 0;
   if (local.evaluator === void 0 && hasEvaluatorCompanion) {
-    throw new Error("Evaluator options require --evaluator braintrust");
-  }
-  if (local.evaluator !== void 0 && local.evaluatorProjectId === void 0) {
-    throw new Error(
-      "--evaluator-project-id is required with --evaluator braintrust"
-    );
+    throw new Error("Evaluator options require --evaluator <provider>");
   }
   if (local.evaluator !== void 0 && local.evaluatorScorer === void 0) {
     throw new Error(
-      "At least one --evaluator-scorer is required with --evaluator braintrust"
+      `At least one --evaluator-scorer is required with --evaluator ${local.evaluator}`
     );
   }
   return {
@@ -31866,19 +33326,158 @@ function pipelineOptions(global, local, reporter) {
     apiKeyEnv: local.apiKeyEnv,
     maxCostUsd,
     ...local.evaluator === void 0 ? {} : {
-      evaluator: {
-        apiKeyEnv: local.evaluatorApiKeyEnv ?? "BRAINTRUST_API_KEY",
-        baseUrl: local.evaluatorBaseUrl ?? "https://api.braintrust.dev",
-        projectId: local.evaluatorProjectId,
-        scorers: local.evaluatorScorer,
-        ...local.evaluatorGateMetric === void 0 ? {} : { gateMetric: local.evaluatorGateMetric },
-        ...evaluatorGateThreshold === void 0 ? {} : { gateThreshold: evaluatorGateThreshold }
-      }
+      evaluator: evaluatorConfig(local, evaluatorGateThreshold)
     },
     modeBConfigPath: local.modebConfig,
     through: local.through,
     plan: local.plan,
     reporter
+  };
+}
+function evaluatorConfig(local, gateThreshold) {
+  const provider = local.evaluator;
+  const scoring = {
+    scorers: local.evaluatorScorer,
+    ...local.evaluatorGateMetric === void 0 ? {} : { gateMetric: local.evaluatorGateMetric },
+    ...gateThreshold === void 0 ? {} : { gateThreshold }
+  };
+  if (provider !== "langfuse" && local.evaluatorPublicKeyEnv !== void 0) {
+    throw new Error("--evaluator-public-key-env requires --evaluator langfuse");
+  }
+  if (provider !== "promptfoo" && (local.evaluatorCommand !== void 0 || local.evaluatorConfig !== void 0)) {
+    throw new Error(
+      "--evaluator-command and --evaluator-config require --evaluator promptfoo"
+    );
+  }
+  if (provider === "braintrust") {
+    if (local.evaluatorProjectId === void 0) {
+      throw new Error(
+        "--evaluator-project-id is required with --evaluator braintrust"
+      );
+    }
+    return {
+      provider,
+      apiKeyEnv: local.evaluatorApiKeyEnv ?? "BRAINTRUST_API_KEY",
+      baseUrl: local.evaluatorBaseUrl ?? "https://api.braintrust.dev",
+      projectId: local.evaluatorProjectId,
+      ...scoring
+    };
+  }
+  if (provider === "langsmith") {
+    if (local.evaluatorProjectId === void 0) {
+      throw new Error(
+        "--evaluator-project-id must name the dataset used with --evaluator langsmith"
+      );
+    }
+    return {
+      provider,
+      apiKeyEnv: local.evaluatorApiKeyEnv ?? "LANGSMITH_API_KEY",
+      baseUrl: local.evaluatorBaseUrl ?? "https://api.smith.langchain.com",
+      datasetId: local.evaluatorProjectId,
+      ...scoring
+    };
+  }
+  if (provider === "langfuse") {
+    if (local.evaluatorProjectId !== void 0) {
+      throw new Error(
+        "--evaluator-project-id is not used with --evaluator langfuse"
+      );
+    }
+    return {
+      provider,
+      apiKeyEnv: local.evaluatorApiKeyEnv ?? "LANGFUSE_SECRET_KEY",
+      publicKeyEnv: local.evaluatorPublicKeyEnv ?? "LANGFUSE_PUBLIC_KEY",
+      baseUrl: local.evaluatorBaseUrl ?? "https://cloud.langfuse.com",
+      ...scoring
+    };
+  }
+  if (local.evaluatorBaseUrl !== void 0 || local.evaluatorApiKeyEnv !== void 0 || local.evaluatorProjectId !== void 0 || local.evaluatorPublicKeyEnv !== void 0) {
+    throw new Error(
+      "API and project options are not used with --evaluator promptfoo"
+    );
+  }
+  if (local.evaluatorConfig === void 0) {
+    throw new Error(
+      "--evaluator-config is required with --evaluator promptfoo"
+    );
+  }
+  return {
+    provider,
+    command: local.evaluatorCommand ?? "promptfoo",
+    assertionsPath: local.evaluatorConfig,
+    ...scoring
+  };
+}
+function parseCorpusSource(value) {
+  const separator = value.indexOf(":");
+  const provider = value.slice(0, separator);
+  const dataset = value.slice(separator + 1);
+  if (separator < 1 || dataset.length === 0 || !["braintrust", "langsmith", "langfuse"].includes(provider)) {
+    throw new Error(
+      "--from must be braintrust:<dataset>, langsmith:<dataset>, or langfuse:<dataset>"
+    );
+  }
+  return {
+    provider,
+    dataset
+  };
+}
+function corpusImportConfig(source, local) {
+  if (source.provider !== "langfuse" && local.publicKeyEnv !== void 0) {
+    throw new Error(
+      "--public-key-env is only used with --from langfuse:<dataset>"
+    );
+  }
+  if (source.provider === "braintrust") {
+    return {
+      ...source,
+      baseUrl: local.baseUrl ?? "https://api.braintrust.dev",
+      apiKeyEnv: local.apiKeyEnv ?? "BRAINTRUST_API_KEY"
+    };
+  }
+  if (source.provider === "langsmith") {
+    return {
+      ...source,
+      baseUrl: local.baseUrl ?? "https://api.smith.langchain.com",
+      apiKeyEnv: local.apiKeyEnv ?? "LANGSMITH_API_KEY"
+    };
+  }
+  return {
+    ...source,
+    baseUrl: local.baseUrl ?? "https://cloud.langfuse.com",
+    apiKeyEnv: local.apiKeyEnv ?? "LANGFUSE_SECRET_KEY",
+    publicKeyEnv: local.publicKeyEnv ?? "LANGFUSE_PUBLIC_KEY"
+  };
+}
+function resultSinkConfig(local) {
+  if (local.to === "braintrust") {
+    if (local.projectId === void 0) {
+      throw new Error("--project-id is required with --to braintrust");
+    }
+    if (local.datasetId !== void 0 || local.publicKeyEnv !== void 0) {
+      throw new Error(
+        "--dataset-id and --public-key-env are only used with --to langfuse"
+      );
+    }
+    return {
+      provider: local.to,
+      baseUrl: local.baseUrl ?? "https://api.braintrust.dev",
+      apiKeyEnv: local.apiKeyEnv ?? "BRAINTRUST_API_KEY",
+      projectId: local.projectId
+    };
+  }
+  if (local.datasetId === void 0) {
+    throw new Error("--dataset-id is required with --to langfuse");
+  }
+  if (local.projectId !== void 0) {
+    throw new Error("--project-id is only used with --to braintrust");
+  }
+  return {
+    provider: local.to,
+    baseUrl: local.baseUrl ?? "https://cloud.langfuse.com",
+    apiKeyEnv: local.apiKeyEnv ?? "LANGFUSE_SECRET_KEY",
+    publicKeyEnv: local.publicKeyEnv ?? "LANGFUSE_PUBLIC_KEY",
+    datasetId: local.datasetId
   };
 }
 function collectOption(value, previous) {

@@ -1,0 +1,40 @@
+Traceback (most recent call last):
+  File "/rightmodeler/app/main.py", line 355, in <module>
+    main()
+  File "/rightmodeler/app/main.py", line 351, in main
+    print(json.dumps(run_case(case), separators=(",", ":")))
+                     ^^^^^^^^^^^^^^
+  File "/rightmodeler/app/main.py", line 236, in run_case
+    result = build_graph().invoke(
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/langgraph/pregel/main.py", line 3913, in invoke
+    for chunk in self.stream(
+  File "/usr/local/lib/python3.11/dist-packages/langgraph/pregel/main.py", line 2967, in stream
+    for _ in runner.tick(
+  File "/usr/local/lib/python3.11/dist-packages/langgraph/pregel/_runner.py", line 207, in tick
+    run_with_retry(
+  File "/usr/local/lib/python3.11/dist-packages/langgraph/pregel/_retry.py", line 617, in run_with_retry
+    return task.proc.invoke(task.input, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/langgraph/_internal/_runnable.py", line 707, in invoke
+    input = context.run(step.invoke, input, config, **kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/langgraph/_internal/_runnable.py", line 447, in invoke
+    ret = self.func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rightmodeler/app/main.py", line 87, in classify
+    response = client_from_env().chat.completions.create(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/openai/_utils/_utils.py", line 298, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/openai/resources/chat/completions/completions.py", line 1296, in create
+    return self._post(
+           ^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/openai/_base_client.py", line 1382, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/dist-packages/openai/_base_client.py", line 1155, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.InternalServerError: Error code: 502 - {'error': 'Egress request failed.'}
+During task with name 'classify' and id '7382759c-a5dd-e57c-6a45-4e1c77b4cca6'
