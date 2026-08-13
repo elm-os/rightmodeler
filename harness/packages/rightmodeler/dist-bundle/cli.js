@@ -3468,8 +3468,9 @@ var require_commander = __commonJS({
 });
 
 // src/cli.ts
+import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { basename as basename2, resolve as resolve6 } from "node:path";
+import { resolve as resolve7 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // ../../../node_modules/.pnpm/commander@14.0.3/node_modules/commander/esm.mjs
@@ -3494,6 +3495,7 @@ import { execFile as execFile7 } from "node:child_process";
 import { createHash as createHash10 } from "node:crypto";
 import { readFileSync as readFileSync5 } from "node:fs";
 import { mkdir as mkdir3, readFile as readFile8, readdir as readdir3, writeFile as writeFile4 } from "node:fs/promises";
+import { hostname as hostname4 } from "node:os";
 import { dirname as dirname5, join as join12, relative as relative6, resolve as resolve5, sep as sep4 } from "node:path";
 import { promisify as promisify6 } from "node:util";
 
@@ -20273,10 +20275,10 @@ var AdaptiveLimiter = class {
       this.active += 1;
       return Promise.resolve();
     }
-    return new Promise((resolve7) => {
+    return new Promise((resolve8) => {
       this.waiters.push(() => {
         this.active += 1;
-        resolve7();
+        resolve8();
       });
     });
   }
@@ -20332,7 +20334,7 @@ function retryDelay(response, attempt) {
   return backoff + Math.random() * backoff * 0.25;
 }
 function sleep(milliseconds) {
-  return new Promise((resolve7) => setTimeout(resolve7, milliseconds));
+  return new Promise((resolve8) => setTimeout(resolve8, milliseconds));
 }
 function isRetryable(status) {
   return status === 429 || status >= 500;
@@ -20637,7 +20639,7 @@ async function replayModeA(input) {
           if (refunds.length > 0) {
             await Promise.race(refunds);
           } else {
-            await new Promise((resolve7) => setTimeout(resolve7, 0));
+            await new Promise((resolve8) => setTimeout(resolve8, 0));
           }
           continue;
         }
@@ -20655,8 +20657,8 @@ async function replayModeA(input) {
       }
     }
     let resolveRefund = () => void 0;
-    const refundComplete = new Promise((resolve7) => {
-      resolveRefund = resolve7;
+    const refundComplete = new Promise((resolve8) => {
+      resolveRefund = resolve8;
     });
     activeRefunds.add(refundComplete);
     const executionId = mintExecutionId();
@@ -20873,8 +20875,8 @@ function redactCredential(body, credential) {
   return Buffer.from(body.toString("utf8").split(credential).join("[REDACTED]"), "utf8");
 }
 function close(server) {
-  return new Promise((resolve7, reject) => {
-    server.close((error51) => error51 === void 0 ? resolve7() : reject(error51));
+  return new Promise((resolve8, reject) => {
+    server.close((error51) => error51 === void 0 ? resolve8() : reject(error51));
   });
 }
 async function startEgressListener(options) {
@@ -20941,16 +20943,16 @@ async function startEgressListener(options) {
     });
     incoming.pipe(upstream);
   });
-  const hostname4 = options.hostname ?? "0.0.0.0";
-  await new Promise((resolve7, reject) => {
+  const hostname5 = options.hostname ?? "0.0.0.0";
+  await new Promise((resolve8, reject) => {
     server.once("error", reject);
-    server.listen(options.port ?? 0, hostname4, resolve7);
+    server.listen(options.port ?? 0, hostname5, resolve8);
   });
   const address = server.address();
   return {
-    hostname: hostname4,
+    hostname: hostname5,
     port: address.port,
-    url: `http://${hostname4 === "0.0.0.0" ? "127.0.0.1" : hostname4}:${address.port}`,
+    url: `http://${hostname5 === "0.0.0.0" ? "127.0.0.1" : hostname5}:${address.port}`,
     close: () => close(server)
   };
 }
@@ -21104,11 +21106,11 @@ function validatePricing(steps, policy, table) {
   }
 }
 function createWaiter() {
-  let resolve7 = () => void 0;
+  let resolve8 = () => void 0;
   const promise2 = new Promise((done) => {
-    resolve7 = done;
+    resolve8 = done;
   });
-  return { promise: promise2, resolve: resolve7 };
+  return { promise: promise2, resolve: resolve8 };
 }
 async function reserveCase(input, activeRefunds) {
   for (; ; ) {
@@ -21211,7 +21213,7 @@ async function waitForExit(executor, handle) {
     const status = await executor.status(handle);
     if (status.state === "exited")
       return status;
-    await new Promise((resolve7) => setTimeout(resolve7, 50));
+    await new Promise((resolve8) => setTimeout(resolve8, 50));
   }
 }
 function textFiles(collected) {
@@ -25662,6 +25664,13 @@ function scrubRuns(runs) {
   }
 }
 
+// src/apply/orchestrator.ts
+import { execFile as execFile3 } from "node:child_process";
+import { createHash as createHash4, randomUUID as randomUUID9 } from "node:crypto";
+import { readFile as readFile4 } from "node:fs/promises";
+import { join as join8 } from "node:path";
+import { promisify as promisify2 } from "node:util";
+
 // src/apply/diff.ts
 import { readFileSync as readFileSync3 } from "node:fs";
 import { join as join6 } from "node:path";
@@ -26517,14 +26526,14 @@ function formatterCommand(repoDir, formatter) {
   return null;
 }
 function runFormatter(command, filePath, cwd, input) {
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve8, reject) => {
     const child = execFile2(
       command.executable,
       command.args(filePath),
       { cwd, encoding: "utf8" },
       (error51, stdout) => {
         if (error51 !== null) reject(error51);
-        else resolve7(command.stdin ? stdout : null);
+        else resolve8(command.stdin ? stdout : null);
       }
     );
     if (command.stdin) child.stdin?.end(input);
@@ -26656,11 +26665,6 @@ async function formatWithHostFormatter({
 }
 
 // src/apply/orchestrator.ts
-import { execFile as execFile3 } from "node:child_process";
-import { createHash as createHash4, randomUUID as randomUUID9 } from "node:crypto";
-import { readFile as readFile4 } from "node:fs/promises";
-import { join as join8 } from "node:path";
-import { promisify as promisify2 } from "node:util";
 var execFileAsync2 = promisify2(execFile3);
 var projectId = "project";
 var reviewerLimit = 5;
@@ -27154,13 +27158,111 @@ async function applySwaps({
   };
 }
 
+// src/estimate.ts
+function estimateReplayCost(input) {
+  const stepsById = new Map(input.steps.map((step) => [step.stepId, step]));
+  const candidatesByStep = new Map(
+    input.candidates.map((assignment) => [
+      assignment.stepId,
+      assignment.candidates
+    ])
+  );
+  let shortlistCostUsd = 0;
+  let shortlistExecutions = 0;
+  for (const replayCase of input.cases) {
+    requireStep(stepsById, replayCase.stepId);
+    if (replayCase.corpusSplit !== "shortlist") continue;
+    for (const candidate of candidatesByStep.get(replayCase.stepId) ?? []) {
+      shortlistCostUsd += reservationCost(replayCase, candidate);
+      shortlistExecutions += 1;
+    }
+  }
+  let holdoutCostUsd = 0;
+  let holdoutExecutions = 0;
+  const families = [...new Set(input.steps.map(({ family }) => family))].sort(
+    compareText5
+  );
+  for (const family of families) {
+    const familyStepIds = new Set(
+      input.steps.filter((step) => step.family === family).map(({ stepId }) => stepId)
+    );
+    const candidateIds = [
+      ...new Set(
+        input.candidates.filter(({ stepId }) => familyStepIds.has(stepId)).flatMap(({ candidates }) => candidates.map(({ id }) => id))
+      )
+    ].sort(compareText5);
+    let maximumFamily;
+    for (const candidateId3 of candidateIds) {
+      let candidateCost = 0;
+      let candidateExecutions = 0;
+      for (const replayCase of input.cases) {
+        if (replayCase.corpusSplit !== "holdout" || !familyStepIds.has(replayCase.stepId)) {
+          continue;
+        }
+        const candidate = (candidatesByStep.get(replayCase.stepId) ?? []).find(
+          ({ id }) => id === candidateId3
+        );
+        if (candidate === void 0) continue;
+        candidateCost += reservationCost(replayCase, candidate);
+        candidateExecutions += 1;
+      }
+      if (maximumFamily === void 0 || candidateCost > maximumFamily.cost) {
+        maximumFamily = {
+          cost: candidateCost,
+          executions: candidateExecutions
+        };
+      }
+    }
+    holdoutCostUsd += maximumFamily?.cost ?? 0;
+    holdoutExecutions += maximumFamily?.executions ?? 0;
+  }
+  return {
+    projectedCostUsd: shortlistCostUsd + holdoutCostUsd,
+    shortlistCostUsd,
+    holdoutCostUsd,
+    candidateExecutions: shortlistExecutions + holdoutExecutions,
+    corpusCases: input.cases.length,
+    shortlistCases: input.cases.filter(
+      ({ corpusSplit }) => corpusSplit === "shortlist"
+    ).length,
+    holdoutCases: input.cases.filter(
+      ({ corpusSplit }) => corpusSplit === "holdout"
+    ).length,
+    basis: "Worst-case candidate reservation from corpus token bounds and current provider catalog pricing; holdout uses the most expensive possible family winner.",
+    exclusions: [
+      "Built-in judge calls, whose current pipeline records no priced usage.",
+      "External evaluator charges, which are not present in the provider catalog."
+    ],
+    shortlist: input.candidates.map(({ stepId, candidates }) => ({
+      stepId,
+      candidateIds: candidates.map(({ id }) => id)
+    }))
+  };
+}
+function reservationCost(replayCase, candidate) {
+  if (candidate.pricing === null) {
+    throw new Error(`Shortlisted candidate has no pricing: ${candidate.id}`);
+  }
+  return replayCase.contextTokens * candidate.pricing.input + replayCase.maxOutputTokens * candidate.pricing.output;
+}
+function requireStep(stepsById, stepId) {
+  const step = stepsById.get(stepId);
+  if (step === void 0) {
+    throw new Error(`Replay cost case references an unknown step: ${stepId}`);
+  }
+  return step;
+}
+function compareText5(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 // src/enrich/shared.ts
 var codeownersPaths = [
   ".github/CODEOWNERS",
   "CODEOWNERS",
   "docs/CODEOWNERS"
 ];
-function compareText5(left, right) {
+function compareText6(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
@@ -27188,7 +27290,7 @@ function blastRadius({
     ...new Set(
       verdicts.filter(({ decision }) => decision === "recommend").map(({ familyId }) => familyId)
     )
-  ].sort(compareText5);
+  ].sort(compareText6);
   return recommendedFamilies.map((familyId) => {
     const roots = stepRecords.filter((record2) => record2.family === familyId);
     const swappedFiles = new Set(roots.map((record2) => record2.callSite.path));
@@ -27217,10 +27319,10 @@ function blastRadius({
     }
     return {
       familyId,
-      files: [...swappedFiles].sort(compareText5),
-      downstreamFiles: [...downstreamFiles].sort(compareText5),
+      files: [...swappedFiles].sort(compareText6),
+      downstreamFiles: [...downstreamFiles].sort(compareText6),
       owners: [...owners.values()].sort(
-        (left, right) => compareText5(left.handle, right.handle)
+        (left, right) => compareText6(left.handle, right.handle)
       )
     };
   });
@@ -27337,13 +27439,13 @@ async function captureInstructionFiles(repoDir) {
       }
     }
   }
-  for (const seed of seeds.sort(compareText5)) {
+  for (const seed of seeds.sort(compareText6)) {
     await capture(seed, 0, []);
   }
   return {
-    files: [...files.entries()].sort(([left], [right]) => compareText5(left, right)).map(([path, content]) => ({ path, content })),
+    files: [...files.entries()].sort(([left], [right]) => compareText6(left, right)).map(([path, content]) => ({ path, content })),
     warnings: warnings.sort(
-      (left, right) => compareText5(left.name, right.name) || compareText5(left.path, right.path) || compareText5(left.includedFrom ?? "", right.includedFrom ?? "")
+      (left, right) => compareText6(left.name, right.name) || compareText6(left.path, right.path) || compareText6(left.includedFrom ?? "", right.includedFrom ?? "")
     )
   };
 }
@@ -27407,7 +27509,7 @@ async function inferBranchPrefix(repoDir) {
     counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
   }
   const ranked = [...counts.entries()].sort(
-    ([leftPrefix, leftCount], [rightPrefix, rightCount]) => rightCount - leftCount || compareText5(leftPrefix, rightPrefix)
+    ([leftPrefix, leftCount], [rightPrefix, rightCount]) => rightCount - leftCount || compareText6(leftPrefix, rightPrefix)
   );
   if (ranked.length === 0) return null;
   return ranked[0][0];
@@ -27526,7 +27628,7 @@ function blameCommitters(output) {
     }
   }
   return [...committers.entries()].sort(
-    ([leftEmail, left], [rightEmail, right]) => right.latestCommitterTime - left.latestCommitterTime || right.lines - left.lines || compareText5(leftEmail, rightEmail)
+    ([leftEmail, left], [rightEmail, right]) => right.latestCommitterTime - left.latestCommitterTime || right.lines - left.lines || compareText6(leftEmail, rightEmail)
   ).slice(0, maximumBlameOwners).map(([handle]) => ({ handle, source: "blame" }));
 }
 async function ownersFromBlame(repoDir, filePath) {
@@ -27812,7 +27914,7 @@ async function pollEvaluator(evaluator, providerRunId) {
   const delays = [0, 25, 50, 100, 200, 400];
   for (const delay of delays) {
     if (delay > 0) {
-      await new Promise((resolve7) => setTimeout(resolve7, delay));
+      await new Promise((resolve8) => setTimeout(resolve8, delay));
     }
     const status = await evaluator.status(providerRunId);
     if (status === "complete" || status === "failed") return status;
@@ -29435,7 +29537,7 @@ var lifecycleKindOrder2 = {
   pr_merged: 6,
   watch_ended: 7
 };
-function compareText6(left, right) {
+function compareText7(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 function handledEventKey(event) {
@@ -29460,7 +29562,7 @@ async function readPrLifecycleEvents({
     }
   }
   return events.sort(
-    (left, right) => compareText6(left.createdAt, right.createdAt) || lifecycleKindOrder2[left.kind] - lifecycleKindOrder2[right.kind] || compareText6(left.eventId, right.eventId)
+    (left, right) => compareText7(left.createdAt, right.createdAt) || lifecycleKindOrder2[left.kind] - lifecycleKindOrder2[right.kind] || compareText7(left.eventId, right.eventId)
   );
 }
 async function derivePrState({
@@ -29607,7 +29709,7 @@ var ciFailureDetailSchema = external_exports.looseObject({
     })
   )
 });
-function compareText7(left, right) {
+function compareText8(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 function lifecycleContext(events, repository, prNumber) {
@@ -29725,7 +29827,7 @@ function questions(reviews, reviewComments, issueComments, prNumber) {
   ].filter(
     ({ body, user }) => body.trim() !== "" && user !== "rightmodeler-bot" && !user.endsWith("[bot]")
   ).sort(
-    (left, right) => compareText7(left.createdAt, right.createdAt) || left.id - right.id || compareText7(left.source, right.source)
+    (left, right) => compareText8(left.createdAt, right.createdAt) || left.id - right.id || compareText8(left.source, right.source)
   );
 }
 function parseStoredVerdict(value, familyId) {
@@ -29772,7 +29874,7 @@ async function markForReproof(store, verdicts, requestId) {
         supplied.familyId
       );
       const requestIds = [.../* @__PURE__ */ new Set([...parsed2.requestIds, requestId])].sort(
-        compareText7
+        compareText8
       );
       const next = jsonValueSchema.parse({
         ...parsed2.verdict,
@@ -30005,7 +30107,7 @@ ${marker}`
       );
     }
     for (const review of [...reviews].sort(
-      (left, right) => compareText7(left.submittedAt ?? "", right.submittedAt ?? "") || left.id - right.id
+      (left, right) => compareText8(left.submittedAt ?? "", right.submittedAt ?? "") || left.id - right.id
     )) {
       if (review.state !== "CHANGES_REQUESTED") continue;
       const key = `review:${input.prNumber}:${review.id}`;
@@ -30086,7 +30188,7 @@ ${marker}`
     const failingChecks = checkRuns.checkRuns.filter(
       (check2) => check2.headSha === pull.head.sha && check2.status === "completed" && check2.conclusion === "failure" && /(lint|test|build)/i.test(check2.name)
     ).sort(
-      (left, right) => compareText7(left.name, right.name) || left.id - right.id
+      (left, right) => compareText8(left.name, right.name) || left.id - right.id
     );
     if (failingChecks.length > 0) {
       const failingNames = [...new Set(failingChecks.map(({ name }) => name))];
@@ -30130,7 +30232,7 @@ ${marker}`
       } else {
         const persistentNames = [
           ...new Set(persistent.map(({ name }) => name))
-        ].sort(compareText7);
+        ].sort(compareText8);
         await renew();
         await input.githubClient.closePullRequest({
           owner: input.owner,
@@ -30186,6 +30288,16 @@ var PIPELINE_STAGES = [
   "confirm",
   "report"
 ];
+var detachedRunProgressSchema = external_exports.strictObject({
+  runId: external_exports.string().min(1),
+  stage: external_exports.enum(PIPELINE_STAGES)
+});
+var detachedReplayWorkerSchema = external_exports.strictObject({
+  runId: external_exports.string().min(1),
+  pid: external_exports.number().int().positive(),
+  hostname: external_exports.string().min(1),
+  startedAt: external_exports.string().datetime()
+});
 var PROJECT_ID = "project";
 var CORPUS_SEED = 42;
 var AUDIT_SAMPLE_LIMIT = 20;
@@ -30276,6 +30388,10 @@ var modelCatalogSchema = external_exports.strictObject({
   }).nullable(),
   supportsTools: external_exports.boolean(),
   supportsStructuredOutput: external_exports.boolean()
+});
+var detachedReplayCatalogSchema = external_exports.strictObject({
+  runId: external_exports.string().min(1),
+  models: external_exports.array(modelCatalogSchema)
 });
 var replayOutputSchema = external_exports.strictObject({
   completed: external_exports.number().int().nonnegative(),
@@ -30437,11 +30553,22 @@ async function runPipeline(options) {
       recommendationExists: false
     };
   }
-  const run = await createRun(context.store, {
+  if (options.existingRunId !== void 0) {
+    const existing = await requireRunningReplayRun(
+      context,
+      options.existingRunId
+    );
+    if (options.through !== existing.phase) {
+      throw new Error(
+        `Detached run ${existing.runId} must execute through ${existing.phase}`
+      );
+    }
+  }
+  const run = options.existingRunId === void 0 ? await createRun(context.store, {
     projectId: context.projectId,
     type: "init",
     phase: options.through ?? "report"
-  });
+  }) : await requireRunningReplayRun(context, options.existingRunId);
   const executedStages = [];
   try {
     for (const stage of stagesThrough(options.through)) {
@@ -30450,6 +30577,7 @@ async function runPipeline(options) {
       const checkpoint = state2.stages[stage];
       if (checkpoint?.inputDigest === digest2 && await checkpointOutputExists(context, stage, checkpoint)) {
         context.reporter.event({ event: "stage_skipped", stage });
+        await markDetachedRunProgress(context, options.existingRunId, stage);
         continue;
       }
       context.reporter.event({ event: "stage_started", stage });
@@ -30461,6 +30589,7 @@ async function runPipeline(options) {
       });
       executedStages.push(stage);
       context.reporter.event({ event: "stage_completed", stage });
+      await markDetachedRunProgress(context, options.existingRunId, stage);
     }
     await completeRun(context.store, context.projectId, run.runId);
   } catch (error51) {
@@ -30480,6 +30609,285 @@ async function runPipeline(options) {
       ({ effectiveRecommendation }) => effectiveRecommendation
     ) ?? false
   };
+}
+async function estimateReplay(options) {
+  const context = createContext(options);
+  if (context.baseUrl === void 0) {
+    throw missingProviderConfiguration();
+  }
+  const plan = await loadReplayPlan(context);
+  const provider = createProvider({
+    providerId: "configured-provider",
+    baseUrl: context.baseUrl,
+    apiKeyEnv: context.apiKeyEnv
+  });
+  const catalog = context.existingRunId === void 0 ? await provider.listModels() : await readDetachedReplayCatalog(context, context.existingRunId);
+  return estimateReplayCost({
+    steps: plan.steps,
+    cases: plan.cases,
+    candidates: context.approvedRunSpecDigest === void 0 ? replayCandidates(plan, catalog) : await approvedReplayCandidates(
+      context,
+      plan,
+      catalog,
+      context.approvedRunSpecDigest
+    )
+  });
+}
+async function claimDetachedReplay(options) {
+  const context = createContext(options);
+  if (context.baseUrl === void 0) {
+    throw missingProviderConfiguration();
+  }
+  const state = await readSetupState(context.store, context.projectId);
+  const traceIdentity = context.traces === void 0 ? state.stages.ingest?.inputDigest : digest({
+    stage: "ingest",
+    traceSha256: sha256(await readFile8(context.traces))
+  });
+  if (traceIdentity === void 0) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "missing_traces_path",
+      message: "A trace input path is required for a fresh detached replay.",
+      remedy: "Pass --traces <path> or complete ingest before detaching replay."
+    });
+  }
+  const catalogIdentity = (await createProvider({
+    providerId: "configured-provider",
+    baseUrl: context.baseUrl,
+    apiKeyEnv: context.apiKeyEnv
+  }).listModels()).sort((left, right) => compareText9(left.id, right.id));
+  const targetPhase = options.through ?? "replay";
+  if (!isPipelineStage(targetPhase)) {
+    throw new Error(`Invalid detached replay target: ${targetPhase}`);
+  }
+  const runId = `replay-${computeRunSpecDigest({
+    version: 1,
+    type: "replay",
+    targetPhase,
+    repository: await repositoryDigest(context.repo, context.storeRoot),
+    traces: traceIdentity,
+    reproofRequests: jsonValue2(
+      await readReproofRequests(context.store, context.projectId)
+    ),
+    catalog: jsonValue2(catalogIdentity),
+    provider: {
+      baseUrl: context.baseUrl,
+      apiKeyEnv: context.apiKeyEnv,
+      maxCostUsd: context.maxCostUsd ?? null
+    },
+    evaluator: await evaluatorRunIdentity(context),
+    modeBConfig: context.modeBConfig === void 0 ? null : jsonValue2(context.modeBConfig),
+    approvedRunSpecDigest: context.approvedRunSpecDigest ?? null
+  })}`;
+  await putImmutableJson(
+    context.store,
+    detachedReplayCatalogKey(context.projectId, runId),
+    { runId, models: catalogIdentity }
+  );
+  const existing = await readRun(context, runId);
+  if (existing !== null) {
+    return detachedClaim(existing, true);
+  }
+  try {
+    const created = await createRun(context.store, {
+      projectId: context.projectId,
+      type: "replay",
+      phase: targetPhase,
+      runId
+    });
+    return detachedClaim(created, false);
+  } catch (error51) {
+    const raced = await readRun(context, runId);
+    if (raced === null) throw error51;
+    return detachedClaim(raced, true);
+  }
+}
+async function beginDetachedReplayWorker(options, runId) {
+  const context = createContext(options);
+  const run = await requireReplayRun(context, runId);
+  if (run.status !== "running") return false;
+  const key = detachedReplayWorkerKey(context.projectId);
+  for (; ; ) {
+    const entry = await context.store.get(key);
+    if (entry !== null) {
+      const worker2 = detachedReplayWorkerSchema.parse(
+        JSON.parse(Buffer.from(entry.body).toString("utf8"))
+      );
+      const owner = await readRun(context, worker2.runId);
+      if (owner?.status === "running" && (worker2.hostname !== hostname4() || processIsAlive(worker2.pid))) {
+        return false;
+      }
+    }
+    const worker = detachedReplayWorkerSchema.parse({
+      runId,
+      pid: process.pid,
+      hostname: hostname4(),
+      startedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+    if (await context.store.compareAndSwap(
+      key,
+      entry?.version ?? 0,
+      Buffer.from(canonicalJson(worker), "utf8"),
+      (entry?.fenceToken ?? 0) + 1
+    )) {
+      return true;
+    }
+  }
+}
+async function readActiveDetachedReplay(options) {
+  const context = createHeadlessContext(options);
+  const entry = await context.store.get(
+    detachedReplayWorkerKey(context.projectId)
+  );
+  if (entry === null) return null;
+  const worker = detachedReplayWorkerSchema.parse(
+    JSON.parse(Buffer.from(entry.body).toString("utf8"))
+  );
+  const run = await readRun(context, worker.runId);
+  if (run === null || run.status !== "running" || worker.hostname === hostname4() && !processIsAlive(worker.pid)) {
+    return null;
+  }
+  return readRunStatus({ ...options, runId: worker.runId });
+}
+async function evaluatorRunIdentity(context) {
+  if (context.evaluator === void 0) return null;
+  if (context.evaluator.provider !== "promptfoo") {
+    return jsonValue2(context.evaluator);
+  }
+  return jsonValue2({
+    ...context.evaluator,
+    assertionsSha256: sha256(
+      await readFile8(resolve5(context.evaluator.assertionsPath))
+    )
+  });
+}
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error51) {
+    const code = error51.code;
+    if (code === "ESRCH") return false;
+    if (code === "EPERM") return true;
+    throw error51;
+  }
+}
+async function readRunStatus(options) {
+  const context = createContext({
+    repo: options.repo,
+    store: options.store,
+    reporter: new Reporter("human", {
+      stdout: () => void 0,
+      stderr: () => void 0
+    })
+  });
+  const run = await requireReplayRun(context, options.runId);
+  const targetStage = isPipelineStage(run.phase) ? run.phase : null;
+  const targetStages = targetStage === null ? [] : stagesThrough(targetStage);
+  const completedStages = await readDetachedRunProgress(
+    context,
+    run.runId,
+    targetStages
+  );
+  return {
+    runId: run.runId,
+    type: run.type,
+    phase: run.phase,
+    status: run.status,
+    terminal: run.status !== "running",
+    startedAt: run.startedAt,
+    ...run.completedAt === void 0 ? {} : { completedAt: run.completedAt },
+    progress: {
+      completedStages,
+      targetStage,
+      completed: completedStages.length,
+      total: targetStage === null ? null : targetStages.length
+    }
+  };
+}
+function detachedClaim(run, deduplicated) {
+  assertReplayRun(run);
+  return {
+    runId: run.runId,
+    status: run.status,
+    terminal: run.status !== "running",
+    deduplicated
+  };
+}
+function detachedRunProgressPrefix(projectId2, runId) {
+  return `${runsPrefix(projectId2)}${runId}/progress/`;
+}
+function detachedReplayCatalogKey(projectId2, runId) {
+  return `${runsPrefix(projectId2)}${runId}/catalog.json`;
+}
+function detachedReplayWorkerKey(projectId2) {
+  return `${setupPrefix(projectId2)}detached-worker.json`;
+}
+async function readDetachedReplayCatalog(context, runId) {
+  const value = detachedReplayCatalogSchema.parse(
+    await readJson(
+      context.store,
+      detachedReplayCatalogKey(context.projectId, runId)
+    )
+  );
+  if (value.runId !== runId) {
+    throw new Error(`Detached replay catalog has the wrong runId: ${runId}`);
+  }
+  return value.models;
+}
+async function markDetachedRunProgress(context, runId, stage) {
+  if (runId === void 0) return;
+  await putImmutableJson(
+    context.store,
+    `${detachedRunProgressPrefix(context.projectId, runId)}${stage}.json`,
+    { runId, stage }
+  );
+}
+async function readDetachedRunProgress(context, runId, targetStages) {
+  const completed = /* @__PURE__ */ new Set();
+  for (const key of await context.store.list(
+    detachedRunProgressPrefix(context.projectId, runId)
+  )) {
+    const entry = await context.store.get(key);
+    if (entry === null) {
+      throw new Error(
+        `Detached run progress disappeared while reading: ${key}`
+      );
+    }
+    const progress = detachedRunProgressSchema.parse(
+      JSON.parse(Buffer.from(entry.body).toString("utf8"))
+    );
+    if (progress.runId !== runId) {
+      throw new Error(`Detached run progress has the wrong runId: ${key}`);
+    }
+    completed.add(progress.stage);
+  }
+  return targetStages.filter((stage) => completed.has(stage));
+}
+async function readRun(context, runId) {
+  const entry = await context.store.get(runKey(context.projectId, runId));
+  return entry === null ? null : runMetaSchema.parse(JSON.parse(Buffer.from(entry.body).toString("utf8")));
+}
+async function requireReplayRun(context, runId) {
+  const run = await readRun(context, runId);
+  if (run === null) throw new Error(`Run does not exist: ${runId}`);
+  assertReplayRun(run);
+  return run;
+}
+async function requireRunningReplayRun(context, runId) {
+  const run = await requireReplayRun(context, runId);
+  if (run.status !== "running") {
+    throw new Error(`Run ${runId} is already ${run.status}`);
+  }
+  return run;
+}
+function assertReplayRun(run) {
+  if (run.type !== "replay" || !isPipelineStage(run.phase)) {
+    throw new Error(`Run ${run.runId} is not a detached replay run`);
+  }
+}
+function isPipelineStage(value) {
+  return PIPELINE_STAGES.some((stage) => stage === value);
 }
 async function runApply(options) {
   const context = createHeadlessContext(options);
@@ -30509,6 +30917,149 @@ async function runWatch(options) {
     verdicts: prepared.verdicts
   });
 }
+async function listWatchablePullRequests(options) {
+  const context = createHeadlessContext(options);
+  const events = (await readFacts2(context.store, context.projectId)).flatMap(
+    (fact) => {
+      const parsed2 = lifecycleEventSchema.safeParse(fact);
+      return parsed2.success && parsed2.data.prNumber !== null ? [parsed2.data] : [];
+    }
+  );
+  const numbers = [
+    ...new Set(
+      events.flatMap(({ prNumber }) => prNumber === null ? [] : [prNumber])
+    )
+  ].sort((left, right) => left - right);
+  return numbers.flatMap((prNumber) => {
+    const matching = events.filter((event) => event.prNumber === prNumber);
+    if (matching.some(({ kind }) => kind === "watch_ended")) return [];
+    const terminal = matching.some(
+      ({ kind }) => kind === "pr_merged" || kind === "pr_closed_rejected"
+    );
+    return [{ prNumber, phase: terminal ? "terminal" : "open" }];
+  });
+}
+async function listApprovedSwapSets(options) {
+  const context = createHeadlessContext(options);
+  const merged = (await readFacts2(context.store, context.projectId)).flatMap(
+    (fact) => {
+      const parsed2 = lifecycleEventSchema.safeParse(fact);
+      return parsed2.success && parsed2.data.kind === "pr_merged" && parsed2.data.prNumber !== null ? [parsed2.data] : [];
+    }
+  );
+  const result2 = [];
+  for (const event of merged) {
+    if (event.prNumber === null) continue;
+    result2.push(
+      await recoverApprovedSwapSet(context, {
+        ...event,
+        prNumber: event.prNumber
+      })
+    );
+  }
+  return result2.sort(
+    (left, right) => left.prNumber - right.prNumber || compareText9(left.runSpecDigest, right.runSpecDigest)
+  );
+}
+async function approvedSwapSetByDigest(context, runSpecDigest) {
+  const matches = (await listApprovedSwapSets({
+    repo: context.repo,
+    store: context.storeRoot
+  })).filter((approved) => approved.runSpecDigest === runSpecDigest);
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected one merged approved swap for run ${runSpecDigest}; found ${matches.length}`
+    );
+  }
+  return matches[0];
+}
+async function recoverApprovedSwapSet(context, event) {
+  const [scans, reconciliations, plans, aggregates, confirmations] = await Promise.all([
+    readSetupArtifacts(context, "scan", scanOutputSchema),
+    readSetupArtifacts(context, "reconcile", reconcileOutputSchema),
+    readSetupArtifacts(context, "shortlist", replayPlanSchema),
+    readSetupArtifacts(context, "aggregate", aggregateOutputSchema),
+    readSetupArtifacts(context, "confirm", confirmOutputSchema)
+  ]);
+  const mappings = /* @__PURE__ */ new Map();
+  for (const scanOutput of scans.filter(
+    ({ revision }) => revision === event.evidence.revision
+  )) {
+    const scanStepIds = new Set(scanOutput.records.map(({ stepId }) => stepId));
+    for (const reconciliation of reconciliations.filter(
+      ({ records }) => records.every(({ stepId }) => scanStepIds.has(stepId))
+    )) {
+      const records = new Map(
+        reconciliation.records.map((record2) => [record2.stepId, record2])
+      );
+      for (const plan of plans) {
+        for (const decision of [...aggregates, ...confirmations]) {
+          const selected = decision.families.filter(
+            (family) => family.verdict.decision === "recommend" && family.gates.every(({ pass }) => pass) && (family.confirmation === void 0 || family.confirmation.status === "not_required" || family.confirmation.status === "confirmed") && family.selection.status === "selected"
+          ).sort((left, right) => compareText9(left.familyId, right.familyId));
+          if (canonicalJson(selected.map(({ familyId }) => familyId)) !== canonicalJson([...event.familyIds].sort(compareText9))) {
+            continue;
+          }
+          const swaps = selected.flatMap((family) => {
+            if (family.selection.status !== "selected") return [];
+            const toModel = family.selection.selectedCandidateId;
+            if (toModel === void 0) return [];
+            return plan.steps.filter(({ family: familyId }) => familyId === family.familyId).flatMap((step) => {
+              const record2 = records.get(step.stepId);
+              return record2 === void 0 || step.currentModel === null || step.currentModel !== record2.currentModel ? [] : [
+                {
+                  familyId: family.familyId,
+                  stepId: step.stepId,
+                  path: record2.callSite.path,
+                  fromModel: step.currentModel,
+                  toModel
+                }
+              ];
+            });
+          });
+          if (swaps.length === 0) continue;
+          const canonical = canonicalApprovedSwaps(swaps);
+          const digestValue = computeRunSpecDigest(
+            jsonValue2({
+              repo: event.repo,
+              evidenceRevision: event.evidence.revision,
+              swapSet: canonical,
+              corpusVersionId: event.evidence.corpusVersionId
+            })
+          );
+          if (digestValue === event.runSpecDigest) {
+            mappings.set(canonicalJson(jsonValue2(canonical)), canonical);
+          }
+        }
+      }
+    }
+  }
+  if (mappings.size !== 1) {
+    throw new Error(
+      `Approved swap ${event.runSpecDigest} resolved to ${mappings.size} immutable mappings`
+    );
+  }
+  return {
+    runSpecDigest: event.runSpecDigest,
+    prNumber: event.prNumber,
+    familyIds: [...event.familyIds],
+    swaps: [...mappings.values()][0]
+  };
+}
+function canonicalApprovedSwaps(swaps) {
+  return [...swaps].sort(
+    (left, right) => compareText9(left.familyId, right.familyId) || compareText9(left.path, right.path) || compareText9(left.stepId, right.stepId) || compareText9(left.fromModel, right.fromModel) || compareText9(left.toModel, right.toModel)
+  );
+}
+async function readSetupArtifacts(context, stage, schema) {
+  const prefix = `${setupPrefix(context.projectId)}${stage}-`;
+  const values = [];
+  for (const key of await context.store.list(prefix)) {
+    if (!key.endsWith(".json")) continue;
+    values.push(schema.parse(await readJson(context.store, key)));
+  }
+  return values;
+}
 async function runCorpusImport(options) {
   const context = createHeadlessContext(options);
   const corpus = await importCorpus(options.config, { seed: CORPUS_SEED });
@@ -30533,8 +31084,8 @@ async function runResultExport(options) {
   const exportDigest = digest({
     provider: options.config.provider,
     target: options.config.provider === "braintrust" ? options.config.projectId : options.config.datasetId,
-    executionIds: executions.map(({ executionId }) => executionId).sort(compareText8),
-    assessmentIds: assessments.map(({ assessmentId }) => assessmentId).sort(compareText8),
+    executionIds: executions.map(({ executionId }) => executionId).sort(compareText9),
+    assessmentIds: assessments.map(({ assessmentId }) => assessmentId).sort(compareText9),
     verdicts: jsonValue2(verdicts)
   });
   const receiptKey = `${context.projectId}/exports/${options.config.provider}-${exportDigest}.json`;
@@ -30662,6 +31213,8 @@ function createContext(options) {
       modeBConfigPath,
       modeBConfig: readModeBConfig(modeBConfigPath)
     },
+    ...options.existingRunId === void 0 ? {} : { existingRunId: options.existingRunId },
+    ...options.approvedRunSpecDigest === void 0 ? {} : { approvedRunSpecDigest: options.approvedRunSpecDigest },
     reporter: options.reporter
   };
 }
@@ -30733,13 +31286,17 @@ async function inputDigest(stage, context, state) {
   const upstream = state.stages[previous];
   if (upstream === void 0) return void 0;
   const extra = {};
-  if (stage === "reconcile" && context.modeBConfig !== void 0) {
-    extra.stepMap = context.modeBConfig.stepMap;
+  if (stage === "reconcile") {
+    extra.scan = state.stages.scan?.inputDigest ?? "missing";
+    if (context.modeBConfig !== void 0) {
+      extra.stepMap = context.modeBConfig.stepMap;
+    }
   }
   if (stage === "corpus") extra.seed = CORPUS_SEED;
   if (stage === "audit-sample") extra.limit = AUDIT_SAMPLE_LIMIT;
   if (stage === "shortlist") extra.top = SHORTLIST_TOP;
   if (stage === "shortlist") {
+    extra.approvedRunSpecDigest = context.approvedRunSpecDigest ?? null;
     extra.evaluatorPlan = evaluatorPlan(context);
     const reproofRequests = await readReproofRequests(
       context.store,
@@ -30777,6 +31334,14 @@ async function inputDigest(stage, context, state) {
       maxCostUsd: context.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context)
     });
+    extra.approvedRunSpecDigest = context.approvedRunSpecDigest ?? null;
+    if (context.existingRunId !== void 0) {
+      extra.catalog = digest(
+        jsonValue2(
+          await readDetachedReplayCatalog(context, context.existingRunId)
+        )
+      );
+    }
   }
   if (stage === "aggregate") {
     extra.gatePolicyVersion = GATE_POLICY_VERSION;
@@ -30815,12 +31380,7 @@ async function requiredInputDigest(stage, context, state) {
     });
   }
   if (stage === "replay") {
-    throw new ProtocolError({
-      exitCode: 2,
-      code: "missing_provider_configuration",
-      message: "Provider configuration is required when replay is reached.",
-      remedy: "Pass --base-url <url> and, if needed, --api-key-env <environment-variable-name>."
-    });
+    throw missingProviderConfiguration();
   }
   if (stage === "confirm") {
     throw new ProtocolError({
@@ -30831,6 +31391,14 @@ async function requiredInputDigest(stage, context, state) {
     });
   }
   throw new Error(`Cannot run ${stage} before its upstream stage is complete`);
+}
+function missingProviderConfiguration() {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "missing_provider_configuration",
+    message: "Provider configuration is required when replay is reached.",
+    remedy: "Pass --base-url <url> and, if needed, --api-key-env <environment-variable-name>."
+  });
 }
 async function executeStage(stage, context, inputDigestValue, runId) {
   switch (stage) {
@@ -31025,6 +31593,7 @@ async function executeShortlist(context, inputDigestValue) {
   const records = (await loadReconcile(context)).records;
   const runs = (await loadScrub(context)).runs;
   const corpus = buildCorpus(runs, { seed: CORPUS_SEED });
+  const approved = context.approvedRunSpecDigest === void 0 ? void 0 : await approvedSwapSetByDigest(context, context.approvedRunSpecDigest);
   const replayableSteps = records.filter(
     (record2) => !record2.capabilityRequirements.includes("tools") && !record2.capabilityRequirements.includes("structured_output")
   );
@@ -31033,9 +31602,17 @@ async function executeShortlist(context, inputDigestValue) {
   }
   const families = [
     ...new Set(corpus.cases.map(({ content }) => content.family))
-  ].sort(
-    (left, right) => corpus.cases.filter(({ content }) => content.family === right).length - corpus.cases.filter(({ content }) => content.family === left).length || compareText8(left, right)
+  ].filter(
+    (family) => approved === void 0 || approved.familyIds.includes(family)
+  ).sort(
+    (left, right) => corpus.cases.filter(({ content }) => content.family === right).length - corpus.cases.filter(({ content }) => content.family === left).length || compareText9(left, right)
   );
+  if (approved !== void 0 && families.length !== approved.familyIds.length) {
+    throw new Error(
+      `Approved swap ${approved.runSpecDigest} has no fresh corpus cases for every family`
+    );
+  }
+  const usageByCase = replayUsageByCase(runs);
   const steps = [];
   const cases = [];
   const sampleSizes = {};
@@ -31056,9 +31633,13 @@ async function executeShortlist(context, inputDigestValue) {
     const fallback = replayableSteps.filter(
       (record2) => unusedSteps.has(record2.stepId)
     );
-    const assignedRecords = (preferred.length > 0 ? preferred : fallback).slice(
+    const assignedRecords = approved === void 0 ? (preferred.length > 0 ? preferred : fallback).slice(
       0,
       familyIndex === 0 ? 2 : 1
+    ) : approvedRecords(
+      approved,
+      family,
+      replayableSteps.filter((record2) => unusedSteps.has(record2.stepId))
     );
     if (assignedRecords.length === 0) {
       throw new Error(
@@ -31079,6 +31660,38 @@ async function executeShortlist(context, inputDigestValue) {
         ...reproofRequestIds.length === 0 ? {} : { reproofRequestIds }
       })
     );
+    const observedContextTokens = new Map(
+      assignedStepIds.map((stepId) => [stepId, 0])
+    );
+    for (const split of ["shortlist", "holdout"]) {
+      familyCases.filter((corpusCase) => corpusCase.split === split).forEach((corpusCase, index) => {
+        const step = assignedRecords[index % assignedRecords.length];
+        const contextTokens = requireReplayUsage(
+          usageByCase,
+          corpusCase
+        ).inputTokens;
+        observedContextTokens.set(
+          step.stepId,
+          Math.max(
+            observedContextTokens.get(step.stepId) ?? 0,
+            contextTokens
+          )
+        );
+        cases.push({
+          family,
+          caseId: corpusCase.caseId,
+          stepId: step.stepId,
+          trajectoryId: corpusCase.content.trajectoryId,
+          corpusSplit: split,
+          task: `Evaluate the ${family} response for the recorded request.`,
+          ...corpusCase.content.systemPrompt === void 0 ? {} : { system: corpusCase.content.systemPrompt },
+          messages: chatMessages(corpusCase.content.messages),
+          contextTokens,
+          maxOutputTokens: 256,
+          referenceOutput: corpusCase.content.output
+        });
+      });
+    }
     for (const stepId of assignedStepIds) {
       const record2 = assignedRecords.find(
         (candidate) => candidate.stepId === stepId
@@ -31090,25 +31703,7 @@ async function executeShortlist(context, inputDigestValue) {
         currentModel: record2.currentModel,
         needsTools: record2.capabilityRequirements.includes("tools"),
         needsStructuredOutput: record2.capabilityRequirements.includes("structured_output"),
-        observedContextTokens: 0
-      });
-    }
-    for (const split of ["shortlist", "holdout"]) {
-      familyCases.filter((corpusCase) => corpusCase.split === split).forEach((corpusCase, index) => {
-        const step = assignedRecords[index % assignedRecords.length];
-        cases.push({
-          family,
-          caseId: corpusCase.caseId,
-          stepId: step.stepId,
-          trajectoryId: corpusCase.content.trajectoryId,
-          corpusSplit: split,
-          task: `Evaluate the ${family} response for the recorded request.`,
-          ...corpusCase.content.systemPrompt === void 0 ? {} : { system: corpusCase.content.systemPrompt },
-          messages: chatMessages(corpusCase.content.messages),
-          contextTokens: 0,
-          maxOutputTokens: 256,
-          referenceOutput: corpusCase.content.output
-        });
+        observedContextTokens: observedContextTokens.get(stepId) ?? 0
       });
     }
   }
@@ -31121,31 +31716,71 @@ async function executeShortlist(context, inputDigestValue) {
   });
   return key;
 }
-async function executeReplay(context, inputDigestValue, runId) {
-  if (context.baseUrl === void 0) {
-    throw new ProtocolError({
-      exitCode: 2,
-      code: "missing_provider_configuration",
-      message: "Provider configuration is required when replay is reached.",
-      remedy: "Pass --base-url <url> and, if needed, --api-key-env <environment-variable-name>."
-    });
+function replayUsageByCase(runs) {
+  const usage2 = /* @__PURE__ */ new Map();
+  for (const run of runs) {
+    for (const step of run.steps) {
+      const key = `${step.trajectoryId}\0${step.stepIndex}`;
+      const existing = usage2.get(key);
+      if (existing === void 0 || step.usage.inputTokens > existing.inputTokens) {
+        usage2.set(key, { inputTokens: step.usage.inputTokens });
+      }
+    }
   }
-  const plan = await loadReplayPlan(context);
-  const provider = createProvider({
-    providerId: "configured-provider",
-    baseUrl: context.baseUrl,
-    apiKeyEnv: context.apiKeyEnv
-  });
-  const catalog = await provider.listModels();
-  const replaySteps = (split) => plan.steps.map((step) => ({
-    ...step,
-    corpusSplit: split,
-    selectionStage: split
+  return usage2;
+}
+function requireReplayUsage(usage2, corpusCase) {
+  const value = usage2.get(
+    `${corpusCase.content.trajectoryId}\0${corpusCase.content.stepIndex}`
+  );
+  if (value === void 0) {
+    throw new Error(
+      `Corpus case has no recorded token usage: ${corpusCase.caseId}`
+    );
+  }
+  return value;
+}
+function approvedRecords(approved, family, records) {
+  const selected = [];
+  for (const swap of approved.swaps.filter(
+    ({ familyId }) => familyId === family
+  )) {
+    const matchingStepId = records.filter(
+      (record2) => record2.stepId === swap.stepId && record2.currentModel === swap.toModel
+    );
+    const matching = matchingStepId.length > 0 ? matchingStepId : records.filter(
+      (record2) => record2.callSite.path === swap.path && record2.currentModel === swap.toModel
+    );
+    if (matching.length !== 1) {
+      throw new Error(
+        `Approved swap ${approved.runSpecDigest} does not resolve to one installed call site: ${swap.path}; expected ${swap.toModel}, observed ${JSON.stringify(
+          records.filter(({ callSite }) => callSite.path === swap.path).map(({ stepId, currentModel }) => ({ stepId, currentModel }))
+        )}`
+      );
+    }
+    if (!selected.some(({ stepId }) => stepId === matching[0].stepId)) {
+      selected.push(matching[0]);
+    }
+  }
+  return selected.sort((left, right) => compareText9(left.stepId, right.stepId));
+}
+function replayCandidates(plan, catalog) {
+  const catalogById = new Map(catalog.map((model) => [model.id, model]));
+  const shortlisted = shortlist(
+    plan.steps.map((step) => ({
+      ...step,
+      corpusSplit: "shortlist",
+      selectionStage: "shortlist"
+    })),
+    catalog.map(
+      (model) => model.contextLength === 0 ? { ...model, contextLength: Number.MAX_SAFE_INTEGER } : model
+    ),
+    { top: plan.top }
+  ).map((assignment) => ({
+    ...assignment,
+    candidates: assignment.candidates.map(({ id }) => catalogById.get(id))
   }));
-  const shortlisted = shortlist(replaySteps("shortlist"), catalog, {
-    top: plan.top
-  });
-  const candidates = shortlisted.map((assignment) => {
+  return shortlisted.map((assignment) => {
     const family = plan.steps.find(
       ({ stepId }) => stepId === assignment.stepId
     )?.family;
@@ -31168,6 +31803,62 @@ async function executeReplay(context, inputDigestValue, runId) {
       candidates: assignment.candidates.filter(({ id }) => commonIds.has(id))
     };
   });
+}
+async function approvedReplayCandidates(context, plan, catalog, runSpecDigest) {
+  const approved = await approvedSwapSetByDigest(context, runSpecDigest);
+  const modelByFamily = /* @__PURE__ */ new Map();
+  for (const swap of approved.swaps) {
+    const existing = modelByFamily.get(swap.familyId);
+    if (existing !== void 0 && existing !== swap.toModel) {
+      throw new Error(
+        `Approved swap ${runSpecDigest} has multiple target models for ${swap.familyId}`
+      );
+    }
+    modelByFamily.set(swap.familyId, swap.toModel);
+  }
+  return plan.steps.map((step) => {
+    const modelId = modelByFamily.get(step.family);
+    if (modelId === void 0) {
+      throw new Error(
+        `Approved swap ${runSpecDigest} has no target model for ${step.family}`
+      );
+    }
+    const model = catalog.find(({ id }) => id === modelId);
+    if (model === void 0) {
+      throw new Error(
+        `Approved target model is absent from the provider catalog: ${modelId}`
+      );
+    }
+    if (model.pricing === null || step.needsTools && !model.supportsTools || step.needsStructuredOutput && !model.supportsStructuredOutput || model.contextLength !== 0 && model.contextLength < step.observedContextTokens) {
+      throw new Error(
+        `Approved target model no longer satisfies replay requirements: ${modelId}`
+      );
+    }
+    return { stepId: step.stepId, candidates: [model], droppedByTop: 0 };
+  });
+}
+async function executeReplay(context, inputDigestValue, runId) {
+  if (context.baseUrl === void 0) {
+    throw missingProviderConfiguration();
+  }
+  const plan = await loadReplayPlan(context);
+  const provider = createProvider({
+    providerId: "configured-provider",
+    baseUrl: context.baseUrl,
+    apiKeyEnv: context.apiKeyEnv
+  });
+  const catalog = context.existingRunId === void 0 ? await provider.listModels() : await readDetachedReplayCatalog(context, context.existingRunId);
+  const replaySteps = (split) => plan.steps.map((step) => ({
+    ...step,
+    corpusSplit: split,
+    selectionStage: split
+  }));
+  const candidates = context.approvedRunSpecDigest === void 0 ? replayCandidates(plan, catalog) : await approvedReplayCandidates(
+    context,
+    plan,
+    catalog,
+    context.approvedRunSpecDigest
+  );
   let externalEvaluator;
   if (context.evaluator !== void 0) {
     const configured = createEvaluator(context.evaluator);
@@ -31180,7 +31871,7 @@ async function executeReplay(context, inputDigestValue, runId) {
   const evaluation = () => ({
     evaluatorKind: externalEvaluator?.id ?? "judge",
     gateMetric: externalEvaluator === void 0 ? "replacement-quality" : context.evaluator.gateMetric,
-    assessmentAbsences: [...assessmentAbsences.entries()].sort(([left], [right]) => compareText8(left, right)).map(([executionId, reason]) => ({ executionId, reason }))
+    assessmentAbsences: [...assessmentAbsences.entries()].sort(([left], [right]) => compareText9(left, right)).map(([executionId, reason]) => ({ executionId, reason }))
   });
   const budget = createBudget({
     store: context.store,
@@ -31350,7 +32041,7 @@ async function executeAggregate(context, inputDigestValue) {
 }
 function buildFamilyOutcomes(plan, allVerdicts) {
   const families = [];
-  for (const familyId of Object.keys(plan.sampleSizes).sort(compareText8)) {
+  for (const familyId of Object.keys(plan.sampleSizes).sort(compareText9)) {
     const familyVerdicts = allVerdicts.filter(
       (verdict2) => verdict2.familyId === familyId
     );
@@ -31458,7 +32149,7 @@ async function executeConfirm(context, inputDigestValue, runId) {
       runId,
       authorizedTotalUsd: context.maxCostUsd
     });
-    for (const familyId of [...needsConfirmation].sort(compareText8)) {
+    for (const familyId of [...needsConfirmation].sort(compareText9)) {
       const family = initial.families.find(
         (candidate) => candidate.familyId === familyId
       );
@@ -31637,7 +32328,7 @@ function topologicalRecords(records) {
       indegree.set(stepId, indegree.get(stepId) + 1);
     }
   }
-  const compareRecords = (left, right) => compareText8(left.callSite.path, right.callSite.path) || left.callSite.line - right.callSite.line || compareText8(left.stepId, right.stepId);
+  const compareRecords = (left, right) => compareText9(left.callSite.path, right.callSite.path) || left.callSite.line - right.callSite.line || compareText9(left.stepId, right.stepId);
   const ready = records.filter(({ stepId }) => indegree.get(stepId) === 0).sort(compareRecords);
   const ordered = [];
   while (ready.length > 0) {
@@ -31744,8 +32435,8 @@ async function assessExternalExecutions(input) {
         ...new Set(
           executions.map(({ evidenceQuestionId: evidenceQuestionId2 }) => evidenceQuestionId2)
         )
-      ].sort(compareText8),
-      candidateIds: [...input.candidateIds].sort(compareText8),
+      ].sort(compareText9),
+      candidateIds: [...input.candidateIds].sort(compareText9),
       split: input.split
     }).slice(0, 24)}`,
     cases: executions.map((execution) => {
@@ -31970,7 +32661,7 @@ function effectiveVerdict(verdicts, selection) {
     if (holdout !== void 0) return holdout;
   }
   const shortlist2 = verdicts.filter(({ corpusSplit }) => corpusSplit === "shortlist").sort(
-    (left, right) => left.candidateCostUsd - right.candidateCostUsd || compareText8(left.candidateId, right.candidateId)
+    (left, right) => left.candidateCostUsd - right.candidateCostUsd || compareText9(left.candidateId, right.candidateId)
   )[0];
   if (shortlist2 === void 0) {
     throw new Error("Family selection has no shortlist verdict");
@@ -31988,7 +32679,7 @@ function modeBProviderBaseUrl(baseUrl) {
   }
   return url2.href.replace(/\/$/, "");
 }
-function compareText8(left, right) {
+function compareText9(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 function reportPath(context) {
@@ -32114,7 +32805,7 @@ async function repositoryFiles(repo, storeRoot) {
     }
   }
   await visit(repo);
-  return files.sort((left, right) => compareText8(left.path, right.path));
+  return files.sort((left, right) => compareText9(left.path, right.path));
 }
 async function repositoryDigest(repo, storeRoot) {
   return digest({
@@ -32199,6 +32890,24 @@ function normalizePipelineError(error51, context) {
 function isMissing2(error51) {
   return error51.code === "ENOENT";
 }
+function spendSummary(facts) {
+  const spends = facts.flatMap((fact) => {
+    const parsed2 = spendEventSchema.safeParse(fact);
+    return parsed2.success ? [parsed2.data] : [];
+  });
+  const byActor = {};
+  for (const spend of spends) {
+    const actor = byActor[spend.actor] ?? { events: 0, costUsd: 0 };
+    actor.events += 1;
+    actor.costUsd += spend.costUsd;
+    byActor[spend.actor] = actor;
+  }
+  return {
+    events: spends.length,
+    totalCostUsd: spends.reduce((total, spend) => total + spend.costUsd, 0),
+    byActor
+  };
+}
 var lifecycleKindOrder3 = {
   apply_started: 0,
   pr_opened: 1,
@@ -32219,7 +32928,7 @@ function lifecycleReport(events) {
   }
   return [...grouped.entries()].map(([runSpecDigest, group]) => {
     const ordered = [...group].sort(
-      (left, right) => compareText8(left.createdAt, right.createdAt) || lifecycleKindOrder3[left.kind] - lifecycleKindOrder3[right.kind] || compareText8(left.eventId, right.eventId)
+      (left, right) => compareText9(left.createdAt, right.createdAt) || lifecycleKindOrder3[left.kind] - lifecycleKindOrder3[right.kind] || compareText9(left.eventId, right.eventId)
     );
     const latest = ordered[ordered.length - 1];
     const prNumber = [...ordered].reverse().find((event) => event.prNumber !== null)?.prNumber;
@@ -32236,7 +32945,7 @@ function lifecycleReport(events) {
       eventCount: ordered.length
     };
   }).sort(
-    (left, right) => compareText8(right.createdAt, left.createdAt) || compareText8(left.runSpecDigest, right.runSpecDigest)
+    (left, right) => compareText9(right.createdAt, left.createdAt) || compareText9(left.runSpecDigest, right.runSpecDigest)
   );
 }
 async function buildReport(context) {
@@ -32251,21 +32960,10 @@ async function buildReport(context) {
     const metadata = judgeMetadata(assessment);
     return metadata === void 0 ? [] : [metadata.orderConsistent];
   });
-  const spends = facts.flatMap((fact) => {
-    const parsed2 = spendEventSchema.safeParse(fact);
-    return parsed2.success ? [parsed2.data] : [];
-  });
   const lifecycle = facts.flatMap((fact) => {
     const parsed2 = lifecycleEventSchema.safeParse(fact);
     return parsed2.success ? [parsed2.data] : [];
   });
-  const byActor = {};
-  for (const spend of spends) {
-    const actor = byActor[spend.actor] ?? { events: 0, costUsd: 0 };
-    actor.events += 1;
-    actor.costUsd += spend.costUsd;
-    byActor[spend.actor] = actor;
-  }
   const corpus = await loadCorpusSummary(context);
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
@@ -32282,11 +32980,7 @@ async function buildReport(context) {
       assessments: consistency.length,
       rate: consistency.length === 0 ? 0 : consistency.filter((value) => !value).length / consistency.length
     },
-    spend: {
-      events: spends.length,
-      totalCostUsd: spends.reduce((total, spend) => total + spend.costUsd, 0),
-      byActor
-    },
+    spend: spendSummary(facts),
     stratumWeights: { basis: "corpus_only", weights: corpus.strata },
     caps: [
       { name: "top-N shortlist", value: plan.top },
@@ -32461,7 +33155,7 @@ function parseReproofRequest(value, expectedFamilyId) {
   return {
     familyId: verdict.familyId,
     requested: requested ?? false,
-    requestIds: [...new Set(requestIds ?? [])].sort(compareText8)
+    requestIds: [...new Set(requestIds ?? [])].sort(compareText9)
   };
 }
 async function readReproofRequests(store, projectId2) {
@@ -32471,7 +33165,7 @@ async function readReproofRequests(store, projectId2) {
     if (request !== void 0) requests.push(request);
   }
   return requests.sort(
-    (left, right) => compareText8(left.familyId, right.familyId)
+    (left, right) => compareText9(left.familyId, right.familyId)
   );
 }
 async function readCurrentVerdicts(store, projectId2) {
@@ -32480,7 +33174,7 @@ async function readCurrentVerdicts(store, projectId2) {
     verdicts.push(parseVerdict(await readJson(store, key)));
   }
   return verdicts.sort(
-    (left, right) => compareText8(left.familyId, right.familyId)
+    (left, right) => compareText9(left.familyId, right.familyId)
   );
 }
 async function runAuditTabulate(options) {
@@ -32553,7 +33247,8 @@ async function readStatus(options) {
     CascadeFinding: 0,
     LifecycleEvent: 0
   };
-  for (const fact of await readFacts2(context.store, context.projectId)) {
+  const facts = await readFacts2(context.store, context.projectId);
+  for (const fact of facts) {
     if (executionSchema.safeParse(fact).success) factCounts.Execution += 1;
     else if (requestAttemptSchema.safeParse(fact).success)
       factCounts.RequestAttempt += 1;
@@ -32568,13 +33263,18 @@ async function readStatus(options) {
   }
   const corpus = await maybeLoadCorpus(context);
   const runs = [];
-  for (const key of await context.store.list(runsPrefix(context.projectId))) {
+  const prefix = runsPrefix(context.projectId);
+  const runKeys = (await context.store.list(prefix)).filter(
+    (key) => !key.slice(prefix.length).includes("/")
+  );
+  for (const key of runKeys) {
     runs.push(runMetaSchema.parse(await readJson(context.store, key)));
   }
-  runs.sort((left, right) => compareText8(right.startedAt, left.startedAt));
+  runs.sort((left, right) => compareText9(right.startedAt, left.startedAt));
   return {
     stepsByStatus: stepCounts,
     factCounts,
+    spend: spendSummary(facts),
     corpusVersion: corpus?.corpusVersionId ?? null,
     lastRun: runs[0] ?? null
   };
@@ -32585,6 +33285,9 @@ async function maybeLoadCorpus(context) {
     await readJson(context.store, state.stages.corpus.outputKey)
   );
 }
+
+// src/apply/index.ts
+import { basename as basename2, resolve as resolve6 } from "node:path";
 
 // src/github/client.ts
 var BlockedError2 = class extends Error {
@@ -32734,7 +33437,7 @@ function isRateLimited(response) {
   return response.status === 429 || response.status === 403 && (response.headers.has("retry-after") || response.headers.get("x-ratelimit-remaining") === "0");
 }
 function sleep2(milliseconds) {
-  return new Promise((resolve7) => setTimeout(resolve7, milliseconds));
+  return new Promise((resolve8) => setTimeout(resolve8, milliseconds));
 }
 function parseJson(text, label) {
   try {
@@ -33046,6 +33749,21 @@ function createGithubClient(options) {
   };
 }
 
+// src/apply/index.ts
+function applySwaps2(options) {
+  return runApply({
+    repo: options.repo,
+    store: options.store,
+    githubClient: createGithubClient({
+      baseUrl: options.githubBaseUrl,
+      tokenEnv: options.githubTokenEnv
+    }),
+    owner: options.owner,
+    githubRepo: basename2(resolve6(options.repo)),
+    dryRun: options.dryRun ?? false
+  });
+}
+
 // src/version.ts
 var version2 = "0.1.0";
 
@@ -33088,20 +33806,63 @@ function createProgram(io = processIo) {
     reporter.result(result2);
     return local.plan || local.through !== void 0 && local.through !== "report" ? 0 : result2.recommendationExists ? 1 : 0;
   });
+  const estimate = addPipelineOptions(
+    program2.command("estimate").description("project replay spend before paid model calls"),
+    true
+  ).option(
+    "--approved-run <digest>",
+    "scope projection to one merged approved swap"
+  );
+  run(estimate, async (reporter, global) => {
+    const options = pipelineOptions(
+      global,
+      estimate.opts(),
+      reporter
+    );
+    await runPipeline({ ...options, through: "shortlist" });
+    reporter.result(await estimateReplay(options));
+    return 0;
+  });
   for (const stage of PIPELINE_STAGES.slice(0, -1)) {
     if (stage === "audit-sample" || stage === "corpus") continue;
     const command = addPipelineOptions(
       program2.command(stage).description(`run through the ${stage} stage`),
       stage === "replay" || stage === "confirm"
     );
+    if (stage === "replay") {
+      command.option("--detach", "enqueue replay and return its run identifier").option(
+        "--approved-run <digest>",
+        "regression-test one merged approved swap"
+      ).addOption(new Option("--internal-run-id <runId>").hideHelp());
+    }
     run(command, async (reporter, global) => {
+      const local = command.opts();
+      const options = pipelineOptions(global, local, reporter);
+      const replayTarget = stage === "replay" && local.approvedRun !== void 0 ? "aggregate" : stage;
+      if (stage === "replay" && local.detach) {
+        if (local.internalRunId !== void 0) {
+          throw new Error("--detach cannot be combined with --internal-run-id");
+        }
+        const claim = await claimDetachedReplay({
+          ...options,
+          through: replayTarget
+        });
+        if (!claim.terminal) {
+          await startDetachedReplay(global, local, claim.runId);
+        }
+        reporter.result(claim);
+        return 0;
+      }
+      if (stage === "replay" && local.internalRunId !== void 0 && !await beginDetachedReplayWorker(options, local.internalRunId)) {
+        reporter.result(
+          await readRunStatus({ ...global, runId: local.internalRunId })
+        );
+        return 0;
+      }
       const result2 = await runPipeline({
-        ...pipelineOptions(
-          global,
-          command.opts(),
-          reporter
-        ),
-        through: stage
+        ...options,
+        through: replayTarget,
+        ...stage === "replay" && local.internalRunId !== void 0 ? { existingRunId: local.internalRunId } : {}
       });
       reporter.result(result2);
       return 0;
@@ -33199,21 +33960,18 @@ function createProgram(io = processIo) {
   ).option("--dry-run", "run all machine gates without writing GitHub state");
   run(apply, async (reporter, global) => {
     const local = apply.opts();
-    const result2 = await runApply({
+    const result2 = await applySwaps2({
       repo: global.repo,
       store: global.store,
-      githubClient: createGithubClient({
-        baseUrl: local.githubBaseUrl,
-        tokenEnv: local.githubTokenEnv
-      }),
       owner: local.owner,
-      githubRepo: basename2(resolve6(global.repo)),
+      githubBaseUrl: local.githubBaseUrl,
+      githubTokenEnv: local.githubTokenEnv,
       dryRun: local.dryRun ?? false
     });
     reporter.result(result2);
     return result2.status === "refused" ? 1 : 0;
   });
-  const watch = program2.command("watch").description("reconcile one open model-swap pull request").requiredOption("--owner <owner>", "GitHub repository owner").requiredOption("--pr <number>", "pull request number").requiredOption("--github-base-url <url>", "GitHub API base URL").requiredOption(
+  const watch = program2.command("watch").description("reconcile one open model-swap pull request").requiredOption("--owner <owner>", "GitHub repository owner").requiredOption("--github-repo <repo>", "GitHub repository name").requiredOption("--pr <number>", "pull request number").requiredOption("--github-base-url <url>", "GitHub API base URL").requiredOption(
     "--github-token-env <name>",
     "environment variable containing the GitHub token"
   );
@@ -33231,7 +33989,7 @@ function createProgram(io = processIo) {
         tokenEnv: local.githubTokenEnv
       }),
       owner: local.owner,
-      githubRepo: basename2(resolve6(global.repo)),
+      githubRepo: local.githubRepo,
       prNumber
     });
     reporter.result(result2);
@@ -33243,9 +34001,12 @@ function createProgram(io = processIo) {
     reporter.result({ ...result2.report, reportPath: result2.reportPath });
     return result2.recommends ? 1 : 0;
   });
-  const status = program2.command("status").description("summarize the current store");
+  const status = program2.command("status").description("summarize the current store").option("--run <runId>", "report one detached replay run");
   run(status, async (reporter, global) => {
-    reporter.result(await readStatus(global));
+    const runId = status.opts().run;
+    reporter.result(
+      runId === void 0 ? await readStatus(global) : await readRunStatus({ ...global, runId })
+    );
     return 0;
   });
   return { program: program2, exitCode: () => code };
@@ -33301,6 +34062,9 @@ function addPipelineOptions(command, provider) {
   return command;
 }
 function pipelineOptions(global, local, reporter) {
+  if (local.approvedRun !== void 0 && !/^[0-9a-f]{64}$/u.test(local.approvedRun)) {
+    throw new Error("--approved-run must be a SHA-256 run-spec digest");
+  }
   const maxCostUsd = local.maxCostUsd === void 0 ? void 0 : Number(local.maxCostUsd);
   if (maxCostUsd !== void 0 && (!Number.isFinite(maxCostUsd) || maxCostUsd < 0)) {
     throw new Error("--max-cost-usd must be a non-negative number");
@@ -33329,6 +34093,7 @@ function pipelineOptions(global, local, reporter) {
       evaluator: evaluatorConfig(local, evaluatorGateThreshold)
     },
     modeBConfigPath: local.modebConfig,
+    approvedRunSpecDigest: local.approvedRun,
     through: local.through,
     plan: local.plan,
     reporter
@@ -33483,6 +34248,82 @@ function resultSinkConfig(local) {
 function collectOption(value, previous) {
   return [...previous ?? [], value];
 }
+async function startDetachedReplay(global, local, runId) {
+  const args = [
+    fileURLToPath2(import.meta.url),
+    "--repo",
+    resolve7(global.repo),
+    "--output",
+    "json"
+  ];
+  if (global.store !== void 0) {
+    args.push("--store", resolve7(global.store));
+  }
+  args.push("replay");
+  appendCliOption(
+    args,
+    "--traces",
+    local.traces === void 0 ? void 0 : resolve7(local.traces)
+  );
+  appendCliOption(
+    args,
+    "--modeb-config",
+    local.modebConfig === void 0 ? void 0 : resolve7(local.modebConfig)
+  );
+  appendCliOption(args, "--base-url", local.baseUrl);
+  appendCliOption(args, "--api-key-env", local.apiKeyEnv);
+  appendCliOption(args, "--max-cost-usd", local.maxCostUsd);
+  appendCliOption(args, "--approved-run", local.approvedRun);
+  appendCliOption(args, "--evaluator", local.evaluator);
+  appendCliOption(args, "--evaluator-base-url", local.evaluatorBaseUrl);
+  appendCliOption(args, "--evaluator-api-key-env", local.evaluatorApiKeyEnv);
+  appendCliOption(
+    args,
+    "--evaluator-public-key-env",
+    local.evaluatorPublicKeyEnv
+  );
+  appendCliOption(args, "--evaluator-project-id", local.evaluatorProjectId);
+  appendCliOption(
+    args,
+    "--evaluator-command",
+    detachedCommand(local.evaluatorCommand)
+  );
+  appendCliOption(
+    args,
+    "--evaluator-config",
+    local.evaluatorConfig === void 0 ? void 0 : resolve7(local.evaluatorConfig)
+  );
+  for (const scorer of local.evaluatorScorer ?? []) {
+    appendCliOption(args, "--evaluator-scorer", scorer);
+  }
+  appendCliOption(args, "--evaluator-gate-metric", local.evaluatorGateMetric);
+  appendCliOption(
+    args,
+    "--evaluator-gate-threshold",
+    local.evaluatorGateThreshold
+  );
+  appendCliOption(args, "--internal-run-id", runId);
+  await new Promise((resolveSpawn, rejectSpawn) => {
+    const child = spawn(process.execPath, args, {
+      cwd: resolve7(global.repo),
+      detached: true,
+      env: process.env,
+      stdio: "ignore"
+    });
+    child.once("error", rejectSpawn);
+    child.once("spawn", () => {
+      child.unref();
+      resolveSpawn();
+    });
+  });
+}
+function detachedCommand(value) {
+  if (value === void 0) return void 0;
+  return value.startsWith("./") || value.startsWith("../") || value.includes("/") || value.includes("\\") ? resolve7(value) : value;
+}
+function appendCliOption(args, flag, value) {
+  if (value !== void 0) args.push(flag, value);
+}
 async function executeCli(argv, io = processIo) {
   const handle = createProgram(io);
   try {
@@ -33507,6 +34348,10 @@ if (isEntryPoint) {
   process.exitCode = await executeCli(process.argv.slice(2));
 }
 export {
+  applySwaps2 as applySwaps,
   createProgram,
-  executeCli
+  executeCli,
+  listApprovedSwapSets,
+  listWatchablePullRequests,
+  readActiveDetachedReplay
 };
