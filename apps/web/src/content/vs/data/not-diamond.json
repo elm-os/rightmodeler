@@ -1,0 +1,126 @@
+{
+  "slug": "not-diamond",
+  "name": "Not Diamond",
+  "category": "router",
+  "verdict": "competitor",
+  "verdictLabel": "Different clock · prediction vs measurement",
+  "title": "rightmodeler vs Not Diamond: measurement vs prediction",
+  "description": "Not Diamond predicts the best model per request, live. rightmodeler measures which model belongs at each step, offline, from your traces. Different clocks.",
+  "h1": "rightmodeler vs Not Diamond",
+  "lede": "Both refuse to be your gateway, from opposite ends. Not Diamond makes a live prediction and hands the call back to your provider; rightmodeler never sees a live request: it measures your accepted traces (the logged record of what your agent already did) offline and hands your team a per-step verdict to approve.",
+  "integrationSlug": "",
+  "related": ["openrouter", "martian", "litellm"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Different jobs on different clocks. Not Diamond is hired to route: a trained meta-model predicts, live, which model (and for coding agents, which reasoning effort) should take the next request or session step, then hands the call back to your own provider or gateway. rightmodeler is hired to decide: the free skill replays your accepted agent traces through cheaper candidates offline, measures how well each one agrees with the output you shipped, and gives your team a per-step recommendation to approve. Both refuse the gateway seat, from opposite ends: Not Diamond predicts and hands back; rightmodeler never sees a live request at all. Routers pick a lane per request. We decide the stack."
+    },
+    {
+      "type": "table",
+      "heading": "Same refusal, opposite ends",
+      "intro": "Neither product wants to be your gateway. Not Diamond hands the call back after a live prediction; rightmodeler never sees the call at all. Four dimensions keep them apart.",
+      "caption": "not-diamond vs rightmodeler",
+      "leftLabel": "Not Diamond",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "clock",
+          "theirs": "request time: score the input as it arrives",
+          "ours": "release time: replay traces before anything ships"
+        },
+        {
+          "dimension": "evidence",
+          "theirs": "a prediction from a trained meta-model",
+          "ours": "a measurement against the output you accepted"
+        },
+        {
+          "dimension": "seat at runtime",
+          "theirs": "a local proxy beside your harness; the call still runs through your gateway",
+          "ours": "none; it is a report, not a runtime gateway"
+        },
+        {
+          "dimension": "who approves",
+          "theirs": "the router's pick applies live, mid-session",
+          "ours": "your team; every swap is recommended, then approved by you"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Pick by the job",
+      "intro": "Three real situations and the honest call in each.",
+      "scenarios": [
+        {
+          "scenario": "An engineering org runs Claude Code all day and wants each step of a live session on the right model and reasoning effort, including staying on a pricier model when the warm cache makes that cheaper overall.",
+          "winner": "theirs",
+          "why": "This is exactly what Not Diamond Code was built for: a local proxy beside your harness makes cache-aware routing calls mid-session, in real time. It is early access behind a gated waitlist as of August 2026, but a release-time report cannot act inside a running session at all."
+        },
+        {
+          "scenario": "A regulated team wants the savings but cannot let any third-party service influence production requests or see request metadata, and payment and auth steps must not move.",
+          "winner": "ours",
+          "why": "The skill runs offline on your own traces with your own keys and adds nothing to your request path; there is no rightmodeler server, no account with us, no telemetry. High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model. Even Not Diamond's proxy, which per their docs sends only derived metadata, still talks to their service at runtime."
+        },
+        {
+          "scenario": "A team is evaluating Not Diamond and wants to know whether a router would actually save money on their pipeline before wiring it in.",
+          "winner": "both",
+          "why": "Run the audit first: it shows which steps have headroom to move and which are already right-sized. Where the evidence shows real variance within a high-volume step, per-request routing is then the right tool to capture it. Measure it, don't guess."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest trade",
+      "intro": "Admissions first, then the reason we made the opposite bet.",
+      "paragraphs": [
+        "Runtime adaptivity is real. Not Diamond routes each individual input live, so on high-volume, heterogeneous traffic it can capture savings a fixed per-step assignment leaves behind. Not Diamond Code goes further: mid-session, it adjusts model and reasoning effort step by step and factors in KV-cache state, sometimes staying on a pricier model because the warm cache makes that cheaper overall. rightmodeler never touches a live request and cannot do any of that.",
+        "There is also no measurement lift on their side. The router works out of the box, with no traces to collect and no replays to run, and it has operated at real scale: Not Diamond's meta-model has powered OpenRouter's Auto router since January 2025, and OpenRouter's CEO still credits it on Not Diamond's homepage as of August 2026. Their launch post claims 20%+ cost reduction without quality degradation for Not Diamond Code; read that as a vendor-run number awaiting independent reproduction, the same hedge we would ask you to apply to any figure, ours included.",
+        "Here is why we still built a report instead of a router. Researchers from Michigan, Stanford, MIT, Google DeepMind, and All Hands AI, the team behind the OpenHands agent, ran eight frontier models across 500 real GitHub issues, four separate times each, and recorded every token (Bai et al., arXiv:2604.22750). Across those repeats, token usage on the identical task, agent, and model varied by as much as thirty times. A single live prediction, like a single replay, is one draw from that wide distribution. So the report shows reference agreement (how often a candidate agreed with the output you shipped), sample size, and abstentions, and it abstains (declines to recommend) where the evidence is thin, rather than stretching one draw into a verdict. The verdicts stay hedged accordingly: agreement with what you shipped, never proof of correctness, because the production result is the reference, not ground truth."
+      ]
+    },
+    {
+      "type": "fork",
+      "left": {
+        "heading": "Stay on Not Diamond when",
+        "items": [
+          "Your traffic is high-volume and genuinely heterogeneous, and the best model varies input to input; a fixed assignment leaves that variance on the table.",
+          "You want live, cache-aware picks of model and reasoning effort inside a running coding session.",
+          "You want savings with zero measurement lift: no traces to collect, no replays to run."
+        ]
+      },
+      "right": {
+        "heading": "Bring in rightmodeler when",
+        "items": [
+          "You want evidence against a quality floor (the minimum agreement bar you set) that a reviewer can approve before any model change ships.",
+          "High-risk step families (auth, payments, migrations, deploys, secrets) must stay pinned to the current model.",
+          "You are deciding whether a router belongs in your stack at all; the audit answers that question first, from your own traces."
+        ]
+      }
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace Not Diamond?",
+          "a": "No, and the reverse is also false. Not Diamond predicts, live, which model should take the next request or session step. rightmodeler measures, offline, which model belongs at each step of your stack, and your team approves every change. If your traffic genuinely varies input to input at high volume, a router captures savings a fixed assignment cannot; the audit tells you whether that is your situation before you wire anything in."
+        },
+        {
+          "q": "Does rightmodeler integrate with Not Diamond?",
+          "a": "No integration ships today: there is no Not Diamond trace adapter and no Not Diamond replay provider. The honest relationship is sequencing, not plumbing. The skill reads the traces your harness or gateway already logs, so a stack that routes through Not Diamond still produces traces you can audit."
+        },
+        {
+          "q": "Is Not Diamond Code generally available?",
+          "a": "No. As of August 2026 it is in early access behind a gated waitlist, per their docs. Its launch post claims 20%+ cost reduction without quality degradation, plus benchmark wins on Poly-SWE-Bench and LongCodeQA; those are vendor-run numbers that have not been independently reproduced."
+        },
+        {
+          "q": "Can rightmodeler tell me whether a router would pay off on my pipeline?",
+          "a": "That is the prior question it answers. The report shows, per step, whether cheaper candidates agreed with the output you shipped, with sample size attached, and abstains where the evidence is thin. Steps with no headroom are already right-sized; steps with real within-input variance at high volume are where a per-request router earns its keep."
+        },
+        {
+          "q": "Does Not Diamond see my prompts and code?",
+          "a": "Per their docs, no: the Not Diamond Code proxy computes derived metadata about the session, sends only that to their optimization service, and the model call itself runs through your configured provider or gateway. We have not independently verified this. rightmodeler's answer to the same worry is structural: there is no rightmodeler server, no account with us, no telemetry; the skill runs on your machine against your own traces."
+        }
+      ]
+    }
+  ]
+}

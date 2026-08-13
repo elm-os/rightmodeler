@@ -4,6 +4,7 @@
 import type { MetadataRoute } from "next";
 import { getAllPosts } from "@/content/blog";
 import { getAllIntegrations } from "@/content/integrations";
+import { getAllComparisons } from "@/content/vs";
 import { SITE_URL } from "@/lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -21,6 +22,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     }),
   );
 
+  // Comparison pages, resolved from the same registry the /vs routes use.
+  const vsEntries: MetadataRoute.Sitemap = getAllComparisons().map(
+    (comparison) => ({
+      url: `${SITE_URL}/vs/${comparison.slug}`,
+    }),
+  );
+
   const pageEntries: MetadataRoute.Sitemap = [
     "/how-it-works",
     "/agent",
@@ -29,6 +37,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/case-study/bside",
     "/case-study/iam360",
     "/integrations",
+    "/vs",
     "/crucible",
     "/manifesto",
     "/glossary",
@@ -44,6 +53,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/blog` },
     ...pageEntries,
     ...integrationEntries,
+    ...vsEntries,
     ...postEntries,
   ];
 }

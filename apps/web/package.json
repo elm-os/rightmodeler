@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
-    "test": "node --test scripts/check-content.test.mjs",
+    "test": "node --test scripts/check-content.test.mjs scripts/check-vs.test.mjs",
     "check-content": "node scripts/check-content.mjs",
     "check": "pnpm run check-content && pnpm run test && pnpm run check-types && pnpm run build",
     "check-types": "next typegen && tsc --noEmit"
@@ -28,6 +28,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "ajv": "^8.20.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.0-preview.5",
     "tailwindcss": "^4",

@@ -1,0 +1,157 @@
+{
+  "slug": "langsmith",
+  "name": "LangSmith",
+  "category": "evals",
+  "verdict": "different-job",
+  "verdictLabel": "Different job · rightmodeler reads its exports",
+  "title": "rightmodeler vs LangSmith: per-node model verdicts",
+  "description": "LangSmith watches, scores, and runs agents in production. rightmodeler reads its exported run trees and decides which model each step needs. Different job.",
+  "h1": "rightmodeler vs LangSmith",
+  "lede": "LangSmith watches, scores, and increasingly runs your agent. rightmodeler reads the run trees it already produced and answers the one question its dashboards leave open: which model belongs at each step.",
+  "integrationSlug": "langsmith",
+  "related": ["braintrust", "promptfoo", "litellm"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Different job, same traces. You hire LangSmith to watch your agent: step-by-step trace trees, dashboards and alerts, evaluator scores on live traffic, and increasingly to run the agent itself. You hire rightmodeler for one decision the platform does not make for you: which model belongs at each step. The rightmodeler skill, free on GitHub, replays the run trees you export from LangSmith through cheaper models, judges each candidate against the output you already accepted, and reports the evidence, sample size, and abstentions (steps where the evidence was too thin to call). Not observability. Not a runtime gateway."
+    },
+    {
+      "type": "scenarios",
+      "heading": "The situations that decide it",
+      "intro": "Pick the row that sounds like your week. Each names the honest winner.",
+      "scenarios": [
+        {
+          "scenario": "Your agent failed in production overnight. You need the exact call that broke, what it cost, and why latency spiked.",
+          "winner": "theirs",
+          "why": "This is live observability, and LangSmith is built for exactly it: walk the trace tree step by step, read cost and latency on every call, and set an alert so the next failure pages you. rightmodeler has no live view at all; it cannot see a run until you export it."
+        },
+        {
+          "scenario": "Your LangGraph agent runs every node on the frontier model. The bill hurts, and nobody can say which nodes actually need it.",
+          "winner": "ours",
+          "why": "Because each LangGraph node arrives as its own step in the export, the verdict comes back per node, judged against outputs you already accepted: keep the frontier model where the evidence demands it, swap where it doesn't. A spend dashboard shows what each node costs, not which swap would survive."
+        },
+        {
+          "scenario": "Your team is happily instrumented on LangSmith and wants the bill down without ripping anything out.",
+          "winner": "both",
+          "why": "Keep LangSmith observing. Export the run trees it already holds, run the audit, and approve the swaps that clear your quality floor (the minimum agreement score a candidate must hit before a swap is recommended). Then watch LangSmith's own cost dashboards confirm the new mix in production."
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "heading": "Side by side",
+      "intro": "One note on words: reference agreement means how closely a candidate's output matches the one you already shipped.",
+      "caption": "langsmith vs rightmodeler",
+      "leftLabel": "LangSmith",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "the seat",
+          "theirs": "a platform you work inside, in and around your production path",
+          "ours": "a report you run offline; never in your request path"
+        },
+        {
+          "dimension": "evidence",
+          "theirs": "evaluator scores over live traffic and datasets you curate",
+          "ours": "reference agreement, evidence, sample size, and abstentions"
+        },
+        {
+          "dimension": "unit of verdict",
+          "theirs": "the run and the experiment",
+          "ours": "the step; per node on LangGraph runs"
+        },
+        {
+          "dimension": "instrumentation cost",
+          "theirs": "instrument once, then every run streams in",
+          "ours": "zero; exported run trees are the whole input"
+        }
+      ]
+    },
+    {
+      "type": "positioning",
+      "left": {
+        "heading": "LangSmith alone",
+        "items": [
+          "Trace trees for step-by-step debugging, dashboards and alerts, and online evaluations scoring live traffic as it happens.",
+          "Offline experiments against datasets you curate, pairwise comparisons, and annotation queues for structured human review.",
+          "And increasingly a runtime: LangSmith deploys and runs agents."
+        ]
+      },
+      "right": {
+        "heading": "LangSmith with rightmodeler on top",
+        "items": [
+          "Everything on the left stays. The audit reads the run trees LangSmith already holds and adds the verdict the platform does not issue: which model belongs at each step.",
+          "Cheaper candidates are judged against the output you accepted, by a judge from a different model family than either candidate, so the expensive model gets no home-field advantage.",
+          "You approve every swap. The report recommends a model, not a route, and LangSmith's own dashboards verify the new mix in production."
+        ]
+      }
+    },
+    {
+      "type": "stack",
+      "heading": "How the audit runs on your exports",
+      "intro": "No new instrumentation and no account access. The traces LangSmith already collected are the whole input.",
+      "paragraphs": [
+        "Export run trees from your LangSmith project and save them anywhere on disk. The skill autodetects the format, walks each tree, and reads files only: it never connects to your LangSmith account, and there is no rightmodeler server, no account with us, no telemetry.",
+        "What comes back is a per-step report: for each step, the cheaper candidates tried on your recorded inputs, the agreement each one earned against the output you accepted, and the sample size behind that score. Steps that call tools or loop are never judged from one replay; they are confirmed end to end in a throwaway sandbox so cascading failures surface before you swap. A candidate only becomes a recommendation when it clears the configurable floor. Anything touching auth, payments, migrations, deploys, or secrets is marked high-risk and never offered a swap. And when the sample is too small to call, the report records an abstention instead of a guess."
+      ],
+      "commands": [
+        {
+          "comment": "# export run trees from your project, then hand the folder to the skill",
+          "command": "claude \"run the rightmodeler skill on ./exports/langsmith/\""
+        }
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "The words the report uses",
+      "terms": [
+        {
+          "term": "model downgrade audit",
+          "def": "The report the skill produces: every step of a recorded run, replayed through cheaper candidates, with a per-step recommendation or an abstention.",
+          "slug": "model-downgrade-audit"
+        },
+        {
+          "term": "reference evidence",
+          "def": "Scores measured against the output you actually shipped for that exact step. Evidence of agreement with shipped output, not proof of correctness: the production result is the reference, not ground truth.",
+          "slug": "reference-evidence"
+        },
+        {
+          "term": "quality floor",
+          "def": "The minimum agreement score a candidate must clear before the audit will recommend a swap. Configurable, and anything below it is a no.",
+          "slug": "quality-floor"
+        },
+        {
+          "term": "abstain",
+          "def": "The audit's decision to make no recommendation when the sample is small or the evidence is mixed. The current model stays.",
+          "slug": "abstain"
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Do I still need LangSmith if I run the audit?",
+          "a": "Yes. LangSmith is the seat you watch and increasingly run your agent from; rightmodeler is a report you run on the run trees you export from it. Nothing gets ripped out: the audit's whole input is data LangSmith already collected, and its output is a model recommendation you carry back to your own repo."
+        },
+        {
+          "q": "Can't LangSmith experiments already compare models?",
+          "a": "They can, honestly. Build a dataset, define evaluators, and an experiment will A/B models across it. rightmodeler starts one step earlier: the reference is the output you already accepted, so there is no dataset to curate and no evaluator to write, and the verdict comes back per step with sample size and abstentions attached."
+        },
+        {
+          "q": "How is this different from a runtime gateway routing model calls?",
+          "a": "A runtime gateway sits in your request path, proxying and metering live model calls. The audit never sits in the request path: it recommends a model, not a route, backs the recommendation with per-step evidence, and you approve every swap before anything changes."
+        },
+        {
+          "q": "Does rightmodeler connect to my LangSmith account?",
+          "a": "No. It reads the files you export, and the audit runs on your machine with your own provider keys. Your instrumentation never notices the audit ran."
+        },
+        {
+          "q": "Does every audit end in recommended swaps?",
+          "a": "No, and it is designed not to. Steps with thin evidence get an abstention, high-risk steps stay put, and a clean bill is a possible outcome: the report can come back saying your current model assignments already earn their cost."
+        }
+      ]
+    }
+  ]
+}
