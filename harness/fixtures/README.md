@@ -8,6 +8,23 @@
 
 `stub-provider/server.mjs` is a dependency-free OpenAI-compatible test server with a four-model price and capability catalog plus deterministic non-streaming chat completions. Run it with `--selftest` to exercise both endpoints and the streaming rejection path on an ephemeral port.
 
-`langgraph-app/` is a standalone three-node StateGraph fixture. Its classify node routes requests, its lookup node sends a tool-calling chat request and invokes a deterministic local order tool, and its answer node composes the terminal output. The documented tool-route case input is `Where is order ORD-104?`. From the repository root, verify it with `python harness/fixtures/langgraph-app/main.py --selftest` after installing its pinned requirements in an isolated environment.
+`langgraph-app/` is a standalone three-node StateGraph fixture. Its classify node routes requests, its lookup node handles a `lookup_order` tool selection and invokes the deterministic local order tool, and its answer node composes the terminal output. Lookup-routed inputs without an order number use `ORD-000`. The documented tool-route case input is `Where is order ORD-104?`. From the repository root, verify it with `python harness/fixtures/langgraph-app/main.py --selftest` after installing its pinned requirements in an isolated environment.
 
-`traces/langgraph-otel.json` contains 14 three-span trajectories recorded for the LangGraph fixture. Within each trace, the records are classify, lookup, then answer; every lookup record carries the `lookup_order` tool-call metadata.
+`traces/langgraph-otel.json` contains 14 trajectories and 37 spans recorded for the LangGraph fixture. Lookup responses match the stub's text-only `finish_reason: stop` response; tool context remains in the fixture request rather than appearing as a response tool-call part. The recorded routes are:
+
+| Trace                | Input                                  | Route                      |
+| -------------------- | -------------------------------------- | -------------------------- |
+| `trace-langgraph-01` | `Where is order ORD-104?`              | classify → lookup → answer |
+| `trace-langgraph-02` | `What is the status of order ORD-104?` | classify → lookup → answer |
+| `trace-langgraph-03` | `Track order ORD-205.`                 | classify → lookup → answer |
+| `trace-langgraph-04` | `Look up delivery ORD-508.`            | classify → lookup → answer |
+| `trace-langgraph-05` | `Track shipment ORD-114.`              | classify → lookup → answer |
+| `trace-langgraph-06` | `Find the ETA for ORD-215.`            | classify → lookup → answer |
+| `trace-langgraph-07` | `Check delivery ORD-417.`              | classify → lookup → answer |
+| `trace-langgraph-08` | `Look up ORD-518.`                     | classify → lookup → answer |
+| `trace-langgraph-09` | `Has order ORD-619 arrived?`           | classify → lookup → answer |
+| `trace-langgraph-10` | `Do you offer weekend support?`        | classify → answer          |
+| `trace-langgraph-11` | `What payment methods do you accept?`  | classify → answer          |
+| `trace-langgraph-12` | `Where can I find the privacy policy?` | classify → answer          |
+| `trace-langgraph-13` | `Tell me about your warranty.`         | classify → answer          |
+| `trace-langgraph-14` | `How do refunds work?`                 | classify → answer          |

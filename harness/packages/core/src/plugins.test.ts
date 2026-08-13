@@ -78,13 +78,15 @@ describe("PluginRegistry", () => {
     const peopleB: PeopleProvider = { lookup: async () => "b" };
     const executorA: ExecutorProvider = {
       launch: async () => "a",
-      collect: async () => "a",
+      collect: async (_runId, _request) => "a",
       status: async () => "a",
+      destroy: async () => undefined,
     };
     const executorB: ExecutorProvider = {
       launch: async () => "b",
-      collect: async () => "b",
+      collect: async (_runId, _request) => "b",
       status: async () => "b",
+      destroy: async () => undefined,
     };
 
     const registry = new PluginRegistry([

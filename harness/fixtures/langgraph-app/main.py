@@ -4,10 +4,10 @@ import argparse
 import json
 import os
 import re
+import selectors
 import subprocess
-import sys
-import tempfile
 import uuid
+from functools import cache
 from pathlib import Path
 from typing import Literal, TypedDict
 
@@ -44,22 +44,31 @@ def lookup_order(order_id: str) -> str:
     )
 
 
-def client_from_env() -> OpenAI:
+@cache
+def create_client(base_url: str, api_key: str) -> OpenAI:
     return OpenAI(
-        base_url=os.environ["OPENAI_BASE_URL"],
-        api_key=os.environ["OPENAI_API_KEY"],
-        default_headers={
-            "x-rm-run": os.environ["RM_RUN_ID"],
-            "x-rm-case": os.environ["RM_CASE_ID"],
-            "x-rm-execution": os.environ["RM_EXECUTION_ID"],
-        },
+        base_url=base_url,
+        api_key=api_key,
     )
 
 
-def call_headers(step: str) -> dict[str, str]:
+def client_from_env() -> OpenAI:
+    return create_client(
+        os.environ["OPENAI_BASE_URL"],
+        os.environ["OPENAI_API_KEY"],
+    )
+
+
+def call_headers(step: str, case_id: str) -> dict[str, str]:
     # Documented correlation-forwarding pattern: execution headers on the client,
     # with step and fresh logical-call identity on each SDK invocation.
-    return {"x-rm-step": step, "x-rm-call": str(uuid.uuid4())}
+    return {
+        "x-rm-run": os.environ["RM_RUN_ID"],
+        "x-rm-case": case_id,
+        "x-rm-execution": os.environ["RM_EXECUTION_ID"],
+        "x-rm-step": step,
+        "x-rm-call": str(uuid.uuid4()),
+    }
 
 
 def classify(state: AppState) -> dict[str, object]:
@@ -72,15 +81,16 @@ def classify(state: AppState) -> dict[str, object]:
             },
             {"role": "user", "content": state["input"]},
         ],
-        extra_headers=call_headers("classify"),
+        max_tokens=256,
+        extra_headers=call_headers("classify", state["case_id"]),
     )
     content = response.choices[0].message.content
     if content is None:
         raise ValueError("classify returned no content")
-    digest = content.rsplit(" ", 1)[-1]
-    route: Literal["lookup", "answer"] = (
-        "lookup" if int(digest[-1], 16) % 2 else "answer"
-    )
+    digest = re.search(r"([0-9a-f]{16})$", content)
+    route: Literal["lookup", "answer"] = "answer"
+    if digest is not None and int(digest.group(1)[-1], 16) % 2:
+        route = "lookup"
     return {
         "route": route,
         "classification": content,
@@ -118,14 +128,23 @@ def lookup(state: AppState) -> dict[str, object]:
             }
         ],
         tool_choice={"type": "function", "function": {"name": "lookup_order"}},
-        extra_headers=call_headers("lookup"),
+        max_tokens=256,
+        extra_headers=call_headers("lookup", state["case_id"]),
     )
-    if response.choices[0].message.content is None:
-        raise ValueError("lookup returned no content")
-    order_id = re.search(r"ORD-\d{3}", state["input"])
-    if order_id is None:
-        raise ValueError("lookup route requires an ORD-NNN order id")
-    result = lookup_order(order_id.group())
+    message = response.choices[0].message
+    input_order_id = re.search(r"ORD-\d{3}", state["input"])
+    order_id = input_order_id.group() if input_order_id is not None else "ORD-000"
+    if message.tool_calls:
+        tool_call = message.tool_calls[0]
+        if tool_call.type != "function" or tool_call.function.name != "lookup_order":
+            raise ValueError("lookup did not select lookup_order")
+        arguments = json.loads(tool_call.function.arguments)
+        selected_order_id = arguments.get("order_id")
+        if isinstance(selected_order_id, str):
+            order_id = selected_order_id
+    elif re.fullmatch(r"Deterministic reply [0-9a-f]{16}", message.content or "") is None:
+        raise ValueError("lookup did not select lookup_order")
+    result = lookup_order(order_id)
     return {
         "lookup_result": result,
         "steps": [*state["steps"], {"step": "lookup", "model": LOOKUP_MODEL, "ok": True}],
@@ -146,7 +165,8 @@ def answer(state: AppState) -> dict[str, object]:
                 "content": f"Request: {state['input']}\nLookup: {context}",
             },
         ],
-        extra_headers=call_headers("answer"),
+        max_tokens=256,
+        extra_headers=call_headers("answer", state["case_id"]),
     )
     content = response.choices[0].message.content
     if content is None:
@@ -210,8 +230,12 @@ await new Promise(() => {{}});
         text=True,
         env=child_env,
     )
-    assert process.stdout is not None
-    port = process.stdout.readline().strip()
+    stdout = process.stdout
+    selector = selectors.DefaultSelector()
+    selector.register(stdout, selectors.EVENT_READ)
+    ready = selector.select(timeout=5)
+    selector.close()
+    port = stdout.readline().strip() if ready else ""
     if not port.isdigit():
         process.terminate()
         _, error = process.communicate(timeout=5)
@@ -231,19 +255,36 @@ await new Promise(() => {{}});
 def selftest() -> None:
     stub = start_stub()
     try:
-        with tempfile.NamedTemporaryFile("w", suffix=".json") as case_file:
-            json.dump({"caseId": "langgraph-tool-01", "input": TOOL_CASE_INPUT}, case_file)
-            case_file.flush()
-            case = json.loads(Path(case_file.name).read_text())
-        envelope = run_case(case)
-        assert envelope["caseId"] == "langgraph-tool-01"
-        assert isinstance(envelope["finalOutput"], str) and envelope["finalOutput"]
-        assert [step["step"] for step in envelope["steps"]] == [
-            "classify",
-            "lookup",
-            "answer",
+        cases = [
+            {"caseId": "langgraph-tool-01", "input": TOOL_CASE_INPUT},
+            {
+                "caseId": "langgraph-fallback-01",
+                "input": "Summarize the refund policy.",
+            },
+            {
+                "caseId": "langgraph-direct-01",
+                "input": "Do you offer weekend support?",
+            },
         ]
-        assert all(step["ok"] is True for step in envelope["steps"])
+        first = [run_case(case) for case in cases]
+        second = [run_case(case) for case in cases]
+        if first != second:
+            raise AssertionError("fixture envelopes changed between identical runs")
+        expected = [
+            ("langgraph-tool-01", "Deterministic reply 81d067ab44f20e70", 3),
+            ("langgraph-fallback-01", "Deterministic reply 16d01727aac92f26", 3),
+            ("langgraph-direct-01", "Deterministic reply 63e396df1afcd7db", 2),
+        ]
+        for envelope, (case_id, final_output, step_count) in zip(first, expected):
+            if envelope["caseId"] != case_id:
+                raise AssertionError(f"unexpected case id for {case_id}")
+            if envelope["finalOutput"] != final_output:
+                raise AssertionError(f"unexpected final output for {case_id}")
+            if len(envelope["steps"]) != step_count:
+                raise AssertionError(f"unexpected route length for {case_id}")
+            if not all(step["ok"] is True for step in envelope["steps"]):
+                raise AssertionError(f"failed step for {case_id}")
+        print(json.dumps(first, separators=(",", ":"), sort_keys=True))
         print("ok")
     finally:
         stub.terminate()
@@ -268,8 +309,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as error:
-        print(str(error), file=sys.stderr)
-        raise SystemExit(1) from error
+    main()

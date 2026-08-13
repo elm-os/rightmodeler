@@ -37,8 +37,9 @@ export interface PeopleProvider {
 
 export interface ExecutorProvider {
   launch(params: unknown): Promise<string>;
-  collect(runId: string): Promise<unknown>;
+  collect(runId: string, request: unknown): Promise<unknown>;
   status(runId: string): Promise<unknown>;
+  destroy(runId: string): Promise<void>;
 }
 
 export type CommandCallback = (program: unknown) => void;

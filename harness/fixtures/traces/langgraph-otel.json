@@ -88,21 +88,9 @@
             {
               "type": "text",
               "content": "Deterministic reply 86207e4710f5bd1d"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-01",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-104"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-104\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
             }
           ],
-          "finish_reason": "tool_call"
+          "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 31,
@@ -247,21 +235,9 @@
             {
               "type": "text",
               "content": "Deterministic reply 967443c40529d9d8"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-02",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-104"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-104\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
             }
           ],
-          "finish_reason": "tool_call"
+          "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 34,
@@ -406,21 +382,9 @@
             {
               "type": "text",
               "content": "Deterministic reply ca22375e98c5b985"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-03",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-205"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-205\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
             }
           ],
-          "finish_reason": "tool_call"
+          "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 30,
@@ -565,21 +529,9 @@
             {
               "type": "text",
               "content": "Deterministic reply 298316bcfbdc5587"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-04",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-508"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-508\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
             }
           ],
-          "finish_reason": "tool_call"
+          "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 31,
@@ -724,21 +676,9 @@
             {
               "type": "text",
               "content": "Deterministic reply 6daabb5eb4d3d21f"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-05",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-114"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-114\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
             }
           ],
-          "finish_reason": "tool_call"
+          "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 31,
@@ -883,21 +823,9 @@
             {
               "type": "text",
               "content": "Deterministic reply 1a77055e2830fae7"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-06",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-215"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-215\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
             }
           ],
-          "finish_reason": "tool_call"
+          "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 31,
@@ -1042,21 +970,9 @@
             {
               "type": "text",
               "content": "Deterministic reply 9ce7442fed098b70"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-07",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-417"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-417\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
             }
           ],
-          "finish_reason": "tool_call"
+          "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 31,
@@ -1201,21 +1117,9 @@
             {
               "type": "text",
               "content": "Deterministic reply 7fe7b351ebbf9193"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-08",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-518"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-518\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
             }
           ],
-          "finish_reason": "tool_call"
+          "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 29,
@@ -1360,21 +1264,9 @@
             {
               "type": "text",
               "content": "Deterministic reply 420492a32a222ee0"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-09",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-619"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-619\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
             }
           ],
-          "finish_reason": "tool_call"
+          "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 31,
@@ -1458,7 +1350,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Check package ORD-922."
+              "content": "Do you offer weekend support?"
             }
           ]
         }
@@ -1469,74 +1361,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply e9e945c743023817"
+              "content": "Deterministic reply e249bcb53615469e"
             }
           ],
           "finish_reason": "stop"
         }
       ],
-      "gen_ai.usage.input_tokens": 35,
-      "gen_ai.usage.output_tokens": 12
-    }
-  },
-  {
-    "traceId": "trace-langgraph-10",
-    "startTimeUnixNano": "10000200",
-    "span_id": "span-langgraph-10-lookup",
-    "name": "lookup",
-    "kind": "CLIENT",
-    "status": {
-      "code": "OK"
-    },
-    "attributes": {
-      "gen_ai.operation.name": "chat",
-      "gen_ai.provider.name": "acme",
-      "rightmodeler.family": "langgraph_order_lookup",
-      "rightmodeler.accepted": true,
-      "gen_ai.request.model": "acme/max-1",
-      "gen_ai.response.model": "acme/max-1",
-      "gen_ai.system_instructions": [
-        {
-          "type": "text",
-          "content": "Select lookup_order for this request."
-        }
-      ],
-      "gen_ai.input.messages": [
-        {
-          "role": "user",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Check package ORD-922."
-            }
-          ]
-        }
-      ],
-      "gen_ai.output.messages": [
-        {
-          "role": "assistant",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Deterministic reply a04df531cd6ee320"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-10",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-922"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-922\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
-            }
-          ],
-          "finish_reason": "tool_call"
-        }
-      ],
-      "gen_ai.usage.input_tokens": 30,
+      "gen_ai.usage.input_tokens": 37,
       "gen_ai.usage.output_tokens": 12
     }
   },
@@ -1568,7 +1399,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Request: Check package ORD-922.\nLookup: {\"orderId\":\"ORD-922\",\"status\":\"in transit\",\"etaDays\":2}"
+              "content": "Request: Do you offer weekend support?\nLookup: No lookup was needed."
             }
           ]
         }
@@ -1579,13 +1410,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply 7b574e7d32d2d82d"
+              "content": "Deterministic reply 63e396df1afcd7db"
             }
           ],
           "finish_reason": "stop"
         }
       ],
-      "gen_ai.usage.input_tokens": 57,
+      "gen_ai.usage.input_tokens": 48,
       "gen_ai.usage.output_tokens": 12
     }
   },
@@ -1617,7 +1448,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Track delivery ORD-023."
+              "content": "What payment methods do you accept?"
             }
           ]
         }
@@ -1628,74 +1459,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply 4e33f17e432b0c8d"
+              "content": "Deterministic reply ab6d618302a76764"
             }
           ],
           "finish_reason": "stop"
         }
       ],
-      "gen_ai.usage.input_tokens": 35,
-      "gen_ai.usage.output_tokens": 12
-    }
-  },
-  {
-    "traceId": "trace-langgraph-11",
-    "startTimeUnixNano": "11000200",
-    "span_id": "span-langgraph-11-lookup",
-    "name": "lookup",
-    "kind": "CLIENT",
-    "status": {
-      "code": "OK"
-    },
-    "attributes": {
-      "gen_ai.operation.name": "chat",
-      "gen_ai.provider.name": "acme",
-      "rightmodeler.family": "langgraph_order_lookup",
-      "rightmodeler.accepted": true,
-      "gen_ai.request.model": "acme/max-1",
-      "gen_ai.response.model": "acme/max-1",
-      "gen_ai.system_instructions": [
-        {
-          "type": "text",
-          "content": "Select lookup_order for this request."
-        }
-      ],
-      "gen_ai.input.messages": [
-        {
-          "role": "user",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Track delivery ORD-023."
-            }
-          ]
-        }
-      ],
-      "gen_ai.output.messages": [
-        {
-          "role": "assistant",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Deterministic reply 37395d9c7a479a10"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-11",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-023"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-023\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
-            }
-          ],
-          "finish_reason": "tool_call"
-        }
-      ],
-      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.input_tokens": 38,
       "gen_ai.usage.output_tokens": 12
     }
   },
@@ -1727,7 +1497,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Request: Track delivery ORD-023.\nLookup: {\"orderId\":\"ORD-023\",\"status\":\"in transit\",\"etaDays\":2}"
+              "content": "Request: What payment methods do you accept?\nLookup: No lookup was needed."
             }
           ]
         }
@@ -1738,13 +1508,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply 9c4ec73c7ccdefc6"
+              "content": "Deterministic reply ae1658dcd92418f9"
             }
           ],
           "finish_reason": "stop"
         }
       ],
-      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.input_tokens": 50,
       "gen_ai.usage.output_tokens": 12
     }
   },
@@ -1776,7 +1546,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Give me the ETA for ORD-225."
+              "content": "Where can I find the privacy policy?"
             }
           ]
         }
@@ -1787,74 +1557,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply b52cfdfee239abf9"
+              "content": "Deterministic reply bae4f8b3fee35b2c"
             }
           ],
           "finish_reason": "stop"
         }
       ],
-      "gen_ai.usage.input_tokens": 37,
-      "gen_ai.usage.output_tokens": 12
-    }
-  },
-  {
-    "traceId": "trace-langgraph-12",
-    "startTimeUnixNano": "12000200",
-    "span_id": "span-langgraph-12-lookup",
-    "name": "lookup",
-    "kind": "CLIENT",
-    "status": {
-      "code": "OK"
-    },
-    "attributes": {
-      "gen_ai.operation.name": "chat",
-      "gen_ai.provider.name": "acme",
-      "rightmodeler.family": "langgraph_order_lookup",
-      "rightmodeler.accepted": true,
-      "gen_ai.request.model": "acme/max-1",
-      "gen_ai.response.model": "acme/max-1",
-      "gen_ai.system_instructions": [
-        {
-          "type": "text",
-          "content": "Select lookup_order for this request."
-        }
-      ],
-      "gen_ai.input.messages": [
-        {
-          "role": "user",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Give me the ETA for ORD-225."
-            }
-          ]
-        }
-      ],
-      "gen_ai.output.messages": [
-        {
-          "role": "assistant",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Deterministic reply 832f8d5cf5b2e4d1"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-12",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-225"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-225\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
-            }
-          ],
-          "finish_reason": "tool_call"
-        }
-      ],
-      "gen_ai.usage.input_tokens": 32,
+      "gen_ai.usage.input_tokens": 39,
       "gen_ai.usage.output_tokens": 12
     }
   },
@@ -1886,7 +1595,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Request: Give me the ETA for ORD-225.\nLookup: {\"orderId\":\"ORD-225\",\"status\":\"in transit\",\"etaDays\":2}"
+              "content": "Request: Where can I find the privacy policy?\nLookup: No lookup was needed."
             }
           ]
         }
@@ -1897,13 +1606,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply ecdd83f9630040ad"
+              "content": "Deterministic reply 01ba6f0ab74dd70e"
             }
           ],
           "finish_reason": "stop"
         }
       ],
-      "gen_ai.usage.input_tokens": 59,
+      "gen_ai.usage.input_tokens": 50,
       "gen_ai.usage.output_tokens": 12
     }
   },
@@ -1935,7 +1644,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Check shipment ORD-427."
+              "content": "Tell me about your warranty."
             }
           ]
         }
@@ -1946,74 +1655,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply 267d78f671728b81"
+              "content": "Deterministic reply cdd68bc02897be80"
             }
           ],
           "finish_reason": "stop"
         }
       ],
-      "gen_ai.usage.input_tokens": 35,
-      "gen_ai.usage.output_tokens": 12
-    }
-  },
-  {
-    "traceId": "trace-langgraph-13",
-    "startTimeUnixNano": "13000200",
-    "span_id": "span-langgraph-13-lookup",
-    "name": "lookup",
-    "kind": "CLIENT",
-    "status": {
-      "code": "OK"
-    },
-    "attributes": {
-      "gen_ai.operation.name": "chat",
-      "gen_ai.provider.name": "acme",
-      "rightmodeler.family": "langgraph_order_lookup",
-      "rightmodeler.accepted": true,
-      "gen_ai.request.model": "acme/max-1",
-      "gen_ai.response.model": "acme/max-1",
-      "gen_ai.system_instructions": [
-        {
-          "type": "text",
-          "content": "Select lookup_order for this request."
-        }
-      ],
-      "gen_ai.input.messages": [
-        {
-          "role": "user",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Check shipment ORD-427."
-            }
-          ]
-        }
-      ],
-      "gen_ai.output.messages": [
-        {
-          "role": "assistant",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Deterministic reply 13be91f4ef5e4867"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-13",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-427"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-427\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
-            }
-          ],
-          "finish_reason": "tool_call"
-        }
-      ],
-      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.input_tokens": 37,
       "gen_ai.usage.output_tokens": 12
     }
   },
@@ -2045,7 +1693,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Request: Check shipment ORD-427.\nLookup: {\"orderId\":\"ORD-427\",\"status\":\"in transit\",\"etaDays\":2}"
+              "content": "Request: Tell me about your warranty.\nLookup: No lookup was needed."
             }
           ]
         }
@@ -2056,13 +1704,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply dd10b83fd6a9adb3"
+              "content": "Deterministic reply 16d4c06cec69d34d"
             }
           ],
           "finish_reason": "stop"
         }
       ],
-      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.input_tokens": 48,
       "gen_ai.usage.output_tokens": 12
     }
   },
@@ -2094,7 +1742,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Has ORD-528 shipped?"
+              "content": "How do refunds work?"
             }
           ]
         }
@@ -2105,74 +1753,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply 5b4596e22f39800d"
+              "content": "Deterministic reply 3388bee4012c9bfe"
             }
           ],
           "finish_reason": "stop"
         }
       ],
       "gen_ai.usage.input_tokens": 35,
-      "gen_ai.usage.output_tokens": 12
-    }
-  },
-  {
-    "traceId": "trace-langgraph-14",
-    "startTimeUnixNano": "14000200",
-    "span_id": "span-langgraph-14-lookup",
-    "name": "lookup",
-    "kind": "CLIENT",
-    "status": {
-      "code": "OK"
-    },
-    "attributes": {
-      "gen_ai.operation.name": "chat",
-      "gen_ai.provider.name": "acme",
-      "rightmodeler.family": "langgraph_order_lookup",
-      "rightmodeler.accepted": true,
-      "gen_ai.request.model": "acme/max-1",
-      "gen_ai.response.model": "acme/max-1",
-      "gen_ai.system_instructions": [
-        {
-          "type": "text",
-          "content": "Select lookup_order for this request."
-        }
-      ],
-      "gen_ai.input.messages": [
-        {
-          "role": "user",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Has ORD-528 shipped?"
-            }
-          ]
-        }
-      ],
-      "gen_ai.output.messages": [
-        {
-          "role": "assistant",
-          "parts": [
-            {
-              "type": "text",
-              "content": "Deterministic reply 2f6b290a02ce4d5a"
-            },
-            {
-              "type": "tool_call",
-              "id": "call-langgraph-14",
-              "name": "lookup_order",
-              "arguments": {
-                "order_id": "ORD-528"
-              },
-              "result": {
-                "content": "{\"orderId\":\"ORD-528\",\"status\":\"in transit\",\"etaDays\":2}",
-                "is_error": false
-              }
-            }
-          ],
-          "finish_reason": "tool_call"
-        }
-      ],
-      "gen_ai.usage.input_tokens": 30,
       "gen_ai.usage.output_tokens": 12
     }
   },
@@ -2204,7 +1791,7 @@
           "parts": [
             {
               "type": "text",
-              "content": "Request: Has ORD-528 shipped?\nLookup: {\"orderId\":\"ORD-528\",\"status\":\"in transit\",\"etaDays\":2}"
+              "content": "Request: How do refunds work?\nLookup: No lookup was needed."
             }
           ]
         }
@@ -2215,13 +1802,13 @@
           "parts": [
             {
               "type": "text",
-              "content": "Deterministic reply db2193f484559523"
+              "content": "Deterministic reply 050b3e55569126ac"
             }
           ],
           "finish_reason": "stop"
         }
       ],
-      "gen_ai.usage.input_tokens": 57,
+      "gen_ai.usage.input_tokens": 46,
       "gen_ai.usage.output_tokens": 12
     }
   }

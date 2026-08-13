@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { ExecutorProvider } from "@rightmodeler/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createDockerExecutor,
@@ -12,6 +13,11 @@ import {
   type DockerHandle,
   type DockerStatus,
 } from "./index.js";
+
+const provider: ExecutorProvider = createDockerExecutor({
+  maxBytesPerNamespace: 1,
+});
+void provider;
 
 const execFileAsync = promisify(execFile);
 const testTimeoutMs = 120_000;
@@ -34,7 +40,7 @@ async function createScratch(): Promise<{
   root: string;
   scratch: string;
 }> {
-  const root = await mkdtemp(join(import.meta.dirname, ".docker-test-"));
+  const root = await mkdtemp(join(import.meta.dirname, ".docker,test-"));
   const scratch = join(root, "scratch");
   await mkdir(scratch);
   temporaryDirectories.push(root);
@@ -130,6 +136,7 @@ describe("docker executor", () => {
       const status = await waitForExit(executor, handle);
       const result = await executor.collect(handle, {
         namespaces: ["facts", "metrics"],
+        scratchHostPath: scratch,
       });
 
       expect(await docker(["logs", handle])).toBe("from-container");
@@ -141,10 +148,27 @@ describe("docker executor", () => {
           handle,
         ]),
       ).toBe("collect");
+      expect(
+        await docker([
+          "inspect",
+          "--format",
+          '{{ index .Config.Labels "com.rightmodeler.executor" }}',
+          handle,
+        ]),
+      ).toBe("1");
+      expect(
+        await docker([
+          "inspect",
+          "--format",
+          '{{ index .Config.Labels "com.rightmodeler.executor.run" }}',
+          handle,
+        ]),
+      ).not.toBe("");
       expect(status).toMatchObject({
         state: "exited",
         exitCode: 0,
         oomKilled: false,
+        timedOut: false,
       });
       expect(Date.parse(status.startedAt)).not.toBeNaN();
       expect(Date.parse(status.heartbeatAt ?? "")).not.toBeNaN();
@@ -213,6 +237,7 @@ describe("docker executor", () => {
 
       const result = await executor.collect(handle, {
         namespaces: ["facts"],
+        scratchHostPath: scratch,
       });
 
       expect(
@@ -256,27 +281,36 @@ while True:
           env: {},
           mounts: [],
           scratchHostPath: scratch,
-          timeoutMs: 300,
+          timeoutMs: 3_000,
           labels: {},
         }),
       );
 
-      expect((await executor.status(handle)).state).toBe("running");
+      let processTable = "";
+      const processDeadline = Date.now() + 2_000;
+      while (Date.now() < processDeadline) {
+        processTable = await docker(["top", handle]);
+        if (processTable.split("\n").length === 3) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(processTable.split("\n")).toHaveLength(3);
       const status = await waitForExit(executor, handle);
 
       expect(status).toMatchObject({
         state: "exited",
         exitCode: 137,
         oomKilled: false,
+        timedOut: true,
       });
-      expect(await docker(["ps", "-q", "--filter", `id=${handle}`])).toBe("");
-      await expect(docker(["top", handle])).rejects.toThrow(/not running/i);
+      expect(
+        await docker(["inspect", "--format", "{{.State.Pid}}", handle]),
+      ).toBe("0");
     },
     testTimeoutMs,
   );
 
   it(
-    "rejects namespace traversal and symbolic-link escapes",
+    "rejects namespace traversal and skips hostile entries",
     async () => {
       const { root, scratch } = await createScratch();
       await writeFile(join(root, "escape.txt"), "outside scratch");
@@ -285,6 +319,9 @@ while True:
         const fs = require("node:fs");
         const root = ${JSON.stringify(SCRATCH_CONTAINER_PATH)} + "/facts";
         fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(root + "/a-safe.txt", "before");
+        fs.writeFileSync(root + "/.rightmodeler-store", "reserved");
+        fs.writeFileSync(root + "/z-safe.txt", "after");
         fs.symlinkSync("../../escape.txt", root + "/escape.txt");
       `;
       const handle = track(
@@ -302,11 +339,39 @@ while True:
       await waitForExit(executor, handle);
 
       await expect(
-        executor.collect(handle, { namespaces: [".."] }),
+        executor.collect(handle, {
+          namespaces: [".."],
+          scratchHostPath: scratch,
+        }),
       ).rejects.toThrow(/Invalid namespace/);
-      await expect(
-        executor.collect(handle, { namespaces: ["facts"] }),
-      ).rejects.toThrow(/symbolic link/i);
+      const result = await executor.collect(handle, {
+        namespaces: ["facts"],
+        scratchHostPath: scratch,
+      });
+
+      expect(
+        result.files.map((file) => [
+          file.path,
+          Buffer.from(file.contents).toString("utf8"),
+        ]),
+      ).toEqual([
+        ["a-safe.txt", "before"],
+        ["z-safe.txt", "after"],
+      ]);
+      expect(result.skipped).toEqual([
+        {
+          namespace: "facts",
+          path: ".rightmodeler-store",
+          bytes: 8,
+          skipped: true,
+        },
+        {
+          namespace: "facts",
+          path: "escape.txt",
+          bytes: 16,
+          skipped: true,
+        },
+      ]);
     },
     testTimeoutMs,
   );
@@ -359,6 +424,7 @@ while True:
 
       const result = await executor.collect(handle, {
         namespaces: ["facts"],
+        scratchHostPath: scratch,
       });
 
       expect(result.files).toHaveLength(1);
@@ -447,6 +513,7 @@ while True:
       await waitForExit(executor, secondHandle);
       const result = await executor.collect(secondHandle, {
         namespaces: ["facts"],
+        scratchHostPath: scratch,
       });
 
       expect(secondHandle).not.toBe(firstHandle);
@@ -458,10 +525,99 @@ while True:
   );
 
   it(
+    "collects from caller-owned scratch after the container is destroyed",
+    async () => {
+      const { scratch } = await createScratch();
+      const executor = createDockerExecutor({ maxBytesPerNamespace: 1024 });
+      const script = `
+        const fs = require("node:fs");
+        const root = ${JSON.stringify(SCRATCH_CONTAINER_PATH)} + "/facts";
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(root + "/salvaged.txt", "persisted");
+      `;
+      const handle = track(
+        executor,
+        await executor.launch({
+          image: "node:22-alpine",
+          command: ["node", "-e", script],
+          env: {},
+          mounts: [],
+          scratchHostPath: scratch,
+          timeoutMs: 10_000,
+          labels: {},
+        }),
+      );
+      await waitForExit(executor, handle);
+      await executor.destroy(handle);
+
+      const result = await executor.collect(handle, {
+        namespaces: ["facts"],
+        scratchHostPath: scratch,
+      });
+
+      expect(Buffer.from(result.files[0].contents).toString("utf8")).toBe(
+        "persisted",
+      );
+    },
+    testTimeoutMs,
+  );
+
+  it(
+    "reaps old executor containers without touching unlabeled containers",
+    async () => {
+      const executor = createDockerExecutor({ maxBytesPerNamespace: 1024 });
+      const orphan = track(
+        executor,
+        await docker([
+          "run",
+          "--detach",
+          "--label",
+          "com.rightmodeler.executor=1",
+          "node:22-alpine",
+          "node",
+          "-e",
+          "setInterval(() => {}, 60_000)",
+        ]),
+      );
+      const unlabeled = track(
+        executor,
+        await docker([
+          "run",
+          "--detach",
+          "node:22-alpine",
+          "node",
+          "-e",
+          "setInterval(() => {}, 60_000)",
+        ]),
+      );
+
+      await executor.reapOrphans({ olderThanMs: 60_000 });
+      expect(
+        await docker(["inspect", "--format", "{{.State.Status}}", orphan]),
+      ).toBe("running");
+      expect(
+        await docker(["inspect", "--format", "{{.State.Status}}", unlabeled]),
+      ).toBe("running");
+
+      await executor.reapOrphans({ olderThanMs: 0 });
+
+      await expect(docker(["inspect", orphan])).rejects.toThrow(
+        /No such object|No such container/i,
+      );
+      expect(
+        await docker(["inspect", "--format", "{{.State.Status}}", unlabeled]),
+      ).toBe("running");
+    },
+    testTimeoutMs,
+  );
+
+  it(
     "names the image when pulling it fails",
     async () => {
       const image = "not a valid image";
-      await expect(ensureImage(image)).rejects.toThrow(image);
+      await expect(ensureImage(image)).rejects.toThrow(
+        `Failed to pull Docker image "${image}"`,
+      );
     },
     testTimeoutMs,
   );
