@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -41,6 +41,10 @@ const stubModuleUrl = new URL(
   "../../../fixtures/stub-provider/server.mjs",
   import.meta.url,
 ).href;
+const aiGatewayFixtureUrl = new URL(
+  "../../../fixtures/catalogs/ai-gateway-models.json",
+  import.meta.url,
+);
 
 const projectId = "replay-test";
 const runId = "run-1";
@@ -166,6 +170,102 @@ describe("provider client", () => {
     delete process.env.REPLAY_TEST_API_KEY;
 
     await expect(provider.listModels()).rejects.toThrow("REPLAY_TEST_API_KEY");
+  });
+});
+
+describe("AI Gateway catalog", () => {
+  beforeEach(() => {
+    process.env.REPLAY_TEST_API_KEY = fakeKey;
+  });
+
+  afterEach(() => {
+    delete process.env.REPLAY_TEST_API_KEY;
+    vi.restoreAllMocks();
+  });
+
+  async function listFixtureModels(
+    fixtureBody?: string,
+  ): Promise<ModelCatalogEntry[]> {
+    const body = fixtureBody ?? (await readFile(aiGatewayFixtureUrl, "utf8"));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    return createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://catalog.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).listModels();
+  }
+
+  it("normalizes string pricing, context, and capabilities while excluding embeddings", async () => {
+    const catalog = await listFixtureModels();
+
+    expect(catalog).toHaveLength(7);
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o")).toEqual({
+      id: "openai/gpt-4o",
+      family: "openai",
+      contextLength: 128_000,
+      pricing: { input: 0.0000025, output: 0.00001 },
+      supportsTools: true,
+      supportsStructuredOutput: false,
+    });
+    expect(catalog.find(({ id }) => id === "sakana/namazu")).toMatchObject({
+      supportsTools: true,
+      supportsStructuredOutput: true,
+    });
+    expect(
+      catalog.find(({ id }) => id === "google/gemini-2.5-flash-image"),
+    ).toMatchObject({ supportsTools: false, supportsStructuredOutput: false });
+    expect(
+      catalog.some(({ id }) => id === "alibaba/qwen3-embedding-0.6b"),
+    ).toBe(false);
+  });
+
+  it("marks non-numeric string pricing as unavailable", async () => {
+    const fixtureBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const catalog = await listFixtureModels(
+      fixtureBody.replace('"input": "0.00000015"', '"input": "unknown"'),
+    );
+
+    expect(
+      catalog.find(({ id }) => id === "openai/gpt-4o-mini")?.pricing,
+    ).toBeNull();
+  });
+
+  it("recognizes response_format as structured-output support", async () => {
+    const fixtureBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const catalog = await listFixtureModels(
+      fixtureBody.replace(',\n        "structured_outputs"', ""),
+    );
+
+    expect(
+      catalog.find(({ id }) => id === "sakana/namazu")
+        ?.supportsStructuredOutput,
+    ).toBe(true);
+  });
+
+  it("shortlists cheaper tool-capable chat models for a GPT-4o incumbent", async () => {
+    const catalog = await listFixtureModels();
+    const result = shortlist(
+      [
+        step({
+          currentModel: "openai/gpt-4o",
+          needsTools: true,
+          observedContextTokens: 30_000,
+        }),
+      ],
+      catalog,
+    );
+
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "openai/gpt-4o-mini",
+      "alibaba/qwen-3-235b",
+      "meta/llama-3.3-70b",
+      "sakana/namazu",
+    ]);
   });
 });
 

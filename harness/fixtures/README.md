@@ -10,6 +10,8 @@ The remaining trace fixtures are synthetic, append-friendly examples of each ada
 
 `stub-provider/server.mjs` is a dependency-free OpenAI-compatible test server with a four-model price and capability catalog plus deterministic non-streaming chat completions. Run it with `--selftest` to exercise both endpoints and the streaming rejection path on an ephemeral port.
 
+`catalogs/ai-gateway-models.json` is a sanitized eight-model sample of the AI Gateway model-catalog response. It preserves per-token string pricing, context and output limits, capability parameters, tags, and model types so replay tests cover language-model normalization, capability-aware shortlisting, and exclusion of embedding entries.
+
 `langgraph-app/` is a standalone three-node StateGraph fixture. Its classify node routes requests, its lookup node handles a `lookup_order` tool selection and invokes the deterministic local order tool, and its answer node composes the terminal output. Lookup-routed inputs without an order number use `ORD-000`. The documented tool-route case input is `Where is order ORD-104?`. From the repository root, verify it with `python harness/fixtures/langgraph-app/main.py --selftest` after installing its pinned requirements in an isolated environment.
 
 `traces/langgraph-otel.json` contains 14 trajectories and 37 spans recorded for the LangGraph fixture. Lookup responses match the stub's text-only `finish_reason: stop` response; tool context remains in the fixture request rather than appearing as a response tool-call part. The recorded routes are:

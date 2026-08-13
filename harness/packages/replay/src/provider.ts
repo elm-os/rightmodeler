@@ -185,6 +185,7 @@ function tokenCount(value: unknown, label: string): number {
 function price(value: unknown, label: string): number | null {
   if (value === undefined || value === null || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(value);
+  if (Number.isNaN(parsed)) return null;
   return nonnegativeNumber(parsed, label);
 }
 
@@ -212,11 +213,18 @@ function isRetryable(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
-function normalizeModel(value: unknown, index: number): ModelCatalogEntry {
+function normalizeModel(
+  value: unknown,
+  index: number,
+): ModelCatalogEntry | null {
   const model = objectValue(value, `models[${index}]`);
   if (typeof model.id !== "string" || model.id.length === 0) {
     throw new Error(`models[${index}].id must be a non-empty string`);
   }
+  if (model.type !== undefined && typeof model.type !== "string") {
+    throw new Error(`models[${index}].type must be a string`);
+  }
+  if (model.type !== undefined && model.type !== "language") return null;
   const rawPricing = objectValue(
     model.pricing ?? {},
     `models[${index}].pricing`,
@@ -229,10 +237,12 @@ function normalizeModel(value: unknown, index: number): ModelCatalogEntry {
       `models[${index}].supported_parameters must contain strings`,
     );
   }
-  const rawContext = model.context_length ?? 0;
+  const contextField =
+    model.context_window === undefined ? "context_length" : "context_window";
+  const rawContext = model.context_window ?? model.context_length ?? 0;
   const contextLength = tokenCount(
     rawContext,
-    `models[${index}].context_length`,
+    `models[${index}].${contextField}`,
   );
 
   return {
@@ -241,17 +251,21 @@ function normalizeModel(value: unknown, index: number): ModelCatalogEntry {
     contextLength,
     pricing: (() => {
       const input = price(
-        rawPricing.prompt ?? rawPricing.input_per_token,
+        rawPricing.prompt ?? rawPricing.input_per_token ?? rawPricing.input,
         `models[${index}].pricing.input`,
       );
       const output = price(
-        rawPricing.completion ?? rawPricing.output_per_token,
+        rawPricing.completion ??
+          rawPricing.output_per_token ??
+          rawPricing.output,
         `models[${index}].pricing.output`,
       );
       return input === null || output === null ? null : { input, output };
     })(),
     supportsTools: supported.includes("tools"),
-    supportsStructuredOutput: supported.includes("structured_outputs"),
+    supportsStructuredOutput:
+      supported.includes("response_format") ||
+      supported.includes("structured_outputs"),
   };
 }
 
@@ -372,7 +386,9 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
     if (!Array.isArray(envelope.data)) {
       throw new Error("model catalog data must be an array");
     }
-    catalog = envelope.data.map(normalizeModel);
+    catalog = envelope.data
+      .map(normalizeModel)
+      .filter((model) => model !== null);
     return catalog;
   }
 

@@ -20315,6 +20315,8 @@ function price(value, label) {
   if (value === void 0 || value === null || value === "")
     return null;
   const parsed2 = typeof value === "number" ? value : Number(value);
+  if (Number.isNaN(parsed2))
+    return null;
   return nonnegativeNumber(parsed2, label);
 }
 function redact(value, apiKey) {
@@ -20344,24 +20346,30 @@ function normalizeModel(value, index) {
   if (typeof model.id !== "string" || model.id.length === 0) {
     throw new Error(`models[${index}].id must be a non-empty string`);
   }
+  if (model.type !== void 0 && typeof model.type !== "string") {
+    throw new Error(`models[${index}].type must be a string`);
+  }
+  if (model.type !== void 0 && model.type !== "language")
+    return null;
   const rawPricing = objectValue(model.pricing ?? {}, `models[${index}].pricing`);
   const supported = Array.isArray(model.supported_parameters) ? model.supported_parameters : [];
   if (!supported.every((parameter) => typeof parameter === "string")) {
     throw new Error(`models[${index}].supported_parameters must contain strings`);
   }
-  const rawContext = model.context_length ?? 0;
-  const contextLength = tokenCount(rawContext, `models[${index}].context_length`);
+  const contextField = model.context_window === void 0 ? "context_length" : "context_window";
+  const rawContext = model.context_window ?? model.context_length ?? 0;
+  const contextLength = tokenCount(rawContext, `models[${index}].${contextField}`);
   return {
     id: model.id,
     family: model.id.split("/", 1)[0],
     contextLength,
     pricing: (() => {
-      const input = price(rawPricing.prompt ?? rawPricing.input_per_token, `models[${index}].pricing.input`);
-      const output = price(rawPricing.completion ?? rawPricing.output_per_token, `models[${index}].pricing.output`);
+      const input = price(rawPricing.prompt ?? rawPricing.input_per_token ?? rawPricing.input, `models[${index}].pricing.input`);
+      const output = price(rawPricing.completion ?? rawPricing.output_per_token ?? rawPricing.output, `models[${index}].pricing.output`);
       return input === null || output === null ? null : { input, output };
     })(),
     supportsTools: supported.includes("tools"),
-    supportsStructuredOutput: supported.includes("structured_outputs")
+    supportsStructuredOutput: supported.includes("response_format") || supported.includes("structured_outputs")
   };
 }
 function normalizeUsage(value) {
@@ -20461,7 +20469,7 @@ function createProvider(options) {
     if (!Array.isArray(envelope.data)) {
       throw new Error("model catalog data must be an array");
     }
-    catalog = envelope.data.map(normalizeModel);
+    catalog = envelope.data.map(normalizeModel).filter((model) => model !== null);
     return catalog;
   }
   function listModels() {
