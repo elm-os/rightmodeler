@@ -1,0 +1,15 @@
+import { cp, mkdir } from "node:fs/promises";
+
+const sourceRoot = new URL("../", import.meta.url);
+const distRoot = new URL("../../dist/", import.meta.url);
+
+await mkdir(new URL("proxy/", distRoot), { recursive: true });
+await cp(
+  new URL("proxy/proxy-runtime.mjs", sourceRoot),
+  new URL("proxy/proxy-runtime.mjs", distRoot),
+);
+await mkdir(new URL("transport/", distRoot), { recursive: true });
+await cp(
+  new URL("transport/stream.js", distRoot),
+  new URL("transport/index.js", distRoot),
+);

@@ -1,10 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { join } from "node:path";
@@ -141,6 +136,8 @@ function loadState(config, spoolPath, checkpointPath) {
     spentUsd: 0,
     groups: new Map(),
     attemptIds: new Set(),
+    completedAttemptIds: new Set(),
+    pendingReservations: new Map(),
   };
 
   for (const row of readJsonLines(checkpointPath, "checkpoint spool")) {
@@ -156,14 +153,14 @@ function loadState(config, spoolPath, checkpointPath) {
       throw new Error("checkpoint spool contains an invalid row");
     }
     state.seqPos = row.seqPos;
-    state.lastAttemptGroup = Math.max(
-      state.lastAttemptGroup,
-      row.attemptGroup,
-    );
+    state.lastAttemptGroup = Math.max(state.lastAttemptGroup, row.attemptGroup);
   }
 
   for (const row of readJsonLines(spoolPath, "attempt spool")) {
-    if (!isObject(row) || !["request_attempt", "blocked"].includes(row.kind)) {
+    if (
+      !isObject(row) ||
+      !["attempt_reservation", "request_attempt", "blocked"].includes(row.kind)
+    ) {
       throw new Error("attempt spool contains an invalid row");
     }
     if (
@@ -173,12 +170,11 @@ function loadState(config, spoolPath, checkpointPath) {
       !Number.isSafeInteger(row.attemptGroup) ||
       row.attemptGroup < 1
     ) {
-      throw new Error("attempt spool correlation does not match this execution");
+      throw new Error(
+        "attempt spool correlation does not match this execution",
+      );
     }
-    state.lastAttemptGroup = Math.max(
-      state.lastAttemptGroup,
-      row.attemptGroup,
-    );
+    state.lastAttemptGroup = Math.max(state.lastAttemptGroup, row.attemptGroup);
     if (typeof row.logicalCallId === "string") {
       const prior = state.groups.get(row.logicalCallId);
       if (prior !== undefined && prior !== row.attemptGroup) {
@@ -189,11 +185,27 @@ function loadState(config, spoolPath, checkpointPath) {
       throw new Error("attempt spool contains an invalid logicalCallId");
     }
 
-    if (row.kind === "request_attempt") {
+    if (row.kind === "attempt_reservation") {
       if (
         typeof row.attemptId !== "string" ||
         row.attemptId.length === 0 ||
         state.attemptIds.has(row.attemptId) ||
+        typeof row.stepId !== "string" ||
+        typeof row.logicalCallId !== "string" ||
+        typeof row.model !== "string" ||
+        !Number.isFinite(row.reservedUsd) ||
+        row.reservedUsd < 0 ||
+        typeof row.startedAt !== "string"
+      ) {
+        throw new Error("attempt spool contains an invalid reservation");
+      }
+      state.attemptIds.add(row.attemptId);
+      state.pendingReservations.set(row.attemptId, row);
+    } else if (row.kind === "request_attempt") {
+      if (
+        typeof row.attemptId !== "string" ||
+        row.attemptId.length === 0 ||
+        state.completedAttemptIds.has(row.attemptId) ||
         !outcomes.has(row.streamOutcome) ||
         row.costUsd !== null ||
         !Number.isFinite(row.leaseChargeUsd) ||
@@ -202,9 +214,39 @@ function loadState(config, spoolPath, checkpointPath) {
         throw new Error("attempt spool contains an invalid request attempt");
       }
       state.attemptIds.add(row.attemptId);
+      state.completedAttemptIds.add(row.attemptId);
+      state.pendingReservations.delete(row.attemptId);
       state.spentUsd += row.leaseChargeUsd;
     }
   }
+
+  for (const reservation of state.pendingReservations.values()) {
+    appendRow(spoolPath, {
+      kind: "request_attempt",
+      runId: reservation.runId,
+      caseId: reservation.caseId,
+      stepId: reservation.stepId,
+      executionId: reservation.executionId,
+      attemptId: reservation.attemptId,
+      logicalCallId: reservation.logicalCallId,
+      attemptGroup: reservation.attemptGroup,
+      attribution: "ok",
+      model: reservation.model,
+      contextTokensUpperBound: reservation.contextTokensUpperBound,
+      streamOutcome: "truncated",
+      usage: null,
+      responseSpoolPath: null,
+      costUsd: null,
+      reservedUsd: reservation.reservedUsd,
+      leaseChargeUsd: reservation.reservedUsd,
+      recoveryReason: "proxy_restarted",
+      startedAt: reservation.startedAt,
+      endedAt: new Date().toISOString(),
+    });
+    state.completedAttemptIds.add(reservation.attemptId);
+    state.spentUsd += reservation.reservedUsd;
+  }
+  state.pendingReservations.clear();
 
   return state;
 }
@@ -286,11 +328,29 @@ function readCappedBody(request) {
   });
 }
 
-function requestUpstream(url, requestTarget, method, headers, body) {
+function requestUpstream(
+  url,
+  requestTarget,
+  method,
+  headers,
+  body,
+  deadlineMs,
+) {
   const send = url.protocol === "https:" ? httpsRequest : httpRequest;
   return new Promise((resolve, reject) => {
-    const request = send(url, { method, path: requestTarget, headers }, resolve);
+    const request = send(
+      url,
+      { method, path: requestTarget, headers },
+      (response) => {
+        clearTimeout(deadline);
+        resolve(response);
+      },
+    );
+    const deadline = setTimeout(() => {
+      request.destroy(new Error("Upstream response header deadline exceeded"));
+    }, deadlineMs);
     request.once("error", reject);
+    request.once("close", () => clearTimeout(deadline));
     request.end(body);
   });
 }
@@ -454,8 +514,8 @@ async function inlineClassifyStream(byteStream, options) {
       }
       if (result.type === "idle" || result.type === "deadline") {
         return {
-          outcome: "truncated",
-          reason: result.type,
+          outcome: state.terminal ? "completed" : "truncated",
+          ...(state.terminal ? {} : { reason: result.type }),
           content: "",
           usage: state.usage,
           chunks: state.chunks,
@@ -530,8 +590,10 @@ async function forwardStreaming(
   const abortController = new AbortController();
   let clientCancelled = false;
   let classificationDone = false;
+  let upstreamFailed = false;
+  let proxyTerminated = false;
   outgoing.once("close", () => {
-    if (!outgoing.writableEnded) {
+    if (!proxyTerminated && !upstreamFailed && !outgoing.writableEnded) {
       clientCancelled = true;
       abortController.abort();
       upstream.destroy();
@@ -550,6 +612,16 @@ async function forwardStreaming(
     }),
   ).then((result) => {
     classificationDone = true;
+    proxyTerminated = true;
+    if (!upstream.complete) {
+      upstream.destroy();
+    }
+    if (
+      result.outcome === "truncated" &&
+      (result.reason === "idle" || result.reason === "deadline")
+    ) {
+      if (!outgoing.destroyed) outgoing.destroy();
+    }
     return result;
   });
 
@@ -568,13 +640,21 @@ async function forwardStreaming(
       classifierBytes.end();
     }
   } catch {
-    classifierBytes.end();
-    if (!outgoing.destroyed) outgoing.destroy();
+    if (!proxyTerminated) {
+      upstreamFailed = true;
+      abortController.abort();
+      classifierBytes.end();
+      if (!outgoing.destroyed) outgoing.destroy();
+    }
   }
 
   const result = await classification;
   return {
-    streamOutcome: clientCancelled ? "client_cancelled" : result.outcome,
+    streamOutcome: clientCancelled
+      ? "client_cancelled"
+      : upstreamFailed
+        ? "truncated"
+        : result.outcome,
     usage: result.usage ?? null,
     spoolPath: result.spoolPath ?? null,
   };
@@ -584,8 +664,9 @@ async function forwardNonStreaming(upstream, outgoing, status) {
   outgoing.writeHead(status, responseHeaders(upstream.headers));
   const chunks = [];
   let clientCancelled = false;
+  let upstreamFailed = false;
   outgoing.once("close", () => {
-    if (!outgoing.writableEnded) {
+    if (!upstreamFailed && !outgoing.writableEnded) {
       clientCancelled = true;
       upstream.destroy();
     }
@@ -601,11 +682,15 @@ async function forwardNonStreaming(upstream, outgoing, status) {
       }
     }
   } catch {
+    upstreamFailed = true;
     if (!outgoing.destroyed) outgoing.destroy();
   }
 
   if (clientCancelled) {
     return { streamOutcome: "client_cancelled", usage: null };
+  }
+  if (upstreamFailed) {
+    return { streamOutcome: "truncated", usage: null };
   }
   if (status >= 400) {
     return { streamOutcome: "provider_error", usage: null };
@@ -637,14 +722,8 @@ async function main() {
   mkdirSync(attemptDirectory, { recursive: true });
   mkdirSync(checkpointDirectory, { recursive: true });
   mkdirSync(streamDirectory, { recursive: true });
-  const spoolPath = join(
-    attemptDirectory,
-    `${config.executionId}.0.jsonl`,
-  );
-  const checkpointPath = join(
-    checkpointDirectory,
-    `${config.caseId}.jsonl`,
-  );
+  const spoolPath = join(attemptDirectory, `${config.executionId}.0.jsonl`);
+  const checkpointPath = join(checkpointDirectory, `${config.caseId}.jsonl`);
   const state = loadState(config, spoolPath, checkpointPath);
   let reservedUsd = 0;
   const classifyStream = await loadClassifier();
@@ -780,7 +859,9 @@ async function main() {
         reason: "missing_pricing",
         startedAt,
       });
-      sendJson(outgoing, 400, { error: `Pricing is unavailable for model: ${model}` });
+      sendJson(outgoing, 400, {
+        error: `Pricing is unavailable for model: ${model}`,
+      });
       return;
     }
 
@@ -815,6 +896,20 @@ async function main() {
     reservedUsd += estimatedWorstCaseUsd;
     const attemptId = nextAttemptId(state);
     const responseSpoolPath = join(streamDirectory, `${attemptId}.txt`);
+    appendRow(spoolPath, {
+      kind: "attempt_reservation",
+      runId: config.runId,
+      caseId: config.caseId,
+      stepId,
+      executionId: config.executionId,
+      attemptId,
+      logicalCallId,
+      attemptGroup,
+      model,
+      contextTokensUpperBound: forwardedBody.length,
+      reservedUsd: estimatedWorstCaseUsd,
+      startedAt,
+    });
     let result = {
       streamOutcome: "truncated",
       usage: null,
@@ -827,21 +922,16 @@ async function main() {
         incoming.method ?? "POST",
         requestHeaders(incoming.headers, forwardedBody.length),
         forwardedBody,
+        streamHardDeadlineMs,
       );
       const status = upstream.statusCode ?? 502;
       result =
         rewritten.stream === true && status < 400
-          ? await forwardStreaming(
-              upstream,
-              outgoing,
-              classifyStream,
-              status,
-              {
-                path: responseSpoolPath,
-                write: (bytes) => appendFileSync(responseSpoolPath, bytes),
-                close: () => undefined,
-              },
-            )
+          ? await forwardStreaming(upstream, outgoing, classifyStream, status, {
+              path: responseSpoolPath,
+              write: (bytes) => appendFileSync(responseSpoolPath, bytes),
+              close: () => undefined,
+            })
           : await forwardNonStreaming(upstream, outgoing, status);
     } catch {
       if (!outgoing.headersSent) {
@@ -853,11 +943,7 @@ async function main() {
 
     reservedUsd -= estimatedWorstCaseUsd;
     const usage = normalizeUsage(result.usage);
-    const leaseChargeUsd = usageCharge(
-      usage,
-      pricing,
-      estimatedWorstCaseUsd,
-    );
+    const leaseChargeUsd = usageCharge(usage, pricing, estimatedWorstCaseUsd);
     state.spentUsd += leaseChargeUsd;
     appendRow(spoolPath, {
       kind: "request_attempt",

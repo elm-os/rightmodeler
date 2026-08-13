@@ -9,7 +9,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && cp src/proxy/proxy-runtime.mjs dist/proxy/proxy-runtime.mjs",
+    "build": "tsc -p tsconfig.json && node src/proxy/build-runtime.mjs",
     "check-types": "tsc --noEmit",
     "check": "tsc --noEmit && vitest run"
   },

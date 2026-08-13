@@ -72,7 +72,10 @@ export async function startStubProvider({ port }) {
               message: `Received authorization: ${request.headers.authorization ?? "missing"}`,
             },
           },
-          hitHeaders,
+          {
+            ...hitHeaders,
+            "x-stub-reflected-auth": request.headers.authorization ?? "missing",
+          },
         );
         return;
       }
@@ -106,7 +109,19 @@ export async function startStubProvider({ port }) {
         return;
       }
 
-      if (body.stream === true) {
+      const holdMs = Number.parseInt(
+        request.headers["x-stub-hold-before-response-ms"] ?? "0",
+        10,
+      );
+      if (holdMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, holdMs));
+        if (response.destroyed) return;
+      }
+
+      if (
+        body.stream === true &&
+        request.headers["x-stub-enable-streaming"] === undefined
+      ) {
         json(
           response,
           400,
@@ -142,6 +157,62 @@ export async function startStubProvider({ port }) {
               justification: `Deterministic judge result ${digest}.`,
             })
           : `Deterministic reply ${digest}`;
+      if (body.stream === true) {
+        const streamContent = `${content} snowman: ☃`;
+        const midpoint = Math.floor(streamContent.length / 2);
+        response.writeHead(200, {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+          ...hitHeaders,
+        });
+        for (const part of [
+          streamContent.slice(0, midpoint),
+          streamContent.slice(midpoint),
+        ]) {
+          response.write(
+            `data: ${JSON.stringify({
+              id: `stub-${digest}`,
+              object: "chat.completion.chunk",
+              model: body.model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: part },
+                  finish_reason: null,
+                },
+              ],
+            })}\n\n`,
+          );
+        }
+        if (request.headers["x-stub-truncate-stream"] !== undefined) {
+          response.end();
+          return;
+        }
+        response.write(
+          `data: ${JSON.stringify({
+            id: `stub-${digest}`,
+            object: "chat.completion.chunk",
+            model: body.model,
+            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+            usage: {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: promptTokens + completionTokens,
+            },
+          })}\n\n`,
+        );
+        response.end("data: [DONE]\n\n");
+        return;
+      }
+      const usage = {
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: promptTokens + completionTokens,
+      };
+      if (request.headers["x-stub-echo-auth-in-usage"] !== undefined) {
+        usage.fixture_authorization =
+          request.headers.authorization ?? "missing";
+      }
       json(
         response,
         200,
@@ -159,13 +230,15 @@ export async function startStubProvider({ port }) {
               finish_reason: "stop",
             },
           ],
-          usage: {
-            prompt_tokens: promptTokens,
-            completion_tokens: completionTokens,
-            total_tokens: promptTokens + completionTokens,
-          },
+          usage,
         },
-        hitHeaders,
+        request.headers["x-stub-echo-auth-in-usage"] === undefined
+          ? hitHeaders
+          : {
+              ...hitHeaders,
+              "x-stub-reflected-auth":
+                request.headers.authorization ?? "missing",
+            },
       );
       return;
     }

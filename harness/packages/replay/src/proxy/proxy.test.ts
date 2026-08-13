@@ -12,12 +12,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  startEgressListener,
-  type EgressListener,
-} from "./egress.js";
+import { startEgressListener, type EgressListener } from "./egress.js";
 
 interface StubProvider {
   port: number;
@@ -60,6 +58,9 @@ const stubModuleUrl = new URL(
 ).href;
 const runtimePath = fileURLToPath(
   new URL("./proxy-runtime.mjs", import.meta.url),
+);
+const transportPath = fileURLToPath(
+  new URL("../transport/stream.ts", import.meta.url),
 );
 const apiKeyEnv = "REPLAY_PROXY_TEST_API_KEY";
 const credential = "credential-sentinel-that-must-never-persist";
@@ -123,8 +124,11 @@ function runtimeEnv(options: RuntimeOptions): NodeJS.ProcessEnv {
   };
 }
 
-async function startRuntime(env: NodeJS.ProcessEnv): Promise<Runtime> {
-  const child = spawn(process.execPath, [runtimePath], {
+async function startRuntime(
+  env: NodeJS.ProcessEnv,
+  scriptPath = runtimePath,
+): Promise<Runtime> {
+  const child = spawn(process.execPath, [scriptPath], {
     env,
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -178,11 +182,33 @@ async function startRuntime(env: NodeJS.ProcessEnv): Promise<Runtime> {
   return runtime;
 }
 
+async function createRuntimeWithTransport(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-runtime-"));
+  scratchDirectories.push(root);
+  const proxyDirectory = join(root, "proxy");
+  const transportDirectory = join(root, "transport");
+  await mkdir(proxyDirectory, { recursive: true });
+  await mkdir(transportDirectory, { recursive: true });
+  await writeFile(
+    join(proxyDirectory, "proxy-runtime.mjs"),
+    await readFile(runtimePath),
+  );
+  const transport = transpileModule(await readFile(transportPath, "utf8"), {
+    compilerOptions: {
+      module: ModuleKind.ESNext,
+      target: ScriptTarget.ES2022,
+    },
+  });
+  await writeFile(join(transportDirectory, "index.js"), transport.outputText);
+  return join(proxyDirectory, "proxy-runtime.mjs");
+}
+
 async function stopRuntime(
   runtime: Runtime,
   signal: NodeJS.Signals = "SIGTERM",
 ): Promise<void> {
-  if (runtime.child.exitCode !== null || runtime.child.signalCode !== null) return;
+  if (runtime.child.exitCode !== null || runtime.child.signalCode !== null)
+    return;
   const exited = new Promise<void>((resolve) =>
     runtime.child.once("exit", () => resolve()),
   );
@@ -281,6 +307,17 @@ function closeServer(server: Server): Promise<void> {
   );
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  message: string,
+): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(message);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 async function absoluteRequest(
   egress: EgressListener,
   target: string,
@@ -372,10 +409,13 @@ describe("Mode B proxy and host egress", () => {
     });
     const expectedBytes = Buffer.from(await direct.arrayBuffer());
     expect(actualBytes.equals(expectedBytes)).toBe(true);
+    expect(pair.stub.getHitCount()).toBe(3);
 
-    const attempts = (await readRows(spoolPath(pair.scratch))).filter(
-      (row) => row.kind === "request_attempt",
-    );
+    const allRows = await readRows(spoolPath(pair.scratch));
+    const attempts = allRows.filter((row) => row.kind === "request_attempt");
+    expect(
+      allRows.filter((row) => row.kind === "attempt_reservation"),
+    ).toHaveLength(2);
     expect(attempts).toHaveLength(2);
     expect(attempts[0]).toMatchObject({
       runId,
@@ -407,6 +447,50 @@ describe("Mode B proxy and host egress", () => {
     );
     expect(Date.parse(String(attempts[0]?.startedAt))).not.toBeNaN();
     expect(Date.parse(String(attempts[0]?.endedAt))).not.toBeNaN();
+  });
+
+  it("loads the production-relative transport bridge", async () => {
+    const pair = await startPair();
+    await stopRuntime(pair.runtime);
+    const built = await startRuntime(
+      pair.env,
+      await createRuntimeWithTransport(),
+    );
+
+    const streamed = await callProxy(
+      built,
+      "step-built",
+      "logical-built",
+      chatBody({ stream: true }),
+      { "x-stub-enable-streaming": "1" },
+    );
+    expect(streamed.status).toBe(200);
+    expect((await streamed.text()).endsWith("data: [DONE]\n\n")).toBe(true);
+    const truncated = await callProxy(
+      built,
+      "step-built",
+      "logical-truncated",
+      chatBody({ stream: true }),
+      {
+        "x-stub-enable-streaming": "1",
+        "x-stub-truncate-stream": "1",
+      },
+    );
+    expect(truncated.status).toBe(200);
+    expect((await truncated.text()).endsWith("data: [DONE]\n\n")).toBe(false);
+
+    const attempts = (await readRows(spoolPath(pair.scratch))).filter(
+      (row) => row.kind === "request_attempt",
+    );
+    expect(attempts[0]).toMatchObject({
+      streamOutcome: "completed",
+      usage: { outputTokens: 12 },
+    });
+    expect(attempts[1]).toMatchObject({
+      logicalCallId: "logical-truncated",
+      streamOutcome: "truncated",
+      usage: null,
+    });
   });
 
   it("fails closed without step correlation and never forwards", async () => {
@@ -473,6 +557,56 @@ describe("Mode B proxy and host egress", () => {
     ]);
   });
 
+  it("recovers an in-flight reservation as one truncated attempt after a kill", async () => {
+    const pair = await startPair();
+    const pending = callProxy(
+      pair.runtime,
+      "step-killed",
+      "logical-killed",
+      chatBody(),
+      { "x-stub-hold-before-response-ms": "5000" },
+    ).catch(() => undefined);
+    await waitFor(
+      () => pair.stub.getHitCount() === 1,
+      "Stub did not receive the in-flight request",
+    );
+    const reservationRows = await readRows(spoolPath(pair.scratch));
+    expect(reservationRows).toEqual([
+      expect.objectContaining({
+        kind: "attempt_reservation",
+        logicalCallId: "logical-killed",
+        attemptGroup: 1,
+      }),
+    ]);
+    const reservationId = reservationRows[0]?.attemptId;
+    await stopRuntime(pair.runtime, "SIGKILL");
+    await pending;
+
+    const restarted = await startRuntime(pair.env);
+    const retry = await callProxy(restarted, "step-killed", "logical-killed");
+    expect(retry.status).toBe(200);
+    await retry.arrayBuffer();
+
+    const rows = await readRows(spoolPath(pair.scratch));
+    const attempts = rows.filter((row) => row.kind === "request_attempt");
+    expect(attempts).toEqual([
+      expect.objectContaining({
+        attemptId: reservationId,
+        logicalCallId: "logical-killed",
+        attemptGroup: 1,
+        streamOutcome: "truncated",
+        recoveryReason: "proxy_restarted",
+      }),
+      expect.objectContaining({
+        logicalCallId: "logical-killed",
+        attemptGroup: 1,
+        streamOutcome: "completed",
+      }),
+    ]);
+    expect(attempts[0]?.leaseChargeUsd).toBe(attempts[0]?.reservedUsd);
+    expect(new Set(attempts.map((row) => row.attemptId)).size).toBe(2);
+  });
+
   it("blocks the second request when the case lease covers only one", async () => {
     const body = chatBody();
     const pricing = { input: 0.001, output: 0.002 };
@@ -484,11 +618,22 @@ describe("Mode B proxy and host egress", () => {
       maxUsd: oneRequestLease,
     });
 
-    const first = await callProxy(pair.runtime, "step-budget", "logical-1", body);
+    const first = await callProxy(
+      pair.runtime,
+      "step-budget",
+      "logical-1",
+      body,
+    );
     expect(first.status).toBe(200);
     await first.arrayBuffer();
     const afterFirst = pair.stub.getHitCount();
     expect(afterFirst).toBe(1);
+    const firstAttempt = (await readRows(spoolPath(pair.scratch))).find(
+      (row) => row.kind === "request_attempt",
+    );
+    expect(Number(firstAttempt?.leaseChargeUsd)).toBeLessThan(
+      Number(firstAttempt?.reservedUsd),
+    );
     const second = await callProxy(
       pair.runtime,
       "step-budget",
@@ -501,9 +646,14 @@ describe("Mode B proxy and host egress", () => {
       requiredLease?: { maxUsd?: number };
     };
     expect(refusal.requiredLease?.maxUsd).toBeGreaterThan(oneRequestLease);
+    expect(refusal.requiredLease?.maxUsd).toBeCloseTo(
+      Number(firstAttempt?.leaseChargeUsd) + oneRequestLease,
+    );
     expect(pair.stub.getHitCount()).toBe(afterFirst);
     const rows = await readRows(spoolPath(pair.scratch));
-    expect(rows.filter((row) => row.kind === "request_attempt")).toHaveLength(1);
+    expect(rows.filter((row) => row.kind === "request_attempt")).toHaveLength(
+      1,
+    );
     expect(rows.filter((row) => row.kind === "blocked")).toEqual([
       expect.objectContaining({
         reason: "budget",
@@ -578,6 +728,7 @@ describe("Mode B proxy and host egress", () => {
     expect(response.status).toBe(400);
     expect(errorBody).toContain("[REDACTED]");
     expect(errorBody).not.toContain(credential);
+    expect(response.headers.get("x-stub-reflected-auth")).toBeNull();
     const usageEcho = await callProxy(
       runtime,
       "step-secret",
@@ -586,6 +737,7 @@ describe("Mode B proxy and host egress", () => {
       { "x-stub-echo-auth-in-usage": "1" },
     );
     expect(usageEcho.status).toBe(200);
+    expect(usageEcho.headers.get("x-stub-reflected-auth")).toBeNull();
     await usageEcho.arrayBuffer();
     const persisted = await readTree(join(scratch, "proxy"));
     expect(persisted).not.toContain(credential);
@@ -631,7 +783,9 @@ describe("Mode B proxy and host egress", () => {
 
   it("fails startup loudly when the authoritative spool is malformed", async () => {
     process.env[apiKeyEnv] = credential;
-    const scratch = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-corrupt-"));
+    const scratch = await mkdtemp(
+      join(tmpdir(), "rightmodeler-proxy-corrupt-"),
+    );
     scratchDirectories.push(scratch);
     const stub = await startStub();
     const egress = await startEgress(stub);

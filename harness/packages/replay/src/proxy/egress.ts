@@ -19,15 +19,6 @@ const hopByHopHeaders = new Set([
   "upgrade",
 ]);
 
-const safeResponseHeaders = new Set([
-  "cache-control",
-  "content-length",
-  "content-type",
-  "date",
-  "retry-after",
-  "x-request-id",
-]);
-
 export interface EgressListenerOptions {
   providerBaseUrl: string;
   apiKeyEnv: string;
@@ -45,12 +36,17 @@ export interface EgressListener {
 function responseHeaders(
   headers: IncomingHttpHeaders,
   bodyLength?: number,
+  credential?: string,
 ): OutgoingHttpHeaders {
   const forwarded: OutgoingHttpHeaders = {};
   for (const [name, value] of Object.entries(headers)) {
     if (
       value !== undefined &&
-      safeResponseHeaders.has(name) &&
+      !hopByHopHeaders.has(name) &&
+      (credential === undefined ||
+        !(Array.isArray(value) ? value : [value]).some((item) =>
+          String(item).includes(credential),
+        )) &&
       !(bodyLength !== undefined && name === "content-length")
     ) {
       forwarded[name] = value;
@@ -69,6 +65,7 @@ function requestHeaders(
     if (
       value !== undefined &&
       !hopByHopHeaders.has(name) &&
+      name !== "accept-encoding" &&
       name !== "authorization" &&
       name !== "host"
     ) {
@@ -144,7 +141,10 @@ export async function startEgressListener(
         const status = upstreamResponse.statusCode ?? 502;
         upstreamResponse.once("error", () => outgoing.destroy());
         if (status < 400) {
-          outgoing.writeHead(status, responseHeaders(upstreamResponse.headers));
+          outgoing.writeHead(
+            status,
+            responseHeaders(upstreamResponse.headers, undefined, credential),
+          );
           upstreamResponse.pipe(outgoing);
           return;
         }
@@ -155,7 +155,7 @@ export async function startEgressListener(
           const body = redactCredential(Buffer.concat(chunks), credential);
           outgoing.writeHead(
             status,
-            responseHeaders(upstreamResponse.headers, body.length),
+            responseHeaders(upstreamResponse.headers, body.length, credential),
           );
           outgoing.end(body);
         });
@@ -176,7 +176,7 @@ export async function startEgressListener(
     incoming.pipe(upstream);
   });
 
-  const hostname = options.hostname ?? "127.0.0.1";
+  const hostname = options.hostname ?? "0.0.0.0";
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(options.port ?? 0, hostname, resolve);
@@ -186,7 +186,7 @@ export async function startEgressListener(
   return {
     hostname,
     port: address.port,
-    url: `http://${hostname}:${address.port}`,
+    url: `http://${hostname === "0.0.0.0" ? "127.0.0.1" : hostname}:${address.port}`,
     close: () => close(server),
   };
 }
