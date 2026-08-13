@@ -66,6 +66,7 @@ export type ApplyRefusalCode =
   | "no_confirmed_recommendation"
   | "release_gate_failed"
   | "inconsistent_evidence"
+  | "previously_rejected"
   | "stale_evidence"
   | "detached_head"
   | "stale_location"
@@ -219,7 +220,19 @@ function evidenceBody(
       const caseIds = verdict.caseIds.filter((caseId) =>
         caseIdPattern.test(caseId),
       );
-      return `| ${escapeCell(verdict.familyId)} | ${verdict.decision} | ${escapeCell(evaluators)} | ${cascadeStatus} | ${percent(verdict.worstCaseBound)} | ${escapeCell(renderedCaps || "none")} | ${caseIds.map((caseId) => `\`${caseId}\``).join(", ")} |`;
+      const renderedCaseIds = caseIds
+        .slice(0, 5)
+        .map((caseId) => `\`${caseId}\``);
+      if (caseIds.length > 5) {
+        renderedCaseIds.push(`and ${caseIds.length - 5} more`);
+      }
+      const invalidCaseIds = verdict.caseIds.length - caseIds.length;
+      if (invalidCaseIds > 0) {
+        renderedCaseIds.push(
+          `${invalidCaseIds} invalid case ID${invalidCaseIds === 1 ? "" : "s"} omitted`,
+        );
+      }
+      return `| ${escapeCell(verdict.familyId)} | ${verdict.decision} | ${escapeCell(evaluators)} | ${cascadeStatus} | ${percent(verdict.worstCaseBound)} | ${escapeCell(renderedCaps || "none")} | ${renderedCaseIds.join(", ")} |`;
     }),
     "",
   ].join("\n");
@@ -255,14 +268,14 @@ function reviewersFor(verdicts: readonly ApplyVerdict[]): ReviewerSet {
         reviewer,
       ]),
     ).values(),
-  ].slice(0, reviewerLimit);
+  ];
   return {
-    reviewers: unique.flatMap(({ kind, value }) =>
-      kind === "user" ? [value] : [],
-    ),
-    teamReviewers: unique.flatMap(({ kind, value }) =>
-      kind === "team" ? [value] : [],
-    ),
+    reviewers: unique
+      .flatMap(({ kind, value }) => (kind === "user" ? [value] : []))
+      .slice(0, reviewerLimit),
+    teamReviewers: unique
+      .flatMap(({ kind, value }) => (kind === "team" ? [value] : []))
+      .slice(0, reviewerLimit),
   };
 }
 
@@ -327,29 +340,95 @@ async function readLifecycleEvents(store: Store): Promise<LifecycleEvent[]> {
   );
 }
 
-function openPullRequest(
+function recordedReviewers(
   events: readonly LifecycleEvent[],
-  runSpecDigest: string,
-): { prNumber: number; branch?: string; title?: string } | null {
-  const matching = events.filter(
-    (event) => event.runSpecDigest === runSpecDigest,
-  );
-  const terminalPulls = new Set(
-    matching.flatMap((event) =>
-      event.prNumber !== null &&
-      (event.kind === "pr_closed_rejected" || event.kind === "pr_merged")
-        ? [event.prNumber]
-        : [],
-    ),
-  );
-  const opened = [...matching]
+  prNumber: number,
+): ReviewerSet | null {
+  const requested = [...events]
     .reverse()
     .find(
       (event) =>
-        event.kind === "pr_opened" &&
-        event.prNumber !== null &&
-        !terminalPulls.has(event.prNumber),
+        event.kind === "review_requested" && event.prNumber === prNumber,
     );
+  const detail = requested === undefined ? undefined : requested.detail;
+  if (
+    typeof detail !== "object" ||
+    detail === null ||
+    Array.isArray(detail) ||
+    !Array.isArray(detail.reviewers) ||
+    !detail.reviewers.every((reviewer) => typeof reviewer === "string") ||
+    !Array.isArray(detail.teamReviewers) ||
+    !detail.teamReviewers.every((reviewer) => typeof reviewer === "string")
+  ) {
+    return null;
+  }
+  return {
+    reviewers: detail.reviewers,
+    teamReviewers: detail.teamReviewers,
+  };
+}
+
+function existingPullRequest(
+  events: readonly LifecycleEvent[],
+  runSpecDigest: string,
+):
+  | {
+      status: "existing";
+      prNumber: number;
+      branch?: string;
+      title?: string;
+      reviewerSet?: ReviewerSet;
+    }
+  | { status: "rejected"; prNumber: number; detail: JsonValue }
+  | null {
+  const matching = events.filter(
+    (event) => event.runSpecDigest === runSpecDigest,
+  );
+  const terminal = [...matching]
+    .reverse()
+    .find(
+      (event) =>
+        event.kind === "pr_closed_rejected" || event.kind === "pr_merged",
+    );
+  if (terminal?.prNumber !== null && terminal?.prNumber !== undefined) {
+    if (terminal.kind === "pr_closed_rejected") {
+      return {
+        status: "rejected",
+        prNumber: terminal.prNumber,
+        detail: terminal.detail,
+      };
+    }
+    const opened = matching.find(
+      (event) =>
+        event.kind === "pr_opened" && event.prNumber === terminal.prNumber,
+    );
+    const detail =
+      typeof opened?.detail === "object" &&
+      opened.detail !== null &&
+      !Array.isArray(opened.detail)
+        ? opened.detail
+        : undefined;
+    if (
+      opened === undefined ||
+      typeof detail?.branch !== "string" ||
+      typeof detail.title !== "string"
+    ) {
+      throw new Error(
+        `Merged run ${runSpecDigest} has no complete pr_opened lifecycle fact`,
+      );
+    }
+    const reviewerSet = recordedReviewers(matching, terminal.prNumber);
+    return {
+      status: "existing",
+      prNumber: terminal.prNumber,
+      branch: detail.branch,
+      title: detail.title,
+      ...(reviewerSet === null ? {} : { reviewerSet }),
+    };
+  }
+  const opened = [...matching]
+    .reverse()
+    .find((event) => event.kind === "pr_opened" && event.prNumber !== null);
   if (opened === undefined || opened.prNumber === null) return null;
   const detail =
     typeof opened.detail === "object" &&
@@ -358,6 +437,7 @@ function openPullRequest(
       ? opened.detail
       : {};
   return {
+    status: "existing",
     prNumber: opened.prNumber,
     ...(typeof detail.branch === "string" ? { branch: detail.branch } : {}),
     ...(typeof detail.title === "string" ? { title: detail.title } : {}),
@@ -414,6 +494,14 @@ export async function applySwaps({
   readonly verdicts: readonly ApplyVerdict[];
   readonly dryRun: boolean;
 }): Promise<ApplyResult> {
+  if (conventions.warnings.length > 0) {
+    return refusal(
+      "host_conventions_unreadable",
+      "One or more host repository instructions could not be read unambiguously.",
+      { warnings: conventions.warnings },
+    );
+  }
+
   const selected = verdicts
     .filter(
       ({ verdict, cascadeStatus }) =>
@@ -469,10 +557,17 @@ export async function applySwaps({
   const branch = branchName(conventions, familyIds, runSpecDigest);
   const title = changeTitle(conventions, familyIds);
   const reviewerSet = reviewersFor(selected);
-  const existing = openPullRequest(
+  const existing = existingPullRequest(
     await readLifecycleEvents(store),
     runSpecDigest,
   );
+  if (existing?.status === "rejected") {
+    return refusal(
+      "previously_rejected",
+      "This evidence and swap set was previously rejected and requires new evidence before it can be proposed again.",
+      { prNumber: existing.prNumber, rejection: existing.detail },
+    );
+  }
   if (existing !== null) {
     return {
       status: "existing",
@@ -480,7 +575,7 @@ export async function applySwaps({
       prNumber: existing.prNumber,
       branch: existing.branch ?? branch,
       title: existing.title ?? title,
-      ...reviewerSet,
+      ...(existing.reviewerSet ?? reviewerSet),
     };
   }
 
@@ -554,14 +649,6 @@ export async function applySwaps({
   }
   const finalLint = lintSwapDiff({ files: lintFiles(formatted.files) });
   if (!finalLint.pass) return lintRefusal(finalLint.violations);
-
-  if (conventions.warnings.length > 0) {
-    return refusal(
-      "host_conventions_unreadable",
-      "One or more host repository instructions could not be read unambiguously.",
-      { warnings: conventions.warnings },
-    );
-  }
 
   if (
     reviewerSet.reviewers.length === 0 &&

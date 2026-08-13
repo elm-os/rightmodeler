@@ -540,6 +540,32 @@ describe("topologicalRecords", () => {
   });
 });
 
+describe("section 18 autonomy boundary", () => {
+  it("has no approval helper in apply or watch production paths", async () => {
+    const sourceRoot = fileURLToPath(new URL(".", import.meta.url));
+    const matches: string[] = [];
+    for (const directory of ["apply", "watch"]) {
+      for (const entry of await readdir(join(sourceRoot, directory), {
+        withFileTypes: true,
+      })) {
+        if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
+        if (entry.name.endsWith(".test.ts")) continue;
+        const content = await readFile(
+          join(sourceRoot, directory, entry.name),
+          "utf8",
+        );
+        for (const [index, line] of content.split("\n").entries()) {
+          if (/approval/i.test(line)) {
+            matches.push(`${directory}/${entry.name}:${index + 1}:${line}`);
+          }
+        }
+      }
+    }
+
+    expect(matches).toEqual([]);
+  });
+});
+
 describe("built CLI pipeline", () => {
   it("uses deterministic judge output and exposes seeded position disagreement", async () => {
     const stub = await startStub();
@@ -1098,6 +1124,8 @@ describe("built CLI pipeline", () => {
       expect(jsonOutput(afterMerge)).toMatchObject({
         status: "existing",
         prNumber: 1,
+        reviewers: [],
+        teamReviewers: ["models"],
       });
       expect(pullWrites()).toHaveLength(1);
 

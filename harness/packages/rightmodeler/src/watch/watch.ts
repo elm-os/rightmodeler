@@ -10,6 +10,7 @@ import {
   type LifecycleEvent,
   type Store,
 } from "@rightmodeler/core";
+import { z } from "zod";
 
 import type { ApplyVerdict } from "../apply/index.js";
 import type { CapturedConventions } from "../enrich/index.js";
@@ -32,7 +33,21 @@ import {
 } from "./lock.js";
 
 const caseIdPattern = /^[0-9a-f]{64}$/;
-const openQuestionPattern = /\bopen\s+questions?\b/i;
+const storedVerdictSchema = z.looseObject({
+  familyId: z.string(),
+  reproof_requested: z.boolean().optional(),
+  reproof_request_ids: z.array(z.string()).optional(),
+});
+const ciFailureDetailSchema = z.looseObject({
+  category: z.literal("ci_failure"),
+  headSha: z.string(),
+  failingChecks: z.array(
+    z.looseObject({
+      id: z.number(),
+      completedAt: z.string(),
+    }),
+  ),
+});
 
 export type WatchActionType =
   | "evidence_replied"
@@ -85,6 +100,7 @@ interface Question {
   readonly id: number;
   readonly eventKey: string;
   readonly body: string;
+  readonly user: string;
   readonly path?: string;
   readonly createdAt: string;
 }
@@ -166,6 +182,13 @@ function evidenceReply(verdicts: readonly ApplyVerdict[]): string {
       const cases = verdict.caseIds.filter((caseId) =>
         caseIdPattern.test(caseId),
       );
+      const invalidCaseIds = verdict.caseIds.length - cases.length;
+      const renderedCases = cases.map((caseId) => `\`${caseId}\``);
+      if (invalidCaseIds > 0) {
+        renderedCases.push(
+          `${invalidCaseIds} invalid case ID${invalidCaseIds === 1 ? "" : "s"} omitted`,
+        );
+      }
       const table = [
         `### ${verdict.familyId}`,
         "",
@@ -173,7 +196,7 @@ function evidenceReply(verdicts: readonly ApplyVerdict[]): string {
         "| --- | --- | --- | --- | --- | --- | --- |",
         ...verdict.evaluatorKinds.map(
           (evaluator) =>
-            `| ${verdict.decision} | ${escapeCell(evaluator.evaluatorKind)} | ${evaluator.passes} | ${evaluator.trials} | ${percent(evaluator.passRate)} | ${percent(evaluator.worstCaseBound)} | ${cases.map((caseId) => `\`${caseId}\``).join(", ")} |`,
+            `| ${verdict.decision} | ${escapeCell(evaluator.evaluatorKind)} | ${evaluator.passes} | ${evaluator.trials} | ${percent(evaluator.passRate)} | ${percent(evaluator.worstCaseBound)} | ${renderedCases.join(", ")} |`,
         ),
         "",
         `Caps: ${caps.map(({ name, value }) => `${name} ${value}`).join(", ") || "none"}`,
@@ -216,6 +239,7 @@ function questions(
         id: review.id,
         eventKey: `review-submission:${prNumber}:${review.id}`,
         body: review.body,
+        user: review.user,
         createdAt: review.submittedAt ?? "",
       })),
     ...reviewComments.map((comment) => ({
@@ -223,6 +247,7 @@ function questions(
       id: comment.id,
       eventKey: `comment:${prNumber}:${comment.id}`,
       body: comment.body,
+      user: comment.user,
       path: comment.path,
       createdAt: comment.createdAt,
     })),
@@ -231,10 +256,16 @@ function questions(
       id: comment.id,
       eventKey: `comment:${prNumber}:${comment.id}`,
       body: comment.body,
+      user: comment.user,
       createdAt: comment.createdAt,
     })),
   ]
-    .filter(({ body }) => openQuestionPattern.test(body))
+    .filter(
+      ({ body, user }) =>
+        body.trim() !== "" &&
+        user !== "rightmodeler-bot" &&
+        !user.endsWith("[bot]"),
+    )
     .sort(
       (left, right) =>
         compareText(left.createdAt, right.createdAt) ||
@@ -244,24 +275,11 @@ function questions(
 }
 
 function parseStoredVerdict(value: unknown, familyId: string) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`Stored verdict for ${familyId} is malformed`);
-  }
-  const verdict = value as Record<string, unknown>;
+  const verdict = storedVerdictSchema.parse(value);
   if (verdict.familyId !== familyId) {
     throw new Error(`Stored verdict for ${familyId} has the wrong familyId`);
   }
-  const requestIds = verdict.reproof_request_ids;
-  if (
-    requestIds !== undefined &&
-    (!Array.isArray(requestIds) ||
-      requestIds.some((requestId) => typeof requestId !== "string"))
-  ) {
-    throw new Error(
-      `Stored verdict for ${familyId} has malformed reproof_request_ids`,
-    );
-  }
-  return { verdict, requestIds: (requestIds ?? []) as string[] };
+  return { verdict, requestIds: verdict.reproof_request_ids ?? [] };
 }
 
 function verdictWithoutReproofMetadata(
@@ -351,48 +369,19 @@ function checkIdentity(check: {
   return `${check.id}:${check.completedAt ?? ""}`;
 }
 
-function previousFailingCheckPasses(
+function previousFailingCheckObservations(
   events: readonly LifecycleEvent[],
   headSha: string,
 ): Map<string, number> {
   const identities = new Map<string, number>();
   for (const event of events) {
-    const detail = detailRecord(event.detail);
-    if (detail?.category !== "ci_failure" || detail.headSha !== headSha) {
+    const detail = ciFailureDetailSchema.safeParse(event.detail);
+    if (!detail.success || detail.data.headSha !== headSha) {
       continue;
     }
-    if (!Array.isArray(detail.failingChecks)) {
-      throw new Error(
-        `Lifecycle event ${event.eventId} has malformed failingChecks`,
-      );
-    }
-    if (
-      typeof detail.watchFenceToken !== "number" ||
-      !Number.isSafeInteger(detail.watchFenceToken) ||
-      detail.watchFenceToken < 1
-    ) {
-      throw new Error(
-        `Lifecycle event ${event.eventId} has malformed watchFenceToken`,
-      );
-    }
-    for (const value of detail.failingChecks) {
-      const check = detailRecord(value);
-      if (
-        typeof check?.id !== "number" ||
-        !Number.isSafeInteger(check.id) ||
-        check.id < 1 ||
-        typeof check.name !== "string" ||
-        typeof check.completedAt !== "string"
-      ) {
-        throw new Error(
-          `Lifecycle event ${event.eventId} has malformed failingChecks`,
-        );
-      }
+    for (const check of detail.data.failingChecks) {
       const identity = `${check.id}:${check.completedAt}`;
-      identities.set(
-        identity,
-        Math.max(identities.get(identity) ?? 0, detail.watchFenceToken),
-      );
+      identities.set(identity, (identities.get(identity) ?? 0) + 1);
     }
   }
   return identities;
@@ -408,9 +397,6 @@ function commentMarker(handledEventKey: string): string {
 }
 
 export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
-  if (!Number.isSafeInteger(input.prNumber) || input.prNumber < 1) {
-    throw new Error("prNumber must be a positive integer");
-  }
   const acquired = await claimWatchLock(input);
   if (acquired === null) {
     return {
@@ -420,7 +406,6 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
       actions: [],
     };
   }
-  const passFenceToken = acquired.fenceToken;
   let claim: WatchLockClaim = acquired;
 
   const actions: WatchAction[] = [];
@@ -633,6 +618,7 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
         [review.body, ...attached.map(({ body }) => body)],
         attached.map(({ path }) => path),
       );
+      await renew();
       await markForReproof(input.store, selected, key);
       const familyIds = selected.map(({ verdict }) => verdict.familyId);
       const postedCommentId = await comment(
@@ -666,6 +652,7 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
     if (base.sha !== context.evidence.revision) {
       const key = `base:${input.prNumber}:${base.sha}`;
       if (!handled.has(key)) {
+        await renew();
         await markForReproof(input.store, prVerdicts, key);
         const familyIds = prVerdicts.map(({ verdict }) => verdict.familyId);
         const postedCommentId = await comment(
@@ -712,15 +699,13 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
       );
     if (failingChecks.length > 0) {
       const failingNames = [...new Set(failingChecks.map(({ name }) => name))];
-      const priorChecks = previousFailingCheckPasses(events, pull.head.sha);
-      const persistent = failingChecks.filter((check) => {
-        const previousPass = priorChecks.get(checkIdentity(check));
-        return (
-          previousPass !== undefined &&
-          passFenceToken - previousPass >= 1 &&
-          passFenceToken - previousPass <= 2
-        );
-      });
+      const priorChecks = previousFailingCheckObservations(
+        events,
+        pull.head.sha,
+      );
+      const persistent = failingChecks.filter(
+        (check) => (priorChecks.get(checkIdentity(check)) ?? 0) >= 1,
+      );
       const key = ciEventKey(
         input.prNumber,
         pull.head.sha,
@@ -737,7 +722,6 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
           failurePass: 1,
           headSha: pull.head.sha,
           checkNames: failingNames,
-          watchFenceToken: passFenceToken,
           failingChecks: failingChecks.map(({ id, name, completedAt }) => ({
             id,
             name,
@@ -770,7 +754,6 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
           failurePass: 2,
           headSha: pull.head.sha,
           checkNames: persistentNames,
-          watchFenceToken: passFenceToken,
           failingChecks: persistent.map(({ id, name, completedAt }) => ({
             id,
             name,

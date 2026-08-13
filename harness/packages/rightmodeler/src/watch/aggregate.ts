@@ -5,6 +5,7 @@ import {
   type LifecycleEvent,
   type Store,
 } from "@rightmodeler/core";
+import { z } from "zod";
 
 export type PrPhase =
   "open" | "reproving" | "closed_rejected" | "merged" | "ended";
@@ -39,12 +40,7 @@ function handledEventKey(event: LifecycleEvent): string | undefined {
   ) {
     return undefined;
   }
-  if (typeof event.detail.handledEventKey !== "string") {
-    throw new Error(
-      `Lifecycle event ${event.eventId} has a malformed handledEventKey`,
-    );
-  }
-  return event.detail.handledEventKey;
+  return z.string().parse(event.detail.handledEventKey);
 }
 
 export async function readPrLifecycleEvents({

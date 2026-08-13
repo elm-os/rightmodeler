@@ -12,6 +12,7 @@ import {
   verdictKey,
   type LifecycleEvent,
   type StepRecord,
+  type Store,
 } from "@rightmodeler/core";
 import {
   GATE_IDS,
@@ -313,15 +314,35 @@ async function createHarness(): Promise<Harness> {
   };
 }
 
-function watchInput(harness: Harness, githubClient = harness.githubClient) {
+function watchInput(
+  harness: Harness,
+  githubClient = harness.githubClient,
+  store: Store = harness.store,
+) {
   return {
-    store: harness.store,
+    store,
     githubClient,
     ...repository,
     repoDir: harness.root,
     prNumber: harness.prNumber,
     verdicts: harness.verdicts,
     conventions,
+  };
+}
+
+function fenceOutBeforeVerdictMutation(store: FsStore): Store {
+  let watchLockWrites = 0;
+  return {
+    get: (key) => store.get(key),
+    list: (prefix) => store.list(prefix),
+    putImmutable: (key, body) => store.putImmutable(key, body),
+    compareAndSwap(key, expectedVersion, body, fenceToken) {
+      if (key.includes("/watch-locks/")) {
+        watchLockWrites += 1;
+        if (watchLockWrites === 4) return Promise.resolve(false);
+      }
+      return store.compareAndSwap(key, expectedVersion, body, fenceToken);
+    },
   };
 }
 
@@ -389,19 +410,27 @@ describe("watchOnce", () => {
     expect((await watchOnce(watchInput(harness))).status).toBe("quiet");
   });
 
-  it("answers a seeded issue-comment question once", async () => {
+  it("answers an unhandled human issue comment without magic wording", async () => {
     const harness = await createHarness();
     await control(harness.stub, "/__test/issue-comments", {
       ...repository,
       pullNumber: harness.prNumber,
       author: "owner",
-      body: "Open question for summarize: which cases were evaluated?",
+      body: "why is the bound only 0.78?",
     });
 
     await watchOnce(watchInput(harness));
     await watchOnce(watchInput(harness));
 
     expect(postedComments(harness.stub, harness.prNumber)).toHaveLength(1);
+    const body = String(
+      (
+        postedComments(harness.stub, harness.prNumber)[0]?.body as
+          Record<string, unknown> | undefined
+      )?.body,
+    );
+    expect(body).toContain("1 invalid case ID omitted");
+    expect(body).not.toContain("private-case-content");
   });
 
   it("recovers a posted evidence reply when its first response is lost", async () => {
@@ -473,6 +502,44 @@ describe("watchOnce", () => {
       ),
     ).toHaveLength(1);
   });
+
+  it.each(["changes_requested", "base_branch_advanced"] as const)(
+    "renews its fence before a %s verdict mutation",
+    async (reason) => {
+      const harness = await createHarness();
+      if (reason === "changes_requested") {
+        await control(harness.stub, "/__test/reviews", {
+          ...repository,
+          pullNumber: harness.prNumber,
+          user: "owner",
+          state: "CHANGES_REQUESTED",
+          body: "Please re-prove this result.",
+        });
+      } else {
+        await control(harness.stub, "/__test/advance-base", {
+          ...repository,
+          branch: "main",
+          tree: { README: "advanced\n" },
+        });
+      }
+      const fencedStore = fenceOutBeforeVerdictMutation(harness.store);
+
+      await expect(
+        watchOnce(watchInput(harness, harness.githubClient, fencedStore)),
+      ).rejects.toThrow("Lost the fenced PR watch lock");
+
+      const stored = await harness.store.get(verdictKey("project", familyId));
+      expect(stored).not.toBeNull();
+      expect(
+        JSON.parse(Buffer.from(stored!.body).toString("utf8")),
+      ).not.toHaveProperty("reproof_requested");
+      expect(
+        (await lifecycleEvents(harness.store)).filter(
+          ({ kind }) => kind === "reproof_started",
+        ),
+      ).toEqual([]);
+    },
+  );
 
   it("waits on one CI failure pass and closes after the same failure persists", async () => {
     const harness = await createHarness();
@@ -562,7 +629,7 @@ describe("watchOnce", () => {
     ).resolves.toMatchObject({ state: "closed" });
   });
 
-  it("requires consecutive observations when a check disappears for one pass", async () => {
+  it("counts persisted failure observations when a check disappears for one pass", async () => {
     const harness = await createHarness();
     let checkPass = 0;
     const intermittentClient: GithubClient = {
@@ -591,14 +658,6 @@ describe("watchOnce", () => {
     expect(
       (await watchOnce(watchInput(harness, intermittentClient))).status,
     ).toBe("quiet");
-    await watchOnce(watchInput(harness, intermittentClient));
-    await expect(
-      harness.githubClient.getPullRequest({
-        ...repository,
-        pullNumber: harness.prNumber,
-      }),
-    ).resolves.toMatchObject({ state: "open" });
-
     await watchOnce(watchInput(harness, intermittentClient));
     await expect(
       harness.githubClient.getPullRequest({

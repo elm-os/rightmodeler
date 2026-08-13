@@ -423,18 +423,7 @@ export interface WatchPipelineOptions {
   readonly prNumber: number;
 }
 
-export type RunApplyResult =
-  | ApplyResult
-  | {
-      readonly status: "refused";
-      readonly reasons: readonly [
-        {
-          readonly code: "previously_rejected";
-          readonly message: string;
-          readonly detail: JsonValue;
-        },
-      ];
-    };
+export type RunApplyResult = ApplyResult;
 
 interface FamilyOutcome {
   familyId: string;
@@ -582,13 +571,6 @@ export async function runApply(
 ): Promise<RunApplyResult> {
   const context = createHeadlessContext(options);
   const prepared = await prepareApply(context);
-  const terminal = await terminalApplyResult({
-    store: context.store,
-    owner: options.owner,
-    repo: options.githubRepo,
-    verdicts: prepared.verdicts,
-  });
-  if (terminal !== null) return terminal;
   return applySwaps({
     store: context.store,
     repoDir: context.repo,
@@ -716,132 +698,6 @@ async function prepareApply(context: PipelineContext): Promise<{
   return {
     verdicts,
     conventions: await captureConventions({ repoDir: context.repo }),
-  };
-}
-
-function applyRunSpecDigest(
-  owner: string,
-  repo: string,
-  verdicts: readonly ApplyVerdict[],
-): string | null {
-  const selected = verdicts
-    .filter(
-      ({ verdict, cascadeStatus }) =>
-        verdict.decision === "recommend" &&
-        (cascadeStatus === "confirmed" || cascadeStatus === "not-required"),
-    )
-    .sort((left, right) =>
-      compareText(left.verdict.familyId, right.verdict.familyId),
-    );
-  if (selected.length === 0) return null;
-  const evidence = selected[0]!.evidence;
-  const gatePolicyVersion = selected[0]!.verdict.gatePolicyVersion;
-  if (
-    selected.some(
-      ({ verdict, releaseGates, evidence: candidate }) =>
-        releaseGates.some(({ pass }) => !pass) ||
-        candidate.revision !== evidence.revision ||
-        candidate.corpusVersionId !== evidence.corpusVersionId ||
-        verdict.gatePolicyVersion !== gatePolicyVersion,
-    )
-  ) {
-    return null;
-  }
-  const swapSet = selected
-    .flatMap(({ verdict, swaps }) =>
-      swaps.map(({ stepRecord, fromModel, toModel }) => ({
-        familyId: verdict.familyId,
-        stepId: stepRecord.stepId,
-        path: stepRecord.callSite.path,
-        fromModel,
-        toModel,
-      })),
-    )
-    .sort(
-      (left, right) =>
-        compareText(left.familyId, right.familyId) ||
-        compareText(left.path, right.path) ||
-        compareText(left.stepId, right.stepId) ||
-        compareText(left.fromModel, right.fromModel) ||
-        compareText(left.toModel, right.toModel),
-    );
-  return computeRunSpecDigest({
-    repo: `${owner}/${repo}`,
-    evidenceRevision: evidence.revision,
-    swapSet,
-    corpusVersionId: evidence.corpusVersionId,
-  });
-}
-
-async function terminalApplyResult({
-  store,
-  owner,
-  repo,
-  verdicts,
-}: {
-  readonly store: Store;
-  readonly owner: string;
-  readonly repo: string;
-  readonly verdicts: readonly ApplyVerdict[];
-}): Promise<RunApplyResult | null> {
-  const runSpecDigest = applyRunSpecDigest(owner, repo, verdicts);
-  if (runSpecDigest === null) return null;
-  const matching = (await readFacts(store, PROJECT_ID))
-    .flatMap((fact) => {
-      const parsed = lifecycleEventSchema.safeParse(fact);
-      return parsed.success && parsed.data.runSpecDigest === runSpecDigest
-        ? [parsed.data]
-        : [];
-    })
-    .sort(
-      (left, right) =>
-        compareText(left.createdAt, right.createdAt) ||
-        lifecycleKindOrder[left.kind] - lifecycleKindOrder[right.kind] ||
-        compareText(left.eventId, right.eventId),
-    );
-  const terminal = [...matching]
-    .reverse()
-    .find(({ kind }) => kind === "pr_closed_rejected" || kind === "pr_merged");
-  if (terminal === undefined || terminal.prNumber === null) return null;
-  if (terminal.kind === "pr_closed_rejected") {
-    return {
-      status: "refused",
-      reasons: [
-        {
-          code: "previously_rejected",
-          message:
-            "This evidence and swap set was previously rejected and requires new evidence before it can be proposed again.",
-          detail: jsonValue({
-            prNumber: terminal.prNumber,
-            rejection: terminal.detail,
-          }),
-        },
-      ],
-    };
-  }
-
-  const opened = matching.find(
-    (event) =>
-      event.kind === "pr_opened" && event.prNumber === terminal.prNumber,
-  );
-  const detail = opened === undefined ? undefined : objectValue(opened.detail);
-  if (
-    opened === undefined ||
-    typeof detail?.branch !== "string" ||
-    typeof detail.title !== "string"
-  ) {
-    throw new Error(
-      `Merged run ${runSpecDigest} has no complete pr_opened lifecycle fact`,
-    );
-  }
-  return {
-    status: "existing",
-    runSpecDigest,
-    prNumber: terminal.prNumber,
-    branch: detail.branch,
-    title: detail.title,
-    reviewers: [],
-    teamReviewers: [],
   };
 }
 
@@ -2556,12 +2412,6 @@ function modeBProviderBaseUrl(baseUrl: string): string {
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
-}
-
-function objectValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }
 
 function reportPath(context: PipelineContext): string {

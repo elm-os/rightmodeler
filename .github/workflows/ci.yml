@@ -13,6 +13,8 @@ concurrency:
 
 jobs:
   ci:
+    # A branch push already checks same-repository changes; pull_request CI is for forks.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -48,16 +50,10 @@ jobs:
       - name: Check
         run: pnpm check
 
-  # Fork pull requests can alter executable code, so they must never reach a job that can access brokered credentials.
-  # Before adding any credential, split this into an unprivileged producer and a trusted consumer that accepts only non-executable artifacts.
-  guarded-live:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+  unprivileged-artifacts:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Create this environment in repository settings with required reviewers before adding any secret to it.
-    environment: harness-live
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,5 +84,51 @@ jobs:
           RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
           DOCKERFILE
 
-      - name: Check replay Docker suite
-        run: pnpm --filter @rightmodeler/replay check
+      - name: Check
+        run: pnpm check
+
+      - name: Write inert check result
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p guarded-input
+          node -e 'require("node:fs").writeFileSync("guarded-input/check-result.json", JSON.stringify({headSha: process.env.HEAD_SHA, check: "passed"}) + "\n")'
+
+      - name: Upload inert check result
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: guarded-input
+          path: guarded-input/check-result.json
+          if-no-files-found: error
+
+  # This environment may gain brokered credentials later. It checks out only the base revision
+  # and treats the pull-request artifact as inert data; no pull-request-controlled code runs here.
+  guarded-live:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: unprivileged-artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: harness-live
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-base
+
+      - name: Download inert check result
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: guarded-input
+          path: guarded-input
+
+      # Replace this validation with a committed base-repository consumer when live inputs exist.
+      - name: Validate inert check result
+        working-directory: trusted-base
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.base.sha }}"
+          node -e 'const value = JSON.parse(require("node:fs").readFileSync("../guarded-input/check-result.json", "utf8")); if (value.check !== "passed" || value.headSha !== process.env.EXPECTED_HEAD_SHA || Object.keys(value).sort().join(",") !== "check,headSha") process.exit(1)'

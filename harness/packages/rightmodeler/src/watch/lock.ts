@@ -61,9 +61,6 @@ export async function claimWatchLock({
         );
   if (current.status === "held") {
     const heartbeat = Date.parse(current.heartbeatAt);
-    if (Number.isNaN(heartbeat)) {
-      throw new Error("PR watch lock has an invalid heartbeatAt timestamp");
-    }
     if (now.getTime() - heartbeat <= staleAfterMs) return null;
   }
 

@@ -365,9 +365,9 @@ describe("formatWithHostFormatter", () => {
     });
   });
 
-  it("preserves earlier formatted files when a later file conflicts", async () => {
+  it("blocks a formatter reformat of the swapped line", async () => {
     const first = await fixtureDiff("src/string.ts");
-    const firstCandidate: SwapDiffFile = {
+    const candidate: SwapDiffFile = {
       path: "src/first.ts",
       before: 'const MODEL="acme/large-1"\n',
       after: 'const MODEL="acme/small-1"\n',
@@ -380,37 +380,19 @@ describe("formatWithHostFormatter", () => {
         },
       ],
     };
-    const secondStepRecord = scan(
-      first.root,
-      createMatcherRegistry(),
-      "project",
-    ).find(({ callSite }) => callSite.path === "src/misformatted.ts")!;
-    const [second] = buildSwapDiff({
-      repoDir: first.root,
-      projectId: "project",
-      swaps: [
-        {
-          stepRecord: secondStepRecord,
-          fromModel: "acme/large-1",
-          toModel: "acme/small-1",
-        },
-      ],
-    });
 
     const result = await formatWithHostFormatter({
       repoDir: first.root,
       conventions: {
         formatter: { kind: "prettier", configPath: null },
       },
-      files: [firstCandidate, second as SwapDiffFile],
+      files: [candidate],
     });
 
-    expect(result.files[0]?.after).toBe('const MODEL = "acme/small-1";\n');
-    expect(result.files[0]).not.toEqual(firstCandidate);
-    expect(result.files[1]).toEqual(second);
-    expect(result.note).toBe("formatted");
+    expect(result.files).toEqual([candidate]);
+    expect(result.note).toBeUndefined();
     expect(result.blocker).toEqual({
-      path: "src/misformatted.ts",
+      path: "src/first.ts",
       line: 1,
       reason: "formatter_conflict",
     });

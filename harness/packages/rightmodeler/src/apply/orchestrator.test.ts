@@ -14,6 +14,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import {
+  canonicalJson,
+  factKey,
   factsPrefix,
   FsStore,
   lifecycleEventSchema,
@@ -417,9 +419,14 @@ describe("applySwaps", () => {
     expect(applied.title).toBe(
       `perf(models): swap ${harness.stepRecord.family}`,
     );
-    expect(applied.reviewers).toEqual(["alpha", "bravo", "charlie", "delta"]);
+    expect(applied.reviewers).toEqual([
+      "alpha",
+      "bravo",
+      "charlie",
+      "delta",
+      "echo",
+    ]);
     expect(applied.teamReviewers).toEqual(["platform"]);
-    expect(applied.reviewers.length + applied.teamReviewers.length).toBe(5);
 
     await expect(
       harness.githubClient.getRef({
@@ -466,6 +473,7 @@ describe("applySwaps", () => {
     expect(pull.body).toContain("corpus-version-9");
     for (const caseId of caseIds) expect(pull.body).toContain(caseId);
     expect(pull.body).not.toContain(caseContentMarker);
+    expect(pull.body).toContain("1 invalid case ID omitted");
 
     expect(
       harness.stub
@@ -555,6 +563,75 @@ describe("applySwaps", () => {
           ],
         },
       }),
+    ]);
+    expect(githubWrites(harness.stub)).toEqual([]);
+  });
+
+  it("refuses inconsistent evidence across selected families", async () => {
+    const harness = await createHarness();
+    const first = applyVerdict(harness);
+    const second = {
+      ...applyVerdict(harness),
+      evidence: { ...first.evidence, corpusVersionId: "different-corpus" },
+    };
+
+    const refused = requireRefused(await runApply(harness, [first, second]));
+
+    expect(refused.reasons.map(({ code }) => code)).toEqual([
+      "inconsistent_evidence",
+    ]);
+    expect(githubWrites(harness.stub)).toEqual([]);
+  });
+
+  it("refuses a detached target HEAD", async () => {
+    const harness = await createHarness();
+    await git(harness.repoDir, ["checkout", "--detach"]);
+
+    const refused = requireRefused(
+      await runApply(harness, [applyVerdict(harness)]),
+    );
+
+    expect(refused.reasons.map(({ code }) => code)).toEqual(["detached_head"]);
+    expect(githubWrites(harness.stub)).toEqual([]);
+  });
+
+  it("refuses unreadable host conventions before selecting a swap", async () => {
+    const harness = await createHarness();
+    const conventions: CapturedConventions = {
+      ...harness.conventions,
+      warnings: [{ name: "instruction_file_unreadable", path: "AGENTS.md" }],
+    };
+
+    const refused = requireRefused(
+      await applySwaps({
+        store: harness.store,
+        repoDir: harness.repoDir,
+        githubClient: harness.githubClient,
+        ...repository,
+        conventions,
+        verdicts: [],
+        dryRun: false,
+      }),
+    );
+
+    expect(refused.reasons.map(({ code }) => code)).toEqual([
+      "host_conventions_unreadable",
+    ]);
+    expect(githubWrites(harness.stub)).toEqual([]);
+  });
+
+  it("refuses a swap with no requestable owners", async () => {
+    const harness = await createHarness();
+    const input = applyVerdict(harness);
+    const withoutOwners: ApplyVerdict = {
+      ...input,
+      blastRadius: { ...input.blastRadius, owners: [] },
+    };
+
+    const refused = requireRefused(await runApply(harness, [withoutOwners]));
+
+    expect(refused.reasons.map(({ code }) => code)).toEqual([
+      "no_requestable_reviewers",
     ]);
     expect(githubWrites(harness.stub)).toEqual([]);
   });
@@ -743,6 +820,74 @@ describe("applySwaps", () => {
     expect(await lifecycleEvents(harness.store)).toHaveLength(3);
   });
 
+  it("refuses a directly reapplied swap after its pull request was rejected", async () => {
+    const harness = await createHarness();
+    const input = applyVerdict(harness);
+    const first = requireApplied(await runApply(harness, [input]));
+    const writesAfterFirstApply = githubWrites(harness.stub).length;
+    const rejected = lifecycleEventSchema.parse({
+      eventId: "rejected",
+      prNumber: first.prNumber,
+      repo: `${owner}/${repo}`,
+      familyIds: [harness.stepRecord.family],
+      kind: "pr_closed_rejected",
+      evidence: {
+        revision: harness.head,
+        corpusVersionId: "corpus-version-9",
+        gatePolicyVersion: "gate-policy-7",
+      },
+      runSpecDigest: first.runSpecDigest,
+      createdAt: "9999-01-01T00:00:00.000Z",
+      detail: { reason: "closed_unmerged" },
+    });
+    await harness.store.putImmutable(
+      factKey("project", rejected.eventId),
+      Buffer.from(canonicalJson(rejected), "utf8"),
+    );
+
+    const reapplied = requireRefused(await runApply(harness, [input]));
+
+    expect(reapplied.reasons).toEqual([
+      expect.objectContaining({
+        code: "previously_rejected",
+        detail: expect.objectContaining({ prNumber: first.prNumber }),
+      }),
+    ]);
+    expect(githubWrites(harness.stub)).toHaveLength(writesAfterFirstApply);
+    expect(pullCreationHits(harness.stub)).toHaveLength(1);
+  });
+
+  it("bounds rendered case IDs and reports omitted invalid IDs", async () => {
+    const harness = await createHarness();
+    const input = applyVerdict(harness);
+    const renderedCaseIds = Array.from({ length: 7 }, (_, index) =>
+      (index + 1).toString(16).repeat(64),
+    );
+    const verdict: ApplyVerdict = {
+      ...input,
+      verdict: {
+        ...input.verdict,
+        caseIds: [...renderedCaseIds, caseContentMarker],
+      },
+    };
+
+    const applied = requireApplied(await runApply(harness, [verdict]));
+    const pull = await harness.githubClient.getPullRequest({
+      ...repository,
+      pullNumber: applied.prNumber,
+    });
+
+    for (const caseId of renderedCaseIds.slice(0, 5)) {
+      expect(pull.body).toContain(caseId);
+    }
+    for (const caseId of renderedCaseIds.slice(5)) {
+      expect(pull.body).not.toContain(caseId);
+    }
+    expect(pull.body).toContain("and 2 more");
+    expect(pull.body).toContain("1 invalid case ID omitted");
+    expect(pull.body).not.toContain(caseContentMarker);
+  });
+
   it("stops a clean dry-run after gate (f) with no GitHub writes or lifecycle facts", async () => {
     const harness = await createHarness();
 
@@ -751,7 +896,7 @@ describe("applySwaps", () => {
     expect(result).toMatchObject({
       status: "dry_run",
       files: [sourcePath],
-      reviewers: ["alpha", "bravo", "charlie", "delta"],
+      reviewers: ["alpha", "bravo", "charlie", "delta", "echo"],
       teamReviewers: ["platform"],
     });
     expect(githubWrites(harness.stub)).toEqual([]);

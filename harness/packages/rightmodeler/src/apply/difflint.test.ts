@@ -245,6 +245,76 @@ describe("lintSwapDiff", () => {
     });
   });
 
+  it("rejects whitespace rewritten inside a neighboring string", () => {
+    const result = lint({
+      files: [
+        {
+          path: "src/prompt.ts",
+          before: 'x(" a  b ", { model: "acme/large-1" });\n',
+          after: 'x("ab", { model: "acme/small-1" });\n',
+        },
+      ],
+      allowedModels,
+    });
+
+    expect(result.violations).toEqual([
+      { path: "src/prompt.ts", line: 1, kind: "non_model_change" },
+    ]);
+  });
+
+  it("rejects reformatting the swapped line", () => {
+    const result = lint({
+      files: [
+        {
+          path: "src/model.ts",
+          before: 'return generateText({ model: "acme/large-1", prompt });\n',
+          after: 'return generateText({model:"acme/small-1",prompt});\n',
+        },
+      ],
+      allowedModels,
+    });
+
+    expect(result.violations).toEqual([
+      { path: "src/model.ts", line: 1, kind: "whitespace_change" },
+    ]);
+  });
+
+  it("rejects re-indenting the swapped Python line", () => {
+    const result = lint({
+      files: [
+        {
+          path: "src/model.py",
+          before:
+            '    return client.chat.completions.create(model="acme/large-1", messages=[prompt])\n',
+          after:
+            '  return client.chat.completions.create(model="acme/small-1", messages=[prompt])\n',
+        },
+      ],
+      allowedModels,
+    });
+
+    expect(result.violations).toEqual([
+      { path: "src/model.py", line: 1, kind: "whitespace_change" },
+    ]);
+  });
+
+  it("rejects re-indenting a swapped YAML entry", () => {
+    const result = lint({
+      files: [
+        {
+          path: "config/models.yaml",
+          before: "service:\n  model: acme/large-1\n",
+          after: "service:\n    model: acme/small-1\n",
+        },
+      ],
+      allowedModels,
+    });
+
+    expect(result.violations).toEqual([
+      { path: "config/models.yaml", line: 2, kind: "whitespace_change" },
+    ]);
+  });
+
   it("rejects a changed file with no swapped step", () => {
     const result = lintFiles([
       {

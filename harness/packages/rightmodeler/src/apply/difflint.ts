@@ -245,7 +245,19 @@ function withoutTokens(line: string, tokens: readonly ModelToken[]): string {
   for (const token of [...tokens].reverse()) {
     result = `${result.slice(0, token.start)}<model>${result.slice(token.end)}`;
   }
-  return result.replace(/(["'])<model>\1/g, '"<model>"').replace(/\s/g, "");
+  return result.replace(/(["'])<model>\1/g, '"<model>"');
+}
+
+function collapseWhitespaceOutsideStrings(value: string): string {
+  const scan = scanSource(value);
+  let result = "";
+  let offset = 0;
+  for (const string of scan.strings) {
+    result += scan.mask.slice(offset, string.fullStart).replace(/\s/g, "");
+    result += value.slice(string.fullStart, string.fullEnd);
+    offset = string.fullEnd;
+  }
+  return result + scan.mask.slice(offset).replace(/\s/g, "");
 }
 
 function sameLineShape(before: string, after: string): boolean {
@@ -278,14 +290,23 @@ function lintChangedLine(
 
   const beforeLineTokens = tokensOnLine(beforeTokens, change.beforeLine);
   const afterLineTokens = tokensOnLine(afterTokens, change.afterLine);
+  const beforeResidual = withoutTokens(change.before, beforeLineTokens);
+  const afterResidual = withoutTokens(change.after, afterLineTokens);
   if (
     beforeLineTokens.length === 0 ||
     beforeLineTokens.length !== afterLineTokens.length ||
-    !sameLineShape(
-      withoutTokens(change.before, beforeLineTokens),
-      withoutTokens(change.after, afterLineTokens),
-    )
+    !sameLineShape(beforeResidual, afterResidual)
   ) {
+    if (
+      beforeLineTokens.length > 0 &&
+      beforeLineTokens.length === afterLineTokens.length &&
+      sameLineShape(
+        collapseWhitespaceOutsideStrings(beforeResidual),
+        collapseWhitespaceOutsideStrings(afterResidual),
+      )
+    ) {
+      return { violation: "whitespace_change" };
+    }
     return { violation: "non_model_change" };
   }
 
