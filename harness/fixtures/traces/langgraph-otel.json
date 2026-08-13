@@ -1,0 +1,2228 @@
+[
+  {
+    "traceId": "trace-langgraph-01",
+    "startTimeUnixNano": "1000100",
+    "span_id": "span-langgraph-01-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Where is order ORD-104?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply c3416e594c1e56c3"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-01",
+    "startTimeUnixNano": "1000200",
+    "span_id": "span-langgraph-01-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Where is order ORD-104?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 86207e4710f5bd1d"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-01",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-104"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-104\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-01",
+    "startTimeUnixNano": "1000300",
+    "span_id": "span-langgraph-01-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Where is order ORD-104?\nLookup: {\"orderId\":\"ORD-104\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 81d067ab44f20e70"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-02",
+    "startTimeUnixNano": "2000100",
+    "span_id": "span-langgraph-02-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "What is the status of order ORD-104?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 875e13b49e9b8c13"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 39,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-02",
+    "startTimeUnixNano": "2000200",
+    "span_id": "span-langgraph-02-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "What is the status of order ORD-104?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 967443c40529d9d8"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-02",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-104"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-104\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 34,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-02",
+    "startTimeUnixNano": "2000300",
+    "span_id": "span-langgraph-02-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: What is the status of order ORD-104?\nLookup: {\"orderId\":\"ORD-104\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply e8f21105f9814882"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 61,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-03",
+    "startTimeUnixNano": "3000100",
+    "span_id": "span-langgraph-03-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Track order ORD-205."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 3090664cfd655471"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-03",
+    "startTimeUnixNano": "3000200",
+    "span_id": "span-langgraph-03-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Track order ORD-205."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply ca22375e98c5b985"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-03",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-205"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-205\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 30,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-03",
+    "startTimeUnixNano": "3000300",
+    "span_id": "span-langgraph-03-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Track order ORD-205.\nLookup: {\"orderId\":\"ORD-205\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 4612b6bb00a512ad"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 57,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-04",
+    "startTimeUnixNano": "4000100",
+    "span_id": "span-langgraph-04-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Look up delivery ORD-508."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 7e51808c9f8d5ef7"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 36,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-04",
+    "startTimeUnixNano": "4000200",
+    "span_id": "span-langgraph-04-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Look up delivery ORD-508."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 298316bcfbdc5587"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-04",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-508"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-508\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-04",
+    "startTimeUnixNano": "4000300",
+    "span_id": "span-langgraph-04-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Look up delivery ORD-508.\nLookup: {\"orderId\":\"ORD-508\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 057775e1ef278887"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-05",
+    "startTimeUnixNano": "5000100",
+    "span_id": "span-langgraph-05-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Track shipment ORD-114."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply d128957ba933a5eb"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-05",
+    "startTimeUnixNano": "5000200",
+    "span_id": "span-langgraph-05-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Track shipment ORD-114."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 6daabb5eb4d3d21f"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-05",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-114"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-114\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-05",
+    "startTimeUnixNano": "5000300",
+    "span_id": "span-langgraph-05-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Track shipment ORD-114.\nLookup: {\"orderId\":\"ORD-114\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply e0074ae4d3792d9a"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-06",
+    "startTimeUnixNano": "6000100",
+    "span_id": "span-langgraph-06-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Find the ETA for ORD-215."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply a7df290d34e4d1ed"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 36,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-06",
+    "startTimeUnixNano": "6000200",
+    "span_id": "span-langgraph-06-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Find the ETA for ORD-215."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 1a77055e2830fae7"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-06",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-215"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-215\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-06",
+    "startTimeUnixNano": "6000300",
+    "span_id": "span-langgraph-06-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Find the ETA for ORD-215.\nLookup: {\"orderId\":\"ORD-215\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 73079e9ac5db1d33"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-07",
+    "startTimeUnixNano": "7000100",
+    "span_id": "span-langgraph-07-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Check delivery ORD-417."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply cb2f489911bfe11d"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-07",
+    "startTimeUnixNano": "7000200",
+    "span_id": "span-langgraph-07-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Check delivery ORD-417."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 9ce7442fed098b70"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-07",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-417"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-417\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-07",
+    "startTimeUnixNano": "7000300",
+    "span_id": "span-langgraph-07-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Check delivery ORD-417.\nLookup: {\"orderId\":\"ORD-417\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply be4bc55eb2d97b58"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-08",
+    "startTimeUnixNano": "8000100",
+    "span_id": "span-langgraph-08-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Look up ORD-518."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 6e73f0c649ffb875"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 34,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-08",
+    "startTimeUnixNano": "8000200",
+    "span_id": "span-langgraph-08-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Look up ORD-518."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 7fe7b351ebbf9193"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-08",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-518"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-518\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 29,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-08",
+    "startTimeUnixNano": "8000300",
+    "span_id": "span-langgraph-08-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Look up ORD-518.\nLookup: {\"orderId\":\"ORD-518\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 71643ecffad08956"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 56,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-09",
+    "startTimeUnixNano": "9000100",
+    "span_id": "span-langgraph-09-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Has order ORD-619 arrived?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 100fc41ea4bb07b7"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 36,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-09",
+    "startTimeUnixNano": "9000200",
+    "span_id": "span-langgraph-09-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Has order ORD-619 arrived?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 420492a32a222ee0"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-09",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-619"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-619\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-09",
+    "startTimeUnixNano": "9000300",
+    "span_id": "span-langgraph-09-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Has order ORD-619 arrived?\nLookup: {\"orderId\":\"ORD-619\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 89e7887a98ec1d97"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-10",
+    "startTimeUnixNano": "10000100",
+    "span_id": "span-langgraph-10-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Check package ORD-922."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply e9e945c743023817"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-10",
+    "startTimeUnixNano": "10000200",
+    "span_id": "span-langgraph-10-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Check package ORD-922."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply a04df531cd6ee320"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-10",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-922"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-922\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 30,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-10",
+    "startTimeUnixNano": "10000300",
+    "span_id": "span-langgraph-10-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Check package ORD-922.\nLookup: {\"orderId\":\"ORD-922\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 7b574e7d32d2d82d"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 57,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-11",
+    "startTimeUnixNano": "11000100",
+    "span_id": "span-langgraph-11-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Track delivery ORD-023."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 4e33f17e432b0c8d"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-11",
+    "startTimeUnixNano": "11000200",
+    "span_id": "span-langgraph-11-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Track delivery ORD-023."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 37395d9c7a479a10"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-11",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-023"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-023\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-11",
+    "startTimeUnixNano": "11000300",
+    "span_id": "span-langgraph-11-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Track delivery ORD-023.\nLookup: {\"orderId\":\"ORD-023\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 9c4ec73c7ccdefc6"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-12",
+    "startTimeUnixNano": "12000100",
+    "span_id": "span-langgraph-12-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Give me the ETA for ORD-225."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply b52cfdfee239abf9"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 37,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-12",
+    "startTimeUnixNano": "12000200",
+    "span_id": "span-langgraph-12-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Give me the ETA for ORD-225."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 832f8d5cf5b2e4d1"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-12",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-225"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-225\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 32,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-12",
+    "startTimeUnixNano": "12000300",
+    "span_id": "span-langgraph-12-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Give me the ETA for ORD-225.\nLookup: {\"orderId\":\"ORD-225\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply ecdd83f9630040ad"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 59,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-13",
+    "startTimeUnixNano": "13000100",
+    "span_id": "span-langgraph-13-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Check shipment ORD-427."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 267d78f671728b81"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-13",
+    "startTimeUnixNano": "13000200",
+    "span_id": "span-langgraph-13-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Check shipment ORD-427."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 13be91f4ef5e4867"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-13",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-427"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-427\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-13",
+    "startTimeUnixNano": "13000300",
+    "span_id": "span-langgraph-13-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Check shipment ORD-427.\nLookup: {\"orderId\":\"ORD-427\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply dd10b83fd6a9adb3"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 58,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-14",
+    "startTimeUnixNano": "14000100",
+    "span_id": "span-langgraph-14-classify",
+    "name": "classify",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Classify whether the request needs a local order lookup."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Has ORD-528 shipped?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 5b4596e22f39800d"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-14",
+    "startTimeUnixNano": "14000200",
+    "span_id": "span-langgraph-14-lookup",
+    "name": "lookup",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/max-1",
+      "gen_ai.response.model": "acme/max-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Select lookup_order for this request."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Has ORD-528 shipped?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply 2f6b290a02ce4d5a"
+            },
+            {
+              "type": "tool_call",
+              "id": "call-langgraph-14",
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "ORD-528"
+              },
+              "result": {
+                "content": "{\"orderId\":\"ORD-528\",\"status\":\"in transit\",\"etaDays\":2}",
+                "is_error": false
+              }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 30,
+      "gen_ai.usage.output_tokens": 12
+    }
+  },
+  {
+    "traceId": "trace-langgraph-14",
+    "startTimeUnixNano": "14000300",
+    "span_id": "span-langgraph-14-answer",
+    "name": "answer",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "rightmodeler.family": "langgraph_order_lookup",
+      "rightmodeler.accepted": true,
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Compose the final answer from the request and lookup context."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Request: Has ORD-528 shipped?\nLookup: {\"orderId\":\"ORD-528\",\"status\":\"in transit\",\"etaDays\":2}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Deterministic reply db2193f484559523"
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 57,
+      "gen_ai.usage.output_tokens": 12
+    }
+  }
+]
