@@ -4,7 +4,9 @@
 
 `traces/otel-genai.json` contains 15 runs and 17 current-convention GenAI spans across summarize and support task families (10 summarize and 7 support spans). The two pairs sharing `trace-trajectory-a` and `trace-trajectory-b` exercise trajectory clustering. Record `trace-support-pii-01` is the only trace record containing fake personal data; scrub tests should target its prompt.
 
-`traces/openai.jsonl` contains eight request/response pairs in the append-friendly shape emitted by the capture script. It covers accepted summarize outputs and support tool calls with stable case identifiers, usage, and fake model identifiers.
+`traces/openai.jsonl` contains eight request/response pairs in the append-friendly shape emitted by the capture script. It covers accepted summarize outputs and support tool calls with stable case identifiers, usage, and fake model identifiers. The `support-004` record is the fixture's planted scrub target.
+
+The remaining trace fixtures are synthetic, append-friendly examples of each adapter's selected export shape: `langfuse.jsonl` uses enriched observation rows, `braintrust.jsonl` uses BTQL span rows, `langsmith.jsonl` uses the v2 bulk run row schema represented as JSONL, `openinference.jsonl` uses OTLP/JSON trace envelopes, `helicone.jsonl` uses request export rows with bodies, `weave.jsonl` uses streamed call rows, `claude-code.jsonl` uses local session transcript entries, and `codex.jsonl` uses persisted rollout entries. Every trace fixture contains `demo.person@example.test` and `+1-202-555-0147` together in exactly one record so the shared scrub test can prove both values are removed without using real personal data.
 
 `stub-provider/server.mjs` is a dependency-free OpenAI-compatible test server with a four-model price and capability catalog plus deterministic non-streaming chat completions. Run it with `--selftest` to exercise both endpoints and the streaming rejection path on an ephemeral port.
 
