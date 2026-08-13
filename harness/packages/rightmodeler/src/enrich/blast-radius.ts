@@ -2,6 +2,7 @@ import type { StepRecord } from "@rightmodeler/core";
 import type { FamilyVerdict } from "@rightmodeler/kernel";
 
 import type { OwnerResolution, RankedOwner } from "./owners.js";
+import { compareText } from "./shared.js";
 
 export interface FamilyBlastRadius {
   readonly familyId: string;
@@ -11,38 +12,6 @@ export interface FamilyBlastRadius {
 }
 
 type RecommendationVerdict = Pick<FamilyVerdict, "decision" | "familyId">;
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function ownerResolution(record: StepRecord): OwnerResolution | null {
-  for (let index = record.analysisHistory.length - 1; index >= 0; index -= 1) {
-    const value = record.analysisHistory[index];
-    if (!isRecord(value) || value.path !== record.callSite.path) continue;
-    if (!Array.isArray(value.owners)) continue;
-
-    const owners: RankedOwner[] = [];
-    let valid = true;
-    for (const owner of value.owners) {
-      if (
-        !isRecord(owner) ||
-        typeof owner.handle !== "string" ||
-        (owner.source !== "codeowners" && owner.source !== "blame")
-      ) {
-        valid = false;
-        break;
-      }
-      owners.push({ handle: owner.handle, source: owner.source });
-    }
-    if (valid) return { path: record.callSite.path, owners };
-  }
-  return null;
-}
 
 function addOwner(owners: Map<string, RankedOwner>, owner: RankedOwner): void {
   const current = owners.get(owner.handle);
@@ -54,12 +23,19 @@ function addOwner(owners: Map<string, RankedOwner>, owner: RankedOwner): void {
 export function blastRadius({
   stepRecords,
   verdicts,
+  owners: ownerResolutions,
 }: {
   readonly stepRecords: readonly StepRecord[];
   readonly verdicts: readonly RecommendationVerdict[];
+  readonly owners: readonly OwnerResolution[];
 }): readonly FamilyBlastRadius[] {
   const recordsById = new Map(
     stepRecords.map((record) => [record.stepId, record] as const),
+  );
+  const ownersByPath = new Map(
+    ownerResolutions.map(
+      (resolution) => [resolution.path, resolution] as const,
+    ),
   );
   const recommendedFamilies = [
     ...new Set(
@@ -78,7 +54,7 @@ export function blastRadius({
     const owners = new Map<string, RankedOwner>();
 
     for (const root of roots) {
-      for (const owner of ownerResolution(root)?.owners ?? []) {
+      for (const owner of ownersByPath.get(root.callSite.path)?.owners ?? []) {
         addOwner(owners, owner);
       }
     }
@@ -93,7 +69,8 @@ export function blastRadius({
       if (!swappedFiles.has(record.callSite.path)) {
         downstreamFiles.add(record.callSite.path);
       }
-      for (const owner of ownerResolution(record)?.owners ?? []) {
+      for (const owner of ownersByPath.get(record.callSite.path)?.owners ??
+        []) {
         addOwner(owners, owner);
       }
       queue.push(...record.downstreamStepIds);

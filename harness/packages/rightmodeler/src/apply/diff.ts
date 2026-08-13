@@ -7,7 +7,7 @@ import {
   type CandidateMatch,
 } from "@rightmodeler/scanner";
 
-const pipelineProjectId = "project";
+import { scanSource } from "./lex.js";
 
 export interface SwapRequest {
   readonly stepRecord: StepRecord;
@@ -81,7 +81,7 @@ function lineText(content: string, line: number): string {
 }
 
 function callEnd(content: string, start: number): number {
-  const searchable = maskNonCode(content);
+  const searchable = scanSource(content).mask;
   const open = searchable.indexOf("(", start);
   if (open === -1) return -1;
   let depth = 0;
@@ -97,78 +97,6 @@ function callEnd(content: string, start: number): number {
   return -1;
 }
 
-function maskNonCode(content: string): string {
-  let masked = "";
-  let index = 0;
-  while (index < content.length) {
-    const character = content[index]!;
-    const next = content[index + 1];
-    if (character === '"' || character === "'" || character === "`") {
-      const fullStart = index;
-      const delimiterLength =
-        character !== "`" &&
-        content[index + 1] === character &&
-        content[index + 2] === character
-          ? 3
-          : 1;
-      const delimiter = character.repeat(delimiterLength);
-      index += delimiterLength;
-      const valueStart = index;
-      while (index < content.length) {
-        if (content.startsWith(delimiter, index)) {
-          index += delimiterLength;
-          break;
-        }
-        if (content[index] === "\\") index += 1;
-        index += 1;
-      }
-      const fullText = content.slice(fullStart, index);
-      const value = content.slice(
-        valueStart,
-        Math.max(valueStart, index - delimiterLength),
-      );
-      masked +=
-        delimiterLength === 1 && ["model", "model_name"].includes(value)
-          ? fullText
-          : fullText.replace(/[^\n]/g, " ");
-      continue;
-    }
-    if (character === "/" && next === "/") {
-      while (index < content.length && content[index] !== "\n") {
-        masked += " ";
-        index += 1;
-      }
-      continue;
-    }
-    if (character === "/" && next === "*") {
-      masked += "  ";
-      index += 2;
-      while (
-        index < content.length &&
-        !(content[index] === "*" && content[index + 1] === "/")
-      ) {
-        masked += content[index] === "\n" ? "\n" : " ";
-        index += 1;
-      }
-      if (index < content.length) {
-        masked += "  ";
-        index += 2;
-      }
-      continue;
-    }
-    if (character === "#") {
-      while (index < content.length && content[index] !== "\n") {
-        masked += " ";
-        index += 1;
-      }
-      continue;
-    }
-    masked += character;
-    index += 1;
-  }
-  return masked;
-}
-
 function trimRange(content: string, range: TextRange): TextRange {
   let start = range.start;
   let end = range.end;
@@ -177,90 +105,21 @@ function trimRange(content: string, range: TextRange): TextRange {
   return { start, end };
 }
 
-function regexStartsAt(
-  content: string,
-  index: number,
-  lowerBound: number,
-): boolean {
-  let previous = index - 1;
-  while (previous >= lowerBound && /\s/.test(content[previous]!)) previous -= 1;
-  if (
-    previous < lowerBound ||
-    "([{:,;=!?&|+-*%^~<>".includes(content[previous]!)
-  ) {
-    return true;
-  }
-  return /\b(?:case|return|throw|yield)\s*$/.test(
-    content.slice(lowerBound, index),
-  );
-}
-
 function splitTopLevel(
   content: string,
   start: number,
   end: number,
 ): TextRange[] | null {
+  const searchable = scanSource(content.slice(start, end)).mask;
   const ranges: TextRange[] = [];
   let partStart = start;
   let round = 0;
   let square = 0;
   let curly = 0;
-  let index = start;
+  let index = 0;
 
-  while (index < end) {
-    const character = content[index]!;
-    const next = content[index + 1];
-    if (character === '"' || character === "'" || character === "`") {
-      const delimiterLength =
-        character !== "`" &&
-        next === character &&
-        content[index + 2] === character
-          ? 3
-          : 1;
-      const delimiter = character.repeat(delimiterLength);
-      index += delimiterLength;
-      while (index < end && !content.startsWith(delimiter, index)) {
-        if (content[index] === "\\") index += 1;
-        index += 1;
-      }
-      if (index >= end) return null;
-      index += delimiterLength;
-      continue;
-    }
-    if (character === "/" && next === "/") {
-      index += 2;
-      while (index < end && content[index] !== "\n") index += 1;
-      continue;
-    }
-    if (character === "/" && next === "*") {
-      const close = content.indexOf("*/", index + 2);
-      if (close === -1 || close >= end) return null;
-      index = close + 2;
-      continue;
-    }
-    if (character === "#") {
-      while (index < end && content[index] !== "\n") index += 1;
-      continue;
-    }
-    if (character === "/" && regexStartsAt(content, index, start)) {
-      index += 1;
-      let inClass = false;
-      while (index < end) {
-        if (content[index] === "\\") {
-          index += 2;
-          continue;
-        }
-        if (content[index] === "[") inClass = true;
-        else if (content[index] === "]") inClass = false;
-        else if (content[index] === "/" && !inClass) break;
-        index += 1;
-      }
-      if (index >= end) return null;
-      index += 1;
-      while (/[A-Za-z]/.test(content[index] ?? "")) index += 1;
-      continue;
-    }
-
+  while (index < searchable.length) {
+    const character = searchable[index]!;
     if (character === "(") round += 1;
     else if (character === ")") round -= 1;
     else if (character === "[") square += 1;
@@ -268,8 +127,8 @@ function splitTopLevel(
     else if (character === "{") curly += 1;
     else if (character === "}") curly -= 1;
     else if (character === "," && round === 0 && square === 0 && curly === 0) {
-      ranges.push({ start: partStart, end: index });
-      partStart = index + 1;
+      ranges.push({ start: partStart, end: start + index });
+      partStart = start + index + 1;
     }
     if (round < 0 || square < 0 || curly < 0) return null;
     index += 1;
@@ -344,7 +203,7 @@ function valueSpansForKeys(
   keyPattern: RegExp,
   allowWrapper: boolean,
 ): ValueSpan[] {
-  const masked = maskNonCode(content);
+  const masked = scanSource(content).keyMask;
   const spans: ValueSpan[] = [];
   for (const match of masked.matchAll(keyPattern)) {
     const span = valueAfter(
@@ -368,7 +227,7 @@ function constantSpans(
   callOffset: number,
   isPython: boolean,
 ): ValueSpan[] | null {
-  const masked = maskNonCode(content);
+  const masked = scanSource(content).mask;
   const escapedIdentifier = escapeRegExp(identifier);
   const bindingPatterns = [
     new RegExp(`\\b(?:const|let|var)\\s+${escapedIdentifier}\\b`, "g"),
@@ -496,9 +355,9 @@ function locateReplacement(
       return null;
     }
     const lineEnd = content.indexOf("\n", start);
-    const maskedLine = maskNonCode(
+    const maskedLine = scanSource(
       content.slice(start, lineEnd === -1 ? content.length : lineEnd),
-    );
+    ).mask;
     const calleePattern = new RegExp(
       `\\b${escapeRegExp(candidate.normalizedCallShape.callee)}\\s*\\(`,
       "g",
@@ -554,6 +413,7 @@ function freshCandidate(
   content: string,
   path: string,
   stepRecord: StepRecord,
+  projectId: string,
 ): CandidateMatch | null {
   const matcher = createMatcherRegistry().getBySlug(
     stepRecord.callSite.matcherSlug,
@@ -563,7 +423,7 @@ function freshCandidate(
   const candidates = matcher.match(normalizedContent, path).filter(
     (candidate) =>
       computeStepId({
-        projectId: pipelineProjectId,
+        projectId,
         normalizedPath: path,
         enclosingSymbolPath: candidate.enclosingSymbolPath,
         normalizedCallShape: candidate.normalizedCallShape,
@@ -574,9 +434,11 @@ function freshCandidate(
 
 export function buildSwapDiff({
   repoDir,
+  projectId,
   swaps,
 }: {
   readonly repoDir: string;
+  readonly projectId: string;
   readonly swaps: readonly SwapRequest[];
 }): SwapDiffResult[] {
   const grouped = new Map<string, SwapRequest[]>();
@@ -598,7 +460,12 @@ export function buildSwapDiff({
     const replacements: Replacement[] = [];
     let stale = false;
     for (const swap of fileSwaps) {
-      const candidate = freshCandidate(before, path, swap.stepRecord);
+      const candidate = freshCandidate(
+        before,
+        path,
+        swap.stepRecord,
+        projectId,
+      );
       const replacement =
         candidate === null ? null : locateReplacement(before, candidate, swap);
       if (replacement === null) {

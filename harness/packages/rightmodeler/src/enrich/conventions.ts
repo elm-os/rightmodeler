@@ -1,7 +1,9 @@
 import { execFile } from "node:child_process";
-import { access, readFile, readdir } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
+
+import { codeownersPaths, compareText } from "./shared.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -34,16 +36,10 @@ export interface CapturedConventions {
   readonly warnings: readonly ConventionWarning[];
 }
 
-const ignoredDirectories = new Set([".git", "node_modules"]);
 const pullRequestTemplates = [
   ".github/PULL_REQUEST_TEMPLATE.md",
   "docs/PULL_REQUEST_TEMPLATE.md",
   "PULL_REQUEST_TEMPLATE.md",
-] as const;
-const codeownersPaths = [
-  ".github/CODEOWNERS",
-  "CODEOWNERS",
-  "docs/CODEOWNERS",
 ] as const;
 const prettierConfigs = [
   ".prettierrc",
@@ -58,10 +54,6 @@ const prettierConfigs = [
   "prettier.config.cjs",
   "prettier.config.mjs",
 ] as const;
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
 
 function posixPath(repoDir: string, absolutePath: string): string {
   return relative(repoDir, absolutePath).replaceAll("\\", "/");
@@ -82,48 +74,22 @@ async function existingPath(
   return null;
 }
 
-async function nestedAgentFiles(
-  repoDir: string,
-  directory = repoDir,
-): Promise<string[]> {
-  const found: string[] = [];
-  let entries;
-  try {
-    entries = await readdir(directory, { withFileTypes: true });
-  } catch {
-    return found;
-  }
-
-  for (const entry of entries) {
-    if (!entry.isDirectory() || ignoredDirectories.has(entry.name)) continue;
-    const child = join(directory, entry.name);
-    const agentPath = join(child, "AGENTS.md");
-    try {
-      await access(agentPath);
-      found.push(posixPath(repoDir, agentPath));
-    } catch {
-      // This directory has no nested instruction file.
-    }
-    found.push(...(await nestedAgentFiles(repoDir, child)));
-  }
-  return found;
+async function nestedAgentFiles(repoDir: string): Promise<string[]> {
+  return (await gitOutput(repoDir, ["ls-files", "--", "*AGENTS.md"]))
+    .split(/\r?\n/)
+    .filter((path) => path === "AGENTS.md" || path.endsWith("/AGENTS.md"));
 }
 
 function includeTargets(content: string): string[] {
   const targets: string[] = [];
   for (const line of content.split(/\r?\n/)) {
     const include = line.match(/^\s*@include\s+(.+?)\s*$/)?.[1];
-    if (include !== undefined) {
+    if (include?.endsWith(".md")) {
       targets.push(include);
       continue;
     }
-    const pointer = line.match(/^\s*@([^\s]+)\s*$/)?.[1];
+    const pointer = line.match(/^\s*@([^\s]+\.md)\s*$/)?.[1];
     if (pointer !== undefined) targets.push(pointer);
-  }
-
-  const trimmed = content.trim();
-  if (trimmed === "AGENTS.md" || trimmed === "CLAUDE.md") {
-    targets.push(trimmed);
   }
   return targets;
 }
@@ -321,7 +287,7 @@ async function inferBranchPrefix(repoDir: string): Promise<string | null> {
     ([leftPrefix, leftCount], [rightPrefix, rightCount]) =>
       rightCount - leftCount || compareText(leftPrefix, rightPrefix),
   );
-  if (ranked.length === 0 || ranked[0]![1] === ranked[1]?.[1]) return null;
+  if (ranked.length === 0) return null;
   return ranked[0]![0];
 }
 

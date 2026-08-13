@@ -3,6 +3,7 @@ import {
   cp,
   mkdir,
   mkdtemp,
+  readFile,
   rm,
   symlink,
   unlink,
@@ -47,6 +48,7 @@ async function fixtureDiff(path: string): Promise<{
   )!;
   const [result] = buildSwapDiff({
     repoDir: root,
+    projectId: "project",
     swaps: [{ stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" }],
   });
   expect(result).not.toHaveProperty("reason");
@@ -60,7 +62,7 @@ describe("formatWithHostFormatter", () => {
     await expect(
       formatWithHostFormatter({
         repoDir: root,
-        conventions: {},
+        conventions: { formatter: { kind: null, configPath: null } },
         files: [file],
       }),
     ).resolves.toEqual({ files: [file], note: "no_formatter" });
@@ -72,7 +74,7 @@ describe("formatWithHostFormatter", () => {
     await expect(
       formatWithHostFormatter({
         repoDir: root,
-        conventions: { formatter: { kind: null } },
+        conventions: { formatter: { kind: null, configPath: null } },
         files: [file],
       }),
     ).resolves.toEqual({ files: [file], note: "no_formatter" });
@@ -85,7 +87,7 @@ describe("formatWithHostFormatter", () => {
     await expect(
       formatWithHostFormatter({
         repoDir: root,
-        conventions: { formatter: "prettier" },
+        conventions: { formatter: { kind: "prettier", configPath: null } },
         files: [file],
       }),
     ).resolves.toEqual({ files: [file], note: "formatter_unavailable" });
@@ -108,10 +110,76 @@ describe("formatWithHostFormatter", () => {
     try {
       const result = await formatWithHostFormatter({
         repoDir: root,
-        conventions: { formatter: "prettier" },
+        conventions: { formatter: { kind: "prettier", configPath: null } },
         files: [file],
       });
       expect(result).toEqual({ files: [file], note: "formatted" });
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it("rejects a non-semver yarn.lock version before invoking npx", async () => {
+    const { root, file } = await fixtureDiff("src/string.ts");
+    await unlink(join(root, "node_modules"));
+    await writeFile(
+      join(root, "yarn.lock"),
+      'prettier@^3.0.0:\n  version "../../evil"\n',
+    );
+    const bin = join(root, "bin");
+    const marker = join(root, "npx-invoked");
+    const executable = join(bin, "npx");
+    await mkdir(bin);
+    await writeFile(
+      executable,
+      `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(${JSON.stringify(marker)}, "called");\n`,
+    );
+    await chmod(executable, 0o755);
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
+    try {
+      await expect(
+        formatWithHostFormatter({
+          repoDir: root,
+          conventions: {
+            formatter: { kind: "prettier", configPath: null },
+          },
+          files: [file],
+        }),
+      ).resolves.toEqual({ files: [file], note: "formatter_unavailable" });
+      await expect(readFile(marker)).rejects.toThrow();
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it("uses a valid semver from yarn.lock for the npx fallback", async () => {
+    const { root, file } = await fixtureDiff("src/string.ts");
+    await unlink(join(root, "node_modules"));
+    await writeFile(
+      join(root, "yarn.lock"),
+      'prettier@^3.0.0:\n  version "3.9.4-alpha.1+build.2"\n',
+    );
+    const bin = join(root, "bin");
+    const executable = join(bin, "npx");
+    await mkdir(bin);
+    await writeFile(
+      executable,
+      '#!/usr/bin/env node\nconst args = process.argv.slice(2);\nif (args[1] !== "--package=prettier@3.9.4-alpha.1+build.2") process.exit(2);\nprocess.stdin.pipe(process.stdout);\n',
+    );
+    await chmod(executable, 0o755);
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
+    try {
+      await expect(
+        formatWithHostFormatter({
+          repoDir: root,
+          conventions: {
+            formatter: { kind: "prettier", configPath: null },
+          },
+          files: [file],
+        }),
+      ).resolves.toEqual({ files: [file], note: "formatted" });
     } finally {
       process.env.PATH = originalPath;
     }
@@ -122,7 +190,9 @@ describe("formatWithHostFormatter", () => {
 
     const result = await formatWithHostFormatter({
       repoDir: root,
-      conventions: { formatter: "prettier" },
+      conventions: {
+        formatter: { kind: "prettier", configPath: ".prettierrc" },
+      },
       files: [file],
     });
 
@@ -161,7 +231,7 @@ describe("formatWithHostFormatter", () => {
 
     const result = await formatWithHostFormatter({
       repoDir: root,
-      conventions: { formatter: "prettier" },
+      conventions: { formatter: { kind: "prettier", configPath: null } },
       files: [candidate],
     });
 
@@ -192,7 +262,7 @@ describe("formatWithHostFormatter", () => {
 
     const result = await formatWithHostFormatter({
       repoDir: root,
-      conventions: { formatter: "prettier" },
+      conventions: { formatter: { kind: "prettier", configPath: null } },
       files: [file],
     });
 
@@ -228,7 +298,7 @@ describe("formatWithHostFormatter", () => {
 
     const result = await formatWithHostFormatter({
       repoDir: root,
-      conventions: { formatter: "prettier" },
+      conventions: { formatter: { kind: "prettier", configPath: null } },
       files: [file],
     });
 
@@ -241,7 +311,7 @@ describe("formatWithHostFormatter", () => {
 
     const result = await formatWithHostFormatter({
       repoDir: root,
-      conventions: { formatter: { kind: "prettier" } },
+      conventions: { formatter: { kind: "prettier", configPath: null } },
       files: [file],
     });
 
@@ -265,7 +335,7 @@ describe("formatWithHostFormatter", () => {
 
     const result = await formatWithHostFormatter({
       repoDir: root,
-      conventions: { formatter: "ruff" },
+      conventions: { formatter: { kind: "ruff", configPath: null } },
       files: [file],
     });
 
@@ -281,18 +351,68 @@ describe("formatWithHostFormatter", () => {
 
     const result = await formatWithHostFormatter({
       repoDir: root,
-      conventions: { formatter: "ruff" },
+      conventions: { formatter: { kind: "ruff", configPath: null } },
       files: [file],
     });
 
     expect(result).toEqual({
       files: [file],
-      note: "formatted",
       blocker: {
         path: "src/string.py",
         line: 1,
         reason: "formatter_failed",
       },
+    });
+  });
+
+  it("preserves earlier formatted files when a later file conflicts", async () => {
+    const first = await fixtureDiff("src/string.ts");
+    const firstCandidate: SwapDiffFile = {
+      path: "src/first.ts",
+      before: 'const MODEL="acme/large-1"\n',
+      after: 'const MODEL="acme/small-1"\n',
+      hunks: [
+        {
+          line: 1,
+          before: 'const MODEL="acme/large-1"',
+          after: 'const MODEL="acme/small-1"',
+          replacements: [{ from: "acme/large-1", to: "acme/small-1" }],
+        },
+      ],
+    };
+    const secondStepRecord = scan(
+      first.root,
+      createMatcherRegistry(),
+      "project",
+    ).find(({ callSite }) => callSite.path === "src/misformatted.ts")!;
+    const [second] = buildSwapDiff({
+      repoDir: first.root,
+      projectId: "project",
+      swaps: [
+        {
+          stepRecord: secondStepRecord,
+          fromModel: "acme/large-1",
+          toModel: "acme/small-1",
+        },
+      ],
+    });
+
+    const result = await formatWithHostFormatter({
+      repoDir: first.root,
+      conventions: {
+        formatter: { kind: "prettier", configPath: null },
+      },
+      files: [firstCandidate, second as SwapDiffFile],
+    });
+
+    expect(result.files[0]?.after).toBe('const MODEL = "acme/small-1";\n');
+    expect(result.files[0]).not.toEqual(firstCandidate);
+    expect(result.files[1]).toEqual(second);
+    expect(result.note).toBe("formatted");
+    expect(result.blocker).toEqual({
+      path: "src/misformatted.ts",
+      line: 1,
+      reason: "formatter_conflict",
     });
   });
 
@@ -326,7 +446,7 @@ describe("formatWithHostFormatter", () => {
     try {
       const result = await formatWithHostFormatter({
         repoDir: root,
-        conventions: { formatter: "gofmt" },
+        conventions: { formatter: { kind: "gofmt", configPath: null } },
         files: [file],
       });
       expect(result).toEqual({ files: [file], note: "formatted" });

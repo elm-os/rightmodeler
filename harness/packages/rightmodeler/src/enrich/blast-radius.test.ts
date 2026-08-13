@@ -1,14 +1,13 @@
 import type { StepRecord } from "@rightmodeler/core";
 import { describe, expect, it } from "vitest";
 
-import { blastRadius, type OwnerResolution } from "./index.js";
+import { blastRadius } from "./index.js";
 
 function step(
   stepId: string,
   path: string,
   family: string,
   downstreamStepIds: readonly string[],
-  ownership: OwnerResolution,
 ): StepRecord {
   return {
     stepId,
@@ -23,15 +22,7 @@ function step(
     observedCostUsd: 1,
     downstreamStepIds: [...downstreamStepIds],
     candidates: [],
-    analysisHistory: [
-      {
-        path: ownership.path,
-        owners: ownership.owners.map(({ handle, source }) => ({
-          handle,
-          source,
-        })),
-      },
-    ],
+    analysisHistory: [],
     status: "replayed",
     contentHash: `hash-${stepId}`,
   };
@@ -40,21 +31,9 @@ function step(
 describe("blastRadius", () => {
   it("collects transitive downstream files and their owner union for recommended families", () => {
     const records = [
-      step("a", "src/a.ts", "summarize", ["b"], {
-        path: "src/a.ts",
-        owners: [{ handle: "@model-team", source: "codeowners" }],
-      }),
-      step("b", "src/b.ts", "extract", ["c"], {
-        path: "src/b.ts",
-        owners: [
-          { handle: "@model-team", source: "codeowners" },
-          { handle: "reviewer@example.com", source: "blame" },
-        ],
-      }),
-      step("c", "src/c.ts", "publish", [], {
-        path: "src/c.ts",
-        owners: [{ handle: "@release-owner", source: "codeowners" }],
-      }),
+      step("a", "src/a.ts", "summarize", ["b"]),
+      step("b", "src/b.ts", "extract", ["c"]),
+      step("c", "src/c.ts", "publish", []),
     ];
 
     expect(
@@ -63,6 +42,23 @@ describe("blastRadius", () => {
         verdicts: [
           { familyId: "summarize", decision: "recommend" },
           { familyId: "extract", decision: "reject" },
+        ],
+        owners: [
+          {
+            path: "src/a.ts",
+            owners: [{ handle: "@model-team", source: "codeowners" }],
+          },
+          {
+            path: "src/b.ts",
+            owners: [
+              { handle: "@model-team", source: "codeowners" },
+              { handle: "reviewer@example.com", source: "blame" },
+            ],
+          },
+          {
+            path: "src/c.ts",
+            owners: [{ handle: "@release-owner", source: "codeowners" }],
+          },
         ],
       }),
     ).toEqual([

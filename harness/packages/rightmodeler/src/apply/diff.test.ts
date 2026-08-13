@@ -54,6 +54,7 @@ describe("buildSwapDiff", () => {
     const file = successful(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -87,6 +88,7 @@ describe("buildSwapDiff", () => {
       const file = successful(
         buildSwapDiff({
           repoDir: root,
+          projectId: "project",
           swaps: [
             { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
           ],
@@ -114,6 +116,7 @@ describe("buildSwapDiff", () => {
     const file = successful(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -122,6 +125,26 @@ describe("buildSwapDiff", () => {
 
     expect(file.after).toContain("// inserted later");
     expect(file.hunks[0]?.line).toBe(3);
+  });
+
+  it("threads the project id into fresh fingerprint matching", async () => {
+    const root = await copyFixture();
+    const projectId = "acme-repo";
+    const stepRecord = scan(root, createMatcherRegistry(), projectId).find(
+      ({ callSite }) => callSite.path === "src/string.ts",
+    )!;
+
+    const file = successful(
+      buildSwapDiff({
+        repoDir: root,
+        projectId,
+        swaps: [
+          { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
+        ],
+      })[0],
+    );
+
+    expect(file.after).toContain('model: "acme/small-1"');
   });
 
   it("returns the named stale-location failure when the fingerprint diverges", async () => {
@@ -136,6 +159,7 @@ describe("buildSwapDiff", () => {
     expect(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -173,6 +197,7 @@ describe("buildSwapDiff", () => {
     expect(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -202,6 +227,7 @@ describe("buildSwapDiff", () => {
     expect(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           {
             stepRecord,
@@ -231,6 +257,7 @@ describe("buildSwapDiff", () => {
     expect(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -252,6 +279,7 @@ describe("buildSwapDiff", () => {
     const file = successful(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -269,6 +297,7 @@ describe("buildSwapDiff", () => {
     expect(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: 'bad" model' },
         ],
@@ -290,6 +319,7 @@ describe("buildSwapDiff", () => {
     const file = successful(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -321,6 +351,7 @@ describe("buildSwapDiff", () => {
       const file = successful(
         buildSwapDiff({
           repoDir: root,
+          projectId: "project",
           swaps: [
             { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
           ],
@@ -344,6 +375,7 @@ describe("buildSwapDiff", () => {
     expect(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -365,6 +397,7 @@ describe("buildSwapDiff", () => {
     expect(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -386,6 +419,7 @@ describe("buildSwapDiff", () => {
     expect(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -407,6 +441,7 @@ describe("buildSwapDiff", () => {
     expect(
       buildSwapDiff({
         repoDir: root,
+        projectId: "project",
         swaps: [
           { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
         ],
@@ -433,6 +468,7 @@ describe("buildSwapDiff", () => {
       expect(
         buildSwapDiff({
           repoDir: root,
+          projectId: "project",
           swaps: [
             { stepRecord, fromModel: "acme/large-1", toModel: "acme/small-1" },
           ],

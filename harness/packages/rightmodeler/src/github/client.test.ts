@@ -3,9 +3,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   BlockedError,
   createGithubClient,
-  GithubConfigurationError,
   GithubHttpError,
-  GithubResponseError,
+  GithubRequestError,
   type GithubClient,
 } from "./client.js";
 
@@ -42,6 +41,8 @@ interface StubModule {
     };
     reflectAuthError?: boolean;
     malformedResponsePath?: string;
+    paginationPageSize?: number;
+    foreignPaginationLink?: boolean;
   }): Promise<StubServer>;
 }
 
@@ -189,6 +190,7 @@ describe("GitHub client conformance", () => {
       teamReviewers: ["platform"],
     });
     expect(requested.requestedReviewers).toEqual(["owner"]);
+    expect(requested.requestedTeams).toEqual(["platform"]);
 
     await control(stub, "/__test/reviews", {
       ...repository,
@@ -265,8 +267,11 @@ describe("GitHub client conformance", () => {
       ...repository,
       pullNumber: pull.number,
     });
-    expect(afterAdvance.base.sha).toBe(advanced.object.sha);
-    expect(afterAdvance.base.sha).not.toBe(beforeAdvance.base.sha);
+    expect(afterAdvance.base.sha).toBe(beforeAdvance.base.sha);
+    expect(afterAdvance.base.sha).not.toBe(advanced.object.sha);
+    await expect(
+      github.getRef({ ...repository, ref: "heads/main" }),
+    ).resolves.toMatchObject({ sha: advanced.object.sha });
     await expect(
       github.compareCommits({
         ...repository,
@@ -292,7 +297,7 @@ describe("GitHub client conformance", () => {
         "GET /repos/acme/demo/git/ref/heads/main",
         "POST /repos/acme/demo/git/refs",
         "PUT /repos/acme/demo/contents/src/new%20file.ts",
-        "GET /repos/acme/demo/compare/main...rightmodeler%2Fchange",
+        "GET /repos/acme/demo/compare/main...rightmodeler/change",
         "POST /repos/acme/demo/pulls",
         "POST /repos/acme/demo/pulls/1/requested_reviewers",
         "GET /repos/acme/demo/pulls/1/reviews",
@@ -300,7 +305,7 @@ describe("GitHub client conformance", () => {
         "GET /repos/acme/demo/issues/1/comments",
         "POST /repos/acme/demo/issues/1/comments",
         "GET /repos/acme/demo/pulls/1",
-        "GET /repos/acme/demo/commits/rightmodeler%2Fchange/check-runs",
+        "GET /repos/acme/demo/commits/rightmodeler/change/check-runs",
         "PATCH /repos/acme/demo/pulls/1",
       ]),
     );
@@ -325,26 +330,157 @@ describe("GitHub client conformance", () => {
       "listReviews",
       "requestReviewers",
     ]);
-    expect(methods).not.toEqual(
-      expect.arrayContaining(["merge", "updateBranch", "deleteRef"]),
-    );
+    expect(Object.keys(await import("./client.js")).sort()).toEqual([
+      "BlockedError",
+      "GithubHttpError",
+      "GithubRequestError",
+      "createGithubClient",
+    ]);
+  });
+
+  it("paginates reviews, comments, and check runs while preserving event authors and states", async () => {
+    process.env[tokenEnv] = token;
+    const stub = await startStub({ paginationPageSize: 1 });
+    const seeded = await seed(stub);
+    const github = client(stub);
+    await github.createRef({
+      ...repository,
+      ref: "refs/heads/rightmodeler/paginated",
+      sha: seeded.sha,
+    });
+    const pull = await github.createPullRequest({
+      ...repository,
+      title: "Paginated lifecycle",
+      body: "Evidence",
+      head: "rightmodeler/paginated",
+      base: "main",
+      draft: true,
+    });
+
+    await control(stub, "/__test/reviews", {
+      ...repository,
+      pullNumber: pull.number,
+      user: "owner-one",
+      state: "COMMENTED",
+      comments: [{ body: "First", path: "README", line: 1 }],
+    });
+    await control(stub, "/__test/reviews", {
+      ...repository,
+      pullNumber: pull.number,
+      user: "owner-two",
+      state: "DISMISSED",
+      comments: [{ body: "Second", path: "README", line: 1 }],
+    });
+    await control(stub, "/__test/issue-comments", {
+      ...repository,
+      pullNumber: pull.number,
+      author: "mentioner-one",
+      body: "@rightmodeler first",
+    });
+    await control(stub, "/__test/issue-comments", {
+      ...repository,
+      pullNumber: pull.number,
+      author: "mentioner-two",
+      body: "@rightmodeler second",
+    });
+    await control(stub, "/__test/check-runs", {
+      ...repository,
+      ref: "rightmodeler/paginated",
+      runs: [
+        { name: "first", conclusion: "success" },
+        { name: "second", conclusion: "failure" },
+      ],
+    });
+
+    await expect(
+      github.listReviews({ ...repository, pullNumber: pull.number }),
+    ).resolves.toMatchObject([
+      { user: "owner-one", state: "COMMENTED" },
+      { user: "owner-two", state: "DISMISSED" },
+    ]);
+    await expect(
+      github.listReviewComments({ ...repository, pullNumber: pull.number }),
+    ).resolves.toMatchObject([{ body: "First" }, { body: "Second" }]);
+    await expect(
+      github.listIssueComments({ ...repository, issueNumber: pull.number }),
+    ).resolves.toMatchObject([
+      { user: "mentioner-one", body: "@rightmodeler first" },
+      { user: "mentioner-two", body: "@rightmodeler second" },
+    ]);
+    await expect(
+      github.listCheckRunsForRef({
+        ...repository,
+        ref: "rightmodeler/paginated",
+      }),
+    ).resolves.toMatchObject({
+      totalCount: 2,
+      checkRuns: [{ name: "first" }, { name: "second" }],
+    });
+
+    const paths = stub.getHits().map(({ path }) => path);
+    expect(
+      paths.filter((path) => path === "/repos/acme/demo/pulls/1/reviews"),
+    ).toHaveLength(2);
+    expect(
+      paths.filter(
+        (path) =>
+          path === "/repos/acme/demo/commits/rightmodeler/paginated/check-runs",
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("rejects a pagination link that leaves the configured API origin", async () => {
+    process.env[tokenEnv] = token;
+    const stub = await startStub({
+      paginationPageSize: 1,
+      foreignPaginationLink: true,
+    });
+    const seeded = await seed(stub);
+    const github = client(stub);
+    await github.createRef({
+      ...repository,
+      ref: "refs/heads/rightmodeler/foreign-page",
+      sha: seeded.sha,
+    });
+    const pull = await github.createPullRequest({
+      ...repository,
+      title: "Foreign page",
+      body: "Evidence",
+      head: "rightmodeler/foreign-page",
+      base: "main",
+      draft: true,
+    });
+    for (const user of ["owner-one", "owner-two"]) {
+      await control(stub, "/__test/reviews", {
+        ...repository,
+        pullNumber: pull.number,
+        user,
+        state: "COMMENTED",
+      });
+    }
+
+    await expect(
+      github.listReviews({ ...repository, pullNumber: pull.number }),
+    ).rejects.toThrow("GitHub pagination attempted to leave the API host");
   });
 });
 
 describe("GitHub client rate limits and credential hygiene", () => {
-  it("honors Retry-After and retries a rate-limited request", async () => {
+  it("honors Retry-After before retrying a rate-limited request", async () => {
     process.env[tokenEnv] = token;
     const stub = await startStub({
-      rateLimit: { remainingResponses: 1, status: 429, retryAfter: 0 },
+      rateLimit: { remainingResponses: 1, status: 429, retryAfter: 0.05 },
     });
     const seeded = await seed(stub);
 
+    const startedAt = performance.now();
     await expect(
       client(stub).getRef({ ...repository, ref: "heads/main" }),
     ).resolves.toEqual({
       ref: "refs/heads/main",
       sha: seeded.sha,
     });
+    expect(performance.now() - startedAt).toBeGreaterThanOrEqual(40);
     expect(
       stub
         .getHits()
@@ -452,7 +588,7 @@ describe("GitHub client rate limits and credential hygiene", () => {
 
     await expect(
       client(stub).getRef({ ...repository, ref: "heads/main" }),
-    ).rejects.toBeInstanceOf(GithubResponseError);
+    ).rejects.toBeInstanceOf(GithubRequestError);
   });
 
   it("does not read or retain the token while the client is created", async () => {
@@ -461,7 +597,7 @@ describe("GitHub client rate limits and credential hygiene", () => {
 
     await expect(
       github.getRef({ ...repository, ref: "heads/main" }),
-    ).rejects.toBeInstanceOf(GithubConfigurationError);
+    ).rejects.toBeInstanceOf(GithubRequestError);
     expect(stub.getHits()).toEqual([]);
   });
 });

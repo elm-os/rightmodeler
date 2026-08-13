@@ -6,11 +6,13 @@ import { basename, dirname, join } from "node:path";
 import { lintSwapDiff } from "./difflint.js";
 import type { SwapDiffFile } from "./diff.js";
 
-export type HostFormatterKind = "gofmt" | "prettier" | "ruff" | "unknown";
+export type HostFormatterKind = "gofmt" | "prettier" | "ruff";
 
 export interface HostConventions {
-  readonly formatter?:
-    HostFormatterKind | { readonly kind: HostFormatterKind | null };
+  readonly formatter: {
+    readonly kind: HostFormatterKind | null;
+    readonly configPath: string | null;
+  };
 }
 
 export interface FormatterBlocker {
@@ -21,7 +23,7 @@ export interface FormatterBlocker {
 
 export interface FormatResult {
   readonly files: readonly SwapDiffFile[];
-  readonly note: "formatted" | "formatter_unavailable" | "no_formatter";
+  readonly note?: "formatted" | "formatter_unavailable" | "no_formatter";
   readonly blocker?: FormatterBlocker;
 }
 
@@ -29,13 +31,6 @@ interface FormatterCommand {
   readonly executable: string;
   readonly args: (filePath: string) => string[];
   readonly stdin: boolean;
-}
-
-function formatterKind(conventions: HostConventions): HostFormatterKind {
-  const formatter = conventions.formatter;
-  if (formatter === undefined) return "unknown";
-  if (typeof formatter === "string") return formatter;
-  return formatter.kind ?? "unknown";
 }
 
 function pinnedPrettierVersion(repoDir: string): string | null {
@@ -83,8 +78,11 @@ function pinnedPrettierVersion(repoDir: string): string | null {
 
 function formatterCommand(
   repoDir: string,
-  kind: HostFormatterKind,
+  formatter: HostConventions["formatter"],
 ): FormatterCommand | null {
+  const { kind, configPath } = formatter;
+  const configArgs =
+    configPath === null ? [] : ["--config", join(repoDir, configPath)];
   if (kind === "prettier") {
     const executable = join(
       repoDir,
@@ -95,12 +93,12 @@ function formatterCommand(
     if (existsSync(executable)) {
       return {
         executable,
-        args: (filePath) => ["--stdin-filepath", filePath],
+        args: (filePath) => ["--stdin-filepath", filePath, ...configArgs],
         stdin: true,
       };
     }
     const version = pinnedPrettierVersion(repoDir);
-    return version === null
+    return version === null || !/^\d+\.\d+\.\d+[\w.+-]*$/.test(version)
       ? null
       : {
           executable: process.platform === "win32" ? "npx.cmd" : "npx",
@@ -110,6 +108,7 @@ function formatterCommand(
             "prettier",
             "--stdin-filepath",
             filePath,
+            ...configArgs,
           ],
           stdin: true,
         };
@@ -122,7 +121,7 @@ function formatterCommand(
     );
     return {
       executable: existsSync(local) ? local : "ruff",
-      args: (filePath) => ["format", filePath],
+      args: (filePath) => ["format", filePath, ...configArgs],
       stdin: false,
     };
   }
@@ -199,24 +198,36 @@ export async function formatWithHostFormatter({
   readonly conventions: HostConventions;
   readonly files: readonly SwapDiffFile[];
 }): Promise<FormatResult> {
-  const kind = formatterKind(conventions);
-  const command = formatterCommand(repoDir, kind);
+  const command = formatterCommand(repoDir, conventions.formatter);
   if (command === null) {
     return {
       files,
-      note: kind === "unknown" ? "no_formatter" : "formatter_unavailable",
+      note:
+        conventions.formatter.kind === null
+          ? "no_formatter"
+          : "formatter_unavailable",
     };
   }
 
   const formattedFiles: SwapDiffFile[] = [];
-  for (const file of files) {
+  for (const [fileIndex, file] of files.entries()) {
     const sourcePath = join(repoDir, file.path);
-    const temporaryDirectory = await mkdtemp(
-      join(dirname(sourcePath), ".rightmodeler-format-"),
-    );
-    const temporaryPath = join(temporaryDirectory, basename(sourcePath));
-    writeFileSync(temporaryPath, file.after, "utf8");
+    let temporaryDirectory: string | null = null;
     try {
+      if (!command.stdin) {
+        temporaryDirectory = await mkdtemp(
+          join(dirname(sourcePath), ".rightmodeler-format-"),
+        );
+        writeFileSync(
+          join(temporaryDirectory, basename(sourcePath)),
+          file.after,
+          "utf8",
+        );
+      }
+      const temporaryPath =
+        temporaryDirectory === null
+          ? sourcePath
+          : join(temporaryDirectory, basename(sourcePath));
       const stdout = await runFormatter(
         command,
         command.stdin ? sourcePath : temporaryPath,
@@ -233,8 +244,8 @@ export async function formatWithHostFormatter({
       );
       if (conflictLine !== null) {
         return {
-          files,
-          note: "formatted",
+          files: [...formattedFiles, ...files.slice(fileIndex)],
+          ...(formattedFiles.length > 0 ? { note: "formatted" as const } : {}),
           blocker: {
             path: file.path,
             line: conflictLine,
@@ -243,22 +254,22 @@ export async function formatWithHostFormatter({
         };
       }
 
-      const allowedModels = {
-        from: file.hunks.flatMap(({ replacements }) =>
-          replacements.map(({ from }) => from),
-        ),
-        to: file.hunks.flatMap(({ replacements }) =>
-          replacements.map(({ to }) => to),
-        ),
-      };
       const lint = lintSwapDiff({
-        files: [{ path: file.path, before: file.before, after: formatted }],
-        allowedModels,
+        files: [
+          {
+            path: file.path,
+            before: file.before,
+            after: formatted,
+            replacements: file.hunks.flatMap(({ replacements }) =>
+              replacements.map(({ from, to }) => ({ from, to })),
+            ),
+          },
+        ],
       });
       if (!lint.pass) {
         return {
-          files,
-          note: "formatted",
+          files: [...formattedFiles, ...files.slice(fileIndex)],
+          ...(formattedFiles.length > 0 ? { note: "formatted" as const } : {}),
           blocker: {
             path: file.path,
             line: lint.violations[0]!.line,
@@ -277,15 +288,20 @@ export async function formatWithHostFormatter({
       });
     } catch (error) {
       if (isMissingExecutable(error)) {
-        return { files, note: "formatter_unavailable" };
+        return {
+          files: [...formattedFiles, ...files.slice(fileIndex)],
+          note: "formatter_unavailable",
+        };
       }
       return {
-        files,
-        note: "formatted",
+        files: [...formattedFiles, ...files.slice(fileIndex)],
+        ...(formattedFiles.length > 0 ? { note: "formatted" as const } : {}),
         blocker: { path: file.path, line: 1, reason: "formatter_failed" },
       };
     } finally {
-      await rm(temporaryDirectory, { recursive: true, force: true });
+      if (temporaryDirectory !== null) {
+        await rm(temporaryDirectory, { recursive: true, force: true });
+      }
     }
   }
 

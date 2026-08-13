@@ -53,6 +53,8 @@ export async function startGithubStub({
   rateLimit,
   reflectAuthError = false,
   malformedResponsePath,
+  paginationPageSize,
+  foreignPaginationLink = false,
 }) {
   const repositories = new Map();
   const hits = [];
@@ -130,10 +132,10 @@ export async function startGithubStub({
       },
       base: {
         ref: pull.base,
-        sha: repo.refs.get(fullRef(pull.base)) ?? pull.baseSha,
+        sha: pull.baseSha,
       },
       requested_reviewers: pull.reviewers.map(user),
-      requested_teams: pull.teamReviewers.map((name) => ({ name })),
+      requested_teams: pull.teamReviewers.map((slug) => ({ slug })),
     };
   }
 
@@ -243,10 +245,6 @@ export async function startGithubStub({
 
   async function testControl(pathname, method, body, response) {
     if (!pathname.startsWith("/__test/")) return false;
-    if (method === "GET" && pathname === "/__test/hits") {
-      json(response, 200, hits);
-      return true;
-    }
     if (method !== "POST") return false;
     if (pathname === "/__test/seed") {
       try {
@@ -270,7 +268,9 @@ export async function startGithubStub({
       if (
         pull === undefined ||
         typeof body.user !== "string" ||
-        !["APPROVED", "CHANGES_REQUESTED", "COMMENTED"].includes(body.state)
+        !["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"].includes(
+          body.state,
+        )
       ) {
         json(response, 422, {
           message: "A valid pull, user, and review state are required",
@@ -309,6 +309,32 @@ export async function startGithubStub({
       }
       repo.reviewComments.set(pull.number, comments);
       json(response, 201, review);
+      return true;
+    }
+
+    if (pathname === "/__test/issue-comments") {
+      if (
+        pull === undefined ||
+        typeof body.author !== "string" ||
+        typeof body.body !== "string"
+      ) {
+        json(response, 422, {
+          message: "A valid pull, author, and body are required",
+        });
+        return true;
+      }
+      const createdAt = now();
+      const comment = {
+        id: nextComment++,
+        user: user(body.author),
+        body: body.body,
+        created_at: createdAt,
+        updated_at: createdAt,
+      };
+      const comments = repo.issueComments.get(pull.number) ?? [];
+      comments.push(comment);
+      repo.issueComments.set(pull.number, comments);
+      json(response, 201, comment);
       return true;
     }
 
@@ -376,6 +402,7 @@ export async function startGithubStub({
 
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    const authorized = request.headers.authorization === `Bearer ${token}`;
     let body;
     try {
       body = await readBody(request);
@@ -383,14 +410,14 @@ export async function startGithubStub({
       hits.push({
         method: request.method ?? "UNKNOWN",
         path: url.pathname,
+        query: Object.fromEntries(url.searchParams),
         body: null,
-        authorized: false,
+        authorized,
       });
       json(response, 400, { message: "Request body must be valid JSON" });
       return;
     }
 
-    const authorized = request.headers.authorization === `Bearer ${token}`;
     hits.push({
       method: request.method ?? "UNKNOWN",
       path: url.pathname,
@@ -400,6 +427,13 @@ export async function startGithubStub({
     });
     if (!authorized) {
       json(response, 401, { message: "Bad credentials" });
+      return;
+    }
+
+    if (/%2f/i.test(url.pathname)) {
+      json(response, 404, {
+        message: "Encoded path separators are not routed",
+      });
       return;
     }
 
@@ -449,6 +483,27 @@ export async function startGithubStub({
       return;
     }
 
+    function paginated(items, bodyForPage = (pageItems) => pageItems) {
+      const requestedPageSize = Number(url.searchParams.get("per_page") ?? 30);
+      const pageSize = Math.min(
+        paginationPageSize ?? requestedPageSize,
+        requestedPageSize,
+      );
+      const page = Number(url.searchParams.get("page") ?? 1);
+      const start = (page - 1) * pageSize;
+      const pageItems = items.slice(start, start + pageSize);
+      const headers = {};
+      if (start + pageSize < items.length) {
+        const next = new URL(url);
+        next.searchParams.set("page", String(page + 1));
+        const target = foreignPaginationLink
+          ? `https://example.invalid${next.pathname}${next.search}`
+          : `${next.pathname}${next.search}`;
+        headers.link = `<${target}>; rel="next"`;
+      }
+      json(response, 200, bodyForPage(pageItems), headers);
+    }
+
     const refMatch = /^\/git\/ref\/(.+)$/.exec(path);
     if (request.method === "GET" && refMatch !== null) {
       const ref = fullRef(decodeURIComponent(refMatch[1]));
@@ -482,13 +537,11 @@ export async function startGithubStub({
         json(response, 404, { message: "Branch not found" });
         return;
       }
-      let content;
-      try {
-        content = Buffer.from(body.content, "base64").toString("utf8");
-      } catch {
+      if (typeof body?.content !== "string") {
         json(response, 422, { message: "content must be base64" });
         return;
       }
+      const content = Buffer.from(body.content, "base64").toString("utf8");
       const files = cloneFiles(repo.commits.get(parent).files);
       const existing = files.get(filePath);
       if (
@@ -572,27 +625,19 @@ export async function startGithubStub({
 
     const reviewsMatch = /^\/pulls\/(\d+)\/reviews$/.exec(path);
     if (request.method === "GET" && reviewsMatch !== null) {
-      json(response, 200, repo.reviews.get(Number(reviewsMatch[1])) ?? []);
+      paginated(repo.reviews.get(Number(reviewsMatch[1])) ?? []);
       return;
     }
 
     const reviewCommentsMatch = /^\/pulls\/(\d+)\/comments$/.exec(path);
     if (request.method === "GET" && reviewCommentsMatch !== null) {
-      json(
-        response,
-        200,
-        repo.reviewComments.get(Number(reviewCommentsMatch[1])) ?? [],
-      );
+      paginated(repo.reviewComments.get(Number(reviewCommentsMatch[1])) ?? []);
       return;
     }
 
     const issueCommentsMatch = /^\/issues\/(\d+)\/comments$/.exec(path);
     if (issueCommentsMatch !== null && request.method === "GET") {
-      json(
-        response,
-        200,
-        repo.issueComments.get(Number(issueCommentsMatch[1])) ?? [],
-      );
+      paginated(repo.issueComments.get(Number(issueCommentsMatch[1])) ?? []);
       return;
     }
     if (issueCommentsMatch !== null && request.method === "POST") {
@@ -642,7 +687,10 @@ export async function startGithubStub({
         json(response, 404, { message: "Commit not found" });
       } else {
         const runs = repo.checkRuns.get(sha) ?? [];
-        json(response, 200, { total_count: runs.length, check_runs: runs });
+        paginated(runs, (pageItems) => ({
+          total_count: runs.length,
+          check_runs: pageItems,
+        }));
       }
       return;
     }

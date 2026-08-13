@@ -27,6 +27,7 @@ export interface GithubPullRequest {
   readonly head: { readonly ref: string; readonly sha: string };
   readonly base: { readonly ref: string; readonly sha: string };
   readonly requestedReviewers: readonly string[];
+  readonly requestedTeams: readonly string[];
 }
 
 export type GithubReviewState =
@@ -175,8 +176,6 @@ export class BlockedError extends Error {
   }
 }
 
-export class GithubConfigurationError extends Error {}
-
 export class GithubRequestError extends Error {}
 
 export class GithubHttpError extends GithubRequestError {
@@ -189,9 +188,8 @@ export class GithubHttpError extends GithubRequestError {
   }
 }
 
-export class GithubResponseError extends GithubRequestError {}
-
 const userSchema = z.object({ login: z.string() });
+const teamSchema = z.object({ slug: z.string() });
 const refSchema = z.object({
   ref: z.string(),
   object: z.object({ sha: z.string() }),
@@ -212,6 +210,7 @@ const pullRequestSchema = z.object({
   head: z.object({ ref: z.string(), sha: z.string() }),
   base: z.object({ ref: z.string(), sha: z.string() }),
   requested_reviewers: z.array(userSchema).default([]),
+  requested_teams: z.array(teamSchema).default([]),
 });
 const reviewSchema = z.object({
   id: z.number().int(),
@@ -286,7 +285,7 @@ const maxAttempts = 5;
 const maxRetryDelayMs = 60_000;
 
 function redact(value: string, token: string): string {
-  return token.length === 0 ? value : value.replaceAll(token, "[redacted]");
+  return value.replaceAll(token, "[redacted]");
 }
 
 function pathPart(value: string): string {
@@ -301,25 +300,35 @@ function retryAfterAt(response: Response, now: number): number | undefined {
   const value = response.headers.get("retry-after");
   if (value === null) return undefined;
   const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) return now + seconds * 1_000;
-  const date = Date.parse(value);
-  return Number.isNaN(date) ? undefined : date;
+  return Number.isFinite(seconds) && seconds >= 0
+    ? now + seconds * 1_000
+    : undefined;
 }
 
-function rateResetAt(response: Response, now = Date.now()): number {
+function rateResetAt(
+  response: Response,
+  now: number,
+  retryAfter: number | undefined,
+): number {
   const rawReset = response.headers.get("x-ratelimit-reset");
   if (rawReset !== null) {
     const seconds = Number(rawReset);
     if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
   }
-  return retryAfterAt(response, now) ?? now + maxRetryDelayMs;
+  return retryAfter ?? now + maxRetryDelayMs;
 }
 
-function retryDelay(response: Response): number {
+function rateLimitTiming(response: Response): {
+  readonly resetAt: number;
+  readonly delay: number;
+} {
   const now = Date.now();
   const retryAfter = retryAfterAt(response, now);
-  const target = retryAfter ?? rateResetAt(response, now);
-  return Math.max(0, target - now);
+  const resetAt = rateResetAt(response, now, retryAfter);
+  return {
+    resetAt,
+    delay: Math.max(0, (retryAfter ?? resetAt) - now),
+  };
 }
 
 function isRateLimited(response: Response): boolean {
@@ -339,14 +348,14 @@ function parseJson(text: string, label: string): unknown {
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    throw new GithubResponseError(`${label} was not valid JSON`);
+    throw new GithubRequestError(`${label} was not valid JSON`);
   }
 }
 
 function parsed<T>(schema: z.ZodType<T>, value: unknown, label: string): T {
   const result = schema.safeParse(value);
   if (!result.success) {
-    throw new GithubResponseError(
+    throw new GithubRequestError(
       `${label} did not match the GitHub response schema`,
     );
   }
@@ -368,6 +377,7 @@ function normalizePullRequest(
     head: raw.head,
     base: raw.base,
     requestedReviewers: raw.requested_reviewers.map(({ login }) => login),
+    requestedTeams: raw.requested_teams.map(({ slug }) => slug),
   };
 }
 
@@ -385,7 +395,7 @@ export function createGithubClient(
   function token(): string {
     const value = process.env[options.tokenEnv];
     if (value === undefined || value.length === 0) {
-      throw new GithubConfigurationError(
+      throw new GithubRequestError(
         `GitHub token environment variable is not set: ${options.tokenEnv}`,
       );
     }
@@ -422,13 +432,13 @@ export function createGithubClient(
 
       if (response.ok) return { response, text: await response.text() };
       if (isRateLimited(response)) {
-        lastResetAt = rateResetAt(response);
-        const delay = retryDelay(response);
+        const timing = rateLimitTiming(response);
+        lastResetAt = timing.resetAt;
         await response.body?.cancel();
-        if (attempt === maxAttempts || delay > maxRetryDelayMs) {
+        if (attempt === maxAttempts || timing.delay > maxRetryDelayMs) {
           throw new BlockedError(new Date(lastResetAt).toISOString());
         }
-        await sleep(delay);
+        await sleep(timing.delay);
         continue;
       }
 
@@ -461,21 +471,22 @@ export function createGithubClient(
       items.push(
         ...parsed(z.array(schema), parseJson(result.text, label), label),
       );
-      const link = result.response.headers.get("link");
-      const match = link?.match(/<([^>]+)>;\s*rel="next"/);
-      if (match?.[1] === undefined) {
-        next = undefined;
-      } else {
-        const candidate = new URL(match[1], baseUrl);
-        if (candidate.origin !== apiOrigin) {
-          throw new GithubResponseError(
-            "GitHub pagination attempted to leave the API host",
-          );
-        }
-        next = candidate.toString();
-      }
+      next = nextPage(result.response);
     }
     return items;
+  }
+
+  function nextPage(response: Response): string | undefined {
+    const link = response.headers.get("link");
+    const match = link?.match(/<([^>]+)>;\s*rel="next"/);
+    if (match?.[1] === undefined) return undefined;
+    const candidate = new URL(match[1], baseUrl);
+    if (candidate.origin !== apiOrigin) {
+      throw new GithubRequestError(
+        "GitHub pagination attempted to leave the API host",
+      );
+    }
+    return candidate.toString();
   }
 
   return {
@@ -491,7 +502,7 @@ export function createGithubClient(
 
     async compareCommits(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/compare/${encodeURIComponent(input.base)}...${encodeURIComponent(input.head)}`,
+        `${repositoryPath(input)}/compare/${pathPart(input.base)}...${pathPart(input.head)}`,
         {},
         comparisonSchema,
         "GitHub comparison response",
@@ -651,15 +662,24 @@ export function createGithubClient(
     },
 
     async listCheckRunsForRef(input) {
-      const raw = await requestJson(
-        `${repositoryPath(input)}/commits/${encodeURIComponent(input.ref)}/check-runs?per_page=100`,
-        {},
-        checkRunsSchema,
-        "GitHub check-runs response",
-      );
+      const runs: z.infer<typeof checkRunSchema>[] = [];
+      let totalCount = 0;
+      let next: string | undefined =
+        `${repositoryPath(input)}/commits/${pathPart(input.ref)}/check-runs?per_page=100`;
+      while (next !== undefined) {
+        const result = await request(next);
+        const raw = parsed(
+          checkRunsSchema,
+          parseJson(result.text, "GitHub check-runs response"),
+          "GitHub check-runs response",
+        );
+        totalCount = raw.total_count;
+        runs.push(...raw.check_runs);
+        next = nextPage(result.response);
+      }
       return {
-        totalCount: raw.total_count,
-        checkRuns: raw.check_runs.map((run) => ({
+        totalCount,
+        checkRuns: runs.map((run) => ({
           id: run.id,
           name: run.name,
           headSha: run.head_sha,

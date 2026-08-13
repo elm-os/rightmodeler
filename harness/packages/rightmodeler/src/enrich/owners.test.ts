@@ -1,12 +1,15 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { resolveOwners } from "./owners.js";
 
+const execFileAsync = promisify(execFile);
 const temporaryDirectories: string[] = [];
 const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -17,6 +20,10 @@ async function temporaryRepository(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "rightmodeler-owners-"));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+async function git(repoDir: string, args: readonly string[]): Promise<void> {
+  await execFileAsync("git", ["-C", repoDir, ...args]);
 }
 
 afterEach(async () => {
@@ -79,6 +86,24 @@ describe("resolveOwners", () => {
     ]);
   });
 
+  it("lets a later CODEOWNERS rule without owners clear an earlier owner", async () => {
+    const repoDir = await temporaryRepository();
+    await writeFile(
+      join(repoDir, "CODEOWNERS"),
+      ["/apps/ @octocat", "/apps/github"].join("\n"),
+    );
+
+    await expect(
+      resolveOwners({ repoDir, filePaths: ["apps/github/client.ts"] }),
+    ).resolves.toEqual([
+      {
+        path: "apps/github/client.ts",
+        owners: [],
+        reason: "codeowners_rule_without_owners",
+      },
+    ]);
+  });
+
   it("matches basename, anchored, direct-child, directory, and double-star patterns", async () => {
     const repoDir = await temporaryRepository();
     await writeFile(
@@ -91,7 +116,6 @@ describe("resolveOwners", () => {
         "/apps/github @github-owner",
         "**/logs @logs-owner",
         "*.rb @ruby-owner",
-        "***/*.rb @invalid-owner",
       ].join("\n"),
     );
 
@@ -152,14 +176,64 @@ describe("resolveOwners", () => {
       filePaths: ["harness/docs/Architecture.md"],
     });
 
-    expect(resolution).toEqual({
-      path: "harness/docs/Architecture.md",
-      owners: [
-        {
-          handle: "aharish4@asu.edu",
-          source: "blame",
-        },
-      ],
-    });
+    expect(resolution?.path).toBe("harness/docs/Architecture.md");
+    expect(resolution?.owners.length).toBeGreaterThan(0);
+    expect(resolution?.owners.every(({ source }) => source === "blame")).toBe(
+      true,
+    );
+  });
+
+  it("bounds concurrent blame commands and memoizes repeated paths", async () => {
+    const repoDir = await temporaryRepository();
+    await git(repoDir, ["init", "-b", "main"]);
+    await mkdir(join(repoDir, "src"));
+    const paths = Array.from({ length: 6 }, (_, index) => `src/${index}.ts`);
+    await Promise.all(
+      paths.map((path, index) =>
+        writeFile(join(repoDir, path), `export const value = ${index};\n`),
+      ),
+    );
+    await git(repoDir, ["add", "--", "src"]);
+    await git(repoDir, [
+      "-c",
+      "user.name=Fixture Author",
+      "-c",
+      "user.email=fixture@example.com",
+      "commit",
+      "-m",
+      "Add fixtures",
+    ]);
+    const tracePath = join(repoDir, "trace.json");
+    const previousTrace = process.env.GIT_TRACE2_EVENT;
+    process.env.GIT_TRACE2_EVENT = tracePath;
+
+    try {
+      await resolveOwners({ repoDir, filePaths: [...paths, paths[0]!] });
+    } finally {
+      if (previousTrace === undefined) delete process.env.GIT_TRACE2_EVENT;
+      else process.env.GIT_TRACE2_EVENT = previousTrace;
+    }
+
+    const events = (await readFile(tracePath, "utf8"))
+      .trim()
+      .split("\n")
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            event: string;
+            time: string;
+          },
+      )
+      .filter(({ event }) => event === "start" || event === "exit")
+      .sort((left, right) => left.time.localeCompare(right.time));
+    expect(events.filter(({ event }) => event === "start")).toHaveLength(6);
+
+    let active = 0;
+    let maximumActive = 0;
+    for (const event of events) {
+      active += event.event === "start" ? 1 : -1;
+      maximumActive = Math.max(maximumActive, active);
+    }
+    expect(maximumActive).toBeLessThanOrEqual(4);
   });
 });

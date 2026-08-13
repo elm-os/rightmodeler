@@ -18,6 +18,43 @@ const allowedModels = {
   to: ["acme/small-1"],
 };
 
+function lint({
+  files,
+  allowedModels: models = allowedModels,
+}: {
+  readonly files: readonly {
+    readonly path: string;
+    readonly before: string;
+    readonly after: string;
+  }[];
+  readonly allowedModels?: {
+    readonly from: readonly string[];
+    readonly to: readonly string[];
+  };
+}) {
+  const replacements = models.from.map((from, index) => ({
+    from,
+    to: models.to[index] ?? "",
+  }));
+  return lintSwapDiff({
+    files: files.map((file) => ({ ...file, replacements })),
+  });
+}
+
+function lintFiles(
+  files: readonly {
+    readonly path: string;
+    readonly before: string;
+    readonly after: string;
+    readonly replacements: readonly {
+      readonly from: string;
+      readonly to: string;
+    }[];
+  }[],
+) {
+  return lintSwapDiff({ files });
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories
@@ -42,6 +79,7 @@ async function greenFixtureDiffs(): Promise<SwapDiffFile[]> {
   );
   const results = buildSwapDiff({
     repoDir: root,
+    projectId: "project",
     swaps: records.map((stepRecord) => ({
       stepRecord,
       fromModel: "acme/large-1",
@@ -67,13 +105,13 @@ describe("lintSwapDiff", () => {
         appliedTwice = appliedTwice.replace(hunk.before, hunk.after);
       }
       expect(appliedTwice).toBe(applied);
-      expect(lintSwapDiff({ files: [file], allowedModels })).toEqual({
+      expect(lint({ files: [file], allowedModels })).toEqual({
         pass: true,
         violations: [],
       });
       expect(
-        lintSwapDiff({
-          files: [{ ...file, before: applied, after: appliedTwice }],
+        lint({
+          files: [{ ...file, before: file.before, after: appliedTwice }],
           allowedModels,
         }),
       ).toEqual({ pass: true, violations: [] });
@@ -84,7 +122,7 @@ describe("lintSwapDiff", () => {
     const [file] = (await greenFixtureDiffs()).filter(
       ({ path }) => path === "src/string.ts",
     );
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         { ...file!, after: `import { track } from "./track";\n${file!.after}` },
       ],
@@ -103,7 +141,7 @@ describe("lintSwapDiff", () => {
     const [file] = (await greenFixtureDiffs()).filter(
       ({ path }) => path === "src/string.ts",
     );
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           ...file!,
@@ -123,7 +161,7 @@ describe("lintSwapDiff", () => {
   });
 
   it("rejects a comment edit with its actual line", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/comment.ts",
@@ -144,7 +182,7 @@ describe("lintSwapDiff", () => {
   });
 
   it("rejects a model-shaped edit inside a multiline comment", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/comment.ts",
@@ -169,7 +207,7 @@ describe("lintSwapDiff", () => {
   ])(
     "rejects a model-shaped edit inside a regular expression",
     (before, after) => {
-      const result = lintSwapDiff({
+      const result = lint({
         files: [
           {
             path: "src/pattern.ts",
@@ -181,13 +219,13 @@ describe("lintSwapDiff", () => {
       });
 
       expect(result.violations).toEqual([
-        { path: "src/pattern.ts", line: 1, kind: "unswapped_file" },
+        { path: "src/pattern.ts", line: 1, kind: "non_model_change" },
       ]);
     },
   );
 
   it("rejects whitespace drift on an untouched line", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/space.ts",
@@ -208,7 +246,62 @@ describe("lintSwapDiff", () => {
   });
 
   it("rejects a changed file with no swapped step", () => {
-    const result = lintSwapDiff({
+    const result = lintFiles([
+      {
+        path: "docs/example.ts",
+        before: 'const MODEL = "acme/large-1";\n',
+        after: 'const MODEL = "acme/small-1";\n',
+        replacements: [],
+      },
+    ]);
+
+    expect(result.violations).toEqual([
+      { path: "docs/example.ts", line: 1, kind: "unswapped_file" },
+    ]);
+  });
+
+  it("rejects an unswapped file even when its model pair is authorized elsewhere", () => {
+    const result = lintFiles([
+      {
+        path: "src/real.ts",
+        before: 'const MODEL = "acme/large-1";\n',
+        after: 'const MODEL = "acme/small-1";\n',
+        replacements: [{ from: "acme/large-1", to: "acme/small-1" }],
+      },
+      {
+        path: "docs/example.ts",
+        before: 'const MODEL = "acme/large-1";\n',
+        after: 'const MODEL = "acme/small-1";\n',
+        replacements: [],
+      },
+    ]);
+
+    expect(result.violations).toEqual([
+      { path: "docs/example.ts", line: 1, kind: "unswapped_file" },
+    ]);
+  });
+
+  it("does not let one file consume another file's replacement budget", () => {
+    const result = lintFiles([
+      {
+        path: "src/bogus.ts",
+        before: 'const MODEL = "acme/large-1";\n',
+        after: 'const MODEL = "acme/small-1";\n',
+        replacements: [{ from: "acme/large-1", to: "acme/small-1" }],
+      },
+      {
+        path: "src/real.ts",
+        before: 'const MODEL = "acme/large-1";\n',
+        after: 'const MODEL = "acme/small-1";\n',
+        replacements: [{ from: "acme/large-1", to: "acme/small-1" }],
+      },
+    ]);
+
+    expect(result).toEqual({ pass: true, violations: [] });
+  });
+
+  it("rejects non-model prose with model words", () => {
+    const result = lint({
       files: [
         {
           path: "src/notes.ts",
@@ -225,7 +318,7 @@ describe("lintSwapDiff", () => {
   });
 
   it("rejects lockfile churn even when it resembles a model replacement", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "pnpm-lock.yaml",
@@ -242,7 +335,7 @@ describe("lintSwapDiff", () => {
   });
 
   it("rejects a model outside the allowed sets", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/model.ts",
@@ -261,7 +354,7 @@ describe("lintSwapDiff", () => {
   });
 
   it("requires corresponding allowed model pairs", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/model.ts",
@@ -281,7 +374,7 @@ describe("lintSwapDiff", () => {
   });
 
   it("does not reuse one authorized pair for two replacements", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/models.ts",
@@ -300,7 +393,7 @@ describe("lintSwapDiff", () => {
   });
 
   it("accepts a multiline model value and a quoted model key", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/multiline.ts",
@@ -317,7 +410,7 @@ describe("lintSwapDiff", () => {
   });
 
   it("allows a formatter-added trailing comma on the swapped line", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/model.ts",
@@ -331,8 +424,21 @@ describe("lintSwapDiff", () => {
     expect(result).toEqual({ pass: true, violations: [] });
   });
 
+  it.each([
+    ['  model: "acme/large-1",\n', '  model: "acme/small-1"\n'],
+    ['const MODEL = "acme/large-1";\n', 'const MODEL = "acme/small-1"\n'],
+  ])("rejects removing trailing punctuation during a swap", (before, after) => {
+    const result = lint({
+      files: [{ path: "src/model.ts", before, after }],
+    });
+
+    expect(result.violations).toEqual([
+      { path: "src/model.ts", line: 1, kind: "non_model_change" },
+    ]);
+  });
+
   it("rejects exchanging a statement semicolon for a comma", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/model.ts",
@@ -344,12 +450,12 @@ describe("lintSwapDiff", () => {
     });
 
     expect(result.violations).toEqual([
-      { path: "src/model.ts", line: 1, kind: "unswapped_file" },
+      { path: "src/model.ts", line: 1, kind: "non_model_change" },
     ]);
   });
 
   it("accepts a typed constant whose name does not contain model", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/model.ts",
@@ -377,7 +483,7 @@ describe("lintSwapDiff", () => {
       'const MODEL_ID = "acme/small-1";',
     ].join("\n");
 
-    const result = lintSwapDiff({
+    const result = lint({
       files: [{ path: "src/large.ts", before, after }],
       allowedModels,
     });
@@ -390,7 +496,7 @@ describe("lintSwapDiff", () => {
   });
 
   it("does not treat a mutable assignment as a model constant", () => {
-    const result = lintSwapDiff({
+    const result = lint({
       files: [
         {
           path: "src/model.ts",
@@ -402,7 +508,7 @@ describe("lintSwapDiff", () => {
     });
 
     expect(result.violations).toEqual([
-      { path: "src/model.ts", line: 1, kind: "unswapped_file" },
+      { path: "src/model.ts", line: 1, kind: "non_model_change" },
     ]);
   });
 });

@@ -1,3 +1,5 @@
+import { scanSource, type SourceLexicalScan } from "./lex.js";
+
 export type DiffViolationKind =
   | "comment_change"
   | "disallowed_model"
@@ -25,14 +27,6 @@ interface ChangedLine {
   readonly after: string;
 }
 
-interface StringToken {
-  readonly fullStart: number;
-  readonly fullEnd: number;
-  readonly start: number;
-  readonly end: number;
-  readonly value: string;
-}
-
 interface ModelToken {
   readonly line: number;
   readonly start: number;
@@ -40,24 +34,7 @@ interface ModelToken {
   readonly value: string;
 }
 
-interface LexicalScan {
-  readonly mask: string;
-  readonly strings: readonly StringToken[];
-  readonly stringAt: ReadonlyMap<number, StringToken>;
-  readonly lineStarts: readonly number[];
-  readonly comments: ReadonlyMap<number, string>;
-}
-
-function regexStartsAt(content: string, index: number): boolean {
-  let previous = index - 1;
-  while (previous >= 0 && /\s/.test(content[previous]!)) previous -= 1;
-  if (previous < 0 || "([{:,;=!?&|+-*%^~<>".includes(content[previous]!)) {
-    return true;
-  }
-  return /\b(?:case|return|throw|yield)\s*$/.test(content.slice(0, index));
-}
-
-function linearChangedLines(
+function changedLines(
   beforeLines: readonly string[],
   afterLines: readonly string[],
   prefix: number,
@@ -139,238 +116,33 @@ function linearChangedLines(
   return changes;
 }
 
-function changedLines(before: string, after: string): ChangedLine[] {
-  const beforeLines = before.split("\n");
-  const afterLines = after.split("\n");
+function changedContentLines(before: string, after: string): ChangedLine[] {
+  const allBeforeLines = before.split("\n");
+  const allAfterLines = after.split("\n");
   let prefix = 0;
   while (
-    prefix < beforeLines.length &&
-    prefix < afterLines.length &&
-    beforeLines[prefix] === afterLines[prefix]
+    prefix < allBeforeLines.length &&
+    prefix < allAfterLines.length &&
+    allBeforeLines[prefix] === allAfterLines[prefix]
   ) {
     prefix += 1;
   }
   let suffix = 0;
   while (
-    suffix < beforeLines.length - prefix &&
-    suffix < afterLines.length - prefix &&
-    beforeLines[beforeLines.length - suffix - 1] ===
-      afterLines[afterLines.length - suffix - 1]
+    suffix < allBeforeLines.length - prefix &&
+    suffix < allAfterLines.length - prefix &&
+    allBeforeLines[allBeforeLines.length - suffix - 1] ===
+      allAfterLines[allAfterLines.length - suffix - 1]
   ) {
     suffix += 1;
   }
 
-  const beforeMiddle = beforeLines.slice(prefix, beforeLines.length - suffix);
-  const afterMiddle = afterLines.slice(prefix, afterLines.length - suffix);
-  if (beforeMiddle.length * afterMiddle.length > 1_000_000) {
-    return linearChangedLines(beforeMiddle, afterMiddle, prefix);
-  }
-  const distances = Array.from({ length: beforeMiddle.length + 1 }, () =>
-    Array<number>(afterMiddle.length + 1).fill(0),
+  const beforeLines = allBeforeLines.slice(
+    prefix,
+    allBeforeLines.length - suffix,
   );
-  for (let index = 0; index <= beforeMiddle.length; index += 1) {
-    distances[index]![0] = index;
-  }
-  for (let index = 0; index <= afterMiddle.length; index += 1) {
-    distances[0]![index] = index;
-  }
-  for (
-    let beforeIndex = 1;
-    beforeIndex <= beforeMiddle.length;
-    beforeIndex += 1
-  ) {
-    for (
-      let afterIndex = 1;
-      afterIndex <= afterMiddle.length;
-      afterIndex += 1
-    ) {
-      const substitution =
-        distances[beforeIndex - 1]![afterIndex - 1]! +
-        (beforeMiddle[beforeIndex - 1] === afterMiddle[afterIndex - 1] ? 0 : 1);
-      distances[beforeIndex]![afterIndex] = Math.min(
-        substitution,
-        distances[beforeIndex - 1]![afterIndex]! + 1,
-        distances[beforeIndex]![afterIndex - 1]! + 1,
-      );
-    }
-  }
-
-  const reversed: ChangedLine[] = [];
-  let beforeIndex = beforeMiddle.length;
-  let afterIndex = afterMiddle.length;
-  while (beforeIndex > 0 || afterIndex > 0) {
-    if (
-      beforeIndex > 0 &&
-      afterIndex > 0 &&
-      beforeMiddle[beforeIndex - 1] === afterMiddle[afterIndex - 1]
-    ) {
-      beforeIndex -= 1;
-      afterIndex -= 1;
-      continue;
-    }
-    if (
-      beforeIndex > 0 &&
-      afterIndex > 0 &&
-      distances[beforeIndex]![afterIndex] ===
-        distances[beforeIndex - 1]![afterIndex - 1]! + 1
-    ) {
-      reversed.push({
-        line: prefix + afterIndex,
-        beforeLine: prefix + beforeIndex,
-        afterLine: prefix + afterIndex,
-        before: beforeMiddle[beforeIndex - 1]!,
-        after: afterMiddle[afterIndex - 1]!,
-      });
-      beforeIndex -= 1;
-      afterIndex -= 1;
-      continue;
-    }
-    if (
-      afterIndex > 0 &&
-      (beforeIndex === 0 ||
-        distances[beforeIndex]![afterIndex] ===
-          distances[beforeIndex]![afterIndex - 1]! + 1)
-    ) {
-      reversed.push({
-        line: prefix + afterIndex,
-        beforeLine: prefix + beforeIndex + 1,
-        afterLine: prefix + afterIndex,
-        before: "",
-        after: afterMiddle[afterIndex - 1]!,
-      });
-      afterIndex -= 1;
-      continue;
-    }
-    reversed.push({
-      line: prefix + afterIndex + 1,
-      beforeLine: prefix + beforeIndex,
-      afterLine: prefix + afterIndex + 1,
-      before: beforeMiddle[beforeIndex - 1]!,
-      after: "",
-    });
-    beforeIndex -= 1;
-  }
-  return reversed.reverse();
-}
-
-function lexicalScan(content: string): LexicalScan {
-  let mask = "";
-  let index = 0;
-  let line = 1;
-  const strings: StringToken[] = [];
-  const comments = new Map<number, string>();
-
-  const recordComment = (text: string, startLine: number): void => {
-    for (const part of text.split("\n")) {
-      comments.set(startLine, `${comments.get(startLine) ?? ""}${part}`);
-      startLine += 1;
-    }
-  };
-
-  while (index < content.length) {
-    const character = content[index]!;
-    const next = content[index + 1];
-    if (character === "/" && next === "/") {
-      const start = index;
-      while (index < content.length && content[index] !== "\n") index += 1;
-      const text = content.slice(start, index);
-      recordComment(text, line);
-      mask += " ".repeat(text.length);
-      continue;
-    }
-    if (character === "/" && next === "*") {
-      const start = index;
-      const startLine = line;
-      index += 2;
-      while (
-        index < content.length &&
-        !(content[index] === "*" && content[index + 1] === "/")
-      ) {
-        if (content[index] === "\n") line += 1;
-        index += 1;
-      }
-      if (index < content.length) index += 2;
-      const text = content.slice(start, index);
-      recordComment(text, startLine);
-      mask += text.replace(/[^\n]/g, " ");
-      continue;
-    }
-    if (character === "/") {
-      if (regexStartsAt(content, index)) {
-        const start = index;
-        index += 1;
-        let inClass = false;
-        while (index < content.length) {
-          if (content[index] === "\\") {
-            index += 2;
-            continue;
-          }
-          if (content[index] === "[") inClass = true;
-          else if (content[index] === "]") inClass = false;
-          else if (content[index] === "/" && !inClass) break;
-          if (content[index] === "\n") break;
-          index += 1;
-        }
-        if (content[index] === "/") {
-          index += 1;
-          while (/[A-Za-z]/.test(content[index] ?? "")) index += 1;
-          mask += content.slice(start, index).replace(/[^\n]/g, " ");
-          continue;
-        }
-        index = start;
-      }
-    }
-    if (character === "#") {
-      const start = index;
-      while (index < content.length && content[index] !== "\n") index += 1;
-      const text = content.slice(start, index);
-      recordComment(text, line);
-      mask += " ".repeat(text.length);
-      continue;
-    }
-    if (character === '"' || character === "'" || character === "`") {
-      const fullStart = index;
-      const delimiterLength =
-        character !== "`" &&
-        content[index + 1] === character &&
-        content[index + 2] === character
-          ? 3
-          : 1;
-      const delimiter = character.repeat(delimiterLength);
-      index += delimiterLength;
-      const start = index;
-      while (index < content.length && !content.startsWith(delimiter, index)) {
-        if (content[index] === "\n") line += 1;
-        if (content[index] === "\\" && index + 1 < content.length) index += 1;
-        index += 1;
-      }
-      const end = index;
-      if (index < content.length) index += delimiterLength;
-      const fullEnd = index;
-      strings.push({
-        fullStart,
-        fullEnd,
-        start,
-        end,
-        value: content.slice(start, end),
-      });
-      mask += content.slice(fullStart, fullEnd).replace(/[^\n]/g, " ");
-      continue;
-    }
-    mask += character;
-    if (character === "\n") line += 1;
-    index += 1;
-  }
-  return {
-    mask,
-    strings,
-    stringAt: new Map(strings.map((string) => [string.fullStart, string])),
-    lineStarts: [
-      0,
-      ...[...content.matchAll(/\n/g)].map((match) => match.index + 1),
-    ],
-    comments,
-  };
+  const afterLines = allAfterLines.slice(prefix, allAfterLines.length - suffix);
+  return changedLines(beforeLines, afterLines, prefix);
 }
 
 function lineForOffset(lineStarts: readonly number[], offset: number): number {
@@ -386,7 +158,7 @@ function lineForOffset(lineStarts: readonly number[], offset: number): number {
 
 function valueAfter(
   content: string,
-  scan: LexicalScan,
+  scan: SourceLexicalScan,
   start: number,
   allowWrapper: boolean,
 ): ModelToken | null {
@@ -419,7 +191,7 @@ function valueAfter(
   };
 }
 
-function modelTokens(content: string, scan: LexicalScan): ModelToken[] {
+function modelTokens(content: string, scan: SourceLexicalScan): ModelToken[] {
   const tokens: ModelToken[] = [];
   const addAfterMatches = (pattern: RegExp, allowWrapper: boolean): void => {
     for (const match of scan.mask.matchAll(pattern)) {
@@ -477,22 +249,7 @@ function withoutTokens(line: string, tokens: readonly ModelToken[]): string {
 }
 
 function sameLineShape(before: string, after: string): boolean {
-  if (before === after) return true;
-  for (const punctuation of [";", ","]) {
-    const beforeWithout = before.endsWith(punctuation)
-      ? before.slice(0, -1)
-      : before;
-    const afterWithout = after.endsWith(punctuation)
-      ? after.slice(0, -1)
-      : after;
-    if (
-      beforeWithout === afterWithout &&
-      (before.endsWith(punctuation) || after.endsWith(punctuation))
-    ) {
-      return true;
-    }
-  }
-  return false;
+  return before === after || after === `${before};` || after === `${before},`;
 }
 
 function isLockfile(path: string): boolean {
@@ -508,15 +265,15 @@ function lintChangedLine(
   beforeComments: ReadonlyMap<number, string>,
   afterComments: ReadonlyMap<number, string>,
   allowedPairs: Map<string, number>,
-): { violation?: DiffViolationKind; replacements: number } {
+): { violation?: DiffViolationKind } {
   if (
     (beforeComments.get(change.beforeLine) ?? "") !==
     (afterComments.get(change.afterLine) ?? "")
   ) {
-    return { violation: "comment_change", replacements: 0 };
+    return { violation: "comment_change" };
   }
   if (change.before.replace(/\s/g, "") === change.after.replace(/\s/g, "")) {
-    return { violation: "whitespace_change", replacements: 0 };
+    return { violation: "whitespace_change" };
   }
 
   const beforeLineTokens = tokensOnLine(beforeTokens, change.beforeLine);
@@ -529,7 +286,7 @@ function lintChangedLine(
       withoutTokens(change.after, afterLineTokens),
     )
   ) {
-    return { violation: "non_model_change", replacements: 0 };
+    return { violation: "non_model_change" };
   }
 
   const replacements: string[] = [];
@@ -540,41 +297,33 @@ function lintChangedLine(
     const pair = `${from}\0${to}`;
     const alreadyUsed = replacements.filter((used) => used === pair).length;
     if ((allowedPairs.get(pair) ?? 0) <= alreadyUsed) {
-      return { violation: "disallowed_model", replacements: 0 };
+      return { violation: "disallowed_model" };
     }
     replacements.push(pair);
   }
   for (const pair of replacements) {
     allowedPairs.set(pair, allowedPairs.get(pair)! - 1);
   }
-  return replacements.length === 0
-    ? { violation: "non_model_change", replacements: 0 }
-    : { replacements: replacements.length };
+  return replacements.length === 0 ? { violation: "non_model_change" } : {};
 }
 
 export function lintSwapDiff({
   files,
-  allowedModels,
 }: {
   readonly files: readonly {
     readonly path: string;
     readonly before: string;
     readonly after: string;
+    readonly replacements: readonly {
+      readonly from: string;
+      readonly to: string;
+    }[];
   }[];
-  readonly allowedModels: {
-    readonly from: readonly string[];
-    readonly to: readonly string[];
-  };
 }): DiffLintResult {
   const violations: DiffViolation[] = [];
-  const allowedPairs = new Map<string, number>();
-  for (const [index, from] of allowedModels.from.entries()) {
-    const pair = `${from}\0${allowedModels.to[index] ?? ""}`;
-    allowedPairs.set(pair, (allowedPairs.get(pair) ?? 0) + 1);
-  }
 
   for (const file of files) {
-    const changes = changedLines(file.before, file.after);
+    const changes = changedContentLines(file.before, file.after);
     if (changes.length === 0) continue;
     if (isLockfile(file.path)) {
       violations.push({
@@ -584,13 +333,25 @@ export function lintSwapDiff({
       });
       continue;
     }
+    if (file.replacements.length === 0) {
+      violations.push({
+        path: file.path,
+        line: changes[0]!.line,
+        kind: "unswapped_file",
+      });
+      continue;
+    }
 
-    const beforeScan = lexicalScan(file.before);
-    const afterScan = lexicalScan(file.after);
+    const allowedPairs = new Map<string, number>();
+    for (const { from, to } of file.replacements) {
+      const pair = `${from}\0${to}`;
+      allowedPairs.set(pair, (allowedPairs.get(pair) ?? 0) + 1);
+    }
+    const beforeScan = scanSource(file.before);
+    const afterScan = scanSource(file.after);
     const beforeTokens = modelTokens(file.before, beforeScan);
     const afterTokens = modelTokens(file.after, afterScan);
     const fileViolations: DiffViolation[] = [];
-    let replacements = 0;
     for (const change of changes) {
       const result = lintChangedLine(
         change,
@@ -600,7 +361,6 @@ export function lintSwapDiff({
         afterScan.comments,
         allowedPairs,
       );
-      replacements += result.replacements;
       if (result.violation !== undefined) {
         fileViolations.push({
           path: file.path,
@@ -609,19 +369,7 @@ export function lintSwapDiff({
         });
       }
     }
-    if (
-      replacements === 0 &&
-      fileViolations.length > 0 &&
-      fileViolations.every(({ kind }) => kind === "non_model_change")
-    ) {
-      violations.push({
-        path: file.path,
-        line: fileViolations[0]!.line,
-        kind: "unswapped_file",
-      });
-    } else {
-      violations.push(...fileViolations);
-    }
+    violations.push(...fileViolations);
   }
 
   return { pass: violations.length === 0, violations };

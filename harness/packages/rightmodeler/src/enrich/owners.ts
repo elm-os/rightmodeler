@@ -3,8 +3,11 @@ import { access, readFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
 
+import { codeownersPaths, compareText } from "./shared.js";
+
 const execFileAsync = promisify(execFile);
 const maximumBlameOwners = 3;
+const maximumBlameConcurrency = 4;
 
 export interface RankedOwner {
   readonly handle: string;
@@ -25,19 +28,13 @@ interface CodeownersRule {
   readonly owners: readonly string[];
 }
 
+interface CompiledCodeownersRule extends CodeownersRule {
+  readonly matcher: RegExp;
+}
+
 interface BlameCommitter {
   lines: number;
   latestCommitterTime: number;
-}
-
-const codeownersPaths = [
-  ".github/CODEOWNERS",
-  "CODEOWNERS",
-  "docs/CODEOWNERS",
-] as const;
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function repositoryPath(repoDir: string, filePath: string): string {
@@ -57,59 +54,12 @@ async function findCodeowners(repoDir: string): Promise<string | null> {
   return null;
 }
 
-function tokens(line: string): string[] {
-  const result: string[] = [];
-  let token = "";
-  let escaped = false;
-
-  for (const character of line) {
-    if (escaped) {
-      token += character;
-      escaped = false;
-      continue;
-    }
-    if (character === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (character === "#") break;
-    if (/\s/.test(character)) {
-      if (token !== "") {
-        result.push(token);
-        token = "";
-      }
-      continue;
-    }
-    token += character;
-  }
-  if (escaped) token += "\\";
-  if (token !== "") result.push(token);
-  return result;
-}
-
-function validOwner(value: string): boolean {
-  return (
-    /^@[A-Za-z0-9](?:[A-Za-z0-9_-]*)(?:\/[A-Za-z0-9][A-Za-z0-9_-]*)?$/.test(
-      value,
-    ) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
-  );
-}
-
 export function parseCodeowners(content: string): readonly CodeownersRule[] {
   const rules: CodeownersRule[] = [];
   for (const line of content.split(/\r?\n/)) {
-    if (line.trimStart().startsWith("\\#")) continue;
-    const [pattern, ...owners] = tokens(line);
-    if (
-      pattern === undefined ||
-      pattern.startsWith("!") ||
-      pattern.includes("[") ||
-      pattern.includes("]") ||
-      pattern.includes("***") ||
-      owners.some((owner) => !validOwner(owner))
-    ) {
-      continue;
-    }
+    const rule = line.split("#")[0]!.trim();
+    if (rule === "") continue;
+    const [pattern, ...owners] = rule.split(/\s+/);
     rules.push({ pattern, owners });
   }
   return rules;
@@ -163,12 +113,12 @@ function codeownersRegex(pattern: string): RegExp {
 }
 
 function matchingRule(
-  rules: readonly CodeownersRule[],
+  rules: readonly CompiledCodeownersRule[],
   filePath: string,
 ): CodeownersRule | null {
   let matched: CodeownersRule | null = null;
   for (const rule of rules) {
-    if (codeownersRegex(rule.pattern).test(filePath)) matched = rule;
+    if (rule.matcher.test(filePath)) matched = rule;
   }
   return matched;
 }
@@ -179,10 +129,7 @@ function blameCommitters(output: string): readonly RankedOwner[] {
   let committerTime = 0;
 
   for (const line of output.split(/\r?\n/)) {
-    if (/^[0-9a-f^]{40,64} \d+ \d+(?: \d+)?$/.test(line)) {
-      email = null;
-      committerTime = 0;
-    } else if (line.startsWith("committer-mail ")) {
+    if (line.startsWith("committer-mail ")) {
       email = line.slice("committer-mail ".length).replace(/^<|>$/g, "");
     } else if (line.startsWith("committer-time ")) {
       committerTime =
@@ -239,36 +186,65 @@ export async function resolveOwners({
   const rules =
     codeownersPath === null
       ? []
-      : parseCodeowners(await readFile(join(repoDir, codeownersPath), "utf8"));
+      : parseCodeowners(
+          await readFile(join(repoDir, codeownersPath), "utf8"),
+        ).map((rule) => ({
+          ...rule,
+          matcher: codeownersRegex(rule.pattern),
+        }));
+  const paths = filePaths.map((inputPath) =>
+    repositoryPath(repoDir, inputPath),
+  );
+  const rulesByPath = new Map(
+    [...new Set(paths)].map(
+      (path) => [path, matchingRule(rules, path)] as const,
+    ),
+  );
+  const blamePaths = [...rulesByPath.entries()]
+    .filter(([, rule]) => rule === null)
+    .map(([path]) => path);
+  const blameOwnersByPath = new Map<string, readonly RankedOwner[]>();
+  let nextPath = 0;
 
-  return Promise.all(
-    filePaths.map(async (inputPath) => {
-      const path = repositoryPath(repoDir, inputPath);
-      const rule = matchingRule(rules, path);
-      if (rule !== null) {
-        return rule.owners.length === 0
-          ? {
-              path,
-              owners: [],
-              reason: "codeowners_rule_without_owners" as const,
-            }
-          : {
-              path,
-              owners: rule.owners.map((handle) => ({
-                handle,
-                source: "codeowners" as const,
-              })),
-            };
-      }
+  async function blameWorker(): Promise<void> {
+    while (nextPath < blamePaths.length) {
+      const path = blamePaths[nextPath++]!;
+      blameOwnersByPath.set(path, await ownersFromBlame(repoDir, path));
+    }
+  }
 
-      const owners = await ownersFromBlame(repoDir, path);
-      return owners.length === 0
+  await Promise.all(
+    Array.from(
+      { length: Math.min(maximumBlameConcurrency, blamePaths.length) },
+      () => blameWorker(),
+    ),
+  );
+
+  return paths.map((path) => {
+    const rule = rulesByPath.get(path) ?? null;
+    if (rule !== null) {
+      return rule.owners.length === 0
         ? {
             path,
-            owners,
-            reason: "no_codeowners_match_or_blame" as const,
+            owners: [],
+            reason: "codeowners_rule_without_owners" as const,
           }
-        : { path, owners };
-    }),
-  );
+        : {
+            path,
+            owners: rule.owners.map((handle) => ({
+              handle,
+              source: "codeowners" as const,
+            })),
+          };
+    }
+
+    const owners = blameOwnersByPath.get(path) ?? [];
+    return owners.length === 0
+      ? {
+          path,
+          owners,
+          reason: "no_codeowners_match_or_blame" as const,
+        }
+      : { path, owners };
+  });
 }
