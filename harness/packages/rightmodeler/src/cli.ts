@@ -13,7 +13,9 @@ import {
   readStatus,
   runAuditTabulate,
   runApply,
+  runCorpusImport,
   runPipeline,
+  runResultExport,
   runWatch,
   type PipelineOptions,
   type PipelineStage,
@@ -37,10 +39,13 @@ interface PipelineCommandOptions {
   traces?: string;
   baseUrl?: string;
   apiKeyEnv?: string;
-  evaluator?: "braintrust";
+  evaluator?: "braintrust" | "langfuse" | "langsmith" | "promptfoo";
   evaluatorBaseUrl?: string;
   evaluatorApiKeyEnv?: string;
+  evaluatorPublicKeyEnv?: string;
   evaluatorProjectId?: string;
+  evaluatorCommand?: string;
+  evaluatorConfig?: string;
   evaluatorScorer?: string[];
   evaluatorGateMetric?: string;
   evaluatorGateThreshold?: string;
@@ -53,6 +58,22 @@ interface PipelineCommandOptions {
 
 interface AuditTabulateOptions {
   worksheet?: string;
+}
+
+interface CorpusImportOptions {
+  from: string;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  publicKeyEnv?: string;
+}
+
+interface ExportCommandOptions {
+  to: "braintrust" | "langfuse";
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  publicKeyEnv?: string;
+  projectId?: string;
+  datasetId?: string;
 }
 
 interface ApplyCommandOptions {
@@ -137,7 +158,7 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
   });
 
   for (const stage of PIPELINE_STAGES.slice(0, -1)) {
-    if (stage === "audit-sample") continue;
+    if (stage === "audit-sample" || stage === "corpus") continue;
     const command = addPipelineOptions(
       program.command(stage).description(`run through the ${stage} stage`),
       stage === "replay" || stage === "confirm",
@@ -155,6 +176,84 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
       return 0;
     });
   }
+
+  const corpus = addPipelineOptions(
+    program.command("corpus").description("build or import the replay corpus"),
+    false,
+  );
+  run(corpus, async (reporter, global) => {
+    const result = await runPipeline({
+      ...pipelineOptions(
+        global,
+        corpus.opts<PipelineCommandOptions>(),
+        reporter,
+      ),
+      through: "corpus",
+    });
+    reporter.result(result);
+    return 0;
+  });
+
+  const corpusImport = corpus
+    .command("import")
+    .description("import a curated provider dataset")
+    .requiredOption("--from <provider:dataset>", "provider and dataset")
+    .option("--base-url <url>", "dataset provider API base URL")
+    .option(
+      "--api-key-env <name>",
+      "environment variable containing the dataset provider API key",
+    )
+    .option(
+      "--public-key-env <name>",
+      "environment variable containing the Langfuse public key",
+    );
+  run(corpusImport, async (reporter, global) => {
+    const local = corpusImport.opts<CorpusImportOptions>();
+    const source = parseCorpusSource(local.from);
+    const result = await runCorpusImport({
+      repo: global.repo,
+      store: global.store,
+      config: corpusImportConfig(source, local),
+    });
+    reporter.result({
+      corpusVersionId: result.corpusVersionId,
+      caseCount: result.cases.length,
+      curatedVerifiedCases: result.cases.filter(
+        ({ content }) => content.referenceVerified,
+      ).length,
+    });
+    return 0;
+  });
+
+  const exportCommand = program
+    .command("export")
+    .description("export trials and verdicts to an evaluation provider")
+    .addOption(
+      new Option("--to <provider>", "result sink provider")
+        .choices(["braintrust", "langfuse"])
+        .makeOptionMandatory(),
+    )
+    .option("--base-url <url>", "result sink API base URL")
+    .option(
+      "--api-key-env <name>",
+      "environment variable containing the result sink API key",
+    )
+    .option(
+      "--public-key-env <name>",
+      "environment variable containing the Langfuse public key",
+    )
+    .option("--project-id <id>", "Braintrust project identifier")
+    .option("--dataset-id <id>", "Langfuse dataset identifier");
+  run(exportCommand, async (reporter, global) => {
+    const local = exportCommand.opts<ExportCommandOptions>();
+    const result = await runResultExport({
+      repo: global.repo,
+      store: global.store,
+      config: resultSinkConfig(local),
+    });
+    reporter.result(result);
+    return 0;
+  });
 
   const audit = program
     .command("audit")
@@ -293,7 +392,7 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         new Option(
           "--evaluator <provider>",
           "external evaluator provider",
-        ).choices(["braintrust"]),
+        ).choices(["braintrust", "langfuse", "langsmith", "promptfoo"]),
       )
       .option("--evaluator-base-url <url>", "external evaluator API base URL")
       .option(
@@ -301,8 +400,20 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         "environment variable containing the evaluator API key",
       )
       .option(
+        "--evaluator-public-key-env <name>",
+        "environment variable containing the Langfuse public key",
+      )
+      .option(
         "--evaluator-project-id <id>",
-        "external evaluator project identifier",
+        "Braintrust project or LangSmith dataset identifier",
+      )
+      .option(
+        "--evaluator-command <path>",
+        "promptfoo executable path or command",
+      )
+      .option(
+        "--evaluator-config <path>",
+        "promptfoo assertions configuration file",
       )
       .option(
         "--evaluator-scorer <name>",
@@ -357,21 +468,19 @@ function pipelineOptions(
   const hasEvaluatorCompanion =
     local.evaluatorBaseUrl !== undefined ||
     local.evaluatorApiKeyEnv !== undefined ||
+    local.evaluatorPublicKeyEnv !== undefined ||
     local.evaluatorProjectId !== undefined ||
+    local.evaluatorCommand !== undefined ||
+    local.evaluatorConfig !== undefined ||
     local.evaluatorScorer !== undefined ||
     local.evaluatorGateMetric !== undefined ||
     evaluatorGateThreshold !== undefined;
   if (local.evaluator === undefined && hasEvaluatorCompanion) {
-    throw new Error("Evaluator options require --evaluator braintrust");
-  }
-  if (local.evaluator !== undefined && local.evaluatorProjectId === undefined) {
-    throw new Error(
-      "--evaluator-project-id is required with --evaluator braintrust",
-    );
+    throw new Error("Evaluator options require --evaluator <provider>");
   }
   if (local.evaluator !== undefined && local.evaluatorScorer === undefined) {
     throw new Error(
-      "At least one --evaluator-scorer is required with --evaluator braintrust",
+      `At least one --evaluator-scorer is required with --evaluator ${local.evaluator}`,
     );
   }
   return {
@@ -384,24 +493,187 @@ function pipelineOptions(
     ...(local.evaluator === undefined
       ? {}
       : {
-          evaluator: {
-            apiKeyEnv: local.evaluatorApiKeyEnv ?? "BRAINTRUST_API_KEY",
-            baseUrl: local.evaluatorBaseUrl ?? "https://api.braintrust.dev",
-            projectId: local.evaluatorProjectId!,
-            scorers: local.evaluatorScorer!,
-            ...(local.evaluatorGateMetric === undefined
-              ? {}
-              : { gateMetric: local.evaluatorGateMetric }),
-            ...(evaluatorGateThreshold === undefined
-              ? {}
-              : { gateThreshold: evaluatorGateThreshold }),
-          },
+          evaluator: evaluatorConfig(local, evaluatorGateThreshold),
         }),
     modeBConfigPath: local.modebConfig,
     through: local.through,
     plan: local.plan,
     reporter,
   };
+}
+
+function evaluatorConfig(
+  local: PipelineCommandOptions,
+  gateThreshold: number | undefined,
+): NonNullable<PipelineOptions["evaluator"]> {
+  const provider = local.evaluator!;
+  const scoring = {
+    scorers: local.evaluatorScorer!,
+    ...(local.evaluatorGateMetric === undefined
+      ? {}
+      : { gateMetric: local.evaluatorGateMetric }),
+    ...(gateThreshold === undefined ? {} : { gateThreshold }),
+  };
+  if (provider !== "langfuse" && local.evaluatorPublicKeyEnv !== undefined) {
+    throw new Error("--evaluator-public-key-env requires --evaluator langfuse");
+  }
+  if (
+    provider !== "promptfoo" &&
+    (local.evaluatorCommand !== undefined ||
+      local.evaluatorConfig !== undefined)
+  ) {
+    throw new Error(
+      "--evaluator-command and --evaluator-config require --evaluator promptfoo",
+    );
+  }
+  if (provider === "braintrust") {
+    if (local.evaluatorProjectId === undefined) {
+      throw new Error(
+        "--evaluator-project-id is required with --evaluator braintrust",
+      );
+    }
+    return {
+      provider,
+      apiKeyEnv: local.evaluatorApiKeyEnv ?? "BRAINTRUST_API_KEY",
+      baseUrl: local.evaluatorBaseUrl ?? "https://api.braintrust.dev",
+      projectId: local.evaluatorProjectId,
+      ...scoring,
+    };
+  }
+  if (provider === "langsmith") {
+    if (local.evaluatorProjectId === undefined) {
+      throw new Error(
+        "--evaluator-project-id must name the dataset used with --evaluator langsmith",
+      );
+    }
+    return {
+      provider,
+      apiKeyEnv: local.evaluatorApiKeyEnv ?? "LANGSMITH_API_KEY",
+      baseUrl: local.evaluatorBaseUrl ?? "https://api.smith.langchain.com",
+      datasetId: local.evaluatorProjectId,
+      ...scoring,
+    };
+  }
+  if (provider === "langfuse") {
+    if (local.evaluatorProjectId !== undefined) {
+      throw new Error(
+        "--evaluator-project-id is not used with --evaluator langfuse",
+      );
+    }
+    return {
+      provider,
+      apiKeyEnv: local.evaluatorApiKeyEnv ?? "LANGFUSE_SECRET_KEY",
+      publicKeyEnv: local.evaluatorPublicKeyEnv ?? "LANGFUSE_PUBLIC_KEY",
+      baseUrl: local.evaluatorBaseUrl ?? "https://cloud.langfuse.com",
+      ...scoring,
+    };
+  }
+  if (
+    local.evaluatorBaseUrl !== undefined ||
+    local.evaluatorApiKeyEnv !== undefined ||
+    local.evaluatorProjectId !== undefined ||
+    local.evaluatorPublicKeyEnv !== undefined
+  ) {
+    throw new Error(
+      "API and project options are not used with --evaluator promptfoo",
+    );
+  }
+  if (local.evaluatorConfig === undefined) {
+    throw new Error(
+      "--evaluator-config is required with --evaluator promptfoo",
+    );
+  }
+  return {
+    provider,
+    command: local.evaluatorCommand ?? "promptfoo",
+    assertionsPath: local.evaluatorConfig,
+    ...scoring,
+  };
+}
+
+function parseCorpusSource(value: string): {
+  readonly provider: "braintrust" | "langsmith" | "langfuse";
+  readonly dataset: string;
+} {
+  const separator = value.indexOf(":");
+  const provider = value.slice(0, separator);
+  const dataset = value.slice(separator + 1);
+  if (
+    separator < 1 ||
+    dataset.length === 0 ||
+    !["braintrust", "langsmith", "langfuse"].includes(provider)
+  ) {
+    throw new Error(
+      "--from must be braintrust:<dataset>, langsmith:<dataset>, or langfuse:<dataset>",
+    );
+  }
+  return {
+    provider: provider as "braintrust" | "langsmith" | "langfuse",
+    dataset,
+  };
+}
+
+function corpusImportConfig(
+  source: ReturnType<typeof parseCorpusSource>,
+  local: CorpusImportOptions,
+) {
+  if (source.provider !== "langfuse" && local.publicKeyEnv !== undefined) {
+    throw new Error(
+      "--public-key-env is only used with --from langfuse:<dataset>",
+    );
+  }
+  if (source.provider === "braintrust") {
+    return {
+      ...source,
+      baseUrl: local.baseUrl ?? "https://api.braintrust.dev",
+      apiKeyEnv: local.apiKeyEnv ?? "BRAINTRUST_API_KEY",
+    } as const;
+  }
+  if (source.provider === "langsmith") {
+    return {
+      ...source,
+      baseUrl: local.baseUrl ?? "https://api.smith.langchain.com",
+      apiKeyEnv: local.apiKeyEnv ?? "LANGSMITH_API_KEY",
+    } as const;
+  }
+  return {
+    ...source,
+    baseUrl: local.baseUrl ?? "https://cloud.langfuse.com",
+    apiKeyEnv: local.apiKeyEnv ?? "LANGFUSE_SECRET_KEY",
+    publicKeyEnv: local.publicKeyEnv ?? "LANGFUSE_PUBLIC_KEY",
+  } as const;
+}
+
+function resultSinkConfig(local: ExportCommandOptions) {
+  if (local.to === "braintrust") {
+    if (local.projectId === undefined) {
+      throw new Error("--project-id is required with --to braintrust");
+    }
+    if (local.datasetId !== undefined || local.publicKeyEnv !== undefined) {
+      throw new Error(
+        "--dataset-id and --public-key-env are only used with --to langfuse",
+      );
+    }
+    return {
+      provider: local.to,
+      baseUrl: local.baseUrl ?? "https://api.braintrust.dev",
+      apiKeyEnv: local.apiKeyEnv ?? "BRAINTRUST_API_KEY",
+      projectId: local.projectId,
+    } as const;
+  }
+  if (local.datasetId === undefined) {
+    throw new Error("--dataset-id is required with --to langfuse");
+  }
+  if (local.projectId !== undefined) {
+    throw new Error("--project-id is only used with --to braintrust");
+  }
+  return {
+    provider: local.to,
+    baseUrl: local.baseUrl ?? "https://cloud.langfuse.com",
+    apiKeyEnv: local.apiKeyEnv ?? "LANGFUSE_SECRET_KEY",
+    publicKeyEnv: local.publicKeyEnv ?? "LANGFUSE_PUBLIC_KEY",
+    datasetId: local.datasetId,
+  } as const;
 }
 
 function collectOption(value: string, previous?: string[]): string[] {

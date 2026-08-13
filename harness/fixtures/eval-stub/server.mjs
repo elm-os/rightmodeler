@@ -84,20 +84,69 @@ export async function startEvalStub({
   fail = false,
   omitCaseId,
   reflectAuthError = false,
+  malformedDataset = false,
   malformedFetch = false,
   platformPassDecisions = true,
 }) {
   const experiments = new Map();
   const hits = new Map();
+  const requests = [];
   let nextExperiment = 1;
 
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const hitKey = `${request.method ?? "UNKNOWN"} ${url.pathname}`;
     hits.set(hitKey, (hits.get(hitKey) ?? 0) + 1);
+    requests.push({
+      method: request.method ?? "UNKNOWN",
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams),
+    });
 
     if (request.method === "GET" && url.pathname === "/v1/project") {
       json(response, 200, { objects: [] });
+      return;
+    }
+
+    if (
+      request.method === "GET" &&
+      url.pathname === "/v1/dataset/braintrust-dataset-1/fetch"
+    ) {
+      if (reflectAuthError) {
+        json(response, 500, {
+          error: `Reflected credential: ${request.headers.authorization ?? "missing"}`,
+        });
+        return;
+      }
+      if (malformedDataset) {
+        json(response, 200, { events: "not-an-array", cursor: null });
+        return;
+      }
+      json(response, 200, {
+        events: [
+          {
+            id: "braintrust-item-1",
+            input: {
+              messages: [{ role: "user", content: "Capital?" }],
+            },
+            expected: "Paris",
+            metadata: {
+              reference_verified: true,
+              family: "qa",
+              model: "curated",
+            },
+          },
+          {
+            id: "braintrust-item-2",
+            input: {
+              messages: [{ role: "user", content: "Unverified?" }],
+            },
+            expected: "Observed",
+            metadata: { family: "qa", model: "curated" },
+          },
+        ],
+        cursor: null,
+      });
       return;
     }
 
@@ -243,6 +292,9 @@ export async function startEvalStub({
   return {
     port: address.port,
     getHitCount: (method, path) => hits.get(`${method} ${path}`) ?? 0,
+    getRequests: () => [...requests],
+    getExperimentEvents: () =>
+      [...experiments.values()].flatMap((experiment) => experiment.events),
     close: () =>
       new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

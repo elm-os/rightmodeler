@@ -22477,7 +22477,7 @@ function maskNonCode(content, includeHashComments) {
 }
 function enclosingSymbol(content, position) {
   const prefix = content.slice(0, position);
-  const declaration = /(?:\b(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+|\b(?:async\s+)?def\s+|\bclass\s+|\b(?:export\s+)?const\s+)([A-Za-z_$][\w$]*)/gm;
+  const declaration = /(?:\b(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+|\b(?:async\s+)?def\s+(?:self\.)?|\bfunc\s+(?:\([^)]*\)\s*)?|\bclass\s+|\b(?:export\s+)?const\s+)([A-Za-z_$][\w$]*)/gm;
   let nearest = "<module>";
   for (const match of prefix.matchAll(declaration))
     nearest = match[1];
@@ -22561,6 +22561,18 @@ function argumentKeys(callText) {
       return [];
     argumentsText = argumentsText.slice(1, objectClose);
     separator = ":";
+  } else if (/^\s*[A-Za-z_$][\w$]*\s*:/.test(argumentsText)) {
+    separator = ":";
+  } else {
+    const struct = /\b(?:[A-Za-z_]\w*\.)+[A-Za-z_]\w*\s*\{/.exec(argumentsText);
+    if (struct !== null) {
+      const structOpen = struct.index + struct[0].lastIndexOf("{");
+      const structClose = argumentsText.lastIndexOf("}");
+      if (structClose > structOpen) {
+        argumentsText = argumentsText.slice(structOpen + 1, structClose);
+        separator = ":";
+      }
+    }
   }
   const keys = splitTopLevel(argumentsText).map((part) => {
     const keyed = new RegExp(`^\\s*(?:["']([A-Za-z_$][\\w$-]*)["']|([A-Za-z_$][\\w$-]*))\\s*${separator}`).exec(part);
@@ -22574,7 +22586,7 @@ function argumentKeys(callText) {
   return [...new Set(keys)].sort();
 }
 function extractModelId(text) {
-  const model = /\b(?:model|model_name)\s*[:=]\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?["']?([A-Za-z0-9][A-Za-z0-9._:/-]*)["']?/.exec(text);
+  const model = /\b(?:model|model_name)\s*[:=]\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?["']?([A-Za-z0-9][A-Za-z0-9._:/-]*)["']?/i.exec(text);
   if (model !== null)
     return model[1];
   return /\b[A-Z][A-Z0-9_]*MODEL(?:_ID|_NAME)?\s*=\s*["']?([^\s"']+)/.exec(text)?.[1];
@@ -22613,7 +22625,7 @@ function createCallMatcher(options) {
       if (options.fileAnchor !== void 0 && !options.fileAnchor.test(content)) {
         return [];
       }
-      const searchable = maskNonCode(content, filePath.endsWith(".py"));
+      const searchable = maskNonCode(content, filePath.endsWith(".py") || filePath.endsWith(".rb"));
       const flags = options.pattern.flags.replaceAll("g", "");
       const pattern = new RegExp(options.pattern.source, `${flags}g`);
       const matches = [];
@@ -23006,15 +23018,280 @@ var MatcherRegistry = class {
   }
 };
 
-// ../scanner/dist/matchers/builtins.js
+// ../scanner/dist/matchers/breadth.js
 var javascriptFiles = ["**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"];
 var pythonFiles = ["**/*.py"];
 var callMatchers = [
   createCallMatcher({
+    slug: "js-ai-sdk-embed",
+    description: "AI SDK embedding calls",
+    noiseTier: "precise",
+    filePatterns: javascriptFiles,
+    examples: [
+      'import { embed } from "ai";\nembed({ model: embeddingModel, value: text })',
+      'import { embedMany } from "ai";\nembedMany({ model: embeddingModel, values: chunks })'
+    ],
+    pattern: /(?<![.\w$])(?<callee>embed(?:Many)?)\s*\(/,
+    fileAnchor: /(?:\bfrom\s*["']ai["']|\brequire\s*\(\s*["']ai["']\s*\))/,
+    label: "AI SDK embedding"
+  }),
+  createCallMatcher({
+    slug: "js-openai-responses-api",
+    description: "OpenAI JavaScript Responses API calls",
+    noiseTier: "precise",
+    filePatterns: javascriptFiles,
+    examples: [
+      'import OpenAI from "openai";\nclient.responses.create({ model: "acme/large-1", input })'
+    ],
+    pattern: /\b(?<callee>[A-Za-z_$][\w$]*\.responses\.create)\s*\(/,
+    fileAnchor: /(?:\bfrom\s*["']openai["']|\brequire\s*\(\s*["']openai["']\s*\))/,
+    label: "OpenAI Responses API"
+  }),
+  createCallMatcher({
+    slug: "js-vercel-ai-tool-call",
+    description: "AI SDK tool definitions used by model calls",
+    noiseTier: "normal",
+    filePatterns: javascriptFiles,
+    examples: [
+      'import { tool } from "ai";\nconst weather = tool({ description: "Weather", inputSchema, execute })',
+      'import { dynamicTool } from "ai";\nconst lookup = dynamicTool({ description: "Lookup", execute })'
+    ],
+    pattern: /(?<![.\w$])(?<callee>(?:dynamicTool|tool))\s*\(/,
+    fileAnchor: /(?:\bfrom\s*["']ai["']|\brequire\s*\(\s*["']ai["']\s*\))/,
+    label: "AI SDK tool definition",
+    needsTools: true
+  }),
+  createCallMatcher({
+    slug: "py-openai-responses",
+    description: "OpenAI Python Responses API calls",
+    noiseTier: "precise",
+    filePatterns: pythonFiles,
+    examples: [
+      'from openai import OpenAI\nclient.responses.create(model="acme/large-1", input=prompt)'
+    ],
+    pattern: /\b(?<callee>[A-Za-z_][\w]*\.responses\.create)\s*\(/,
+    fileAnchor: /^\s*(?:from\s+openai\s+import\b|import\s+openai\b)/m,
+    label: "OpenAI Responses API"
+  }),
+  createCallMatcher({
+    slug: "py-litellm-router",
+    description: "LiteLLM Router completion calls",
+    noiseTier: "precise",
+    filePatterns: pythonFiles,
+    examples: [
+      'from litellm import Router\nrouter = Router(model_list=models)\nrouter.completion(model="primary", messages=messages)',
+      'from litellm import Router\nllm_router = Router(model_list=models)\nllm_router.acompletion(model="primary", messages=messages)'
+    ],
+    pattern: /\b(?<callee>(?:router|llm_router)\.(?:acompletion|completion))\s*\(/,
+    fileAnchor: /^\s*from\s+litellm\s+import\s+[^\n]*\bRouter\b/m,
+    label: "LiteLLM Router completion"
+  }),
+  createCallMatcher({
+    slug: "py-instructor",
+    description: "Instructor structured model calls",
+    noiseTier: "precise",
+    filePatterns: pythonFiles,
+    examples: [
+      'import instructor\nclient = instructor.from_provider("openai/acme-large")\nclient.create(response_model=Profile, messages=messages)'
+    ],
+    pattern: /\b(?<callee>(?:client|instructor_client)\.create)\s*\(\s*(?=[\s\S]{0,400}\bresponse_model\s*=)/,
+    fileAnchor: /\binstructor\.from_provider\s*\(/,
+    label: "Instructor structured response",
+    needsStructuredOutput: true
+  }),
+  createCallMatcher({
+    slug: "py-dspy-predict",
+    description: "DSPy Predict module construction",
+    noiseTier: "normal",
+    filePatterns: pythonFiles,
+    examples: [
+      "import dspy\nclass Extractor(dspy.Module):\n    extract = dspy.Predict(ExtractEvent)"
+    ],
+    pattern: /\b(?<callee>dspy\.Predict)\s*\(/,
+    fileAnchor: /^\s*(?:import\s+dspy\b|from\s+dspy\s+import\b)/m,
+    label: "DSPy Predict"
+  }),
+  createCallMatcher({
+    slug: "py-dspy-chain",
+    description: "DSPy ChainOfThought module construction",
+    noiseTier: "normal",
+    filePatterns: pythonFiles,
+    examples: [
+      "import dspy\nclass TriageAgent(dspy.Module):\n    classify = dspy.ChainOfThought(Triage)"
+    ],
+    pattern: /\b(?<callee>dspy\.ChainOfThought)\s*\(/,
+    fileAnchor: /^\s*(?:import\s+dspy\b|from\s+dspy\s+import\b)/m,
+    label: "DSPy ChainOfThought"
+  }),
+  createCallMatcher({
+    slug: "js-mastra-workflow-step",
+    description: "Mastra workflow step definitions",
+    noiseTier: "normal",
+    filePatterns: javascriptFiles,
+    examples: [
+      'import { createStep } from "@mastra/core/workflows";\nconst summarize = createStep({ id: "summarize", execute })'
+    ],
+    pattern: /(?<![.\w$])(?<callee>createStep)\s*\(/,
+    fileAnchor: /(?:\bfrom\s*["']@mastra\/core\/workflows["']|\brequire\s*\(\s*["']@mastra\/core\/workflows["']\s*\))/,
+    label: "Mastra workflow step"
+  }),
+  createCallMatcher({
+    slug: "go-openai-chat",
+    description: "OpenAI Go chat completion calls",
+    noiseTier: "precise",
+    filePatterns: ["**/*.go"],
+    examples: [
+      'package main\nimport "github.com/openai/openai-go/v3"\nfunc chat() { client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{Model: openai.ChatModelGPT5, Messages: messages}) }',
+      'package main\nimport "github.com/openai/openai-go/v3"\nfunc stream() { client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{Model: model, Messages: messages}) }'
+    ],
+    pattern: /\b(?<callee>[A-Za-z_][\w]*\.Chat\.Completions\.(?:NewStreaming|New))\s*\(/,
+    fileAnchor: /["']github\.com\/openai\/openai-go(?:\/v\d+)?["']/,
+    label: "OpenAI Go chat completion"
+  }),
+  createCallMatcher({
+    slug: "rb-ruby-openai-chat",
+    description: "OpenAI Ruby chat completion calls",
+    noiseTier: "precise",
+    filePatterns: ["**/*.rb"],
+    examples: [
+      'require "openai"\ndef chat\n  client.chat.completions.create(messages: messages, model: "acme-large")\nend'
+    ],
+    pattern: /\b(?<callee>[a-z_][\w]*\.chat\.completions\.create)\s*\(/,
+    fileAnchor: /^\s*require\s*[\s(]*["']openai["']/m,
+    label: "OpenAI Ruby chat completion"
+  }),
+  createCallMatcher({
+    slug: "java-openai",
+    description: "Official OpenAI Java model calls",
+    noiseTier: "precise",
+    filePatterns: ["**/*.java"],
+    examples: [
+      "import com.openai.client.OpenAIClient;\nclass Agent { void run() { client.responses().create(params); } }",
+      "import com.openai.client.OpenAIClient;\nclass Agent { void run() { client.chat().completions().create(params); } }"
+    ],
+    pattern: /\b(?<callee>[A-Za-z_$][\w$]*(?:\.async\(\))?\.(?:responses\(\)|chat\(\)\.completions\(\))\.create)\s*\(/,
+    fileAnchor: /^\s*import\s+com\.openai\./m,
+    label: "OpenAI Java model call"
+  }),
+  createCallMatcher({
+    slug: "java-langchain4j-chat",
+    description: "LangChain4j OpenAI chat model construction",
+    noiseTier: "normal",
+    filePatterns: ["**/*.java"],
+    examples: [
+      'import dev.langchain4j.model.openai.OpenAiChatModel;\nclass Agent { Object model() { return OpenAiChatModel.builder().modelName("acme-large").build(); } }',
+      'import dev.langchain4j.model.openai.OpenAiResponsesChatModel;\nclass Agent { Object model() { return OpenAiResponsesChatModel.builder().modelName("acme-large").build(); } }'
+    ],
+    pattern: /\b(?<callee>OpenAi(?:Official)?(?:Responses)?(?:Streaming)?ChatModel\.builder)\s*\(/,
+    fileAnchor: /^\s*import\s+dev\.langchain4j\./m,
+    label: "LangChain4j OpenAI chat model"
+  })
+];
+var envModelMatcher = {
+  slug: "cfg-env-model",
+  description: "Generic model identifiers in environment-style configuration",
+  noiseTier: "normal",
+  filePatterns: ["**/.env", "**/.env.*", "**/*.{env,yaml,yml,toml}"],
+  examples: ["MODEL=acme/large-1", "LLM_MODEL: acme/large-1"],
+  match(content) {
+    const matches = [];
+    const pattern = /^\s*((?:LLM_)?MODEL(?:_ID|_NAME)?)\s*[:=]\s*["']?([^\s"']+)["']?/gm;
+    for (const match of content.matchAll(pattern)) {
+      const candidate = candidateFromText({
+        slug: this.slug,
+        label: "Model environment variable",
+        content,
+        position: match.index,
+        matchedText: match[0],
+        callee: "config.env.model"
+      });
+      matches.push({
+        ...candidate,
+        normalizedCallShape: {
+          ...candidate.normalizedCallShape,
+          argumentKeys: [match[1].toLowerCase()]
+        },
+        modelId: match[2]
+      });
+    }
+    return matches;
+  }
+};
+function jsonModelPins(value) {
+  const pins = [];
+  const visit = (current, path) => {
+    if (Array.isArray(current)) {
+      current.forEach((item, index) => visit(item, [...path, String(index)]));
+      return;
+    }
+    if (typeof current !== "object" || current === null)
+      return;
+    for (const [key, child] of Object.entries(current)) {
+      const nextPath = [...path, key];
+      if (/^(?:model|modelId|model_name)$/.test(key) && typeof child === "string" && path.some((segment) => /^(?:ai|llm|inference|models?|providers?)$/i.test(segment))) {
+        pins.push({ path, key, modelId: child });
+      }
+      visit(child, nextPath);
+    }
+  };
+  visit(value, []);
+  return pins;
+}
+var jsonModelMatcher = {
+  slug: "cfg-json-model-key",
+  description: "Nested model identifiers in AI JSON configuration",
+  noiseTier: "precise",
+  filePatterns: [
+    "**/config.json",
+    "**/config/*.json",
+    "**/models/*.json",
+    "**/*-models.json"
+  ],
+  examples: [
+    '{"ai":{"primary":{"model":"acme/large-1"}}}',
+    '{"providers":{"openai":{"modelId":"acme/large-1"}}}'
+  ],
+  match(content) {
+    const parsed2 = JSON.parse(content);
+    let cursor = 0;
+    return jsonModelPins(parsed2).map((pin) => {
+      const valueText = JSON.stringify(pin.modelId);
+      const position = content.indexOf(valueText, cursor);
+      cursor = position === -1 ? cursor : position + valueText.length;
+      const enclosing = pin.path.join(".") || "<root>";
+      return {
+        slug: this.slug,
+        label: "JSON model configuration",
+        snippet: `${pin.key}: ${pin.modelId}`,
+        enclosingSymbolPath: enclosing,
+        normalizedCallShape: {
+          callee: "config.json.model",
+          argumentKeys: [pin.key],
+          enclosing
+        },
+        needsTools: false,
+        needsStructuredOutput: false,
+        modelId: pin.modelId,
+        line: position === -1 ? 1 : content.slice(0, position).split("\n").length
+      };
+    });
+  }
+};
+var breadthMatchers = Object.freeze([
+  ...callMatchers,
+  envModelMatcher,
+  jsonModelMatcher
+]);
+
+// ../scanner/dist/matchers/builtins.js
+var javascriptFiles2 = ["**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"];
+var pythonFiles2 = ["**/*.py"];
+var callMatchers2 = [
+  createCallMatcher({
     slug: "js-ai-sdk-generate-text",
     description: "AI SDK text generation calls",
     noiseTier: "precise",
-    filePatterns: javascriptFiles,
+    filePatterns: javascriptFiles2,
     examples: ['generateText({ model: "acme/large-1", prompt: input })'],
     pattern: /\b(?<callee>generateText)\s*\(/,
     label: "AI SDK generateText"
@@ -23023,7 +23300,7 @@ var callMatchers = [
     slug: "js-ai-sdk-stream-text",
     description: "AI SDK streaming text generation calls",
     noiseTier: "precise",
-    filePatterns: javascriptFiles,
+    filePatterns: javascriptFiles2,
     examples: ['streamText({ model: "acme/large-1", prompt: input })'],
     pattern: /\b(?<callee>streamText)\s*\(/,
     label: "AI SDK streamText"
@@ -23032,7 +23309,7 @@ var callMatchers = [
     slug: "js-ai-sdk-generate-object",
     description: "AI SDK structured object generation calls",
     noiseTier: "precise",
-    filePatterns: javascriptFiles,
+    filePatterns: javascriptFiles2,
     examples: [
       'generateObject({ model: "acme/large-1", schema, prompt: input })'
     ],
@@ -23044,7 +23321,7 @@ var callMatchers = [
     slug: "js-openai-chat-completions",
     description: "OpenAI JavaScript chat completion calls",
     noiseTier: "precise",
-    filePatterns: javascriptFiles,
+    filePatterns: javascriptFiles2,
     examples: [
       'client.chat.completions.create({ model: "acme/large-1", messages })'
     ],
@@ -23055,7 +23332,7 @@ var callMatchers = [
     slug: "js-anthropic-messages",
     description: "Anthropic JavaScript message creation calls",
     noiseTier: "precise",
-    filePatterns: javascriptFiles,
+    filePatterns: javascriptFiles2,
     examples: [
       'import Anthropic from "@anthropic-ai/sdk";\nanthropic.messages.create({ model: "acme/large-1", messages, max_tokens: 200 })'
     ],
@@ -23067,7 +23344,7 @@ var callMatchers = [
     slug: "js-langchain-chat-model",
     description: "LangChain JavaScript chat model construction",
     noiseTier: "normal",
-    filePatterns: javascriptFiles,
+    filePatterns: javascriptFiles2,
     examples: ['new ChatOpenAI({ model: "acme/large-1" })'],
     pattern: /\bnew\s+(?<callee>Chat(?:OpenAI|Anthropic|GoogleGenerativeAI|Bedrock(?:Converse)?))\s*\(/,
     label: "LangChain chat model"
@@ -23076,7 +23353,7 @@ var callMatchers = [
     slug: "py-openai-chat-completions",
     description: "OpenAI Python chat completion calls",
     noiseTier: "precise",
-    filePatterns: pythonFiles,
+    filePatterns: pythonFiles2,
     examples: [
       'client.chat.completions.create(model="acme/large-1", messages=[], tools=tools)'
     ],
@@ -23087,7 +23364,7 @@ var callMatchers = [
     slug: "py-anthropic-messages",
     description: "Anthropic Python message creation calls",
     noiseTier: "precise",
-    filePatterns: pythonFiles,
+    filePatterns: pythonFiles2,
     examples: [
       'client.messages.create(model="acme/large-1", max_tokens=200, messages=[])'
     ],
@@ -23098,11 +23375,11 @@ var callMatchers = [
     slug: "py-litellm-completion",
     description: "LiteLLM Python completion calls",
     noiseTier: "precise",
-    filePatterns: pythonFiles,
+    filePatterns: pythonFiles2,
     examples: [
       'import litellm\nlitellm.completion(model="acme/large-1", messages=[])'
     ],
-    pattern: /\b(?<callee>(?:litellm\.)?completion)\s*\(/,
+    pattern: /(?<![.\w])(?<callee>(?:litellm\.)?completion)\s*\(/,
     fileAnchor: /^\s*(?:from\s+litellm(?:\.[A-Za-z_]\w*)*\s+import\b|import\s+(?:[A-Za-z_]\w*\s*,\s*)*litellm\b)/m,
     label: "LiteLLM completion"
   }),
@@ -23110,7 +23387,7 @@ var callMatchers = [
     slug: "py-langchain-chat-model",
     description: "LangChain Python chat model construction",
     noiseTier: "normal",
-    filePatterns: pythonFiles,
+    filePatterns: pythonFiles2,
     examples: ['ChatOpenAI(model="acme/large-1")'],
     pattern: /\b(?<callee>Chat(?:OpenAI|Anthropic|GoogleGenerativeAI|Bedrock))\s*\(/,
     label: "LangChain chat model"
@@ -23119,7 +23396,7 @@ var callMatchers = [
     slug: "py-langgraph-node",
     description: "LangGraph node registration",
     noiseTier: "normal",
-    filePatterns: pythonFiles,
+    filePatterns: pythonFiles2,
     examples: ['graph.add_node("triage", triage_ticket)'],
     pattern: /\b(?<callee>[A-Za-z_][\w]*\.add_node)\s*\(/,
     label: "LangGraph node"
@@ -23169,7 +23446,7 @@ var modelEnvironmentMatcher = {
   examples: ["OPENAI_MODEL=acme/large-1"],
   match(content) {
     const matches = [];
-    const pattern = /^\s*((?:OPENAI|ANTHROPIC|LITELLM|LANGCHAIN|AI|LLM)_MODEL(?:_ID|_NAME)?|MODEL_(?:ID|NAME))\s*[:=]\s*["']?([^\s"']+)["']?/gm;
+    const pattern = /^\s*((?:OPENAI|ANTHROPIC|LITELLM|LANGCHAIN|AI)_MODEL(?:_ID|_NAME)?)\s*[:=]\s*["']?([^\s"']+)["']?/gm;
     for (const match of content.matchAll(pattern)) {
       const position = match.index;
       const candidate = candidateFromText({
@@ -23193,9 +23470,10 @@ var modelEnvironmentMatcher = {
   }
 };
 var builtinMatchers = Object.freeze([
-  ...callMatchers,
+  ...callMatchers2,
   litellmYamlMatcher,
-  modelEnvironmentMatcher
+  modelEnvironmentMatcher,
+  ...breadthMatchers
 ]);
 
 // ../scanner/dist/reconcile.js

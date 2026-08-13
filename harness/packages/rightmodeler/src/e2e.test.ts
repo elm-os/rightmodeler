@@ -18,11 +18,13 @@ import { promisify } from "node:util";
 import {
   FsStore,
   confirmPlanKey,
+  factKey,
   factsPrefix,
   reportKey,
   setupStateKey,
   type StepRecord,
   type JsonValue,
+  verdictKey,
   verdictsPrefix,
 } from "@rightmodeler/core";
 import { judgeExecution, type JudgeChat } from "@rightmodeler/kernel";
@@ -674,6 +676,134 @@ describe("built CLI pipeline", () => {
         ({ state }) => state === "complete",
       ),
     ).toBe(true);
+  });
+
+  it("imports a curated provider corpus without persisting its key", async () => {
+    const { repo } = await fixtureCopy("corpus-import");
+    const evaluatorStub = await startEvaluatorStub();
+    const evaluatorSecret = "corpus-e2e-key-must-not-persist";
+    try {
+      const result = await runCli(
+        [
+          "corpus",
+          "import",
+          "--from",
+          "braintrust:braintrust-dataset-1",
+          "--base-url",
+          `http://127.0.0.1:${evaluatorStub.port}`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_CORPUS_KEY",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_E2E_CORPUS_KEY: evaluatorSecret } },
+      );
+
+      expect(result.code).toBe(0);
+      expect(jsonOutput(result)).toMatchObject({
+        corpusVersionId: expect.any(String),
+        caseCount: 2,
+        curatedVerifiedCases: 1,
+      });
+      const storeRoot = join(repo, ".rightmodeler");
+      const store = new FsStore(storeRoot);
+      expect(await store.list("project/cases/")).toHaveLength(2);
+      expect(await allFileText(storeRoot)).not.toContain(evaluatorSecret);
+    } finally {
+      await evaluatorStub.close();
+    }
+  });
+
+  it("exports stored trials and verdicts once and persists a key-free receipt", async () => {
+    const { repo } = await fixtureCopy("result-export");
+    const evaluatorStub = await startEvaluatorStub();
+    const evaluatorSecret = "export-e2e-key-must-not-persist";
+    const storeRoot = join(repo, ".rightmodeler");
+    const store = new FsStore(storeRoot);
+    const execution = {
+      executionId: "execution-export-1",
+      evidenceQuestionId: "question-export-1",
+      caseId: "case-export-1",
+      stepId: "step-export-1",
+      candidateId: "candidate-export-1",
+      trajectoryId: "trajectory-export-1",
+      corpusSplit: "holdout",
+      selectionStage: "confirmation",
+      terminalOutcome: "success",
+      finalOutput: "Paris",
+      attribution: "ok",
+    };
+    const assessment = {
+      assessmentId: "assessment-export-1",
+      executionId: execution.executionId,
+      evaluatorId: "braintrust",
+      metricName: "quality",
+      score: 1,
+      passed: true,
+      rubricVersion: "quality-v1",
+      artifactRef: null,
+    };
+    await store.putImmutable(
+      factKey("project", execution.executionId),
+      Buffer.from(JSON.stringify(execution), "utf8"),
+    );
+    await store.putImmutable(
+      factKey("project", assessment.assessmentId),
+      Buffer.from(JSON.stringify(assessment), "utf8"),
+    );
+    await store.putImmutable(
+      verdictKey("project", "qa"),
+      Buffer.from(
+        JSON.stringify({
+          familyId: "qa",
+          decision: "recommend",
+          evaluatorKinds: [],
+        }),
+        "utf8",
+      ),
+    );
+    const args = [
+      "export",
+      "--to",
+      "braintrust",
+      "--base-url",
+      `http://127.0.0.1:${evaluatorStub.port}`,
+      "--api-key-env",
+      "RIGHTMODELER_E2E_EXPORT_KEY",
+      "--project-id",
+      "00000000-0000-4000-8000-000000000001",
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    try {
+      const first = await runCli(args, {
+        env: { RIGHTMODELER_E2E_EXPORT_KEY: evaluatorSecret },
+      });
+      expect(first.code).toBe(0);
+      expect(jsonOutput(first)).toMatchObject({
+        provider: "braintrust",
+        exportedTrials: 1,
+        exportedVerdicts: 1,
+      });
+      const exportHits = evaluatorStub.getHitCount("POST", "/v1/experiment");
+
+      const resumed = await runCli(args, {
+        env: { RIGHTMODELER_E2E_EXPORT_KEY: evaluatorSecret },
+      });
+
+      expect(resumed.code).toBe(0);
+      expect(evaluatorStub.getHitCount("POST", "/v1/experiment")).toBe(
+        exportHits,
+      );
+      expect(await store.list("project/exports/")).toHaveLength(1);
+      expect(await allFileText(storeRoot)).not.toContain(evaluatorSecret);
+    } finally {
+      await evaluatorStub.close();
+    }
   });
 
   it("runs end to end, reports both families, resumes replay, and never persists the key", async () => {

@@ -35,6 +35,7 @@ import {
   verdictsPrefix,
   type Assessment,
   type CascadeFinding,
+  type Execution,
   type Fact,
   type JsonValue,
   type LifecycleEvent,
@@ -103,13 +104,26 @@ import {
   type CapturedConventions,
 } from "./enrich/index.js";
 import {
-  createBraintrustEvaluator,
   pollEvaluator,
   preferEvaluatorWhenReachable,
-  resolveBraintrustEvaluatorConfig,
-  type BraintrustEvaluatorConfig,
-  type ResolvedBraintrustEvaluatorConfig,
 } from "./evaluators/braintrust.js";
+import {
+  importCorpus,
+  writeImportedCorpus,
+  type CorpusImportConfig,
+} from "./evaluators/corpus-import.js";
+import {
+  createEvaluator,
+  resolveEvaluatorConfig,
+  type EvaluatorConfig,
+  type ResolvedEvaluatorConfig,
+} from "./evaluators/registry.js";
+import {
+  exportResults,
+  resultExportReceiptSchema,
+  type ResultExportReceipt,
+  type ResultSinkConfig,
+} from "./evaluators/result-sinks.js";
 import type {
   EvaluatorCaseResult,
   EvaluatorProvider,
@@ -371,7 +385,7 @@ interface PipelineContext {
   baseUrl?: string;
   apiKeyEnv: string;
   maxCostUsd?: number;
-  evaluator?: ResolvedBraintrustEvaluatorConfig;
+  evaluator?: ResolvedEvaluatorConfig;
   modeBConfig?: ModeBConfig;
   modeBConfigPath?: string;
   reporter: Reporter;
@@ -384,7 +398,7 @@ export interface PipelineOptions {
   baseUrl?: string;
   apiKeyEnv?: string;
   maxCostUsd?: number;
-  evaluator?: BraintrustEvaluatorConfig;
+  evaluator?: EvaluatorConfig;
   modeBConfigPath?: string;
   through?: PipelineStage;
   plan?: boolean;
@@ -600,6 +614,71 @@ export async function runWatch(
   });
 }
 
+export async function runCorpusImport(options: {
+  readonly repo: string;
+  readonly store?: string;
+  readonly config: CorpusImportConfig;
+}): Promise<Awaited<ReturnType<typeof importCorpus>>> {
+  const context = createHeadlessContext(options);
+  const corpus = await importCorpus(options.config, { seed: CORPUS_SEED });
+  await writeImportedCorpus(context.store, context.projectId, corpus);
+  return corpus;
+}
+
+export async function runResultExport(options: {
+  readonly repo: string;
+  readonly store?: string;
+  readonly config: ResultSinkConfig;
+}): Promise<ResultExportReceipt> {
+  const context = createHeadlessContext(options);
+  const facts = await readFacts(context.store, context.projectId);
+  const executions = facts.flatMap((fact): Execution[] => {
+    const parsed = executionSchema.safeParse(fact);
+    return parsed.success ? [parsed.data] : [];
+  });
+  if (executions.length === 0) {
+    throw new Error("No execution trials are available to export");
+  }
+  const assessments = facts.flatMap((fact): Assessment[] => {
+    const parsed = assessmentSchema.safeParse(fact);
+    return parsed.success ? [parsed.data] : [];
+  });
+  const verdicts = await readCurrentVerdicts(context.store, context.projectId);
+  const exportDigest = digest({
+    provider: options.config.provider,
+    target:
+      options.config.provider === "braintrust"
+        ? options.config.projectId
+        : options.config.datasetId,
+    executionIds: executions
+      .map(({ executionId }) => executionId)
+      .sort(compareText),
+    assessmentIds: assessments
+      .map(({ assessmentId }) => assessmentId)
+      .sort(compareText),
+    verdicts: jsonValue(verdicts),
+  });
+  const receiptKey = `${context.projectId}/exports/${options.config.provider}-${exportDigest}.json`;
+  const existing = await context.store.get(receiptKey);
+  if (existing !== null) {
+    return resultExportReceiptSchema.parse(
+      JSON.parse(Buffer.from(existing.body).toString("utf8")),
+    );
+  }
+  const receipt = await exportResults(options.config, {
+    name: `rightmodeler-${exportDigest.slice(0, 24)}`,
+    trials: executions.map((execution) => ({
+      execution,
+      assessments: assessments.filter(
+        ({ executionId }) => executionId === execution.executionId,
+      ),
+    })),
+    verdicts: verdicts.map((verdict) => jsonValue(verdict)),
+  });
+  await putImmutableJson(context.store, receiptKey, receipt);
+  return receipt;
+}
+
 function createHeadlessContext(options: {
   readonly repo: string;
   readonly store?: string;
@@ -739,7 +818,7 @@ function createContext(options: PipelineOptions): PipelineContext {
     maxCostUsd: options.maxCostUsd,
     ...(options.evaluator === undefined
       ? {}
-      : { evaluator: resolveBraintrustEvaluatorConfig(options.evaluator) }),
+      : { evaluator: resolveEvaluatorConfig(options.evaluator) }),
     ...(modeBConfigPath === undefined
       ? {}
       : {
@@ -799,7 +878,7 @@ function evaluatorPlan(context: PipelineContext): JsonValue {
   return context.evaluator === undefined
     ? { evaluatorKind: "judge", gateMetric: "replacement-quality" }
     : {
-        evaluatorKind: "braintrust",
+        evaluatorKind: context.evaluator.provider,
         scorers: [...context.evaluator.scorers],
         gateMetric: context.evaluator.gateMetric,
         gateThreshold: context.evaluator.gateThreshold ?? null,
@@ -1358,7 +1437,7 @@ async function executeReplay(
   });
   let externalEvaluator: EvaluatorProvider | undefined;
   if (context.evaluator !== undefined) {
-    const configured = createBraintrustEvaluator(context.evaluator);
+    const configured = createEvaluator(context.evaluator);
     externalEvaluator = await preferEvaluatorWhenReachable(
       configured,
       (code, message) => context.reporter.warning(code, message),
@@ -2160,7 +2239,7 @@ async function assessExternalExecutions(input: {
 async function persistEvaluatorMetrics(
   context: PipelineContext,
   evaluator: EvaluatorProvider,
-  config: ResolvedBraintrustEvaluatorConfig,
+  config: ResolvedEvaluatorConfig,
   providerRunId: string,
   result: EvaluatorCaseResult,
   existingMetrics: Set<string>,
