@@ -26,11 +26,12 @@ Commands:
   ingest [options]     run through the ingest stage
   reconcile [options]  run through the reconcile stage
   scrub [options]      run through the scrub stage
-  corpus [options]     run through the corpus stage
   shortlist [options]  run through the shortlist stage
   replay [options]     run through the replay stage
   aggregate [options]  run through the aggregate stage
   confirm [options]    run through the confirm stage
+  corpus [options]     build or import the replay corpus
+  export [options]     export trials and verdicts to an evaluation provider
   audit                manage the reference audit
   apply [options]      open a draft pull request for proven model swaps
   watch [options]      reconcile one open model-swap pull request
@@ -55,11 +56,17 @@ Options:
                                       provider API key
   --max-cost-usd <amount>             maximum replay spend in USD
   --evaluator <provider>              external evaluator provider (choices:
-                                      "braintrust")
+                                      "braintrust", "langfuse", "langsmith",
+                                      "promptfoo")
   --evaluator-base-url <url>          external evaluator API base URL
   --evaluator-api-key-env <name>      environment variable containing the
                                       evaluator API key
-  --evaluator-project-id <id>         external evaluator project identifier
+  --evaluator-public-key-env <name>   environment variable containing the
+                                      Langfuse public key
+  --evaluator-project-id <id>         Braintrust project or LangSmith dataset
+                                      identifier
+  --evaluator-command <path>          promptfoo executable path or command
+  --evaluator-config <path>           promptfoo assertions configuration file
   --evaluator-scorer <name>           external evaluator scorer name
                                       (repeatable)
   --evaluator-gate-metric <name>      scorer metric used for release gates
@@ -127,19 +134,6 @@ Options:
   -h, --help             display help for command
 ```
 
-## `rightmodeler corpus`
-
-```text
-Usage: rightmodeler corpus [options]
-
-run through the corpus stage
-
-Options:
-  --traces <path>        trace input file
-  --modeb-config <path>  versioned Mode B runtime configuration JSON file
-  -h, --help             display help for command
-```
-
 ## `rightmodeler shortlist`
 
 ```text
@@ -169,11 +163,17 @@ Options:
                                       provider API key
   --max-cost-usd <amount>             maximum replay spend in USD
   --evaluator <provider>              external evaluator provider (choices:
-                                      "braintrust")
+                                      "braintrust", "langfuse", "langsmith",
+                                      "promptfoo")
   --evaluator-base-url <url>          external evaluator API base URL
   --evaluator-api-key-env <name>      environment variable containing the
                                       evaluator API key
-  --evaluator-project-id <id>         external evaluator project identifier
+  --evaluator-public-key-env <name>   environment variable containing the
+                                      Langfuse public key
+  --evaluator-project-id <id>         Braintrust project or LangSmith dataset
+                                      identifier
+  --evaluator-command <path>          promptfoo executable path or command
+  --evaluator-config <path>           promptfoo assertions configuration file
   --evaluator-scorer <name>           external evaluator scorer name
                                       (repeatable)
   --evaluator-gate-metric <name>      scorer metric used for release gates
@@ -211,17 +211,76 @@ Options:
                                       provider API key
   --max-cost-usd <amount>             maximum replay spend in USD
   --evaluator <provider>              external evaluator provider (choices:
-                                      "braintrust")
+                                      "braintrust", "langfuse", "langsmith",
+                                      "promptfoo")
   --evaluator-base-url <url>          external evaluator API base URL
   --evaluator-api-key-env <name>      environment variable containing the
                                       evaluator API key
-  --evaluator-project-id <id>         external evaluator project identifier
+  --evaluator-public-key-env <name>   environment variable containing the
+                                      Langfuse public key
+  --evaluator-project-id <id>         Braintrust project or LangSmith dataset
+                                      identifier
+  --evaluator-command <path>          promptfoo executable path or command
+  --evaluator-config <path>           promptfoo assertions configuration file
   --evaluator-scorer <name>           external evaluator scorer name
                                       (repeatable)
   --evaluator-gate-metric <name>      scorer metric used for release gates
   --evaluator-gate-threshold <value>  fallback pass threshold when the evaluator
                                       omits a pass decision
   -h, --help                          display help for command
+```
+
+## `rightmodeler corpus`
+
+```text
+Usage: rightmodeler corpus [options] [command]
+
+build or import the replay corpus
+
+Options:
+  --traces <path>        trace input file
+  --modeb-config <path>  versioned Mode B runtime configuration JSON file
+  -h, --help             display help for command
+
+Commands:
+  import [options]       import a curated provider dataset
+```
+
+## `rightmodeler corpus import`
+
+```text
+Usage: rightmodeler corpus import [options]
+
+import a curated provider dataset
+
+Options:
+  --from <provider:dataset>  provider and dataset
+  --base-url <url>           dataset provider API base URL
+  --api-key-env <name>       environment variable containing the dataset
+                             provider API key
+  --public-key-env <name>    environment variable containing the Langfuse public
+                             key
+  -h, --help                 display help for command
+```
+
+## `rightmodeler export`
+
+```text
+Usage: rightmodeler export [options]
+
+export trials and verdicts to an evaluation provider
+
+Options:
+  --to <provider>          result sink provider (choices: "braintrust",
+                           "langfuse")
+  --base-url <url>         result sink API base URL
+  --api-key-env <name>     environment variable containing the result sink API
+                           key
+  --public-key-env <name>  environment variable containing the Langfuse public
+                           key
+  --project-id <id>        Braintrust project identifier
+  --dataset-id <id>        Langfuse dataset identifier
+  -h, --help               display help for command
 ```
 
 ## `rightmodeler audit`
