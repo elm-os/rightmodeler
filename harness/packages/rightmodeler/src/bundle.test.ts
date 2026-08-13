@@ -144,7 +144,7 @@ describe("packed CLI bundle", () => {
       await readFile(join(installedRoot, "package.json"), "utf8"),
     ) as { dependencies?: unknown; engines?: { node?: string } };
     expect(installedPackage.dependencies).toBeUndefined();
-    expect(installedPackage.engines?.node).toBe(">=20");
+    expect(installedPackage.engines?.node).toBe(">=24");
 
     const help = await runInstalled(installedBinary, ["--help"], project);
     expect(help).toMatchObject({ code: 0, stderr: "" });
