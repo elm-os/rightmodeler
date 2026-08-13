@@ -64,14 +64,6 @@ def client_from_env() -> OpenAI:
     )
 
 
-def was_swapped(step: str, current_model: str, effective_model: str) -> bool:
-    raw_policy = os.environ.get("RM_SWAP_POLICY")
-    if raw_policy is None:
-        return effective_model != current_model
-    policy = json.loads(raw_policy)
-    return policy.get(step, current_model) != current_model
-
-
 def call_headers(
     step: str, case_id: str, injected: dict[str, str]
 ) -> dict[str, str]:
@@ -118,7 +110,7 @@ def classify(state: AppState) -> dict[str, object]:
             *state["swap_markers"],
             *(
                 [CLASSIFY_SWAP_MARKER]
-                if was_swapped("classify", CLASSIFY_MODEL, response.model)
+                if response.model != CLASSIFY_MODEL
                 else []
             ),
         ],
@@ -179,7 +171,7 @@ def lookup(state: AppState) -> dict[str, object]:
             *state["swap_markers"],
             *(
                 [LOOKUP_SWAP_MARKER]
-                if was_swapped("lookup", LOOKUP_MODEL, response.model)
+                if response.model != LOOKUP_MODEL
                 else []
             ),
         ],

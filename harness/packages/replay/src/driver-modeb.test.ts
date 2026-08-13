@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
-  appendFile,
   mkdir,
   mkdtemp,
   readFile,
@@ -23,6 +22,7 @@ import {
   requestAttemptSchema,
   spendEventSchema,
   type Fact,
+  type Store,
 } from "@rightmodeler/core";
 import {
   createDockerExecutor,
@@ -801,6 +801,68 @@ describe("Mode B replay", () => {
   );
 
   it(
+    "charges the full lease and records a reconcilable failure when fact persistence throws",
+    async () => {
+      const [recordedCase] = await recordedCases();
+      const context = await createContext([recordedCase!], { concurrency: 1 });
+      let injected = false;
+      const failingStore: Store = {
+        get: (key) => context.store.get(key),
+        list: (prefix) => context.store.list(prefix),
+        async putImmutable(key, body) {
+          const value: unknown = JSON.parse(Buffer.from(body).toString("utf8"));
+          if (!injected && requestAttemptSchema.safeParse(value).success) {
+            injected = true;
+            throw new Error("injected request-attempt persistence failure");
+          }
+          await context.store.putImmutable(key, body);
+        },
+        compareAndSwap: (key, version, body, fenceToken) =>
+          context.store.compareAndSwap(key, version, body, fenceToken),
+      };
+      const budget = createBudget({
+        store: failingStore,
+        projectId,
+        runId: context.input.budget.runId,
+        authorizedTotalUsd: 1,
+      });
+      context.input = {
+        ...context.input,
+        store: failingStore,
+        budget,
+      };
+      try {
+        await expect(replayModeB(context.input)).rejects.toThrow(
+          "injected request-attempt persistence failure",
+        );
+        const facts = parsedFacts(await readFacts(context.store));
+        expect(injected).toBe(true);
+        expect(facts.attempts).toEqual([]);
+        expect(facts.spend).toEqual([
+          expect.objectContaining({
+            actor: "replay-driver",
+            costUsd: 1,
+            reconcilableTo: expect.objectContaining({
+              caseId: recordedCase!.caseId,
+              failure: "mode_b_case_failed",
+              error: expect.stringContaining(
+                "injected request-attempt persistence failure",
+              ),
+            }),
+          }),
+        ]);
+        expect(await budget.state()).toMatchObject({
+          spentUsd: 1,
+          reservedUsd: 0,
+        });
+      } finally {
+        await context.close();
+      }
+    },
+    testTimeoutMs,
+  );
+
+  it(
     "reports an exhausted terminal rate limit as blocked after earlier steps succeed",
     async () => {
       const [recordedCase] = await recordedCases();
@@ -1237,13 +1299,16 @@ describe("Mode B replay", () => {
   );
 
   it(
-    "rejects a forged scratch row instead of ingesting it",
+    "re-derives cost for an in-execution forged attempt with inflated usage",
     async () => {
       const [recordedCase] = await recordedCases();
       const base = createDockerExecutor({
         maxBytesPerNamespace: 16 * 1024 * 1024,
       });
       let planted = false;
+      let forgedAttemptId: string | undefined;
+      let legitimateUsage: unknown;
+      let forgedUsage: unknown;
       const executor: DockerExecutor = {
         launch: (spec) => base.launch(spec),
         status: (handle) => base.status(handle),
@@ -1257,18 +1322,44 @@ describe("Mode B replay", () => {
               "attempts",
               `${executionId}.0.jsonl`,
             );
-            const legitimate = JSON.parse(
-              (await readFile(attemptPath, "utf8")).split("\n")[0]!,
-            ) as Record<string, unknown>;
-            await appendFile(
-              attemptPath,
-              `${JSON.stringify({
-                ...legitimate,
-                caseId: "forged-case",
-                attemptId: "forged-attempt",
-              })}\n`,
-              "utf8",
+            const lines = (await readFile(attemptPath, "utf8"))
+              .trimEnd()
+              .split("\n");
+            const rows = lines.map(
+              (line) => JSON.parse(line) as Record<string, unknown>,
             );
+            const attemptIndex = rows.findIndex(
+              (row) => row.kind === "request_attempt",
+            );
+            const legitimate = rows[attemptIndex];
+            if (legitimate === undefined) {
+              throw new Error("Fixture emitted no request attempt");
+            }
+            const usage = legitimate.usage;
+            const usageRecord = usage as Record<string, unknown>;
+            if (
+              typeof usage !== "object" ||
+              usage === null ||
+              Array.isArray(usage) ||
+              typeof usageRecord.inputTokens !== "number" ||
+              typeof usageRecord.outputTokens !== "number"
+            ) {
+              throw new Error("Fixture request attempt has no token usage");
+            }
+            legitimateUsage = usage;
+            forgedAttemptId = String(legitimate.attemptId);
+            forgedUsage = {
+              inputTokens: usageRecord.inputTokens + 1_000_000,
+              outputTokens: usageRecord.outputTokens + 1_000_000,
+              totalTokens:
+                usageRecord.inputTokens + usageRecord.outputTokens + 2_000_000,
+            };
+            lines.splice(
+              attemptIndex,
+              0,
+              JSON.stringify({ ...legitimate, usage: forgedUsage }),
+            );
+            await writeFile(attemptPath, `${lines.join("\n")}\n`, "utf8");
           }
           return base.collect(handle, request);
         },
@@ -1285,14 +1376,28 @@ describe("Mode B replay", () => {
         expect(result).toMatchObject({ completed: 1, rejectedRows: 1 });
         expect(facts.attempts).toHaveLength(3);
         expect(facts.spend).toHaveLength(3);
-        expect(facts.attempts.map(({ attemptId }) => attemptId)).not.toContain(
-          "forged-attempt",
-        );
+        expect(forgedAttemptId).toBeDefined();
         expect(
-          facts.spend.map(
-            (event) => spendMetadata(event.reconcilableTo).attemptId,
-          ),
-        ).not.toContain("forged-attempt");
+          facts.attempts.find(({ attemptId }) => attemptId === forgedAttemptId)
+            ?.usage,
+        ).toEqual(legitimateUsage);
+        expect(facts.attempts.map(({ usage }) => usage)).not.toContainEqual(
+          forgedUsage,
+        );
+        const spendByAttempt = new Map(
+          facts.spend.map((event) => [
+            spendMetadata(event.reconcilableTo).attemptId,
+            event,
+          ]),
+        );
+        for (const attempt of facts.attempts) {
+          const spend = spendByAttempt.get(attempt.attemptId);
+          expect(spend).toBeDefined();
+          expect(attempt.costUsd).toBeCloseTo(
+            expectedAttemptCost(attempt, spendMetadata(spend!.reconcilableTo)),
+          );
+          expect(spend?.costUsd).toBeCloseTo(attempt.costUsd);
+        }
       } finally {
         await context.close();
       }
@@ -1307,7 +1412,7 @@ describe("Mode B replay", () => {
       const timeoutCases = [
         {
           ...cases[0]!,
-          headers: { "x-fault-stall": "5000" },
+          headers: { "x-fault-stall": "8000" },
         },
         cases[1]!,
       ];
@@ -1319,7 +1424,7 @@ describe("Mode B replay", () => {
         concurrency: 1,
         executor: tracked.executor,
       });
-      context.input = { ...context.input, appSpec: appSpec(2_500) };
+      context.input = { ...context.input, appSpec: appSpec(4_000) };
       try {
         const result = await replayModeB(context.input);
         const facts = parsedFacts(await readFacts(context.store));

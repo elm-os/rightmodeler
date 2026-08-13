@@ -45,6 +45,7 @@ const CASE_CONTAINER_PATH = `${SCRATCH_CONTAINER_PATH}/driver/case.json`;
 const CONFIG_CONTAINER_PATH = `${SCRATCH_CONTAINER_PATH}/driver/config.json`;
 const PROXY_PORT = 8787;
 const DEFAULT_TIMEOUT_MS = 60_000;
+const BUDGET_HEARTBEAT_INTERVAL_MS = 30_000;
 const COLLECTION_NAMESPACES = ["driver", "workload", "proxy"] as const;
 const STREAM_OUTCOMES = new Set([
   "completed",
@@ -610,7 +611,6 @@ function validIdentity(
   return (
     row.runId === input.budget.runId &&
     row.caseId === cell.recordedCase.caseId &&
-    input.cases.some(({ caseId }) => caseId === row.caseId) &&
     row.executionId === executionId
   );
 }
@@ -1416,8 +1416,19 @@ export async function replayModeB(
     const waiter = createWaiter();
     activeRefunds.add(waiter.promise);
     let actualCostUsd = 0;
+    let heartbeatFailure: unknown;
+    let heartbeatWork = reservation.heartbeat().catch((error: unknown) => {
+      heartbeatFailure = error;
+    });
+    const heartbeatTimer = setInterval(() => {
+      heartbeatWork = heartbeatWork
+        .then(() => reservation.heartbeat())
+        .catch((error: unknown) => {
+          heartbeatFailure ??= error;
+        });
+    }, BUDGET_HEARTBEAT_INTERVAL_MS);
+    const executionId = randomUUID();
     try {
-      const executionId = randomUUID();
       if (scratchRoot === null || listener === null) {
         throw new Error("Mode B runtime is not initialized");
       }
@@ -1450,6 +1461,7 @@ export async function replayModeB(
         inspection.attempts,
         inspection.reservations,
       );
+      if (heartbeatFailure !== undefined) throw heartbeatFailure;
 
       const successfulEnvelope =
         container.status?.exitCode === 0 &&
@@ -1534,8 +1546,36 @@ export async function replayModeB(
       existing.add(cell.correlationKey);
       result.executions.push(execution);
       result.completed += 1;
+    } catch (error) {
+      actualCostUsd = reservation.reservedUsd;
+      const spendId = randomUUID();
+      await writeReplayFact(
+        input.store,
+        input.budget.projectId,
+        spendId,
+        spendEventSchema.parse({
+          actor: "replay-driver",
+          phase:
+            cell.executionStep.selectionStage ?? cell.recordedCase.corpusSplit,
+          costUsd: actualCostUsd,
+          provider: input.egress.providerId,
+          reconcilableTo: {
+            executionId,
+            caseId: cell.recordedCase.caseId,
+            candidateId: cell.candidateId,
+            failure: "mode_b_case_failed",
+            error:
+              error instanceof Error
+                ? `${error.name}: ${error.message}`
+                : String(error),
+          },
+        }),
+      );
+      throw error;
     } finally {
       try {
+        clearInterval(heartbeatTimer);
+        await heartbeatWork;
         await reservation.refund(actualCostUsd);
       } finally {
         activeRefunds.delete(waiter.promise);

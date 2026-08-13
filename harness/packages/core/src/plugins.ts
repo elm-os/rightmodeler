@@ -25,7 +25,7 @@ export interface EvaluatorLaunchInput {
   readonly cases: readonly EvaluatorCase[];
 }
 
-export type EvaluatorRunStatus = "pending" | "running" | "complete" | "failed";
+export type EvaluatorRunStatus = "pending" | "complete" | "failed";
 
 export interface EvaluatorMetric {
   readonly metricName: string;

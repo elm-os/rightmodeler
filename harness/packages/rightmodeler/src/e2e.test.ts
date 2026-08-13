@@ -20,6 +20,7 @@ import {
   confirmPlanKey,
   factsPrefix,
   reportKey,
+  type StepRecord,
   type JsonValue,
   verdictsPrefix,
 } from "@rightmodeler/core";
@@ -27,6 +28,8 @@ import { judgeExecution, type JudgeChat } from "@rightmodeler/kernel";
 import { createProvider } from "@rightmodeler/replay";
 import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
 import { afterAll, describe, expect, it } from "vitest";
+
+import { topologicalRecords } from "./pipeline.js";
 
 const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const demoAppPath = fileURLToPath(
@@ -196,6 +199,7 @@ async function writeModeBConfig(
           ["classify", "lookup", "answer"][index],
         ]),
       ),
+      confirmMaxRunSets: 20,
     }),
   );
   return config;
@@ -361,6 +365,71 @@ async function allFileText(root: string): Promise<string> {
   await visit(root);
   return texts.join("\n");
 }
+
+function topologyRecord(
+  stepId: string,
+  path: string,
+  downstreamStepIds: readonly string[],
+): StepRecord {
+  return {
+    stepId,
+    callSite: { path, line: 1, matcherSlug: "topology-test" },
+    family: "topology-test",
+    replayMode: "e2e",
+    prefixProvenance: "model_authored",
+    riskTier: "normal",
+    capabilityRequirements: [],
+    evaluatorLadder: [],
+    currentModel: "acme/current",
+    observedCostUsd: 0,
+    downstreamStepIds: [...downstreamStepIds],
+    candidates: [],
+    analysisHistory: [],
+    status: "pending",
+    contentHash: `hash-${stepId}`,
+  };
+}
+
+describe("topologicalRecords", () => {
+  it("respects every edge across all four-node DAGs", () => {
+    const ids = ["a", "b", "c", "d"] as const;
+    const possibleEdges = ids.flatMap((source, sourceIndex) =>
+      ids.slice(sourceIndex + 1).map((target) => [source, target] as const),
+    );
+    for (let mask = 0; mask < 2 ** possibleEdges.length; mask += 1) {
+      const records = ids.map((stepId, index) =>
+        topologyRecord(
+          stepId,
+          `${ids.length - index}.py`,
+          possibleEdges.flatMap(([source, target], edgeIndex) =>
+            source === stepId && (mask & (1 << edgeIndex)) !== 0
+              ? [target]
+              : [],
+          ),
+        ),
+      );
+      for (const input of [
+        records,
+        [...records].reverse(),
+        [records[1]!, records[3]!, records[0]!, records[2]!],
+      ]) {
+        const ordered = topologicalRecords(input);
+        const position = new Map(
+          ordered.map(({ stepId }, order) => [stepId, order]),
+        );
+        for (const [source, target] of possibleEdges) {
+          if (
+            records
+              .find(({ stepId }) => stepId === source)!
+              .downstreamStepIds.includes(target)
+          ) {
+            expect(position.get(source)).toBeLessThan(position.get(target)!);
+          }
+        }
+      }
+    }
+  });
+});
 
 describe("built CLI pipeline", () => {
   it("uses deterministic judge output and exposes seeded position disagreement", async () => {
@@ -976,13 +1045,19 @@ describe("built CLI pipeline", () => {
       expect(output.familyOutcomes).toContainEqual(
         expect.objectContaining({
           familyId: "langgraph_order_lookup",
+          verdict: expect.objectContaining({
+            decision: "reject",
+            abstainReason: { reason: "cascade_isolated" },
+          }),
+          decisionDisplay: "reject",
           effectiveRecommendation: false,
-          confirmation: {
+          confirmation: expect.objectContaining({
             status: "isolated",
             runSetsUsed: expect.any(Number),
             culprits: [["classify", "lookup"]],
             cascadeSeedStepId: "classify",
-          },
+            maxRunSets: 20,
+          }),
         }),
       );
 
@@ -1023,6 +1098,20 @@ describe("built CLI pipeline", () => {
       expect(reportMarkdown).toContain("## Confirm");
       expect(reportMarkdown).toContain("| langgraph_order_lookup | isolated |");
       expect(reportMarkdown).toContain("classify + lookup");
+      expect(reportMarkdown).toContain("cascade_isolated");
+      const storedVerdictKeys = await store.list(verdictsPrefix("project"));
+      const storedVerdicts = await Promise.all(
+        storedVerdictKeys.map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      );
+      expect(storedVerdicts).toContainEqual(
+        expect.objectContaining({
+          familyId: "langgraph_order_lookup",
+          decision: "reject",
+          abstainReason: { reason: "cascade_isolated" },
+        }),
+      );
 
       const hits = stub.getHitCount();
       const resumed = await runCli(args, {

@@ -29,5 +29,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prebuild Mode B fixture image
+        run: |
+          docker pull node:24-bookworm-slim
+          fixture_digest="$(sha256sum harness/fixtures/langgraph-app/requirements.txt | cut -c1-12)"
+          fixture_image="rightmodeler-modeb-langgraph:${fixture_digest}"
+          docker build --tag "${fixture_image}" --file - harness/fixtures/langgraph-app <<'DOCKERFILE'
+          FROM node:24-bookworm-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip && rm -rf /var/lib/apt/lists/*
+          COPY requirements.txt /tmp/requirements.txt
+          RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
+          DOCKERFILE
+
       - name: Check
         run: pnpm check

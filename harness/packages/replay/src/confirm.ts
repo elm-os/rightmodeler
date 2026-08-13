@@ -122,7 +122,7 @@ interface FactsIndex {
   readonly cascadeFindings: readonly CascadeFinding[];
 }
 
-type RunSetOutcome = DeltaDebugTestOutcome | "ambiguous" | "incomplete";
+type RunSetOutcome = DeltaDebugTestOutcome | "incomplete";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -791,7 +791,7 @@ export async function confirmSwapSet(
       );
       return terminalOutcome;
     }
-    if (!execute) return "ambiguous" as never;
+    if (!execute) return "ambiguous";
 
     await updatePlan(input.store, planKey, familyId, inputDigest, (current) =>
       replacePlanItem(current, key, members, "running"),
@@ -823,7 +823,7 @@ export async function confirmSwapSet(
       await updatePlan(input.store, planKey, familyId, inputDigest, (current) =>
         replacePlanItem(current, key, members, "pending"),
       );
-      return "ambiguous" as never;
+      return "ambiguous";
     }
     await updatePlan(input.store, planKey, familyId, inputDigest, (current) =>
       replacePlanItem(current, key, members, outcome),

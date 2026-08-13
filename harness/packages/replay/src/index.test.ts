@@ -3,17 +3,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  completeRun,
+  createRun,
   factSchema,
   factsPrefix,
   FsStore,
   type Fact,
 } from "@rightmodeler/core";
 import type { JudgeChat } from "@rightmodeler/kernel";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   BlockedError,
   BudgetRefusalError,
+  DEFAULT_RESERVATION_STALENESS_WINDOW_MS,
   createBudget,
   createProvider,
   replayModeA,
@@ -227,6 +230,71 @@ describe("budget reservation", () => {
     await reservation.refund(3);
     expect(await budget.state()).toMatchObject({
       spentUsd: 3,
+      reservedUsd: 0,
+    });
+  });
+
+  it("reclaims a reservation after its host dies mid-case", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-13T12:00:00.000Z"));
+    try {
+      const killedHostBudget = createBudget({
+        store,
+        projectId,
+        runId,
+        authorizedTotalUsd: 0.01,
+      });
+      await killedHostBudget.reserveExecution({
+        contextTokens: 1,
+        maxOutputTokens: 0,
+        pricing: { input: 0.01, output: 0 },
+      });
+
+      vi.advanceTimersByTime(DEFAULT_RESERVATION_STALENESS_WINDOW_MS + 1);
+      const resumedBudget = createBudget({
+        store,
+        projectId,
+        runId,
+        authorizedTotalUsd: 0.01,
+      });
+      const resumed = await resumedBudget.reserveExecution({
+        contextTokens: 1,
+        maxOutputTokens: 0,
+        pricing: { input: 0.01, output: 0 },
+      });
+
+      expect(await resumedBudget.state()).toMatchObject({
+        spentUsd: 0,
+        reservedUsd: 0.01,
+      });
+      await resumed.refund(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reclaims a reservation when its owning run is terminal", async () => {
+    await createRun(store, {
+      projectId,
+      runId,
+      type: "replay",
+      phase: "confirm",
+    });
+    const active = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.01,
+    });
+    await active.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 0,
+      pricing: { input: 0.01, output: 0 },
+    });
+    await completeRun(store, projectId, runId);
+
+    expect(await active.state()).toMatchObject({
+      spentUsd: 0,
       reservedUsd: 0,
     });
   });

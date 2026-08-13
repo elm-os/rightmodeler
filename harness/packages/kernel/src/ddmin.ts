@@ -1,4 +1,4 @@
-export type DeltaDebugTestOutcome = "pass" | "fail";
+export type DeltaDebugTestOutcome = "pass" | "fail" | "ambiguous";
 
 export interface DeltaDebugBudget {
   readonly maxRunSets: number;
@@ -13,7 +13,7 @@ export interface DeltaDebugInput<Item> {
 export interface DeltaDebugLogEntry<Item> {
   readonly runSet: number;
   readonly subset: readonly Item[];
-  readonly outcome: DeltaDebugTestOutcome | "ambiguous";
+  readonly outcome: DeltaDebugTestOutcome;
 }
 
 export interface DeltaDebugResult<Item> {
@@ -51,15 +51,15 @@ export async function deltaDebug<Item>(
 
   const run = async (
     indices: readonly number[],
-  ): Promise<DeltaDebugTestOutcome | "ambiguous" | "budget-exhausted"> => {
+  ): Promise<DeltaDebugTestOutcome | "budget-exhausted"> => {
     if (runSetsUsed >= input.budget.maxRunSets) {
       return "budget-exhausted";
     }
 
     const subset = pick(input.items, indices);
     runSetsUsed += 1;
-    const outcome: unknown = await input.test([...subset]);
-    if (outcome !== "pass" && outcome !== "fail") {
+    const outcome = await input.test([...subset]);
+    if (outcome === "ambiguous") {
       log.push({ runSet: runSetsUsed, subset, outcome: "ambiguous" });
       return "ambiguous";
     }

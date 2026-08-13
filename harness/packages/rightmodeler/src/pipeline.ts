@@ -132,7 +132,6 @@ const SHORTLIST_TOP = 3;
 const AVAILABILITY_FLOOR = 0.7;
 const GATE_POLICY_VERSION = "phase-a-v2";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
-const CONFIRM_MAX_RUN_SETS = 20;
 const RELEASE_GATE_POLICY = new ReleaseGatePolicy({
   gatePolicyVersion: GATE_POLICY_VERSION,
   qualityFloor: 0.85,
@@ -313,6 +312,8 @@ const familyOutcomeSchema = z.strictObject({
       runSetsUsed: z.number().int().nonnegative(),
       culprits: z.array(z.array(z.string().min(1))),
       cascadeSeedStepId: z.string().min(1).nullable(),
+      maxRunSets: z.number().int().nonnegative().optional(),
+      requiredMaxRunSets: z.number().int().nonnegative().optional(),
       blocker: z.string().min(1).optional(),
     })
     .optional(),
@@ -397,6 +398,8 @@ interface FamilyOutcome {
     runSetsUsed: number;
     culprits: string[][];
     cascadeSeedStepId: string | null;
+    maxRunSets?: number;
+    requiredMaxRunSets?: number;
     blocker?: string;
   };
 }
@@ -410,6 +413,7 @@ const modeBConfigSchema = z.strictObject({
     installCommand: z.array(z.string().min(1)).min(1).optional(),
   }),
   stepMap: z.record(z.string().min(1), z.string().min(1)),
+  confirmMaxRunSets: z.number().int().nonnegative().optional(),
 });
 
 export type ModeBConfig = z.infer<typeof modeBConfigSchema>;
@@ -1344,7 +1348,9 @@ function buildFamilyOutcomes(
     const verdict = effectiveVerdict(familyVerdicts, selection);
     const gates = evaluateGates([verdict], RELEASE_GATE_POLICY);
     const effectiveRecommendation =
-      selection.status === "selected" && gates.every(({ pass }) => pass);
+      verdict.decision === "recommend" &&
+      selection.status === "selected" &&
+      gates.every(({ pass }) => pass);
     const decisionDisplay =
       verdict.decision === "recommend" && !effectiveRecommendation
         ? "recommend (gated)"
@@ -1425,7 +1431,6 @@ async function executeConfirm(
     const runtimeByCanonical = config.stepMap;
     const runtimeRecords = orderedRecords.map((record) => ({
       stepId: runtimeByCanonical[record.stepId]!,
-      evidenceQuestionId: "pending-confirmation-question",
       currentModel: record.currentModel,
       needsTools: record.capabilityRequirements.includes("tools"),
       needsStructuredOutput:
@@ -1501,6 +1506,8 @@ async function executeConfirm(
           candidateModel: selectedCandidateId,
         };
       });
+      const maxRunSets =
+        config.confirmMaxRunSets ?? defaultConfirmMaxRunSets(swapSet.length);
       const result = await confirmSwapSet({
         family: {
           familyId,
@@ -1555,7 +1562,7 @@ async function executeConfirm(
           },
         },
         store: context.store,
-        budget: { modeB: budget, maxRunSets: CONFIRM_MAX_RUN_SETS },
+        budget: { modeB: budget, maxRunSets },
         policy: RELEASE_GATE_POLICY,
       });
       confirmedFamilies += 1;
@@ -1564,6 +1571,10 @@ async function executeConfirm(
         runSetsUsed: result.runSetsUsed,
         culprits: result.culprits.map((culprit) => [...culprit]),
         cascadeSeedStepId: result.cascadeSeed ?? null,
+        maxRunSets,
+        ...(result.requiredMaxRunSets === undefined
+          ? {}
+          : { requiredMaxRunSets: result.requiredMaxRunSets }),
       });
     }
   }
@@ -1582,19 +1593,16 @@ async function executeConfirm(
   const families = buildFamilyOutcomes(plan, allVerdicts).map((family) => {
     const confirmation = confirmations.get(family.familyId);
     if (confirmation !== undefined) {
-      const effectiveRecommendation =
-        family.effectiveRecommendation && confirmation.status === "confirmed";
+      const blocked = confirmation.status === "blocked";
       return {
         ...family,
         confirmation,
-        effectiveRecommendation,
-        decisionDisplay:
-          confirmation.status === "blocked"
-            ? ("recommend (unconfirmed)" as const)
-            : family.verdict.decision === "recommend" &&
-                !effectiveRecommendation
-              ? ("recommend (gated)" as const)
-              : family.decisionDisplay,
+        effectiveRecommendation: blocked
+          ? false
+          : family.effectiveRecommendation,
+        decisionDisplay: blocked
+          ? ("recommend (unconfirmed)" as const)
+          : family.decisionDisplay,
       };
     }
     return {
@@ -1653,17 +1661,55 @@ function configuredStepRecords(
   });
 }
 
-function topologicalRecords(
+export function topologicalRecords(
   records: readonly z.infer<typeof stepRecordSchema>[],
 ) {
-  return [...records].sort((left, right) => {
-    if (left.downstreamStepIds.includes(right.stepId)) return -1;
-    if (right.downstreamStepIds.includes(left.stepId)) return 1;
-    return (
-      compareText(left.callSite.path, right.callSite.path) ||
-      left.callSite.line - right.callSite.line
-    );
-  });
+  const byId = new Map(records.map((record) => [record.stepId, record]));
+  if (byId.size !== records.length) {
+    throw new Error("Configured confirmation steps contain duplicate ids");
+  }
+  const indegree = new Map(records.map(({ stepId }) => [stepId, 0]));
+  const downstream = new Map<string, string[]>();
+  for (const record of records) {
+    const selectedDownstream = [
+      ...new Set(record.downstreamStepIds.filter((stepId) => byId.has(stepId))),
+    ];
+    downstream.set(record.stepId, selectedDownstream);
+    for (const stepId of selectedDownstream) {
+      indegree.set(stepId, indegree.get(stepId)! + 1);
+    }
+  }
+  const compareRecords = (
+    left: z.infer<typeof stepRecordSchema>,
+    right: z.infer<typeof stepRecordSchema>,
+  ) =>
+    compareText(left.callSite.path, right.callSite.path) ||
+    left.callSite.line - right.callSite.line ||
+    compareText(left.stepId, right.stepId);
+  const ready = records
+    .filter(({ stepId }) => indegree.get(stepId) === 0)
+    .sort(compareRecords);
+  const ordered: z.infer<typeof stepRecordSchema>[] = [];
+  while (ready.length > 0) {
+    const record = ready.shift()!;
+    ordered.push(record);
+    for (const stepId of downstream.get(record.stepId) ?? []) {
+      const nextIndegree = indegree.get(stepId)! - 1;
+      indegree.set(stepId, nextIndegree);
+      if (nextIndegree === 0) {
+        ready.push(byId.get(stepId)!);
+        ready.sort(compareRecords);
+      }
+    }
+  }
+  if (ordered.length !== records.length) {
+    throw new Error("Configured confirmation steps contain a dependency cycle");
+  }
+  return ordered;
+}
+
+function defaultConfirmMaxRunSets(swapCount: number): number {
+  return Math.max(20, 2 ** Math.min(swapCount, 4) + 4);
 }
 
 function confirmationCases(
@@ -2477,6 +2523,17 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
         stepId,
         value: droppedByTop,
       })),
+      ...decisionOutput.families.flatMap((family) =>
+        family.confirmation?.maxRunSets === undefined
+          ? []
+          : [
+              {
+                name: "confirm max run sets",
+                family: family.familyId,
+                value: family.confirmation.maxRunSets,
+              },
+            ],
+      ),
     ],
   };
 }
@@ -2502,7 +2559,7 @@ function renderReport(report: ReportData): string {
       ? `${formatRate(verdict.naiveInterval.lower)} to ${formatRate(verdict.naiveInterval.upper)}`
       : `${formatRate(verdict.clusterBootstrapLow ?? 0)} lower`;
     lines.push(
-      `| ${verdict.familyId} | ${family.decisionDisplay} | ${evaluatorRates} | ${verdict.availability.availableExecutions}/${verdict.availability.executions} (${formatRate(verdict.availability.rate)}) | ${verdict.excludedExecutions}/${verdict.nExecutions} (${formatRate(verdict.excludedFraction)}) | ${formatRate(verdict.worstCaseBound)} | ${confidence} | ${verdict.decision === "abstain" ? formatAbstention(verdict.abstainReason) : ""} |`,
+      `| ${verdict.familyId} | ${family.decisionDisplay} | ${evaluatorRates} | ${verdict.availability.availableExecutions}/${verdict.availability.executions} (${formatRate(verdict.availability.rate)}) | ${verdict.excludedExecutions}/${verdict.nExecutions} (${formatRate(verdict.excludedFraction)}) | ${formatRate(verdict.worstCaseBound)} | ${confidence} | ${verdict.abstainReason === undefined ? "" : formatAbstention(verdict.abstainReason)} |`,
     );
   }
   lines.push(
@@ -2537,11 +2594,17 @@ function renderReport(report: ReportData): string {
     "",
     "## Confirm",
     "",
-    "| Family | Status | Run sets used | Cascade seed | Culprits | Blocker |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "Confirmation exhaustively tests swap subsets and may require up to 2^n run sets for n swaps. The default cap is structurally inconclusive at five or more swapped steps; raise the configured cap when an action is shown.",
+    "",
+    "| Family | Status | Run sets used | Run-set cap | Cascade seed | Culprits | Action | Blocker |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ...report.families.map((family) => {
       const confirmation = family.confirmation;
-      return `| ${family.familyId} | ${confirmation?.status ?? "not run"} | ${confirmation?.runSetsUsed ?? 0} | ${confirmation?.cascadeSeedStepId ?? ""} | ${confirmation?.culprits.map((culprit) => culprit.join(" + ")).join("; ") ?? ""} | ${confirmation?.blocker ?? ""} |`;
+      const action =
+        confirmation?.requiredMaxRunSets === undefined
+          ? ""
+          : `raise to ${confirmation.requiredMaxRunSets}`;
+      return `| ${family.familyId} | ${confirmation?.status ?? "not run"} | ${confirmation?.runSetsUsed ?? 0} | ${confirmation?.maxRunSets ?? ""} | ${confirmation?.cascadeSeedStepId ?? ""} | ${confirmation?.culprits.map((culprit) => culprit.join(" + ")).join("; ") ?? ""} | ${action} | ${confirmation?.blocker ?? ""} |`;
     }),
     "",
     "## Judge disagreement",
@@ -2574,10 +2637,12 @@ function renderReport(report: ReportData): string {
 
 function formatAbstention(abstention: {
   reason: string;
-  observed: number;
-  required: number;
+  observed?: number;
+  required?: number;
 }): string {
-  return `${abstention.reason} (${formatNumber(abstention.observed)} of ${formatNumber(abstention.required)})`;
+  return abstention.observed === undefined || abstention.required === undefined
+    ? abstention.reason
+    : `${abstention.reason} (${formatNumber(abstention.observed)} of ${formatNumber(abstention.required)})`;
 }
 
 function formatNumber(value: number): string {

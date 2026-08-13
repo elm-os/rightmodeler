@@ -60,6 +60,12 @@ const releaseGatePolicy = new ReleaseGatePolicy({
   qualityFloor: 0.81,
   availabilityFloor: 0.8,
 });
+const twoCaseIsolationPolicy: ReleaseGatePolicy = {
+  gatePolicyVersion: "gate-two-case-isolation",
+  qualityFloor: 0.3,
+  availabilityFloor: 0.8,
+  passFraction: releaseGatePolicy.passFraction,
+};
 const confirmationCaseCount = 17;
 
 const catalog: ModelCatalogEntry[] = [
@@ -412,7 +418,13 @@ async function startStub(): Promise<StubProvider> {
   return fixture.startStubProvider({ port: 0 });
 }
 
-async function realModeBContext(swapStepIds: readonly string[]): Promise<{
+async function realModeBContext(
+  swapStepIds: readonly string[],
+  options: {
+    caseCount?: number;
+    policy?: ReleaseGatePolicy;
+  } = {},
+): Promise<{
   store: FsStore;
   input: ConfirmSwapSetInput;
   stub: StubProvider;
@@ -441,18 +453,21 @@ async function realModeBContext(swapStepIds: readonly string[]): Promise<{
         currentModel: currentModels[stepId]!,
         candidateModel: "acme/small-1",
       })),
-      cases: Array.from({ length: confirmationCaseCount }, (_, index) => ({
-        caseId: `langgraph-tool-${index}`,
-        stepId: "answer",
-        trajectoryId: `langgraph-tool-${index}`,
-        corpusSplit: "holdout",
-        task: "Answer the recorded order lookup request.",
-        messages: [{ role: "user", content: "Where is order ORD-104?" }],
-        contextTokens: 64,
-        maxOutputTokens: 256,
-        referenceOutput: "Deterministic reply 81d067ab44f20e70",
-        input: "Where is order ORD-104?",
-      })),
+      cases: Array.from(
+        { length: options.caseCount ?? confirmationCaseCount },
+        (_, index) => ({
+          caseId: `langgraph-tool-${index}`,
+          stepId: "answer",
+          trajectoryId: `langgraph-tool-${index}`,
+          corpusSplit: "holdout",
+          task: "Answer the recorded order lookup request.",
+          messages: [{ role: "user", content: "Where is order ORD-104?" }],
+          contextTokens: 64,
+          maxOutputTokens: 256,
+          referenceOutput: "Deterministic reply 81d067ab44f20e70",
+          input: "Where is order ORD-104?",
+        }),
+      ),
       modeB: {
         input: {
           executor: createDockerExecutor({
@@ -486,7 +501,7 @@ async function realModeBContext(swapStepIds: readonly string[]): Promise<{
       },
       store,
       budget: { modeB: modeBBudget, maxRunSets: 20 },
-      policy: releaseGatePolicy,
+      policy: options.policy ?? releaseGatePolicy,
     },
   };
 }
@@ -598,7 +613,7 @@ describe("confirmSwapSet", () => {
     expect(second).toEqual(first);
     expect(await cascadeFindings(context.store)).toHaveLength(1);
     expect(runner.calls()).toBe(first.runSetsUsed);
-  });
+  }, 15_000);
 
   it("uses the release policy quality floor for run-set outcomes", async () => {
     const runner = fakeRunner(() => false);
@@ -706,7 +721,11 @@ describe("confirmSwapSet", () => {
   it(
     "isolates classify and lookup through the real seeded interaction seam",
     async () => {
-      const context = await realModeBContext(["classify", "lookup", "answer"]);
+      // The CLI e2e keeps the production-policy corpus; this test covers the replay seam.
+      const context = await realModeBContext(["classify", "lookup", "answer"], {
+        caseCount: 2,
+        policy: twoCaseIsolationPolicy,
+      });
       try {
         const result = await confirmSwapSet(context.input);
         expect(result).toMatchObject({

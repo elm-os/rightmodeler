@@ -113,8 +113,8 @@ function renderHuman(value: unknown): string {
       : undefined;
   if (families !== undefined) {
     const lines = [
-      "Family | Decision | Evaluator rates | Availability | Worst-case bound | Abstain reason | Confirm | Blocker",
-      "--- | --- | --- | --- | --- | --- | --- | ---",
+      "Family | Decision | Evaluator rates | Availability | Worst-case bound | Abstain reason | Confirm | Action | Blocker",
+      "--- | --- | --- | --- | --- | --- | --- | --- | ---",
       ...families.map(renderFamilyRow),
     ];
     if (typeof record?.reportPath === "string") {
@@ -148,7 +148,14 @@ function renderFamilyRow(value: unknown): string {
   const reason =
     abstention === undefined
       ? ""
-      : `${String(abstention.reason)} (${formatNumber(abstention.observed)} of ${formatNumber(abstention.required)})`;
+      : typeof abstention.observed === "number" &&
+          typeof abstention.required === "number"
+        ? `${String(abstention.reason)} (${formatNumber(abstention.observed)} of ${formatNumber(abstention.required)})`
+        : String(abstention.reason);
+  const action =
+    typeof confirmation?.requiredMaxRunSets === "number"
+      ? `raise to ${confirmation.requiredMaxRunSets}`
+      : "";
   return [
     String(family?.familyId ?? verdict?.familyId ?? "unknown"),
     String(family?.decisionDisplay ?? verdict?.decision ?? "unknown"),
@@ -157,6 +164,7 @@ function renderFamilyRow(value: unknown): string {
     formatRate(verdict?.worstCaseBound),
     reason,
     String(confirmation?.status ?? "not run"),
+    action,
     String(confirmation?.blocker ?? ""),
   ].join(" | ");
 }

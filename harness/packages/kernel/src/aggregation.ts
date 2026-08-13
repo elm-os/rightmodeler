@@ -24,14 +24,19 @@ export const ABSTAIN_REASONS = [
   "required_abstention",
   "incomplete_evidence_coverage",
   "incomplete_evaluator_coverage",
+  "cascade_isolated",
+  "cascade_inconclusive",
 ] as const;
 
 export type AbstainReason = (typeof ABSTAIN_REASONS)[number];
-export interface AbstainReasonDetails {
-  readonly reason: AbstainReason;
-  readonly observed: number;
-  readonly required: number;
-}
+type CascadeReason = "cascade_isolated" | "cascade_inconclusive";
+export type AbstainReasonDetails =
+  | {
+      readonly reason: Exclude<AbstainReason, CascadeReason>;
+      readonly observed: number;
+      readonly required: number;
+    }
+  | { readonly reason: CascadeReason };
 export type FamilyDecision =
   "recommend" | "reject" | "abstain" | "inconclusive";
 
@@ -154,10 +159,28 @@ export type FamilyVerdict = FamilyVerdictBase &
         readonly abstainReason: AbstainReasonDetails;
       }
     | {
-        readonly decision: Exclude<FamilyDecision, "abstain">;
+        readonly decision: "reject";
+        readonly abstainReason?: { readonly reason: "cascade_isolated" };
+      }
+    | {
+        readonly decision: "recommend" | "inconclusive";
         readonly abstainReason?: never;
       }
   );
+
+type DecisionResult =
+  | {
+      readonly decision: "abstain";
+      readonly abstainReason: AbstainReasonDetails;
+    }
+  | {
+      readonly decision: "reject";
+      readonly abstainReason?: { readonly reason: "cascade_isolated" };
+    }
+  | {
+      readonly decision: "recommend" | "inconclusive";
+      readonly abstainReason?: never;
+    };
 
 export interface AggregateOptions {
   readonly gatePolicyVersion: string;
@@ -385,18 +408,24 @@ function aggregateGroup(
           },
         }),
   };
-  return abstainReason === undefined
-    ? {
-        ...base,
-        decision: decide({
-          unsafeSubstitutions,
-          weakestWorstCaseBound: weakest.worstCaseBound,
-          qualityFloor,
-          availabilityLowerBound: availability.lowerBound,
-          availabilityFloor,
-        }),
-      }
-    : { ...base, decision: "abstain", abstainReason };
+  const decision = decide({
+    cascadeFinding,
+    abstainReason,
+    unsafeSubstitutions,
+    weakestWorstCaseBound: weakest.worstCaseBound,
+    qualityFloor,
+    availabilityLowerBound: availability.lowerBound,
+    availabilityFloor,
+  });
+  if (decision.decision === "abstain") {
+    return { ...base, ...decision };
+  }
+  if (decision.decision === "reject") {
+    return decision.abstainReason === undefined
+      ? { ...base, decision: "reject" }
+      : { ...base, ...decision };
+  }
+  return { ...base, decision: decision.decision };
 }
 
 function aggregateEvaluatorKind(
@@ -612,7 +641,7 @@ function findAbstainReason(input: {
 }
 
 function abstention(
-  reason: AbstainReason,
+  reason: Exclude<AbstainReason, CascadeReason>,
   observed: number,
   required: number,
 ): AbstainReasonDetails {
@@ -620,22 +649,42 @@ function abstention(
 }
 
 function decide(input: {
+  readonly cascadeFinding?: CascadeFinding;
+  readonly abstainReason?: AbstainReasonDetails;
   readonly unsafeSubstitutions: number;
   readonly weakestWorstCaseBound: number;
   readonly qualityFloor: number;
   readonly availabilityLowerBound: number;
   readonly availabilityFloor: number;
-}): Exclude<FamilyDecision, "abstain"> {
+}): DecisionResult {
+  if (
+    input.cascadeFinding?.verdict === "isolated" &&
+    input.cascadeFinding.culprits.length > 0
+  ) {
+    return {
+      decision: "reject",
+      abstainReason: { reason: "cascade_isolated" },
+    };
+  }
+  if (input.cascadeFinding?.verdict === "inconclusive") {
+    return {
+      decision: "abstain",
+      abstainReason: { reason: "cascade_inconclusive" },
+    };
+  }
+  if (input.abstainReason !== undefined) {
+    return { decision: "abstain", abstainReason: input.abstainReason };
+  }
   if (input.unsafeSubstitutions > 0) {
-    return "reject";
+    return { decision: "reject" };
   }
   if (
     input.weakestWorstCaseBound >= input.qualityFloor &&
     input.availabilityLowerBound >= input.availabilityFloor
   ) {
-    return "recommend";
+    return { decision: "recommend" };
   }
-  return "inconclusive";
+  return { decision: "inconclusive" };
 }
 
 function validateFloor(value: number, name: string): void {

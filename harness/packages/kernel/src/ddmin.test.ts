@@ -114,7 +114,7 @@ describe("deltaDebug", () => {
   it("returns inconclusive for an ambiguous oracle outcome", async () => {
     const result = await deltaDebug({
       items: ["a"],
-      test: async () => "unknown" as never,
+      test: async () => "ambiguous",
       budget: { maxRunSets: 2 },
     });
 

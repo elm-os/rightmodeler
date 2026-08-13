@@ -100,6 +100,53 @@ describe("aggregate", () => {
     });
   });
 
+  it("rejects an otherwise recommendable family when confirmation isolates a cascade", () => {
+    const [verdict] = aggregate(aggregationFacts(20), options, [
+      cascadeFinding(),
+    ]);
+
+    expect(verdict).toMatchObject({
+      decision: "reject",
+      abstainReason: { reason: "cascade_isolated" },
+      cascadeStatus: { verdict: "isolated" },
+    });
+  });
+
+  it("abstains an otherwise recommendable family when confirmation is inconclusive", () => {
+    const [verdict] = aggregate(aggregationFacts(20), options, [
+      cascadeFinding({
+        verdict: "inconclusive",
+        culprits: [],
+        cascadeSeedStepId: null,
+        uncertainStepIds: ["classify", "lookup"],
+      }),
+    ]);
+
+    expect(verdict).toMatchObject({
+      decision: "abstain",
+      abstainReason: { reason: "cascade_inconclusive" },
+      cascadeStatus: { verdict: "inconclusive" },
+    });
+  });
+
+  it("keeps an otherwise recommendable family recommended after confirmation", () => {
+    const [verdict] = aggregate(aggregationFacts(20), options, [
+      cascadeFinding({
+        verdict: "confirmed",
+        culprits: [],
+        cascadeSeedStepId: null,
+        uncertainStepIds: [],
+        runSetsUsed: 1,
+      }),
+    ]);
+
+    expect(verdict).toMatchObject({
+      decision: "recommend",
+      cascadeStatus: { verdict: "confirmed" },
+    });
+    expect(verdict).not.toHaveProperty("abstainReason");
+  });
+
   it("reports evaluator kinds separately and applies the weakest kind", () => {
     const [verdict] = aggregate(aggregationScenarios.evaluatorKinds, options);
 
