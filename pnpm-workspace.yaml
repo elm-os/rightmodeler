@@ -2,8 +2,11 @@ packages:
   - apps/*
   - packages/*
   - harness/packages/*
+  - harness/apps/*
   - skills/*
 allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+minimumReleaseAgeExclude:
+  - eve@0.36.0

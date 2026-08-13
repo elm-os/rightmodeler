@@ -1,0 +1,28 @@
+{
+  "name": "@rightmodeler/agent",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Agent application for operating the rightmodeler harness.",
+  "scripts": {
+    "build": "eve build",
+    "typecheck": "tsc --noEmit",
+    "info": "eve info",
+    "eval:list": "eve eval --list",
+    "eval": "RIGHTMODELER_AGENT_EVAL=1 RIGHTMODELER_AGENT_FIXTURE_API_KEY=fixture-api-key eve eval --strict --skip-report",
+    "check": "pnpm run typecheck && eve info --json && pnpm run eval"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@rightmodeler/cli": "workspace:*",
+    "ai": "^7.0.64",
+    "eve": "0.36.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^5.9.3"
+  }
+}
