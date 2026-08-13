@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
@@ -2425,8 +2425,11 @@ async function executeReport(
   const report = await buildReport(context);
   const jsonKey = reportKey(context.projectId, "report.json");
   const markdownKey = reportKey(context.projectId, "report.md");
+  const markdown = renderReport(report);
   await putMutableJson(context.store, jsonKey, jsonValue(report));
-  await putMutableText(context.store, markdownKey, renderReport(report));
+  await putMutableText(context.store, markdownKey, markdown);
+  await mkdir(dirname(reportPath(context)), { recursive: true });
+  await writeFile(reportPath(context), markdown, "utf8");
   return jsonKey;
 }
 
@@ -2437,10 +2440,19 @@ async function checkpointOutputExists(
 ): Promise<boolean> {
   if ((await context.store.get(checkpoint.outputKey)) === null) return false;
   if (stage !== "report") return true;
-  return (
-    (await context.store.get(reportKey(context.projectId, "report.md"))) !==
+  if (
+    (await context.store.get(reportKey(context.projectId, "report.md"))) ===
     null
-  );
+  ) {
+    return false;
+  }
+  try {
+    await readFile(reportPath(context));
+    return true;
+  } catch (error) {
+    if (isMissing(error)) return false;
+    throw error;
+  }
 }
 
 async function loadScan(context: PipelineContext) {

@@ -1,34 +1,40 @@
 {
   "name": "@rightmodeler/cli",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "bin": {
-    "rightmodeler": "./dist/cli.js"
+    "rightmodeler": "./dist-bundle/cli.js"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/cli.d.ts",
-      "import": "./dist/cli.js"
-    }
+  "exports": "./dist-bundle/cli.js",
+  "files": [
+    "dist-bundle",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "directory": "dist/publish"
   },
   "scripts": {
-    "build": "pnpm --filter @rightmodeler/scanner build && pnpm --filter @rightmodeler/kernel build && pnpm --filter @rightmodeler/replay build && tsc -p tsconfig.json",
+    "build": "pnpm --filter @rightmodeler/core build && pnpm --filter @rightmodeler/executor build && pnpm --filter @rightmodeler/kernel build && pnpm --filter @rightmodeler/scanner build && pnpm --filter @rightmodeler/replay build && tsc -p tsconfig.json && pnpm run bundle",
+    "bundle": "tsx scripts/generate-docs.mjs --check && node build.mjs",
+    "docs:generate": "tsx scripts/generate-docs.mjs --write",
+    "prepack": "pnpm run bundle",
     "check-types": "tsc --noEmit",
     "check": "pnpm run build && tsc --noEmit && vitest run"
   },
-  "dependencies": {
+  "devDependencies": {
     "@rightmodeler/core": "workspace:*",
     "@rightmodeler/kernel": "workspace:*",
     "@rightmodeler/replay": "workspace:*",
     "@rightmodeler/scanner": "workspace:*",
-    "commander": "^14",
-    "zod": "^4"
-  },
-  "devDependencies": {
     "@types/node": "^20",
+    "commander": "^14",
+    "esbuild": "^0.28.2",
     "tsx": "^4",
     "typescript": "^5",
-    "vitest": "^3"
+    "vitest": "^3",
+    "zod": "^4"
   }
 }
