@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.rightmodeler.com/schemas/vs-page.schema.json",
+  "title": "rightmodeler comparison page",
+  "description": "Contract for src/content/vs/data/*.json. Pages are block-composed: every block type is optional and repeatable, array order is render order. Enforced by scripts/check-vs.test.mjs; the permissive render type lives in ./types.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "slug",
+    "name",
+    "category",
+    "verdict",
+    "verdictLabel",
+    "title",
+    "description",
+    "h1",
+    "lede",
+    "integrationSlug",
+    "related",
+    "cta",
+    "blocks"
+  ],
+  "properties": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "category": { "enum": ["gateway", "evals", "router"] },
+    "verdict": { "enum": ["complement", "competitor", "different-job"] },
+    "verdictLabel": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "h1": { "type": "string", "pattern": "^rightmodeler vs .+$" },
+    "lede": { "type": "string", "minLength": 1 },
+    "integrationSlug": {
+      "type": "string",
+      "pattern": "^$|^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "related": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
+    },
+    "cta": { "enum": ["github", "crucible"] },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/block" }
+    }
+  },
+  "$defs": {
+    "side": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["heading", "items"],
+      "properties": {
+        "heading": { "type": "string", "minLength": 1 },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "block": {
+      "oneOf": [
+        { "$ref": "#/$defs/tldr" },
+        { "$ref": "#/$defs/positioning" },
+        { "$ref": "#/$defs/contrast" },
+        { "$ref": "#/$defs/fork" },
+        { "$ref": "#/$defs/scenarios" },
+        { "$ref": "#/$defs/table" },
+        { "$ref": "#/$defs/stack" },
+        { "$ref": "#/$defs/prose" },
+        { "$ref": "#/$defs/definitions" },
+        { "$ref": "#/$defs/faq" }
+      ]
+    },
+    "tldr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "body"],
+      "properties": {
+        "type": { "const": "tldr" },
+        "body": { "type": "string", "minLength": 1 }
+      }
+    },
+    "positioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "left", "right"],
+      "properties": {
+        "type": { "const": "positioning" },
+        "left": { "$ref": "#/$defs/side" },
+        "right": { "$ref": "#/$defs/side" }
+      }
+    },
+    "contrast": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "left", "right"],
+      "properties": {
+        "type": { "const": "contrast" },
+        "left": { "$ref": "#/$defs/side" },
+        "right": { "$ref": "#/$defs/side" }
+      }
+    },
+    "fork": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "left", "right"],
+      "properties": {
+        "type": { "const": "fork" },
+        "left": { "$ref": "#/$defs/side" },
+        "right": { "$ref": "#/$defs/side" }
+      }
+    },
+    "scenarios": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "heading", "scenarios"],
+      "properties": {
+        "type": { "const": "scenarios" },
+        "heading": { "type": "string", "minLength": 1 },
+        "intro": { "type": "string", "minLength": 1 },
+        "scenarios": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["scenario", "winner", "why"],
+            "properties": {
+              "scenario": { "type": "string", "minLength": 1 },
+              "winner": { "enum": ["theirs", "ours", "both"] },
+              "why": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "heading", "leftLabel", "rightLabel", "rows"],
+      "properties": {
+        "type": { "const": "table" },
+        "heading": { "type": "string", "minLength": 1 },
+        "intro": { "type": "string", "minLength": 1 },
+        "caption": { "type": "string", "minLength": 1 },
+        "leftLabel": { "type": "string", "minLength": 1 },
+        "rightLabel": { "type": "string", "minLength": 1 },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dimension", "theirs", "ours"],
+            "properties": {
+              "dimension": { "type": "string", "minLength": 1 },
+              "theirs": { "type": "string", "minLength": 1 },
+              "ours": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "heading"],
+      "anyOf": [{ "required": ["paragraphs"] }, { "required": ["commands"] }],
+      "properties": {
+        "type": { "const": "stack" },
+        "heading": { "type": "string", "minLength": 1 },
+        "intro": { "type": "string", "minLength": 1 },
+        "paragraphs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["comment", "command"],
+            "properties": {
+              "comment": { "type": "string", "minLength": 1 },
+              "command": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "prose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "heading", "paragraphs"],
+      "properties": {
+        "type": { "const": "prose" },
+        "heading": { "type": "string", "minLength": 1 },
+        "intro": { "type": "string", "minLength": 1 },
+        "paragraphs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "definitions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "heading", "terms"],
+      "properties": {
+        "type": { "const": "definitions" },
+        "heading": { "type": "string", "minLength": 1 },
+        "intro": { "type": "string", "minLength": 1 },
+        "terms": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["term", "def"],
+            "properties": {
+              "term": { "type": "string", "minLength": 1 },
+              "def": { "type": "string", "minLength": 1 },
+              "slug": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "faq": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "items"],
+      "properties": {
+        "type": { "const": "faq" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q", "a"],
+            "properties": {
+              "q": { "type": "string", "minLength": 1 },
+              "a": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

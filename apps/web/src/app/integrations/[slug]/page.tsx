@@ -11,6 +11,7 @@ import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { Tldr } from "@/components/sections/tldr";
 import { getAllSlugs, getIntegration } from "@/content/integrations";
+import { getComparison } from "@/content/vs";
 import { pageMetadata } from "@/lib/seo";
 import { RUN_COMMAND, SITE_URL } from "@/lib/site";
 
@@ -333,6 +334,15 @@ export default async function IntegrationPage({
                 href: `/integrations/${entry.slug}`,
                 label: entry.name,
               })),
+              // When the same tool also has a comparison page, cross-link the two intents.
+              ...(getComparison(data.slug)
+                ? [
+                    {
+                      href: `/vs/${data.slug}`,
+                      label: `rightmodeler vs ${data.name}`,
+                    },
+                  ]
+                : []),
               { href: "/how-it-works", label: "How it works" },
             ]}
           />

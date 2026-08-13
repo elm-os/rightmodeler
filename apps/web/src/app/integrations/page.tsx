@@ -147,6 +147,7 @@ export default function IntegrationsPage() {
                 href: "/use-cases/reduce-llm-costs",
                 label: "Reduce LLM costs",
               },
+              { href: "/vs", label: "Compare alternatives" },
               { href: "/glossary", label: "Glossary" },
             ]}
           />
