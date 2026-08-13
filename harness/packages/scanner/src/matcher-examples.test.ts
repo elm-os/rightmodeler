@@ -5,7 +5,7 @@ import { samplePath } from "./path-pattern.js";
 
 describe("builtin matcher examples", () => {
   it("discovers every named builtin matcher", () => {
-    expect(builtinMatchers).toHaveLength(13);
+    expect(builtinMatchers).toHaveLength(28);
   });
 
   for (const matcher of builtinMatchers) {
@@ -60,6 +60,49 @@ describe("builtin matcher examples", () => {
       anthropic.match(
         'from anthropic import Anthropic\n"""client.messages.create(model="acme/large-1")"""',
         "src/notes.py",
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps provider-prefixed and generic environment keys disjoint", () => {
+    const provider = builtinMatchers.find(
+      ({ slug }) => slug === "cfg-model-env-var",
+    )!;
+    const generic = builtinMatchers.find(
+      ({ slug }) => slug === "cfg-env-model",
+    )!;
+
+    expect(provider.match("OPENAI_MODEL=acme/large-1", ".env")).toHaveLength(1);
+    expect(generic.match("OPENAI_MODEL=acme/large-1", ".env")).toEqual([]);
+    expect(provider.match("LLM_MODEL=acme/large-1", ".env")).toEqual([]);
+    expect(generic.match("LLM_MODEL=acme/large-1", ".env")).toHaveLength(1);
+  });
+
+  it("uses callee, argument keys, and enclosing symbol for Go identity", () => {
+    const matcher = builtinMatchers.find(
+      ({ slug }) => slug === "go-openai-chat",
+    )!;
+    const [candidate] = matcher.match(
+      'package main\nimport "github.com/openai/openai-go/v3"\nfunc answer() { client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{Model: model, Messages: messages}) }',
+      "cmd/chat/main.go",
+    );
+
+    expect(candidate?.normalizedCallShape).toEqual({
+      callee: "client.Chat.Completions.New",
+      argumentKeys: ["Messages", "Model"],
+      enclosing: "answer",
+    });
+  });
+
+  it("masks Ruby comments before matching call sites", () => {
+    const matcher = builtinMatchers.find(
+      ({ slug }) => slug === "rb-ruby-openai-chat",
+    )!;
+
+    expect(
+      matcher.match(
+        'require "openai"\n# client.chat.completions.create(messages: [], model: "ignored")',
+        "app/services/chat.rb",
       ),
     ).toEqual([]);
   });

@@ -85,7 +85,7 @@ function maskNonCode(content: string, includeHashComments: boolean): string {
 export function enclosingSymbol(content: string, position: number): string {
   const prefix = content.slice(0, position);
   const declaration =
-    /(?:\b(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+|\b(?:async\s+)?def\s+|\bclass\s+|\b(?:export\s+)?const\s+)([A-Za-z_$][\w$]*)/gm;
+    /(?:\b(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+|\b(?:async\s+)?def\s+(?:self\.)?|\bfunc\s+(?:\([^)]*\)\s*)?|\bclass\s+|\b(?:export\s+)?const\s+)([A-Za-z_$][\w$]*)/gm;
   let nearest = "<module>";
   for (const match of prefix.matchAll(declaration)) nearest = match[1]!;
   return nearest;
@@ -157,6 +157,18 @@ export function argumentKeys(callText: string): string[] {
     if (objectClose === -1) return [];
     argumentsText = argumentsText.slice(1, objectClose);
     separator = ":";
+  } else if (/^\s*[A-Za-z_$][\w$]*\s*:/.test(argumentsText)) {
+    separator = ":";
+  } else {
+    const struct = /\b(?:[A-Za-z_]\w*\.)+[A-Za-z_]\w*\s*\{/.exec(argumentsText);
+    if (struct !== null) {
+      const structOpen = struct.index + struct[0].lastIndexOf("{");
+      const structClose = argumentsText.lastIndexOf("}");
+      if (structClose > structOpen) {
+        argumentsText = argumentsText.slice(structOpen + 1, structClose);
+        separator = ":";
+      }
+    }
   }
   const keys = splitTopLevel(argumentsText)
     .map((part) => {
@@ -175,7 +187,7 @@ export function argumentKeys(callText: string): string[] {
 
 export function extractModelId(text: string): string | undefined {
   const model =
-    /\b(?:model|model_name)\s*[:=]\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?["']?([A-Za-z0-9][A-Za-z0-9._:/-]*)["']?/.exec(
+    /\b(?:model|model_name)\s*[:=]\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?["']?([A-Za-z0-9][A-Za-z0-9._:/-]*)["']?/i.exec(
       text,
     );
   if (model !== null) return model[1];
@@ -233,7 +245,10 @@ export function createCallMatcher(options: CallMatcherOptions): Matcher {
       ) {
         return [];
       }
-      const searchable = maskNonCode(content, filePath.endsWith(".py"));
+      const searchable = maskNonCode(
+        content,
+        filePath.endsWith(".py") || filePath.endsWith(".rb"),
+      );
       const flags = options.pattern.flags.replaceAll("g", "");
       const pattern = new RegExp(options.pattern.source, `${flags}g`);
       const matches: CandidateMatch[] = [];

@@ -4,6 +4,7 @@ import {
   enclosingSymbol,
 } from "./utils.js";
 import type { CandidateMatch, Matcher } from "../types.js";
+import { breadthMatchers } from "./breadth.js";
 
 const javascriptFiles = ["**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"];
 const pythonFiles = ["**/*.py"];
@@ -103,7 +104,7 @@ const callMatchers: Matcher[] = [
     examples: [
       'import litellm\nlitellm.completion(model="acme/large-1", messages=[])',
     ],
-    pattern: /\b(?<callee>(?:litellm\.)?completion)\s*\(/,
+    pattern: /(?<![.\w])(?<callee>(?:litellm\.)?completion)\s*\(/,
     fileAnchor:
       /^\s*(?:from\s+litellm(?:\.[A-Za-z_]\w*)*\s+import\b|import\s+(?:[A-Za-z_]\w*\s*,\s*)*litellm\b)/m,
     label: "LiteLLM completion",
@@ -178,7 +179,7 @@ const modelEnvironmentMatcher: Matcher = {
   match(content): CandidateMatch[] {
     const matches: CandidateMatch[] = [];
     const pattern =
-      /^\s*((?:OPENAI|ANTHROPIC|LITELLM|LANGCHAIN|AI|LLM)_MODEL(?:_ID|_NAME)?|MODEL_(?:ID|NAME))\s*[:=]\s*["']?([^\s"']+)["']?/gm;
+      /^\s*((?:OPENAI|ANTHROPIC|LITELLM|LANGCHAIN|AI)_MODEL(?:_ID|_NAME)?)\s*[:=]\s*["']?([^\s"']+)["']?/gm;
     for (const match of content.matchAll(pattern)) {
       const position = match.index;
       const candidate = candidateFromText({
@@ -206,4 +207,5 @@ export const builtinMatchers: readonly Matcher[] = Object.freeze([
   ...callMatchers,
   litellmYamlMatcher,
   modelEnvironmentMatcher,
+  ...breadthMatchers,
 ]);
