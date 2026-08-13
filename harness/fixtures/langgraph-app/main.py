@@ -19,6 +19,9 @@ CLASSIFY_MODEL = "acme/large-1"
 LOOKUP_MODEL = "acme/max-1"
 ANSWER_MODEL = "acme/large-1"
 TOOL_CASE_INPUT = "Where is order ORD-104?"
+CLASSIFY_SWAP_MARKER = "classify-swapped"
+LOOKUP_SWAP_MARKER = "lookup-swapped"
+INTERACTION_FAILURE = "The order lookup result could not be verified."
 
 
 class Step(TypedDict):
@@ -35,6 +38,7 @@ class AppState(TypedDict):
     classification: str
     lookup_result: str
     final_output: str
+    swap_markers: list[str]
     steps: list[Step]
 
 
@@ -58,6 +62,14 @@ def client_from_env() -> OpenAI:
         os.environ["OPENAI_BASE_URL"],
         os.environ["OPENAI_API_KEY"],
     )
+
+
+def was_swapped(step: str, current_model: str, effective_model: str) -> bool:
+    raw_policy = os.environ.get("RM_SWAP_POLICY")
+    if raw_policy is None:
+        return effective_model != current_model
+    policy = json.loads(raw_policy)
+    return policy.get(step, current_model) != current_model
 
 
 def call_headers(
@@ -102,6 +114,14 @@ def classify(state: AppState) -> dict[str, object]:
     return {
         "route": route,
         "classification": content,
+        "swap_markers": [
+            *state["swap_markers"],
+            *(
+                [CLASSIFY_SWAP_MARKER]
+                if was_swapped("classify", CLASSIFY_MODEL, response.model)
+                else []
+            ),
+        ],
         "steps": [*state["steps"], {"step": "classify", "model": CLASSIFY_MODEL, "ok": True}],
     }
 
@@ -155,6 +175,14 @@ def lookup(state: AppState) -> dict[str, object]:
     result = lookup_order(order_id)
     return {
         "lookup_result": result,
+        "swap_markers": [
+            *state["swap_markers"],
+            *(
+                [LOOKUP_SWAP_MARKER]
+                if was_swapped("lookup", LOOKUP_MODEL, response.model)
+                else []
+            ),
+        ],
         "steps": [*state["steps"], {"step": "lookup", "model": LOOKUP_MODEL, "ok": True}],
     }
 
@@ -179,6 +207,11 @@ def answer(state: AppState) -> dict[str, object]:
     content = response.choices[0].message.content
     if content is None:
         raise ValueError("answer returned no content")
+    if {
+        CLASSIFY_SWAP_MARKER,
+        LOOKUP_SWAP_MARKER,
+    }.issubset(state["swap_markers"]):
+        content = INTERACTION_FAILURE
     return {
         "final_output": content,
         "steps": [*state["steps"], {"step": "answer", "model": ANSWER_MODEL, "ok": True}],
@@ -217,6 +250,7 @@ def run_case(case: dict[str, object]) -> dict[str, object]:
             "classification": "",
             "lookup_result": "",
             "final_output": "",
+            "swap_markers": [],
             "steps": [],
         }
     )

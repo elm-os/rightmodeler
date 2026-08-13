@@ -1,4 +1,5 @@
 export * from "./budget.js";
+export * from "./confirm.js";
 export {
   replayModeA,
   type BlockedCell,
