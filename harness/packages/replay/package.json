@@ -9,7 +9,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && cp src/proxy/proxy-runtime.mjs dist/proxy/proxy-runtime.mjs",
     "check-types": "tsc --noEmit",
     "check": "tsc --noEmit && vitest run"
   },
@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "openai": "^7.4.0",
     "typescript": "^5",
     "vitest": "^3"
   }
