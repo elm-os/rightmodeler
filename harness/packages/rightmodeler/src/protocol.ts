@@ -34,6 +34,12 @@ export interface PipelineEvent {
   stage: string;
 }
 
+export interface PipelineWarning {
+  event: "warning";
+  code: string;
+  message: string;
+}
+
 export class Reporter {
   readonly mode: OutputMode;
   readonly io: CliIo;
@@ -51,6 +57,17 @@ export class Reporter {
     } else if (this.mode === "human") {
       const verb = value.event.replace("stage_", "");
       this.io.stdout(`${value.stage}: ${verb}\n`);
+    }
+  }
+
+  warning(code: string, message: string): void {
+    const value: PipelineWarning = { event: "warning", code, message };
+    if (this.mode === "human") {
+      this.io.stderr(`WARNING: ${message}\n`);
+    } else if (this.mode === "jsonl") {
+      this.io.stdout(`${JSON.stringify(value)}\n`);
+    } else {
+      this.io.stderr(`${JSON.stringify(value)}\n`);
     }
   }
 

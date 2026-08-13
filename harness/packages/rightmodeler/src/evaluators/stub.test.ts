@@ -7,6 +7,7 @@ const stubModuleUrl = new URL(
 
 interface StubServer {
   readonly port: number;
+  getHitCount(method: string, path: string): number;
   close(): Promise<void>;
 }
 
@@ -15,6 +16,10 @@ interface StubModule {
     port: number;
     pendingPolls?: number;
     fail?: boolean;
+    omitCaseId?: string;
+    reflectAuthError?: boolean;
+    malformedFetch?: boolean;
+    platformPassDecisions?: boolean;
   }): Promise<StubServer>;
 }
 
@@ -26,6 +31,10 @@ interface EventResult {
 async function startStub(options: {
   pendingPolls?: number;
   fail?: boolean;
+  omitCaseId?: string;
+  reflectAuthError?: boolean;
+  malformedFetch?: boolean;
+  platformPassDecisions?: boolean;
 }): Promise<StubServer> {
   const module = (await import(stubModuleUrl)) as StubModule;
   return module.startEvalStub({ port: 0, ...options });

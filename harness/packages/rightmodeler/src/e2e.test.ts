@@ -45,6 +45,10 @@ const stubModuleUrl = new URL(
   "../../../fixtures/stub-provider/server.mjs",
   import.meta.url,
 ).href;
+const evaluatorStubModuleUrl = new URL(
+  "../../../fixtures/eval-stub/server.mjs",
+  import.meta.url,
+).href;
 const temporaryDirectories: string[] = [];
 const secret = "phase-a-api-key-must-not-persist";
 const execFileAsync = promisify(execFile);
@@ -57,6 +61,21 @@ interface StubProvider {
 
 interface StubProviderModule {
   startStubProvider(options: { port: number }): Promise<StubProvider>;
+}
+
+interface EvaluatorStub {
+  port: number;
+  close(): Promise<void>;
+  getHitCount(method: string, path: string): number;
+}
+
+interface EvaluatorStubModule {
+  startEvalStub(options: {
+    port: number;
+    pendingPolls?: number;
+    platformPassDecisions?: boolean;
+    fail?: boolean;
+  }): Promise<EvaluatorStub>;
 }
 
 interface ChildResult {
@@ -218,6 +237,22 @@ function jsonOutput(result: ChildResult): Record<string, unknown> {
 async function startStub(): Promise<StubProvider> {
   const module = (await import(stubModuleUrl)) as StubProviderModule;
   return module.startStubProvider({ port: 0 });
+}
+
+async function startEvaluatorStub(
+  options: {
+    pendingPolls?: number;
+    platformPassDecisions?: boolean;
+    fail?: boolean;
+  } = {},
+): Promise<EvaluatorStub> {
+  const module = (await import(evaluatorStubModuleUrl)) as EvaluatorStubModule;
+  return module.startEvalStub({
+    port: 0,
+    pendingPolls: 1,
+    platformPassDecisions: false,
+    ...options,
+  });
 }
 
 async function startConfirmStub(): Promise<StubProvider> {
@@ -645,6 +680,267 @@ describe("built CLI pipeline", () => {
       expect(JSON.stringify(reportJson)).not.toContain(secret);
     } finally {
       await stub.close();
+    }
+  }, 60_000);
+
+  it("prefers a reachable external evaluator, persists every metric, and makes zero judge calls", async () => {
+    const { repo } = await fixtureCopy("external-evaluator");
+    const modelStub = await startStub();
+    const evaluatorStub = await startEvaluatorStub();
+    const evaluatorSecret = "external-evaluator-key-must-not-persist";
+    const args = [
+      "init",
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${modelStub.port}/v1`,
+      "--api-key-env",
+      "RIGHTMODELER_E2E_API_KEY",
+      "--evaluator",
+      "braintrust",
+      "--evaluator-base-url",
+      `http://127.0.0.1:${evaluatorStub.port}`,
+      "--evaluator-api-key-env",
+      "RIGHTMODELER_E2E_EVALUATOR_KEY",
+      "--evaluator-project-id",
+      "00000000-0000-4000-8000-000000000001",
+      "--evaluator-scorer",
+      "output_similarity",
+      "--evaluator-scorer",
+      "secondary_similarity",
+      "--evaluator-gate-metric",
+      "output_similarity",
+      "--evaluator-gate-threshold",
+      "0.8",
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+
+    try {
+      const first = await runCli(args, {
+        env: {
+          RIGHTMODELER_E2E_API_KEY: secret,
+          RIGHTMODELER_E2E_EVALUATOR_KEY: evaluatorSecret,
+        },
+      });
+      expect(first.code).toBe(0);
+      const output = jsonOutput(first);
+      const verdicts = output.verdicts as Array<{
+        evaluatorKinds: Array<{ evaluatorKind: string }>;
+      }>;
+      expect(
+        verdicts.flatMap(({ evaluatorKinds }) =>
+          evaluatorKinds.map(({ evaluatorKind }) => evaluatorKind),
+        ),
+      ).toEqual(expect.arrayContaining(["braintrust"]));
+
+      const storeRoot = join(repo, ".rightmodeler");
+      const store = new FsStore(storeRoot);
+      const facts = (await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      )) as Array<Record<string, unknown>>;
+      const executions = facts.filter(
+        (fact) =>
+          typeof fact.executionId === "string" &&
+          typeof fact.candidateId === "string",
+      );
+      const attempts = facts.filter(
+        (fact) =>
+          typeof fact.attemptId === "string" &&
+          typeof fact.logicalCallId === "string",
+      );
+      const assessments = facts.filter(
+        (fact) =>
+          typeof fact.assessmentId === "string" &&
+          fact.evaluatorId === "braintrust",
+      );
+      expect(assessments).toHaveLength(executions.length * 2);
+      expect(new Set(assessments.map(({ metricName }) => metricName))).toEqual(
+        new Set(["output_similarity", "secondary_similarity"]),
+      );
+      expect(
+        assessments.every(
+          ({ rubricVersion }) => rubricVersion === "threshold:0.8",
+        ),
+      ).toBe(true);
+      expect(
+        facts.some((fact) => "actor" in fact && fact.actor === "judge"),
+      ).toBe(false);
+      expect(modelStub.getHitCount()).toBe(attempts.length);
+      expect(
+        evaluatorStub.getHitCount("POST", "/v1/experiment"),
+      ).toBeGreaterThan(0);
+      expect(evaluatorStub.getHitCount("GET", "/v1/project")).toBeGreaterThan(
+        0,
+      );
+
+      const reportMarkdown = await storeText(
+        store,
+        reportKey("project", "report.md"),
+      );
+      expect(reportMarkdown).toContain("braintrust:");
+      expect(await allFileText(storeRoot)).not.toContain(evaluatorSecret);
+      expect(reportMarkdown).not.toContain(evaluatorSecret);
+
+      const modelHits = modelStub.getHitCount();
+      const evaluatorHits = evaluatorStub.getHitCount("POST", "/v1/experiment");
+      const resumed = await runCli(args, {
+        env: {
+          RIGHTMODELER_E2E_API_KEY: secret,
+          RIGHTMODELER_E2E_EVALUATOR_KEY: evaluatorSecret,
+        },
+      });
+      expect(resumed.code).toBe(0);
+      expect(jsonOutput(resumed).executedStages).toEqual([]);
+      expect(modelStub.getHitCount()).toBe(modelHits);
+      expect(evaluatorStub.getHitCount("POST", "/v1/experiment")).toBe(
+        evaluatorHits,
+      );
+    } finally {
+      await Promise.all([modelStub.close(), evaluatorStub.close()]);
+    }
+  }, 60_000);
+
+  it("names failed external assessments as absent without fabricating Assessment facts", async () => {
+    const { repo } = await fixtureCopy("external-evaluator-failed");
+    const modelStub = await startStub();
+    const evaluatorStub = await startEvaluatorStub({ fail: true });
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "aggregate",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${modelStub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_API_KEY",
+          "--evaluator",
+          "braintrust",
+          "--evaluator-base-url",
+          `http://127.0.0.1:${evaluatorStub.port}`,
+          "--evaluator-api-key-env",
+          "RIGHTMODELER_E2E_EVALUATOR_KEY",
+          "--evaluator-project-id",
+          "00000000-0000-4000-8000-000000000001",
+          "--evaluator-scorer",
+          "output_similarity",
+          "--evaluator-gate-threshold",
+          "0.8",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        {
+          env: {
+            RIGHTMODELER_E2E_API_KEY: secret,
+            RIGHTMODELER_E2E_EVALUATOR_KEY: "failed-evaluator-key",
+          },
+        },
+      );
+      expect(result.code).toBe(0);
+      const output = jsonOutput(result);
+      const verdicts = output.verdicts as Array<{
+        assessmentAbsent: number;
+        assessmentAbsentReasons: Array<{ reason: string; count: number }>;
+      }>;
+      expect(
+        verdicts.every(({ assessmentAbsent }) => assessmentAbsent > 0),
+      ).toBe(true);
+      expect(
+        verdicts.flatMap(({ assessmentAbsentReasons }) =>
+          assessmentAbsentReasons.map(({ reason }) => reason),
+        ),
+      ).toEqual(expect.arrayContaining(["external_experiment_failed"]));
+
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const facts = await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      );
+      expect(
+        facts.some(
+          (fact) =>
+            typeof fact === "object" && fact !== null && "assessmentId" in fact,
+        ),
+      ).toBe(false);
+    } finally {
+      await Promise.all([modelStub.close(), evaluatorStub.close()]);
+    }
+  }, 60_000);
+
+  it("warns and uses the built-in judge when the external evaluator is unreachable", async () => {
+    const { repo } = await fixtureCopy("external-evaluator-unreachable");
+    const modelStub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "aggregate",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${modelStub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_API_KEY",
+          "--evaluator",
+          "braintrust",
+          "--evaluator-base-url",
+          "http://127.0.0.1:1",
+          "--evaluator-api-key-env",
+          "RIGHTMODELER_MISSING_EVALUATOR_KEY",
+          "--evaluator-project-id",
+          "00000000-0000-4000-8000-000000000001",
+          "--evaluator-scorer",
+          "output_similarity",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_E2E_API_KEY: secret } },
+      );
+
+      expect(result.code).toBe(0);
+      expect(result.stderr).toContain(
+        '"code":"external_evaluator_unreachable"',
+      );
+      const output = JSON.parse(result.stdout) as Record<string, unknown>;
+      const verdicts = output.verdicts as Array<{
+        evaluatorKinds: Array<{ evaluatorKind: string }>;
+      }>;
+      expect(
+        verdicts.flatMap(({ evaluatorKinds }) =>
+          evaluatorKinds.map(({ evaluatorKind }) => evaluatorKind),
+        ),
+      ).toEqual(expect.arrayContaining(["judge"]));
+
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const facts = await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      );
+      expect(
+        facts.some(
+          (fact) =>
+            typeof fact === "object" &&
+            fact !== null &&
+            "actor" in fact &&
+            fact.actor === "judge",
+        ),
+      ).toBe(true);
+    } finally {
+      await modelStub.close();
     }
   }, 60_000);
 

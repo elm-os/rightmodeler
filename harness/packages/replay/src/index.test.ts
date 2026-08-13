@@ -725,6 +725,44 @@ describe("Mode A replay", () => {
     expect(facts.some((fact) => "assessmentId" in fact)).toBe(false);
   });
 
+  it("records a successful execution without built-in judging when no judge is configured", async () => {
+    const catalog = await provider.listModels();
+    const candidate = catalog.find((model) => model.id === "acme/small-1");
+    if (candidate === undefined) throw new Error("Missing stub candidate");
+    const budget = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 1,
+    });
+
+    const result = await replayModeA({
+      steps: [step()],
+      cases: [recordedCase()],
+      candidates: [
+        { stepId: "step-1", candidates: [candidate], droppedByTop: 0 },
+      ],
+      provider,
+      store,
+      budget,
+      concurrency: 1,
+    });
+    const facts = await readFacts(store);
+
+    expect(result).toMatchObject({ completed: 1, blocked: [] });
+    expect(facts).toContainEqual(
+      expect.objectContaining({
+        caseId: "case-1",
+        terminalOutcome: "success",
+        attribution: "ok",
+      }),
+    );
+    expect(facts.some((fact) => "assessmentId" in fact)).toBe(false);
+    expect(
+      facts.some((fact) => "actor" in fact && fact.actor === "judge"),
+    ).toBe(false);
+  });
+
   it("resumes without new provider calls or facts", async () => {
     await run([recordedCase()]);
     const hitsAfterFirstRun = stub.getHitCount();

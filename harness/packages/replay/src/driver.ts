@@ -59,7 +59,7 @@ export interface ReplayModeAInput {
   cases: readonly RecordedCase[];
   candidates: readonly StepShortlist[];
   provider: ProviderClient;
-  judge: {
+  judge?: {
     chat: JudgeChat;
     judgeModel: string;
   };
@@ -358,13 +358,15 @@ export async function replayModeA(
       );
       result.completed += 1;
       if (silentFailure) return;
+      if (input.judge === undefined) return;
+      const judge = input.judge;
 
       let judgeInvocation = 0;
       const judged = await judgeExecution({
         chat: async (request) => {
           judgeInvocation += 1;
           try {
-            return await input.judge.chat(request);
+            return await judge.chat(request);
           } finally {
             const spendId = randomUUID();
             await writeReplayFact(
@@ -378,7 +380,7 @@ export async function replayModeA(
                 provider: input.provider.providerId,
                 reconcilableTo: {
                   executionId,
-                  judgeModel: input.judge.judgeModel,
+                  judgeModel: judge.judgeModel,
                   invocation: judgeInvocation,
                   costUnavailable: true,
                 },
@@ -386,7 +388,7 @@ export async function replayModeA(
             );
           }
         },
-        judgeModel: input.judge.judgeModel,
+        judgeModel: judge.judgeModel,
         task: cell.recordedCase.task,
         reference:
           typeof cell.recordedCase.referenceOutput === "string"

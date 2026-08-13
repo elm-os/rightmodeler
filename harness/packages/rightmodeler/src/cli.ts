@@ -32,6 +32,13 @@ interface PipelineCommandOptions {
   traces?: string;
   baseUrl?: string;
   apiKeyEnv?: string;
+  evaluator?: "braintrust";
+  evaluatorBaseUrl?: string;
+  evaluatorApiKeyEnv?: string;
+  evaluatorProjectId?: string;
+  evaluatorScorer?: string[];
+  evaluatorGateMetric?: string;
+  evaluatorGateThreshold?: string;
   maxCostUsd?: string;
   modebConfig?: string;
   through?: PipelineStage;
@@ -200,7 +207,35 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         "--api-key-env <name>",
         "environment variable containing the provider API key",
       )
-      .option("--max-cost-usd <amount>", "maximum replay spend in USD");
+      .option("--max-cost-usd <amount>", "maximum replay spend in USD")
+      .addOption(
+        new Option(
+          "--evaluator <provider>",
+          "external evaluator provider",
+        ).choices(["braintrust"]),
+      )
+      .option("--evaluator-base-url <url>", "external evaluator API base URL")
+      .option(
+        "--evaluator-api-key-env <name>",
+        "environment variable containing the evaluator API key",
+      )
+      .option(
+        "--evaluator-project-id <id>",
+        "external evaluator project identifier",
+      )
+      .option(
+        "--evaluator-scorer <name>",
+        "external evaluator scorer name (repeatable)",
+        collectOption,
+      )
+      .option(
+        "--evaluator-gate-metric <name>",
+        "scorer metric used for release gates",
+      )
+      .option(
+        "--evaluator-gate-threshold <value>",
+        "fallback pass threshold when the evaluator omits a pass decision",
+      );
   }
   if (command.name() === "init") {
     command
@@ -228,6 +263,36 @@ function pipelineOptions(
   ) {
     throw new Error("--max-cost-usd must be a non-negative number");
   }
+  const evaluatorGateThreshold =
+    local.evaluatorGateThreshold === undefined
+      ? undefined
+      : Number(local.evaluatorGateThreshold);
+  if (
+    evaluatorGateThreshold !== undefined &&
+    !Number.isFinite(evaluatorGateThreshold)
+  ) {
+    throw new Error("--evaluator-gate-threshold must be a finite number");
+  }
+  const hasEvaluatorCompanion =
+    local.evaluatorBaseUrl !== undefined ||
+    local.evaluatorApiKeyEnv !== undefined ||
+    local.evaluatorProjectId !== undefined ||
+    local.evaluatorScorer !== undefined ||
+    local.evaluatorGateMetric !== undefined ||
+    evaluatorGateThreshold !== undefined;
+  if (local.evaluator === undefined && hasEvaluatorCompanion) {
+    throw new Error("Evaluator options require --evaluator braintrust");
+  }
+  if (local.evaluator !== undefined && local.evaluatorProjectId === undefined) {
+    throw new Error(
+      "--evaluator-project-id is required with --evaluator braintrust",
+    );
+  }
+  if (local.evaluator !== undefined && local.evaluatorScorer === undefined) {
+    throw new Error(
+      "At least one --evaluator-scorer is required with --evaluator braintrust",
+    );
+  }
   return {
     repo: global.repo,
     store: global.store,
@@ -235,11 +300,31 @@ function pipelineOptions(
     baseUrl: local.baseUrl,
     apiKeyEnv: local.apiKeyEnv,
     maxCostUsd,
+    ...(local.evaluator === undefined
+      ? {}
+      : {
+          evaluator: {
+            apiKeyEnv: local.evaluatorApiKeyEnv ?? "BRAINTRUST_API_KEY",
+            baseUrl: local.evaluatorBaseUrl ?? "https://api.braintrust.dev",
+            projectId: local.evaluatorProjectId!,
+            scorers: local.evaluatorScorer!,
+            ...(local.evaluatorGateMetric === undefined
+              ? {}
+              : { gateMetric: local.evaluatorGateMetric }),
+            ...(evaluatorGateThreshold === undefined
+              ? {}
+              : { gateThreshold: evaluatorGateThreshold }),
+          },
+        }),
     modeBConfigPath: local.modebConfig,
     through: local.through,
     plan: local.plan,
     reporter,
   };
+}
+
+function collectOption(value: string, previous?: string[]): string[] {
+  return [...(previous ?? []), value];
 }
 
 export async function executeCli(

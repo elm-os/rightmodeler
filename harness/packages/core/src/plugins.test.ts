@@ -31,14 +31,18 @@ describe("PluginRegistry", () => {
     const notifierA: NotifierPlugin = { notify: async () => "a" };
     const notifierB: NotifierPlugin = { notify: async () => "b" };
     const evaluatorA: EvaluatorProvider = {
-      launch: async () => "a",
-      status: async () => "a",
-      collect: async () => "a",
+      id: "a",
+      detectAvailability: async () => true,
+      launch: async () => ({ providerRunId: "a" }),
+      status: async () => "complete",
+      collect: async () => [],
     };
     const evaluatorB: EvaluatorProvider = {
-      launch: async () => "b",
-      status: async () => "b",
-      collect: async () => "b",
+      id: "b",
+      detectAvailability: async () => true,
+      launch: async () => ({ providerRunId: "b" }),
+      status: async () => "complete",
+      collect: async () => [],
     };
     const commandOrder: string[] = [];
     const commandA: CommandCallback = () => commandOrder.push("a");

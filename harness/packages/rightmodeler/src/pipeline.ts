@@ -12,11 +12,13 @@ import {
   computeRunSpecDigest,
   createRun,
   executionSchema,
+  factKey,
   factSchema,
   factsPrefix,
   failRun,
   FsStore,
   jsonValueSchema,
+  mintAssessmentId,
   reportKey,
   requestAttemptSchema,
   runMetaSchema,
@@ -44,6 +46,7 @@ import {
   type AggregationFact,
   type FamilyVerdict,
   type GateResult,
+  type JudgeChat,
   type WinnerSelection,
 } from "@rightmodeler/kernel";
 import {
@@ -83,6 +86,18 @@ import {
   type AuditWorksheet,
   type Corpus,
 } from "./data/index.js";
+import {
+  createBraintrustEvaluator,
+  pollEvaluator,
+  preferEvaluatorWhenReachable,
+  resolveBraintrustEvaluatorConfig,
+  type BraintrustEvaluatorConfig,
+  type ResolvedBraintrustEvaluatorConfig,
+} from "./evaluators/braintrust.js";
+import type {
+  EvaluatorCaseResult,
+  EvaluatorProvider,
+} from "./evaluators/types.js";
 import { ProtocolError, Reporter } from "./protocol.js";
 import {
   putMutableJson,
@@ -220,6 +235,16 @@ const replayOutputSchema = z.strictObject({
         .optional(),
     }),
   ),
+  evaluation: z.strictObject({
+    evaluatorKind: z.string().min(1),
+    gateMetric: z.string().min(1),
+    assessmentAbsences: z.array(
+      z.strictObject({
+        executionId: z.string().min(1),
+        reason: z.string().min(1),
+      }),
+    ),
+  }),
 });
 const gateResultSchema = z.strictObject({
   id: z.enum([
@@ -324,6 +349,7 @@ interface PipelineContext {
   baseUrl?: string;
   apiKeyEnv: string;
   maxCostUsd?: number;
+  evaluator?: ResolvedBraintrustEvaluatorConfig;
   modeBConfig?: ModeBConfig;
   modeBConfigPath?: string;
   reporter: Reporter;
@@ -336,6 +362,7 @@ export interface PipelineOptions {
   baseUrl?: string;
   apiKeyEnv?: string;
   maxCostUsd?: number;
+  evaluator?: BraintrustEvaluatorConfig;
   modeBConfigPath?: string;
   through?: PipelineStage;
   plan?: boolean;
@@ -510,6 +537,9 @@ function createContext(options: PipelineOptions): PipelineContext {
     baseUrl: options.baseUrl,
     apiKeyEnv: options.apiKeyEnv ?? API_KEY_ENV_DEFAULT,
     maxCostUsd: options.maxCostUsd,
+    ...(options.evaluator === undefined
+      ? {}
+      : { evaluator: resolveBraintrustEvaluatorConfig(options.evaluator) }),
     ...(modeBConfigPath === undefined
       ? {}
       : {
@@ -565,6 +595,17 @@ function readModeBConfig(path: string): ModeBConfig {
   };
 }
 
+function evaluatorPlan(context: PipelineContext): JsonValue {
+  return context.evaluator === undefined
+    ? { evaluatorKind: "judge", gateMetric: "replacement-quality" }
+    : {
+        evaluatorKind: "braintrust",
+        scorers: [...context.evaluator.scorers],
+        gateMetric: context.evaluator.gateMetric,
+        gateThreshold: context.evaluator.gateThreshold ?? null,
+      };
+}
+
 function stagesThrough(through?: PipelineStage): PipelineStage[] {
   if (through === undefined) return [...PIPELINE_STAGES];
   return PIPELINE_STAGES.slice(0, PIPELINE_STAGES.indexOf(through) + 1);
@@ -599,12 +640,16 @@ async function inputDigest(
   if (stage === "corpus") extra.seed = CORPUS_SEED;
   if (stage === "audit-sample") extra.limit = AUDIT_SAMPLE_LIMIT;
   if (stage === "shortlist") extra.top = SHORTLIST_TOP;
+  if (stage === "shortlist") {
+    extra.evaluatorPlan = evaluatorPlan(context);
+  }
   if (stage === "replay") {
     if (context.baseUrl === undefined) return state.stages.replay?.inputDigest;
     extra.provider = digest({
       baseUrl: context.baseUrl,
       apiKeyEnv: context.apiKeyEnv,
       maxCostUsd: context.maxCostUsd ?? null,
+      evaluatorPlan: evaluatorPlan(context),
     });
   }
   if (stage === "aggregate") {
@@ -962,6 +1007,7 @@ async function executeShortlist(
       family,
       stepIds: assignedStepIds,
       gatePolicyVersion: GATE_POLICY_VERSION,
+      evaluatorPlan: evaluatorPlan(context),
       replayMode: "single_shot",
     });
     for (const stepId of assignedStepIds) {
@@ -1070,6 +1116,25 @@ async function executeReplay(
       candidates: assignment.candidates.filter(({ id }) => commonIds.has(id)),
     };
   });
+  let externalEvaluator: EvaluatorProvider | undefined;
+  if (context.evaluator !== undefined) {
+    const configured = createBraintrustEvaluator(context.evaluator);
+    externalEvaluator = await preferEvaluatorWhenReachable(
+      configured,
+      (code, message) => context.reporter.warning(code, message),
+    );
+  }
+  const assessmentAbsences = new Map<string, string>();
+  const evaluation = () => ({
+    evaluatorKind: externalEvaluator?.id ?? "judge",
+    gateMetric:
+      externalEvaluator === undefined
+        ? "replacement-quality"
+        : context.evaluator!.gateMetric,
+    assessmentAbsences: [...assessmentAbsences.entries()]
+      .sort(([left], [right]) => compareText(left, right))
+      .map(([executionId, reason]) => ({ executionId, reason })),
+  });
   const budget = createBudget({
     store: context.store,
     projectId: context.projectId,
@@ -1101,43 +1166,42 @@ async function executeReplay(
           .filter(({ candidates }) => candidates.length > 0)
           .map(({ stepId }) => stepId),
       );
-      const referenceFamilies = new Set(
-        plan.steps
-          .filter(({ stepId }) => stepIds.has(stepId))
-          .map(({ currentModel }) => modelFamily(currentModel)),
-      );
-      if (referenceFamilies.size !== 1) {
-        throw new Error(
-          `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
+      const judge = (() => {
+        if (externalEvaluator !== undefined) return undefined;
+        const referenceFamilies = new Set(
+          plan.steps
+            .filter(({ stepId }) => stepIds.has(stepId))
+            .map(({ currentModel }) => modelFamily(currentModel)),
         );
-      }
-      const referenceFamily = [...referenceFamilies][0]!;
-      const judgeModel = pickJudge(
-        catalog.map((model) => ({
-          id: model.id,
-          family: model.family,
-          context_length: model.contextLength,
-          pricing:
-            model.pricing === null
-              ? null
-              : {
-                  prompt: model.pricing.input,
-                  completion: model.pricing.output,
-                },
-          supported_parameters: model.supportsStructuredOutput
-            ? ["structured_outputs"]
-            : [],
-        })),
-        { candidateFamily, referenceFamily },
-      );
-      const result = await replayModeA({
-        steps: replaySteps(split),
-        cases: plan.cases,
-        candidates: familyAssignments,
-        provider,
-        judge: {
+        if (referenceFamilies.size !== 1) {
+          throw new Error(
+            `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
+          );
+        }
+        const judgeModel = pickJudge(
+          catalog.map((model) => ({
+            id: model.id,
+            family: model.family,
+            context_length: model.contextLength,
+            pricing:
+              model.pricing === null
+                ? null
+                : {
+                    prompt: model.pricing.input,
+                    completion: model.pricing.output,
+                  },
+            supported_parameters: model.supportsStructuredOutput
+              ? ["structured_outputs"]
+              : [],
+          })),
+          {
+            candidateFamily,
+            referenceFamily: [...referenceFamilies][0]!,
+          },
+        );
+        return {
           judgeModel,
-          chat: async (request) =>
+          chat: async (request: Parameters<JudgeChat>[0]) =>
             (
               await provider.chat({
                 model: request.model,
@@ -1147,7 +1211,14 @@ async function executeReplay(
                 responseFormat: jsonValue(request.responseFormat),
               })
             ).content,
-        },
+        };
+      })();
+      const result = await replayModeA({
+        steps: replaySteps(split),
+        cases: plan.cases,
+        candidates: familyAssignments,
+        provider,
+        ...(judge === undefined ? {} : { judge }),
         store: context.store,
         budget,
         concurrency: 4,
@@ -1172,12 +1243,29 @@ async function executeReplay(
       }
       completed += result.completed;
       skipped += result.skipped;
+      if (externalEvaluator !== undefined) {
+        const absences = await assessExternalExecutions({
+          context,
+          plan,
+          evaluator: externalEvaluator,
+          split,
+          stepIds,
+          candidateIds: new Set(
+            familyAssignments.flatMap(({ candidates }) =>
+              candidates.map(({ id }) => id),
+            ),
+          ),
+        });
+        for (const absence of absences) {
+          assessmentAbsences.set(absence.executionId, absence.reason);
+        }
+      }
     }
   };
 
   await runCells("shortlist", candidates);
   const shortlistVerdicts = aggregate(
-    await materializeAggregationFacts(context, plan, candidates),
+    await materializeAggregationFacts(context, plan, candidates, evaluation()),
     aggregateOptions(),
   ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
   const shortlistSelections = new Map(
@@ -1211,6 +1299,7 @@ async function executeReplay(
     completed,
     skipped,
     candidates,
+    evaluation: evaluation(),
   });
   return key;
 }
@@ -1223,7 +1312,12 @@ async function executeAggregate(
   const replay = await loadReplayOutput(context);
   const facts = await readFacts(context.store, context.projectId);
   const allVerdicts = aggregate(
-    await materializeAggregationFacts(context, plan, replay.candidates),
+    await materializeAggregationFacts(
+      context,
+      plan,
+      replay.candidates,
+      replay.evaluation,
+    ),
     aggregateOptions(),
     cascadeFindings(facts),
   );
@@ -1476,7 +1570,12 @@ async function executeConfirm(
 
   const facts = await readFacts(context.store, context.projectId);
   const allVerdicts = aggregate(
-    await materializeAggregationFacts(context, plan, replay.candidates),
+    await materializeAggregationFacts(
+      context,
+      plan,
+      replay.candidates,
+      replay.evaluation,
+    ),
     aggregateOptions(),
     cascadeFindings(facts),
   );
@@ -1638,10 +1737,183 @@ function cascadeFindings(facts: readonly Fact[]): CascadeFinding[] {
   });
 }
 
+async function assessExternalExecutions(input: {
+  context: PipelineContext;
+  plan: z.infer<typeof replayPlanSchema>;
+  evaluator: EvaluatorProvider;
+  split: "shortlist" | "holdout";
+  stepIds: ReadonlySet<string>;
+  candidateIds: ReadonlySet<string>;
+}): Promise<readonly { executionId: string; reason: string }[]> {
+  const config = input.context.evaluator;
+  if (config === undefined) {
+    throw new Error("External evaluator configuration is unavailable");
+  }
+  const facts = await readFacts(input.context.store, input.context.projectId);
+  const assessedGateExecutions = new Set(
+    facts.flatMap((fact) => {
+      const parsed = assessmentSchema.safeParse(fact);
+      return parsed.success &&
+        parsed.data.evaluatorId === input.evaluator.id &&
+        parsed.data.metricName === config.gateMetric
+        ? [parsed.data.executionId]
+        : [];
+    }),
+  );
+  const executions = facts.flatMap((fact) => {
+    const parsed = executionSchema.safeParse(fact);
+    return parsed.success &&
+      parsed.data.corpusSplit === input.split &&
+      parsed.data.terminalOutcome === "success" &&
+      parsed.data.attribution === "ok" &&
+      input.stepIds.has(parsed.data.stepId) &&
+      input.candidateIds.has(parsed.data.candidateId) &&
+      !assessedGateExecutions.has(parsed.data.executionId)
+      ? [parsed.data]
+      : [];
+  });
+  if (executions.length === 0) return [];
+
+  const recordedCases = new Map(
+    input.plan.cases.map((recordedCase) => [
+      `${recordedCase.stepId}\0${recordedCase.caseId}`,
+      recordedCase,
+    ]),
+  );
+  const launched = await input.evaluator.launch({
+    experimentName: `rightmodeler-${digest({
+      evidenceQuestionIds: [
+        ...new Set(
+          executions.map(({ evidenceQuestionId }) => evidenceQuestionId),
+        ),
+      ].sort(compareText),
+      candidateIds: [...input.candidateIds].sort(compareText),
+      split: input.split,
+    }).slice(0, 24)}`,
+    cases: executions.map((execution) => {
+      const recordedCase = recordedCases.get(
+        `${execution.stepId}\0${execution.caseId}`,
+      );
+      if (recordedCase === undefined) {
+        throw new Error(
+          `Execution ${execution.executionId} has no recorded evaluator case`,
+        );
+      }
+      return {
+        caseId: execution.executionId,
+        input: jsonValue({
+          task: recordedCase.task,
+          ...(recordedCase.system === undefined
+            ? {}
+            : { system: recordedCase.system }),
+          messages: recordedCase.messages,
+        }),
+        expected: recordedCase.referenceOutput,
+        output: execution.finalOutput,
+      };
+    }),
+  });
+  const status = await pollEvaluator(input.evaluator, launched.providerRunId);
+  const results = await input.evaluator.collect(launched.providerRunId);
+  const resultsByExecution = new Map(
+    results.map((result) => [result.caseId, result]),
+  );
+  const existingMetrics = new Set(
+    facts.flatMap((fact) => {
+      const parsed = assessmentSchema.safeParse(fact);
+      return parsed.success && parsed.data.evaluatorId === input.evaluator.id
+        ? [`${parsed.data.executionId}\0${parsed.data.metricName}`]
+        : [];
+    }),
+  );
+  for (const result of results) {
+    await persistEvaluatorMetrics(
+      input.context,
+      input.evaluator,
+      config,
+      launched.providerRunId,
+      result,
+      existingMetrics,
+    );
+  }
+
+  return executions.flatMap((execution) => {
+    const result = resultsByExecution.get(execution.executionId);
+    if (
+      result?.metrics.some(({ metricName }) => metricName === config.gateMetric)
+    ) {
+      return [];
+    }
+    return [
+      {
+        executionId: execution.executionId,
+        reason:
+          status === "failed"
+            ? "external_experiment_failed"
+            : result === undefined
+              ? "external_event_missing"
+              : "external_gate_metric_missing",
+      },
+    ];
+  });
+}
+
+async function persistEvaluatorMetrics(
+  context: PipelineContext,
+  evaluator: EvaluatorProvider,
+  config: ResolvedBraintrustEvaluatorConfig,
+  providerRunId: string,
+  result: EvaluatorCaseResult,
+  existingMetrics: Set<string>,
+): Promise<void> {
+  for (const metric of result.metrics) {
+    const key = `${result.caseId}\0${metric.metricName}`;
+    if (existingMetrics.has(key)) continue;
+    const thresholdApplied =
+      metric.passed === null && config.gateThreshold !== undefined;
+    if (metric.passed === null && !thresholdApplied) {
+      throw new Error(
+        `Evaluator metric ${metric.metricName} has no pass decision; configure --evaluator-gate-threshold`,
+      );
+    }
+    const rubricVersion = thresholdApplied
+      ? `threshold:${config.gateThreshold}`
+      : metric.rubricVersion;
+    if (rubricVersion === undefined) {
+      throw new Error(
+        `Evaluator metric ${metric.metricName} has no rubric version`,
+      );
+    }
+    const assessmentId = mintAssessmentId();
+    const assessment = assessmentSchema.parse({
+      assessmentId,
+      executionId: result.caseId,
+      evaluatorId: evaluator.id,
+      metricName: metric.metricName,
+      score: metric.score,
+      passed: thresholdApplied
+        ? metric.score >= config.gateThreshold!
+        : metric.passed!,
+      rubricVersion,
+      artifactRef: {
+        providerRunId,
+        providerArtifact: result.artifactRef ?? null,
+      },
+    });
+    await putImmutableJson(
+      context.store,
+      factKey(context.projectId, assessmentId),
+      assessment,
+    );
+    existingMetrics.add(key);
+  }
+}
+
 async function materializeAggregationFacts(
   context: PipelineContext,
   plan: z.infer<typeof replayPlanSchema>,
   candidates: z.infer<typeof replayOutputSchema>["candidates"],
+  evaluation: z.infer<typeof replayOutputSchema>["evaluation"],
 ): Promise<AggregationFact[]> {
   const facts = await readFacts(context.store, context.projectId);
   const evidenceQuestionIds = new Set(
@@ -1654,14 +1926,25 @@ async function materializeAggregationFacts(
       ? [parsed.data]
       : [];
   });
-  const assessments = new Map(
-    facts.flatMap((fact) => {
-      const parsed = assessmentSchema.safeParse(fact);
-      return parsed.success
-        ? ([[parsed.data.executionId, parsed.data]] as const)
-        : [];
-    }),
+  const assessments = new Map<string, Assessment[]>();
+  for (const fact of facts) {
+    const parsed = assessmentSchema.safeParse(fact);
+    if (!parsed.success) continue;
+    const current = assessments.get(parsed.data.executionId) ?? [];
+    current.push(parsed.data);
+    assessments.set(parsed.data.executionId, current);
+  }
+  const assessmentAbsences = new Map(
+    evaluation.assessmentAbsences.map(({ executionId, reason }) => [
+      executionId,
+      reason,
+    ]),
   );
+  if (assessmentAbsences.size !== evaluation.assessmentAbsences.length) {
+    throw new Error(
+      "External assessment absences contain duplicate executions",
+    );
+  }
   const familyByCase = new Map(
     plan.cases.map((item) => [item.caseId, item.family]),
   );
@@ -1683,14 +1966,27 @@ async function materializeAggregationFacts(
       .map((item) => ({
         caseId: item.caseId,
         stratumId: family,
-        evaluatorKind: "judge",
+        evaluatorKind: evaluation.evaluatorKind,
       }));
   return executions.flatMap((execution): AggregationFact[] => {
     const family = familyByCase.get(execution.caseId);
     if (family === undefined) {
       return [];
     }
-    const assessment = assessments.get(execution.executionId);
+    const gateAssessments = (
+      assessments.get(execution.executionId) ?? []
+    ).filter(
+      (assessment) =>
+        assessment.metricName === evaluation.gateMetric &&
+        (evaluation.evaluatorKind === "judge" ||
+          assessment.evaluatorId === evaluation.evaluatorKind),
+    );
+    if (gateAssessments.length > 1) {
+      throw new Error(
+        `Execution ${execution.executionId} has duplicate gate metric assessments for ${evaluation.gateMetric}`,
+      );
+    }
+    const assessment = gateAssessments[0];
     const selected = selectedByStep
       .get(execution.stepId)
       ?.find(({ id }) => id === execution.candidateId);
@@ -1698,7 +1994,9 @@ async function materializeAggregationFacts(
       return [];
     }
     const judge =
-      assessment === undefined ? undefined : judgeMetadata(assessment);
+      assessment === undefined || evaluation.evaluatorKind !== "judge"
+        ? undefined
+        : judgeMetadata(assessment);
     if (
       execution.corpusSplit !== "shortlist" &&
       execution.corpusSplit !== "holdout"
@@ -1709,10 +2007,18 @@ async function materializeAggregationFacts(
       {
         execution,
         assessment,
+        ...(assessment === undefined &&
+        assessmentAbsences.has(execution.executionId)
+          ? {
+              assessmentAbsentReason: assessmentAbsences.get(
+                execution.executionId,
+              )!,
+            }
+          : {}),
         gatePolicyVersion: GATE_POLICY_VERSION,
         familyId: family,
         candidateFamily: selected.family,
-        evaluatorKind: "judge",
+        evaluatorKind: evaluation.evaluatorKind,
         candidateCostUsd: blendedPrice(selected),
         referenceCeilingMultiplier: 1,
         unsafeSubstitution: false,

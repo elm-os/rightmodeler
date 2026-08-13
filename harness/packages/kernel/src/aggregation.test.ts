@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CascadeFinding } from "@rightmodeler/core";
+import type { Assessment, CascadeFinding } from "@rightmodeler/core";
 
 import {
   EXCLUDED_FRACTION_MAX,
@@ -254,7 +254,7 @@ describe("aggregate", () => {
       evaluatorWorstCaseBound(
         facts.map((fact) => ({
           trajectoryId: fact.execution.trajectoryId,
-          passed: fact.assessment!.passed,
+          passed: fact.assessment!.passed === true,
         })),
         "question-1\0judge",
       ),
@@ -521,7 +521,95 @@ describe("aggregate", () => {
       assessment: index === 0 ? null : undefined,
     }));
 
-    expect(() => aggregate(facts, options)).toThrow(/execution-0.*assessment/i);
+    expect(() => aggregate(facts, options)).toThrow(
+      /execution-0.*neither an assessment nor a named assessment absence/i,
+    );
+  });
+
+  it("counts a named assessment absence as an exclusion without fabricating a trial", () => {
+    const facts = aggregationFacts(20, (index) =>
+      index === 0 ? { assessment: null } : {},
+    ).map((fact, index) =>
+      index === 0
+        ? { ...fact, assessmentAbsentReason: "external_event_missing" }
+        : fact,
+    );
+    const [verdict] = aggregate(facts, options);
+
+    expect(verdict).toMatchObject({
+      nReviewTrials: 19,
+      excludedExecutions: 1,
+      excludedFraction: EXCLUDED_FRACTION_MAX,
+      assessmentAbsent: 1,
+      assessmentAbsentReasons: [{ reason: "external_event_missing", count: 1 }],
+      evaluatorKinds: [
+        expect.objectContaining({
+          passes: 19,
+          trials: 19,
+          assessmentAbsent: 1,
+          assessmentAbsentReasons: [
+            { reason: "external_event_missing", count: 1 },
+          ],
+        }),
+      ],
+    });
+  });
+
+  it("lets named assessment absence starve the review minimum", () => {
+    const facts = aggregationFacts(11, (index) =>
+      index < 2 ? { assessment: null } : {},
+    ).map((fact, index) =>
+      index < 2
+        ? { ...fact, assessmentAbsentReason: "external_experiment_failed" }
+        : fact,
+    );
+
+    expect(aggregate(facts, options)[0]).toMatchObject({
+      assessmentAbsent: 2,
+      decision: "abstain",
+      abstainReason: {
+        reason: "insufficient_review_trials",
+        observed: 9,
+        required: MIN_REVIEW_TRIALS,
+      },
+    });
+  });
+
+  it("gates named assessment absence above the excluded-fraction ceiling", () => {
+    const facts = aggregationFacts(20, (index) =>
+      index < 2 ? { assessment: null } : {},
+    ).map((fact, index) =>
+      index < 2
+        ? { ...fact, assessmentAbsentReason: "external_polling_exhausted" }
+        : fact,
+    );
+
+    expect(aggregate(facts, options)[0]).toMatchObject({
+      assessmentAbsent: 2,
+      excludedFraction: 0.1,
+      decision: "abstain",
+      abstainReason: { reason: "excluded_fraction_exceeded" },
+    });
+  });
+
+  it("does not coerce a null gate pass decision", () => {
+    const facts = aggregationFacts(10, (index) => ({
+      assessment:
+        index === 0
+          ? ({
+              assessmentId: "assessment-null-pass",
+              executionId: "execution-0",
+              evaluatorId: "external-evaluator",
+              metricName: "quality",
+              score: 0.9,
+              passed: null,
+              rubricVersion: null,
+              artifactRef: null,
+            } as unknown as Assessment)
+          : undefined,
+    }));
+
+    expect(() => aggregate(facts, options)).toThrow(/no gate pass decision/i);
   });
 
   it("carries judge disagreement as conservative quality variance", () => {

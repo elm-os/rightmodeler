@@ -35,25 +35,58 @@ function runState(experiment) {
 
 function fetchedEvents(experiment) {
   const state = runState(experiment);
-  return experiment.events.map((event) => {
+  return experiment.events.flatMap((event) => {
+    if (event.id === experiment.omitCaseId) return [];
     if (state === "failed") {
-      return { ...event, error: { message: "Seeded evaluator failure." } };
+      return [{ ...event, error: { message: "Seeded evaluator failure." } }];
     }
-    if (state !== "complete") return event;
+    if (state !== "complete") return [event];
     const score = similarity(event.output, event.expected);
-    return {
-      ...event,
-      scores: { [METRIC_NAME]: score },
-      metadata: {
-        ...event.metadata,
-        rubric_version: RUBRIC_VERSION,
-        passed: score === 1,
+    const scorers = Array.isArray(event.metadata.scorers)
+      ? event.metadata.scorers.filter(
+          (scorer) => typeof scorer === "string" && scorer.length > 0,
+        )
+      : [];
+    const metricNames = scorers.length === 0 ? [METRIC_NAME] : scorers;
+    const scores = Object.fromEntries(
+      metricNames.map((metricName) => [metricName, score]),
+    );
+    const passDecisions = experiment.platformPassDecisions
+      ? Object.fromEntries(
+          metricNames.map((metricName) => [metricName, score === 1]),
+        )
+      : undefined;
+    const rubricVersions = Object.fromEntries(
+      metricNames.map((metricName) => [metricName, RUBRIC_VERSION]),
+    );
+    return [
+      {
+        ...event,
+        scores,
+        metadata: {
+          ...event.metadata,
+          ...(passDecisions === undefined
+            ? {}
+            : { pass_decisions: passDecisions }),
+          rubric_versions: rubricVersions,
+          ...(metricNames.length === 1 && experiment.platformPassDecisions
+            ? { rubric_version: RUBRIC_VERSION, passed: score === 1 }
+            : {}),
+        },
       },
-    };
+    ];
   });
 }
 
-export async function startEvalStub({ port, pendingPolls = 1, fail = false }) {
+export async function startEvalStub({
+  port,
+  pendingPolls = 1,
+  fail = false,
+  omitCaseId,
+  reflectAuthError = false,
+  malformedFetch = false,
+  platformPassDecisions = true,
+}) {
   const experiments = new Map();
   const hits = new Map();
   let nextExperiment = 1;
@@ -69,6 +102,12 @@ export async function startEvalStub({ port, pendingPolls = 1, fail = false }) {
     }
 
     if (request.method === "POST" && url.pathname === "/v1/experiment") {
+      if (reflectAuthError) {
+        json(response, 500, {
+          error: `Reflected credential: ${request.headers.authorization ?? "missing"}`,
+        });
+        return;
+      }
       let body;
       try {
         body = await readJson(request);
@@ -90,6 +129,9 @@ export async function startEvalStub({ port, pendingPolls = 1, fail = false }) {
         polls: 0,
         pendingPolls,
         fail,
+        omitCaseId,
+        malformedFetch,
+        platformPassDecisions,
       };
       experiments.set(id, experiment);
       json(response, 200, {
@@ -153,6 +195,10 @@ export async function startEvalStub({ port, pendingPolls = 1, fail = false }) {
       (request.method === "GET" || request.method === "POST") &&
       match[2] === "fetch"
     ) {
+      if (experiment.malformedFetch) {
+        json(response, 200, { events: "not-an-array" });
+        return;
+      }
       experiment.polls += 1;
       json(response, 200, { events: fetchedEvents(experiment) });
       return;
@@ -247,14 +293,20 @@ async function selftest() {
         input: { prompt: "capital" },
         expected: "Paris",
         output: "Paris",
-        metadata: { case_id: "case-1" },
+        metadata: {
+          case_id: "case-1",
+          scorers: [METRIC_NAME, "secondary_similarity"],
+        },
       },
       {
         id: "case-2",
         input: { prompt: "capital" },
         expected: "Paris",
         output: "Parish",
-        metadata: { case_id: "case-2" },
+        metadata: {
+          case_id: "case-2",
+          scorers: [METRIC_NAME, "secondary_similarity"],
+        },
       },
     ];
     const first = await createExperiment(baseUrl, "selftest-one");
@@ -268,6 +320,9 @@ async function selftest() {
     const complete = await fetchEvents(baseUrl, first.id);
     if (complete.events[0]?.scores?.[METRIC_NAME] !== 1) {
       throw new Error("Expected an exact match to score 1.");
+    }
+    if (complete.events[0]?.scores?.secondary_similarity !== 1) {
+      throw new Error("Expected every configured scorer to complete.");
     }
 
     const second = await createExperiment(baseUrl, "selftest-two");

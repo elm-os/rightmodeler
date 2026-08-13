@@ -45,6 +45,7 @@ export type FamilyDecision =
 export interface AggregationFact {
   readonly execution: Execution;
   readonly assessment?: Assessment;
+  readonly assessmentAbsentReason?: string;
   readonly gatePolicyVersion: string;
   readonly familyId: string;
   readonly candidateFamily: string;
@@ -85,11 +86,18 @@ export interface EvaluatorKindVerdict {
   readonly nDistinctSteps: number;
   readonly excludedExecutions: number;
   readonly excludedFraction: number;
+  readonly assessmentAbsent: number;
+  readonly assessmentAbsentReasons: readonly AssessmentAbsentReasonCount[];
   readonly worstCasePassRate: number;
   readonly worstCaseBound: number;
   readonly naiveInterval?: Interval;
   readonly clusterBootstrapLow?: number;
   readonly trajectoryClusters: readonly TrajectoryCluster[];
+}
+
+export interface AssessmentAbsentReasonCount {
+  readonly reason: string;
+  readonly count: number;
 }
 
 export interface AvailabilityVerdict {
@@ -125,6 +133,8 @@ interface FamilyVerdictBase {
   readonly nDistinctSteps: number;
   readonly excludedExecutions: number;
   readonly excludedFraction: number;
+  readonly assessmentAbsent: number;
+  readonly assessmentAbsentReasons: readonly AssessmentAbsentReasonCount[];
   readonly worstCaseBound: number;
   readonly naiveInterval?: Interval;
   readonly clusterBootstrapLow?: number;
@@ -217,12 +227,18 @@ function aggregateGroup(
   assertConsistentGroup(facts, first);
 
   const included = facts.filter(
-    (fact) => !fact.requiredAbstention && fact.execution.attribution === "ok",
+    (fact) =>
+      !fact.requiredAbstention &&
+      fact.execution.attribution === "ok" &&
+      fact.assessment !== undefined,
   );
   const excludedExecutions = facts.filter(
-    (fact) => fact.execution.attribution !== "ok",
+    (fact) =>
+      fact.execution.attribution !== "ok" ||
+      fact.assessmentAbsentReason !== undefined,
   ).length;
   const excludedFraction = excludedExecutions / facts.length;
+  const assessmentAbsentReasons = countAssessmentAbsenceReasons(facts);
   const trajectories = new Set(
     included.map((fact) => fact.execution.trajectoryId),
   );
@@ -345,6 +361,11 @@ function aggregateGroup(
     nDistinctSteps: steps.size,
     excludedExecutions,
     excludedFraction,
+    assessmentAbsent: assessmentAbsentReasons.reduce(
+      (total, item) => total + item.count,
+      0,
+    ),
+    assessmentAbsentReasons,
     worstCaseBound: weakest.worstCaseBound,
     ...(hasClusteredQuality
       ? { clusterBootstrapLow: conditionalQualityLow }
@@ -385,10 +406,12 @@ function aggregateEvaluatorKind(
 ): EvaluatorKindVerdict {
   const conditionalFacts = facts.filter((fact) => !fact.requiredAbstention);
   const included = conditionalFacts.filter(
-    (fact) => fact.execution.attribution === "ok",
+    (fact) =>
+      fact.execution.attribution === "ok" && fact.assessment !== undefined,
   );
   const passes = included.filter(
-    (fact) => fact.assessment!.passed && fact.orderConsistent !== false,
+    (fact) =>
+      fact.assessment!.passed === true && fact.orderConsistent !== false,
   ).length;
   const scoreTotal = included.reduce(
     (total, fact) =>
@@ -400,15 +423,17 @@ function aggregateEvaluatorKind(
     fact.orderConsistent === undefined ? [] : [fact.orderConsistent],
   );
   const excludedExecutions = conditionalFacts.length - included.length;
+  const assessmentAbsentReasons =
+    countAssessmentAbsenceReasons(conditionalFacts);
   const includedOutcomes = outcomesByTrajectory(included, (fact) =>
-    Boolean(fact.assessment!.passed && fact.orderConsistent !== false),
+    Boolean(fact.assessment!.passed === true && fact.orderConsistent !== false),
   );
   const worstCaseOutcomes = outcomesByTrajectory(
     conditionalFacts,
     (fact) =>
       fact.execution.attribution === "ok" &&
       fact.orderConsistent !== false &&
-      Boolean(fact.assessment!.passed),
+      fact.assessment?.passed === true,
   );
   const clustered = hasRepeatedTrajectory(worstCaseOutcomes);
   const nTrajectories = Object.keys(includedOutcomes).length;
@@ -428,7 +453,7 @@ function aggregateEvaluatorKind(
       passed:
         fact.execution.attribution === "ok" &&
         fact.orderConsistent !== false &&
-        Boolean(fact.assessment!.passed),
+        fact.assessment?.passed === true,
     })),
     `${evidenceQuestionId}\0${evaluatorKind}`,
   );
@@ -453,6 +478,11 @@ function aggregateEvaluatorKind(
       conditionalFacts.length === 0
         ? 0
         : excludedExecutions / conditionalFacts.length,
+    assessmentAbsent: assessmentAbsentReasons.reduce(
+      (total, item) => total + item.count,
+      0,
+    ),
+    assessmentAbsentReasons,
     worstCasePassRate:
       conditionalFacts.length === 0 ? 0 : passes / conditionalFacts.length,
     worstCaseBound,
@@ -765,9 +795,28 @@ function validateFact(fact: AggregationFact): void {
       "referenceCeilingMultiplier must be a finite number in [0, 1]",
     );
   }
-  if (fact.execution.attribution === "ok" && fact.assessment === undefined) {
+  if (
+    fact.assessmentAbsentReason !== undefined &&
+    fact.assessmentAbsentReason.length === 0
+  ) {
+    throw new TypeError("assessmentAbsentReason must not be empty");
+  }
+  if (
+    fact.assessment !== undefined &&
+    fact.assessmentAbsentReason !== undefined
+  ) {
     throw new Error(
-      `execution ${fact.execution.executionId} has no assessment`,
+      `execution ${fact.execution.executionId} has both an assessment and a named assessment absence`,
+    );
+  }
+  if (
+    fact.execution.attribution === "ok" &&
+    !fact.requiredAbstention &&
+    fact.assessment === undefined &&
+    fact.assessmentAbsentReason === undefined
+  ) {
+    throw new Error(
+      `execution ${fact.execution.executionId} has neither an assessment nor a named assessment absence`,
     );
   }
   if (
@@ -776,6 +825,11 @@ function validateFact(fact: AggregationFact): void {
   ) {
     throw new Error(
       `assessment ${fact.assessment.assessmentId} belongs to a different execution`,
+    );
+  }
+  if (fact.assessment?.passed === null) {
+    throw new Error(
+      `assessment ${fact.assessment.assessmentId} has no gate pass decision`,
     );
   }
   if (fact.judgeModel !== undefined && fact.orderConsistent === undefined) {
@@ -788,6 +842,22 @@ function validateFact(fact: AggregationFact): void {
       `execution ${fact.execution.executionId} is missing judge order consistency`,
     );
   }
+}
+
+function countAssessmentAbsenceReasons(
+  facts: readonly AggregationFact[],
+): AssessmentAbsentReasonCount[] {
+  const counts = new Map<string, number>();
+  for (const fact of facts) {
+    if (fact.assessmentAbsentReason === undefined) continue;
+    counts.set(
+      fact.assessmentAbsentReason,
+      (counts.get(fact.assessmentAbsentReason) ?? 0) + 1,
+    );
+  }
+  return [...counts.entries()]
+    .sort(([left], [right]) => compareText(left, right))
+    .map(([reason, count]) => ({ reason, count }));
 }
 
 function assertConsistentGroup(
