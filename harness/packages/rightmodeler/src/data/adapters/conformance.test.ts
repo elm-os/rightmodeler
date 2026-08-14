@@ -352,4 +352,29 @@ describe("trace adapter conformance", () => {
       ).toHaveLength(1);
     },
   );
+
+  it("keeps a Weave model call without a family label", () => {
+    const runs = weaveAdapter.adapt([
+      {
+        id: "wv-unlabeled",
+        trace_id: "wv-trace-unlabeled",
+        op_name: "",
+        parent_id: null,
+        started_at: "2026-08-01T12:00:00.000Z",
+        inputs: {
+          model: "acme/large-1",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        output: "Hi",
+        summary: {
+          usage: {
+            "acme/large-1": { prompt_tokens: 1, completion_tokens: 1 },
+          },
+        },
+      },
+    ]);
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.steps[0]?.family).toBeUndefined();
+  });
 });

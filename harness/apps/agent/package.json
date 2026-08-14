@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "info": "pnpm run build:cli && eve info",
     "eval:list": "pnpm run build:cli && eve eval --list",
-    "eval": "pnpm run build:cli && RIGHTMODELER_AGENT_EVAL=1 RIGHTMODELER_AGENT_FIXTURE_API_KEY=fixture-api-key eve eval --strict --skip-report",
+    "eval": "pnpm run build:cli && GITHUB_TOKEN=fixture-github-token RIGHTMODELER_AGENT_EVAL=1 RIGHTMODELER_AGENT_FIXTURE_API_KEY=fixture-api-key eve eval --strict --skip-report",
     "check": "pnpm run build && pnpm run typecheck && eve info --json && pnpm run eval"
   },
   "type": "module",
@@ -17,7 +17,9 @@
     "node": ">=24"
   },
   "dependencies": {
+    "@github-tools/eve-extension": "0.3.2",
     "@rightmodeler/cli": "workspace:*",
+    "@vercel/connect": "0.8.0",
     "ai": "^7.0.64",
     "eve": "0.36.0",
     "zod": "^4.4.3"

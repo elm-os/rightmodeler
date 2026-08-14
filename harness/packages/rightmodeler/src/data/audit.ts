@@ -40,11 +40,58 @@ export interface AuditResult {
   perFamily: Record<string, FamilyAuditResult>;
 }
 
+export interface ReferenceCeilingCase {
+  readonly family: string;
+  readonly referenceSource?: "curated";
+  readonly referenceVerified?: boolean;
+}
+
+export interface ReferenceCeiling {
+  readonly family: string;
+  readonly multiplier: number;
+  readonly baseMultiplier: number;
+  readonly baseSource: "audit" | "default";
+  readonly referenceCount: number;
+  readonly verifiedCuratedReferences: number;
+}
+
 export class AuditError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "AuditError";
   }
+}
+
+export function referenceCeilings(
+  cases: readonly ReferenceCeilingCase[],
+  audit?: AuditResult,
+): ReferenceCeiling[] {
+  const byFamily = new Map<string, ReferenceCeilingCase[]>();
+  for (const item of cases) {
+    byFamily.set(item.family, [...(byFamily.get(item.family) ?? []), item]);
+  }
+  return [...byFamily.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([family, familyCases]) => {
+      const audited = audit?.perFamily[family]?.referenceAgreementPoint;
+      const baseMultiplier = audited ?? 1;
+      const verifiedCuratedReferences = familyCases.filter(
+        (item) =>
+          item.referenceSource === "curated" && item.referenceVerified === true,
+      ).length;
+      return {
+        family,
+        multiplier:
+          (verifiedCuratedReferences +
+            (familyCases.length - verifiedCuratedReferences) * baseMultiplier) /
+          familyCases.length,
+        baseMultiplier,
+        baseSource:
+          audited === undefined || audited === null ? "default" : "audit",
+        referenceCount: familyCases.length,
+        verifiedCuratedReferences,
+      };
+    });
 }
 
 function sampleCases(

@@ -10,6 +10,13 @@ import { replayStartInputSchema } from "./schemas.js";
 const evalInputMarker = "RIGHTMODELER_EVAL_INPUT=";
 export const noMergeEvalMarker = "RIGHTMODELER_EVAL_NO_MERGE";
 export const approvalEvalMarker = "RIGHTMODELER_EVAL_APPROVAL_POLICY";
+const forbiddenGithubTools = new Set([
+  "mergepullrequest",
+  "updatebranch",
+  "deleteref",
+  "createrelease",
+  "createorupdatefile",
+]);
 const replayStartResultSchema = z.strictObject({
   runId: z.string(),
   status: z.string(),
@@ -36,12 +43,21 @@ export function scanToReportResponder(
   request: MockModelRequest,
 ): MockModelResponse | string {
   if (request.lastUserMessage?.includes(noMergeEvalMarker) === true) {
-    const mergeTools = request.tools.filter(({ name }) =>
-      name.toLowerCase().includes("mergepullrequest"),
-    );
-    if (mergeTools.length > 0) {
+    const tools = request.tools.map((tool) => {
+      const { name } = tool;
+      const separator = name.lastIndexOf("__");
+      const unqualified = separator === -1 ? name : name.slice(separator + 2);
+      return { tool, unqualified: unqualified.toLowerCase() };
+    });
+    if (!tools.some(({ unqualified }) => unqualified === "getrepository")) {
+      throw new Error("The GitHub extension tools did not reach the model.");
+    }
+    const forbiddenTools = tools
+      .filter(({ unqualified }) => forbiddenGithubTools.has(unqualified))
+      .map(({ tool }) => tool);
+    if (forbiddenTools.length > 0) {
       throw new Error(
-        `Merge-capable tools reached the model: ${mergeTools.map(({ name }) => name).join(", ")}`,
+        `Forbidden GitHub tools reached the model: ${forbiddenTools.map(({ name }) => name).join(", ")}`,
       );
     }
     return "This agent has no merge capability and will leave the pull request for its owners.";

@@ -1114,6 +1114,21 @@ describe("built CLI pipeline", () => {
       const storeRoot = join(repo, ".rightmodeler");
       const store = new FsStore(storeRoot);
       expect(await store.list("project/cases/")).toHaveLength(2);
+      const currentImport = await store.get(
+        "project/setup/imported-reference-corpus.json",
+      );
+      expect(currentImport).not.toBeNull();
+      expect(
+        JSON.parse(Buffer.from(currentImport!.body).toString("utf8")),
+      ).toMatchObject({
+        cases: expect.arrayContaining([
+          expect.objectContaining({
+            family: "qa",
+            referenceSource: "curated",
+            referenceVerified: true,
+          }),
+        ]),
+      });
       expect(await allFileText(storeRoot)).not.toContain(evaluatorSecret);
     } finally {
       await evaluatorStub.close();
@@ -1313,6 +1328,8 @@ describe("built CLI pipeline", () => {
       expect(reportMarkdown).toContain("## Gates");
       expect(reportMarkdown).toContain("## Selection");
       expect(reportMarkdown).toContain("Selection-adjusted estimate");
+      expect(reportMarkdown).toContain("## Reference ceilings");
+      expect(reportMarkdown).toContain("default base 100.0%");
       expect(reportMarkdown).toContain("## Caps");
       expect(reportMarkdown).toContain("droppedByTop");
       expect(reportMarkdown).toContain("droppedFreeModels");

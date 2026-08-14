@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { FsStore } from "@rightmodeler/core";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { referenceCeilings } from "../data/audit.js";
 import {
   importCorpus,
   writeImportedCorpus,
@@ -71,6 +72,39 @@ describe.each(["braintrust", "langsmith", "langfuse"] as const)(
       expect(
         corpus.cases.filter(({ content }) => content.referenceVerified),
       ).toHaveLength(1);
+      const audit = {
+        perFamily: {
+          qa: {
+            n: 10,
+            disagreement: 0.2,
+            wilsonLow: 0.05,
+            wilsonHigh: 0.5,
+            referenceAgreementPoint: 0.8,
+          },
+        },
+      };
+      const verifiedCeiling = referenceCeilings(
+        corpus.cases.map(({ content }) => content),
+        audit,
+      )[0]!;
+      const unverifiedCeiling = referenceCeilings(
+        corpus.cases.map(({ content }) => ({
+          ...content,
+          referenceVerified: false,
+        })),
+        audit,
+      )[0]!;
+      expect(verifiedCeiling).toMatchObject({
+        multiplier: 0.9,
+        baseMultiplier: 0.8,
+        baseSource: "audit",
+        referenceCount: 2,
+        verifiedCuratedReferences: 1,
+      });
+      expect(verifiedCeiling.multiplier).toBeGreaterThan(
+        unverifiedCeiling.multiplier,
+      );
+      expect(unverifiedCeiling.multiplier).toBe(0.8);
       expect(JSON.stringify(corpus)).not.toContain(apiKey);
       expect(JSON.stringify(corpus)).not.toContain(publicKey);
 

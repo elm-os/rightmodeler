@@ -6,6 +6,8 @@ The offline build, discovery, and eval path requires no GitHub App or model cred
 
 The GitHub channel reads `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, and `GITHUB_APP_SLUG` lazily when a webhook reaches `/eve/v1/github`. `RIGHTMODELER_GITHUB_BOT_NAME` overrides the invocation token. Only comments from `COLLABORATOR`, `MEMBER`, or `OWNER` actors that mention the bot dispatch; agent replies carry an ignore marker.
 
+The mounted GitHub tools read `GITHUB_TOKEN` for outbound API calls. The GitHub App variables authenticate the channel only and do not supply this token.
+
 Schedules use these shared variables:
 
 - `RIGHTMODELER_REPO`, with optional `RIGHTMODELER_STORE`

@@ -29,7 +29,7 @@
     "@rightmodeler/kernel": "workspace:*",
     "@rightmodeler/replay": "workspace:*",
     "@rightmodeler/scanner": "workspace:*",
-    "@types/node": "^20",
+    "@types/node": "^24",
     "commander": "^14",
     "esbuild": "^0.28.2",
     "tsx": "^4",

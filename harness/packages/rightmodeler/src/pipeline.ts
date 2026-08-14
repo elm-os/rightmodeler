@@ -91,11 +91,14 @@ import {
   FormatDetectionError,
   normalizedRunSchema,
   parseTraceRecords,
+  referenceCeilings,
   scrubRuns,
   traceAdapters,
   writeCorpus,
+  type AuditResult,
   type AuditWorksheet,
   type Corpus,
+  type ReferenceCeiling,
 } from "./data/index.js";
 import {
   applySwaps as applyPreparedSwaps,
@@ -189,6 +192,14 @@ const RELEASE_GATE_POLICY = new ReleaseGatePolicy({
   qualityFloor: 0.85,
   availabilityFloor: AVAILABILITY_FLOOR,
 });
+
+function auditResultKey(projectId: string): string {
+  return `${setupPrefix(projectId)}audit-result.json`;
+}
+
+function importedReferenceCorpusKey(projectId: string): string {
+  return `${setupPrefix(projectId)}imported-reference-corpus.json`;
+}
 
 const scanOutputSchema = z.strictObject({
   revision: z.string().min(1),
@@ -357,9 +368,18 @@ const selectionSchema = z.discriminatedUnion("status", [
     holdoutRequired: z.literal(false),
   }),
 ]);
+const referenceCeilingSchema = z.strictObject({
+  family: z.string().min(1),
+  multiplier: z.number().min(0).max(1),
+  baseMultiplier: z.number().min(0).max(1),
+  baseSource: z.enum(["audit", "default"]),
+  referenceCount: z.number().int().positive(),
+  verifiedCuratedReferences: z.number().int().nonnegative(),
+});
 const familyOutcomeSchema = z.strictObject({
   familyId: z.string().min(1),
   verdict: z.custom<FamilyVerdict>(isFamilyVerdict),
+  referenceCeiling: referenceCeilingSchema,
   selection: selectionSchema,
   gates: z.array(gateResultSchema),
   decisionDisplay: z.enum([
@@ -408,6 +428,32 @@ const auditWorksheetSchema = z.strictObject({
       acceptedOutput: z.json(),
       verdict: z.enum(["", "correct", "incorrect", "ambiguous"]),
       note: z.string(),
+    }),
+  ),
+});
+const auditResultSchema = z.strictObject({
+  perFamily: z.record(
+    z.string(),
+    z.strictObject({
+      n: z.number().int().positive(),
+      disagreement: z.number().min(0).max(1),
+      wilsonLow: z.number().min(0).max(1),
+      wilsonHigh: z.number().min(0).max(1),
+      referenceAgreementPoint: z.number().min(0).max(1).nullable(),
+      referenceAgreementPointReason: z
+        .literal("below_minimum_audited_count")
+        .optional(),
+    }),
+  ),
+});
+const importedReferenceCorpusSchema = z.strictObject({
+  corpusVersionId: z.string().min(1),
+  cases: z.array(
+    z.strictObject({
+      caseId: z.string().min(1),
+      family: z.string().min(1),
+      referenceSource: z.literal("curated"),
+      referenceVerified: z.boolean(),
     }),
   ),
 });
@@ -527,6 +573,7 @@ export type RunApplyResult = ApplyResult;
 interface FamilyOutcome {
   familyId: string;
   verdict: FamilyVerdict;
+  referenceCeiling: ReferenceCeiling;
   selection: WinnerSelection;
   gates: GateResult[];
   decisionDisplay:
@@ -1286,6 +1333,19 @@ export async function runCorpusImport(options: {
   const context = createHeadlessContext(options);
   const corpus = await importCorpus(options.config, { seed: CORPUS_SEED });
   await writeImportedCorpus(context.store, context.projectId, corpus);
+  await putMutableJson(
+    context.store,
+    importedReferenceCorpusKey(context.projectId),
+    jsonValue({
+      corpusVersionId: corpus.corpusVersionId,
+      cases: corpus.cases.map(({ caseId, content }) => ({
+        caseId,
+        family: content.family,
+        referenceSource: content.referenceSource,
+        referenceVerified: content.referenceVerified,
+      })),
+    }),
+  );
   return corpus;
 }
 
@@ -1651,6 +1711,9 @@ async function inputDigest(
     extra.gatePolicyVersion = GATE_POLICY_VERSION;
     extra.qualityFloor = RELEASE_GATE_POLICY.qualityFloor;
     extra.availabilityFloor = RELEASE_GATE_POLICY.availabilityFloor;
+    extra.referenceCeilings = jsonValue(
+      await loadReferenceCeilings(context, await loadReplayPlan(context)),
+    );
   }
   if (stage === "confirm") {
     const plan = await loadReplayPlan(context);
@@ -2293,6 +2356,7 @@ async function executeReplay(
     throw missingProviderConfiguration();
   }
   const plan = await loadReplayPlan(context);
+  const ceilings = await loadReferenceCeilings(context, plan);
   const provider = createProvider({
     providerId: "configured-provider",
     baseUrl: context.baseUrl,
@@ -2490,7 +2554,13 @@ async function executeReplay(
 
   await runCells("shortlist", candidates);
   const shortlistVerdicts = aggregate(
-    await materializeAggregationFacts(context, plan, candidates, evaluation()),
+    await materializeAggregationFacts(
+      context,
+      plan,
+      candidates,
+      evaluation(),
+      ceilings,
+    ),
     aggregateOptions(),
   ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
   const shortlistSelections = new Map(
@@ -2554,6 +2624,7 @@ async function executeAggregate(
 ): Promise<string> {
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
+  const ceilings = await loadReferenceCeilings(context, plan);
   const facts = await readFacts(context.store, context.projectId);
   const allVerdicts = aggregate(
     await materializeAggregationFacts(
@@ -2561,6 +2632,7 @@ async function executeAggregate(
       plan,
       replay.candidates,
       replay.evaluation,
+      ceilings,
     ),
     aggregateOptions(),
     cascadeFindings(facts),
@@ -2570,6 +2642,7 @@ async function executeAggregate(
     allVerdicts,
     replay.candidates,
     replay.familyBlocks,
+    ceilings,
   );
   await writeFamilyVerdicts(context, families);
   const key = artifactKey(context, "aggregate", inputDigestValue);
@@ -2582,9 +2655,11 @@ function buildFamilyOutcomes(
   allVerdicts: readonly FamilyVerdict[],
   candidates: z.infer<typeof replayOutputSchema>["candidates"],
   familyBlocks: z.infer<typeof replayOutputSchema>["familyBlocks"],
+  ceilings: readonly ReferenceCeiling[],
 ): FamilyOutcome[] {
   const families: FamilyOutcome[] = [];
   for (const familyId of Object.keys(plan.sampleSizes).sort(compareText)) {
+    const referenceCeiling = referenceCeilingFor(ceilings, familyId);
     const familyVerdicts = allVerdicts.filter(
       (verdict) => verdict.familyId === familyId,
     );
@@ -2606,6 +2681,7 @@ function buildFamilyOutcomes(
             ({ id }) => id === selectionGap?.candidateId,
           ) ?? expectedCandidates[0],
           abstainReason,
+          referenceCeiling,
         ),
       );
       continue;
@@ -2617,11 +2693,17 @@ function buildFamilyOutcomes(
     const verdict = effectiveVerdict(familyVerdicts, selection);
     if (verdict === undefined) {
       families.push(
-        blockedFamilyOutcome(plan, familyId, expectedCandidates[0], {
-          reason: "selection_missing_shortlist_verdicts",
-          observed: 0,
-          required: Math.max(expectedCandidates.length, 1),
-        }),
+        blockedFamilyOutcome(
+          plan,
+          familyId,
+          expectedCandidates[0],
+          {
+            reason: "selection_missing_shortlist_verdicts",
+            observed: 0,
+            required: Math.max(expectedCandidates.length, 1),
+          },
+          referenceCeiling,
+        ),
       );
       continue;
     }
@@ -2637,6 +2719,7 @@ function buildFamilyOutcomes(
     const outcome: FamilyOutcome = {
       familyId,
       verdict,
+      referenceCeiling,
       selection,
       gates,
       decisionDisplay,
@@ -2712,6 +2795,7 @@ function blockedFamilyOutcome(
   familyId: string,
   candidate: ModelCatalogEntry | undefined,
   abstainReason: AbstainReasonDetails,
+  referenceCeiling: ReferenceCeiling,
 ): FamilyOutcome {
   const familyStep = plan.steps.find((step) => step.family === familyId);
   if (familyStep === undefined) {
@@ -2726,7 +2810,7 @@ function blockedFamilyOutcome(
     caseIds: [],
     candidateCostUsd: candidate === undefined ? 0 : blendedPrice(candidate),
     gatePolicyVersion: GATE_POLICY_VERSION,
-    referenceCeilingMultiplier: 1,
+    referenceCeilingMultiplier: referenceCeiling.multiplier,
     evaluatorKinds: [],
     weakestEvaluatorKind: "none",
     nExecutions: 0,
@@ -2754,6 +2838,7 @@ function blockedFamilyOutcome(
   return {
     familyId,
     verdict,
+    referenceCeiling,
     selection: noShortlistSelection(),
     gates: evaluateGates([verdict], RELEASE_GATE_POLICY),
     decisionDisplay: "abstain",
@@ -3076,12 +3161,14 @@ async function executeConfirm(
   }
 
   const facts = await readFacts(context.store, context.projectId);
+  const ceilings = await loadReferenceCeilings(context, plan);
   const allVerdicts = aggregate(
     await materializeAggregationFacts(
       context,
       plan,
       replay.candidates,
       replay.evaluation,
+      ceilings,
     ),
     aggregateOptions(),
     cascadeFindings(facts),
@@ -3091,6 +3178,7 @@ async function executeConfirm(
     allVerdicts,
     replay.candidates,
     replay.familyBlocks,
+    ceilings,
   ).map((family) => {
     const confirmation = confirmations.get(family.familyId);
     if (confirmation !== undefined) {
@@ -3473,6 +3561,7 @@ async function materializeAggregationFacts(
   plan: z.infer<typeof replayPlanSchema>,
   candidates: z.infer<typeof replayOutputSchema>["candidates"],
   evaluation: z.infer<typeof replayOutputSchema>["evaluation"],
+  ceilings: readonly ReferenceCeiling[],
 ): Promise<AggregationFact[]> {
   const facts = await readFacts(context.store, context.projectId);
   const evidenceQuestionIds = new Set(
@@ -3579,7 +3668,8 @@ async function materializeAggregationFacts(
         candidateFamily: selected.family,
         evaluatorKind: evaluation.evaluatorKind,
         candidateCostUsd: blendedPrice(selected),
-        referenceCeilingMultiplier: 1,
+        referenceCeilingMultiplier: referenceCeilingFor(ceilings, family)
+          .multiplier,
         unsafeSubstitution: false,
         evidenceCovered: true,
         expectedEvaluatorAssignments: expectedAssignments(
@@ -3736,6 +3826,46 @@ async function loadCorpusSummary(context: PipelineContext) {
 
 async function loadReplayPlan(context: PipelineContext) {
   return loadCurrent(context, "shortlist", replayPlanSchema);
+}
+
+async function loadReferenceCeilings(
+  context: PipelineContext,
+  plan: z.infer<typeof replayPlanSchema>,
+): Promise<ReferenceCeiling[]> {
+  const [auditEntry, importedEntry] = await Promise.all([
+    context.store.get(auditResultKey(context.projectId)),
+    context.store.get(importedReferenceCorpusKey(context.projectId)),
+  ]);
+  const audit: AuditResult | undefined =
+    auditEntry === null
+      ? undefined
+      : auditResultSchema.parse(
+          JSON.parse(Buffer.from(auditEntry.body).toString("utf8")),
+        );
+  const imported =
+    importedEntry === null
+      ? undefined
+      : importedReferenceCorpusSchema.parse(
+          JSON.parse(Buffer.from(importedEntry.body).toString("utf8")),
+        );
+  return referenceCeilings(
+    [
+      ...plan.cases.map(({ caseId, family }) => ({ caseId, family })),
+      ...(imported?.cases ?? []),
+    ],
+    audit,
+  );
+}
+
+function referenceCeilingFor(
+  ceilings: readonly ReferenceCeiling[],
+  family: string,
+): ReferenceCeiling {
+  const ceiling = ceilings.find((item) => item.family === family);
+  if (ceiling === undefined) {
+    throw new Error(`Reference ceiling is missing for family ${family}`);
+  }
+  return ceiling;
 }
 
 async function loadReplayOutput(context: PipelineContext) {
@@ -3970,6 +4100,7 @@ function isMissing(error: unknown): boolean {
 interface ReportData {
   verdicts: FamilyVerdict[];
   families: FamilyOutcome[];
+  referenceCeilings: ReferenceCeiling[];
   judgeDisagreement: {
     disagreements: number;
     assessments: number;
@@ -4177,6 +4308,9 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
   return {
     verdicts,
     families: decisionOutput.families,
+    referenceCeilings: decisionOutput.families.map(
+      ({ referenceCeiling }) => referenceCeiling,
+    ),
     judgeDisagreement: {
       disagreements: consistency.filter((value) => !value).length,
       assessments: consistency.length,
@@ -4247,6 +4381,15 @@ function renderReport(report: ReportData): string {
     );
   }
   lines.push(
+    "",
+    "## Reference ceilings",
+    "",
+    "| Family | Ceiling | Source |",
+    "| --- | --- | --- |",
+    ...report.referenceCeilings.map(
+      (ceiling) =>
+        `| ${ceiling.family} | ${formatRate(ceiling.multiplier)} | ${ceiling.baseSource} base ${formatRate(ceiling.baseMultiplier)}; curated verified ${ceiling.verifiedCuratedReferences}/${ceiling.referenceCount} |`,
+    ),
     "",
     "## Gates",
     "",
@@ -4481,7 +4624,7 @@ export async function runAuditTabulate(options: {
   const result = auditTabulate(worksheet);
   await putMutableJson(
     context.store,
-    `${setupPrefix(context.projectId)}audit-result.json`,
+    auditResultKey(context.projectId),
     jsonValue(result),
   );
   return result;

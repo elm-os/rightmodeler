@@ -4,7 +4,7 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 
 ## Requirements
 
-- Node.js 20 or newer.
+- Node.js 24 or newer.
 - A Git repository to analyze.
 - Trace input in a supported format.
 - An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins.

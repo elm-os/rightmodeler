@@ -112,32 +112,10 @@ function parseJsonObject(
   } catch (error) {
     throw new Error(`${source} was not valid JSON.`, { cause: error });
   }
-  if (!isJsonObject(parsed)) {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error(`${source} must contain one JSON object.`);
   }
-  return parsed;
-}
-
-function isJsonObject(value: unknown): value is { [key: string]: JsonValue } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.values(value).every(isJsonValue)
-  );
-}
-
-function isJsonValue(value: unknown): value is JsonValue {
-  if (
-    value === null ||
-    typeof value === "boolean" ||
-    typeof value === "string"
-  ) {
-    return true;
-  }
-  if (typeof value === "number") return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(isJsonValue);
-  return isJsonObject(value);
+  return parsed as { [key: string]: JsonValue };
 }
 
 function cliFailure(command: string, result: CapturedProcess): Error {
@@ -151,15 +129,21 @@ function parseCliError(stderr: string): string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stderr);
-  } catch (error) {
-    throw new Error("rightmodeler emitted invalid JSON error output.", {
-      cause: error,
-    });
+  } catch {
+    return stderr;
   }
-  if (!isJsonObject(parsed) || typeof parsed.message !== "string") {
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    typeof (parsed as Record<string, unknown>).message !== "string"
+  ) {
     throw new Error("rightmodeler emitted an invalid JSON error object.");
   }
+  const errorObject = parsed as Record<string, unknown>;
   const remedy =
-    typeof parsed.remedy === "string" ? ` Remedy: ${parsed.remedy}` : "";
-  return `${parsed.message}${remedy}`;
+    typeof errorObject.remedy === "string"
+      ? ` Remedy: ${errorObject.remedy}`
+      : "";
+  return `${errorObject.message as string}${remedy}`;
 }

@@ -57,8 +57,18 @@ describe("trace adapters", () => {
 
   it("reports both candidates instead of guessing on ambiguous input", () => {
     const adapters: readonly NamedTraceAdapter[] = [
-      { name: "otel-genai", detect: () => 0.8, adapt: () => [] },
-      { name: "openai-jsonl", detect: () => 0.75, adapt: () => [] },
+      {
+        name: "otel-genai",
+        detect: () => 0.8,
+        adapt: () => [],
+        adaptWithReport: () => ({ runs: [], droppedRecords: [] }),
+      },
+      {
+        name: "openai-jsonl",
+        detect: () => 0.75,
+        adapt: () => [],
+        adaptWithReport: () => ({ runs: [], droppedRecords: [] }),
+      },
     ];
 
     expect(() => detectFormat("{}", adapters)).toThrowError(

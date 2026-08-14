@@ -222,6 +222,7 @@ First run the machine-gated dry run:
 
 ```bash
 GITHUB_OWNER=example-org
+GITHUB_REPO=example-repository
 GITHUB_API_URL=https://api.github.com
 GITHUB_TOKEN_ENV=GITHUB_TOKEN
 
@@ -245,6 +246,7 @@ After the command returns the pull request number, watch one reconciliation pass
 PR_NUMBER=123
 "${RIGHTMODELER[@]}" watch \
   --owner "$GITHUB_OWNER" \
+  --github-repo "$GITHUB_REPO" \
   --pr "$PR_NUMBER" \
   --github-base-url "$GITHUB_API_URL" \
   --github-token-env "$GITHUB_TOKEN_ENV" \

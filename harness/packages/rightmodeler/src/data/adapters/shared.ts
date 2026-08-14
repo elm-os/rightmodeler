@@ -28,7 +28,7 @@ export interface NamedTraceAdapter {
   readonly name: TraceFormat;
   detect(sample: unknown): number;
   adapt(records: unknown): NormalizedRun[];
-  adaptWithReport?(records: unknown): TraceAdaptResult;
+  adaptWithReport(records: unknown): TraceAdaptResult;
 }
 
 export interface DetectionCandidate {
@@ -193,12 +193,7 @@ export function adaptWithReport(
   adapter: NamedTraceAdapter,
   records: unknown,
 ): TraceAdaptResult {
-  return (
-    adapter.adaptWithReport?.(records) ?? {
-      runs: adapter.adapt(records),
-      droppedRecords: [],
-    }
-  );
+  return adapter.adaptWithReport(records);
 }
 
 export function strictRuns(

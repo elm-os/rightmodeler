@@ -52,6 +52,7 @@ export const weaveAdapter = createRowAdapter({
       ? usageByModel[model]
       : (Object.values(usageByModel).find(isRecord) ?? {});
     const timestamp = optionalString(record.started_at);
+    const family = optionalString(record.display_name ?? record.op_name);
     return [
       {
         traceId,
@@ -84,11 +85,7 @@ export const weaveAdapter = createRowAdapter({
             ),
           },
           trajectoryId: traceId,
-          family: requiredString(
-            record.display_name ?? record.op_name,
-            `Weave record ${recordIndex + 1} operation`,
-            format,
-          ),
+          ...(family === undefined ? {} : { family }),
           ...(timestamp === undefined ? {} : { timestamp }),
         },
       },
