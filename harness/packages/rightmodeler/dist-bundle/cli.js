@@ -22206,14 +22206,24 @@ import { randomUUID as randomUUID6 } from "node:crypto";
 
 // ../replay/dist/provider.js
 var BlockedError = class extends Error {
-  kind = "rate-limit";
+  kind;
   observedCeiling;
-  constructor(status, observedCeiling) {
+  providerId;
+  errorDetail;
+  constructor(statusOrProvider, ceilingOrDetail) {
+    const rateLimited = typeof statusOrProvider === "number";
     super(
-      `Provider retries exhausted after HTTP ${status}; observed concurrency ceiling: ${observedCeiling}`,
+      rateLimited
+        ? `Provider retries exhausted after HTTP ${statusOrProvider}; observed concurrency ceiling: ${ceilingOrDetail}`
+        : `Provider ${statusOrProvider} returned a malformed model catalog`,
     );
     this.name = "BlockedError";
-    this.observedCeiling = observedCeiling;
+    this.kind = rateLimited ? "rate-limit" : "provider";
+    this.observedCeiling = rateLimited ? ceilingOrDetail : null;
+    this.providerId = rateLimited ? null : statusOrProvider;
+    if (!rateLimited) {
+      this.errorDetail = ceilingOrDetail;
+    }
   }
 };
 var ProviderRequestError = class extends Error {};
@@ -22226,7 +22236,17 @@ var ProviderHttpError = class extends ProviderRequestError {
   }
 };
 var ProviderConfigurationError = class extends Error {};
-var ProviderResponseError = class extends ProviderRequestError {};
+var ProviderResponseError = class extends ProviderRequestError {
+  status;
+  bodyExcerpt;
+  redacted = true;
+  constructor(message, { status, bodyExcerpt }) {
+    super(message);
+    this.name = "ProviderResponseError";
+    this.status = status;
+    this.bodyExcerpt = bodyExcerpt.slice(0, 500);
+  }
+};
 var AdaptiveLimiter = class {
   ceiling;
   cap;
@@ -22496,24 +22516,23 @@ function createProvider(options) {
     const { response, apiKey: requestKey } = await withRetries("/models", {
       method: "GET",
     });
-    let value;
+    const responseText = await response.text();
     try {
-      value = JSON.parse(await response.text());
+      const value = JSON.parse(responseText);
+      const envelope = objectValue(value, "model catalog");
+      if (!Array.isArray(envelope.data)) {
+        throw new Error("model catalog data must be an array");
+      }
+      catalog = envelope.data
+        .map(normalizeModel)
+        .filter((model) => model !== null);
+      return catalog;
     } catch (error51) {
-      const message =
-        error51 instanceof Error ? error51.message : String(error51);
-      throw new Error(
-        `Invalid model catalog JSON: ${redact(message, requestKey)}`,
-      );
+      throw new BlockedError(options.providerId, {
+        status: response.status,
+        bodyExcerpt: errorExcerpt(responseText, requestKey),
+      });
     }
-    const envelope = objectValue(value, "model catalog");
-    if (!Array.isArray(envelope.data)) {
-      throw new Error("model catalog data must be an array");
-    }
-    catalog = envelope.data
-      .map(normalizeModel)
-      .filter((model) => model !== null);
-    return catalog;
   }
   function listModels() {
     if (catalog !== void 0) return Promise.resolve(catalog);
@@ -22643,19 +22662,21 @@ function createProvider(options) {
     } catch (error51) {
       const message =
         error51 instanceof Error ? error51.message : String(error51);
+      const errorDetail = {
+        status: response.status,
+        bodyExcerpt: errorExcerpt(responseText, requestKey),
+      };
       await request.onAttempt?.({
         outcome: "provider_error",
         content: "",
         usage: { inputTokens: 0, outputTokens: 0 },
         costUsd: 0,
         costIsEstimate: true,
-        errorDetail: {
-          status: response.status,
-          bodyExcerpt: errorExcerpt(responseText, requestKey),
-        },
+        errorDetail,
       });
       throw new ProviderResponseError(
         `Invalid chat response: ${redact(message, requestKey)}`,
+        errorDetail,
       );
     }
     await request.onAttempt?.({ outcome: "completed", ...normalized });
@@ -22849,6 +22870,49 @@ async function replayModeA(input) {
     const executionId = mintExecutionId();
     const logicalCallId = randomUUID6();
     let actualCostUsd = 0;
+    async function recordAttempt(
+      attempt,
+      attemptLogicalCallId = logicalCallId,
+    ) {
+      actualCostUsd += attempt.costUsd;
+      const attemptId = mintAttemptId();
+      await writeReplayFact(
+        input.store,
+        input.budget.projectId,
+        attemptId,
+        requestAttemptSchema.parse({
+          attemptId,
+          logicalCallId: attemptLogicalCallId,
+          executionId,
+          streamOutcome: attempt.outcome,
+          usage: attempt.usage,
+          costUsd: attempt.costUsd,
+          costIsEstimate: attempt.costIsEstimate,
+          ...(attempt.errorDetail === void 0
+            ? {}
+            : { errorDetail: attempt.errorDetail }),
+        }),
+      );
+      const spendId = randomUUID6();
+      await writeReplayFact(
+        input.store,
+        input.budget.projectId,
+        spendId,
+        spendEventSchema.parse({
+          actor: "replay-driver",
+          phase: cell.step.selectionStage ?? cell.step.corpusSplit,
+          costUsd: attempt.costUsd,
+          provider: input.provider.providerId,
+          reconcilableTo: {
+            attemptId,
+            logicalCallId: attemptLogicalCallId,
+            executionId,
+            candidateId: cell.candidate.id,
+            costIsEstimate: attempt.costIsEstimate,
+          },
+        }),
+      );
+    }
     try {
       let response;
       try {
@@ -22865,50 +22929,17 @@ async function replayModeA(input) {
           toolChoice: cell.recordedCase.toolChoice,
           responseFormat: cell.recordedCase.responseFormat,
           headers: cell.recordedCase.headers,
-          onAttempt: async (attempt) => {
-            actualCostUsd += attempt.costUsd;
-            const attemptId = mintAttemptId();
-            await writeReplayFact(
-              input.store,
-              input.budget.projectId,
-              attemptId,
-              requestAttemptSchema.parse({
-                attemptId,
-                logicalCallId,
-                executionId,
-                streamOutcome: attempt.outcome,
-                usage: attempt.usage,
-                costUsd: attempt.costUsd,
-                costIsEstimate: attempt.costIsEstimate,
-                ...(attempt.errorDetail === void 0
-                  ? {}
-                  : { errorDetail: attempt.errorDetail }),
-              }),
-            );
-            const spendId = randomUUID6();
-            await writeReplayFact(
-              input.store,
-              input.budget.projectId,
-              spendId,
-              spendEventSchema.parse({
-                actor: "replay-driver",
-                phase: cell.step.selectionStage ?? cell.step.corpusSplit,
-                costUsd: attempt.costUsd,
-                provider: input.provider.providerId,
-                reconcilableTo: {
-                  attemptId,
-                  logicalCallId,
-                  executionId,
-                  candidateId: cell.candidate.id,
-                  costIsEstimate: attempt.costIsEstimate,
-                },
-              }),
-            );
-          },
+          onAttempt: recordAttempt,
         });
       } catch (error51) {
         if (error51 instanceof ProviderConfigurationError) throw error51;
         if (error51 instanceof BlockedError) {
+          if (
+            error51.kind !== "rate-limit" ||
+            error51.observedCeiling === null
+          ) {
+            throw error51;
+          }
           result2.blocked.push({
             stepId: cell.step.stepId,
             caseId: cell.recordedCase.caseId,
@@ -22971,40 +23002,84 @@ async function replayModeA(input) {
       }
       const judge = input.judge;
       let judgeInvocation = 0;
-      const judged = await judgeExecution({
-        chat: async (request) => {
-          judgeInvocation += 1;
-          try {
-            return await judge.chat(request);
-          } finally {
-            const spendId = randomUUID6();
-            await writeReplayFact(
-              input.store,
-              input.budget.projectId,
-              spendId,
-              spendEventSchema.parse({
-                actor: "judge",
-                phase: cell.step.selectionStage ?? cell.step.corpusSplit,
-                costUsd: 0,
-                provider: input.provider.providerId,
-                reconcilableTo: {
-                  executionId,
-                  judgeModel: judge.judgeModel,
-                  invocation: judgeInvocation,
-                  costUnavailable: true,
-                },
-              }),
-            );
-          }
-        },
-        judgeModel: judge.judgeModel,
-        task: cell.recordedCase.task,
-        reference:
-          typeof cell.recordedCase.referenceOutput === "string"
-            ? cell.recordedCase.referenceOutput
-            : JSON.stringify(cell.recordedCase.referenceOutput),
-        candidate: response.content,
-      });
+      let judged;
+      try {
+        judged = await judgeExecution({
+          chat: async (request) => {
+            judgeInvocation += 1;
+            const judgeLogicalCallId = randomUUID6();
+            try {
+              return await judge.chat(request);
+            } catch (error51) {
+              if (error51 instanceof ProviderResponseError) {
+                await recordAttempt(
+                  {
+                    outcome: "provider_error",
+                    content: "",
+                    usage: { inputTokens: 0, outputTokens: 0 },
+                    costUsd: 0,
+                    costIsEstimate: true,
+                    errorDetail: {
+                      status: error51.status,
+                      bodyExcerpt: error51.bodyExcerpt,
+                    },
+                  },
+                  judgeLogicalCallId,
+                );
+              }
+              throw error51;
+            } finally {
+              const spendId = randomUUID6();
+              await writeReplayFact(
+                input.store,
+                input.budget.projectId,
+                spendId,
+                spendEventSchema.parse({
+                  actor: "judge",
+                  phase: cell.step.selectionStage ?? cell.step.corpusSplit,
+                  costUsd: 0,
+                  provider: input.provider.providerId,
+                  reconcilableTo: {
+                    executionId,
+                    judgeModel: judge.judgeModel,
+                    invocation: judgeInvocation,
+                    costUnavailable: true,
+                  },
+                }),
+              );
+            }
+          },
+          judgeModel: judge.judgeModel,
+          task: cell.recordedCase.task,
+          reference:
+            typeof cell.recordedCase.referenceOutput === "string"
+              ? cell.recordedCase.referenceOutput
+              : JSON.stringify(cell.recordedCase.referenceOutput),
+          candidate: response.content,
+        });
+      } catch (error51) {
+        if (!(error51 instanceof ProviderResponseError)) throw error51;
+        await writeReplayFact(
+          input.store,
+          input.budget.projectId,
+          executionId,
+          executionSchema.parse({
+            executionId,
+            evidenceQuestionId: cell.step.evidenceQuestionId,
+            caseId: cell.recordedCase.caseId,
+            stepId: cell.step.stepId,
+            candidateId: cell.candidate.id,
+            trajectoryId: cell.recordedCase.trajectoryId,
+            corpusSplit: cell.recordedCase.corpusSplit,
+            selectionStage: cell.step.selectionStage ?? cell.step.corpusSplit,
+            terminalOutcome: "failure",
+            finalOutput: null,
+            attribution: "lost",
+          }),
+        );
+        result2.completed += 1;
+        return;
+      }
       const assessmentId = mintAssessmentId();
       await writeReplayFact(
         input.store,

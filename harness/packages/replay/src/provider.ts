@@ -73,15 +73,30 @@ export interface CreateProviderOptions {
 }
 
 export class BlockedError extends Error {
-  readonly kind = "rate-limit" as const;
-  readonly observedCeiling: number;
+  readonly kind: "rate-limit" | "provider";
+  readonly observedCeiling: number | null;
+  readonly providerId: string | null;
+  readonly errorDetail?: ProviderErrorDetail;
 
-  constructor(status: number, observedCeiling: number) {
+  constructor(status: number, observedCeiling: number);
+  constructor(providerId: string, errorDetail: ProviderErrorDetail);
+  constructor(
+    statusOrProvider: number | string,
+    ceilingOrDetail: number | ProviderErrorDetail,
+  ) {
+    const rateLimited = typeof statusOrProvider === "number";
     super(
-      `Provider retries exhausted after HTTP ${status}; observed concurrency ceiling: ${observedCeiling}`,
+      rateLimited
+        ? `Provider retries exhausted after HTTP ${statusOrProvider}; observed concurrency ceiling: ${ceilingOrDetail as number}`
+        : `Provider ${statusOrProvider} returned a malformed model catalog`,
     );
     this.name = "BlockedError";
-    this.observedCeiling = observedCeiling;
+    this.kind = rateLimited ? "rate-limit" : "provider";
+    this.observedCeiling = rateLimited ? (ceilingOrDetail as number) : null;
+    this.providerId = rateLimited ? null : statusOrProvider;
+    if (!rateLimited) {
+      this.errorDetail = ceilingOrDetail as ProviderErrorDetail;
+    }
   }
 }
 
@@ -98,7 +113,21 @@ export class ProviderHttpError extends ProviderRequestError {
 }
 
 export class ProviderConfigurationError extends Error {}
-export class ProviderResponseError extends ProviderRequestError {}
+export class ProviderResponseError extends ProviderRequestError {
+  readonly status: number;
+  readonly bodyExcerpt: string;
+  readonly redacted = true;
+
+  constructor(
+    message: string,
+    { status, bodyExcerpt }: ProviderErrorDetail & { status: number },
+  ) {
+    super(message);
+    this.name = "ProviderResponseError";
+    this.status = status;
+    this.bodyExcerpt = bodyExcerpt.slice(0, 500);
+  }
+}
 
 class AdaptiveLimiter {
   private readonly ceiling: number;
@@ -420,23 +449,23 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
     const { response, apiKey: requestKey } = await withRetries("/models", {
       method: "GET",
     });
-    let value: unknown;
+    const responseText = await response.text();
     try {
-      value = JSON.parse(await response.text());
+      const value: unknown = JSON.parse(responseText);
+      const envelope = objectValue(value, "model catalog");
+      if (!Array.isArray(envelope.data)) {
+        throw new Error("model catalog data must be an array");
+      }
+      catalog = envelope.data
+        .map(normalizeModel)
+        .filter((model) => model !== null);
+      return catalog;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Invalid model catalog JSON: ${redact(message, requestKey)}`,
-      );
+      throw new BlockedError(options.providerId, {
+        status: response.status,
+        bodyExcerpt: errorExcerpt(responseText, requestKey),
+      });
     }
-    const envelope = objectValue(value, "model catalog");
-    if (!Array.isArray(envelope.data)) {
-      throw new Error("model catalog data must be an array");
-    }
-    catalog = envelope.data
-      .map(normalizeModel)
-      .filter((model) => model !== null);
-    return catalog;
   }
 
   function listModels(): Promise<ModelCatalogEntry[]> {
@@ -570,19 +599,21 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const errorDetail = {
+        status: response.status,
+        bodyExcerpt: errorExcerpt(responseText, requestKey),
+      };
       await request.onAttempt?.({
         outcome: "provider_error",
         content: "",
         usage: { inputTokens: 0, outputTokens: 0 },
         costUsd: 0,
         costIsEstimate: true,
-        errorDetail: {
-          status: response.status,
-          bodyExcerpt: errorExcerpt(responseText, requestKey),
-        },
+        errorDetail,
       });
       throw new ProviderResponseError(
         `Invalid chat response: ${redact(message, requestKey)}`,
+        errorDetail,
       );
     }
     await request.onAttempt?.({ outcome: "completed", ...normalized });

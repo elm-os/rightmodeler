@@ -315,33 +315,48 @@ export async function startStubProvider({
         usage.fixture_authorization =
           request.headers.authorization ?? "missing";
       }
-      json(
-        response,
-        200,
-        {
-          id: `stub-${digest}`,
-          object: "chat.completion",
-          model: body.model,
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: empty ? "" : content,
-              },
-              finish_reason: "stop",
+      const responseBody = {
+        id: `stub-${digest}`,
+        object: "chat.completion",
+        model: body.model,
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: empty ? "" : content,
             },
-          ],
-          usage,
-        },
+            finish_reason: "stop",
+          },
+        ],
+        usage,
+      };
+      const responseHeaders =
         request.headers["x-stub-echo-auth-in-usage"] === undefined
           ? hitHeaders
           : {
               ...hitHeaders,
               "x-stub-reflected-auth":
                 request.headers.authorization ?? "missing",
-            },
-      );
+            };
+      if (request.headers["x-stub-empty-body"] !== undefined) {
+        response.writeHead(200, {
+          "content-type": "application/json",
+          ...responseHeaders,
+        });
+        response.end();
+        return;
+      }
+      if (request.headers["x-stub-truncated-json"] !== undefined) {
+        const serialized = JSON.stringify(responseBody);
+        response.writeHead(200, {
+          "content-type": "application/json",
+          ...responseHeaders,
+        });
+        response.end(serialized.slice(0, Math.floor(serialized.length / 2)));
+        return;
+      }
+      json(response, 200, responseBody, responseHeaders);
       return;
     }
 

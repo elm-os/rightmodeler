@@ -32,6 +32,8 @@ import {
   type ModelCatalogEntry,
   ProviderConfigurationError,
   ProviderRequestError,
+  ProviderResponseError,
+  type ProviderAttempt,
   type ProviderClient,
 } from "./provider.js";
 import type { ReplayStep, StepShortlist } from "./shortlist.js";
@@ -298,6 +300,49 @@ export async function replayModeA(
     const executionId = mintExecutionId();
     const logicalCallId = randomUUID();
     let actualCostUsd = 0;
+    async function recordAttempt(
+      attempt: ProviderAttempt,
+      attemptLogicalCallId = logicalCallId,
+    ): Promise<void> {
+      actualCostUsd += attempt.costUsd;
+      const attemptId = mintAttemptId();
+      await writeReplayFact(
+        input.store,
+        input.budget.projectId,
+        attemptId,
+        requestAttemptSchema.parse({
+          attemptId,
+          logicalCallId: attemptLogicalCallId,
+          executionId,
+          streamOutcome: attempt.outcome,
+          usage: attempt.usage,
+          costUsd: attempt.costUsd,
+          costIsEstimate: attempt.costIsEstimate,
+          ...(attempt.errorDetail === undefined
+            ? {}
+            : { errorDetail: attempt.errorDetail }),
+        }),
+      );
+      const spendId = randomUUID();
+      await writeReplayFact(
+        input.store,
+        input.budget.projectId,
+        spendId,
+        spendEventSchema.parse({
+          actor: "replay-driver",
+          phase: cell.step.selectionStage ?? cell.step.corpusSplit,
+          costUsd: attempt.costUsd,
+          provider: input.provider.providerId,
+          reconcilableTo: {
+            attemptId,
+            logicalCallId: attemptLogicalCallId,
+            executionId,
+            candidateId: cell.candidate.id,
+            costIsEstimate: attempt.costIsEstimate,
+          },
+        }),
+      );
+    }
     try {
       let response;
       try {
@@ -314,50 +359,14 @@ export async function replayModeA(
           toolChoice: cell.recordedCase.toolChoice,
           responseFormat: cell.recordedCase.responseFormat,
           headers: cell.recordedCase.headers,
-          onAttempt: async (attempt) => {
-            actualCostUsd += attempt.costUsd;
-            const attemptId = mintAttemptId();
-            await writeReplayFact(
-              input.store,
-              input.budget.projectId,
-              attemptId,
-              requestAttemptSchema.parse({
-                attemptId,
-                logicalCallId,
-                executionId,
-                streamOutcome: attempt.outcome,
-                usage: attempt.usage,
-                costUsd: attempt.costUsd,
-                costIsEstimate: attempt.costIsEstimate,
-                ...(attempt.errorDetail === undefined
-                  ? {}
-                  : { errorDetail: attempt.errorDetail }),
-              }),
-            );
-            const spendId = randomUUID();
-            await writeReplayFact(
-              input.store,
-              input.budget.projectId,
-              spendId,
-              spendEventSchema.parse({
-                actor: "replay-driver",
-                phase: cell.step.selectionStage ?? cell.step.corpusSplit,
-                costUsd: attempt.costUsd,
-                provider: input.provider.providerId,
-                reconcilableTo: {
-                  attemptId,
-                  logicalCallId,
-                  executionId,
-                  candidateId: cell.candidate.id,
-                  costIsEstimate: attempt.costIsEstimate,
-                },
-              }),
-            );
-          },
+          onAttempt: recordAttempt,
         });
       } catch (error) {
         if (error instanceof ProviderConfigurationError) throw error;
         if (error instanceof BlockedError) {
+          if (error.kind !== "rate-limit" || error.observedCeiling === null) {
+            throw error;
+          }
           result.blocked.push({
             stepId: cell.step.stepId,
             caseId: cell.recordedCase.caseId,
@@ -422,40 +431,84 @@ export async function replayModeA(
       const judge = input.judge;
 
       let judgeInvocation = 0;
-      const judged = await judgeExecution({
-        chat: async (request) => {
-          judgeInvocation += 1;
-          try {
-            return await judge.chat(request);
-          } finally {
-            const spendId = randomUUID();
-            await writeReplayFact(
-              input.store,
-              input.budget.projectId,
-              spendId,
-              spendEventSchema.parse({
-                actor: "judge",
-                phase: cell.step.selectionStage ?? cell.step.corpusSplit,
-                costUsd: 0,
-                provider: input.provider.providerId,
-                reconcilableTo: {
-                  executionId,
-                  judgeModel: judge.judgeModel,
-                  invocation: judgeInvocation,
-                  costUnavailable: true,
-                },
-              }),
-            );
-          }
-        },
-        judgeModel: judge.judgeModel,
-        task: cell.recordedCase.task,
-        reference:
-          typeof cell.recordedCase.referenceOutput === "string"
-            ? cell.recordedCase.referenceOutput
-            : JSON.stringify(cell.recordedCase.referenceOutput),
-        candidate: response.content,
-      });
+      let judged;
+      try {
+        judged = await judgeExecution({
+          chat: async (request) => {
+            judgeInvocation += 1;
+            const judgeLogicalCallId = randomUUID();
+            try {
+              return await judge.chat(request);
+            } catch (error) {
+              if (error instanceof ProviderResponseError) {
+                await recordAttempt(
+                  {
+                    outcome: "provider_error",
+                    content: "",
+                    usage: { inputTokens: 0, outputTokens: 0 },
+                    costUsd: 0,
+                    costIsEstimate: true,
+                    errorDetail: {
+                      status: error.status,
+                      bodyExcerpt: error.bodyExcerpt,
+                    },
+                  },
+                  judgeLogicalCallId,
+                );
+              }
+              throw error;
+            } finally {
+              const spendId = randomUUID();
+              await writeReplayFact(
+                input.store,
+                input.budget.projectId,
+                spendId,
+                spendEventSchema.parse({
+                  actor: "judge",
+                  phase: cell.step.selectionStage ?? cell.step.corpusSplit,
+                  costUsd: 0,
+                  provider: input.provider.providerId,
+                  reconcilableTo: {
+                    executionId,
+                    judgeModel: judge.judgeModel,
+                    invocation: judgeInvocation,
+                    costUnavailable: true,
+                  },
+                }),
+              );
+            }
+          },
+          judgeModel: judge.judgeModel,
+          task: cell.recordedCase.task,
+          reference:
+            typeof cell.recordedCase.referenceOutput === "string"
+              ? cell.recordedCase.referenceOutput
+              : JSON.stringify(cell.recordedCase.referenceOutput),
+          candidate: response.content,
+        });
+      } catch (error) {
+        if (!(error instanceof ProviderResponseError)) throw error;
+        await writeReplayFact(
+          input.store,
+          input.budget.projectId,
+          executionId,
+          executionSchema.parse({
+            executionId,
+            evidenceQuestionId: cell.step.evidenceQuestionId,
+            caseId: cell.recordedCase.caseId,
+            stepId: cell.step.stepId,
+            candidateId: cell.candidate.id,
+            trajectoryId: cell.recordedCase.trajectoryId,
+            corpusSplit: cell.recordedCase.corpusSplit,
+            selectionStage: cell.step.selectionStage ?? cell.step.corpusSplit,
+            terminalOutcome: "failure",
+            finalOutput: null,
+            attribution: "lost",
+          }),
+        );
+        result.completed += 1;
+        return;
+      }
       const assessmentId = mintAssessmentId();
       await writeReplayFact(
         input.store,

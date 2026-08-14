@@ -271,6 +271,20 @@ describe("AI Gateway catalog", () => {
     ).toBe(true);
   });
 
+  it("blocks a malformed catalog response with provider diagnostics", async () => {
+    const malformedBody = `{"credential":"${fakeKey}`;
+
+    await expect(listFixtureModels(malformedBody)).rejects.toMatchObject({
+      name: "BlockedError",
+      kind: "provider",
+      providerId: "vercel-ai-gateway",
+      errorDetail: {
+        status: 200,
+        bodyExcerpt: '{"credential":"[redacted]',
+      },
+    });
+  });
+
   it("shortlists cheaper tool-capable chat models for a GPT-4o incumbent", async () => {
     const catalog = await listFixtureModels();
     const result = shortlist(
@@ -412,6 +426,68 @@ describe("AI Gateway chat", () => {
     const request = vi.mocked(globalThis.fetch).mock.calls[1]?.[1];
     expect(JSON.parse(String(request?.body))).toMatchObject({ max_tokens: 16 });
   });
+
+  it("returns typed diagnostics for malformed non-streaming JSON", async () => {
+    const malformedBody = `{"credential":"${fakeKey}`;
+
+    await expect(chatFromFixture(malformedBody)).rejects.toMatchObject({
+      name: "ProviderResponseError",
+      status: 200,
+      bodyExcerpt: '{"credential":"[redacted]',
+      redacted: true,
+    });
+  });
+
+  it.each([429, 500])(
+    "retries a malformed HTTP %s body by status",
+    async (status) => {
+      const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+      const chatBody = await readFile(aiGatewayChatFixtureUrl, "utf8");
+      const onAttempt = vi.fn();
+      vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(
+          new Response(catalogBody, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response("", {
+            status,
+            headers: { "retry-after": "0" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(chatBody, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      const response = await createProvider({
+        providerId: "vercel-ai-gateway",
+        baseUrl: "https://chat.example/v1",
+        apiKeyEnv: "REPLAY_TEST_API_KEY",
+      }).chat({
+        model: "openai/gpt-4o-mini",
+        messages: [{ role: "user", content: "Say okay." }],
+        onAttempt,
+      });
+
+      expect(response.content).toBe("Ok!");
+      expect(onAttempt).toHaveBeenCalledTimes(2);
+      expect(onAttempt).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          outcome: "provider_error",
+          errorDetail: { status, bodyExcerpt: "" },
+        }),
+      );
+      expect(onAttempt).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ outcome: "completed" }),
+      );
+    },
+  );
 });
 
 describe("budget reservation", () => {
@@ -981,6 +1057,138 @@ describe("Mode A replay", () => {
       attribution: "lost",
     });
     expect(facts.some((fact) => "assessmentId" in fact)).toBe(false);
+  });
+
+  it.each([
+    ["empty", "x-stub-empty-body", ""],
+    ["truncated", "x-stub-truncated-json", '{"id":"stub-'],
+  ])(
+    "records one %s non-streaming response error and continues sibling cells",
+    async (_fault, header, expectedExcerpt) => {
+      const result = await run([
+        recordedCase({
+          caseId: "malformed-case",
+          headers: { [header]: "true" },
+        }),
+        recordedCase({ caseId: "healthy-case" }),
+      ]);
+      const facts = await readFacts(store);
+      const attempts = facts.filter((fact) => "attemptId" in fact);
+      const executions = facts.filter(
+        (fact) => "caseId" in fact && "terminalOutcome" in fact,
+      );
+      const malformedAttempt = attempts.find(
+        (attempt) => attempt.streamOutcome === "provider_error",
+      );
+
+      expect(result).toMatchObject({ completed: 2, blocked: [] });
+      expect(stub.getHitCount()).toBe(2);
+      expect(attempts).toHaveLength(2);
+      expect(
+        attempts.filter(
+          (attempt) => attempt.streamOutcome === "provider_error",
+        ),
+      ).toHaveLength(1);
+      expect(malformedAttempt).toMatchObject({
+        streamOutcome: "provider_error",
+        errorDetail: {
+          status: 200,
+        },
+      });
+      if (
+        malformedAttempt === undefined ||
+        !("attemptId" in malformedAttempt)
+      ) {
+        throw new Error("Expected a malformed provider attempt");
+      }
+      expect(
+        malformedAttempt.errorDetail?.bodyExcerpt.length,
+      ).toBeLessThanOrEqual(500);
+      if (expectedExcerpt.length === 0) {
+        expect(malformedAttempt.errorDetail?.bodyExcerpt).toBe("");
+      } else {
+        expect(malformedAttempt.errorDetail?.bodyExcerpt).toContain(
+          expectedExcerpt,
+        );
+      }
+      expect(executions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            caseId: "malformed-case",
+            terminalOutcome: "failure",
+            finalOutput: null,
+            attribution: "lost",
+          }),
+          expect.objectContaining({
+            caseId: "healthy-case",
+            terminalOutcome: "success",
+            attribution: "ok",
+          }),
+        ]),
+      );
+      expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(1);
+    },
+  );
+
+  it("records a malformed judge response and continues sibling cells", async () => {
+    let malformedJudgeCalls = 0;
+    const result = await run(
+      [
+        recordedCase({ caseId: "malformed-judge", task: "MALFORMED_JUDGE" }),
+        recordedCase({ caseId: "healthy-case", task: "HEALTHY_JUDGE" }),
+      ],
+      async (request) => {
+        if (
+          request.messages.some(({ content }) =>
+            content.includes("MALFORMED_JUDGE"),
+          )
+        ) {
+          malformedJudgeCalls += 1;
+          return (
+            await provider.chat({
+              model: "acme/small-1",
+              messages: [{ role: "user", content: "Judge this output." }],
+              headers: { "x-stub-empty-body": "true" },
+            })
+          ).content;
+        }
+        return JSON.stringify({
+          verdict: "equivalent",
+          score: 1,
+          justification: "Equivalent fixture outputs.",
+        });
+      },
+    );
+    const facts = await readFacts(store);
+    const providerErrors = facts.filter(
+      (fact) => "attemptId" in fact && fact.streamOutcome === "provider_error",
+    );
+    const executions = facts.filter(
+      (fact) => "caseId" in fact && "terminalOutcome" in fact,
+    );
+
+    expect(result).toMatchObject({ completed: 2, blocked: [] });
+    expect(malformedJudgeCalls).toBe(1);
+    expect(providerErrors).toEqual([
+      expect.objectContaining({
+        errorDetail: { status: 200, bodyExcerpt: "" },
+      }),
+    ]);
+    expect(executions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          caseId: "malformed-judge",
+          terminalOutcome: "failure",
+          finalOutput: null,
+          attribution: "lost",
+        }),
+        expect.objectContaining({
+          caseId: "healthy-case",
+          terminalOutcome: "success",
+          attribution: "ok",
+        }),
+      ]),
+    );
   });
 
   it("replays only cases assigned to the step corpus split", async () => {
