@@ -17,7 +17,7 @@
     "directory": "dist/publish"
   },
   "scripts": {
-    "build": "pnpm --filter @rightmodeler/core build && pnpm --filter @rightmodeler/executor build && pnpm --filter @rightmodeler/kernel build && pnpm --filter @rightmodeler/scanner build && pnpm --filter @rightmodeler/replay build && tsc -p tsconfig.json && pnpm run bundle",
+    "build": "tsc -p tsconfig.json && pnpm run bundle",
     "bundle": "tsx scripts/generate-docs.mjs --check && node build.mjs",
     "docs:generate": "tsx scripts/generate-docs.mjs --write",
     "prepack": "pnpm run bundle",
