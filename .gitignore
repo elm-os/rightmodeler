@@ -31,3 +31,4 @@ advisor-plans/
 # Agent working notes — todo.md / lessons.md (not version controlled)
 tasks/
 .vercel
+harness/packages/rightmodeler/dist-bundle.staging/
