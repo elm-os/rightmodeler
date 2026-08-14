@@ -45,6 +45,10 @@ const aiGatewayFixtureUrl = new URL(
   "../../../fixtures/catalogs/ai-gateway-models.json",
   import.meta.url,
 );
+const aiGatewayChatFixtureUrl = new URL(
+  "../../../fixtures/catalogs/ai-gateway-chat-response.json",
+  import.meta.url,
+);
 
 const projectId = "replay-test";
 const runId = "run-1";
@@ -266,6 +270,127 @@ describe("AI Gateway catalog", () => {
       "meta/llama-3.3-70b",
       "sakana/namazu",
     ]);
+  });
+});
+
+describe("AI Gateway chat", () => {
+  beforeEach(() => {
+    process.env.REPLAY_TEST_API_KEY = fakeKey;
+  });
+
+  afterEach(() => {
+    delete process.env.REPLAY_TEST_API_KEY;
+    vi.restoreAllMocks();
+  });
+
+  async function chatFromFixture(
+    chatBody: string,
+    maxOutputTokens = 32,
+  ): Promise<Awaited<ReturnType<ProviderClient["chat"]>>> {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(chatBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    return createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      maxOutputTokens,
+      estimatedInputTokens: 10,
+    });
+  }
+
+  it("parses the sanitized response usage and BYOK market cost", async () => {
+    const fixtureBody = await readFile(aiGatewayChatFixtureUrl, "utf8");
+
+    await expect(chatFromFixture(fixtureBody)).resolves.toEqual({
+      content: "Ok!",
+      usage: { inputTokens: 10, outputTokens: 3 },
+      costUsd: 0.0000033,
+      costIsEstimate: false,
+    });
+  });
+
+  it("uses upstream inference cost when BYOK market cost is absent", async () => {
+    const fixture = JSON.parse(
+      await readFile(aiGatewayChatFixtureUrl, "utf8"),
+    ) as {
+      usage: Record<string, unknown>;
+    };
+    delete fixture.usage.market_cost;
+
+    const response = await chatFromFixture(JSON.stringify(fixture));
+
+    expect(response).toMatchObject({
+      costUsd: 0.0000033,
+      costIsEstimate: false,
+    });
+  });
+
+  it("prefers BYOK market cost over upstream inference cost", async () => {
+    const fixture = JSON.parse(
+      await readFile(aiGatewayChatFixtureUrl, "utf8"),
+    ) as {
+      usage: {
+        cost_details: Record<string, unknown>;
+      };
+    };
+    fixture.usage.cost_details.upstream_inference_cost = 0.0000099;
+
+    const response = await chatFromFixture(JSON.stringify(fixture));
+
+    expect(response).toMatchObject({
+      costUsd: 0.0000033,
+      costIsEstimate: false,
+    });
+  });
+
+  it("estimates usage and cost when non-empty content has zero usage", async () => {
+    const fixture = JSON.parse(
+      await readFile(aiGatewayChatFixtureUrl, "utf8"),
+    ) as {
+      usage: Record<string, unknown>;
+    };
+    fixture.usage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+    };
+
+    const response = await chatFromFixture(JSON.stringify(fixture));
+
+    expect(response).toMatchObject({
+      content: "Ok!",
+      usage: {
+        inputTokens: 10,
+        outputTokens: 1,
+        status: "usage_unreported",
+      },
+      costIsEstimate: true,
+    });
+    expect(response.costUsd).toBeCloseTo(0.0000021);
+  });
+
+  it("clamps max_tokens to the gateway minimum", async () => {
+    const fixtureBody = await readFile(aiGatewayChatFixtureUrl, "utf8");
+
+    await chatFromFixture(fixtureBody, 1);
+
+    const request = vi.mocked(globalThis.fetch).mock.calls[1]?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({ max_tokens: 16 });
   });
 });
 
@@ -923,6 +1048,76 @@ describe("Mode A replay", () => {
     });
     expect(judgeCounter.calls).toBe(0);
     expect(facts.some((fact) => "assessmentId" in fact)).toBe(false);
+  });
+
+  it("classifies whitespace output with zero usage as silent failure", async () => {
+    const delegate = provider;
+    provider = {
+      providerId: delegate.providerId,
+      listModels: () => delegate.listModels(),
+      chat: async (request) => {
+        const response = {
+          content: " \n ",
+          usage: { inputTokens: 64, outputTokens: 0 },
+          costUsd: 0.0000128,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+    const judgeCounter = { calls: 0 };
+
+    await run([recordedCase()], judge(judgeCounter));
+    const facts = await readFacts(store);
+
+    expect(facts).toContainEqual(
+      expect.objectContaining({
+        terminalOutcome: "failure",
+        attribution: "silent-failure",
+      }),
+    );
+    expect(judgeCounter.calls).toBe(0);
+  });
+
+  it("includes non-empty output when provider usage is unreported", async () => {
+    const delegate = provider;
+    provider = {
+      providerId: delegate.providerId,
+      listModels: () => delegate.listModels(),
+      chat: async (request) => {
+        const response = {
+          content: "candidate output",
+          usage: {
+            inputTokens: 64,
+            outputTokens: 4,
+            status: "usage_unreported" as const,
+          },
+          costUsd: 0.000016,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+
+    await run([recordedCase()]);
+    const facts = await readFacts(store);
+
+    expect(facts).toContainEqual(
+      expect.objectContaining({
+        terminalOutcome: "success",
+        attribution: "ok",
+      }),
+    );
+    expect(facts).toContainEqual(
+      expect.objectContaining({
+        streamOutcome: "completed",
+        usage: expect.objectContaining({ status: "usage_unreported" }),
+        costIsEstimate: true,
+      }),
+    );
+    expect(facts.some((fact) => "assessmentId" in fact)).toBe(true);
   });
 
   it("records a successful execution without built-in judging when no judge is configured", async () => {

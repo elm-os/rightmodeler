@@ -1502,7 +1502,8 @@ export async function replayModeB(
         successfulEnvelope &&
         envelope !== null &&
         !infrastructureLost &&
-        envelope.finalOutput === "" &&
+        typeof envelope.finalOutput === "string" &&
+        envelope.finalOutput.trim().length === 0 &&
         outputTokens === 0
       ) {
         execution = executionFor(

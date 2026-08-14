@@ -256,6 +256,7 @@ export async function replayModeA(
           messages: replayMessages(cell.recordedCase),
           temperature: cell.recordedCase.temperature,
           maxOutputTokens: cell.recordedCase.maxOutputTokens,
+          estimatedInputTokens: cell.recordedCase.contextTokens,
           tools: cell.recordedCase.tools,
           toolChoice: cell.recordedCase.toolChoice,
           responseFormat: cell.recordedCase.responseFormat,
@@ -337,7 +338,8 @@ export async function replayModeA(
       }
 
       const silentFailure =
-        response.content.length === 0 || response.usage.outputTokens === 0;
+        response.content.trim().length === 0 &&
+        response.usage.outputTokens === 0;
       const execution = executionSchema.parse({
         executionId,
         evidenceQuestionId: cell.step.evidenceQuestionId,

@@ -21,6 +21,7 @@ export interface ChatRequest {
   messages: readonly ChatMessage[];
   temperature?: number;
   maxOutputTokens?: number;
+  estimatedInputTokens?: number;
   tools?: JsonValue;
   toolChoice?: JsonValue;
   responseFormat?: JsonValue;
@@ -33,6 +34,7 @@ export interface ChatResponse {
   usage: {
     inputTokens: number;
     outputTokens: number;
+    status?: "usage_unreported";
   };
   costUsd: number;
   costIsEstimate: boolean;
@@ -189,6 +191,19 @@ function price(value: unknown, label: string): number | null {
   return nonnegativeNumber(parsed, label);
 }
 
+function responsePrice(value: unknown, label: string): number | null {
+  const parsed = price(value, label);
+  if (
+    parsed === null &&
+    value !== undefined &&
+    value !== null &&
+    value !== ""
+  ) {
+    throw new Error(`${label} must be a non-negative number`);
+  }
+  return parsed;
+}
+
 function redact(value: string, apiKey: string): string {
   return apiKey.length === 0 ? value : value.split(apiKey).join("[redacted]");
 }
@@ -269,14 +284,15 @@ function normalizeModel(
   };
 }
 
-function normalizeUsage(value: unknown): ChatResponse["usage"] {
+function normalizeUsage(value: unknown): ChatResponse["usage"] | null {
+  if (value === undefined || value === null) return null;
   const usage = objectValue(value, "chat response usage");
+  const input = usage.prompt_tokens ?? usage.input_tokens;
+  const output = usage.completion_tokens ?? usage.output_tokens;
+  if (input === undefined && output === undefined) return null;
   return {
-    inputTokens: tokenCount(usage.prompt_tokens, "usage.prompt_tokens"),
-    outputTokens: tokenCount(
-      usage.completion_tokens,
-      "usage.completion_tokens",
-    ),
+    inputTokens: tokenCount(input, "usage.prompt_tokens"),
+    outputTokens: tokenCount(output, "usage.completion_tokens"),
   };
 }
 
@@ -403,11 +419,16 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
 
   async function chat(request: ChatRequest): Promise<ChatResponse> {
     const models = await listModels();
+    const maxTokens =
+      request.maxOutputTokens === undefined
+        ? undefined
+        : Math.max(16, request.maxOutputTokens);
     const body = {
       model: request.model,
       messages: request.messages,
       temperature: request.temperature,
-      max_tokens: request.maxOutputTokens,
+      // AI Gateway rejects output limits below 16 even when the upstream model accepts them.
+      max_tokens: maxTokens,
       tools: request.tools,
       tool_choice: request.toolChoice,
       response_format: request.responseFormat,
@@ -440,15 +461,59 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
           "chat response message content must be a string or null",
         );
       }
-      const usage = normalizeUsage(envelope.usage);
-      const usageObject = objectValue(envelope.usage, "chat response usage");
-      const reportedCost = usageObject.cost;
+      const content = message.content ?? "";
+      const reportedUsage = normalizeUsage(envelope.usage);
+      const usageObject =
+        envelope.usage === undefined || envelope.usage === null
+          ? {}
+          : objectValue(envelope.usage, "chat response usage");
+      const usageUnreported =
+        content.trim().length > 0 &&
+        (reportedUsage === null || reportedUsage.outputTokens === 0);
+      const usage: ChatResponse["usage"] = usageUnreported
+        ? {
+            inputTokens:
+              reportedUsage?.inputTokens ||
+              request.estimatedInputTokens ||
+              Math.max(
+                1,
+                Math.ceil(
+                  Buffer.byteLength(JSON.stringify(request.messages)) / 4,
+                ),
+              ),
+            outputTokens: Math.max(
+              1,
+              Math.ceil(Buffer.byteLength(content) / 4),
+            ),
+            status: "usage_unreported",
+          }
+        : (reportedUsage ?? {
+            inputTokens: 0,
+            outputTokens: 0,
+          });
+      const costDetails =
+        usageObject.cost_details === undefined ||
+        usageObject.cost_details === null
+          ? {}
+          : objectValue(usageObject.cost_details, "usage.cost_details");
+      const billedCost = responsePrice(usageObject.cost, "usage.cost");
+      const marketCost = responsePrice(
+        usageObject.market_cost,
+        "usage.market_cost",
+      );
+      const upstreamCost = responsePrice(
+        costDetails.upstream_inference_cost,
+        "usage.cost_details.upstream_inference_cost",
+      );
       let costUsd: number;
       let costIsEstimate: boolean;
-      if (reportedCost !== undefined && reportedCost !== null) {
-        const parsedCost = price(reportedCost, "usage.cost");
-        if (parsedCost === null) throw new Error("usage.cost must be present");
-        costUsd = parsedCost;
+      // Prefer positive billed cost, then market cost, then upstream cost; a BYOK billed zero is not free.
+      const providerCost =
+        billedCost !== null && billedCost > 0
+          ? billedCost
+          : (marketCost ?? upstreamCost);
+      if (!usageUnreported && providerCost !== null) {
+        costUsd = providerCost;
         costIsEstimate = false;
       } else {
         const model = models.find((item) => item.id === request.model);
@@ -466,7 +531,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         costIsEstimate = true;
       }
       normalized = {
-        content: message.content ?? "",
+        content,
         usage,
         costUsd,
         costIsEstimate,

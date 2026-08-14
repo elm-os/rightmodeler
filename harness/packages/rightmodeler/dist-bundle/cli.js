@@ -20326,6 +20326,13 @@ function price(value, label) {
     return null;
   return nonnegativeNumber(parsed2, label);
 }
+function responsePrice(value, label) {
+  const parsed2 = price(value, label);
+  if (parsed2 === null && value !== void 0 && value !== null && value !== "") {
+    throw new Error(`${label} must be a non-negative number`);
+  }
+  return parsed2;
+}
 function redact(value, apiKey) {
   return apiKey.length === 0 ? value : value.split(apiKey).join("[redacted]");
 }
@@ -20380,10 +20387,16 @@ function normalizeModel(value, index) {
   };
 }
 function normalizeUsage(value) {
+  if (value === void 0 || value === null)
+    return null;
   const usage2 = objectValue(value, "chat response usage");
+  const input = usage2.prompt_tokens ?? usage2.input_tokens;
+  const output = usage2.completion_tokens ?? usage2.output_tokens;
+  if (input === void 0 && output === void 0)
+    return null;
   return {
-    inputTokens: tokenCount(usage2.prompt_tokens, "usage.prompt_tokens"),
-    outputTokens: tokenCount(usage2.completion_tokens, "usage.completion_tokens")
+    inputTokens: tokenCount(input, "usage.prompt_tokens"),
+    outputTokens: tokenCount(output, "usage.completion_tokens")
   };
 }
 function createProvider(options) {
@@ -20491,11 +20504,13 @@ function createProvider(options) {
   }
   async function chat(request) {
     const models = await listModels();
+    const maxTokens = request.maxOutputTokens === void 0 ? void 0 : Math.max(16, request.maxOutputTokens);
     const body = {
       model: request.model,
       messages: request.messages,
       temperature: request.temperature,
-      max_tokens: request.maxOutputTokens,
+      // AI Gateway rejects output limits below 16 even when the upstream model accepts them.
+      max_tokens: maxTokens,
       tools: request.tools,
       tool_choice: request.toolChoice,
       response_format: request.responseFormat,
@@ -20521,16 +20536,27 @@ function createProvider(options) {
       if (typeof message.content !== "string" && message.content !== null) {
         throw new Error("chat response message content must be a string or null");
       }
-      const usage2 = normalizeUsage(envelope.usage);
-      const usageObject = objectValue(envelope.usage, "chat response usage");
-      const reportedCost = usageObject.cost;
+      const content = message.content ?? "";
+      const reportedUsage = normalizeUsage(envelope.usage);
+      const usageObject = envelope.usage === void 0 || envelope.usage === null ? {} : objectValue(envelope.usage, "chat response usage");
+      const usageUnreported = content.trim().length > 0 && (reportedUsage === null || reportedUsage.outputTokens === 0);
+      const usage2 = usageUnreported ? {
+        inputTokens: reportedUsage?.inputTokens || request.estimatedInputTokens || Math.max(1, Math.ceil(Buffer.byteLength(JSON.stringify(request.messages)) / 4)),
+        outputTokens: Math.max(1, Math.ceil(Buffer.byteLength(content) / 4)),
+        status: "usage_unreported"
+      } : reportedUsage ?? {
+        inputTokens: 0,
+        outputTokens: 0
+      };
+      const costDetails = usageObject.cost_details === void 0 || usageObject.cost_details === null ? {} : objectValue(usageObject.cost_details, "usage.cost_details");
+      const billedCost = responsePrice(usageObject.cost, "usage.cost");
+      const marketCost = responsePrice(usageObject.market_cost, "usage.market_cost");
+      const upstreamCost = responsePrice(costDetails.upstream_inference_cost, "usage.cost_details.upstream_inference_cost");
       let costUsd;
       let costIsEstimate;
-      if (reportedCost !== void 0 && reportedCost !== null) {
-        const parsedCost = price(reportedCost, "usage.cost");
-        if (parsedCost === null)
-          throw new Error("usage.cost must be present");
-        costUsd = parsedCost;
+      const providerCost = billedCost !== null && billedCost > 0 ? billedCost : marketCost ?? upstreamCost;
+      if (!usageUnreported && providerCost !== null) {
+        costUsd = providerCost;
         costIsEstimate = false;
       } else {
         const model = models.find((item) => item.id === request.model);
@@ -20544,7 +20570,7 @@ function createProvider(options) {
         costIsEstimate = true;
       }
       normalized = {
-        content: message.content ?? "",
+        content,
         usage: usage2,
         costUsd,
         costIsEstimate
@@ -20687,6 +20713,7 @@ async function replayModeA(input) {
           messages: replayMessages(cell.recordedCase),
           temperature: cell.recordedCase.temperature,
           maxOutputTokens: cell.recordedCase.maxOutputTokens,
+          estimatedInputTokens: cell.recordedCase.contextTokens,
           tools: cell.recordedCase.tools,
           toolChoice: cell.recordedCase.toolChoice,
           responseFormat: cell.recordedCase.responseFormat,
@@ -20752,7 +20779,7 @@ async function replayModeA(input) {
         }
         throw error51;
       }
-      const silentFailure = response.content.length === 0 || response.usage.outputTokens === 0;
+      const silentFailure = response.content.trim().length === 0 && response.usage.outputTokens === 0;
       const execution = executionSchema.parse({
         executionId,
         evidenceQuestionId: cell.step.evidenceQuestionId,
@@ -21777,7 +21804,7 @@ async function replayModeB(input) {
       const targetStepExercised = inspection.attempts.some(({ stepId }) => stepId === cell.recordedCase.stepId);
       const outputTokens = inspection.attempts.reduce((total, attempt) => total + (attempt.usage?.outputTokens ?? 0), 0);
       let execution;
-      if (successfulEnvelope && envelope !== null && !infrastructureLost && envelope.finalOutput === "" && outputTokens === 0) {
+      if (successfulEnvelope && envelope !== null && !infrastructureLost && typeof envelope.finalOutput === "string" && envelope.finalOutput.trim().length === 0 && outputTokens === 0) {
         execution = executionFor(cell, executionId, "failure", envelope.finalOutput, "silent-failure");
       } else if (successfulEnvelope && envelope !== null && targetStepExercised) {
         execution = executionFor(cell, executionId, "success", envelope.finalOutput, infrastructureLost ? "lost" : "ok");

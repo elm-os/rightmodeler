@@ -88,6 +88,11 @@ These executions stay in the worst-case denominator but are excluded from the co
 numerator and denominator. They count toward the excluded-fraction ceiling; if too few complete
 trials remain, the family abstains under the applicable evidence minimum.
 
+An attempt with non-empty output but missing or zero output-token usage records
+`usage.status = "usage_unreported"`. Its token usage and catalog-price cost are estimates, so
+`costIsEstimate` is true. The execution remains attributable and included; this state is not an
+evidence exclusion.
+
 ## Release gate IDs
 
 - `zero-unsafe-substitutions`: the total unsafe-substitution count must be zero.

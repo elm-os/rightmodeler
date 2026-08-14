@@ -1,0 +1,85 @@
+{
+  "id": "chatcmpl-SANITIZED",
+  "object": "chat.completion",
+  "created": 1786666130,
+  "model": "openai/gpt-4o-mini",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Ok!",
+        "provider_metadata": {
+          "openai": {
+            "responseId": "resp_02b55c81d4d1e30f006a7e5c90bf0487d29a1aa2294b568c16",
+            "serviceTier": "default"
+          },
+          "gateway": {
+            "routing": {
+              "originalModelId": "openai/gpt-4o-mini",
+              "resolvedProvider": "openai",
+              "fallbacksAvailable": ["azure"],
+              "planningReasoning": "BYOK credentials available for: openai. System credentials planned for: openai, azure. Total execution order: openai(BYOK) → openai(system) → azure(system)",
+              "canonicalSlug": "openai/gpt-4o-mini",
+              "finalProvider": "openai",
+              "modelAttemptCount": 1,
+              "modelAttempts": [
+                {
+                  "canonicalSlug": "openai/gpt-4o-mini",
+                  "success": true,
+                  "providerAttemptCount": 1,
+                  "providerAttempts": [
+                    {
+                      "provider": "openai",
+                      "credentialType": "byok",
+                      "success": true,
+                      "startTime": 1786666128668,
+                      "endTime": 1786666130023,
+                      "providerRequestId": "req_b4bb4c8c06894f79a4d0e50885e907d3",
+                      "statusCode": 200,
+                      "providerResponseId": "resp_02b55c81d4d1e30f006a7e5c90bf0487d29a1aa2294b568c16"
+                    }
+                  ]
+                }
+              ],
+              "totalProviderAttemptCount": 1
+            },
+            "cost": "0",
+            "marketCost": "0.0000033",
+            "surchargeCost": "0",
+            "gatewayCost": "0",
+            "generationId": "gen_01KZYSK582PZST0T79EP0DJ1FJ"
+          }
+        }
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 3,
+    "total_tokens": 13,
+    "cost": 0,
+    "is_byok": true,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 3.3e-6,
+      "upstream_inference_prompt_cost": 0,
+      "upstream_inference_completions_cost": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0
+    },
+    "cache_creation_input_tokens": 0,
+    "market_cost": 3.3e-6
+  },
+  "system_fingerprint": "fp_vvfkp9ljbb",
+  "service_tier": "default",
+  "generationId": "gen_01KZYSK582PZST0T79EP0DJ1FJ"
+}
