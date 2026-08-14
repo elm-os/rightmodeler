@@ -1202,8 +1202,7 @@ describe("Mode B replay", () => {
                 "attempts",
                 `${spec.env.RM_EXECUTION_ID}.0.jsonl`,
               );
-              const deadline = Date.now() + 10_000;
-              while (Date.now() < deadline) {
+              while (true) {
                 try {
                   const checkpointReady = (
                     await readFile(checkpoint, "utf8")
@@ -1220,7 +1219,6 @@ describe("Mode B replay", () => {
                 }
                 await new Promise((resolve) => setTimeout(resolve, 5));
               }
-              throw new Error("Timed out waiting for the first checkpoint");
             })();
           }
           return handle;

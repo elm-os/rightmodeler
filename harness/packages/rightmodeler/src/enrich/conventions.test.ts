@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { makeGitFixture } from "../test-utils/git-fixture.js";
 import { captureConventions } from "./conventions.js";
 
 const execFileAsync = promisify(execFile);
@@ -53,8 +54,14 @@ afterEach(async () => {
 
 describe("captureConventions", () => {
   it("captures includes, pointers, nested instructions, ownership, templates, and formatting from the demo fixture", async () => {
+    const root = await temporaryRepository();
+    const repoDir = await makeGitFixture(
+      root,
+      join(repositoryRoot, "harness/fixtures/demo-app"),
+      "demo-app",
+    );
     const conventions = await captureConventions({
-      repoDir: join(repositoryRoot, "harness/fixtures/demo-app"),
+      repoDir,
     });
 
     expect(conventions.version).toBe("1");
@@ -79,8 +86,14 @@ describe("captureConventions", () => {
   });
 
   it("captures the pointer convention and nested instructions without inventing a formatter in the LangGraph fixture", async () => {
+    const root = await temporaryRepository();
+    const repoDir = await makeGitFixture(
+      root,
+      join(repositoryRoot, "harness/fixtures/langgraph-app"),
+      "langgraph-app",
+    );
     const conventions = await captureConventions({
-      repoDir: join(repositoryRoot, "harness/fixtures/langgraph-app"),
+      repoDir,
     });
 
     expect(conventions.instructionFiles.map(({ path }) => path)).toEqual([

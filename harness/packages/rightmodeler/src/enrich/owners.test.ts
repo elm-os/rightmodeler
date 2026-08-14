@@ -1,20 +1,16 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { commitGitFixture, makeGitFixture } from "../test-utils/git-fixture.js";
 import { resolveOwners } from "./owners.js";
 
 const execFileAsync = promisify(execFile);
 const temporaryDirectories: string[] = [];
-const repositoryRoot = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../../../../",
-);
 
 async function temporaryRepository(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "rightmodeler-owners-"));
@@ -171,16 +167,33 @@ describe("resolveOwners", () => {
   });
 
   it("falls back to ranked git blame authors for a committed file", async () => {
-    const [resolution] = await resolveOwners({
-      repoDir: repositoryRoot,
-      filePaths: ["harness/docs/Architecture.md"],
+    const root = await temporaryRepository();
+    const repoDir = await makeGitFixture(root);
+    const filePath = join(repoDir, "ranked.txt");
+    await writeFile(filePath, "one\ntwo\nthree\nfour\n");
+    await commitGitFixture(repoDir, "Add ranked fixture", {
+      name: "Primary Author",
+      email: "primary@example.com",
+      date: "2026-01-01T00:00:00Z",
+    });
+    await writeFile(filePath, "one\ntwo\nthree\nfour\nfive\n");
+    await commitGitFixture(repoDir, "Extend ranked fixture", {
+      name: "Recent Author",
+      email: "recent@example.com",
+      date: "2026-01-02T00:00:00Z",
     });
 
-    expect(resolution?.path).toBe("harness/docs/Architecture.md");
-    expect(resolution?.owners.length).toBeGreaterThan(0);
-    expect(resolution?.owners.every(({ source }) => source === "blame")).toBe(
-      true,
-    );
+    await expect(
+      resolveOwners({ repoDir, filePaths: ["ranked.txt"] }),
+    ).resolves.toEqual([
+      {
+        path: "ranked.txt",
+        owners: [
+          { handle: "recent@example.com", source: "blame" },
+          { handle: "primary@example.com", source: "blame" },
+        ],
+      },
+    ]);
   });
 
   it("bounds concurrent blame commands and memoizes repeated paths", async () => {

@@ -24,6 +24,7 @@ import {
   runPipeline,
 } from "./pipeline.js";
 import { Reporter } from "./protocol.js";
+import { makeGitFixture } from "./test-utils/git-fixture.js";
 
 const temporaryDirectories: string[] = [];
 const demoAppPath = fileURLToPath(
@@ -112,7 +113,7 @@ describe("detached replay progress", () => {
     async () => {
       const root = await mkdtemp(join(tmpdir(), "rightmodeler-detached-"));
       temporaryDirectories.push(root);
-      const repo = demoAppPath;
+      const repo = await makeGitFixture(root, demoAppPath, "demo-app");
       const store = join(root, "store");
       const traces = join(root, "traces.jsonl");
       await writeFile(traces, await readFile(tracesPath));
