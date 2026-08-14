@@ -81,6 +81,7 @@ interface StubProviderModule {
     port: number;
     errorModels?: string[];
     includeFreeModel?: boolean;
+    malformedJudgeModels?: string[];
   }): Promise<StubProvider>;
 }
 
@@ -356,7 +357,11 @@ function jsonOutput(result: ChildResult): Record<string, unknown> {
 }
 
 async function startStub(
-  options: { errorModels?: string[]; includeFreeModel?: boolean } = {},
+  options: {
+    errorModels?: string[];
+    includeFreeModel?: boolean;
+    malformedJudgeModels?: string[];
+  } = {},
 ): Promise<StubProvider> {
   const module = (await import(stubModuleUrl)) as StubProviderModule;
   return module.startStubProvider({ port: 0, ...options });
@@ -784,13 +789,16 @@ describe("built CLI pipeline", () => {
             model: request.model,
             messages: request.messages,
             temperature: request.temperature,
-            responseFormat: request.responseFormat as JsonValue,
+            ...(request.responseFormat === undefined
+              ? {}
+              : { responseFormat: request.responseFormat as JsonValue }),
           })
         ).content;
 
       const normal = await judgeExecution({
         chat,
         judgeModel: "zeta/judge-1",
+        supportsStructuredOutput: true,
         task: "Summarize the recorded case.",
         reference: "Accepted summary",
         candidate: "Candidate summary",
@@ -798,6 +806,7 @@ describe("built CLI pipeline", () => {
       const seeded = await judgeExecution({
         chat,
         judgeModel: "zeta/judge-1",
+        supportsStructuredOutput: true,
         task: "STUB_JUDGE_DISAGREEMENT",
         reference: "Accepted summary",
         candidate: "Candidate summary",
@@ -816,6 +825,76 @@ describe("built CLI pipeline", () => {
       await stub.close();
     }
   });
+
+  it("falls back from a systematically malformed judge without losing assessments", async () => {
+    const { repo } = await fixtureCopy("judge-failover");
+    const stub = await startStub({
+      malformedJudgeModels: ["zeta/judge-1"],
+    });
+    const apiKeyEnv = "RIGHTMODELER_JUDGE_FAILOVER_E2E_API_KEY";
+    const args = [
+      "init",
+      "--through",
+      "replay",
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+
+    try {
+      const first = await runCli(args, { env: { [apiKeyEnv]: secret } });
+      expect(first.code, first.stderr).toBe(0);
+      expect(first.stderr).toContain('"event":"warning"');
+      expect(first.stderr).toContain("zeta/judge-1");
+      expect(JSON.parse(first.stdout)).toMatchObject({
+        executedStages: expect.arrayContaining(["replay"]),
+      });
+
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const facts = (await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      )) as Array<Record<string, unknown>>;
+      const executions = facts.filter(
+        ({ executionId, caseId }) =>
+          typeof executionId === "string" && typeof caseId === "string",
+      );
+      const assessments = facts.filter(
+        ({ assessmentId }) => typeof assessmentId === "string",
+      );
+      const unusableNotes = facts.filter(
+        ({ actor, reconcilableTo }) =>
+          actor === "judge" &&
+          typeof reconcilableTo === "object" &&
+          reconcilableTo !== null &&
+          !Array.isArray(reconcilableTo) &&
+          (reconcilableTo as Record<string, unknown>).judgeStatus ===
+            "unusable",
+      );
+
+      expect(executions.length).toBeGreaterThanOrEqual(3);
+      expect(assessments).toHaveLength(executions.length);
+      expect(
+        assessments.every(({ evaluatorId }) => evaluatorId === "yotta/judge-2"),
+      ).toBe(true);
+      expect(unusableNotes).toHaveLength(1);
+
+      const hitsAfterFirstRun = stub.getHitCount();
+      const resumed = await runCli(args, { env: { [apiKeyEnv]: secret } });
+      expect(resumed.code, resumed.stderr).toBe(0);
+      expect(stub.getHitCount()).toBe(hitsAfterFirstRun);
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
 
   it("plans from anywhere and proves checkpointed free stages", async () => {
     const { root, repo } = await fixtureCopy("plan");

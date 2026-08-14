@@ -35,6 +35,14 @@ const models = [
     supported_parameters: ["structured_outputs"],
     pricing: { input_per_token: 0.000004, output_per_token: 0.000012 },
   },
+  {
+    id: "yotta/judge-2",
+    object: "model",
+    capabilities: { chat: true, tools: false },
+    context_length: 64_000,
+    supported_parameters: [],
+    pricing: { input_per_token: 0.000002, output_per_token: 0.000006 },
+  },
 ];
 
 const freeModel = {
@@ -62,11 +70,14 @@ export async function startStubProvider({
   port,
   errorModels = [],
   includeFreeModel = false,
+  malformedJudgeModels = [],
 }) {
   const rateLimitedKeys = new Set();
   const failingModels = new Set(errorModels);
+  const malformedJudges = new Set(malformedJudgeModels);
   const catalogModels = includeFreeModel ? [...models, freeModel] : models;
   let hitCount = 0;
+  const requests = [];
   const server = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/v1/models") {
       json(response, 200, { object: "list", data: catalogModels });
@@ -90,6 +101,7 @@ export async function startStubProvider({
         );
         return;
       }
+      requests.push(body);
 
       if (!Array.isArray(body.messages)) {
         json(
@@ -223,10 +235,9 @@ export async function startStubProvider({
       }
 
       const messageText = JSON.stringify(body.messages ?? []);
-      if (
-        body.model === "zeta/judge-1" &&
-        messageText.includes("STUB_JUDGE_PROVIDER_ERROR")
-      ) {
+      const judgeModel =
+        body.model === "zeta/judge-1" || body.model === "yotta/judge-2";
+      if (judgeModel && messageText.includes("STUB_JUDGE_PROVIDER_ERROR")) {
         json(
           response,
           500,
@@ -247,20 +258,27 @@ export async function startStubProvider({
         Number.parseInt(digest[0], 16) % 2 === 0
           ? "divergent"
           : "equivalent";
-      const content =
-        body.model === "zeta/judge-1"
-          ? messageText.includes("STUB_JUDGE_EMPTY_OUTPUT")
+      const content = judgeModel
+        ? malformedJudges.has(body.model)
+          ? '{"verdict":'
+          : messageText.includes("STUB_JUDGE_EMPTY_OUTPUT")
             ? ""
             : messageText.includes("STUB_JUDGE_TRUNCATED_JSON")
               ? '{"verdict":"equivalent"'
               : messageText.includes("STUB_JUDGE_NON_JSON")
                 ? "The candidate appears equivalent."
-                : JSON.stringify({
-                    verdict: judgeVerdict,
-                    score: judgeVerdict === "equivalent" ? 1 : 0,
-                    justification: `Deterministic judge result ${digest}.`,
-                  })
-          : `Deterministic reply ${digest}`;
+                : body.model === "zeta/judge-1" &&
+                    body.response_format?.type !== "json_schema"
+                  ? "A structured judge request requires response_format."
+                  : body.model === "yotta/judge-2" &&
+                      !messageText.includes("Return strict JSON only")
+                    ? "An unstructured judge requires an explicit JSON instruction."
+                    : JSON.stringify({
+                        verdict: judgeVerdict,
+                        score: judgeVerdict === "equivalent" ? 1 : 0,
+                        justification: `Deterministic judge result ${digest}.`,
+                      })
+        : `Deterministic reply ${digest}`;
       if (body.stream === true) {
         const streamContent =
           request.headers["x-stub-large-stream"] === undefined
@@ -390,6 +408,7 @@ export async function startStubProvider({
   return {
     port: address.port,
     getHitCount: () => hitCount,
+    getRequests: () => requests.map((request) => structuredClone(request)),
     close: () =>
       new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -404,7 +423,7 @@ async function selftest() {
     const catalog = await fetch(`${baseUrl}/v1/models`).then((response) =>
       response.json(),
     );
-    if (catalog.data?.length !== 5) throw new Error("Expected five models.");
+    if (catalog.data?.length !== 6) throw new Error("Expected six models.");
 
     const request = {
       model: "acme/small-1",

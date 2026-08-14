@@ -14,6 +14,7 @@ import {
   factsPrefix,
   FsStore,
   type Execution,
+  type JsonValue,
 } from "@rightmodeler/core";
 import {
   createDockerExecutor,
@@ -363,6 +364,7 @@ async function testContext(
         judge: {
           chat: judgeChat(),
           judgeModel: "neutral/judge",
+          supportsStructuredOutput: true,
         },
         runner: runner.run,
       },
@@ -511,6 +513,7 @@ async function realModeBContext(
         judge: {
           chat: judgeChat(),
           judgeModel: "neutral/judge",
+          supportsStructuredOutput: true,
           providerId: "deterministic-test-judge",
         },
       },
@@ -695,9 +698,11 @@ describe("confirmSwapSet", () => {
                     messages: request.messages,
                     temperature: request.temperature,
                     maxOutputTokens: 256,
+                    responseFormat: request.responseFormat as JsonValue,
                   })
                 ).content,
               judgeModel: "zeta/judge-1",
+              supportsStructuredOutput: true,
               providerId: provider.providerId,
             },
           },

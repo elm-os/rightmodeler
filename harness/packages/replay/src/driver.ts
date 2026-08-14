@@ -12,6 +12,7 @@ import {
   requestAttemptSchema,
   spendEventSchema,
   type Fact,
+  type Execution,
   type JsonValue,
   type Store,
 } from "@rightmodeler/core";
@@ -63,7 +64,11 @@ export interface ReplayModeAInput {
   provider: ProviderClient;
   judge?: {
     chat: JudgeChat;
-    judgeModel: string;
+    rankedModels: readonly {
+      judgeModel: string;
+      supportsStructuredOutput: boolean;
+    }[];
+    warning?: (code: string, message: string) => void;
   };
   store: Store;
   budget: Budget;
@@ -93,6 +98,17 @@ interface ReplayCell {
   candidate: ModelCatalogEntry;
 }
 
+interface JudgeCell {
+  readonly cell: ReplayCell;
+  readonly executionId: string;
+  readonly execution: Execution;
+  readonly candidateOutput: string;
+  readonly recordAttempt: (
+    attempt: ProviderAttempt,
+    logicalCallId?: ReturnType<typeof randomUUID>,
+  ) => Promise<void>;
+}
+
 export function replayCorrelationKey(
   evidenceQuestionId: string,
   caseId: string,
@@ -115,11 +131,15 @@ export async function writeReplayFact(
   return fact;
 }
 
-export async function terminalReplayCells(
+async function replayFactState(
   store: Store,
   projectId: string,
-): Promise<Set<string>> {
+): Promise<{
+  readonly completed: Set<string>;
+  readonly unusableJudges: Set<string>;
+}> {
   const completed = new Set<string>();
+  const unusableJudges = new Set<string>();
   for (const key of await store.list(factsPrefix(projectId))) {
     const entry = await store.get(key);
     if (entry === null) throw new Error(`Listed fact is missing: ${key}`);
@@ -136,8 +156,26 @@ export async function terminalReplayCells(
         ),
       );
     }
+    if (
+      "actor" in fact &&
+      fact.actor === "judge" &&
+      typeof fact.reconcilableTo === "object" &&
+      fact.reconcilableTo !== null &&
+      !Array.isArray(fact.reconcilableTo) &&
+      fact.reconcilableTo.judgeStatus === "unusable" &&
+      typeof fact.reconcilableTo.judgeModel === "string"
+    ) {
+      unusableJudges.add(fact.reconcilableTo.judgeModel);
+    }
   }
-  return completed;
+  return { completed, unusableJudges };
+}
+
+export async function terminalReplayCells(
+  store: Store,
+  projectId: string,
+): Promise<Set<string>> {
+  return (await replayFactState(store, projectId)).completed;
 }
 
 function cellsFor(input: ReplayModeAInput): ReplayCell[] {
@@ -233,14 +271,265 @@ export async function replayModeA(
   if (input.store !== input.budget.store) {
     throw new Error("Replay store must match the budget store");
   }
-  const existing = await terminalReplayCells(
+  const replayState = await replayFactState(
     input.store,
     input.budget.projectId,
   );
+  const existing = replayState.completed;
   const cells = cellsFor(input);
   const result: ReplayModeAResult = { completed: 0, skipped: 0, blocked: [] };
   const activeRefunds = new Set<Promise<void>>();
   let nextCell = 0;
+  const judges = input.judge?.rankedModels.slice(0, 2) ?? [];
+  if (input.judge !== undefined && judges.length === 0) {
+    throw new Error("At least one ranked judge model is required");
+  }
+  const unusableJudges = replayState.unusableJudges;
+  const firstUsableJudge = judges.findIndex(
+    ({ judgeModel }) => !unusableJudges.has(judgeModel),
+  );
+  let activeJudgeIndex =
+    firstUsableJudge === -1 ? judges.length : firstUsableJudge;
+  let consecutiveMalformed = 0;
+  let malformedPending: JudgeCell[] = [];
+  let judgeQueue = Promise.resolve();
+
+  async function completeWithoutAssessment(job: JudgeCell): Promise<void> {
+    await writeReplayFact(
+      input.store,
+      input.budget.projectId,
+      job.executionId,
+      job.execution,
+    );
+    result.completed += 1;
+  }
+
+  async function completeWithAssessment(
+    job: JudgeCell,
+    judged: Awaited<ReturnType<typeof judgeExecution>>,
+  ): Promise<void> {
+    const assessmentId = mintAssessmentId();
+    await writeReplayFact(
+      input.store,
+      input.budget.projectId,
+      assessmentId,
+      assessmentSchema.parse({
+        assessmentId,
+        executionId: job.executionId,
+        evaluatorId: judged.evaluatorId,
+        metricName: judged.metricName,
+        score: judged.score,
+        passed: judged.passed,
+        rubricVersion: judged.rubricVersion,
+        artifactRef: {
+          evidence: judged.artifactRef,
+          verdict: judged.verdict,
+          justification: judged.justification,
+          judgeModel: judged.judgeModel,
+          orderConsistent: judged.orderConsistent,
+        },
+      }),
+    );
+    await completeWithoutAssessment(job);
+  }
+
+  async function recordJudgeFailure(
+    job: JudgeCell,
+    judgeModel: string,
+    judgeFailureKind: "response_malformed" | "provider_error",
+    error: unknown,
+  ): Promise<void> {
+    const failureId = randomUUID();
+    await writeReplayFact(
+      input.store,
+      input.budget.projectId,
+      failureId,
+      spendEventSchema.parse({
+        actor: "judge",
+        phase: job.cell.step.selectionStage ?? job.cell.step.corpusSplit,
+        costUsd: 0,
+        provider: input.provider.providerId,
+        reconcilableTo: {
+          executionId: job.executionId,
+          judgeModel,
+          judgeFailureKind,
+          errorDetail: {
+            message: (error instanceof Error
+              ? error.message
+              : String(error)
+            ).slice(0, 300),
+            judgeModel,
+          },
+        },
+      }),
+    );
+  }
+
+  async function attemptJudge(
+    job: JudgeCell,
+    judge: (typeof judges)[number],
+  ): Promise<
+    | {
+        readonly status: "success";
+        readonly assessment: Awaited<ReturnType<typeof judgeExecution>>;
+      }
+    | {
+        readonly status: "failure";
+        readonly kind: "response_malformed" | "provider_error";
+      }
+  > {
+    let judgeInvocation = 0;
+    let judgeFailureKind: "response_malformed" | "provider_error" =
+      "response_malformed";
+    let judgePersistenceFailure: unknown;
+    try {
+      const assessment = await judgeExecution({
+        chat: async (request) => {
+          judgeInvocation += 1;
+          const judgeLogicalCallId = randomUUID();
+          try {
+            return await input.judge!.chat(request);
+          } catch (error) {
+            if (error instanceof ProviderConfigurationError) throw error;
+            judgeFailureKind = "provider_error";
+            if (error instanceof ProviderResponseError) {
+              try {
+                await job.recordAttempt(
+                  {
+                    outcome: "provider_error",
+                    content: "",
+                    usage: { inputTokens: 0, outputTokens: 0 },
+                    costUsd: 0,
+                    costIsEstimate: true,
+                    errorDetail: {
+                      status: error.status,
+                      bodyExcerpt: error.bodyExcerpt,
+                    },
+                  },
+                  judgeLogicalCallId,
+                );
+              } catch (persistenceError) {
+                judgePersistenceFailure = persistenceError;
+                throw persistenceError;
+              }
+            }
+            throw error;
+          } finally {
+            const spendId = randomUUID();
+            try {
+              await writeReplayFact(
+                input.store,
+                input.budget.projectId,
+                spendId,
+                spendEventSchema.parse({
+                  actor: "judge",
+                  phase:
+                    job.cell.step.selectionStage ?? job.cell.step.corpusSplit,
+                  costUsd: 0,
+                  provider: input.provider.providerId,
+                  reconcilableTo: {
+                    executionId: job.executionId,
+                    judgeModel: judge.judgeModel,
+                    invocation: judgeInvocation,
+                    costUnavailable: true,
+                  },
+                }),
+              );
+            } catch (persistenceError) {
+              judgePersistenceFailure = persistenceError;
+              throw persistenceError;
+            }
+          }
+        },
+        judgeModel: judge.judgeModel,
+        supportsStructuredOutput: judge.supportsStructuredOutput,
+        task: job.cell.recordedCase.task,
+        reference:
+          typeof job.cell.recordedCase.referenceOutput === "string"
+            ? job.cell.recordedCase.referenceOutput
+            : JSON.stringify(job.cell.recordedCase.referenceOutput),
+        candidate: job.candidateOutput,
+      });
+      return { status: "success", assessment };
+    } catch (error) {
+      if (
+        error instanceof ProviderConfigurationError ||
+        judgePersistenceFailure !== undefined
+      ) {
+        throw error;
+      }
+      await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error);
+      return { status: "failure", kind: judgeFailureKind };
+    }
+  }
+
+  async function flushMalformedPending(): Promise<void> {
+    const pending = malformedPending;
+    malformedPending = [];
+    consecutiveMalformed = 0;
+    for (const job of pending) await completeWithoutAssessment(job);
+  }
+
+  async function processJudgeCell(job: JudgeCell): Promise<void> {
+    const judge = judges[activeJudgeIndex];
+    if (judge === undefined) {
+      await completeWithoutAssessment(job);
+      return;
+    }
+    const outcome = await attemptJudge(job, judge);
+    if (outcome.status === "success") {
+      await flushMalformedPending();
+      await completeWithAssessment(job, outcome.assessment);
+      return;
+    }
+    if (outcome.kind === "provider_error") {
+      await flushMalformedPending();
+      await completeWithoutAssessment(job);
+      return;
+    }
+
+    malformedPending.push(job);
+    consecutiveMalformed += 1;
+    if (consecutiveMalformed < 3) return;
+
+    const nextJudge = judges[activeJudgeIndex + 1];
+    input.judge!.warning?.(
+      "judge_unusable",
+      nextJudge === undefined
+        ? `Judge ${judge.judgeModel} is unusable after three consecutive malformed assessments; no eligible fallback judge remains.`
+        : `Judge ${judge.judgeModel} is unusable after three consecutive malformed assessments; switching to ${nextJudge.judgeModel}.`,
+    );
+    const noteId = randomUUID();
+    await writeReplayFact(
+      input.store,
+      input.budget.projectId,
+      noteId,
+      spendEventSchema.parse({
+        actor: "judge",
+        phase: job.cell.step.selectionStage ?? job.cell.step.corpusSplit,
+        costUsd: 0,
+        provider: input.provider.providerId,
+        reconcilableTo: {
+          judgeModel: judge.judgeModel,
+          judgeStatus: "unusable",
+          note: "three_consecutive_response_malformed",
+          consecutiveAssessments: consecutiveMalformed,
+        },
+      }),
+    );
+
+    const affected = malformedPending;
+    malformedPending = [];
+    consecutiveMalformed = 0;
+    activeJudgeIndex += 1;
+    for (const pending of affected) await processJudgeCell(pending);
+  }
+
+  async function scheduleJudgeCell(job: JudgeCell): Promise<void> {
+    const scheduled = judgeQueue.then(() => processJudgeCell(job));
+    judgeQueue = scheduled.catch(() => undefined);
+    await scheduled;
+  }
 
   async function runCell(cell: ReplayCell): Promise<void> {
     const key = replayCorrelationKey(
@@ -428,148 +717,13 @@ export async function replayModeA(
         result.completed += 1;
         return;
       }
-      const judge = input.judge;
-
-      let judgeInvocation = 0;
-      let judgeFailureKind: "response_malformed" | "provider_error" =
-        "response_malformed";
-      let judgePersistenceFailure: unknown;
-      let judged;
-      try {
-        judged = await judgeExecution({
-          chat: async (request) => {
-            judgeInvocation += 1;
-            const judgeLogicalCallId = randomUUID();
-            try {
-              return await judge.chat(request);
-            } catch (error) {
-              if (error instanceof ProviderConfigurationError) throw error;
-              judgeFailureKind = "provider_error";
-              if (error instanceof ProviderResponseError) {
-                try {
-                  await recordAttempt(
-                    {
-                      outcome: "provider_error",
-                      content: "",
-                      usage: { inputTokens: 0, outputTokens: 0 },
-                      costUsd: 0,
-                      costIsEstimate: true,
-                      errorDetail: {
-                        status: error.status,
-                        bodyExcerpt: error.bodyExcerpt,
-                      },
-                    },
-                    judgeLogicalCallId,
-                  );
-                } catch (persistenceError) {
-                  judgePersistenceFailure = persistenceError;
-                  throw persistenceError;
-                }
-              }
-              throw error;
-            } finally {
-              const spendId = randomUUID();
-              try {
-                await writeReplayFact(
-                  input.store,
-                  input.budget.projectId,
-                  spendId,
-                  spendEventSchema.parse({
-                    actor: "judge",
-                    phase: cell.step.selectionStage ?? cell.step.corpusSplit,
-                    costUsd: 0,
-                    provider: input.provider.providerId,
-                    reconcilableTo: {
-                      executionId,
-                      judgeModel: judge.judgeModel,
-                      invocation: judgeInvocation,
-                      costUnavailable: true,
-                    },
-                  }),
-                );
-              } catch (persistenceError) {
-                judgePersistenceFailure = persistenceError;
-                throw persistenceError;
-              }
-            }
-          },
-          judgeModel: judge.judgeModel,
-          task: cell.recordedCase.task,
-          reference:
-            typeof cell.recordedCase.referenceOutput === "string"
-              ? cell.recordedCase.referenceOutput
-              : JSON.stringify(cell.recordedCase.referenceOutput),
-          candidate: response.content,
-        });
-      } catch (error) {
-        if (
-          error instanceof ProviderConfigurationError ||
-          judgePersistenceFailure !== undefined
-        ) {
-          throw error;
-        }
-        const failureId = randomUUID();
-        await writeReplayFact(
-          input.store,
-          input.budget.projectId,
-          failureId,
-          spendEventSchema.parse({
-            actor: "judge",
-            phase: cell.step.selectionStage ?? cell.step.corpusSplit,
-            costUsd: 0,
-            provider: input.provider.providerId,
-            reconcilableTo: {
-              executionId,
-              judgeModel: judge.judgeModel,
-              judgeFailureKind,
-              errorDetail: {
-                message: (error instanceof Error
-                  ? error.message
-                  : String(error)
-                ).slice(0, 300),
-                judgeModel: judge.judgeModel,
-              },
-            },
-          }),
-        );
-        await writeReplayFact(
-          input.store,
-          input.budget.projectId,
-          executionId,
-          execution,
-        );
-        result.completed += 1;
-        return;
-      }
-      const assessmentId = mintAssessmentId();
-      await writeReplayFact(
-        input.store,
-        input.budget.projectId,
-        assessmentId,
-        assessmentSchema.parse({
-          assessmentId,
-          executionId,
-          evaluatorId: judged.evaluatorId,
-          metricName: judged.metricName,
-          score: judged.score,
-          passed: judged.passed,
-          rubricVersion: judged.rubricVersion,
-          artifactRef: {
-            evidence: judged.artifactRef,
-            verdict: judged.verdict,
-            justification: judged.justification,
-            judgeModel: judged.judgeModel,
-            orderConsistent: judged.orderConsistent,
-          },
-        }),
-      );
-      await writeReplayFact(
-        input.store,
-        input.budget.projectId,
+      await scheduleJudgeCell({
+        cell,
         executionId,
         execution,
-      );
-      result.completed += 1;
+        candidateOutput: response.content,
+        recordAttempt,
+      });
     } finally {
       try {
         await reservation.refund(actualCostUsd);
@@ -596,5 +750,7 @@ export async function replayModeA(
       () => worker(),
     ),
   );
+  await judgeQueue;
+  await flushMalformedPending();
   return result;
 }

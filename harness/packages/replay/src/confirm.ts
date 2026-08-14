@@ -79,6 +79,7 @@ export interface ConfirmModeB {
   readonly judge: {
     readonly chat: JudgeChat;
     readonly judgeModel: string;
+    readonly supportsStructuredOutput: boolean;
     readonly providerId?: string;
   };
   readonly runner?: (input: ReplayModeBInput) => Promise<ReplayModeBResult>;
@@ -438,6 +439,7 @@ function confirmInputDigest(
     })),
     judge: {
       model: input.modeB.judge.judgeModel,
+      supportsStructuredOutput: input.modeB.judge.supportsStructuredOutput,
       providerId: input.modeB.judge.providerId ?? null,
     },
     runtime: {
@@ -644,6 +646,7 @@ async function assessExecution(
         }
       },
       judgeModel: input.modeB.judge.judgeModel,
+      supportsStructuredOutput: input.modeB.judge.supportsStructuredOutput,
       task: recordedCase.task,
       reference:
         typeof recordedCase.referenceOutput === "string"

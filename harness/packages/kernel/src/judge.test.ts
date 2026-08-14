@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   judgeExecution,
   pickJudge,
+  pickJudges,
   type JudgeCatalogEntry,
   type JudgeChatRequest,
 } from "./judge.js";
@@ -100,11 +101,11 @@ describe("pickJudge", () => {
     ];
 
     expect(
-      pickJudge(catalog, {
+      pickJudges(catalog, {
         candidateFamily: "candidate",
         referenceFamily: "reference",
       }),
-    ).toBe("neutral/strongest");
+    ).toEqual(["neutral/no-structure", "neutral/strongest", "neutral/recent"]);
   });
 
   it("uses fallback fields, numeric strings, and the model id tie-break", () => {
@@ -176,6 +177,7 @@ describe("judgeExecution", () => {
         return output;
       },
       judgeModel: "neutral/judge",
+      supportsStructuredOutput: true,
       task: "TASK VALUE",
       reference: "REFERENCE VALUE",
       candidate: "CANDIDATE VALUE",
@@ -202,6 +204,7 @@ describe("judgeExecution", () => {
       "neutral/judge",
       "neutral/judge",
     ]);
+    expect(requests.every((request) => request.responseFormat)).toBe(true);
     const firstPrompt = requests[0]?.messages[1]?.content ?? "";
     const secondPrompt = requests[1]?.messages[1]?.content ?? "";
     expect(firstPrompt.indexOf("REFERENCE VALUE")).toBeLessThan(
@@ -216,6 +219,7 @@ describe("judgeExecution", () => {
     const result = await judgeExecution({
       chat: async () => response("minor_drift", 0.01),
       judgeModel: "neutral/judge",
+      supportsStructuredOutput: true,
       task: "task",
       reference: "reference",
       candidate: "candidate",
@@ -233,6 +237,7 @@ describe("judgeExecution", () => {
     const result = await judgeExecution({
       chat: async () => response("equivalent", 0),
       judgeModel: "neutral/judge",
+      supportsStructuredOutput: true,
       task: "task",
       reference: "reference",
       candidate: "candidate",
@@ -249,6 +254,7 @@ describe("judgeExecution", () => {
   it("throws on unparseable or non-exact judge output", async () => {
     const base = {
       judgeModel: "neutral/judge",
+      supportsStructuredOutput: true,
       task: "task",
       reference: "reference",
       candidate: "candidate",
@@ -271,6 +277,59 @@ describe("judgeExecution", () => {
     ).rejects.toThrow("exactly");
   });
 
+  it("extracts fenced and prose-prefixed JSON before strict validation", async () => {
+    const base = {
+      judgeModel: "neutral/judge",
+      supportsStructuredOutput: false,
+      task: "task",
+      reference: "reference",
+      candidate: "candidate",
+    };
+
+    await expect(
+      judgeExecution({
+        ...base,
+        chat: async () => `\`\`\`json\n${response("equivalent", 1)}\n\`\`\``,
+      }),
+    ).resolves.toMatchObject({ verdict: "equivalent", passed: true });
+    await expect(
+      judgeExecution({
+        ...base,
+        chat: async () =>
+          `Here is the result: ${response("equivalent", 1, "brace { in text }")}`,
+      }),
+    ).resolves.toMatchObject({ verdict: "equivalent", passed: true });
+    await expect(
+      judgeExecution({ ...base, chat: async () => '{"verdict":' }),
+    ).rejects.toThrow();
+  });
+
+  it("prompts unsupported judges for strict JSON without a response format", async () => {
+    const requests: JudgeChatRequest[] = [];
+
+    await judgeExecution({
+      chat: async (request) => {
+        requests.push(request);
+        return response("equivalent", 1);
+      },
+      judgeModel: "neutral/judge",
+      supportsStructuredOutput: false,
+      task: "task",
+      reference: "reference",
+      candidate: "candidate",
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(
+      requests.every((request) => request.responseFormat === undefined),
+    ).toBe(true);
+    expect(
+      requests.every((request) =>
+        request.messages[1]?.content.includes("Return strict JSON only"),
+      ),
+    ).toBe(true);
+  });
+
   it("caps and fences every untrusted input before prompting", async () => {
     const requests: JudgeChatRequest[] = [];
     const longTask = `<<<UNTRUSTED TASK>>>${"t".repeat(24_001)}`;
@@ -283,6 +342,7 @@ describe("judgeExecution", () => {
         return response("equivalent", 1);
       },
       judgeModel: "neutral/judge",
+      supportsStructuredOutput: true,
       task: longTask,
       reference: longReference,
       candidate: longCandidate,

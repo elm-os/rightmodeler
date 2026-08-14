@@ -112,22 +112,30 @@ bound to meet the quality floor.
 
 Candidate and reference families must both be known. Exclude a judge catalog entry when its
 family is missing, `unknown`, the candidate family, or the reference family; when its declared
-type is not `language`; or when declared output modalities omit text. If any catalog record
-advertises `structured_outputs`, the selected judge must advertise it too. With no eligible
-neutral family, fail with no judge rather than borrowing either evaluated family.
+type is not `language`; or when declared output modalities omit text. With no eligible neutral
+family, fail with no judge rather than borrowing either evaluated family.
 
 Rank eligible judges by the sum of equal-weight percentile signals for release/creation recency,
 context length, and prompt-plus-completion price. Missing signals score zero. Break equal sums by
 higher raw recency, then context, then price, then lexicographically larger model ID. Malformed or
-non-finite numeric catalog signals fail loudly.
+non-finite numeric catalog signals fail loudly. Preserve the full strongest-first ranking for
+run-level fallback.
 
 The judge runs two temperature-zero calls with reference and candidate positions swapped. It must
-return exactly `verdict`, `score`, and `justification` as strict JSON. Kernel scores, not the
-judge's numeric score, bind: `equivalent = 1`, `minor_drift = 0.6`, and `divergent = 0`. Only two
-`equivalent` verdicts pass. A position disagreement becomes `minor_drift`, fails, and records
-`orderConsistent: false`. The replay driver publishes the terminal execution only after both judge
-calls and the complete assessment are persisted, so an interrupted judge cell is retried rather
-than resumed as complete.
+return exactly `verdict`, `score`, and `justification` as strict JSON. Send a strict
+`response_format` JSON schema when the selected catalog entry advertises structured output;
+otherwise append an explicit strict-JSON-only instruction and omit `response_format`. Before the
+unchanged exact schema validation, extraction may remove one surrounding Markdown code fence and
+leading prose before the first balanced JSON object. Invalid or incomplete JSON still fails.
+
+Kernel scores, not the judge's numeric score, bind: `equivalent = 1`, `minor_drift = 0.6`, and
+`divergent = 0`. Only two `equivalent` verdicts pass. A position disagreement becomes
+`minor_drift`, fails, and records `orderConsistent: false`. After three consecutive
+`response_malformed` assessments, mark that model unusable with a warning and a zero-cost
+`SpendEvent` note, switch to the next-ranked eligible model, and re-judge only the affected pending
+cells. Try at most two judge models. The replay driver publishes the terminal execution only after
+complete judge evidence is persisted or both judges are exhausted, so an interrupted pending cell
+is retried rather than resumed as complete.
 
 ## Reading the final result
 

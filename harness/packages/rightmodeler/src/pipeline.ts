@@ -49,7 +49,7 @@ import {
 import {
   aggregate,
   evaluateGates,
-  pickJudge,
+  pickJudges,
   ReleaseGatePolicy,
   selectWinner,
   type AggregationFact,
@@ -2380,7 +2380,7 @@ async function executeReplay(
             `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
           );
         }
-        const judgeModel = pickJudge(
+        const rankedModels = pickJudges(
           catalog.map((model) => ({
             id: model.id,
             family: model.family,
@@ -2400,9 +2400,15 @@ async function executeReplay(
             candidateFamily,
             referenceFamily: [...referenceFamilies][0]!,
           },
-        );
-        return {
+        ).map((judgeModel) => ({
           judgeModel,
+          supportsStructuredOutput: catalog.find(({ id }) => id === judgeModel)!
+            .supportsStructuredOutput,
+        }));
+        return {
+          rankedModels,
+          warning: (code: string, message: string) =>
+            context.reporter.warning(code, message),
           chat: async (request: Parameters<JudgeChat>[0]) =>
             (
               await provider.chat({
@@ -2410,7 +2416,11 @@ async function executeReplay(
                 messages: request.messages.map((message) => ({ ...message })),
                 temperature: request.temperature,
                 maxOutputTokens: 256,
-                responseFormat: jsonValue(request.responseFormat),
+                ...(request.responseFormat === undefined
+                  ? {}
+                  : {
+                      responseFormat: jsonValue(request.responseFormat),
+                    }),
               })
             ).content,
         };
@@ -2957,10 +2967,13 @@ async function executeConfirm(
         continue;
       }
       const referenceFamily = modelFamily(configuredRecords[0]!.currentModel);
-      const judgeModel = pickJudge(judgeCatalog, {
+      const judgeModel = pickJudges(judgeCatalog, {
         candidateFamily: selectedCatalogEntry.family,
         referenceFamily,
-      });
+      })[0]!;
+      const judgeSupportsStructuredOutput = catalog.find(
+        ({ id }) => id === judgeModel,
+      )!.supportsStructuredOutput;
       const cases = confirmationCases(scrubbedRuns, targetStepId, familyId);
       if (cases === undefined) {
         blockConfirmation(
@@ -3026,6 +3039,7 @@ async function executeConfirm(
           })),
           judge: {
             judgeModel,
+            supportsStructuredOutput: judgeSupportsStructuredOutput,
             providerId: provider.providerId,
             chat: async (request) =>
               (
@@ -3034,7 +3048,11 @@ async function executeConfirm(
                   messages: request.messages.map((message) => ({ ...message })),
                   temperature: request.temperature,
                   maxOutputTokens: 256,
-                  responseFormat: jsonValue(request.responseFormat),
+                  ...(request.responseFormat === undefined
+                    ? {}
+                    : {
+                        responseFormat: jsonValue(request.responseFormat),
+                      }),
                 })
               ).content,
           },

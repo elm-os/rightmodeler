@@ -9,6 +9,7 @@ import {
   factsPrefix,
   FsStore,
   type Fact,
+  type JsonValue,
 } from "@rightmodeler/core";
 import { aggregate, type JudgeChat } from "@rightmodeler/kernel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,10 +33,14 @@ interface StubProvider {
   port: number;
   close(): Promise<void>;
   getHitCount(): number;
+  getRequests(): Array<Record<string, unknown>>;
 }
 
 interface StubProviderModule {
-  startStubProvider(options: { port: number }): Promise<StubProvider>;
+  startStubProvider(options: {
+    port: number;
+    malformedJudgeModels?: string[];
+  }): Promise<StubProvider>;
 }
 
 const stubModuleUrl = new URL(
@@ -55,9 +60,11 @@ const projectId = "replay-test";
 const runId = "run-1";
 const fakeKey = "fake-provider-key-never-persist";
 
-async function startStub(): Promise<StubProvider> {
+async function startStub(
+  options: { malformedJudgeModels?: string[] } = {},
+): Promise<StubProvider> {
   const fixture = (await import(stubModuleUrl)) as StubProviderModule;
-  return fixture.startStubProvider({ port: 0 });
+  return fixture.startStubProvider({ port: 0, ...options });
 }
 
 function baseUrl(stub: StubProvider): string {
@@ -919,6 +926,8 @@ describe("Mode A replay", () => {
     judgeChat = judge(),
     concurrency = 2,
     judgeModel = "neutral/judge",
+    rankedModels = [{ judgeModel, supportsStructuredOutput: true }],
+    warning?: (code: string, message: string) => void,
   ) {
     const catalog = await provider.listModels();
     const candidate = catalog.find((model) => model.id === "acme/small-1");
@@ -941,7 +950,11 @@ describe("Mode A replay", () => {
         },
       ],
       provider,
-      judge: { chat: judgeChat, judgeModel },
+      judge: {
+        chat: judgeChat,
+        rankedModels,
+        ...(warning === undefined ? {} : { warning }),
+      },
       store,
       budget,
       concurrency,
@@ -955,6 +968,7 @@ describe("Mode A replay", () => {
         messages: request.messages,
         temperature: request.temperature,
         maxOutputTokens: 256,
+        responseFormat: request.responseFormat as JsonValue,
       })
     ).content;
 
@@ -1022,6 +1036,179 @@ describe("Mode A replay", () => {
         orderConsistent: true,
       },
     });
+  });
+
+  it("passes the exact judge response format through to the provider", async () => {
+    await run([recordedCase()], providerJudge, 1, "zeta/judge-1", [
+      {
+        judgeModel: "zeta/judge-1",
+        supportsStructuredOutput: true,
+      },
+    ]);
+
+    const judgeRequests = stub
+      .getRequests()
+      .filter(({ model }) => model === "zeta/judge-1");
+    expect(judgeRequests).toHaveLength(2);
+    expect(judgeRequests[0]?.response_format).toEqual({
+      type: "json_schema",
+      json_schema: {
+        name: "verdict",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            verdict: {
+              type: "string",
+              enum: ["equivalent", "minor_drift", "divergent"],
+            },
+            score: { type: "number", minimum: 0, maximum: 1 },
+            justification: { type: "string" },
+          },
+          required: ["verdict", "score", "justification"],
+          additionalProperties: false,
+        },
+      },
+    });
+  });
+
+  it("switches after three malformed assessments and rejudges only affected cells", async () => {
+    await stub.close();
+    stub = await startStub({
+      malformedJudgeModels: ["zeta/judge-1"],
+    });
+    provider = createProvider({
+      providerId: "stub-provider",
+      baseUrl: baseUrl(stub),
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      maxConcurrency: 4,
+    });
+    const warning = vi.fn();
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    const result = await run(
+      cases,
+      providerJudge,
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+        },
+      ],
+      warning,
+    );
+    const facts = await readFacts(store);
+    const requests = stub.getRequests();
+    const notes = facts.filter(
+      (fact) =>
+        "actor" in fact &&
+        typeof fact.reconcilableTo === "object" &&
+        fact.reconcilableTo !== null &&
+        !Array.isArray(fact.reconcilableTo) &&
+        fact.reconcilableTo.judgeStatus === "unusable",
+    );
+
+    expect(result).toMatchObject({ completed: 4, blocked: [] });
+    expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(4);
+    expect(
+      facts
+        .filter((fact) => "assessmentId" in fact)
+        .every((fact) => fact.evaluatorId === "yotta/judge-2"),
+    ).toBe(true);
+    expect(
+      requests.filter(({ model }) => model === "acme/small-1"),
+    ).toHaveLength(4);
+    expect(
+      requests.filter(({ model }) => model === "zeta/judge-1"),
+    ).toHaveLength(3);
+    expect(
+      requests.filter(({ model }) => model === "yotta/judge-2"),
+    ).toHaveLength(8);
+    expect(warning).toHaveBeenCalledOnce();
+    expect(warning.mock.calls[0]?.[1]).toContain("zeta/judge-1");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({
+      reconcilableTo: {
+        judgeModel: "zeta/judge-1",
+        judgeStatus: "unusable",
+        note: "three_consecutive_response_malformed",
+        consecutiveAssessments: 3,
+      },
+    });
+  });
+
+  it("tries at most two systematically malformed judges", async () => {
+    await stub.close();
+    stub = await startStub({
+      malformedJudgeModels: ["zeta/judge-1", "yotta/judge-2"],
+    });
+    provider = createProvider({
+      providerId: "stub-provider",
+      baseUrl: baseUrl(stub),
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      maxConcurrency: 4,
+    });
+    const warning = vi.fn();
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    const result = await run(
+      cases,
+      providerJudge,
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+        },
+        {
+          judgeModel: "unused/judge-3",
+          supportsStructuredOutput: false,
+        },
+      ],
+      warning,
+    );
+    const facts = await readFacts(store);
+    const requests = stub.getRequests();
+
+    expect(result).toMatchObject({ completed: 4, blocked: [] });
+    expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(0);
+    expect(
+      facts.filter((fact) => "executionId" in fact && "caseId" in fact),
+    ).toHaveLength(4);
+    expect(
+      requests.filter(({ model }) => model === "acme/small-1"),
+    ).toHaveLength(4);
+    expect(
+      requests.filter(({ model }) => model === "zeta/judge-1"),
+    ).toHaveLength(3);
+    expect(
+      requests.filter(({ model }) => model === "yotta/judge-2"),
+    ).toHaveLength(3);
+    expect(requests.some(({ model }) => model === "unused/judge-3")).toBe(
+      false,
+    );
+    expect(warning).toHaveBeenCalledTimes(2);
   });
 
   it("bounds judge failure forensics to 300 characters", async () => {
@@ -1366,7 +1553,15 @@ describe("Mode A replay", () => {
         },
       ],
       provider: delayedProvider,
-      judge: { chat: judge(), judgeModel: "neutral/judge" },
+      judge: {
+        chat: judge(),
+        rankedModels: [
+          {
+            judgeModel: "neutral/judge",
+            supportsStructuredOutput: true,
+          },
+        ],
+      },
       store,
       budget,
       concurrency: 2,
