@@ -11,10 +11,8 @@ build/
 coverage/
 .ruff_cache/
 .venv/
-apps/pipeline/.venv/
 .claude/skills/rightmodeler/
 .claude/skills/cheaper-models/
-skills/rightmodeler/.venv/
 __pycache__/
 *.pyc
 outputs/

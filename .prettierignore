@@ -4,8 +4,6 @@ node_modules
 .next
 .turbo
 .cheaper-models
-apps/pipeline/.venv
-apps/pipeline/uv.lock
 pnpm-lock.yaml
 harness/fixtures/diff-cases/src/misformatted.ts
 harness/packages/rightmodeler/dist-bundle

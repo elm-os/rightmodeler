@@ -6,13 +6,13 @@ For the technical design, see [Architecture.md](Architecture.md).
 
 ## 1. Why
 
-`rightmodeler` today is a skill plus roughly 12,000 lines of Python across two engines that
-cannot reach each other in production.
+`rightmodeler` began as a skill plus roughly 12,000 lines of Python across two engines that
+could not reach each other in production.
 
-- `skills/rightmodeler/scripts/` (6,777 LOC) is what users install.
-- `apps/pipeline/` (3,167 LOC plus 2,138 LOC of tests) owns the evaluator families, scorecards,
+- `skills/rightmodeler/scripts/` (6,777 LOC, retired in Phase E) was what users installed.
+- `apps/pipeline/` (3,167 LOC plus 2,138 LOC of tests, retired in Phase E) owned the evaluator families, scorecards,
   release gates, remediation lifecycle, and corpus versioning.
-- `npx skills add elm-os/rightmodeler` ships only the first, while `workflow.py` requires the
+- `npx skills add elm-os/rightmodeler` shipped only the first, while `workflow.py` required the
   second to exist on disk.
 
 Engine 2 is therefore unreachable for every external user. That is a distribution bug, and it
@@ -231,7 +231,8 @@ invalidates caches and evidence.
 
 ## 11. Constraints this plan respects
 
-- `pnpm` for repository-level and TypeScript work, `uv` for Python while it remains.
+- `pnpm` for repository-level and TypeScript work. `uv` was used only before the Phase E
+  Python cutover.
 - Root commands stay the shared lifecycle entry points: `format`, `check`, `lint`, `build`,
   `check-types`. Run `pnpm format` and `pnpm check` after changes.
 - `packages/contracts` and `.rightmodeler/` remain the pipeline contract boundary. A new

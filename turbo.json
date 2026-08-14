@@ -24,12 +24,10 @@
     },
     "@rightmodeler/cli#check": {
       "dependsOn": ["^build", "^check"],
-      // Temporary Phase E2 parity inputs; shrink after the Phase E3 cutover removes the Python pipeline.
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/harness/docs/parity.md",
-        "$TURBO_ROOT$/harness/fixtures/canonicalization/**",
-        "$TURBO_ROOT$/apps/pipeline/**"
+        "$TURBO_ROOT$/harness/fixtures/canonicalization/**"
       ]
     },
     "check-types": {
