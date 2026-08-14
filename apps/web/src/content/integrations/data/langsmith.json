@@ -6,8 +6,8 @@
   "title": "LangSmith integration: replay traces on cheaper models",
   "description": "Export a LangSmith run tree: rightmodeler replays each step through cheaper models and measures every output against what you accepted.",
   "h1": "rightmodeler + LangSmith",
-  "lede": "Your LangSmith traces already hold the inputs and accepted outputs. rightmodeler replays them through cheaper models and reports candidate agreement, evidence, sample size, and abstentions step by step.",
-  "tldr": "rightmodeler reads exported LangSmith run trees with a dedicated adapter, replays each successful step through cheaper candidates on your selected replay provider, and judges every output against the one you already shipped, so a LangSmith-instrumented agent gets right-sized without new instrumentation.",
+  "lede": "Your LangSmith traces already hold the inputs and accepted outputs. rightmodeler replays them through cheaper models and reports candidate agreement, evidence, sample size, and abstentions step by step, scored by LangSmith itself when you point it there.",
+  "tldr": "rightmodeler has a dedicated LangSmith adapter. It recognizes exported runs by their trace_id, run_type, and dotted_order keys, maps the runs whose run_type is llm, and takes the model from extra.metadata.ls_model_name with messages from inputs.messages and the answer from outputs. LangSmith can also be the evaluator: pass --evaluator langsmith with a dataset and scorer names, and the built-in judge is used only when nothing better is reachable.",
   "steps": [
     {
       "label": "01 · Export",
@@ -16,33 +16,41 @@
     },
     {
       "label": "02 · Ingest",
-      "title": "Autodetected, then normalized",
-      "body": "The ingester recognizes LangSmith by its run_type, trace_id, and parent_run_id keys, walks the run tree, and folds every LLM, tool, and chain run into one per-step schema. LangGraph runs arrive the same way: each node becomes a step."
+      "title": "Autodetected, then mapped field by field",
+      "body": "The adapter recognizes LangSmith by trace_id, run_type, and dotted_order, then keeps the runs whose run_type is llm. Each one contributes its model from extra.metadata.ls_model_name (or extra.invocation_params.model), its messages from inputs.messages, its answer from outputs, and its usage from the run's prompt_tokens and completion_tokens. dotted_order orders the steps, and thread_id, session_id, or conversation_id becomes the trajectory when present."
     },
     {
-      "label": "03 · Replay + judge",
+      "label": "03 · Replay + score",
       "title": "Cheaper candidates, judged against what you shipped",
-      "body": "Single-shot steps are replayed through cheaper models from your selected replay provider on the exact inputs from your trace, and a judge from a different model family scores each candidate against the output you already shipped, with a quality floor of 0.90 by default. Steps with tool calls or loops are confirmed end-to-end by re-running your pipeline code instead."
+      "body": "Each kept run is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator langsmith, your own scorers grade the replays against the named dataset and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, two temperature-zero calls with the reference and candidate positions swapped. Verdicts are confidence lower bounds kept separate per evaluator kind."
     },
     {
-      "label": "04 · Approve",
-      "title": "A per-step report you approve",
-      "body": "The report lists every proposed swap with its evidence and confidence, and the TUI walks you through approve, reject, or hold for each step, never all-or-nothing. Where the evidence is weak, it abstains and the current model stays."
+      "label": "04 · Report + apply",
+      "title": "A per-step report, then a pull request",
+      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. Thin evidence produces an abstention with a named reason rather than a recommendation. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI and review comments, and rollback restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
-    "intro": "Install once, then point the skill at an exported run tree. Nothing connects to your LangSmith account; the audit runs on files you export.",
+    "intro": "Install once, then point the CLI at an exported run tree. The audit reads the file offline; your LangSmith key is needed only if you choose LangSmith as the evaluator or import one of its datasets.",
     "commands": [
       {
-        "comment": "# inside Claude Code, hand the export to the skill",
-        "command": "claude \"run the rightmodeler skill on ./traces/langsmith-run.json\""
+        "comment": "# preview the pipeline against the export, without spending",
+        "command": "npx rightmodeler init --plan --traces ./traces/langsmith-run.json --repo ."
+      },
+      {
+        "comment": "# score the replays with your own LangSmith scorers",
+        "command": "npx rightmodeler init --traces ./traces/langsmith-run.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --evaluator langsmith --evaluator-project-id $DATASET --evaluator-scorer correctness"
+      },
+      {
+        "comment": "# or build the corpus from a curated LangSmith dataset",
+        "command": "npx rightmodeler corpus import --from langsmith:$DATASET"
       }
     ]
   },
   "reads": [
     {
-      "field": "step kind",
-      "source": "run_type"
+      "field": "trajectory",
+      "source": "metadata.thread_id, else trace_id"
     },
     {
       "field": "model",
@@ -53,73 +61,75 @@
       "source": "inputs.messages"
     },
     {
-      "field": "tool calls",
-      "source": "child tool runs"
-    },
-    {
-      "field": "tool results",
-      "source": "tool run outputs"
-    },
-    {
-      "field": "available tools",
-      "source": "extra.invocation_params.tools"
+      "field": "output",
+      "source": "outputs"
     },
     {
       "field": "token usage",
-      "source": "token_usage.*"
+      "source": "prompt_tokens, completion_tokens"
     },
     {
-      "field": "success signal",
-      "source": "feedback_stats, error"
+      "field": "step family",
+      "source": "name"
+    },
+    {
+      "field": "ordering",
+      "source": "dotted_order"
     }
   ],
-  "detection": "run_type · trace_id · parent_run_id",
+  "detection": "trace_id · run_type · dotted_order",
   "useCases": [
     {
       "title": "Right-size a LangGraph agent",
-      "body": "Every node in a LangGraph run lands as its own step, so the audit shows which nodes genuinely need a frontier model and which are paying for capability they never use."
+      "body": "LangGraph runs are recorded as LangSmith runs, so each node that calls a model lands as its own step and groups into a step family by name. The audit shows which families genuinely need a frontier model and which are paying for capability they never use."
+    },
+    {
+      "title": "Score the audit with the evaluators you already wrote",
+      "body": "Pass --evaluator langsmith with the dataset and scorer names you already use, and those scorers decide whether a candidate passed rather than a judge model you did not write. Metric names, rubric versions, and the provider's own pass decision are kept on each assessment."
+    },
+    {
+      "title": "Build the corpus from a curated dataset",
+      "body": "rightmodeler corpus import --from langsmith:dataset builds the replay corpus from a curated dataset instead of raw runs. Curated references are usually human-verified, and reference correctness caps every number downstream, so a verified corpus raises what the audit can prove."
     },
     {
       "title": "Measure a candidate before you change a model",
-      "body": "Instead of trialing a cheaper model in production and watching dashboards, replay last week's run trees and read the verdict per step, judged against outputs your users already accepted."
-    },
-    {
-      "title": "Compare candidate replay prices",
-      "body": "The audit prices candidate calls through your selected replay provider and tests each cheaper option against the outputs you already shipped. It does not derive missing historical costs from the export."
+      "body": "Instead of trialing a cheaper model in production and watching dashboards, replay last week's run trees and read the verdict per step family, judged against outputs your users already accepted."
     }
   ],
   "limits": [
-    "It reads exported run trees as JSON or JSONL files. It does not connect to your LangSmith account, poll projects, or watch new runs.",
-    "Steps with tool calls or loops are not judged from the trace alone; they are confirmed by re-running your pipeline end-to-end with the candidate model injected.",
-    "High-risk steps like auth, payments, and migrations are flagged and left on the current model, and weak evidence means abstain rather than a recommendation.",
+    "Only runs whose run_type is llm become steps. Chain, tool, and retriever runs are read for detection, then dropped with a recorded reason rather than replayed.",
+    "An llm run has to carry both inputs and outputs, and a model in extra.metadata.ls_model_name or extra.invocation_params.model. A run missing either is dropped with its reason instead of guessed at.",
+    "It reads exported run trees as JSON or JSONL files. It does not connect to your LangSmith account, poll projects, or watch new runs; the evaluator and corpus-import paths are the only ones that call LangSmith, and only when you ask for them.",
+    "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
+    "Selection is split-corpus. Candidates are shortlisted on one half of the cases, and the winner has to clear the configured quality floor again on held-out cases against a multiplicity-corrected lower bound.",
     "It is a report, not a runtime gateway. LangSmith keeps observing your agent; rightmodeler never sits in the request path."
   ],
   "faq": [
     {
       "q": "How do I get my traces out of LangSmith?",
-      "a": "Use the Python SDK, where client.read_run(run_id, load_child_runs=True) returns the full run tree, or run a bulk export from your project, and save the result as JSON or JSONL. Point the skill at the file or folder; the format is autodetected."
+      "a": "Use the Python SDK, where client.read_run(run_id, load_child_runs=True) returns the full run tree, or run a bulk export from your project, and save the result as JSON or JSONL. Pass the file or folder with --traces; the format is autodetected from the trace_id, run_type, and dotted_order keys."
     },
     {
-      "q": "Does rightmodeler replace LangSmith?",
-      "a": "No. LangSmith observes your agent in production; rightmodeler is an offline audit that measures cheaper candidates against the outputs you accepted and reports the evidence. They work on the same traces."
+      "q": "How do I make LangSmith the evaluator?",
+      "a": "Pass --evaluator langsmith with --evaluator-project-id naming the dataset and at least one --evaluator-scorer. The key comes from LANGSMITH_API_KEY unless --evaluator-api-key-env names another variable. Add --evaluator-gate-metric when several scorers are configured, and --evaluator-gate-threshold when the evaluator returns no pass decision of its own."
     },
     {
       "q": "Does it work with LangGraph?",
-      "a": "Yes. LangGraph runs are recorded as LangSmith run trees, and each node becomes a step in the audit. For graph steps that call tools or loop, the skill re-runs your pipeline end-to-end, and it can even find the entrypoint from langgraph.json, so cascade effects surface before you swap."
+      "a": "Yes. LangGraph runs are recorded as LangSmith runs, and every node that calls a model becomes a step grouped by its run name. Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in, so cascade effects surface before you swap."
     },
     {
       "q": "Which candidate models does it try?",
-      "a": "Cheaper models from your selected replay provider's live catalog that support what the step actually needs (tool calling, structured output, enough context) and are priced strictly below the current model. Replays run with your own provider key, and a judge from a different model family scores each output."
+      "a": "Models from the live catalog of whichever OpenAI-compatible endpoint you pass with --base-url: cheaper than the incumbent, and capable of what the step needs. Zero-priced models are left out unless you pass --include-free, and the built-in judge is chosen from a family that is neither the candidate's nor the reference's."
     },
     {
       "q": "Does my trace data leave my machine?",
-      "a": "Replays send step inputs to candidate models through your selected replay provider with your own key, the same shape of call your agent already makes to a provider. There is no rightmodeler server, and nothing else holds your traces."
+      "a": "Replays send step inputs to candidate models through the endpoint you configured, under your own key, the same shape of call your agent already makes. There is no rightmodeler server, and LangSmith is contacted only by the evaluator or corpus-import commands when you choose them."
     },
     {
       "q": "Will it always find savings?",
-      "a": "No, and that's deliberate. When the evidence is weak or a step is high-risk, the audit abstains and the current model stays. A tool that always finds a swap is not measuring anything."
+      "a": "No, and that is deliberate. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor again on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],
-  "related": ["langfuse", "phoenix", "openrouter"],
+  "related": ["langfuse", "phoenix", "weave"],
   "cta": "github"
 }

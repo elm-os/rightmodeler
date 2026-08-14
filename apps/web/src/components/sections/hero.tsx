@@ -1,7 +1,7 @@
 "use client";
 
 // The hero — a thesis, not a claim. The most characteristic artifact in rightmodeler's world is
-// the per-step approval TUI where a human ratifies each downgrade against evidence, so THAT is the
+// the per-step swap plan where a human ratifies each downgrade against evidence, so THAT is the
 // hero: a faithful, monochrome `rightmodeler · per-step approval` ledger on an opaque warm-sand
 // window, with the HeroGradient reduced to paper matting in the gutters. One bold move only — an
 // ink "reading head" caret that walks the pipeline as the ledger fills and comes to rest on the
@@ -35,7 +35,7 @@ type Flag = { label: string; strong?: boolean } | null;
 
 type LedgerRow = {
   key: string;
-  glyph: string; // ✓ ⚙ ✕ — real Textual status glyphs, monochrome
+  glyph: string; // ✓ ⚙ ✕ — terminal status glyphs, monochrome
   status: "approved" | "pending" | "abstained";
   srStatus: string; // spoken status (glyph alone is not accessible)
   step: string;
@@ -60,8 +60,8 @@ const ROWS: LedgerRow[] = [
     srStatus: "Approved",
     step: "1",
     family: "pr_summary",
-    from: "gpt-4.1",
-    to: "gpt-4o-mini",
+    from: "gpt-5.6",
+    to: "gpt-5.4",
     save: "72%",
     quality: ILLUSTRATIVE_SCORECARD.approved,
     evidence: "reference+judge",
@@ -74,7 +74,7 @@ const ROWS: LedgerRow[] = [
     srStatus: "Pending, cascade risk",
     step: "2",
     family: "tool_agent",
-    from: "claude-opus-4",
+    from: "claude-opus-5",
     to: "llama-3.3-70b",
     save: "41%",
     quality: ILLUSTRATIVE_SCORECARD.pending,
@@ -88,8 +88,8 @@ const ROWS: LedgerRow[] = [
     srStatus: "Approved",
     step: "3",
     family: "json_extraction",
-    from: "gpt-4o",
-    to: "gpt-4o-mini",
+    from: "gpt-5.4",
+    to: "qwen3.7-flash",
     save: "68%",
     quality: ILLUSTRATIVE_SCORECARD.deterministic,
     evidence: "deterministic",
@@ -102,7 +102,7 @@ const ROWS: LedgerRow[] = [
     srStatus: "Approved",
     step: "4",
     family: "sql_generation",
-    from: "gpt-4o",
+    from: "gpt-5.4",
     to: "deepseek-chat",
     save: "55%",
     quality: ILLUSTRATIVE_SCORECARD.alternative,
@@ -116,12 +116,12 @@ const ROWS: LedgerRow[] = [
     srStatus: "Abstained",
     step: "5",
     family: "auth_code_edit",
-    from: "gpt-4.1",
+    from: "gpt-5.6",
     to: "·",
     save: "·",
     quality: "·",
     evidence: "none",
-    flag: { label: "HIGH-RISK · abstain", strong: true },
+    flag: { label: "NO EVIDENCE · abstain", strong: true },
     dim: true,
   },
 ];
@@ -215,8 +215,8 @@ export function Hero() {
 }
 
 // ── ApprovalTable ─────────────────────────────────────────────────────────────────────────────
-// A faithful HTML/CSS re-creation of the real Textual TUI: opaque warm-sand window, ash-border
-// hairlines, strict monochrome status glyphs (no traffic-light dots, no semantic hue). Rows
+// A faithful HTML/CSS rendering of the CLI's per-step swap plan: opaque warm-sand window,
+// ash-border hairlines, strict monochrome status glyphs (no traffic-light dots, no semantic hue). Rows
 // stagger in on load (50ms) as the ledger populates; a single ink reading-head caret walks down
 // the status gutter and rests on the abstain row. Nothing here fakes a live measurement — it is a
 // still artifact with one explanatory entrance.
@@ -237,7 +237,7 @@ function ApprovalTable() {
       </div>
 
       {/* ── Mobile ledger (< sm): the same five steps as stacked records, so nothing scrolls
-          sideways on a phone. The wide TUI grid below is desktop-only; here each row carries the
+          sideways on a phone. The wide ledger grid below is desktop-only; here each row carries the
           whole verdict — status, family, the model swap, and the numbers that back it — and the
           abstain row keeps its de-emphasis + emphasised flag so the "it declines to gamble"
           payoff still lands. A static ink marker stands in for the desktop reading-head caret. */}
@@ -330,7 +330,7 @@ function ApprovalTable() {
       </div>
 
       {/* Horizontal scroll lane (>= sm): the mono grid keeps its columns and scrolls like a real
-          wide TUI on tablet/desktop; the page body itself never scrolls sideways. */}
+          wide terminal ledger on tablet/desktop; the page body itself never scrolls sideways. */}
       <div className="hidden overflow-x-auto sm:block">
         <div className="w-max px-4">
           {/* Column headers */}
