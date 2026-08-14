@@ -10,6 +10,7 @@ import {
   computeRunSpecDigest,
   confirmPlanKey,
   executionSchema,
+  factSchema,
   factsPrefix,
   FsStore,
   type Execution,
@@ -34,7 +35,7 @@ import type {
   ReplayModeBResult,
 } from "./driver-modeb.js";
 import { writeReplayFact } from "./driver.js";
-import type { ModelCatalogEntry } from "./provider.js";
+import { createProvider, type ModelCatalogEntry } from "./provider.js";
 import type { ReplayStep } from "./shortlist.js";
 
 const temporaryDirectories: string[] = [];
@@ -409,6 +410,20 @@ async function cascadeFindings(store: FsStore) {
   return findings;
 }
 
+async function facts(store: FsStore) {
+  const values = [];
+  for (const key of await store.list(factsPrefix(projectId))) {
+    const entry = await store.get(key);
+    if (entry === null) throw new Error(`Missing fact: ${key}`);
+    values.push(
+      factSchema.parse(
+        JSON.parse(Buffer.from(entry.body).toString("utf8")) as unknown,
+      ),
+    );
+  }
+  return values;
+}
+
 function pairFailure(members: ReadonlySet<string>): boolean {
   return members.has("classify") && members.has("lookup");
 }
@@ -638,6 +653,126 @@ describe("confirmSwapSet", () => {
       ]),
     );
   });
+
+  it.each([
+    ["empty body", "STUB_JUDGE_EMPTY_OUTPUT", "response_malformed"],
+    ["truncated JSON", "STUB_JUDGE_TRUNCATED_JSON", "response_malformed"],
+    ["non-JSON prose", "STUB_JUDGE_NON_JSON", "response_malformed"],
+    ["provider 500", "STUB_JUDGE_PROVIDER_ERROR", "provider_error"],
+  ] as const)(
+    "mutation: removing the confirm judge boundary rethrows; %s is excluded and its run set continues",
+    async (_fault, marker, judgeFailureKind) => {
+      const stub = await startStub();
+      try {
+        process.env[apiKeyEnv] = "fixture-host-key";
+        const provider = createProvider({
+          providerId: "stub-provider",
+          baseUrl: `http://127.0.0.1:${stub.port}/v1`,
+          apiKeyEnv,
+        });
+        const runner = fakeRunner(() => false);
+        const context = await testContext(runner, 1);
+        const result = await confirmSwapSet({
+          ...context.input,
+          family: {
+            ...context.input.family,
+            stepOrder: ["answer"],
+          },
+          swapSet: context.input.swapSet.filter(
+            ({ stepId }) => stepId === "answer",
+          ),
+          cases: context.input.cases.slice(0, 2).map((recordedCase, index) => ({
+            ...recordedCase,
+            task: index === 0 ? marker : "HEALTHY_CONFIRM_JUDGE",
+          })),
+          modeB: {
+            ...context.input.modeB,
+            judge: {
+              chat: async (request) =>
+                (
+                  await provider.chat({
+                    model: request.model,
+                    messages: request.messages,
+                    temperature: request.temperature,
+                    maxOutputTokens: 256,
+                  })
+                ).content,
+              judgeModel: "zeta/judge-1",
+              providerId: provider.providerId,
+            },
+          },
+          policy: {
+            ...twoCaseIsolationPolicy,
+            gatePolicyVersion: "gate-confirm-judge-failure",
+            qualityFloor: 0.2,
+          },
+        });
+        const storedFacts = await facts(context.store);
+        const executions = storedFacts.filter(
+          (fact) => executionSchema.safeParse(fact).success,
+        );
+        const assessments = storedFacts.filter(
+          (fact) => "assessmentId" in fact,
+        );
+        const failedExecution = executions.find(
+          (execution) => "caseId" in execution && execution.caseId === "case-0",
+        );
+        const forensic = storedFacts.find(
+          (fact) =>
+            "actor" in fact &&
+            typeof fact.reconcilableTo === "object" &&
+            fact.reconcilableTo !== null &&
+            !Array.isArray(fact.reconcilableTo) &&
+            fact.reconcilableTo.judgeFailureKind === judgeFailureKind,
+        );
+
+        expect(result).toMatchObject({
+          verdict: "inconclusive",
+          runSetsUsed: 1,
+        });
+        expect(runner.calls()).toBe(1);
+        expect(assessments).toHaveLength(1);
+        expect(forensic).toMatchObject({
+          actor: "judge",
+          phase: "confirm",
+          provider: "stub-provider",
+          reconcilableTo: {
+            executionId:
+              failedExecution !== undefined && "executionId" in failedExecution
+                ? failedExecution.executionId
+                : undefined,
+            judgeModel: "zeta/judge-1",
+            assessmentAbsentReason: "judge_evidence_incomplete",
+            judgeFailureKind,
+            errorDetail: {
+              judgeModel: "zeta/judge-1",
+            },
+          },
+        });
+        if (
+          forensic === undefined ||
+          !("actor" in forensic) ||
+          typeof forensic.reconcilableTo !== "object" ||
+          forensic.reconcilableTo === null ||
+          Array.isArray(forensic.reconcilableTo) ||
+          typeof forensic.reconcilableTo.errorDetail !== "object" ||
+          forensic.reconcilableTo.errorDetail === null ||
+          Array.isArray(forensic.reconcilableTo.errorDetail)
+        ) {
+          throw new Error("Expected confirm judge failure forensics");
+        }
+        expect(forensic.reconcilableTo.errorDetail.message).toEqual(
+          expect.any(String),
+        );
+        expect(
+          String(forensic.reconcilableTo.errorDetail.message).length,
+        ).toBeLessThanOrEqual(300);
+      } finally {
+        await stub.close();
+      }
+    },
+    testTimeoutMs,
+  );
 
   it("names the next required run-set cap and leaves a resumable frontier", async () => {
     const runner = fakeRunner(pairFailure);

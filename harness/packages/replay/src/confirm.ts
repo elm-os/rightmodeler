@@ -12,6 +12,7 @@ import {
   type Assessment,
   type CascadeFinding,
   type Execution,
+  type SpendEvent,
   type Store,
 } from "@rightmodeler/core";
 import {
@@ -35,6 +36,7 @@ import {
   type ReplayModeBResult,
 } from "./driver-modeb.js";
 import { writeReplayFact } from "./driver.js";
+import { ProviderConfigurationError } from "./provider.js";
 import type { ReplayStep } from "./shortlist.js";
 
 type PlanItemStatus = "pending" | "running" | "pass" | "fail";
@@ -119,6 +121,7 @@ export interface ConfirmSwapSetResult {
 interface FactsIndex {
   readonly executions: readonly Execution[];
   readonly assessments: readonly Assessment[];
+  readonly spendEvents: readonly SpendEvent[];
   readonly cascadeFindings: readonly CascadeFinding[];
 }
 
@@ -510,6 +513,7 @@ function candidateId(policy: ModeBSwapPolicy): string {
 async function readFacts(store: Store, projectId: string): Promise<FactsIndex> {
   const executions: Execution[] = [];
   const assessments: Assessment[] = [];
+  const spendEvents: SpendEvent[] = [];
   const cascadeFindings: CascadeFinding[] = [];
   for (const key of await store.list(factsPrefix(projectId))) {
     const entry = await store.get(key);
@@ -521,10 +525,12 @@ async function readFacts(store: Store, projectId: string): Promise<FactsIndex> {
     if (execution.success) executions.push(execution.data);
     const assessment = assessmentSchema.safeParse(fact);
     if (assessment.success) assessments.push(assessment.data);
+    const spendEvent = spendEventSchema.safeParse(fact);
+    if (spendEvent.success) spendEvents.push(spendEvent.data);
     const cascadeFinding = cascadeFindingSchema.safeParse(fact);
     if (cascadeFinding.success) cascadeFindings.push(cascadeFinding.data);
   }
-  return { executions, assessments, cascadeFindings };
+  return { executions, assessments, spendEvents, cascadeFindings };
 }
 
 function expectedExecutions(
@@ -555,13 +561,33 @@ function deterministicFactId(
   return `${kind}-${computeRunSpecDigest([kind, ...parts])}`;
 }
 
+function hasJudgeEvidenceFailure(
+  spendEvents: readonly SpendEvent[],
+  executionId: string,
+  key: string,
+): boolean {
+  return spendEvents.some((event) => {
+    if (event.actor !== "judge" || event.phase !== "confirm") return false;
+    if (!isRecord(event.reconcilableTo)) return false;
+    return (
+      event.reconcilableTo.executionId === executionId &&
+      event.reconcilableTo.subsetKey === key &&
+      event.reconcilableTo.assessmentAbsentReason ===
+        "judge_evidence_incomplete" &&
+      (event.reconcilableTo.judgeFailureKind === "response_malformed" ||
+        event.reconcilableTo.judgeFailureKind === "provider_error")
+    );
+  });
+}
+
 async function assessExecution(
   input: ConfirmSwapSetInput,
   recordedCase: ModeBCase,
   execution: Execution,
   key: string,
   existing: readonly Assessment[],
-): Promise<Assessment | "ambiguous"> {
+  spendEvents: readonly SpendEvent[],
+): Promise<Assessment | "ambiguous" | "judge_evidence_incomplete"> {
   const matches = existing.filter(
     (assessment) =>
       assessment.executionId === execution.executionId &&
@@ -569,48 +595,101 @@ async function assessExecution(
   );
   if (matches.length > 1) return "ambiguous";
   if (matches[0] !== undefined) return matches[0];
+  if (hasJudgeEvidenceFailure(spendEvents, execution.executionId, key)) {
+    return "judge_evidence_incomplete";
+  }
 
   let invocation = 0;
-  const judged = await judgeExecution({
-    chat: async (request) => {
-      invocation += 1;
-      try {
-        return await input.modeB.judge.chat(request);
-      } finally {
-        const spendId = randomUUID();
-        await writeReplayFact(
-          input.store,
-          input.budget.modeB.projectId,
-          spendId,
-          spendEventSchema.parse({
-            actor: "judge",
-            phase: "confirm",
-            costUsd: 0,
-            provider:
-              input.modeB.judge.providerId ??
-              input.modeB.input.egress.providerId,
-            reconcilableTo: {
-              executionId: execution.executionId,
-              judgeModel: input.modeB.judge.judgeModel,
-              invocation,
-              costUnavailable: true,
-              subsetKey: key,
-            },
-          }),
-        );
-      }
-    },
-    judgeModel: input.modeB.judge.judgeModel,
-    task: recordedCase.task,
-    reference:
-      typeof recordedCase.referenceOutput === "string"
-        ? recordedCase.referenceOutput
-        : JSON.stringify(recordedCase.referenceOutput),
-    candidate:
-      typeof execution.finalOutput === "string"
-        ? execution.finalOutput
-        : JSON.stringify(execution.finalOutput),
-  });
+  let judgeFailureKind: "response_malformed" | "provider_error" =
+    "response_malformed";
+  let judgePersistenceFailure: unknown;
+  let judged;
+  try {
+    judged = await judgeExecution({
+      chat: async (request) => {
+        invocation += 1;
+        try {
+          return await input.modeB.judge.chat(request);
+        } catch (error) {
+          if (error instanceof ProviderConfigurationError) throw error;
+          judgeFailureKind = "provider_error";
+          throw error;
+        } finally {
+          const spendId = randomUUID();
+          try {
+            await writeReplayFact(
+              input.store,
+              input.budget.modeB.projectId,
+              spendId,
+              spendEventSchema.parse({
+                actor: "judge",
+                phase: "confirm",
+                costUsd: 0,
+                provider:
+                  input.modeB.judge.providerId ??
+                  input.modeB.input.egress.providerId,
+                reconcilableTo: {
+                  executionId: execution.executionId,
+                  judgeModel: input.modeB.judge.judgeModel,
+                  invocation,
+                  costUnavailable: true,
+                  subsetKey: key,
+                },
+              }),
+            );
+          } catch (persistenceError) {
+            judgePersistenceFailure = persistenceError;
+            throw persistenceError;
+          }
+        }
+      },
+      judgeModel: input.modeB.judge.judgeModel,
+      task: recordedCase.task,
+      reference:
+        typeof recordedCase.referenceOutput === "string"
+          ? recordedCase.referenceOutput
+          : JSON.stringify(recordedCase.referenceOutput),
+      candidate:
+        typeof execution.finalOutput === "string"
+          ? execution.finalOutput
+          : JSON.stringify(execution.finalOutput),
+    });
+  } catch (error) {
+    if (
+      error instanceof ProviderConfigurationError ||
+      judgePersistenceFailure !== undefined
+    ) {
+      throw error;
+    }
+    const failureId = randomUUID();
+    await writeReplayFact(
+      input.store,
+      input.budget.modeB.projectId,
+      failureId,
+      spendEventSchema.parse({
+        actor: "judge",
+        phase: "confirm",
+        costUsd: 0,
+        provider:
+          input.modeB.judge.providerId ?? input.modeB.input.egress.providerId,
+        reconcilableTo: {
+          executionId: execution.executionId,
+          judgeModel: input.modeB.judge.judgeModel,
+          assessmentAbsentReason: "judge_evidence_incomplete",
+          judgeFailureKind,
+          errorDetail: {
+            message: (error instanceof Error
+              ? error.message
+              : String(error)
+            ).slice(0, 300),
+            judgeModel: input.modeB.judge.judgeModel,
+          },
+          subsetKey: key,
+        },
+      }),
+    );
+    return "judge_evidence_incomplete";
+  }
   const assessmentId = deterministicFactId(
     "confirm-assessment",
     execution.executionId,
@@ -690,9 +769,15 @@ async function outcomeFromFacts(
       execution,
       key,
       facts.assessments,
+      facts.spendEvents,
     );
     if (assessment === "ambiguous") ambiguous = true;
-    else {
+    else if (assessment === "judge_evidence_incomplete") {
+      observations.push({
+        trajectoryId: execution.trajectoryId,
+        passed: false,
+      });
+    } else {
       observations.push({
         trajectoryId: execution.trajectoryId,
         passed: assessment.passed,
