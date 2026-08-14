@@ -26,6 +26,7 @@ import {
   type RecordedCase,
   type ReplayStep,
 } from "./index.js";
+import { toWireMessages } from "./driver.js";
 
 interface StubProvider {
   port: number;
@@ -174,6 +175,25 @@ describe("provider client", () => {
     delete process.env.REPLAY_TEST_API_KEY;
 
     await expect(provider.listModels()).rejects.toThrow("REPLAY_TEST_API_KEY");
+  });
+
+  it("rejects internal parts arrays at the strict stub boundary", async () => {
+    const response = await fetch(`${baseUrl(stub)}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "acme/small-1",
+        messages: [
+          {
+            role: "user",
+            parts: [{ type: "text", content: "not wire-shaped" }],
+          },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.text()).resolves.toContain("messages[0].parts");
   });
 });
 
@@ -708,7 +728,7 @@ describe("shortlist", () => {
     ]);
   });
 
-  it("keeps explicitly free models and excludes unpriced models", () => {
+  it("excludes explicitly free models by default and reports the exclusion", () => {
     const result = shortlist(
       [step({ currentModel: "vendor/current" })],
       [
@@ -722,12 +742,74 @@ describe("shortlist", () => {
       ],
     );
 
-    expect(result[0]?.candidates.map((candidate) => candidate.id)).toContain(
-      "vendor/free",
-    );
+    expect(
+      result[0]?.candidates.map((candidate) => candidate.id),
+    ).not.toContain("vendor/free");
+    expect(result[0]?.droppedFreeModels).toBe(1);
     expect(
       result[0]?.candidates.map((candidate) => candidate.id),
     ).not.toContain("vendor/unpriced");
+  });
+
+  it("includes explicitly free models only when opted in", () => {
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        ...catalog,
+        {
+          ...catalog[1]!,
+          id: "vendor/free",
+          pricing: { input: 0, output: 0 },
+        },
+      ],
+      { includeFreeModels: true },
+    );
+
+    expect(result[0]?.candidates.map((candidate) => candidate.id)).toContain(
+      "vendor/free",
+    );
+    expect(result[0]?.droppedFreeModels).toBe(0);
+  });
+});
+
+describe("toWireMessages", () => {
+  it("prepends the recorded system prompt and converts internal text parts", () => {
+    expect(
+      toWireMessages(
+        [
+          {
+            role: "user",
+            parts: [{ type: "text", content: "Summarize this case." }],
+          },
+        ],
+        "Follow the recorded instruction.",
+      ),
+    ).toEqual([
+      { role: "system", content: "Follow the recorded instruction." },
+      { role: "user", content: "Summarize this case." },
+    ]);
+  });
+
+  it("joins multiple text parts with newlines", () => {
+    expect(
+      toWireMessages([
+        {
+          role: "assistant",
+          parts: [
+            { type: "text", content: "First" },
+            { type: "text", content: "Second" },
+          ],
+        },
+      ]),
+    ).toEqual([{ role: "assistant", content: "First\nSecond" }]);
+  });
+
+  it("preserves an already-wire tool message", () => {
+    expect(
+      toWireMessages([
+        { role: "tool", tool_call_id: "call-1", content: "delivered" },
+      ]),
+    ).toEqual([{ role: "tool", tool_call_id: "call-1", content: "delivered" }]);
   });
 });
 
@@ -770,7 +852,12 @@ describe("Mode A replay", () => {
       steps: [step()],
       cases,
       candidates: [
-        { stepId: "step-1", candidates: [candidate], droppedByTop: 0 },
+        {
+          stepId: "step-1",
+          candidates: [candidate],
+          droppedByTop: 0,
+          droppedFreeModels: 0,
+        },
       ],
       provider,
       judge: { chat: judgeChat, judgeModel: "neutral/judge" },
@@ -979,7 +1066,12 @@ describe("Mode A replay", () => {
         }),
       ],
       candidates: [
-        { stepId: "step-1", candidates: [candidate], droppedByTop: 0 },
+        {
+          stepId: "step-1",
+          candidates: [candidate],
+          droppedByTop: 0,
+          droppedFreeModels: 0,
+        },
       ],
       provider: delayedProvider,
       judge: { chat: judge(), judgeModel: "neutral/judge" },
@@ -995,7 +1087,7 @@ describe("Mode A replay", () => {
     });
   });
 
-  it("replays the recorded request verbatim with only the model swapped", async () => {
+  it("converts the recorded request to provider wire messages with only the model swapped", async () => {
     const delegate = provider;
     const requests: Parameters<ProviderClient["chat"]>[0][] = [];
     provider = {
@@ -1009,8 +1101,17 @@ describe("Mode A replay", () => {
     const inputCase = recordedCase({
       system: "Exact system",
       messages: [
-        { role: "user", content: "Exact user" },
-        { role: "assistant", content: "Exact assistant" },
+        {
+          role: "user",
+          parts: [{ type: "text", content: "Exact user" }],
+        },
+        {
+          role: "assistant",
+          parts: [
+            { type: "text", content: "Exact" },
+            { type: "text", content: "assistant" },
+          ],
+        },
       ],
       temperature: 0.73,
     });
@@ -1023,7 +1124,7 @@ describe("Mode A replay", () => {
       messages: [
         { role: "system", content: "Exact system" },
         { role: "user", content: "Exact user" },
-        { role: "assistant", content: "Exact assistant" },
+        { role: "assistant", content: "Exact\nassistant" },
       ],
       temperature: 0.73,
       maxOutputTokens: inputCase.maxOutputTokens,
@@ -1135,7 +1236,12 @@ describe("Mode A replay", () => {
       steps: [step()],
       cases: [recordedCase()],
       candidates: [
-        { stepId: "step-1", candidates: [candidate], droppedByTop: 0 },
+        {
+          stepId: "step-1",
+          candidates: [candidate],
+          droppedByTop: 0,
+          droppedFreeModels: 0,
+        },
       ],
       provider,
       store,
@@ -1170,34 +1276,23 @@ describe("Mode A replay", () => {
     expect(await readFacts(store)).toHaveLength(factsAfterFirstRun.length);
   });
 
-  it("redacts an echoed authorization key and never persists it", async () => {
-    const errors: Error[] = [];
-    await run([recordedCase()]);
-    try {
-      const failingProvider = createProvider({
-        providerId: "stub-provider",
-        baseUrl: baseUrl(stub),
-        apiKeyEnv: "REPLAY_TEST_API_KEY",
-      });
-      await failingProvider.chat({
-        model: "acme/small-1",
-        messages: [{ role: "user", content: "not found" }],
-        headers: { "x-stub-echo-auth": "true" },
-      });
-    } catch (error) {
-      if (error instanceof Error) errors.push(error);
-    }
-
+  it("persists a bounded provider 400 excerpt with the authorization key redacted", async () => {
+    await run([recordedCase({ headers: { "x-stub-echo-auth": "true" } })]);
     const facts = await readFacts(store);
-    const serialized = JSON.stringify({
-      facts,
-      errors: errors.map((error) => ({
-        ...error,
-        name: error.name,
-        message: error.message,
-      })),
+    const attempt = facts.find(
+      (fact) => "attemptId" in fact && fact.streamOutcome === "provider_error",
+    );
+    expect(attempt).toMatchObject({
+      errorDetail: {
+        status: 400,
+        bodyExcerpt: expect.stringContaining("[redacted]"),
+      },
     });
-    expect(errors[0]?.message).toContain("[redacted]");
+    if (attempt === undefined || !("attemptId" in attempt)) {
+      throw new Error("Expected a provider error attempt");
+    }
+    expect(attempt.errorDetail?.bodyExcerpt.length).toBeLessThanOrEqual(500);
+    const serialized = JSON.stringify(facts);
     expect(serialized).not.toContain(fakeKey);
   });
 });

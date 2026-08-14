@@ -43,7 +43,7 @@ export interface RecordedCase {
   corpusSplit: CorpusSplit;
   task: string;
   system?: string;
-  messages: readonly ChatMessage[];
+  messages: readonly JsonValue[];
   temperature?: number;
   contextTokens: number;
   maxOutputTokens: number;
@@ -163,13 +163,63 @@ function cellsFor(input: ReplayModeAInput): ReplayCell[] {
   return cells;
 }
 
-function replayMessages(recordedCase: RecordedCase): ChatMessage[] {
-  return recordedCase.system === undefined
-    ? [...recordedCase.messages]
-    : [
-        { role: "system", content: recordedCase.system },
-        ...recordedCase.messages,
-      ];
+export function toWireMessages(
+  messages: readonly JsonValue[],
+  system?: string,
+): ChatMessage[] {
+  const wire = messages.map((message, index): ChatMessage => {
+    if (
+      typeof message !== "object" ||
+      message === null ||
+      Array.isArray(message)
+    ) {
+      throw new Error(`Recorded message ${index + 1} must be an object`);
+    }
+    const role = message.role;
+    if (
+      role !== "system" &&
+      role !== "developer" &&
+      role !== "user" &&
+      role !== "assistant" &&
+      role !== "tool"
+    ) {
+      throw new Error(`Recorded message ${index + 1}.role is unsupported`);
+    }
+    const content = (() => {
+      if (typeof message.content === "string") return message.content;
+      if (!Array.isArray(message.parts)) {
+        throw new Error(
+          `Recorded message ${index + 1} must have string content or text parts`,
+        );
+      }
+      return message.parts
+        .map((part, partIndex) => {
+          if (
+            typeof part !== "object" ||
+            part === null ||
+            Array.isArray(part) ||
+            part.type !== "text" ||
+            typeof part.content !== "string"
+          ) {
+            throw new Error(
+              `Recorded message ${index + 1}.parts[${partIndex}] must be a text part`,
+            );
+          }
+          return part.content;
+        })
+        .join("\n");
+    })();
+    if (role !== "tool") return { role, content };
+    if (typeof message.tool_call_id !== "string") {
+      throw new Error(
+        `Recorded message ${index + 1}.tool_call_id must be a string`,
+      );
+    }
+    return { role, content, tool_call_id: message.tool_call_id };
+  });
+  return system === undefined
+    ? wire
+    : [{ role: "system", content: system }, ...wire];
 }
 
 export async function replayModeA(
@@ -253,7 +303,10 @@ export async function replayModeA(
       try {
         response = await input.provider.chat({
           model: cell.candidate.id,
-          messages: replayMessages(cell.recordedCase),
+          messages: toWireMessages(
+            cell.recordedCase.messages,
+            cell.recordedCase.system,
+          ),
           temperature: cell.recordedCase.temperature,
           maxOutputTokens: cell.recordedCase.maxOutputTokens,
           estimatedInputTokens: cell.recordedCase.contextTokens,
@@ -276,6 +329,9 @@ export async function replayModeA(
                 usage: attempt.usage,
                 costUsd: attempt.costUsd,
                 costIsEstimate: attempt.costIsEstimate,
+                ...(attempt.errorDetail === undefined
+                  ? {}
+                  : { errorDetail: attempt.errorDetail }),
               }),
             );
             const spendId = randomUUID();

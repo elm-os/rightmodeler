@@ -62,6 +62,7 @@ interface PipelineCommandOptions {
   evaluatorGateMetric?: string;
   evaluatorGateThreshold?: string;
   maxCostUsd?: string;
+  includeFree?: boolean;
   modebConfig?: string;
   through?: PipelineStage;
   plan?: boolean;
@@ -459,6 +460,10 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
   command
     .option("--traces <path>", "trace input file")
     .option(
+      "--include-free",
+      "include zero-priced models in candidate shortlists",
+    )
+    .option(
       "--modeb-config <path>",
       "versioned Mode B runtime configuration JSON file",
     );
@@ -578,6 +583,7 @@ function pipelineOptions(
     baseUrl: local.baseUrl,
     apiKeyEnv: local.apiKeyEnv,
     maxCostUsd,
+    includeFreeModels: local.includeFree,
     ...(local.evaluator === undefined
       ? {}
       : {
@@ -798,6 +804,7 @@ async function startDetachedReplay(
   appendCliOption(args, "--base-url", local.baseUrl);
   appendCliOption(args, "--api-key-env", local.apiKeyEnv);
   appendCliOption(args, "--max-cost-usd", local.maxCostUsd);
+  if (local.includeFree) args.push("--include-free");
   appendCliOption(args, "--approved-run", local.approvedRun);
   appendCliOption(args, "--evaluator", local.evaluator);
   appendCliOption(args, "--evaluator-base-url", local.evaluatorBaseUrl);

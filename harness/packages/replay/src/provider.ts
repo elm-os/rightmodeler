@@ -14,7 +14,16 @@ export interface ModelCatalogEntry {
   supportsStructuredOutput: boolean;
 }
 
-export type ChatMessage = Record<string, JsonValue>;
+export type ChatMessage =
+  | {
+      role: "system" | "developer" | "user" | "assistant";
+      content: string;
+    }
+  | {
+      role: "tool";
+      content: string;
+      tool_call_id: string;
+    };
 
 export interface ChatRequest {
   model: string;
@@ -40,8 +49,14 @@ export interface ChatResponse {
   costIsEstimate: boolean;
 }
 
+export interface ProviderErrorDetail {
+  status: number | null;
+  bodyExcerpt: string;
+}
+
 export interface ProviderAttempt extends ChatResponse {
   outcome: "completed" | "provider_error";
+  errorDetail?: ProviderErrorDetail;
 }
 
 export interface ProviderClient {
@@ -208,6 +223,10 @@ function redact(value: string, apiKey: string): string {
   return apiKey.length === 0 ? value : value.split(apiKey).join("[redacted]");
 }
 
+function errorExcerpt(value: string, apiKey: string): string {
+  return redact(value, apiKey).slice(0, 500);
+}
+
 function retryDelay(response: Response, attempt: number): number {
   const retryAfter = response.headers.get("retry-after");
   if (retryAfter !== null) {
@@ -349,12 +368,17 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         result = await physicalFetch(path, init);
       } catch (error) {
         if (error instanceof ProviderConfigurationError) throw error;
+        const bodyExcerpt = errorExcerpt(
+          error instanceof Error ? error.message : String(error),
+          apiKey(),
+        );
         await onRejectedAttempt?.({
           outcome: "provider_error",
           content: "",
           usage: { inputTokens: 0, outputTokens: 0 },
           costUsd: 0,
           costIsEstimate: true,
+          errorDetail: { status: null, bodyExcerpt },
         });
         throw error;
       }
@@ -362,25 +386,32 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         return result;
       }
 
+      const bodyExcerpt = errorExcerpt(
+        await result.response.text(),
+        result.apiKey,
+      );
+
       await onRejectedAttempt?.({
         outcome: "provider_error",
         content: "",
         usage: { inputTokens: 0, outputTokens: 0 },
         costUsd: 0,
         costIsEstimate: true,
+        errorDetail: {
+          status: result.response.status,
+          bodyExcerpt,
+        },
       });
 
       if (isRetryable(result.response.status)) {
         if (attempt === retryAttempts) {
           throw new BlockedError(result.response.status, limiter.currentCap);
         }
-        await result.response.body?.cancel();
         await sleep(retryDelay(result.response, attempt));
         continue;
       }
 
-      const body = redact(await result.response.text(), result.apiKey);
-      throw new ProviderHttpError(result.response.status, body.slice(0, 300));
+      throw new ProviderHttpError(result.response.status, bodyExcerpt);
     }
     throw new BlockedError(429, limiter.currentCap);
   }
@@ -447,9 +478,10 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
       request.onAttempt,
     );
 
+    const responseText = await response.text();
     let normalized: ChatResponse;
     try {
-      const value: unknown = JSON.parse(await response.text());
+      const value: unknown = JSON.parse(responseText);
       const envelope = objectValue(value, "chat response");
       if (!Array.isArray(envelope.choices) || envelope.choices.length === 0) {
         throw new Error("chat response choices must be a non-empty array");
@@ -544,6 +576,10 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         usage: { inputTokens: 0, outputTokens: 0 },
         costUsd: 0,
         costIsEstimate: true,
+        errorDetail: {
+          status: response.status,
+          bodyExcerpt: errorExcerpt(responseText, requestKey),
+        },
       });
       throw new ProviderResponseError(
         `Invalid chat response: ${redact(message, requestKey)}`,

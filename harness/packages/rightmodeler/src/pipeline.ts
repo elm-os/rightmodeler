@@ -41,6 +41,7 @@ import {
   type Fact,
   type JsonValue,
   type LifecycleEvent,
+  type RequestAttempt,
   type RunMeta,
   type StepRecord,
   type Store,
@@ -253,6 +254,7 @@ const replayPlanStepSchema = z.strictObject({
 });
 const replayPlanSchema = z.strictObject({
   top: z.number().int().positive(),
+  includeFreeModels: z.boolean(),
   sampleSizes: z.record(z.string(), z.number().int().positive()),
   steps: z.array(replayPlanStepSchema),
   cases: z.array(replayPlanCaseSchema),
@@ -282,6 +284,7 @@ const replayOutputSchema = z.strictObject({
       stepId: z.string().min(1),
       candidates: z.array(modelCatalogSchema),
       droppedByTop: z.number().int().nonnegative(),
+      droppedFreeModels: z.number().int().nonnegative(),
       abstention: z
         .strictObject({
           kind: z.literal("current-model-absent"),
@@ -418,6 +421,7 @@ interface PipelineContext {
   baseUrl?: string;
   apiKeyEnv: string;
   maxCostUsd?: number;
+  includeFreeModels: boolean;
   evaluator?: ResolvedEvaluatorConfig;
   modeBConfig?: ModeBConfig;
   modeBConfigPath?: string;
@@ -433,6 +437,7 @@ export interface PipelineOptions {
   baseUrl?: string;
   apiKeyEnv?: string;
   maxCostUsd?: number;
+  includeFreeModels?: boolean;
   evaluator?: EvaluatorConfig;
   modeBConfigPath?: string;
   approvedRunSpecDigest?: string;
@@ -758,6 +763,7 @@ export async function claimDetachedReplay(
       baseUrl: context.baseUrl,
       apiKeyEnv: context.apiKeyEnv,
       maxCostUsd: context.maxCostUsd ?? null,
+      includeFreeModels: context.includeFreeModels,
     },
     evaluator: await evaluatorRunIdentity(context),
     modeBConfig:
@@ -1474,6 +1480,7 @@ function createContext(options: PipelineOptions): PipelineContext {
     baseUrl: options.baseUrl,
     apiKeyEnv: options.apiKeyEnv ?? API_KEY_ENV_DEFAULT,
     maxCostUsd: options.maxCostUsd,
+    includeFreeModels: options.includeFreeModels ?? false,
     ...(options.evaluator === undefined
       ? {}
       : { evaluator: resolveEvaluatorConfig(options.evaluator) }),
@@ -1585,7 +1592,10 @@ async function inputDigest(
   }
   if (stage === "corpus") extra.seed = CORPUS_SEED;
   if (stage === "audit-sample") extra.limit = AUDIT_SAMPLE_LIMIT;
-  if (stage === "shortlist") extra.top = SHORTLIST_TOP;
+  if (stage === "shortlist") {
+    extra.top = SHORTLIST_TOP;
+    extra.includeFreeModels = context.includeFreeModels;
+  }
   if (stage === "shortlist") {
     extra.approvedRunSpecDigest = context.approvedRunSpecDigest ?? null;
     extra.evaluatorPlan = evaluatorPlan(context);
@@ -2086,6 +2096,7 @@ async function executeShortlist(
   const key = artifactKey(context, "shortlist", inputDigestValue);
   await putImmutableJson(context.store, key, {
     top: SHORTLIST_TOP,
+    includeFreeModels: context.includeFreeModels,
     sampleSizes,
     steps,
     cases,
@@ -2180,7 +2191,7 @@ function replayCandidates(
         ? { ...model, contextLength: Number.MAX_SAFE_INTEGER }
         : model,
     ),
-    { top: plan.top },
+    { top: plan.top, includeFreeModels: plan.includeFreeModels },
   ).map((assignment) => ({
     ...assignment,
     candidates: assignment.candidates.map(({ id }) => catalogById.get(id)!),
@@ -2255,7 +2266,21 @@ async function approvedReplayCandidates(
         `Approved target model no longer satisfies replay requirements: ${modelId}`,
       );
     }
-    return { stepId: step.stepId, candidates: [model], droppedByTop: 0 };
+    if (
+      !plan.includeFreeModels &&
+      model.pricing.input === 0 &&
+      model.pricing.output === 0
+    ) {
+      throw new Error(
+        `Approved target model is zero-priced; rerun with --include-free: ${modelId}`,
+      );
+    }
+    return {
+      stepId: step.stepId,
+      candidates: [model],
+      droppedByTop: 0,
+      droppedFreeModels: 0,
+    };
   });
 }
 
@@ -3951,6 +3976,11 @@ interface ReportData {
     family?: string;
     stepId?: string;
   }>;
+  candidateErrors: Array<{
+    candidateId: string;
+    calls: number;
+    sampleExcerpt: string;
+  }>;
   apply: Array<{
     runSpecDigest: string;
     repo: string;
@@ -4037,6 +4067,71 @@ function lifecycleReport(
     );
 }
 
+function candidateErrorReport(
+  facts: readonly Fact[],
+  plan: z.infer<typeof replayPlanSchema>,
+  replay: z.infer<typeof replayOutputSchema>,
+): ReportData["candidateErrors"] {
+  const evidenceQuestionIds = new Set(
+    plan.steps.map(({ evidenceQuestionId }) => evidenceQuestionId),
+  );
+  const candidateIds = new Set(
+    replay.candidates.flatMap(({ candidates }) =>
+      candidates.map(({ id }) => id),
+    ),
+  );
+  const executions = new Map(
+    facts.flatMap((fact): Array<[string, Execution]> => {
+      const parsed = executionSchema.safeParse(fact);
+      return parsed.success &&
+        evidenceQuestionIds.has(parsed.data.evidenceQuestionId) &&
+        candidateIds.has(parsed.data.candidateId)
+        ? [[parsed.data.executionId, parsed.data]]
+        : [];
+    }),
+  );
+  const callsByCandidate = new Map<string, Map<string, RequestAttempt[]>>();
+  for (const fact of facts) {
+    const parsed = requestAttemptSchema.safeParse(fact);
+    if (!parsed.success) continue;
+    const execution = executions.get(parsed.data.executionId);
+    if (execution === undefined) continue;
+    const calls = callsByCandidate.get(execution.candidateId) ?? new Map();
+    calls.set(parsed.data.logicalCallId, [
+      ...(calls.get(parsed.data.logicalCallId) ?? []),
+      parsed.data,
+    ]);
+    callsByCandidate.set(execution.candidateId, calls);
+  }
+  return [...callsByCandidate.entries()]
+    .flatMap(([candidateId, calls]) => {
+      const logicalCalls = [...calls.values()];
+      if (
+        logicalCalls.length === 0 ||
+        logicalCalls.some((attempts) =>
+          attempts.some(
+            ({ streamOutcome }) => streamOutcome !== "provider_error",
+          ),
+        )
+      ) {
+        return [];
+      }
+      const sampleExcerpt = logicalCalls
+        .flat()
+        .find(({ errorDetail }) => errorDetail !== undefined)
+        ?.errorDetail?.bodyExcerpt;
+      return [
+        {
+          candidateId,
+          calls: logicalCalls.length,
+          sampleExcerpt:
+            sampleExcerpt ?? "No provider response body was returned.",
+        },
+      ];
+    })
+    .sort((left, right) => compareText(left.candidateId, right.candidateId));
+}
+
 async function buildReport(context: PipelineContext): Promise<ReportData> {
   const decisionOutput = await loadDecisionOutput(context);
   const verdicts = decisionOutput.families.map(({ verdict }) => verdict);
@@ -4087,6 +4182,11 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
         stepId,
         value: droppedByTop,
       })),
+      ...replay.candidates.map(({ stepId, droppedFreeModels }) => ({
+        name: "droppedFreeModels",
+        stepId,
+        value: droppedFreeModels,
+      })),
       ...decisionOutput.families.flatMap((family) =>
         family.confirmation?.maxRunSets === undefined
           ? []
@@ -4099,6 +4199,7 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
             ],
       ),
     ],
+    candidateErrors: candidateErrorReport(facts, plan, replay),
     apply: lifecycleReport(lifecycle),
   };
 }
@@ -4157,6 +4258,15 @@ function renderReport(report: ReportData): string {
       return `| ${family.familyId} | ${selection.status} | ${selection.shortlistedCandidateIds.join(", ")} | ${confirmed} | ${estimate} |`;
     }),
     "",
+    "## Candidate provider errors",
+    "",
+    ...(report.candidateErrors.length === 0
+      ? ["None."]
+      : report.candidateErrors.map(
+          ({ candidateId, calls, sampleExcerpt }) =>
+            `- [warn] ${reportText(candidateId)} errored on ALL ${calls} calls. Sample: ${reportText(sampleExcerpt)}`,
+        )),
+    "",
     "## Confirm",
     "",
     "Confirmation exhaustively tests swap subsets and may require up to 2^n run sets for n swaps. The default cap is structurally inconclusive at five or more swapped steps; raise the configured cap when an action is shown.",
@@ -4211,6 +4321,10 @@ function renderReport(report: ReportData): string {
     );
   }
   return lines.join("\n");
+}
+
+function reportText(value: string): string {
+  return value.replaceAll("|", "\\|").replace(/\s+/gu, " ").trim();
 }
 
 function formatAbstention(abstention: {

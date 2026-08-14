@@ -6,8 +6,18 @@ import { estimateReplayCost } from "./estimate.js";
 const first = model("provider/first", 0.001, 0.002);
 const second = model("provider/second", 0.002, 0.003);
 const candidates: StepShortlist[] = [
-  { stepId: "step-1", candidates: [first, second], droppedByTop: 0 },
-  { stepId: "step-2", candidates: [first, second], droppedByTop: 0 },
+  {
+    stepId: "step-1",
+    candidates: [first, second],
+    droppedByTop: 0,
+    droppedFreeModels: 0,
+  },
+  {
+    stepId: "step-2",
+    candidates: [first, second],
+    droppedByTop: 0,
+    droppedFreeModels: 0,
+  },
 ];
 
 describe("estimateReplayCost", () => {
@@ -67,6 +77,7 @@ describe("estimateReplayCost", () => {
             stepId: "step-1",
             candidates: [{ ...first, pricing: null }],
             droppedByTop: 0,
+            droppedFreeModels: 0,
           },
         ],
       }),

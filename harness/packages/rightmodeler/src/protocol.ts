@@ -117,6 +117,16 @@ function renderHuman(value: unknown): string {
       "--- | --- | --- | --- | --- | --- | --- | --- | ---",
       ...families.map(renderFamilyRow),
     ];
+    const candidateErrors = Array.isArray(record?.candidateErrors)
+      ? record.candidateErrors
+      : [];
+    if (candidateErrors.length > 0) {
+      lines.push(
+        "",
+        "Candidate provider errors",
+        ...candidateErrors.map(renderCandidateError),
+      );
+    }
     if (typeof record?.reportPath === "string") {
       lines.push("", `Report: ${record.reportPath}`);
     }
@@ -138,6 +148,11 @@ function renderHuman(value: unknown): string {
       .join("\n");
   }
   return renderValue(value);
+}
+
+function renderCandidateError(value: unknown): string {
+  const error = objectValue(value);
+  return `[warn] ${String(error?.candidateId ?? "unknown")} errored on ALL ${String(error?.calls ?? 0)} calls. Sample: ${String(error?.sampleExcerpt ?? "")}`;
 }
 
 function renderApplyRow(value: unknown): string {

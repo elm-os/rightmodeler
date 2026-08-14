@@ -37,6 +37,13 @@ const models = [
   },
 ];
 
+const freeModel = {
+  id: "acme/free-1",
+  object: "model",
+  capabilities: { chat: true, tools: false },
+  pricing: { input_per_token: 0, output_per_token: 0 },
+};
+
 function json(response, status, body, headers = {}) {
   response.writeHead(status, {
     "content-type": "application/json",
@@ -51,18 +58,99 @@ async function readJson(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-export async function startStubProvider({ port }) {
+export async function startStubProvider({
+  port,
+  errorModels = [],
+  includeFreeModel = false,
+}) {
   const rateLimitedKeys = new Set();
+  const failingModels = new Set(errorModels);
+  const catalogModels = includeFreeModel ? [...models, freeModel] : models;
   let hitCount = 0;
   const server = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/v1/models") {
-      json(response, 200, { object: "list", data: models });
+      json(response, 200, { object: "list", data: catalogModels });
       return;
     }
 
     if (request.method === "POST" && request.url === "/v1/chat/completions") {
       hitCount += 1;
       const hitHeaders = { "x-stub-hit-count": String(hitCount) };
+      let body;
+      try {
+        body = await readJson(request);
+      } catch {
+        json(
+          response,
+          400,
+          {
+            error: { message: "Request body must be valid JSON." },
+          },
+          hitHeaders,
+        );
+        return;
+      }
+
+      if (!Array.isArray(body.messages)) {
+        json(
+          response,
+          400,
+          { error: { message: "messages must be an array." } },
+          hitHeaders,
+        );
+        return;
+      }
+      for (const [index, message] of body.messages.entries()) {
+        if (
+          typeof message !== "object" ||
+          message === null ||
+          Array.isArray(message)
+        ) {
+          json(
+            response,
+            400,
+            { error: { message: `messages[${index}] must be an object.` } },
+            hitHeaders,
+          );
+          return;
+        }
+        if (Object.hasOwn(message, "parts")) {
+          json(
+            response,
+            400,
+            {
+              error: {
+                message: `messages[${index}].parts is not a wire field; use content.`,
+              },
+            },
+            hitHeaders,
+          );
+          return;
+        }
+        if (typeof message.role !== "string") {
+          json(
+            response,
+            400,
+            { error: { message: `messages[${index}].role must be a string.` } },
+            hitHeaders,
+          );
+          return;
+        }
+        if (typeof message.content !== "string") {
+          json(
+            response,
+            400,
+            {
+              error: {
+                message: `messages[${index}].content must be a string.`,
+              },
+            },
+            hitHeaders,
+          );
+          return;
+        }
+      }
+
       if (request.headers["x-stub-echo-auth"] !== undefined) {
         json(
           response,
@@ -79,6 +167,19 @@ export async function startStubProvider({ port }) {
         );
         return;
       }
+      if (failingModels.has(body.model)) {
+        json(
+          response,
+          400,
+          {
+            error: {
+              message: `Model ${body.model} rejected authorization ${request.headers.authorization ?? "missing"}.`,
+            },
+          },
+          hitHeaders,
+        );
+        return;
+      }
       const rateLimitKey = request.headers["x-stub-429-once"];
       if (
         typeof rateLimitKey === "string" &&
@@ -90,21 +191,6 @@ export async function startStubProvider({ port }) {
           429,
           { error: { message: "Stub rate limit." } },
           { ...hitHeaders, "retry-after": "0" },
-        );
-        return;
-      }
-
-      let body;
-      try {
-        body = await readJson(request);
-      } catch {
-        json(
-          response,
-          400,
-          {
-            error: { message: "Request body must be valid JSON." },
-          },
-          hitHeaders,
         );
         return;
       }

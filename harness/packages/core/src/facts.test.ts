@@ -198,6 +198,47 @@ describe("fact schemas", () => {
     ).toBe(false);
   });
 
+  it("accepts bounded provider error detail without requiring it on historical attempts", () => {
+    expect(requestAttemptSchema.parse(requestAttempt)).toEqual(requestAttempt);
+    expect(
+      requestAttemptSchema.parse({
+        ...requestAttempt,
+        streamOutcome: "provider_error",
+        errorDetail: {
+          status: 400,
+          bodyExcerpt: "Invalid messages[0].parts",
+        },
+      }),
+    ).toMatchObject({
+      errorDetail: {
+        status: 400,
+        bodyExcerpt: "Invalid messages[0].parts",
+      },
+    });
+  });
+
+  it("rejects provider error excerpts over 500 characters", () => {
+    expect(
+      requestAttemptSchema.safeParse({
+        ...requestAttempt,
+        streamOutcome: "provider_error",
+        errorDetail: { status: 400, bodyExcerpt: "x".repeat(501) },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts a null provider status for transport errors", () => {
+    expect(
+      requestAttemptSchema.parse({
+        ...requestAttempt,
+        streamOutcome: "provider_error",
+        errorDetail: { status: null, bodyExcerpt: "fetch failed" },
+      }),
+    ).toMatchObject({
+      errorDetail: { status: null, bodyExcerpt: "fetch failed" },
+    });
+  });
+
   it("rejects invalid cascade counts and timestamps", () => {
     expect(
       cascadeFindingSchema.safeParse({ ...cascadeFinding, runSetsUsed: -1 })

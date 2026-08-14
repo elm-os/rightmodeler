@@ -50,6 +50,8 @@ run the resumable Phase A pipeline
 
 Options:
   --traces <path>                     trace input file
+  --include-free                      include zero-priced models in candidate
+                                      shortlists
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -92,6 +94,8 @@ project replay spend before paid model calls
 
 Options:
   --traces <path>                     trace input file
+  --include-free                      include zero-priced models in candidate
+                                      shortlists
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -129,6 +133,7 @@ run through the scan stage
 
 Options:
   --traces <path>        trace input file
+  --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
 ```
@@ -142,6 +147,7 @@ run through the ingest stage
 
 Options:
   --traces <path>        trace input file
+  --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
 ```
@@ -155,6 +161,7 @@ run through the reconcile stage
 
 Options:
   --traces <path>        trace input file
+  --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
 ```
@@ -168,6 +175,7 @@ run through the scrub stage
 
 Options:
   --traces <path>        trace input file
+  --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
 ```
@@ -181,6 +189,7 @@ run through the shortlist stage
 
 Options:
   --traces <path>        trace input file
+  --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
 ```
@@ -194,6 +203,8 @@ run through the replay stage
 
 Options:
   --traces <path>                     trace input file
+  --include-free                      include zero-priced models in candidate
+                                      shortlists
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -232,6 +243,7 @@ run through the aggregate stage
 
 Options:
   --traces <path>        trace input file
+  --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
 ```
@@ -245,6 +257,8 @@ run through the confirm stage
 
 Options:
   --traces <path>                     trace input file
+  --include-free                      include zero-priced models in candidate
+                                      shortlists
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -280,6 +294,7 @@ build or import the replay corpus
 
 Options:
   --traces <path>        trace input file
+  --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
 
@@ -349,6 +364,7 @@ write the audit worksheet without blocking
 
 Options:
   --traces <path>        trace input file
+  --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
 ```

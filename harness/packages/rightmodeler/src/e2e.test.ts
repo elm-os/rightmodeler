@@ -77,7 +77,11 @@ interface StubProvider {
 }
 
 interface StubProviderModule {
-  startStubProvider(options: { port: number }): Promise<StubProvider>;
+  startStubProvider(options: {
+    port: number;
+    errorModels?: string[];
+    includeFreeModel?: boolean;
+  }): Promise<StubProvider>;
 }
 
 interface EvaluatorStub {
@@ -351,9 +355,11 @@ function jsonOutput(result: ChildResult): Record<string, unknown> {
   return JSON.parse(result.stdout) as Record<string, unknown>;
 }
 
-async function startStub(): Promise<StubProvider> {
+async function startStub(
+  options: { errorModels?: string[]; includeFreeModel?: boolean } = {},
+): Promise<StubProvider> {
   const module = (await import(stubModuleUrl)) as StubProviderModule;
-  return module.startStubProvider({ port: 0 });
+  return module.startStubProvider({ port: 0, ...options });
 }
 
 async function startRateLimitedStub(): Promise<StubProvider> {
@@ -886,7 +892,7 @@ describe("built CLI pipeline", () => {
       physicalInvocationDirectory,
       promptfooAssertionsPath,
     );
-    const stub = await startStub();
+    const stub = await startStub({ includeFreeModel: true });
     const apiKeyEnv = "RIGHTMODELER_DETACHED_E2E_API_KEY";
     const common = ["--repo", repo, "--store", store, "--output", "json"];
     const replayOptions = [
@@ -921,7 +927,28 @@ describe("built CLI pipeline", () => {
         shortlist: expect.any(Array),
       });
       expect(jsonOutput(estimate).candidateExecutions).not.toBe(0);
+      expect(
+        (
+          jsonOutput(estimate).shortlist as Array<{ candidateIds: string[] }>
+        ).flatMap(({ candidateIds }) => candidateIds),
+      ).not.toContain("acme/free-1");
       expect(stub.getHitCount()).toBe(0);
+
+      const includeFree = await runCli(
+        [...common, "estimate", ...replayOptions, "--include-free"],
+        {
+          cwd: invocationDirectory,
+          env: { [apiKeyEnv]: secret },
+        },
+      );
+      expect(includeFree.code, includeFree.stderr).toBe(0);
+      expect(
+        (
+          jsonOutput(includeFree).shortlist as Array<{
+            candidateIds: string[];
+          }>
+        ).flatMap(({ candidateIds }) => candidateIds),
+      ).toContain("acme/free-1");
 
       const first = await runCli(
         [...common, "replay", ...replayOptions, "--detach"],
@@ -1209,6 +1236,7 @@ describe("built CLI pipeline", () => {
       expect(reportMarkdown).toContain("Selection-adjusted estimate");
       expect(reportMarkdown).toContain("## Caps");
       expect(reportMarkdown).toContain("droppedByTop");
+      expect(reportMarkdown).toContain("droppedFreeModels");
       expect(reportJson.families).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -2636,6 +2664,71 @@ describe("built CLI pipeline", () => {
       code: "runtime_error",
       message: expect.stringContaining("appSpec.command"),
     });
+  });
+
+  it("reports a candidate whose provider calls all errored with one redacted sample", async () => {
+    const { repo } = await fixtureCopy("provider-errors");
+    const stub = await startStub({ errorModels: ["acme/lite-1"] });
+    const apiKeyEnv = "RIGHTMODELER_PROVIDER_ERROR_E2E_API_KEY";
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+      expect([0, 1], result.stderr).toContain(result.code);
+
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const reportJson = JSON.parse(
+        await storeText(store, reportKey("project", "report.json")),
+      ) as {
+        candidateErrors: Array<{
+          candidateId: string;
+          calls: number;
+          sampleExcerpt: string;
+        }>;
+      };
+      expect(reportJson.candidateErrors).toEqual([
+        {
+          candidateId: "acme/lite-1",
+          calls: expect.any(Number),
+          sampleExcerpt: expect.stringContaining("[redacted]"),
+        },
+      ]);
+      expect(reportJson.candidateErrors[0]?.calls).toBeGreaterThan(0);
+
+      const markdown = await storeText(
+        store,
+        reportKey("project", "report.md"),
+      );
+      expect(markdown).toContain("[warn] acme/lite-1 errored on ALL");
+      expect(markdown).toContain("[redacted]");
+      expect(await allFileText(join(repo, ".rightmodeler"))).not.toContain(
+        secret,
+      );
+
+      const human = await runCli([
+        "report",
+        "--output",
+        "human",
+        "--repo",
+        repo,
+      ]);
+      expect(human.stdout).toContain("[warn] acme/lite-1 errored on ALL");
+    } finally {
+      await stub.close();
+    }
   });
 
   it("returns a machine-readable needs-input error when replay has no provider", async () => {

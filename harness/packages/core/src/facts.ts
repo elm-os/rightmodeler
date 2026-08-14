@@ -50,6 +50,13 @@ export const requestAttemptSchema = z
     usage: jsonValueSchema,
     costUsd: z.number().nonnegative(),
     costIsEstimate: z.boolean(),
+    errorDetail: z
+      .strictObject({
+        status: z.number().int().min(100).max(599).nullable(),
+        bodyExcerpt: z.string().max(500),
+      })
+      .readonly()
+      .optional(),
   })
   .readonly();
 export type RequestAttempt = z.infer<typeof requestAttemptSchema>;

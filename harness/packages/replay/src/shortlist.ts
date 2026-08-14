@@ -16,6 +16,7 @@ export interface ShortlistOptions {
   allow?: readonly string[];
   deny?: readonly string[];
   top?: number;
+  includeFreeModels?: boolean;
 }
 
 export interface ShortlistAbstention {
@@ -27,6 +28,7 @@ export interface StepShortlist {
   stepId: string;
   candidates: ModelCatalogEntry[];
   droppedByTop: number;
+  droppedFreeModels: number;
   abstention?: ShortlistAbstention;
 }
 
@@ -61,6 +63,7 @@ export function shortlist(
         stepId: step.stepId,
         candidates: [],
         droppedByTop: 0,
+        droppedFreeModels: 0,
         abstention: {
           kind: "current-model-absent",
           message: `Current model is absent from the provider catalog: ${step.currentModel ?? "unknown"}`,
@@ -68,26 +71,36 @@ export function shortlist(
       };
     }
     const currentPrice = blendedPrice(current);
-    const qualified = catalog
-      .filter((candidate) => {
-        const candidatePrice = blendedPrice(candidate);
-        return (
-          candidate.id !== current.id &&
-          (allow === undefined || allow.has(candidate.id)) &&
-          !deny.has(candidate.id) &&
-          (!step.needsTools || candidate.supportsTools) &&
-          (!step.needsStructuredOutput || candidate.supportsStructuredOutput) &&
-          candidate.contextLength >= step.observedContextTokens &&
-          candidatePrice !== null &&
-          currentPrice !== null &&
-          candidatePrice < currentPrice
-        );
-      })
+    const qualifiedBeforeFreePolicy = catalog.filter((candidate) => {
+      const candidatePrice = blendedPrice(candidate);
+      return (
+        candidate.id !== current.id &&
+        (allow === undefined || allow.has(candidate.id)) &&
+        !deny.has(candidate.id) &&
+        (!step.needsTools || candidate.supportsTools) &&
+        (!step.needsStructuredOutput || candidate.supportsStructuredOutput) &&
+        candidate.contextLength >= step.observedContextTokens &&
+        candidatePrice !== null &&
+        currentPrice !== null &&
+        candidatePrice < currentPrice
+      );
+    });
+    const droppedFreeModels = options.includeFreeModels
+      ? 0
+      : qualifiedBeforeFreePolicy.filter(
+          (candidate) => blendedPrice(candidate) === 0,
+        ).length;
+    const qualified = qualifiedBeforeFreePolicy
+      .filter(
+        (candidate) =>
+          options.includeFreeModels || blendedPrice(candidate) !== 0,
+      )
       .sort((left, right) => blendedPrice(left)! - blendedPrice(right)!);
     return {
       stepId: step.stepId,
       candidates: qualified.slice(0, top),
       droppedByTop: Math.max(0, qualified.length - top),
+      droppedFreeModels,
     };
   });
 }
