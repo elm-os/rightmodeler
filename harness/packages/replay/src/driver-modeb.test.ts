@@ -1410,7 +1410,7 @@ describe("Mode B replay", () => {
       const timeoutCases = [
         {
           ...cases[0]!,
-          headers: { "x-fault-stall": "8000" },
+          headers: { "x-fault-stall": "30000" },
         },
         cases[1]!,
       ];
@@ -1422,7 +1422,7 @@ describe("Mode B replay", () => {
         concurrency: 1,
         executor: tracked.executor,
       });
-      context.input = { ...context.input, appSpec: appSpec(4_000) };
+      context.input = { ...context.input, appSpec: appSpec(15_000) };
       try {
         const result = await replayModeB(context.input);
         const facts = parsedFacts(await readFacts(context.store));

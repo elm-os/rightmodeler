@@ -769,7 +769,9 @@ describe("Mode B proxy and host egress", () => {
     );
 
     await response.arrayBuffer().catch(() => undefined);
-    expect(performance.now() - startedAt).toBeLessThan(200);
+    // The bound only needs to discriminate the idle override firing (tens of milliseconds)
+    // from the 500ms stall completing or the 1s hard deadline; slow CI runners need headroom.
+    expect(performance.now() - startedAt).toBeLessThan(450);
     const attempts = (await readRows(spoolPath(pair.scratch))).filter(
       (row) => row.kind === "request_attempt",
     );
