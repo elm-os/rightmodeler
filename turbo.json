@@ -20,10 +20,10 @@
       "cache": false
     },
     "check": {
-      "dependsOn": ["^build", "^check"]
+      "dependsOn": ["build", "^build", "^check"]
     },
     "@rightmodeler/cli#check": {
-      "dependsOn": ["^build", "^check"],
+      "dependsOn": ["build", "^build", "^check"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/harness/docs/parity.md",
@@ -36,6 +36,13 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "@rightmodeler/agent#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "@rightmodeler/rightmodeler-skill#build": {
+      "outputs": []
     }
   }
 }
