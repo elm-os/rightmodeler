@@ -102,6 +102,7 @@ describe("wilson", () => {
   });
 
   it("keeps every interval and point inside [0, 1] with point contained", () => {
+    const violations: string[] = [];
     for (const confidence of [0.8, 0.9, 0.95, 0.99]) {
       for (const comparisons of [1, 2, 8]) {
         for (let n = 1; n <= 100; n += 1) {
@@ -111,14 +112,21 @@ describe("wilson", () => {
               comparisons,
             });
 
-            expect(interval.lower).toBeGreaterThanOrEqual(0);
-            expect(interval.upper).toBeLessThanOrEqual(1);
-            expect(interval.lower).toBeLessThanOrEqual(interval.point);
-            expect(interval.point).toBeLessThanOrEqual(interval.upper);
+            if (
+              !(interval.lower >= 0) ||
+              !(interval.upper <= 1) ||
+              !(interval.lower <= interval.point) ||
+              !(interval.point <= interval.upper)
+            ) {
+              violations.push(
+                `confidence=${confidence} comparisons=${comparisons} ${passes}/${n}: ${JSON.stringify(interval)}`,
+              );
+            }
           }
         }
       }
     }
+    expect(violations).toEqual([]);
   });
 
   it("moves both bounds monotonically as passes increase", () => {
