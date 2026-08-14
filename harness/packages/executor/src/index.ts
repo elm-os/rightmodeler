@@ -387,6 +387,11 @@ export function createDockerExecutor(
       if (process.platform === "linux") {
         args.push("--add-host", "host.docker.internal:host-gateway");
       }
+      // Files the container writes into the bind-mounted scratch must be owned by the invoking
+      // user, or the host cannot clean them up after collection on native Linux Docker.
+      if (process.getuid !== undefined && process.getgid !== undefined) {
+        args.push("--user", `${process.getuid()}:${process.getgid()}`);
+      }
       for (const [name, value] of Object.entries(spec.env).sort(
         ([left], [right]) => left.localeCompare(right),
       )) {

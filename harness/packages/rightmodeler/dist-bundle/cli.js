@@ -27807,6 +27807,9 @@ function createDockerExecutor(options) {
       if (process.platform === "linux") {
         args.push("--add-host", "host.docker.internal:host-gateway");
       }
+      if (process.getuid !== void 0 && process.getgid !== void 0) {
+        args.push("--user", `${process.getuid()}:${process.getgid()}`);
+      }
       for (const [name, value] of Object.entries(spec.env).sort(([left], [right]) => left.localeCompare(right))) {
         args.push("--env", `${name}=${value}`);
       }
