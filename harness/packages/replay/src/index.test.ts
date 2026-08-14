@@ -721,6 +721,38 @@ describe("Mode A replay", () => {
     });
   });
 
+  it("does not publish a terminal execution until judging is complete", async () => {
+    let calls = 0;
+    await expect(
+      run([recordedCase()], async () => {
+        calls += 1;
+        if (calls === 2) throw new Error("second judge call failed");
+        return JSON.stringify({
+          verdict: "equivalent",
+          score: 1,
+          justification: "Equivalent fixture outputs.",
+        });
+      }),
+    ).rejects.toThrow("second judge call failed");
+
+    const interruptedFacts = await readFacts(store);
+    expect(
+      interruptedFacts.some(
+        (fact) => "executionId" in fact && "caseId" in fact,
+      ),
+    ).toBe(false);
+    expect(interruptedFacts.some((fact) => "assessmentId" in fact)).toBe(false);
+
+    await run([recordedCase()]);
+    const resumedFacts = await readFacts(store);
+    expect(
+      resumedFacts.filter((fact) => "executionId" in fact && "caseId" in fact),
+    ).toHaveLength(1);
+    expect(resumedFacts.filter((fact) => "assessmentId" in fact)).toHaveLength(
+      1,
+    );
+  });
+
   it("records a provider 400 as lost rather than a scored failure", async () => {
     const result = await run([
       recordedCase({ headers: { "x-stub-echo-auth": "true" } }),

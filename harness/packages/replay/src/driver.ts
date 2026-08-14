@@ -338,27 +338,29 @@ export async function replayModeA(
 
       const silentFailure =
         response.content.length === 0 || response.usage.outputTokens === 0;
-      await writeReplayFact(
-        input.store,
-        input.budget.projectId,
+      const execution = executionSchema.parse({
         executionId,
-        executionSchema.parse({
+        evidenceQuestionId: cell.step.evidenceQuestionId,
+        caseId: cell.recordedCase.caseId,
+        stepId: cell.step.stepId,
+        candidateId: cell.candidate.id,
+        trajectoryId: cell.recordedCase.trajectoryId,
+        corpusSplit: cell.recordedCase.corpusSplit,
+        selectionStage: cell.step.selectionStage ?? cell.step.corpusSplit,
+        terminalOutcome: silentFailure ? "failure" : "success",
+        finalOutput: response.content,
+        attribution: silentFailure ? "silent-failure" : "ok",
+      });
+      if (silentFailure || input.judge === undefined) {
+        await writeReplayFact(
+          input.store,
+          input.budget.projectId,
           executionId,
-          evidenceQuestionId: cell.step.evidenceQuestionId,
-          caseId: cell.recordedCase.caseId,
-          stepId: cell.step.stepId,
-          candidateId: cell.candidate.id,
-          trajectoryId: cell.recordedCase.trajectoryId,
-          corpusSplit: cell.recordedCase.corpusSplit,
-          selectionStage: cell.step.selectionStage ?? cell.step.corpusSplit,
-          terminalOutcome: silentFailure ? "failure" : "success",
-          finalOutput: response.content,
-          attribution: silentFailure ? "silent-failure" : "ok",
-        }),
-      );
-      result.completed += 1;
-      if (silentFailure) return;
-      if (input.judge === undefined) return;
+          execution,
+        );
+        result.completed += 1;
+        return;
+      }
       const judge = input.judge;
 
       let judgeInvocation = 0;
@@ -418,6 +420,13 @@ export async function replayModeA(
           },
         }),
       );
+      await writeReplayFact(
+        input.store,
+        input.budget.projectId,
+        executionId,
+        execution,
+      );
+      result.completed += 1;
     } finally {
       try {
         await reservation.refund(actualCostUsd);

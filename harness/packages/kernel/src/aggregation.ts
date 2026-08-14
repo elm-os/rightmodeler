@@ -14,6 +14,11 @@ export const DEFAULT_PASS_FRACTION = 0.75;
 
 const AGGREGATION_BOOTSTRAP_RESAMPLES = 2_000;
 
+export const EVIDENCE_EXCLUSION_REASONS = [
+  "assessment_evidence_missing",
+  "judge_evidence_incomplete",
+] as const;
+
 export const ABSTAIN_REASONS = [
   "insufficient_availability",
   "excluded_fraction_exceeded",
@@ -259,12 +264,13 @@ function aggregateGroup(
     (fact) =>
       !fact.requiredAbstention &&
       fact.execution.attribution === "ok" &&
-      fact.assessment !== undefined,
+      fact.assessment !== undefined &&
+      evidenceExclusionReason(fact) === undefined,
   );
   const excludedExecutions = facts.filter(
     (fact) =>
       fact.execution.attribution !== "ok" ||
-      fact.assessmentAbsentReason !== undefined,
+      evidenceExclusionReason(fact) !== undefined,
   ).length;
   const excludedFraction = excludedExecutions / facts.length;
   const assessmentAbsentReasons = countAssessmentAbsenceReasons(facts);
@@ -442,7 +448,9 @@ function aggregateEvaluatorKind(
   const conditionalFacts = facts.filter((fact) => !fact.requiredAbstention);
   const included = conditionalFacts.filter(
     (fact) =>
-      fact.execution.attribution === "ok" && fact.assessment !== undefined,
+      fact.execution.attribution === "ok" &&
+      fact.assessment !== undefined &&
+      evidenceExclusionReason(fact) === undefined,
   );
   const passes = included.filter(
     (fact) =>
@@ -467,6 +475,7 @@ function aggregateEvaluatorKind(
     conditionalFacts,
     (fact) =>
       fact.execution.attribution === "ok" &&
+      evidenceExclusionReason(fact) === undefined &&
       fact.orderConsistent !== false &&
       fact.assessment?.passed === true,
   );
@@ -487,6 +496,7 @@ function aggregateEvaluatorKind(
       trajectoryId: fact.execution.trajectoryId,
       passed:
         fact.execution.attribution === "ok" &&
+        evidenceExclusionReason(fact) === undefined &&
         fact.orderConsistent !== false &&
         fact.assessment?.passed === true,
     })),
@@ -865,16 +875,6 @@ function validateFact(fact: AggregationFact): void {
     );
   }
   if (
-    fact.execution.attribution === "ok" &&
-    !fact.requiredAbstention &&
-    fact.assessment === undefined &&
-    fact.assessmentAbsentReason === undefined
-  ) {
-    throw new Error(
-      `execution ${fact.execution.executionId} has neither an assessment nor a named assessment absence`,
-    );
-  }
-  if (
     fact.assessment !== undefined &&
     fact.assessment.executionId !== fact.execution.executionId
   ) {
@@ -887,16 +887,27 @@ function validateFact(fact: AggregationFact): void {
       `assessment ${fact.assessment.assessmentId} has no gate pass decision`,
     );
   }
-  if (fact.judgeModel !== undefined && fact.orderConsistent === undefined) {
-    throw new Error(
-      `execution ${fact.execution.executionId} is missing judge order consistency`,
-    );
+}
+
+function evidenceExclusionReason(fact: AggregationFact): string | undefined {
+  if (fact.assessmentAbsentReason !== undefined) {
+    return fact.assessmentAbsentReason;
   }
-  if (fact.evaluatorKind === "judge" && fact.orderConsistent === undefined) {
-    throw new Error(
-      `execution ${fact.execution.executionId} is missing judge order consistency`,
-    );
+  if (fact.execution.attribution !== "ok" || fact.requiredAbstention) {
+    return undefined;
   }
+  if (fact.assessment === undefined) {
+    return fact.evaluatorKind === "judge"
+      ? "judge_evidence_incomplete"
+      : "assessment_evidence_missing";
+  }
+  if (
+    (fact.evaluatorKind === "judge" || fact.judgeModel !== undefined) &&
+    fact.orderConsistent === undefined
+  ) {
+    return "judge_evidence_incomplete";
+  }
+  return undefined;
 }
 
 function countAssessmentAbsenceReasons(
@@ -904,11 +915,9 @@ function countAssessmentAbsenceReasons(
 ): AssessmentAbsentReasonCount[] {
   const counts = new Map<string, number>();
   for (const fact of facts) {
-    if (fact.assessmentAbsentReason === undefined) continue;
-    counts.set(
-      fact.assessmentAbsentReason,
-      (counts.get(fact.assessmentAbsentReason) ?? 0) + 1,
-    );
+    const reason = evidenceExclusionReason(fact);
+    if (reason === undefined) continue;
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
   }
   return [...counts.entries()]
     .sort(([left], [right]) => compareText(left, right))

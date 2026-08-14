@@ -18818,8 +18818,8 @@ function aggregate(facts, { gatePolicyVersion, qualityFloor, availabilityFloor }
 function aggregateGroup(facts, gatePolicyVersion, qualityFloor, availabilityFloor, cascadeFindings2) {
   const first = facts[0];
   assertConsistentGroup(facts, first);
-  const included = facts.filter((fact) => !fact.requiredAbstention && fact.execution.attribution === "ok" && fact.assessment !== void 0);
-  const excludedExecutions = facts.filter((fact) => fact.execution.attribution !== "ok" || fact.assessmentAbsentReason !== void 0).length;
+  const included = facts.filter((fact) => !fact.requiredAbstention && fact.execution.attribution === "ok" && fact.assessment !== void 0 && evidenceExclusionReason(fact) === void 0);
+  const excludedExecutions = facts.filter((fact) => fact.execution.attribution !== "ok" || evidenceExclusionReason(fact) !== void 0).length;
   const excludedFraction = excludedExecutions / facts.length;
   const assessmentAbsentReasons = countAssessmentAbsenceReasons(facts);
   const trajectories = new Set(included.map((fact) => fact.execution.trajectoryId));
@@ -18915,7 +18915,7 @@ function aggregateGroup(facts, gatePolicyVersion, qualityFloor, availabilityFloo
 }
 function aggregateEvaluatorKind(facts, evaluatorKind, evidenceQuestionId2) {
   const conditionalFacts = facts.filter((fact) => !fact.requiredAbstention);
-  const included = conditionalFacts.filter((fact) => fact.execution.attribution === "ok" && fact.assessment !== void 0);
+  const included = conditionalFacts.filter((fact) => fact.execution.attribution === "ok" && fact.assessment !== void 0 && evidenceExclusionReason(fact) === void 0);
   const passes = included.filter((fact) => fact.assessment.passed === true && fact.orderConsistent !== false).length;
   const scoreTotal = included.reduce((total, fact) => total + (fact.orderConsistent === false ? 0 : fact.assessment.score), 0);
   const judgeFacts = included.filter((fact) => fact.judgeModel !== void 0);
@@ -18923,7 +18923,7 @@ function aggregateEvaluatorKind(facts, evaluatorKind, evidenceQuestionId2) {
   const excludedExecutions = conditionalFacts.length - included.length;
   const assessmentAbsentReasons = countAssessmentAbsenceReasons(conditionalFacts);
   const includedOutcomes = outcomesByTrajectory(included, (fact) => Boolean(fact.assessment.passed === true && fact.orderConsistent !== false));
-  const worstCaseOutcomes = outcomesByTrajectory(conditionalFacts, (fact) => fact.execution.attribution === "ok" && fact.orderConsistent !== false && fact.assessment?.passed === true);
+  const worstCaseOutcomes = outcomesByTrajectory(conditionalFacts, (fact) => fact.execution.attribution === "ok" && evidenceExclusionReason(fact) === void 0 && fact.orderConsistent !== false && fact.assessment?.passed === true);
   const clustered = hasRepeatedTrajectory(worstCaseOutcomes);
   const nTrajectories = Object.keys(includedOutcomes).length;
   const nDistinctSteps = new Set(included.map((fact) => fact.execution.stepId)).size;
@@ -18933,7 +18933,7 @@ function aggregateEvaluatorKind(facts, evaluatorKind, evidenceQuestionId2) {
   }) : wilson(passes, included.length);
   const worstCaseBound = evaluatorWorstCaseBound(conditionalFacts.map((fact) => ({
     trajectoryId: fact.execution.trajectoryId,
-    passed: fact.execution.attribution === "ok" && fact.orderConsistent !== false && fact.assessment?.passed === true
+    passed: fact.execution.attribution === "ok" && evidenceExclusionReason(fact) === void 0 && fact.orderConsistent !== false && fact.assessment?.passed === true
   })), `${evidenceQuestionId2}\0${evaluatorKind}`);
   return {
     evaluatorKind,
@@ -19122,28 +19122,35 @@ function validateFact(fact) {
   if (fact.assessment !== void 0 && fact.assessmentAbsentReason !== void 0) {
     throw new Error(`execution ${fact.execution.executionId} has both an assessment and a named assessment absence`);
   }
-  if (fact.execution.attribution === "ok" && !fact.requiredAbstention && fact.assessment === void 0 && fact.assessmentAbsentReason === void 0) {
-    throw new Error(`execution ${fact.execution.executionId} has neither an assessment nor a named assessment absence`);
-  }
   if (fact.assessment !== void 0 && fact.assessment.executionId !== fact.execution.executionId) {
     throw new Error(`assessment ${fact.assessment.assessmentId} belongs to a different execution`);
   }
   if (fact.assessment?.passed === null) {
     throw new Error(`assessment ${fact.assessment.assessmentId} has no gate pass decision`);
   }
-  if (fact.judgeModel !== void 0 && fact.orderConsistent === void 0) {
-    throw new Error(`execution ${fact.execution.executionId} is missing judge order consistency`);
+}
+function evidenceExclusionReason(fact) {
+  if (fact.assessmentAbsentReason !== void 0) {
+    return fact.assessmentAbsentReason;
   }
-  if (fact.evaluatorKind === "judge" && fact.orderConsistent === void 0) {
-    throw new Error(`execution ${fact.execution.executionId} is missing judge order consistency`);
+  if (fact.execution.attribution !== "ok" || fact.requiredAbstention) {
+    return void 0;
   }
+  if (fact.assessment === void 0) {
+    return fact.evaluatorKind === "judge" ? "judge_evidence_incomplete" : "assessment_evidence_missing";
+  }
+  if ((fact.evaluatorKind === "judge" || fact.judgeModel !== void 0) && fact.orderConsistent === void 0) {
+    return "judge_evidence_incomplete";
+  }
+  return void 0;
 }
 function countAssessmentAbsenceReasons(facts) {
   const counts = /* @__PURE__ */ new Map();
   for (const fact of facts) {
-    if (fact.assessmentAbsentReason === void 0)
+    const reason = evidenceExclusionReason(fact);
+    if (reason === void 0)
       continue;
-    counts.set(fact.assessmentAbsentReason, (counts.get(fact.assessmentAbsentReason) ?? 0) + 1);
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
   }
   return [...counts.entries()].sort(([left], [right]) => compareText(left, right)).map(([reason, count]) => ({ reason, count }));
 }
@@ -20746,7 +20753,7 @@ async function replayModeA(input) {
         throw error51;
       }
       const silentFailure = response.content.length === 0 || response.usage.outputTokens === 0;
-      await writeReplayFact(input.store, input.budget.projectId, executionId, executionSchema.parse({
+      const execution = executionSchema.parse({
         executionId,
         evidenceQuestionId: cell.step.evidenceQuestionId,
         caseId: cell.recordedCase.caseId,
@@ -20758,12 +20765,12 @@ async function replayModeA(input) {
         terminalOutcome: silentFailure ? "failure" : "success",
         finalOutput: response.content,
         attribution: silentFailure ? "silent-failure" : "ok"
-      }));
-      result2.completed += 1;
-      if (silentFailure)
+      });
+      if (silentFailure || input.judge === void 0) {
+        await writeReplayFact(input.store, input.budget.projectId, executionId, execution);
+        result2.completed += 1;
         return;
-      if (input.judge === void 0)
-        return;
+      }
       const judge = input.judge;
       let judgeInvocation = 0;
       const judged = await judgeExecution({
@@ -20809,6 +20816,8 @@ async function replayModeA(input) {
           orderConsistent: judged.orderConsistent
         }
       }));
+      await writeReplayFact(input.store, input.budget.projectId, executionId, execution);
+      result2.completed += 1;
     } finally {
       try {
         await reservation.refund(actualCostUsd);

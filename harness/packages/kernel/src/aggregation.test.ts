@@ -3,6 +3,7 @@ import type { Assessment, CascadeFinding } from "@rightmodeler/core";
 
 import {
   ABSTAIN_REASONS,
+  EVIDENCE_EXCLUSION_REASONS,
   EXCLUDED_FRACTION_MAX,
   aggregate,
   evaluatorWorstCaseBound,
@@ -54,6 +55,15 @@ describe("aggregate", () => {
         "provider_catalog_drift",
         "confirmation_model_metadata_missing",
         "confirmation_recorded_content_missing",
+      ]),
+    );
+  });
+
+  it("exports named evidence exclusion reasons", () => {
+    expect(EVIDENCE_EXCLUSION_REASONS).toEqual(
+      expect.arrayContaining([
+        "assessment_evidence_missing",
+        "judge_evidence_incomplete",
       ]),
     );
   });
@@ -501,13 +511,75 @@ describe("aggregate", () => {
     });
   });
 
-  it("requires position-swap agreement metadata for judge evidence", () => {
-    const facts = Array.from({ length: 10 }, (_, index) => ({
+  it("excludes judge assessments missing position-swap agreement metadata", () => {
+    const facts = Array.from({ length: 20 }, (_, index) => ({
       ...aggregationFact(index),
+      orderConsistent: index === 0 ? undefined : true,
+    }));
+
+    const [verdict] = aggregate(withExpectedAssignments(facts), options);
+
+    expect(verdict).toMatchObject({
+      nReviewTrials: 19,
+      excludedExecutions: 1,
+      excludedFraction: EXCLUDED_FRACTION_MAX,
+      assessmentAbsent: 1,
+      assessmentAbsentReasons: [
+        { reason: "judge_evidence_incomplete", count: 1 },
+      ],
+      evaluatorKinds: [
+        expect.objectContaining({
+          passes: 19,
+          trials: 19,
+          excludedExecutions: 1,
+          excludedFraction: EXCLUDED_FRACTION_MAX,
+          worstCasePassRate: 0.95,
+          assessmentAbsentReasons: [
+            { reason: "judge_evidence_incomplete", count: 1 },
+          ],
+        }),
+      ],
+    });
+  });
+
+  it("gates incomplete judge evidence above the excluded-fraction ceiling", () => {
+    const facts = Array.from({ length: 20 }, (_, index) => ({
+      ...aggregationFact(index),
+      orderConsistent: index < 2 ? undefined : true,
+    }));
+
+    expect(aggregate(withExpectedAssignments(facts), options)[0]).toMatchObject(
+      {
+        excludedExecutions: 2,
+        excludedFraction: 0.1,
+        assessmentAbsentReasons: [
+          { reason: "judge_evidence_incomplete", count: 2 },
+        ],
+        decision: "abstain",
+        abstainReason: { reason: "excluded_fraction_exceeded" },
+      },
+    );
+  });
+
+  it("abstains when incomplete judge evidence starves the family", () => {
+    const facts = aggregationFacts(10).map((fact) => ({
+      ...fact,
       orderConsistent: undefined,
     }));
 
-    expect(() => aggregate(facts, options)).toThrow(/order consistency/i);
+    expect(aggregate(facts, options)[0]).toMatchObject({
+      nReviewTrials: 0,
+      excludedExecutions: 10,
+      assessmentAbsentReasons: [
+        { reason: "judge_evidence_incomplete", count: 10 },
+      ],
+      decision: "abstain",
+      abstainReason: {
+        reason: "insufficient_review_trials",
+        observed: 0,
+        required: MIN_REVIEW_TRIALS,
+      },
+    });
   });
 
   it("names a failed minimum before a required-abstention failure", () => {
@@ -577,14 +649,34 @@ describe("aggregate", () => {
     expect(() => aggregate(facts, options)).toThrow(/gate policy/i);
   });
 
-  it("fails loudly when an attributable execution has no assessment", () => {
-    const facts = aggregationFacts(10, (index) => ({
+  it("excludes an attributable execution with no assessment", () => {
+    const facts = aggregationFacts(20, (index) => ({
       assessment: index === 0 ? null : undefined,
     }));
 
-    expect(() => aggregate(facts, options)).toThrow(
-      /execution-0.*neither an assessment nor a named assessment absence/i,
-    );
+    expect(aggregate(facts, options)[0]).toMatchObject({
+      nReviewTrials: 19,
+      excludedExecutions: 1,
+      assessmentAbsent: 1,
+      assessmentAbsentReasons: [
+        { reason: "judge_evidence_incomplete", count: 1 },
+      ],
+    });
+  });
+
+  it("names missing non-judge assessment evidence", () => {
+    const facts = aggregationFacts(20, (index) => ({
+      assessment: index === 0 ? null : undefined,
+      evaluatorKind: "deterministic",
+    }));
+
+    expect(aggregate(facts, options)[0]).toMatchObject({
+      nReviewTrials: 19,
+      excludedExecutions: 1,
+      assessmentAbsentReasons: [
+        { reason: "assessment_evidence_missing", count: 1 },
+      ],
+    });
   });
 
   it("counts a named assessment absence as an exclusion without fabricating a trial", () => {

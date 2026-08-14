@@ -77,6 +77,17 @@ required abstentions, evidence coverage, evaluator coverage, availability, exclu
 Report the selected reason plus its observed and required values; do not substitute a friendlier
 reason later in the list.
 
+The exported `EVIDENCE_EXCLUSION_REASONS` values name malformed or absent execution evidence:
+
+- `assessment_evidence_missing`: an attributable non-judge execution has no assessment and no
+  more specific named absence.
+- `judge_evidence_incomplete`: judge evidence is absent or its assessment lacks the required
+  position-swap consistency metadata.
+
+These executions stay in the worst-case denominator but are excluded from the conditional-quality
+numerator and denominator. They count toward the excluded-fraction ceiling; if too few complete
+trials remain, the family abstains under the applicable evidence minimum.
+
 ## Release gate IDs
 
 - `zero-unsafe-substitutions`: the total unsafe-substitution count must be zero.
@@ -109,7 +120,9 @@ The judge runs two temperature-zero calls with reference and candidate positions
 return exactly `verdict`, `score`, and `justification` as strict JSON. Kernel scores, not the
 judge's numeric score, bind: `equivalent = 1`, `minor_drift = 0.6`, and `divergent = 0`. Only two
 `equivalent` verdicts pass. A position disagreement becomes `minor_drift`, fails, and records
-`orderConsistent: false`.
+`orderConsistent: false`. The replay driver publishes the terminal execution only after both judge
+calls and the complete assessment are persisted, so an interrupted judge cell is retried rather
+than resumed as complete.
 
 ## Reading the final result
 
