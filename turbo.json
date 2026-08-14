@@ -5,7 +5,13 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**", "build/**", "dist/**"]
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "!.next/dev/**",
+        "build/**",
+        "dist/**"
+      ]
     },
     "lint": {
       "dependsOn": ["^lint"]
@@ -15,6 +21,16 @@
     },
     "check": {
       "dependsOn": ["^build", "^check"]
+    },
+    "@rightmodeler/cli#check": {
+      "dependsOn": ["^build", "^check"],
+      // Temporary Phase E2 parity inputs; shrink after the Phase E3 cutover removes the Python pipeline.
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/harness/docs/parity.md",
+        "$TURBO_ROOT$/harness/fixtures/canonicalization/**",
+        "$TURBO_ROOT$/apps/pipeline/**"
+      ]
     },
     "check-types": {
       "dependsOn": ["^check-types"]

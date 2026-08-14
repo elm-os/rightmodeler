@@ -21,6 +21,7 @@
     "bundle": "tsx scripts/generate-docs.mjs --check && node build.mjs",
     "docs:generate": "tsx scripts/generate-docs.mjs --write",
     "prepack": "pnpm run bundle",
+    "parity": "pnpm run build && vitest run src/parity.test.ts",
     "check-types": "tsc --noEmit",
     "check": "pnpm run build && tsc --noEmit && vitest run"
   },

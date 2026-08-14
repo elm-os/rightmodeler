@@ -10,6 +10,7 @@ import {
   TraceAdaptError,
   TraceParseError,
   detectFormat,
+  langfuseAdapter,
   openAiJsonlAdapter,
   otelGenAiAdapter,
   parseTraceRecords,
@@ -104,6 +105,18 @@ describe("trace adapters", () => {
       TraceParseError,
     );
     expect(() => otelGenAiAdapter.adapt({})).toThrow(TraceAdaptError);
+  });
+
+  it("reports a named reason when a record has no mappable model call", () => {
+    expect(langfuseAdapter.adaptWithReport([{ type: "SPAN" }])).toEqual({
+      runs: [],
+      droppedRecords: [
+        {
+          recordIndex: 0,
+          reason: "record does not contain a mappable model call",
+        },
+      ],
+    });
   });
 
   it("groups OTel spans into ordered shared-trace trajectories", async () => {
@@ -226,6 +239,31 @@ describe("scrubRuns", () => {
 });
 
 describe("corpus", () => {
+  it("deduplicates identical case content", () => {
+    const run: NormalizedRun = {
+      version: "2",
+      traceId: "source-a",
+      sourceFormat: "test",
+      steps: [
+        {
+          stepIndex: 0,
+          model: "model",
+          messages: ["same input"],
+          output: "same output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          trajectoryId: "shared-trajectory",
+          family: "summarize",
+        },
+      ],
+    };
+
+    const corpus = buildCorpus([run, { ...run, traceId: "source-b" }], {
+      seed: 42,
+    });
+
+    expect(corpus.cases).toHaveLength(1);
+  });
+
   it("is content deterministic and persists normalized stratum weights", async () => {
     const runs = scrubRuns(await otelRuns()).runs;
     const first = buildCorpus(runs, { seed: 42 });

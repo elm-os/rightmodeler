@@ -71,6 +71,7 @@ export async function startStubProvider({
   errorModels = [],
   includeFreeModel = false,
   malformedJudgeModels = [],
+  rateLimitMessageIncludes,
 }) {
   const rateLimitedKeys = new Set();
   const failingModels = new Set(errorModels);
@@ -162,6 +163,7 @@ export async function startStubProvider({
           return;
         }
       }
+      const messageText = JSON.stringify(body.messages ?? []);
 
       if (request.headers["x-stub-echo-auth"] !== undefined) {
         json(
@@ -206,6 +208,18 @@ export async function startStubProvider({
         );
         return;
       }
+      if (
+        typeof rateLimitMessageIncludes === "string" &&
+        messageText.includes(rateLimitMessageIncludes)
+      ) {
+        json(
+          response,
+          429,
+          { error: { message: "Stub rate limit." } },
+          { ...hitHeaders, "retry-after": "0" },
+        );
+        return;
+      }
 
       const holdMs = Number.parseInt(
         request.headers["x-stub-hold-before-response-ms"] ?? "0",
@@ -234,7 +248,6 @@ export async function startStubProvider({
         return;
       }
 
-      const messageText = JSON.stringify(body.messages ?? []);
       const judgeModel =
         body.model === "zeta/judge-1" || body.model === "yotta/judge-2";
       if (judgeModel && messageText.includes("STUB_JUDGE_PROVIDER_ERROR")) {

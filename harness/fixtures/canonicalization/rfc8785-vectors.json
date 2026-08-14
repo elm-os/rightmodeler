@@ -1,0 +1,94 @@
+[
+  {
+    "name": "ascii-primitives-and-empty-containers",
+    "value": {
+      "array": [],
+      "falseValue": false,
+      "nullValue": null,
+      "object": {},
+      "trueValue": true
+    },
+    "canonical": "{\"array\":[],\"falseValue\":false,\"nullValue\":null,\"object\":{},\"trueValue\":true}",
+    "sha256": "c3c61a9daa1a5a404b14894e24ff8a3a338b5ce28a0319635eb81d6a9c5d1228"
+  },
+  {
+    "name": "exponent-switch",
+    "value": {
+      "exponent": 1e21,
+      "fixed": 1e20
+    },
+    "canonical": "{\"exponent\":1e+21,\"fixed\":100000000000000000000}",
+    "sha256": "8547795455e73849c1c45485fa9522cd4c231f719b757da057fb88bd55aea2d4"
+  },
+  {
+    "name": "negative-zero",
+    "value": {
+      "value": -0.0
+    },
+    "canonical": "{\"value\":0}",
+    "sha256": "23d7b286bd429460b92a2a1c21b6afc34110446c5034c17363fda363aa0a7c5d"
+  },
+  {
+    "name": "small-number-switch",
+    "value": {
+      "fixed": 0.000001,
+      "exponent": 1e-7
+    },
+    "canonical": "{\"exponent\":1e-7,\"fixed\":0.000001}",
+    "sha256": "a43bcea14adf52ccc01f39917a4a9f9bcab2a5a1c042887d8bb672552b68bfc7"
+  },
+  {
+    "name": "utf8-strings",
+    "value": {
+      "value": "é €"
+    },
+    "canonical": "{\"value\":\"é €\"}",
+    "sha256": "cebb9ec8e3fb0f016cbcd4fedf8e469209ccccc55cec537843010976bc697aa4"
+  },
+  {
+    "name": "control-characters",
+    "value": {
+      "value": "\u0000\u0001\b\t\n\f\r\"\\/\u001f"
+    },
+    "canonical": "{\"value\":\"\\u0000\\u0001\\b\\t\\n\\f\\r\\\"\\\\/\\u001f\"}",
+    "sha256": "c230c82ccee30237f4e6ae2e877f2bee68a1c84556235b990f0028b2aeea98a0"
+  },
+  {
+    "name": "utf16-key-ordering",
+    "value": {
+      "�": 2,
+      "😀": 1
+    },
+    "canonical": "{\"😀\":1,\"�\":2}",
+    "sha256": "fd8b688bfa8b71822975ab3519e20b09e43b67d382a9f32831bfa384df21a82d"
+  },
+  {
+    "name": "nested-array-key-ordering",
+    "value": {
+      "rows": [
+        {
+          "z": 1,
+          "a": 2
+        },
+        {
+          "outer": {
+            "y": 3,
+            "b": 4
+          }
+        }
+      ]
+    },
+    "canonical": "{\"rows\":[{\"a\":2,\"z\":1},{\"outer\":{\"b\":4,\"y\":3}}]}",
+    "sha256": "8645f659c3dd37d6d0acebb071fbf2a7c2f019d87bd0f858f5af6b70222b9bfa"
+  },
+  {
+    "name": "safe-and-large-integers",
+    "value": {
+      "at": 9007199254740992,
+      "beyond": 9007199254740994,
+      "maxSafe": 9007199254740991
+    },
+    "canonical": "{\"at\":9007199254740992,\"beyond\":9007199254740994,\"maxSafe\":9007199254740991}",
+    "sha256": "cdd4dd29ea4f956651a68f9162ae7bab0c51ab838149f8e97649f78dc4d453c1"
+  }
+]

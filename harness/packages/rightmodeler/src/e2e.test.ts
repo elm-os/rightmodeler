@@ -104,6 +104,7 @@ interface StubProviderModule {
     errorModels?: string[];
     includeFreeModel?: boolean;
     malformedJudgeModels?: string[];
+    rateLimitMessageIncludes?: string;
   }): Promise<StubProvider>;
 }
 
@@ -383,54 +384,11 @@ async function startStub(
     errorModels?: string[];
     includeFreeModel?: boolean;
     malformedJudgeModels?: string[];
+    rateLimitMessageIncludes?: string;
   } = {},
 ): Promise<StubProvider> {
   const module = (await import(stubModuleUrl)) as StubProviderModule;
   return module.startStubProvider({ port: 0, ...options });
-}
-
-async function startRateLimitedStub(): Promise<StubProvider> {
-  const upstream = await startStub();
-  let hitCount = 0;
-  const server = createServer(async (request, response) => {
-    if (request.method === "POST" && request.url === "/v1/chat/completions") {
-      hitCount += 1;
-      response.writeHead(429, {
-        "content-type": "application/json",
-        "retry-after": "0",
-      });
-      response.end(JSON.stringify({ error: { message: "Rate limited." } }));
-      return;
-    }
-    const upstreamResponse = await fetch(
-      `http://127.0.0.1:${upstream.port}${request.url ?? "/"}`,
-      { method: request.method },
-    );
-    response.writeHead(upstreamResponse.status, {
-      "content-type":
-        upstreamResponse.headers.get("content-type") ?? "application/json",
-    });
-    response.end(Buffer.from(await upstreamResponse.arrayBuffer()));
-  });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  if (address === null || typeof address === "string") {
-    await upstream.close();
-    throw new Error("Rate-limit stub did not bind a TCP port");
-  }
-  return {
-    port: address.port,
-    getHitCount: () => hitCount,
-    close: async () => {
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
-      await upstream.close();
-    },
-  };
 }
 
 async function startCatalogDriftStub(): Promise<StubProvider> {
@@ -1714,7 +1672,9 @@ describe("built CLI pipeline", () => {
 
   it("blocks only affected families when operational replay cells cannot complete", async () => {
     const { repo } = await fixtureCopy("replay-operational-block");
-    const stub = await startRateLimitedStub();
+    const stub = await startStub({
+      rateLimitMessageIncludes: "Fixture bulletin",
+    });
     try {
       const result = await runCli(
         [
@@ -1736,19 +1696,29 @@ describe("built CLI pipeline", () => {
       expect(result.code, result.stderr).toBe(0);
       const output = jsonOutput(result);
       const families = output.familyOutcomes as Array<{
-        verdict: { abstainReason?: Record<string, unknown> };
+        familyId: string;
+        verdict: { abstainReason?: { reason?: string } };
       }>;
-      expect(families.length).toBeGreaterThan(0);
       expect(
-        families.every(
-          ({ verdict }) =>
-            verdict.abstainReason?.reason === "replay_operational_block",
-        ),
-      ).toBe(true);
-      expect(families[0]?.verdict.abstainReason).toMatchObject({
+        families
+          .filter(
+            ({ verdict }) =>
+              verdict.abstainReason?.reason === "replay_operational_block",
+          )
+          .map(({ familyId }) => familyId),
+      ).toEqual(["summarize"]);
+      expect(
+        families.find(({ familyId }) => familyId === "summarize")?.verdict
+          .abstainReason,
+      ).toMatchObject({
+        reason: "replay_operational_block",
         observed: expect.any(Number),
         required: 0,
       });
+      expect(
+        families.find(({ familyId }) => familyId === "support")?.verdict
+          .abstainReason?.reason,
+      ).toBe("insufficient_review_trials");
       const report = await storeText(
         new FsStore(join(repo, ".rightmodeler")),
         reportKey("project", "report.md"),
