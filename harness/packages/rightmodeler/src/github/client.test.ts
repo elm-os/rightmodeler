@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   BlockedError,
   createGithubClient,
+  GithubContentRefusalError,
   GithubHttpError,
   GithubRequestError,
   type GithubClient,
@@ -43,6 +44,8 @@ interface StubModule {
     malformedResponsePath?: string;
     paginationPageSize?: number;
     foreignPaginationLink?: boolean;
+    contentDirectoryResponse?: boolean;
+    contentEncodingNoneResponse?: boolean;
   }): Promise<StubServer>;
 }
 
@@ -131,6 +134,26 @@ describe("GitHub client conformance", () => {
       sha: seeded.sha,
     });
 
+    await expect(
+      github.getFileContent({
+        ...repository,
+        path: "src/existing.ts",
+        ref: seeded.sha,
+      }),
+    ).resolves.toEqual({
+      path: "src/existing.ts",
+      sha: expect.stringMatching(/^[a-f0-9]{40}$/),
+      content: "export const existing = true;\n",
+      contentBytes: Buffer.from("export const existing = true;\n"),
+    });
+    await expect(
+      github.findOpenPullRequest({
+        ...repository,
+        head: "rightmodeler/change",
+        base: "main",
+      }),
+    ).resolves.toBeNull();
+
     const created = await github.createOrUpdateFile({
       ...repository,
       path: "src/new file.ts",
@@ -150,6 +173,17 @@ describe("GitHub client conformance", () => {
       sha: created.content?.sha,
     });
     expect(updated.content?.sha).not.toBe(created.content?.sha);
+    await expect(
+      github.getFileContent({
+        ...repository,
+        path: "src/new file.ts",
+        ref: "rightmodeler/change",
+      }),
+    ).resolves.toMatchObject({
+      path: "src/new file.ts",
+      sha: updated.content?.sha,
+      content: "export const model = 'smaller';\n",
+    });
 
     await expect(
       github.compareCommits({
@@ -182,6 +216,13 @@ describe("GitHub client conformance", () => {
       merged: false,
       requestedReviewers: [],
     });
+    await expect(
+      github.findOpenPullRequest({
+        ...repository,
+        head: "rightmodeler/change",
+        base: "main",
+      }),
+    ).resolves.toMatchObject({ number: pull.number });
 
     const requested = await github.requestReviewers({
       ...repository,
@@ -296,8 +337,11 @@ describe("GitHub client conformance", () => {
       expect.arrayContaining([
         "GET /repos/acme/demo/git/ref/heads/main",
         "POST /repos/acme/demo/git/refs",
+        "GET /repos/acme/demo/contents/src/existing.ts",
         "PUT /repos/acme/demo/contents/src/new%20file.ts",
+        "GET /repos/acme/demo/contents/src/new%20file.ts",
         "GET /repos/acme/demo/compare/main...rightmodeler/change",
+        "GET /repos/acme/demo/pulls",
         "POST /repos/acme/demo/pulls",
         "POST /repos/acme/demo/pulls/1/requested_reviewers",
         "GET /repos/acme/demo/pulls/1/reviews",
@@ -322,6 +366,8 @@ describe("GitHub client conformance", () => {
       "createOrUpdateFile",
       "createPullRequest",
       "createRef",
+      "findOpenPullRequest",
+      "getFileContent",
       "getPullRequest",
       "getRef",
       "listCheckRunsForRef",
@@ -332,6 +378,7 @@ describe("GitHub client conformance", () => {
     ]);
     expect(Object.keys(await import("./client.js")).sort()).toEqual([
       "BlockedError",
+      "GithubContentRefusalError",
       "GithubHttpError",
       "GithubRequestError",
       "createGithubClient",
@@ -589,6 +636,34 @@ describe("GitHub client rate limits and credential hygiene", () => {
     await expect(
       client(stub).getRef({ ...repository, ref: "heads/main" }),
     ).rejects.toBeInstanceOf(GithubRequestError);
+  });
+
+  it.each([
+    {
+      name: "directory array",
+      options: { contentDirectoryResponse: true },
+      code: "github_path_is_directory",
+    },
+    {
+      name: "non-inline file",
+      options: { contentEncodingNoneResponse: true },
+      code: "github_file_content_unavailable",
+    },
+  ] as const)("names a $name contents response", async ({ options, code }) => {
+    process.env[tokenEnv] = token;
+    const stub = await startStub(options);
+    const seeded = await seed(stub);
+
+    await expect(
+      client(stub).getFileContent({
+        ...repository,
+        path: "src/existing.ts",
+        ref: seeded.sha,
+      }),
+    ).rejects.toMatchObject({
+      name: "GithubContentRefusalError",
+      code,
+    } satisfies Partial<GithubContentRefusalError>);
   });
 
   it("does not read or retain the token while the client is created", async () => {

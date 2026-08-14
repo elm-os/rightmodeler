@@ -82,6 +82,13 @@ export class Reporter {
   }
 
   error(error: unknown): number {
+    const errorCode =
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string"
+        ? error.code
+        : undefined;
     const protocol =
       error instanceof ProtocolError
         ? {
@@ -90,7 +97,7 @@ export class Reporter {
             remedy: error.remedy,
           }
         : {
-            code: "runtime_error",
+            code: errorCode ?? "runtime_error",
             message: error instanceof Error ? error.message : String(error),
             remedy: "Fix the error and rerun the command.",
           };

@@ -9,6 +9,10 @@ export interface ScheduleHarnessInput {
   readonly store?: string;
 }
 
+export interface ScheduleTraceInput extends ScheduleHarnessInput {
+  readonly traces: string;
+}
+
 export function scheduleHarnessInput(
   schedule: string,
 ): ScheduleHarnessInput | undefined {
@@ -21,19 +25,17 @@ export function scheduleHarnessInput(
 export function scheduleReplayInput(
   schedule: string,
 ): ReplayStartInput | undefined {
-  const harness = scheduleHarnessInput(schedule);
-  const traces = requiredEnvironment(schedule, "RIGHTMODELER_TRACES");
+  const traceInput = scheduleTraceInput(schedule);
   const baseUrl = requiredEnvironment(
     schedule,
     "RIGHTMODELER_PROVIDER_BASE_URL",
   );
-  if (harness === undefined || traces === undefined || baseUrl === undefined) {
+  if (traceInput === undefined || baseUrl === undefined) {
     return undefined;
   }
   const maxCostUsd = optionalPositiveNumber("RIGHTMODELER_MAX_COST_USD");
   return {
-    ...harness,
-    traces,
+    ...traceInput,
     baseUrl,
     ...(process.env.RIGHTMODELER_MODEB_CONFIG === undefined
       ? {}
@@ -43,6 +45,15 @@ export function scheduleReplayInput(
       : { apiKeyEnv: process.env.RIGHTMODELER_API_KEY_ENV }),
     ...(maxCostUsd === undefined ? {} : { maxCostUsd }),
   };
+}
+
+export function scheduleTraceInput(
+  schedule: string,
+): ScheduleTraceInput | undefined {
+  const harness = scheduleHarnessInput(schedule);
+  const traces = requiredEnvironment(schedule, "RIGHTMODELER_TRACES");
+  if (harness === undefined || traces === undefined) return undefined;
+  return { ...harness, traces };
 }
 
 export function scheduleGitHubTarget(

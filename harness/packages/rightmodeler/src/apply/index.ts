@@ -6,6 +6,7 @@ import { runApply, type RunApplyResult } from "../pipeline.js";
 export * from "./diff.js";
 export * from "./difflint.js";
 export * from "./format.js";
+export * from "./remediation.js";
 export { applySwaps as applyPreparedSwaps } from "./orchestrator.js";
 export type {
   ApplyCap,

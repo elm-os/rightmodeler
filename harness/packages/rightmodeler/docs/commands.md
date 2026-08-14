@@ -35,6 +35,8 @@ Commands:
   export [options]     export trials and verdicts to an evaluation provider
   audit                manage the reference audit
   apply [options]      open a draft pull request for proven model swaps
+  rollback [options]   open a draft pull request restoring a prior model swap
+  drift [options]      detect drift against the active replay corpus
   watch [options]      reconcile one open model-swap pull request
   report               write report.md and report.json
   status [options]     summarize the current store
@@ -394,6 +396,63 @@ Options:
   --github-token-env <name>  environment variable containing the GitHub token
   --dry-run                  run all machine gates without writing GitHub state
   -h, --help                 display help for command
+```
+
+## `rightmodeler rollback`
+
+```text
+Usage: rightmodeler rollback [options]
+
+open a draft pull request restoring a prior model swap
+
+Options:
+  --owner <owner>            GitHub repository owner
+  --pr <number>              merged pull request number
+  --github-base-url <url>    GitHub API base URL
+  --github-token-env <name>  environment variable containing the GitHub token
+  -h, --help                 display help for command
+```
+
+## `rightmodeler drift`
+
+```text
+Usage: rightmodeler drift [options] [command]
+
+detect drift against the active replay corpus
+
+Options:
+  --traces <path>    new trace batch
+  -h, --help         display help for command
+
+Commands:
+  approve [options]  approve a stored corpus drift proposal
+  publish [options]  publish an approved corpus drift proposal
+```
+
+## `rightmodeler drift approve`
+
+```text
+Usage: rightmodeler drift approve [options]
+
+approve a stored corpus drift proposal
+
+Options:
+  --proposal <id>  drift proposal SHA-256 identifier
+  --actor <name>   approving actor
+  --reason <text>  approval reason
+  -h, --help       display help for command
+```
+
+## `rightmodeler drift publish`
+
+```text
+Usage: rightmodeler drift publish [options]
+
+publish an approved corpus drift proposal
+
+Options:
+  --proposal <id>  drift proposal SHA-256 identifier
+  -h, --help       display help for command
 ```
 
 ## `rightmodeler watch`

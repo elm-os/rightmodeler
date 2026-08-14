@@ -30,6 +30,7 @@
     "@rightmodeler/replay": "workspace:*",
     "@rightmodeler/scanner": "workspace:*",
     "@types/node": "^24",
+    "ajv": "^8.20.0",
     "commander": "^14",
     "esbuild": "^0.28.2",
     "tsx": "^4",

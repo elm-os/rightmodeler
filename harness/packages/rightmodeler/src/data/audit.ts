@@ -2,7 +2,7 @@ import { computeRunSpecDigest, type JsonValue } from "@rightmodeler/core";
 import { wilson } from "@rightmodeler/kernel";
 import { z } from "zod";
 
-import { buildCorpus } from "./corpus.js";
+import { buildCorpus, type Corpus } from "./corpus.js";
 import type { NormalizedRun } from "./normalized-run.js";
 
 export const MIN_AUDITED_PER_FAMILY = 10;
@@ -113,10 +113,24 @@ export function auditSample(
   options: { size: number; seed: number },
 ): AuditWorksheet {
   try {
+    return auditCorpusSample(
+      buildCorpus(runs, { seed: options.seed }),
+      options,
+    );
+  } catch (error) {
+    if (error instanceof AuditError) throw error;
+    throw new AuditError("Audit sampling failed", { cause: error });
+  }
+}
+
+export function auditCorpusSample(
+  corpus: Corpus,
+  options: { size: number; seed: number },
+): AuditWorksheet {
+  try {
     if (!Number.isSafeInteger(options.size) || options.size < 1) {
       throw new AuditError("Audit sample size must be a positive integer");
     }
-    const corpus = buildCorpus(runs, { seed: options.seed });
     if (options.size > corpus.cases.length) {
       throw new AuditError(
         `Audit sample size must not exceed ${corpus.cases.length}`,

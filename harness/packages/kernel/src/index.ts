@@ -1,5 +1,7 @@
 export * from "./aggregation.js";
 export * from "./ddmin.js";
+export * from "./diagnosis.js";
+export * from "./drift.js";
 export * from "./gates.js";
 export * from "./judge.js";
 export * from "./selection.js";

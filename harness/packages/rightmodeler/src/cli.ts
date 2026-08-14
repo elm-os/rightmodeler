@@ -39,6 +39,19 @@ import {
   type CliIo,
   type OutputMode,
 } from "./protocol.js";
+import {
+  approveDriftProposal,
+  publishDriftProposal,
+  runDrift,
+  type ApproveDriftProposalOptions,
+  type PublishDriftProposalOptions,
+  type RunDriftOptions,
+} from "./drift.js";
+import {
+  rollbackSwaps,
+  type RollbackResult,
+  type RollbackSwapsOptions,
+} from "./rollback.js";
 import { version } from "./version.js";
 
 interface GlobalOptions {
@@ -99,6 +112,27 @@ interface ApplyCommandOptions {
   dryRun?: boolean;
 }
 
+interface RollbackCommandOptions {
+  owner: string;
+  pr: string;
+  githubBaseUrl: string;
+  githubTokenEnv: string;
+}
+
+interface DriftCommandOptions {
+  traces?: string;
+}
+
+interface DriftApproveCommandOptions {
+  proposal: string;
+  actor: string;
+  reason?: string;
+}
+
+interface DriftPublishCommandOptions {
+  proposal: string;
+}
+
 interface WatchCommandOptions {
   owner: string;
   githubRepo: string;
@@ -123,7 +157,7 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     .description("Find and prove safe model substitutions.")
     .addHelpText(
       "after",
-      "\nExit codes are command-specific: apply uses 0 applied/clean dry-run, 1 refused, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
+      "\nExit codes are command-specific: apply and rollback use 0 success, 1 refused, >=10 runtime error; drift uses 0 success, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
     )
     .version(version)
     .option("--repo <dir>", "repository to analyze", process.cwd())
@@ -392,6 +426,86 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     });
     reporter.result(result);
     return result.status === "refused" ? 1 : 0;
+  });
+
+  const rollback = program
+    .command("rollback")
+    .description("open a draft pull request restoring a prior model swap")
+    .requiredOption("--owner <owner>", "GitHub repository owner")
+    .requiredOption("--pr <number>", "merged pull request number")
+    .requiredOption("--github-base-url <url>", "GitHub API base URL")
+    .requiredOption(
+      "--github-token-env <name>",
+      "environment variable containing the GitHub token",
+    );
+  run(rollback, async (reporter, global) => {
+    const local = rollback.opts<RollbackCommandOptions>();
+    const prNumber = Number(local.pr);
+    if (!Number.isSafeInteger(prNumber) || prNumber < 1) {
+      throw new Error("--pr must be a positive integer");
+    }
+    const result = await rollbackSwaps({
+      repo: global.repo,
+      store: global.store,
+      owner: local.owner,
+      githubBaseUrl: local.githubBaseUrl,
+      githubTokenEnv: local.githubTokenEnv,
+      prNumber,
+    });
+    reporter.result(result);
+    return result.status === "refused" ? 1 : 0;
+  });
+
+  const drift = program
+    .command("drift")
+    .description("detect drift against the active replay corpus")
+    .option("--traces <path>", "new trace batch");
+  run(drift, async (reporter, global) => {
+    const traces = drift.opts<DriftCommandOptions>().traces;
+    if (traces === undefined) {
+      throw new Error("--traces is required");
+    }
+    const result = await runDrift({
+      repo: global.repo,
+      store: global.store,
+      traces,
+    });
+    reporter.result(result);
+    return 0;
+  });
+
+  const driftApprove = drift
+    .command("approve")
+    .description("approve a stored corpus drift proposal")
+    .requiredOption("--proposal <id>", "drift proposal SHA-256 identifier")
+    .requiredOption("--actor <name>", "approving actor")
+    .option("--reason <text>", "approval reason");
+  run(driftApprove, async (reporter, global) => {
+    const local = driftApprove.opts<DriftApproveCommandOptions>();
+    const result = await approveDriftProposal({
+      repo: global.repo,
+      store: global.store,
+      proposalId: local.proposal,
+      actor: local.actor,
+      ...(local.reason === undefined ? {} : { reason: local.reason }),
+    });
+    reporter.result(result);
+    return 0;
+  });
+
+  const driftPublish = drift
+    .command("publish")
+    .description("publish an approved corpus drift proposal")
+    .requiredOption("--proposal <id>", "drift proposal SHA-256 identifier");
+  run(driftPublish, async (reporter, global) => {
+    const local = driftPublish.opts<DriftPublishCommandOptions>();
+    const result = await publishDriftProposal({
+      repo: global.repo,
+      store: global.store,
+      proposalId: local.proposal,
+    });
+    reporter.result(result);
+    return 0;
   });
 
   const watch = program
@@ -903,9 +1017,21 @@ if (isEntryPoint) {
 }
 
 export {
+  approveDriftProposal,
   applySwaps,
   listApprovedSwapSets,
   listWatchablePullRequests,
+  publishDriftProposal,
   readActiveDetachedReplay,
+  rollbackSwaps,
+  runDrift,
 };
-export type { ApplySwapsOptions, ApplySwapsResult };
+export type {
+  ApproveDriftProposalOptions,
+  ApplySwapsOptions,
+  ApplySwapsResult,
+  PublishDriftProposalOptions,
+  RollbackResult,
+  RollbackSwapsOptions,
+  RunDriftOptions,
+};

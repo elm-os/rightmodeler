@@ -236,6 +236,18 @@ export function tokenCount(
   return value as number;
 }
 
+export function optionalNonnegativeNumber(
+  value: unknown,
+  label: string,
+  format: TraceFormat,
+): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new TraceAdaptError(format, `${label} must be a non-negative number`);
+  }
+  return value;
+}
+
 export function jsonValue(
   value: unknown,
   label: string,

@@ -15,6 +15,13 @@ export interface GithubFileCommit {
   readonly commit: { readonly sha: string; readonly message: string };
 }
 
+export interface GithubFileContent {
+  readonly path: string;
+  readonly sha: string;
+  readonly content: string;
+  readonly contentBytes: Uint8Array;
+}
+
 export interface GithubPullRequest {
   readonly number: number;
   readonly state: "open" | "closed";
@@ -109,6 +116,12 @@ export interface GithubClient {
   createRef(
     input: GithubRepository & { readonly ref: string; readonly sha: string },
   ): Promise<GithubRef>;
+  getFileContent(
+    input: GithubRepository & {
+      readonly path: string;
+      readonly ref: string;
+    },
+  ): Promise<GithubFileContent>;
   createOrUpdateFile(
     input: GithubRepository & {
       readonly path: string;
@@ -127,6 +140,12 @@ export interface GithubClient {
       readonly draft: boolean;
     },
   ): Promise<GithubPullRequest>;
+  findOpenPullRequest(
+    input: GithubRepository & {
+      readonly head: string;
+      readonly base: string;
+    },
+  ): Promise<GithubPullRequest | null>;
   requestReviewers(
     input: GithubRepository & {
       readonly pullNumber: number;
@@ -178,6 +197,19 @@ export class BlockedError extends Error {
 
 export class GithubRequestError extends Error {}
 
+export type GithubContentRefusalCode =
+  "github_path_is_directory" | "github_file_content_unavailable";
+
+export class GithubContentRefusalError extends GithubRequestError {
+  readonly code: GithubContentRefusalCode;
+
+  constructor(code: GithubContentRefusalCode, message: string) {
+    super(message);
+    this.name = "GithubContentRefusalError";
+    this.code = code;
+  }
+}
+
 export class GithubHttpError extends GithubRequestError {
   readonly status: number;
 
@@ -197,6 +229,13 @@ const refSchema = z.object({
 const fileCommitSchema = z.object({
   content: z.object({ path: z.string(), sha: z.string() }).nullable(),
   commit: z.object({ sha: z.string(), message: z.string() }),
+});
+const fileContentSchema = z.object({
+  type: z.literal("file"),
+  encoding: z.literal("base64"),
+  path: z.string(),
+  sha: z.string(),
+  content: z.string(),
 });
 const pullRequestSchema = z.object({
   number: z.number().int(),
@@ -531,6 +570,42 @@ export function createGithubClient(
       return { ref: raw.ref, sha: raw.object.sha };
     },
 
+    async getFileContent(input) {
+      const result = await request(
+        `${repositoryPath(input)}/contents/${pathPart(input.path)}?ref=${encodeURIComponent(input.ref)}`,
+      );
+      const value = parseJson(result.text, "GitHub file-contents response");
+      if (Array.isArray(value)) {
+        throw new GithubContentRefusalError(
+          "github_path_is_directory",
+          `GitHub path is a directory, not a file: ${input.path}`,
+        );
+      }
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        "encoding" in value &&
+        value.encoding === "none"
+      ) {
+        throw new GithubContentRefusalError(
+          "github_file_content_unavailable",
+          `GitHub did not return inline file content: ${input.path}`,
+        );
+      }
+      const raw = parsed(
+        fileContentSchema,
+        value,
+        "GitHub file-contents response",
+      );
+      const contentBytes = Buffer.from(raw.content, "base64");
+      return {
+        path: raw.path,
+        sha: raw.sha,
+        content: contentBytes.toString("utf8"),
+        contentBytes,
+      };
+    },
+
     async createOrUpdateFile(input) {
       const raw = await requestJson(
         `${repositoryPath(input)}/contents/${pathPart(input.path)}`,
@@ -566,6 +641,27 @@ export function createGithubClient(
         "GitHub create-pull-request response",
       );
       return normalizePullRequest(raw);
+    },
+
+    async findOpenPullRequest(input) {
+      const query = new URLSearchParams({
+        state: "open",
+        head: `${input.owner}:${input.head}`,
+        base: input.base,
+        per_page: "2",
+      });
+      const raw = await requestJson(
+        `${repositoryPath(input)}/pulls?${query.toString()}`,
+        {},
+        z.array(pullRequestSchema),
+        "GitHub pull-request list response",
+      );
+      if (raw.length > 1) {
+        throw new GithubRequestError(
+          `Multiple open pull requests use ${input.head} as their head`,
+        );
+      }
+      return raw[0] === undefined ? null : normalizePullRequest(raw[0]);
     },
 
     async requestReviewers(input) {

@@ -34,6 +34,7 @@ import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { listApprovedSwapSets, topologicalRecords } from "./pipeline.js";
+import { Reporter } from "./protocol.js";
 
 const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const demoAppPath = fileURLToPath(
@@ -69,6 +70,27 @@ const githubStubModuleUrl = new URL(
 const temporaryDirectories: string[] = [];
 const secret = "phase-a-api-key-must-not-persist";
 const execFileAsync = promisify(execFile);
+
+describe("machine error protocol", () => {
+  it("preserves a named code from a typed service error", () => {
+    let stderr = "";
+    const reporter = new Reporter("json", {
+      stdout: () => undefined,
+      stderr: (value) => {
+        stderr += value;
+      },
+    });
+    const error = Object.assign(new Error("active corpus moved"), {
+      code: "stale_corpus_parent",
+    });
+
+    expect(reporter.error(error)).toBe(10);
+    expect(JSON.parse(stderr)).toMatchObject({
+      code: "stale_corpus_parent",
+      message: "active corpus moved",
+    });
+  });
+});
 
 interface StubProvider {
   port: number;
@@ -1319,6 +1341,10 @@ describe("built CLI pipeline", () => {
       ) as {
         verdicts: unknown[];
         families: Array<{ gates: unknown[]; selection: unknown }>;
+        blockedFamilies: Array<{
+          familyId: string;
+          diagnosis: { issueClass: string };
+        }>;
       };
       const reportMarkdown = await storeText(
         store,
@@ -1340,6 +1366,14 @@ describe("built CLI pipeline", () => {
             selection: expect.objectContaining({ status: "selected" }),
           }),
         ]),
+      );
+      expect(reportJson.blockedFamilies).toContainEqual(
+        expect.objectContaining({
+          familyId: "support",
+          diagnosis: expect.objectContaining({
+            issueClass: "insufficient-evidence",
+          }),
+        }),
       );
       const storedVerdicts = await Promise.all(
         (await store.list(verdictsPrefix("project"))).map(async (key) =>
@@ -1569,6 +1603,110 @@ describe("built CLI pipeline", () => {
       );
       const report = await storeText(store, reportKey("project", "report.md"));
       expect(report).toContain("selection_candidate_verdict_missing");
+      expect(report).toContain("## Blocked families");
+      expect(report).toContain("insufficient-evidence");
+      expect(report).toContain("collect-evidence");
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("reports only the case whose evaluator evidence is missing", async () => {
+    const { repo } = await fixtureCopy("missing-evaluator-evidence");
+    const stub = await startStub();
+    const baseArgs = [
+      "init",
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      "RIGHTMODELER_MISSING_EVIDENCE_API_KEY",
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    try {
+      const replay = await runCli([...baseArgs, "--through", "replay"], {
+        env: { RIGHTMODELER_MISSING_EVIDENCE_API_KEY: secret },
+      });
+      expect(replay.code, replay.stderr).toBe(0);
+      const storeRoot = join(repo, ".rightmodeler");
+      const store = new FsStore(storeRoot);
+      const facts = await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) => ({
+          key,
+          fact: JSON.parse(await storeText(store, key)) as Record<
+            string,
+            unknown
+          >,
+        })),
+      );
+      const executions = new Map(
+        facts.flatMap(({ fact }) =>
+          typeof fact.executionId === "string" &&
+          typeof fact.terminalOutcome === "string"
+            ? [[fact.executionId, fact] as const]
+            : [],
+        ),
+      );
+      const target = facts.find(({ fact }) => {
+        if (
+          typeof fact.assessmentId !== "string" ||
+          typeof fact.executionId !== "string"
+        ) {
+          return false;
+        }
+        return executions.get(fact.executionId)?.corpusSplit === "holdout";
+      });
+      expect(target).toBeDefined();
+      if (target === undefined || typeof target.fact.executionId !== "string") {
+        throw new Error("Missing holdout assessment fixture");
+      }
+      const targetExecution = executions.get(target.fact.executionId);
+      if (typeof targetExecution?.caseId !== "string") {
+        throw new Error("Missing holdout execution fixture");
+      }
+      const targetCaseId = targetExecution.caseId;
+      await rm(join(storeRoot, ".rightmodeler-store", "entries", target.key), {
+        recursive: true,
+      });
+
+      const result = await runCli(baseArgs, {
+        env: { RIGHTMODELER_MISSING_EVIDENCE_API_KEY: secret },
+      });
+
+      expect(result.code, result.stderr).toBe(0);
+      const reportJson = JSON.parse(
+        await storeText(store, reportKey("project", "report.json")),
+      ) as {
+        families: Array<{
+          familyId: string;
+          verdict: { caseIds: string[] };
+        }>;
+        blockedFamilies: Array<{
+          familyId: string;
+          diagnosis: {
+            issueClass: string;
+            triggerCaseIds: string[];
+          };
+        }>;
+      };
+      const family = reportJson.families.find(({ verdict }) =>
+        verdict.caseIds.includes(targetCaseId),
+      );
+      expect(family?.verdict.caseIds.length).toBeGreaterThan(1);
+      expect(
+        reportJson.blockedFamilies.find(
+          ({ familyId }) => familyId === family?.familyId,
+        )?.diagnosis,
+      ).toEqual(
+        expect.objectContaining({
+          issueClass: "insufficient-evidence",
+          triggerCaseIds: [targetCaseId],
+        }),
+      );
     } finally {
       await stub.close();
     }
@@ -1616,6 +1754,9 @@ describe("built CLI pipeline", () => {
         reportKey("project", "report.md"),
       );
       expect(report).toContain("replay_operational_block");
+      expect(report).toContain("## Blocked families");
+      expect(report).toContain("replay");
+      expect(report).toContain("fix-replay");
     } finally {
       await stub.close();
     }

@@ -48,12 +48,14 @@ import {
 } from "@rightmodeler/core";
 import {
   aggregate,
+  diagnoseFailure,
   evaluateGates,
   pickJudges,
   ReleaseGatePolicy,
   selectWinner,
   type AggregationFact,
   type AbstainReasonDetails,
+  type Diagnosis,
   type FamilyVerdict,
   type GateResult,
   type JudgeChat,
@@ -84,7 +86,7 @@ import {
 import { z } from "zod";
 
 import {
-  auditSample,
+  auditCorpusSample,
   auditTabulate,
   buildCorpus,
   detectFormat,
@@ -107,6 +109,7 @@ import {
   type ApplyVerdict,
 } from "./apply/orchestrator.js";
 import { estimateReplayCost, type ReplayCostEstimate } from "./estimate.js";
+import { readActiveCorpus, readCorpusVersion } from "./drift.js";
 import {
   blastRadius,
   captureConventions,
@@ -181,6 +184,7 @@ const detachedReplayWorkerSchema = z.strictObject({
 });
 
 const PROJECT_ID = "project";
+const ACTIVE_CORPUS_KEY = `${PROJECT_ID}/corpus/active.json`;
 const CORPUS_SEED = 42;
 const AUDIT_SAMPLE_LIMIT = 20;
 const SHORTLIST_TOP = 3;
@@ -1650,7 +1654,14 @@ async function inputDigest(
       extra.stepMap = context.modeBConfig.stepMap;
     }
   }
-  if (stage === "corpus") extra.seed = CORPUS_SEED;
+  if (stage === "corpus") {
+    extra.seed = CORPUS_SEED;
+    const active = await context.store.get(ACTIVE_CORPUS_KEY);
+    extra.activeCorpus =
+      active === null
+        ? null
+        : createHash("sha256").update(active.body).digest("hex");
+  }
   if (stage === "audit-sample") extra.limit = AUDIT_SAMPLE_LIMIT;
   if (stage === "shortlist") {
     extra.top = SHORTLIST_TOP;
@@ -1984,13 +1995,47 @@ async function executeScrub(
   return key;
 }
 
+export interface PipelineCorpusContext {
+  readonly repo: string;
+  readonly store: Store;
+  readonly storeRoot: string;
+  readonly projectId: string;
+}
+
+export async function resolvePipelineCorpus(
+  context: PipelineCorpusContext,
+  runs: readonly z.infer<typeof normalizedRunSchema>[],
+): Promise<Corpus> {
+  if ((await context.store.get(ACTIVE_CORPUS_KEY)) === null) {
+    return buildCorpus(runs, { seed: CORPUS_SEED });
+  }
+  return (
+    await readActiveCorpus({ repo: context.repo, store: context.storeRoot })
+  ).corpus;
+}
+
+export async function resolveCheckpointedPipelineCorpus(
+  context: PipelineCorpusContext,
+): Promise<Corpus> {
+  const { corpusVersionId } = await loadCurrent(
+    context,
+    "corpus",
+    corpusOutputSchema,
+  );
+  return readCorpusVersion(
+    { repo: context.repo, store: context.storeRoot },
+    corpusVersionId,
+  );
+}
+
 async function executeCorpus(
   context: PipelineContext,
   inputDigestValue: string,
 ): Promise<string> {
-  const corpus = buildCorpus((await loadScrub(context)).runs, {
-    seed: CORPUS_SEED,
-  });
+  const corpus = await resolvePipelineCorpus(
+    context,
+    (await loadScrub(context)).runs,
+  );
   await writeCorpus(context.store, context.projectId, corpus);
   const key = artifactKey(context, "corpus", inputDigestValue);
   await putImmutableJson(context.store, key, corpusOutput(corpus));
@@ -2001,12 +2046,12 @@ async function executeAuditSample(
   context: PipelineContext,
   inputDigestValue: string,
 ): Promise<string> {
-  const runs = (await loadScrub(context)).runs;
-  const size = Math.min(
-    AUDIT_SAMPLE_LIMIT,
-    buildCorpus(runs, { seed: CORPUS_SEED }).cases.length,
-  );
-  const worksheet = auditSample(runs, { size, seed: CORPUS_SEED });
+  const corpus = await resolveCheckpointedPipelineCorpus(context);
+  const size = Math.min(AUDIT_SAMPLE_LIMIT, corpus.cases.length);
+  const worksheet = auditCorpusSample(corpus, {
+    size,
+    seed: CORPUS_SEED,
+  });
   const key = artifactKey(context, "audit-sample", inputDigestValue);
   await putImmutableJson(context.store, key, worksheet);
   return key;
@@ -2018,7 +2063,7 @@ async function executeShortlist(
 ): Promise<string> {
   const records = (await loadReconcile(context)).records;
   const runs = (await loadScrub(context)).runs;
-  const corpus = buildCorpus(runs, { seed: CORPUS_SEED });
+  const corpus = await resolveCheckpointedPipelineCorpus(context);
   const approved =
     context.approvedRunSpecDigest === undefined
       ? undefined
@@ -2190,13 +2235,20 @@ function requireReplayUsage(
   usage: ReadonlyMap<string, { readonly inputTokens: number }>,
   corpusCase: Corpus["cases"][number],
 ): { readonly inputTokens: number } {
+  if (corpusCase.observation !== undefined) {
+    return { inputTokens: corpusCase.observation.usage.inputTokens };
+  }
   const value = usage.get(
     `${corpusCase.content.trajectoryId}\0${corpusCase.content.stepIndex}`,
   );
   if (value === undefined) {
-    throw new Error(
-      `Corpus case has no recorded token usage: ${corpusCase.caseId}`,
-    );
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "active_corpus_usage_unavailable",
+      message: `Active corpus case has no recorded token usage: ${corpusCase.caseId}`,
+      remedy:
+        "Publish a corpus version built from traces that include token usage.",
+    });
   }
   return value;
 }
@@ -3888,7 +3940,7 @@ async function loadDecisionOutput(context: PipelineContext) {
 }
 
 async function loadCurrent<T>(
-  context: PipelineContext,
+  context: Pick<PipelineContext, "store" | "projectId">,
   stage: PipelineStage,
   schema: z.ZodType<T>,
 ): Promise<T> {
@@ -4130,6 +4182,10 @@ interface ReportData {
     calls: number;
     sampleExcerpt: string;
   }>;
+  blockedFamilies: Array<{
+    familyId: string;
+    diagnosis: Diagnosis;
+  }>;
   apply: Array<{
     runSpecDigest: string;
     repo: string;
@@ -4142,6 +4198,98 @@ interface ReportData {
     createdAt: string;
     eventCount: number;
   }>;
+}
+
+function blockedFamilyDiagnosis(
+  family: FamilyOutcome,
+  aggregationFacts: readonly AggregationFact[],
+): ReportData["blockedFamilies"][number] | undefined {
+  if (family.effectiveRecommendation || family.verdict.decision === "reject") {
+    return undefined;
+  }
+  const reason = family.verdict.abstainReason?.reason;
+  const missingEvidence =
+    family.verdict.nExecutions === 0 ||
+    family.verdict.coveredEvidenceCases < family.verdict.nExecutions;
+  const familyFailureCode =
+    reason === "replay_operational_block" || reason === "provider_catalog_drift"
+      ? `replay_${reason}`
+      : reason === "selection_candidate_verdict_missing" ||
+          reason === "selection_missing_shortlist_verdicts"
+        ? "missing_candidate_result"
+        : missingEvidence ||
+            reason?.includes("evidence") ||
+            reason === "incomplete_evaluator_coverage"
+          ? "missing_evidence"
+          : null;
+  const selectionGate =
+    family.verdict.decision === "abstain"
+      ? undefined
+      : family.selection.status === "no_shortlist_passer"
+        ? "recommendation-precision"
+        : family.selection.status === "holdout_failed"
+          ? "safe-opportunity-recall"
+          : undefined;
+  const gates: Array<{ id: string; status: "pass" | "fail" }> =
+    family.gates.map(({ id, pass }) => ({
+      id,
+      status: pass ? ("pass" as const) : ("fail" as const),
+    }));
+  if (
+    selectionGate !== undefined &&
+    !gates.some(({ id }) => id === selectionGate)
+  ) {
+    gates.push({ id: selectionGate, status: "fail" });
+  }
+  const cases = aggregationFacts
+    .filter(
+      ({ execution, familyId }) =>
+        familyId === family.familyId &&
+        execution.candidateId === family.verdict.candidateId &&
+        execution.corpusSplit === family.verdict.corpusSplit,
+    )
+    .map(({ execution, assessment, assessmentAbsentReason }) => ({
+      caseId: execution.caseId,
+      pipelineFamily: "structured-check",
+      terminalVerdict:
+        execution.terminalOutcome === "failure" || assessment?.passed === false
+          ? ("fail" as const)
+          : execution.terminalOutcome === "abstain" || assessment === undefined
+            ? ("abstain" as const)
+            : ("pass" as const),
+      failureCode:
+        assessmentAbsentReason ??
+        (assessment === undefined ? "missing_evidence" : null),
+      evidenceRefs: assessment === undefined ? [] : [assessment.assessmentId],
+    }));
+  const syntheticCaseId = `family:${family.familyId}`;
+  if (familyFailureCode !== null) {
+    cases.push({
+      caseId: syntheticCaseId,
+      pipelineFamily: "structured-check",
+      terminalVerdict: familyFailureCode.startsWith("replay_")
+        ? "fail"
+        : "abstain",
+      failureCode: familyFailureCode,
+      evidenceRefs: [],
+    });
+  }
+  const diagnosis = diagnoseFailure({
+    gates,
+    cases,
+    replayObserved:
+      reason === "replay_operational_block" ||
+      reason === "provider_catalog_drift",
+  });
+  return {
+    familyId: family.familyId,
+    diagnosis: {
+      ...diagnosis,
+      triggerCaseIds: diagnosis.triggerCaseIds.filter(
+        (caseId) => caseId !== syntheticCaseId,
+      ),
+    },
+  };
 }
 
 function spendSummary(facts: readonly Fact[]): ReportData["spend"] {
@@ -4300,6 +4448,13 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
   const corpus = await loadCorpusSummary(context);
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
+  const aggregationFacts = await materializeAggregationFacts(
+    context,
+    plan,
+    replay.candidates,
+    replay.evaluation,
+    decisionOutput.families.map(({ referenceCeiling }) => referenceCeiling),
+  );
   const worksheet = await loadCurrent(
     context,
     "audit-sample",
@@ -4352,6 +4507,10 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
       ),
     ],
     candidateErrors: candidateErrorReport(facts, plan, replay),
+    blockedFamilies: decisionOutput.families.flatMap((family) => {
+      const blocked = blockedFamilyDiagnosis(family, aggregationFacts);
+      return blocked === undefined ? [] : [blocked];
+    }),
     apply: lifecycleReport(lifecycle),
   };
 }
@@ -4381,6 +4540,19 @@ function renderReport(report: ReportData): string {
     );
   }
   lines.push(
+    "",
+    "## Blocked families",
+    "",
+    ...(report.blockedFamilies.length === 0
+      ? ["None."]
+      : [
+          "| Family | Issue class | Next action | Trigger cases |",
+          "| --- | --- | --- | --- |",
+          ...report.blockedFamilies.map(
+            ({ familyId, diagnosis }) =>
+              `| ${familyId} | ${diagnosis.issueClass} | ${diagnosis.nextAction} | ${diagnosis.triggerCaseIds.join(", ")} |`,
+          ),
+        ]),
     "",
     "## Reference ceilings",
     "",

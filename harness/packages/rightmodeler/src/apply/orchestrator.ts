@@ -8,8 +8,6 @@ import {
   canonicalJson,
   computeRunSpecDigest,
   factKey,
-  factSchema,
-  factsPrefix,
   jsonValueSchema,
   lifecycleEventSchema,
   type JsonValue,
@@ -22,24 +20,29 @@ import type {
   CapturedConventions,
   FamilyBlastRadius,
 } from "../enrich/index.js";
-import type { GithubClient } from "../github/index.js";
+import {
+  type GithubClient,
+  type GithubFileContent,
+  GithubHttpError,
+  type GithubPullRequest,
+} from "../github/index.js";
 import { buildSwapDiff, type SwapDiffFile, type SwapRequest } from "./diff.js";
 import { lintSwapDiff, type DiffViolation } from "./difflint.js";
 import { formatWithHostFormatter, type FormatterBlocker } from "./format.js";
+import {
+  createAppliedRemediationLifecycleEvent,
+  createRemediationLifecycleEvent,
+  digestFileContent,
+  isRepositoryRevision,
+  readRemediationLifecycleEvents,
+  remediationFromLifecycleDetail,
+  type FileDigestMap,
+  type RemediationLifecycleEvent,
+} from "./remediation.js";
 
 const execFileAsync = promisify(execFile);
 const projectId = "project";
 const reviewerLimit = 5;
-const lifecycleKindOrder: Record<LifecycleEvent["kind"], number> = {
-  apply_started: 0,
-  pr_opened: 1,
-  review_requested: 2,
-  comment_posted: 3,
-  reproof_started: 4,
-  pr_closed_rejected: 5,
-  pr_merged: 6,
-  watch_ended: 7,
-};
 
 export type ApplyCascadeStatus =
   "confirmed" | "not-required" | "blocked" | "isolated" | "inconclusive";
@@ -73,7 +76,12 @@ export type ApplyRefusalCode =
   | "diff_lint_failed"
   | "formatter_blocked"
   | "host_conventions_unreadable"
-  | "no_requestable_reviewers";
+  | "no_requestable_reviewers"
+  | "invalid_repository_revision"
+  | "apply_branch_unowned"
+  | "apply_branch_scope_mismatch"
+  | "apply_resume_state_mismatch"
+  | "apply_restore_failed";
 
 const caseIdPattern = /^[0-9a-f]{64}$/;
 
@@ -115,6 +123,23 @@ interface ReviewerSet {
 interface ReviewIdentity {
   readonly kind: "user" | "team";
   readonly value: string;
+}
+
+interface ApplyBranchUpdate {
+  readonly file: SwapDiffFile;
+  readonly sha: string;
+}
+
+class ApplyServiceError extends Error {
+  readonly code: ApplyRefusalCode;
+  readonly detail: JsonValue;
+
+  constructor(code: ApplyRefusalCode, message: string, detail: unknown = null) {
+    super(message);
+    this.name = "ApplyServiceError";
+    this.code = code;
+    this.detail = jsonValueSchema.parse(detail);
+  }
 }
 
 function refusal(
@@ -292,6 +317,217 @@ function blobSha(content: string): string {
     .digest("hex");
 }
 
+function lifecycleDetail(event: LifecycleEvent): Record<string, JsonValue> {
+  if (
+    typeof event.detail !== "object" ||
+    event.detail === null ||
+    Array.isArray(event.detail)
+  ) {
+    return {};
+  }
+  return event.detail;
+}
+
+async function optionalGithubFile(
+  githubClient: GithubClient,
+  input: Parameters<GithubClient["getFileContent"]>[0],
+): Promise<GithubFileContent | undefined> {
+  try {
+    return await githubClient.getFileContent(input);
+  } catch (error) {
+    if (error instanceof GithubHttpError && error.status === 404) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function optionalBranchSha(
+  githubClient: GithubClient,
+  input: Parameters<GithubClient["getRef"]>[0],
+): Promise<string | undefined> {
+  try {
+    return (await githubClient.getRef(input)).sha;
+  } catch (error) {
+    if (error instanceof GithubHttpError && error.status === 404) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function resumedApplyUpdates({
+  githubClient,
+  owner,
+  repo,
+  branchSha,
+  files,
+}: {
+  readonly githubClient: GithubClient;
+  readonly owner: string;
+  readonly repo: string;
+  readonly branchSha: string;
+  readonly files: readonly SwapDiffFile[];
+}): Promise<ApplyBranchUpdate[]> {
+  const updates: ApplyBranchUpdate[] = [];
+  for (const file of files) {
+    const current = await optionalGithubFile(githubClient, {
+      owner,
+      repo,
+      path: file.path,
+      ref: branchSha,
+    });
+    if (current?.content === file.after) continue;
+    if (current?.content !== file.before) {
+      throw new ApplyServiceError(
+        "apply_resume_state_mismatch",
+        `Existing apply branch has an unrecognized touched-file state: ${file.path}`,
+        { path: file.path },
+      );
+    }
+    updates.push({ file, sha: current.sha });
+  }
+  return updates;
+}
+
+async function assertApplyBranchScope({
+  githubClient,
+  owner,
+  repo,
+  base,
+  head,
+  files,
+}: {
+  readonly githubClient: GithubClient;
+  readonly owner: string;
+  readonly repo: string;
+  readonly base: string;
+  readonly head: string;
+  readonly files: readonly SwapDiffFile[];
+}): Promise<void> {
+  const allowed = new Set(files.map(({ path }) => path));
+  const comparison = await githubClient.compareCommits({
+    owner,
+    repo,
+    base,
+    head,
+  });
+  const unexpected = comparison.files
+    .map(({ filename }) => filename)
+    .filter((path) => !allowed.has(path));
+  if (unexpected.length > 0) {
+    throw new ApplyServiceError(
+      "apply_branch_scope_mismatch",
+      `Existing apply branch changed files outside its declared scope: ${unexpected.join(", ")}`,
+      { paths: unexpected },
+    );
+  }
+}
+
+async function restoreApplyBranch({
+  githubClient,
+  owner,
+  repo,
+  branch,
+  title,
+  files,
+  failedDigests,
+}: {
+  readonly githubClient: GithubClient;
+  readonly owner: string;
+  readonly repo: string;
+  readonly branch: string;
+  readonly title: string;
+  readonly files: readonly {
+    readonly path: string;
+    readonly before: string;
+  }[];
+  readonly failedDigests: FileDigestMap;
+}): Promise<void> {
+  const branchSha = await optionalBranchSha(githubClient, {
+    owner,
+    repo,
+    ref: `heads/${branch}`,
+  });
+  if (branchSha === undefined) {
+    return;
+  }
+
+  const currentFiles = new Map<string, GithubFileContent | undefined>();
+  for (const file of files) {
+    const current = await optionalGithubFile(githubClient, {
+      owner,
+      repo,
+      path: file.path,
+      ref: branchSha,
+    });
+    currentFiles.set(file.path, current);
+    failedDigests[file.path] =
+      current === undefined ? null : digestFileContent(current.contentBytes);
+  }
+
+  for (const file of files) {
+    const current = currentFiles.get(file.path);
+    if (current?.content === file.before) continue;
+    await githubClient.createOrUpdateFile({
+      owner,
+      repo,
+      path: file.path,
+      message: `Restore after failed ${title}`,
+      content: file.before,
+      branch,
+      ...(current === undefined ? {} : { sha: current.sha }),
+    });
+  }
+
+  for (const file of files) {
+    const restored = await optionalGithubFile(githubClient, {
+      owner,
+      repo,
+      path: file.path,
+      ref: branch,
+    });
+    if (restored?.content !== file.before) {
+      throw new ApplyServiceError(
+        "apply_restore_failed",
+        `Apply failure did not restore ${file.path}`,
+        { path: file.path },
+      );
+    }
+  }
+}
+
+function applyStartMismatch(
+  started: LifecycleEvent,
+  remediation: RemediationLifecycleEvent,
+): ApplyResult | null {
+  let recorded: RemediationLifecycleEvent;
+  try {
+    recorded = remediationFromLifecycleDetail(started.detail);
+  } catch (error) {
+    return refusal(
+      "apply_resume_state_mismatch",
+      "The recorded apply start has malformed remediation evidence.",
+      { message: error instanceof Error ? error.message : String(error) },
+    );
+  }
+  if (
+    recorded.evidence_id !== remediation.evidence_id ||
+    recorded.repository_revision !== remediation.repository_revision ||
+    canonicalJson(recorded.affected_files) !==
+      canonicalJson(remediation.affected_files) ||
+    canonicalJson(recorded.pre_apply_digests) !==
+      canonicalJson(remediation.pre_apply_digests)
+  ) {
+    return refusal(
+      "apply_resume_state_mismatch",
+      "The recorded pre-apply state does not match the resumed remediation.",
+      { eventId: started.eventId },
+    );
+  }
+  return null;
+}
+
 async function staleDigestPaths(
   repoDir: string,
   swaps: readonly SwapRequest[],
@@ -320,24 +556,6 @@ async function staleDigestPaths(
     }
   }
   return stale;
-}
-
-async function readLifecycleEvents(store: Store): Promise<LifecycleEvent[]> {
-  const events: LifecycleEvent[] = [];
-  for (const key of await store.list(factsPrefix(projectId))) {
-    const entry = await store.get(key);
-    if (entry === null) throw new Error(`Missing listed fact: ${key}`);
-    const value: unknown = JSON.parse(Buffer.from(entry.body).toString("utf8"));
-    const fact = factSchema.parse(value);
-    const lifecycle = lifecycleEventSchema.safeParse(fact);
-    if (lifecycle.success) events.push(lifecycle.data);
-  }
-  return events.sort(
-    (left, right) =>
-      compareText(left.createdAt, right.createdAt) ||
-      lifecycleKindOrder[left.kind] - lifecycleKindOrder[right.kind] ||
-      compareText(left.eventId, right.eventId),
-  );
 }
 
 function recordedReviewers(
@@ -545,6 +763,13 @@ export async function applySwaps({
       "Selected families do not share one evidence revision, corpus, and gate policy.",
     );
   }
+  if (!isRepositoryRevision(evidence.revision)) {
+    return refusal(
+      "invalid_repository_revision",
+      "The evidence repository revision must be a 40- or 64-character lowercase hex object ID.",
+      { revision: evidence.revision },
+    );
+  }
 
   const repository = `${owner}/${repo}`;
   const runSpecDigest = computeRunSpecDigest({
@@ -557,10 +782,11 @@ export async function applySwaps({
   const branch = branchName(conventions, familyIds, runSpecDigest);
   const title = changeTitle(conventions, familyIds);
   const reviewerSet = reviewersFor(selected);
-  const existing = existingPullRequest(
-    await readLifecycleEvents(store),
-    runSpecDigest,
+  const lifecycleEvents = await readRemediationLifecycleEvents(
+    store,
+    projectId,
   );
+  const existing = existingPullRequest(lifecycleEvents, runSpecDigest);
   if (existing?.status === "rejected") {
     return refusal(
       "previously_rejected",
@@ -671,6 +897,11 @@ export async function applySwaps({
     };
   }
 
+  const remediation = createAppliedRemediationLifecycleEvent({
+    runSpecDigest,
+    repositoryRevision: evidence.revision,
+    files: formatted.files,
+  });
   const lifecycle = {
     repo: repository,
     familyIds,
@@ -681,46 +912,185 @@ export async function applySwaps({
     },
     runSpecDigest,
   } as const;
-  await appendLifecycleEvent(store, {
-    ...lifecycle,
-    prNumber: null,
-    kind: "apply_started",
-    detail: { branch, title },
-  });
-
-  await githubClient.createRef({
+  const sortedFiles = [...formatted.files].sort((left, right) =>
+    compareText(left.path, right.path),
+  );
+  const started = [...lifecycleEvents]
+    .reverse()
+    .find(
+      (event) =>
+        event.runSpecDigest === runSpecDigest &&
+        event.kind === "apply_started" &&
+        lifecycleDetail(event).operation === "apply",
+    );
+  if (started !== undefined) {
+    const mismatch = applyStartMismatch(started, remediation);
+    if (mismatch !== null) return mismatch;
+  }
+  const existingBranchSha = await optionalBranchSha(githubClient, {
     owner,
     repo,
-    ref: `refs/heads/${branch}`,
-    sha: evidence.revision,
+    ref: `heads/${branch}`,
   });
-  for (const file of [...formatted.files].sort((left, right) =>
-    compareText(left.path, right.path),
-  )) {
-    await githubClient.createOrUpdateFile({
-      owner,
-      repo,
-      path: file.path,
-      message: title,
-      content: file.after,
-      branch,
-      sha: blobSha(file.before),
+  if (existingBranchSha !== undefined && started === undefined) {
+    return refusal(
+      "apply_branch_unowned",
+      "The deterministic apply branch exists without a recorded apply start.",
+      { branch },
+    );
+  }
+  let resumedUpdates: ApplyBranchUpdate[] | undefined;
+  try {
+    if (existingBranchSha !== undefined) {
+      await assertApplyBranchScope({
+        githubClient,
+        owner,
+        repo,
+        base: evidence.revision,
+        head: existingBranchSha,
+        files: sortedFiles,
+      });
+      resumedUpdates = await resumedApplyUpdates({
+        githubClient,
+        owner,
+        repo,
+        branchSha: existingBranchSha,
+        files: sortedFiles,
+      });
+    }
+  } catch (error) {
+    if (error instanceof ApplyServiceError) {
+      return refusal(error.code, error.message, error.detail);
+    }
+    throw error;
+  }
+  if (started === undefined) {
+    await appendLifecycleEvent(store, {
+      ...lifecycle,
+      prNumber: null,
+      kind: "apply_started",
+      detail: { operation: "apply", branch, title, remediation },
     });
   }
-  const pullRequest = await githubClient.createPullRequest({
-    owner,
-    repo,
-    title,
-    body: evidenceBody(conventions, selected),
-    head: branch,
-    base,
-    draft: true,
-  });
+
+  let pullRequest: GithubPullRequest;
+  let ownsBranch = existingBranchSha !== undefined && started !== undefined;
+  try {
+    if (existingBranchSha === undefined) {
+      await githubClient.createRef({
+        owner,
+        repo,
+        ref: `refs/heads/${branch}`,
+        sha: evidence.revision,
+      });
+      ownsBranch = true;
+    }
+    const updates =
+      resumedUpdates ??
+      sortedFiles.map((file) => ({ file, sha: blobSha(file.before) }));
+    for (const { file, sha } of updates) {
+      await githubClient.createOrUpdateFile({
+        owner,
+        repo,
+        path: file.path,
+        message: title,
+        content: file.after,
+        branch,
+        sha,
+      });
+    }
+    await assertApplyBranchScope({
+      githubClient,
+      owner,
+      repo,
+      base: evidence.revision,
+      head: branch,
+      files: sortedFiles,
+    });
+    pullRequest =
+      (await githubClient.findOpenPullRequest({
+        owner,
+        repo,
+        head: branch,
+        base,
+      })) ??
+      (await githubClient.createPullRequest({
+        owner,
+        repo,
+        title,
+        body: evidenceBody(conventions, selected),
+        head: branch,
+        base,
+        draft: true,
+      }));
+  } catch (error) {
+    const failedDigests: FileDigestMap = {
+      ...(ownsBranch
+        ? remediation.post_apply_digests
+        : remediation.pre_apply_digests),
+    };
+    let restoreFailure: unknown;
+    if (ownsBranch) {
+      try {
+        await restoreApplyBranch({
+          githubClient,
+          owner,
+          repo,
+          branch,
+          title,
+          files: sortedFiles,
+          failedDigests,
+        });
+      } catch (caught) {
+        restoreFailure = caught;
+      }
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    const failedRemediation = createRemediationLifecycleEvent({
+      evidenceId: remediation.evidence_id,
+      eventType: "apply_failed",
+      actor: "rightmodeler",
+      reason,
+      repositoryRevision: evidence.revision,
+      affectedFiles: remediation.affected_files,
+      preApplyDigests: remediation.pre_apply_digests,
+      postApplyDigests: failedDigests,
+      restored: ownsBranch && restoreFailure === undefined,
+    });
+    await appendLifecycleEvent(store, {
+      ...lifecycle,
+      prNumber: null,
+      kind: "apply_started",
+      detail: {
+        operation: "apply_failed",
+        branch,
+        title,
+        remediation: failedRemediation,
+      },
+    });
+    if (restoreFailure !== undefined) {
+      if (restoreFailure instanceof ApplyServiceError) throw restoreFailure;
+      throw new ApplyServiceError(
+        "apply_restore_failed",
+        `Apply failure restoration failed: ${restoreFailure instanceof Error ? restoreFailure.message : String(restoreFailure)}`,
+        { branch },
+      );
+    }
+    if (error instanceof ApplyServiceError) {
+      return refusal(error.code, error.message, error.detail);
+    }
+    throw new Error(
+      ownsBranch ? `${reason}; pre-apply files were restored` : reason,
+      {
+        cause: error,
+      },
+    );
+  }
   await appendLifecycleEvent(store, {
     ...lifecycle,
     prNumber: pullRequest.number,
     kind: "pr_opened",
-    detail: { branch, title },
+    detail: { operation: "apply", branch, title, remediation },
   });
 
   await githubClient.requestReviewers({

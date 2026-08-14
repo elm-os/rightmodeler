@@ -19,10 +19,23 @@ export interface CorpusCaseContent {
   stepIndex: number;
 }
 
+export interface CorpusCaseObservation {
+  traceId?: string;
+  usage: { inputTokens: number; outputTokens: number };
+  timestamp?: string;
+  costUsd?: number;
+  durationMs?: number;
+  toolCalls: JsonValue[];
+  evaluator?: JsonValue;
+  evaluatorVersion?: JsonValue;
+  retryCount?: number;
+}
+
 export interface CorpusCase {
   caseId: string;
   content: CorpusCaseContent;
   split: CorpusSplit;
+  observation?: CorpusCaseObservation;
 }
 
 export interface StratumWeight {
@@ -33,6 +46,7 @@ export interface StratumWeight {
 
 export interface Corpus {
   corpusVersionId: string;
+  contractVersion?: number;
   seed: number;
   cases: CorpusCase[];
   strata: StratumWeight[];
@@ -64,6 +78,33 @@ function caseContent(step: NormalizedRun["steps"][number]): CorpusCaseContent {
   return content;
 }
 
+function toolCalls(value: JsonValue): JsonValue[] {
+  if (Array.isArray(value)) return value.flatMap(toolCalls);
+  if (typeof value !== "object" || value === null) return [];
+  const direct = value.tool_calls ?? value.toolCalls;
+  if (Array.isArray(direct)) return direct;
+  return Object.values(value).flatMap(toolCalls);
+}
+
+function caseObservation(
+  step: NormalizedRun["steps"][number],
+  traceId: string,
+): CorpusCaseObservation {
+  return {
+    traceId,
+    usage: { ...step.usage },
+    toolCalls: toolCalls(step.output),
+    ...(step.timestamp === undefined ? {} : { timestamp: step.timestamp }),
+    ...(step.costUsd === undefined ? {} : { costUsd: step.costUsd }),
+    ...(step.durationMs === undefined ? {} : { durationMs: step.durationMs }),
+    ...(step.evaluator === undefined ? {} : { evaluator: step.evaluator }),
+    ...(step.evaluatorVersion === undefined
+      ? {}
+      : { evaluatorVersion: step.evaluatorVersion }),
+    ...(step.retryCount === undefined ? {} : { retryCount: step.retryCount }),
+  };
+}
+
 function caseContentJson(content: CorpusCaseContent): JsonValue {
   const value: Record<string, JsonValue> = {
     family: content.family,
@@ -77,6 +118,53 @@ function caseContentJson(content: CorpusCaseContent): JsonValue {
     value.systemPrompt = content.systemPrompt;
   }
   return value;
+}
+
+function caseObservationJson(observation: CorpusCaseObservation): JsonValue {
+  return {
+    ...(observation.traceId === undefined
+      ? {}
+      : { traceId: observation.traceId }),
+    usage: { ...observation.usage },
+    toolCalls: [...observation.toolCalls],
+    ...(observation.timestamp === undefined
+      ? {}
+      : { timestamp: observation.timestamp }),
+    ...(observation.costUsd === undefined
+      ? {}
+      : { costUsd: observation.costUsd }),
+    ...(observation.durationMs === undefined
+      ? {}
+      : { durationMs: observation.durationMs }),
+    ...(observation.evaluator === undefined
+      ? {}
+      : { evaluator: observation.evaluator }),
+    ...(observation.evaluatorVersion === undefined
+      ? {}
+      : { evaluatorVersion: observation.evaluatorVersion }),
+    ...(observation.retryCount === undefined
+      ? {}
+      : { retryCount: observation.retryCount }),
+  };
+}
+
+function corpusIndexCases(corpus: Corpus): JsonValue[] {
+  return corpus.cases.map(({ caseId, content, split, observation }) => ({
+    caseId,
+    family: content.family,
+    split,
+    ...(observation === undefined
+      ? {}
+      : { observation: caseObservationJson(observation) }),
+  }));
+}
+
+export function refreshCorpusVersionId(corpus: Corpus): void {
+  corpus.corpusVersionId = computeRunSpecDigest({
+    seed: corpus.seed,
+    cases: corpusIndexCases(corpus),
+    strata: corpus.strata.map((weight) => ({ ...weight })),
+  });
 }
 
 function buildStrata(
@@ -125,6 +213,7 @@ export function buildCorpus(
           caseId,
           content,
           split: "shortlist",
+          observation: caseObservation(step, run.traceId),
         });
       }
     }
@@ -141,13 +230,15 @@ export function buildCorpus(
       corpusCase.split = splits[corpusCase.caseId]!;
     }
     cases.sort((left, right) => compareText(left.caseId, right.caseId));
-    const caseIds = cases.map(({ caseId }) => caseId);
-    return {
-      corpusVersionId: computeRunSpecDigest(caseIds),
+    const corpus: Corpus = {
+      corpusVersionId: "",
+      contractVersion: 1,
       seed,
       cases,
       strata: buildStrata(cases, runs),
     };
+    refreshCorpusVersionId(corpus);
+    return corpus;
   } catch (error) {
     if (error instanceof CorpusError) throw error;
     throw new CorpusError("Corpus construction failed", { cause: error });
@@ -157,12 +248,9 @@ export function buildCorpus(
 function corpusManifest(corpus: Corpus): JsonValue {
   return {
     corpusVersionId: corpus.corpusVersionId,
+    contractVersion: corpus.contractVersion ?? 1,
     seed: corpus.seed,
-    cases: corpus.cases.map(({ caseId, content, split }) => ({
-      caseId,
-      family: content.family,
-      split,
-    })),
+    cases: corpusIndexCases(corpus),
     strata: corpus.strata.map((weight) => ({ ...weight })),
   };
 }

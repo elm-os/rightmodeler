@@ -74,6 +74,15 @@ export function assignSplits(
   );
 }
 
+export function assignDriftSplit(
+  stableCaseIdentity: string,
+  seed: string | number,
+): CorpusSplit {
+  return splitHash(seed, stableCaseIdentity) < "8".padEnd(64, "0")
+    ? "shortlist"
+    : "holdout";
+}
+
 export function selectWinner(
   verdictsByCandidate: VerdictsByCandidate,
   policy: ReleaseGatePolicy,

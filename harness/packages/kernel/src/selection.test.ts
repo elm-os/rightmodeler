@@ -6,7 +6,7 @@ import {
 } from "./__fixtures__/aggregation.js";
 import { aggregate, type FamilyVerdict } from "./aggregation.js";
 import { wilson } from "./statistics.js";
-import { assignSplits, selectWinner } from "./selection.js";
+import { assignDriftSplit, assignSplits, selectWinner } from "./selection.js";
 import { ReleaseGatePolicy } from "./gates.js";
 
 const policy = new ReleaseGatePolicy({
@@ -114,6 +114,13 @@ describe("assignSplits", () => {
     expect(() => assignSplits(["case-1", "case-1"], "seed")).toThrow(
       /duplicate/i,
     );
+  });
+
+  it("assigns new drift cases independently of the surrounding corpus", () => {
+    const assigned = assignDriftSplit("stable-call-1", "seed");
+
+    expect(assignDriftSplit("stable-call-1", "seed")).toBe(assigned);
+    expect(assignDriftSplit("stable-call-1", "seed-0")).not.toBe(assigned);
   });
 });
 

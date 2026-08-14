@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import {
   canonicalJson,
+  computeRunSpecDigest,
   factKey,
   jsonValueSchema,
   lifecycleEventSchema,
@@ -10,6 +11,14 @@ import {
   type LifecycleEvent,
   type Store,
 } from "@rightmodeler/core";
+import {
+  diagnoseFailure,
+  diagnoseRemediationEvidence,
+  type DiagnosisSnapshot,
+  type RemediationEvidence,
+  type RemediationProposedChange,
+  type RemediationValidation,
+} from "@rightmodeler/kernel";
 import { z } from "zod";
 
 import type { ApplyVerdict } from "../apply/index.js";
@@ -20,6 +29,7 @@ import type {
   GithubReview,
   GithubReviewComment,
 } from "../github/index.js";
+import { putContractArtifact } from "../contract-validation.js";
 import {
   derivePrState,
   readPrLifecycleEvents,
@@ -44,10 +54,17 @@ const ciFailureDetailSchema = z.looseObject({
   failingChecks: z.array(
     z.looseObject({
       id: z.number(),
+      name: z.string(),
       completedAt: z.string(),
     }),
   ),
 });
+
+interface CiCheckFact {
+  readonly id: number;
+  readonly name: string;
+  readonly completedAt: string | null;
+}
 
 export type WatchActionType =
   | "evidence_replied"
@@ -387,6 +404,81 @@ function previousFailingCheckObservations(
   return identities;
 }
 
+function latestCiFailureDetail(
+  events: readonly LifecycleEvent[],
+): z.infer<typeof ciFailureDetailSchema> | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const detail = ciFailureDetailSchema.safeParse(events[index]!.detail);
+    if (detail.success) return detail.data;
+  }
+  return undefined;
+}
+
+function ciSnapshot(
+  headSha: string,
+  checks: readonly CiCheckFact[],
+  status: "pass" | "fail",
+): DiagnosisSnapshot {
+  const facts = {
+    gates: [{ id: "repo-ci", status }],
+    cases: checks.map(({ id }) => ({
+      caseId: `check-run-${id}`,
+      pipelineFamily: "repo-fix",
+      terminalVerdict: status,
+      failureCode: null,
+      evidenceRefs: [`github-check-run:${id}`],
+    })),
+    replayObserved: false,
+  } as const;
+  return {
+    ...facts,
+    snapshotId: `sha256:${computeRunSpecDigest(
+      jsonValueSchema.parse({ headSha, ...facts }),
+    )}`,
+    confidenceStatus: status,
+  };
+}
+
+function ciProposedChange(
+  verdicts: readonly ApplyVerdict[],
+  prNumber: number,
+): RemediationProposedChange {
+  return {
+    type: "configuration",
+    content: `Apply the reviewed model substitutions from pull request #${prNumber}.`,
+    affected_files: [
+      ...new Set(
+        verdicts.flatMap(({ swaps }) =>
+          swaps.map(({ stepRecord }) => stepRecord.callSite.path),
+        ),
+      ),
+    ].sort(compareText),
+    validation_commands: [],
+  };
+}
+
+function ciValidation(
+  checks: readonly CiCheckFact[],
+  status: "passed" | "failed",
+): RemediationValidation {
+  return {
+    status,
+    commands: [...new Set(checks.map(({ name }) => name))].sort(compareText),
+    evidence_refs: checks
+      .map(({ id }) => `github-check-run:${id}`)
+      .sort(compareText),
+  };
+}
+
+async function writeRemediationEvidence(
+  store: Store,
+  evidence: RemediationEvidence,
+): Promise<string> {
+  const key = `project/reports/remediation-${evidence.evidence_id.slice("sha256:".length)}.json`;
+  await putContractArtifact(store, key, "remediation-evidence", evidence);
+  return key;
+}
+
 function action(type: WatchActionType, detail: JsonValue): WatchAction {
   return { type, detail };
 }
@@ -685,20 +777,33 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
       }
     }
 
-    const failingChecks = checkRuns.checkRuns
+    const relevantChecks = checkRuns.checkRuns
       .filter(
         (check) =>
           check.headSha === pull.head.sha &&
           check.status === "completed" &&
-          check.conclusion === "failure" &&
           /(lint|test|build)/i.test(check.name),
       )
       .sort(
         (left, right) =>
           compareText(left.name, right.name) || left.id - right.id,
       );
+    const failingChecks = relevantChecks.filter(
+      ({ conclusion }) => conclusion === "failure",
+    );
     if (failingChecks.length > 0) {
       const failingNames = [...new Set(failingChecks.map(({ name }) => name))];
+      const diagnosis = diagnoseFailure({
+        gates: [{ id: "repo-ci", status: "fail" }],
+        cases: failingChecks.map(({ id }) => ({
+          caseId: `check-run-${id}`,
+          pipelineFamily: "repo-fix",
+          terminalVerdict: "fail",
+          failureCode: null,
+          evidenceRefs: [`github-check-run:${id}`],
+        })),
+        replayObserved: false,
+      });
       const priorChecks = previousFailingCheckObservations(
         events,
         pull.head.sha,
@@ -712,13 +817,24 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
         failingChecks.map(checkIdentity),
       );
       if (persistent.length === 0) {
+        const remediationEvidence = diagnoseRemediationEvidence({
+          baseline: ciSnapshot(pull.head.sha, failingChecks, "fail"),
+          proposal: ciProposedChange(prVerdicts, input.prNumber),
+          validation: ciValidation(failingChecks, "failed"),
+        });
+        const remediationEvidenceKey = await writeRemediationEvidence(
+          input.store,
+          remediationEvidence,
+        );
         const postedCommentId = await comment(
           key,
-          `The following relevant checks failed on ${pull.head.sha}: ${failingNames.join(", ")}. The watch will confirm the failure on the next pass before closing the pull request.`,
+          `Diagnosis: ${diagnosis.issueClass} (${diagnosis.nextAction}). The following relevant checks failed on ${pull.head.sha}: ${failingNames.join(", ")}. The watch will confirm the failure on the next pass before closing the pull request.`,
         );
         const event = await record("comment_posted", {
           handledEventKey: key,
           category: "ci_failure",
+          issueClass: diagnosis.issueClass,
+          nextAction: diagnosis.nextAction,
           failurePass: 1,
           headSha: pull.head.sha,
           checkNames: failingNames,
@@ -727,6 +843,8 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
             name,
             completedAt: completedAt ?? "",
           })),
+          remediationEvidenceId: remediationEvidence.evidence_id,
+          remediationEvidenceKey,
           postedCommentId,
         });
         state = { ...state, lastEventId: event.eventId };
@@ -734,6 +852,10 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
           action("ci_failure_observed", {
             failurePass: 1,
             checkNames: failingNames,
+            issueClass: diagnosis.issueClass,
+            nextAction: diagnosis.nextAction,
+            remediationEvidenceId: remediationEvidence.evidence_id,
+            remediationEvidenceKey,
           }),
         );
       } else {
@@ -750,6 +872,8 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
         await record("pr_closed_rejected", {
           handledEventKey: key,
           reason: "persistent_ci_failure",
+          issueClass: diagnosis.issueClass,
+          nextAction: diagnosis.nextAction,
           rejectionRecorded: true,
           failurePass: 2,
           headSha: pull.head.sha,
@@ -764,9 +888,46 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
           action("pr_closed_rejected", {
             reason: "persistent_ci_failure",
             checkNames: persistentNames,
+            issueClass: diagnosis.issueClass,
+            nextAction: diagnosis.nextAction,
           }),
         );
         return await endRecordedTerminal("closed_rejected");
+      }
+    } else {
+      const baselineDetail = latestCiFailureDetail(events);
+      const passingChecksByName = new Map(
+        relevantChecks
+          .filter(({ conclusion }) => conclusion === "success")
+          .map((check) => [check.name, check] as const),
+      );
+      const baselineCheckNames = [
+        ...new Set(baselineDetail?.failingChecks.map(({ name }) => name) ?? []),
+      ].sort(compareText);
+      const passingChecks = baselineCheckNames.flatMap((name) => {
+        const check = passingChecksByName.get(name);
+        return check === undefined ? [] : [check];
+      });
+      if (
+        baselineDetail !== undefined &&
+        passingChecks.length === baselineCheckNames.length
+      ) {
+        const baselineChecks = baselineDetail.failingChecks.map(
+          ({ id, name, completedAt }) => ({ id, name, completedAt }),
+        );
+        await writeRemediationEvidence(
+          input.store,
+          diagnoseRemediationEvidence({
+            baseline: ciSnapshot(
+              baselineDetail.headSha,
+              baselineChecks,
+              "fail",
+            ),
+            proposal: ciProposedChange(prVerdicts, input.prNumber),
+            postFix: ciSnapshot(pull.head.sha, passingChecks, "pass"),
+            validation: ciValidation(passingChecks, "passed"),
+          }),
+        );
       }
     }
 

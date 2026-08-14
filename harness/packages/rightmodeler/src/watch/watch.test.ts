@@ -22,6 +22,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ApplyVerdict } from "../apply/index.js";
+import { assertContractArtifact } from "../contract-validation.js";
 import type { CapturedConventions } from "../enrich/index.js";
 import { createGithubClient, type GithubClient } from "../github/index.js";
 import { derivePrState } from "./aggregate.js";
@@ -239,6 +240,20 @@ async function lifecycleEvents(store: FsStore): Promise<LifecycleEvent[]> {
     if (parsed.success) events.push(parsed.data);
   }
   return events;
+}
+
+async function remediationEvidenceArtifacts(
+  store: FsStore,
+): Promise<Array<Record<string, unknown>>> {
+  const artifacts: Array<Record<string, unknown>> = [];
+  for (const key of await store.list("project/reports/remediation-")) {
+    const entry = await store.get(key);
+    if (entry === null) throw new Error(`Missing remediation evidence ${key}`);
+    const value: unknown = JSON.parse(Buffer.from(entry.body).toString("utf8"));
+    assertContractArtifact("remediation-evidence", value);
+    artifacts.push(value as Record<string, unknown>);
+  }
+  return artifacts;
 }
 
 async function createHarness(): Promise<Harness> {
@@ -570,7 +585,32 @@ describe("watchOnce", () => {
       (firstComment?.body as Record<string, unknown> | undefined)?.body,
     );
     expect(firstCommentBody).toContain("unit test");
+    expect(firstCommentBody).toContain(
+      "Diagnosis: repo-validation (fix-repo-validation)",
+    );
     expect(firstCommentBody).not.toContain("docs");
+    expect(first.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "ci_failure_observed",
+          detail: expect.objectContaining({
+            issueClass: "repo-validation",
+            nextAction: "fix-repo-validation",
+          }),
+        }),
+      ]),
+    );
+    expect(await remediationEvidenceArtifacts(harness.store)).toEqual([
+      expect.objectContaining({
+        status: "draft",
+        proof: expect.objectContaining({
+          baseline_gate_statuses: { "repo-ci": "fail" },
+          post_fix_snapshot_id: null,
+          validation: expect.objectContaining({ status: "failed" }),
+        }),
+        residual_risks: expect.arrayContaining([expect.any(String)]),
+      }),
+    ]);
 
     const second = await watchOnce(watchInput(harness));
     expect(second.status).toBe("actions_taken");
@@ -605,6 +645,23 @@ describe("watchOnce", () => {
       runs: [{ name: "unit test", conclusion: "success" }],
     });
     expect((await watchOnce(watchInput(harness))).status).toBe("quiet");
+    const proven = (await remediationEvidenceArtifacts(harness.store)).find(
+      ({ status }) => status === "proven",
+    );
+    expect(proven).toMatchObject({
+      status: "proven",
+      proof: {
+        baseline_gate_statuses: { "repo-ci": "fail" },
+        post_fix_snapshot_id: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        target_improved: true,
+        regressed_gate_ids: [],
+        validation: {
+          status: "passed",
+          commands: ["unit test"],
+          evidence_refs: [expect.stringMatching(/^github-check-run:/)],
+        },
+      },
+    });
 
     await control(harness.stub, "/__test/check-run-conclusions", {
       ...repository,
@@ -628,6 +685,87 @@ describe("watchOnce", () => {
       }),
     ).resolves.toMatchObject({ state: "closed" });
   });
+
+  it("does not prove remediation evidence when only some baseline failures pass", async () => {
+    const harness = await createHarness();
+    await control(harness.stub, "/__test/check-runs", {
+      ...repository,
+      ref: harness.head,
+      runs: [
+        { name: "unit test", conclusion: "failure" },
+        { name: "build", conclusion: "failure" },
+      ],
+    });
+    await watchOnce(watchInput(harness));
+
+    await control(harness.stub, "/__test/check-runs", {
+      ...repository,
+      ref: harness.head,
+      runs: [{ name: "unit test", conclusion: "success" }],
+    });
+    await watchOnce(watchInput(harness));
+
+    expect(
+      (await remediationEvidenceArtifacts(harness.store)).map(
+        ({ status }) => status,
+      ),
+    ).toEqual(["draft"]);
+  });
+
+  it("does not prove remediation evidence while a baseline failure is pending", async () => {
+    const harness = await createHarness();
+    await control(harness.stub, "/__test/check-runs", {
+      ...repository,
+      ref: harness.head,
+      runs: [{ name: "unit test", conclusion: "failure" }],
+    });
+    await watchOnce(watchInput(harness));
+
+    await control(harness.stub, "/__test/check-runs", {
+      ...repository,
+      ref: harness.head,
+      runs: [
+        { name: "unit test", status: "pending", conclusion: null },
+        { name: "build", conclusion: "success" },
+      ],
+    });
+    await watchOnce(watchInput(harness));
+
+    expect(
+      (await remediationEvidenceArtifacts(harness.store)).map(
+        ({ status }) => status,
+      ),
+    ).toEqual(["draft"]);
+  });
+
+  it.each(["cancelled", "timed_out", "action_required", "neutral", "skipped"])(
+    "does not prove remediation evidence for a completed %s baseline check",
+    async (conclusion) => {
+      const harness = await createHarness();
+      await control(harness.stub, "/__test/check-runs", {
+        ...repository,
+        ref: harness.head,
+        runs: [{ name: "unit test", conclusion: "failure" }],
+      });
+      await watchOnce(watchInput(harness));
+
+      await control(harness.stub, "/__test/check-runs", {
+        ...repository,
+        ref: harness.head,
+        runs: [
+          { name: "unit test", conclusion },
+          { name: "build", conclusion: "success" },
+        ],
+      });
+      await watchOnce(watchInput(harness));
+
+      expect(
+        (await remediationEvidenceArtifacts(harness.store)).map(
+          ({ status }) => status,
+        ),
+      ).toEqual(["draft"]);
+    },
+  );
 
   it("counts persisted failure observations when a check disappears for one pass", async () => {
     const harness = await createHarness();

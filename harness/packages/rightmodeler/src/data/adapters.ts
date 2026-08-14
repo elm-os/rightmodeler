@@ -8,6 +8,7 @@ import {
   compareStartValues,
   isRecord,
   jsonValue,
+  optionalNonnegativeNumber,
   optionalString,
   requiredString,
   sampleRecords,
@@ -199,7 +200,10 @@ function adaptOpenAi(records: unknown): NormalizedRun[] {
     throw new TraceAdaptError(format, "OpenAI trace records must be a list");
   }
 
-  const grouped = new Map<string, Record<string, unknown>[]>();
+  const grouped = new Map<
+    string,
+    Array<{ record: Record<string, unknown>; sourceIndex: number }>
+  >();
   for (const [index, candidate] of records.entries()) {
     if (!isRecord(candidate)) {
       throw new TraceAdaptError(
@@ -213,7 +217,7 @@ function adaptOpenAi(records: unknown): NormalizedRun[] {
       format,
     );
     const group = grouped.get(trajectoryId) ?? [];
-    group.push(candidate);
+    group.push({ record: candidate, sourceIndex: index });
     grouped.set(trajectoryId, group);
   }
   if (grouped.size === 0) {
@@ -221,7 +225,14 @@ function adaptOpenAi(records: unknown): NormalizedRun[] {
   }
 
   return [...grouped.entries()].map(([traceId, group]) => {
-    const steps = group.map((record, stepIndex) => {
+    group.sort(
+      (left, right) =>
+        compareStartValues(
+          optionalString(left.record.timestamp),
+          optionalString(right.record.timestamp),
+        ) || left.sourceIndex - right.sourceIndex,
+    );
+    const steps = group.map(({ record }, stepIndex) => {
       if (!Array.isArray(record.messages)) {
         throw new TraceAdaptError(
           format,
@@ -296,6 +307,39 @@ function adaptOpenAi(records: unknown): NormalizedRun[] {
       if (family !== undefined) step.family = family;
       const timestamp = optionalString(record.timestamp);
       if (timestamp !== undefined) step.timestamp = timestamp;
+      const costUsd = optionalNonnegativeNumber(
+        record.cost_usd ?? response.cost_usd,
+        `OpenAI trace ${traceId} cost_usd`,
+        format,
+      );
+      if (costUsd !== undefined) step.costUsd = costUsd;
+      const durationMs = optionalNonnegativeNumber(
+        record.duration_ms ?? response.duration_ms ?? record.latency_ms,
+        `OpenAI trace ${traceId} duration_ms`,
+        format,
+      );
+      if (durationMs !== undefined) step.durationMs = durationMs;
+      if (record.evaluator !== undefined) {
+        step.evaluator = jsonValue(
+          record.evaluator,
+          `OpenAI trace ${traceId} evaluator`,
+          format,
+        );
+      }
+      if (record.evaluator_version !== undefined) {
+        step.evaluatorVersion = jsonValue(
+          record.evaluator_version,
+          `OpenAI trace ${traceId} evaluator version`,
+          format,
+        );
+      }
+      if (record.retry_count !== undefined) {
+        step.retryCount = tokenCount(
+          record.retry_count,
+          `OpenAI trace ${traceId} retry count`,
+          format,
+        );
+      }
       return step;
     });
 

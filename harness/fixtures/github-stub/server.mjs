@@ -55,6 +55,8 @@ export async function startGithubStub({
   malformedResponsePath,
   paginationPageSize,
   foreignPaginationLink = false,
+  contentDirectoryResponse = false,
+  contentEncodingNoneResponse = false,
 }) {
   const repositories = new Map();
   const hits = [];
@@ -416,6 +418,7 @@ export async function startGithubStub({
       const files = cloneFiles(repo.commits.get(parent).files);
       for (const [path, file] of flattenTree(body.tree ?? {}))
         files.set(path, file);
+      for (const path of body.deletePaths ?? []) files.delete(path);
       const sha = commit(repo, parent, files, "Advance base branch");
       repo.refs.set(ref, sha);
       json(response, 200, refResponse(ref, sha));
@@ -569,6 +572,49 @@ export async function startGithubStub({
     }
 
     const contentsMatch = /^\/contents\/(.+)$/.exec(path);
+    if (request.method === "GET" && contentsMatch !== null) {
+      const filePath = decodeURIComponent(contentsMatch[1]);
+      const sha = resolveCommit(
+        repo,
+        url.searchParams.get("ref") ?? repo.defaultBranch,
+      );
+      const file =
+        sha === undefined
+          ? undefined
+          : repo.commits.get(sha).files.get(filePath);
+      if (file === undefined) {
+        json(response, 404, { message: "File not found" });
+        return;
+      }
+      if (contentDirectoryResponse) {
+        json(response, 200, [
+          {
+            type: "file",
+            path: filePath,
+            sha: file.sha,
+          },
+        ]);
+        return;
+      }
+      if (contentEncodingNoneResponse) {
+        json(response, 200, {
+          type: "file",
+          encoding: "none",
+          path: filePath,
+          sha: file.sha,
+          content: "",
+        });
+        return;
+      }
+      json(response, 200, {
+        type: "file",
+        encoding: "base64",
+        path: filePath,
+        sha: file.sha,
+        content: Buffer.from(file.content, "utf8").toString("base64"),
+      });
+      return;
+    }
     if (request.method === "PUT" && contentsMatch !== null) {
       const filePath = decodeURIComponent(contentsMatch[1]);
       const ref = fullRef(body?.branch ?? repo.defaultBranch);
@@ -601,7 +647,6 @@ export async function startGithubStub({
       });
       return;
     }
-
     const compareMatch = /^\/compare\/(.+)\.\.\.(.+)$/.exec(path);
     if (request.method === "GET" && compareMatch !== null) {
       const base = resolveCommit(repo, decodeURIComponent(compareMatch[1]));
@@ -643,6 +688,22 @@ export async function startGithubStub({
       repo.reviewComments.set(number, []);
       repo.issueComments.set(number, []);
       json(response, 201, pullResponse(repo, pull));
+      return;
+    }
+
+    if (request.method === "GET" && path === "/pulls") {
+      const state = url.searchParams.get("state");
+      const head = url.searchParams.get("head");
+      const base = url.searchParams.get("base");
+      const pulls = [...repo.pulls.values()]
+        .filter(
+          (pull) =>
+            (state === null || pull.state === state) &&
+            (head === null || `${owner}:${pull.head}` === head) &&
+            (base === null || pull.base === base),
+        )
+        .map((pull) => pullResponse(repo, pull));
+      paginated(pulls);
       return;
     }
 

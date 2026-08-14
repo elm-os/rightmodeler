@@ -15,6 +15,11 @@ export const normalizedStepSchema = z.strictObject({
   family: z.string().min(1).optional(),
   trajectoryId: z.string().min(1),
   timestamp: z.string().min(1).optional(),
+  costUsd: z.number().nonnegative().optional(),
+  durationMs: z.number().nonnegative().optional(),
+  evaluator: z.json().optional(),
+  evaluatorVersion: z.json().optional(),
+  retryCount: z.number().int().nonnegative().optional(),
 });
 
 export const normalizedRunSchema = z.strictObject({
