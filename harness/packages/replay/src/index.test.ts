@@ -10,7 +10,7 @@ import {
   FsStore,
   type Fact,
 } from "@rightmodeler/core";
-import type { JudgeChat } from "@rightmodeler/kernel";
+import { aggregate, type JudgeChat } from "@rightmodeler/kernel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -914,7 +914,12 @@ describe("Mode A replay", () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  async function run(cases: RecordedCase[], judgeChat = judge()) {
+  async function run(
+    cases: RecordedCase[],
+    judgeChat = judge(),
+    concurrency = 2,
+    judgeModel = "neutral/judge",
+  ) {
     const catalog = await provider.listModels();
     const candidate = catalog.find((model) => model.id === "acme/small-1");
     if (candidate === undefined) throw new Error("Missing stub candidate");
@@ -936,12 +941,22 @@ describe("Mode A replay", () => {
         },
       ],
       provider,
-      judge: { chat: judgeChat, judgeModel: "neutral/judge" },
+      judge: { chat: judgeChat, judgeModel },
       store,
       budget,
-      concurrency: 2,
+      concurrency,
     });
   }
+
+  const providerJudge: JudgeChat = async (request) =>
+    (
+      await provider.chat({
+        model: request.model,
+        messages: request.messages,
+        temperature: request.temperature,
+        maxOutputTokens: 256,
+      })
+    ).content;
 
   it("records two attempts but one terminal execution after a one-time 429", async () => {
     const result = await run([
@@ -1009,36 +1024,34 @@ describe("Mode A replay", () => {
     });
   });
 
-  it("does not publish a terminal execution until judging is complete", async () => {
-    let calls = 0;
-    await expect(
-      run([recordedCase()], async () => {
-        calls += 1;
-        if (calls === 2) throw new Error("second judge call failed");
-        return JSON.stringify({
-          verdict: "equivalent",
-          score: 1,
-          justification: "Equivalent fixture outputs.",
-        });
-      }),
-    ).rejects.toThrow("second judge call failed");
+  it("bounds judge failure forensics to 300 characters", async () => {
+    const message = "x".repeat(400);
 
-    const interruptedFacts = await readFacts(store);
-    expect(
-      interruptedFacts.some(
-        (fact) => "executionId" in fact && "caseId" in fact,
-      ),
-    ).toBe(false);
-    expect(interruptedFacts.some((fact) => "assessmentId" in fact)).toBe(false);
-
-    await run([recordedCase()]);
-    const resumedFacts = await readFacts(store);
-    expect(
-      resumedFacts.filter((fact) => "executionId" in fact && "caseId" in fact),
-    ).toHaveLength(1);
-    expect(resumedFacts.filter((fact) => "assessmentId" in fact)).toHaveLength(
+    await run(
+      [recordedCase()],
+      async () => {
+        throw new Error(message);
+      },
       1,
     );
+
+    const facts = await readFacts(store);
+    const forensic = facts.find(
+      (fact) =>
+        "actor" in fact &&
+        typeof fact.reconcilableTo === "object" &&
+        fact.reconcilableTo !== null &&
+        !Array.isArray(fact.reconcilableTo) &&
+        fact.reconcilableTo.judgeFailureKind === "provider_error",
+    );
+    expect(forensic).toMatchObject({
+      reconcilableTo: {
+        errorDetail: {
+          message: message.slice(0, 300),
+          judgeModel: "neutral/judge",
+        },
+      },
+    });
   });
 
   it("records a provider 400 as lost rather than a scored failure", async () => {
@@ -1130,66 +1143,137 @@ describe("Mode A replay", () => {
     },
   );
 
-  it("records a malformed judge response and continues sibling cells", async () => {
-    let malformedJudgeCalls = 0;
-    const result = await run(
-      [
-        recordedCase({ caseId: "malformed-judge", task: "MALFORMED_JUDGE" }),
-        recordedCase({ caseId: "healthy-case", task: "HEALTHY_JUDGE" }),
-      ],
-      async (request) => {
-        if (
-          request.messages.some(({ content }) =>
-            content.includes("MALFORMED_JUDGE"),
-          )
-        ) {
-          malformedJudgeCalls += 1;
-          return (
-            await provider.chat({
-              model: "acme/small-1",
-              messages: [{ role: "user", content: "Judge this output." }],
-              headers: { "x-stub-empty-body": "true" },
-            })
-          ).content;
-        }
-        return JSON.stringify({
-          verdict: "equivalent",
-          score: 1,
-          justification: "Equivalent fixture outputs.",
-        });
-      },
-    );
-    const facts = await readFacts(store);
-    const providerErrors = facts.filter(
-      (fact) => "attemptId" in fact && fact.streamOutcome === "provider_error",
-    );
-    const executions = facts.filter(
-      (fact) => "caseId" in fact && "terminalOutcome" in fact,
-    );
+  it.each([
+    ["empty", "STUB_JUDGE_EMPTY_OUTPUT", "response_malformed"],
+    ["truncated JSON", "STUB_JUDGE_TRUNCATED_JSON", "response_malformed"],
+    ["non-JSON prose", "STUB_JUDGE_NON_JSON", "response_malformed"],
+    ["provider 500", "STUB_JUDGE_PROVIDER_ERROR", "provider_error"],
+  ] as const)(
+    "mutation: removing the judge boundary rethrows; %s is excluded and the next cell runs",
+    async (_fault, marker, judgeFailureKind) => {
+      const result = await run(
+        [
+          recordedCase({ caseId: "judge-failed", task: marker }),
+          recordedCase({ caseId: "healthy-case", task: "HEALTHY_JUDGE" }),
+        ],
+        providerJudge,
+        1,
+        "zeta/judge-1",
+      );
+      const facts = await readFacts(store);
+      const executions = facts.filter(
+        (fact) => "caseId" in fact && "terminalOutcome" in fact,
+      );
+      const assessments = facts.filter((fact) => "assessmentId" in fact);
+      const failedExecution = executions.find(
+        (execution) => execution.caseId === "judge-failed",
+      );
+      const healthyExecution = executions.find(
+        (execution) => execution.caseId === "healthy-case",
+      );
+      const forensic = facts.find(
+        (fact) =>
+          "actor" in fact &&
+          typeof fact.reconcilableTo === "object" &&
+          fact.reconcilableTo !== null &&
+          !Array.isArray(fact.reconcilableTo) &&
+          fact.reconcilableTo.judgeFailureKind === judgeFailureKind,
+      );
 
-    expect(result).toMatchObject({ completed: 2, blocked: [] });
-    expect(malformedJudgeCalls).toBe(1);
-    expect(providerErrors).toEqual([
-      expect.objectContaining({
-        errorDetail: { status: 200, bodyExcerpt: "" },
-      }),
-    ]);
-    expect(executions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          caseId: "malformed-judge",
-          terminalOutcome: "failure",
-          finalOutput: null,
-          attribution: "lost",
+      expect(result).toMatchObject({ completed: 2, blocked: [] });
+      expect(executions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            caseId: "judge-failed",
+            terminalOutcome: "success",
+            attribution: "ok",
+          }),
+          expect.objectContaining({
+            caseId: "healthy-case",
+            terminalOutcome: "success",
+            attribution: "ok",
+          }),
+        ]),
+      );
+      expect(assessments).toHaveLength(1);
+      expect(assessments[0]).toMatchObject({
+        executionId: healthyExecution?.executionId,
+      });
+      expect(forensic).toMatchObject({
+        actor: "judge",
+        reconcilableTo: {
+          executionId: failedExecution?.executionId,
+          judgeModel: "zeta/judge-1",
+          judgeFailureKind,
+          errorDetail: {
+            judgeModel: "zeta/judge-1",
+          },
+        },
+      });
+      if (
+        forensic === undefined ||
+        !("actor" in forensic) ||
+        typeof forensic.reconcilableTo !== "object" ||
+        forensic.reconcilableTo === null ||
+        Array.isArray(forensic.reconcilableTo) ||
+        typeof forensic.reconcilableTo.errorDetail !== "object" ||
+        forensic.reconcilableTo.errorDetail === null ||
+        Array.isArray(forensic.reconcilableTo.errorDetail)
+      ) {
+        throw new Error("Expected judge failure forensics");
+      }
+      expect(forensic.reconcilableTo.errorDetail.message).toEqual(
+        expect.any(String),
+      );
+      expect(
+        String(forensic.reconcilableTo.errorDetail.message).length,
+      ).toBeLessThanOrEqual(300);
+
+      const expectedAssignments = executions.map((execution) => ({
+        caseId: execution.caseId,
+        stratumId: "family-1",
+        evaluatorKind: "judge",
+      }));
+      const [verdict] = aggregate(
+        executions.map((execution) => {
+          const assessment = assessments.find(
+            (assessment) => assessment.executionId === execution.executionId,
+          );
+          return {
+            execution,
+            assessment,
+            gatePolicyVersion: "test-policy",
+            familyId: "family-1",
+            candidateFamily: "acme",
+            evaluatorKind: "judge",
+            candidateCostUsd: 0.1,
+            referenceCeilingMultiplier: 1,
+            unsafeSubstitution: false,
+            evidenceCovered: true,
+            expectedEvaluatorAssignments: expectedAssignments,
+            stratumId: "family-1",
+            requiredAbstention: false,
+            requiresDeterministicEvidence: false,
+            hasDeterministicEvidence: false,
+            ...(assessment === undefined
+              ? {}
+              : { judgeModel: "zeta/judge-1", orderConsistent: true }),
+          };
         }),
-        expect.objectContaining({
-          caseId: "healthy-case",
-          terminalOutcome: "success",
-          attribution: "ok",
-        }),
-      ]),
-    );
-  });
+        {
+          gatePolicyVersion: "test-policy",
+          qualityFloor: 0.75,
+          availabilityFloor: 0.95,
+        },
+      );
+      expect(verdict).toMatchObject({
+        excludedExecutions: 1,
+        assessmentAbsentReasons: [
+          { reason: "judge_evidence_incomplete", count: 1 },
+        ],
+      });
+    },
+  );
 
   it("replays only cases assigned to the step corpus split", async () => {
     const result = await run([

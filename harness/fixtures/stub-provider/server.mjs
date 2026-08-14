@@ -223,6 +223,18 @@ export async function startStubProvider({
       }
 
       const messageText = JSON.stringify(body.messages ?? []);
+      if (
+        body.model === "zeta/judge-1" &&
+        messageText.includes("STUB_JUDGE_PROVIDER_ERROR")
+      ) {
+        json(
+          response,
+          500,
+          { error: { message: "Stub judge provider failure." } },
+          { ...hitHeaders, "retry-after": "0" },
+        );
+        return;
+      }
       const digest = createHash("sha256")
         .update(messageText)
         .digest("hex")
@@ -237,11 +249,17 @@ export async function startStubProvider({
           : "equivalent";
       const content =
         body.model === "zeta/judge-1"
-          ? JSON.stringify({
-              verdict: judgeVerdict,
-              score: judgeVerdict === "equivalent" ? 1 : 0,
-              justification: `Deterministic judge result ${digest}.`,
-            })
+          ? messageText.includes("STUB_JUDGE_EMPTY_OUTPUT")
+            ? ""
+            : messageText.includes("STUB_JUDGE_TRUNCATED_JSON")
+              ? '{"verdict":"equivalent"'
+              : messageText.includes("STUB_JUDGE_NON_JSON")
+                ? "The candidate appears equivalent."
+                : JSON.stringify({
+                    verdict: judgeVerdict,
+                    score: judgeVerdict === "equivalent" ? 1 : 0,
+                    justification: `Deterministic judge result ${digest}.`,
+                  })
           : `Deterministic reply ${digest}`;
       if (body.stream === true) {
         const streamContent =
