@@ -71,12 +71,18 @@ export async function startStubProvider({
   errorModels = [],
   includeFreeModel = false,
   malformedJudgeModels = [],
+  omitCatalogModels = [],
+  rateLimitedModels = [],
   rateLimitMessageIncludes,
 }) {
   const rateLimitedKeys = new Set();
   const failingModels = new Set(errorModels);
   const malformedJudges = new Set(malformedJudgeModels);
-  const catalogModels = includeFreeModel ? [...models, freeModel] : models;
+  const omittedCatalogModels = new Set(omitCatalogModels);
+  const persistentlyRateLimitedModels = new Set(rateLimitedModels);
+  const catalogModels = (
+    includeFreeModel ? [...models, freeModel] : models
+  ).filter(({ id }) => !omittedCatalogModels.has(id));
   let hitCount = 0;
   const requests = [];
   const server = createServer(async (request, response) => {
@@ -200,6 +206,15 @@ export async function startStubProvider({
         !rateLimitedKeys.has(rateLimitKey)
       ) {
         rateLimitedKeys.add(rateLimitKey);
+        json(
+          response,
+          429,
+          { error: { message: "Stub rate limit." } },
+          { ...hitHeaders, "retry-after": "0" },
+        );
+        return;
+      }
+      if (persistentlyRateLimitedModels.has(body.model)) {
         json(
           response,
           429,
@@ -467,6 +482,43 @@ async function selftest() {
     });
     if (streaming.status !== 400)
       throw new Error("Expected streaming to be rejected.");
+
+    const faultStub = await startStubProvider({
+      port: 0,
+      omitCatalogModels: ["acme/large-1"],
+      rateLimitedModels: ["zeta/judge-1"],
+    });
+    const faultBaseUrl = `http://127.0.0.1:${faultStub.port}`;
+    try {
+      const faultCatalog = await fetch(`${faultBaseUrl}/v1/models`).then(
+        (response) => response.json(),
+      );
+      if (faultCatalog.data?.some(({ id }) => id === "acme/large-1")) {
+        throw new Error("Expected the omitted model to be absent.");
+      }
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const rateLimited = await fetch(`${faultBaseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...request, model: "zeta/judge-1" }),
+        });
+        if (rateLimited.status !== 429) {
+          throw new Error("Expected the judge model to remain rate limited.");
+        }
+      }
+      const fallback = await fetch(`${faultBaseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...request, model: "yotta/judge-2" }),
+      });
+      if (fallback.status !== 200) {
+        throw new Error(
+          "Expected the fallback judge model to remain available.",
+        );
+      }
+    } finally {
+      await faultStub.close();
+    }
     console.log("ok");
   } finally {
     await stub.close();

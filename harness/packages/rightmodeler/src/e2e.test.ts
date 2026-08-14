@@ -104,6 +104,8 @@ interface StubProviderModule {
     errorModels?: string[];
     includeFreeModel?: boolean;
     malformedJudgeModels?: string[];
+    omitCatalogModels?: string[];
+    rateLimitedModels?: string[];
     rateLimitMessageIncludes?: string;
   }): Promise<StubProvider>;
 }
@@ -384,6 +386,8 @@ async function startStub(
     errorModels?: string[];
     includeFreeModel?: boolean;
     malformedJudgeModels?: string[];
+    omitCatalogModels?: string[];
+    rateLimitedModels?: string[];
     rateLimitMessageIncludes?: string;
   } = {},
 ): Promise<StubProvider> {
@@ -871,6 +875,108 @@ describe("built CLI pipeline", () => {
       const resumed = await runCli(args, { env: { [apiKeyEnv]: secret } });
       expect(resumed.code, resumed.stderr).toBe(0);
       expect(stub.getHitCount()).toBe(hitsAfterFirstRun);
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("falls back from a persistently rate-limited judge and completes family evidence", async () => {
+    const { repo } = await fixtureCopy("judge-rate-limit-failover");
+    const stub = await startStub({
+      rateLimitedModels: ["zeta/judge-1"],
+    });
+    const apiKeyEnv = "RIGHTMODELER_JUDGE_RATE_LIMIT_E2E_API_KEY";
+    const args = [
+      "init",
+      "--through",
+      "aggregate",
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+
+    try {
+      const result = await runCli(args, { env: { [apiKeyEnv]: secret } });
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stderr).toContain('"event":"warning"');
+      expect(result.stderr).toContain("zeta/judge-1");
+      const output = JSON.parse(result.stdout) as {
+        familyOutcomes: Array<{
+          familyId: string;
+          verdict: { decision: string; abstainReason?: unknown };
+        }>;
+      };
+      const summarize = output.familyOutcomes.find(
+        ({ familyId }) => familyId === "summarize",
+      );
+      expect(summarize?.verdict).toMatchObject({ decision: "recommend" });
+      expect(summarize?.verdict).not.toHaveProperty("abstainReason");
+
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const facts = (await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      )) as Array<Record<string, unknown>>;
+      const executions = facts.filter(
+        ({ executionId, caseId }) =>
+          typeof executionId === "string" && typeof caseId === "string",
+      );
+      const assessments = facts.filter(
+        ({ assessmentId }) => typeof assessmentId === "string",
+      );
+      const providerFailures = facts.filter(({ actor, reconcilableTo }) => {
+        if (
+          actor !== "judge" ||
+          typeof reconcilableTo !== "object" ||
+          reconcilableTo === null ||
+          Array.isArray(reconcilableTo)
+        ) {
+          return false;
+        }
+        const detail = reconcilableTo as Record<string, unknown>;
+        return (
+          detail.judgeModel === "zeta/judge-1" &&
+          detail.judgeFailureKind === "provider_error"
+        );
+      });
+      const unusableNotes = facts.filter(({ actor, reconcilableTo }) => {
+        if (
+          actor !== "judge" ||
+          typeof reconcilableTo !== "object" ||
+          reconcilableTo === null ||
+          Array.isArray(reconcilableTo)
+        ) {
+          return false;
+        }
+        return (
+          (reconcilableTo as Record<string, unknown>).judgeStatus === "unusable"
+        );
+      });
+
+      expect(executions.length).toBeGreaterThanOrEqual(10);
+      expect(assessments).toHaveLength(executions.length);
+      expect(
+        assessments.every(({ evaluatorId }) => evaluatorId === "yotta/judge-2"),
+      ).toBe(true);
+      expect(providerFailures).toHaveLength(3);
+      expect(unusableNotes).toEqual([
+        expect.objectContaining({
+          costUsd: 0,
+          reconcilableTo: expect.objectContaining({
+            judgeModel: "zeta/judge-1",
+            judgeStatus: "unusable",
+            consecutiveAssessments: 3,
+          }),
+        }),
+      ]);
     } finally {
       await stub.close();
     }
@@ -1487,6 +1593,72 @@ describe("built CLI pipeline", () => {
         reportKey("project", "report.md"),
       );
       expect(report).toContain("selection_missing_shortlist_verdicts");
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("warns and names catalog drift when every family step lacks its current model", async () => {
+    const { repo } = await fixtureCopy("shortlist-catalog-drift");
+    const stub = await startStub({
+      omitCatalogModels: ["acme/large-1"],
+    });
+    const apiKeyEnv = "RIGHTMODELER_SHORTLIST_CATALOG_DRIFT_API_KEY";
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "jsonl",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const events = result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      const warnings = events.filter(({ event }) => event === "warning");
+      expect(warnings).toEqual([
+        {
+          event: "warning",
+          code: "shortlist_current_model_absent",
+          message:
+            "Family summarize: Current model is absent from the provider catalog: acme/large-1",
+        },
+        {
+          event: "warning",
+          code: "shortlist_current_model_absent",
+          message:
+            "Family support: Current model is absent from the provider catalog: acme/large-1",
+        },
+      ]);
+      const resultEvent = events.find(({ event }) => event === "result");
+      const resultValue = resultEvent?.result as
+        | {
+            familyOutcomes?: Array<{
+              verdict: {
+                abstainReason?: { reason?: string };
+              };
+            }>;
+          }
+        | undefined;
+      expect(resultValue?.familyOutcomes?.length).toBeGreaterThan(0);
+      expect(
+        resultValue?.familyOutcomes?.every(
+          ({ verdict }) =>
+            verdict.abstainReason?.reason === "provider_catalog_drift",
+        ),
+      ).toBe(true);
     } finally {
       await stub.close();
     }

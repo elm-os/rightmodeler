@@ -290,8 +290,8 @@ export async function replayModeA(
   );
   let activeJudgeIndex =
     firstUsableJudge === -1 ? judges.length : firstUsableJudge;
-  let consecutiveMalformed = 0;
-  let malformedPending: JudgeCell[] = [];
+  let consecutiveJudgeFailures = 0;
+  let judgeFailurePending: JudgeCell[] = [];
   let judgeQueue = Promise.resolve();
 
   async function completeWithoutAssessment(job: JudgeCell): Promise<void> {
@@ -375,7 +375,6 @@ export async function replayModeA(
       }
     | {
         readonly status: "failure";
-        readonly kind: "response_malformed" | "provider_error";
       }
   > {
     let judgeInvocation = 0;
@@ -459,14 +458,14 @@ export async function replayModeA(
         throw error;
       }
       await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error);
-      return { status: "failure", kind: judgeFailureKind };
+      return { status: "failure" };
     }
   }
 
-  async function flushMalformedPending(): Promise<void> {
-    const pending = malformedPending;
-    malformedPending = [];
-    consecutiveMalformed = 0;
+  async function flushJudgeFailurePending(): Promise<void> {
+    const pending = judgeFailurePending;
+    judgeFailurePending = [];
+    consecutiveJudgeFailures = 0;
     for (const job of pending) await completeWithoutAssessment(job);
   }
 
@@ -478,26 +477,21 @@ export async function replayModeA(
     }
     const outcome = await attemptJudge(job, judge);
     if (outcome.status === "success") {
-      await flushMalformedPending();
+      await flushJudgeFailurePending();
       await completeWithAssessment(job, outcome.assessment);
       return;
     }
-    if (outcome.kind === "provider_error") {
-      await flushMalformedPending();
-      await completeWithoutAssessment(job);
-      return;
-    }
 
-    malformedPending.push(job);
-    consecutiveMalformed += 1;
-    if (consecutiveMalformed < 3) return;
+    judgeFailurePending.push(job);
+    consecutiveJudgeFailures += 1;
+    if (consecutiveJudgeFailures < 3) return;
 
     const nextJudge = judges[activeJudgeIndex + 1];
     input.judge!.warning?.(
       "judge_unusable",
       nextJudge === undefined
-        ? `Judge ${judge.judgeModel} is unusable after three consecutive malformed assessments; no eligible fallback judge remains.`
-        : `Judge ${judge.judgeModel} is unusable after three consecutive malformed assessments; switching to ${nextJudge.judgeModel}.`,
+        ? `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; no eligible fallback judge remains.`
+        : `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; switching to ${nextJudge.judgeModel}.`,
     );
     const noteId = randomUUID();
     await writeReplayFact(
@@ -512,15 +506,15 @@ export async function replayModeA(
         reconcilableTo: {
           judgeModel: judge.judgeModel,
           judgeStatus: "unusable",
-          note: "three_consecutive_response_malformed",
-          consecutiveAssessments: consecutiveMalformed,
+          note: "three_consecutive_terminal_failures",
+          consecutiveAssessments: consecutiveJudgeFailures,
         },
       }),
     );
 
-    const affected = malformedPending;
-    malformedPending = [];
-    consecutiveMalformed = 0;
+    const affected = judgeFailurePending;
+    judgeFailurePending = [];
+    consecutiveJudgeFailures = 0;
     activeJudgeIndex += 1;
     for (const pending of affected) await processJudgeCell(pending);
   }
@@ -751,6 +745,6 @@ export async function replayModeA(
     ),
   );
   await judgeQueue;
-  await flushMalformedPending();
+  await flushJudgeFailurePending();
   return result;
 }

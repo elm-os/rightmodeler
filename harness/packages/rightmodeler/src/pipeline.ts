@@ -2321,8 +2321,9 @@ function replayCandidates(
         .filter((step) => step.family === family)
         .map(({ stepId }) => stepId),
     );
-    const familyAssignments = shortlisted.filter(({ stepId }) =>
-      familyStepIds.has(stepId),
+    const familyAssignments = shortlisted.filter(
+      ({ stepId, abstention }) =>
+        familyStepIds.has(stepId) && abstention === undefined,
     );
     const commonIds = new Set(
       assignment.candidates
@@ -2433,6 +2434,18 @@ async function executeReplay(
           catalog,
           context.approvedRunSpecDigest,
         );
+  const shortlistWarnings = new Set<string>();
+  for (const assignment of candidates) {
+    if (assignment.abstention === undefined) continue;
+    const step = plan.steps.find(({ stepId }) => stepId === assignment.stepId)!;
+    const warningKey = JSON.stringify([step.family, step.currentModel]);
+    if (shortlistWarnings.has(warningKey)) continue;
+    shortlistWarnings.add(warningKey);
+    context.reporter.warning(
+      "shortlist_current_model_absent",
+      `Family ${step.family}: ${assignment.abstention.message}`,
+    );
+  }
   let externalEvaluator: EvaluatorProvider | undefined;
   if (context.evaluator !== undefined) {
     const configured = createEvaluator(context.evaluator);
@@ -2712,6 +2725,14 @@ function buildFamilyOutcomes(
   const families: FamilyOutcome[] = [];
   for (const familyId of Object.keys(plan.sampleSizes).sort(compareText)) {
     const referenceCeiling = referenceCeilingFor(ceilings, familyId);
+    const familyStepIds = new Set(
+      plan.steps
+        .filter((step) => step.family === familyId)
+        .map(({ stepId }) => stepId),
+    );
+    const familyAssignments = candidates.filter(({ stepId }) =>
+      familyStepIds.has(stepId),
+    );
     const familyVerdicts = allVerdicts.filter(
       (verdict) => verdict.familyId === familyId,
     );
@@ -2723,7 +2744,19 @@ function buildFamilyOutcomes(
       familyVerdicts,
       expectedCandidates,
     );
-    const abstainReason = replayBlock?.abstainReason ?? selectionGap?.reason;
+    const catalogDrift =
+      familyAssignments.length > 0 &&
+      familyAssignments.every(
+        ({ abstention }) => abstention?.kind === "current-model-absent",
+      )
+        ? ({
+            reason: "provider_catalog_drift",
+            observed: 0,
+            required: 1,
+          } as const)
+        : undefined;
+    const abstainReason =
+      replayBlock?.abstainReason ?? catalogDrift ?? selectionGap?.reason;
     if (abstainReason !== undefined) {
       families.push(
         blockedFamilyOutcome(

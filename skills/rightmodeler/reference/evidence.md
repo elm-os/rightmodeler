@@ -130,12 +130,12 @@ leading prose before the first balanced JSON object. Invalid or incomplete JSON 
 
 Kernel scores, not the judge's numeric score, bind: `equivalent = 1`, `minor_drift = 0.6`, and
 `divergent = 0`. Only two `equivalent` verdicts pass. A position disagreement becomes
-`minor_drift`, fails, and records `orderConsistent: false`. After three consecutive
-`response_malformed` assessments, mark that model unusable with a warning and a zero-cost
-`SpendEvent` note, switch to the next-ranked eligible model, and re-judge only the affected pending
-cells. Try at most two judge models. The replay driver publishes the terminal execution only after
-complete judge evidence is persisted or both judges are exhausted, so an interrupted pending cell
-is retried rather than resumed as complete.
+`minor_drift`, fails, and records `orderConsistent: false`. After three consecutive terminal judge
+failures, each recorded as `response_malformed` or `provider_error`, mark that model unusable with a
+warning and a zero-cost `SpendEvent` note, switch to the next-ranked eligible model, and re-judge
+only the affected pending cells. Try at most two judge models. The replay driver publishes the
+terminal execution only after complete judge evidence is persisted or both judges are exhausted,
+so an interrupted pending cell is retried rather than resumed as complete.
 
 ## Reading the final result
 

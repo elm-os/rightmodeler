@@ -28437,8 +28437,8 @@ async function replayModeA(input) {
   const unusableJudges = replayState.unusableJudges;
   const firstUsableJudge = judges.findIndex(({ judgeModel }) => !unusableJudges.has(judgeModel));
   let activeJudgeIndex = firstUsableJudge === -1 ? judges.length : firstUsableJudge;
-  let consecutiveMalformed = 0;
-  let malformedPending = [];
+  let consecutiveJudgeFailures = 0;
+  let judgeFailurePending = [];
   let judgeQueue = Promise.resolve();
   async function completeWithoutAssessment(job) {
     await writeReplayFact(input.store, input.budget.projectId, job.executionId, job.execution);
@@ -28549,13 +28549,13 @@ async function replayModeA(input) {
         throw error51;
       }
       await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error51);
-      return { status: "failure", kind: judgeFailureKind };
+      return { status: "failure" };
     }
   }
-  async function flushMalformedPending() {
-    const pending = malformedPending;
-    malformedPending = [];
-    consecutiveMalformed = 0;
+  async function flushJudgeFailurePending() {
+    const pending = judgeFailurePending;
+    judgeFailurePending = [];
+    consecutiveJudgeFailures = 0;
     for (const job of pending)
       await completeWithoutAssessment(job);
   }
@@ -28567,21 +28567,16 @@ async function replayModeA(input) {
     }
     const outcome = await attemptJudge(job, judge);
     if (outcome.status === "success") {
-      await flushMalformedPending();
+      await flushJudgeFailurePending();
       await completeWithAssessment(job, outcome.assessment);
       return;
     }
-    if (outcome.kind === "provider_error") {
-      await flushMalformedPending();
-      await completeWithoutAssessment(job);
-      return;
-    }
-    malformedPending.push(job);
-    consecutiveMalformed += 1;
-    if (consecutiveMalformed < 3)
+    judgeFailurePending.push(job);
+    consecutiveJudgeFailures += 1;
+    if (consecutiveJudgeFailures < 3)
       return;
     const nextJudge = judges[activeJudgeIndex + 1];
-    input.judge.warning?.("judge_unusable", nextJudge === void 0 ? `Judge ${judge.judgeModel} is unusable after three consecutive malformed assessments; no eligible fallback judge remains.` : `Judge ${judge.judgeModel} is unusable after three consecutive malformed assessments; switching to ${nextJudge.judgeModel}.`);
+    input.judge.warning?.("judge_unusable", nextJudge === void 0 ? `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; no eligible fallback judge remains.` : `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; switching to ${nextJudge.judgeModel}.`);
     const noteId = randomUUID6();
     await writeReplayFact(input.store, input.budget.projectId, noteId, spendEventSchema.parse({
       actor: "judge",
@@ -28591,13 +28586,13 @@ async function replayModeA(input) {
       reconcilableTo: {
         judgeModel: judge.judgeModel,
         judgeStatus: "unusable",
-        note: "three_consecutive_response_malformed",
-        consecutiveAssessments: consecutiveMalformed
+        note: "three_consecutive_terminal_failures",
+        consecutiveAssessments: consecutiveJudgeFailures
       }
     }));
-    const affected = malformedPending;
-    malformedPending = [];
-    consecutiveMalformed = 0;
+    const affected = judgeFailurePending;
+    judgeFailurePending = [];
+    consecutiveJudgeFailures = 0;
     activeJudgeIndex += 1;
     for (const pending of affected)
       await processJudgeCell(pending);
@@ -28782,7 +28777,7 @@ async function replayModeA(input) {
   }
   await Promise.all(Array.from({ length: Math.min(input.concurrency, Math.max(1, cells.length)) }, () => worker()));
   await judgeQueue;
-  await flushMalformedPending();
+  await flushJudgeFailurePending();
   return result2;
 }
 
@@ -42575,7 +42570,7 @@ function replayCandidates(plan, catalog) {
       plan.steps.filter((step) => step.family === family).map(({ stepId }) => stepId)
     );
     const familyAssignments = shortlisted.filter(
-      ({ stepId }) => familyStepIds.has(stepId)
+      ({ stepId, abstention: abstention2 }) => familyStepIds.has(stepId) && abstention2 === void 0
     );
     const commonIds = new Set(
       assignment.candidates.map(({ id }) => id).filter(
@@ -42656,6 +42651,18 @@ async function executeReplay(context2, inputDigestValue, runId) {
     catalog,
     context2.approvedRunSpecDigest
   );
+  const shortlistWarnings = /* @__PURE__ */ new Set();
+  for (const assignment of candidates) {
+    if (assignment.abstention === void 0) continue;
+    const step = plan.steps.find(({ stepId }) => stepId === assignment.stepId);
+    const warningKey = JSON.stringify([step.family, step.currentModel]);
+    if (shortlistWarnings.has(warningKey)) continue;
+    shortlistWarnings.add(warningKey);
+    context2.reporter.warning(
+      "shortlist_current_model_absent",
+      `Family ${step.family}: ${assignment.abstention.message}`
+    );
+  }
   let externalEvaluator;
   if (context2.evaluator !== void 0) {
     const configured = createEvaluator(context2.evaluator);
@@ -42889,6 +42896,12 @@ function buildFamilyOutcomes(plan, allVerdicts, candidates, familyBlocks, ceilin
   const families = [];
   for (const familyId of Object.keys(plan.sampleSizes).sort(compareText13)) {
     const referenceCeiling = referenceCeilingFor(ceilings, familyId);
+    const familyStepIds = new Set(
+      plan.steps.filter((step) => step.family === familyId).map(({ stepId }) => stepId)
+    );
+    const familyAssignments = candidates.filter(
+      ({ stepId }) => familyStepIds.has(stepId)
+    );
     const familyVerdicts = allVerdicts.filter(
       (verdict2) => verdict2.familyId === familyId
     );
@@ -42900,7 +42913,14 @@ function buildFamilyOutcomes(plan, allVerdicts, candidates, familyBlocks, ceilin
       familyVerdicts,
       expectedCandidates
     );
-    const abstainReason = replayBlock?.abstainReason ?? selectionGap?.reason;
+    const catalogDrift = familyAssignments.length > 0 && familyAssignments.every(
+      ({ abstention: abstention2 }) => abstention2?.kind === "current-model-absent"
+    ) ? {
+      reason: "provider_catalog_drift",
+      observed: 0,
+      required: 1
+    } : void 0;
+    const abstainReason = replayBlock?.abstainReason ?? catalogDrift ?? selectionGap?.reason;
     if (abstainReason !== void 0) {
       families.push(
         blockedFamilyOutcome(

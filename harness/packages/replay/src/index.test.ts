@@ -1142,10 +1142,72 @@ describe("Mode A replay", () => {
       reconcilableTo: {
         judgeModel: "zeta/judge-1",
         judgeStatus: "unusable",
-        note: "three_consecutive_response_malformed",
+        note: "three_consecutive_terminal_failures",
         consecutiveAssessments: 3,
       },
     });
+  });
+
+  it("counts mixed malformed and provider judge failures toward failover", async () => {
+    const warning = vi.fn();
+    const judgeModels: string[] = [];
+    const failures = ["malformed", "provider_error", "malformed"] as const;
+    let failureIndex = 0;
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    const result = await run(
+      cases,
+      async (request) => {
+        judgeModels.push(request.model);
+        if (request.model === "zeta/judge-1") {
+          const failure = failures[failureIndex];
+          failureIndex += 1;
+          if (failure === "provider_error") {
+            throw new Error("Terminal provider failure");
+          }
+          return '{"verdict":';
+        }
+        return JSON.stringify({
+          verdict: "equivalent",
+          score: 1,
+          justification: "Equivalent fixture outputs.",
+        });
+      },
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+        },
+      ],
+      warning,
+    );
+    const facts = await readFacts(store);
+
+    expect(result).toMatchObject({ completed: 4, blocked: [] });
+    expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(4);
+    expect(
+      facts
+        .filter((fact) => "assessmentId" in fact)
+        .every((fact) => fact.evaluatorId === "yotta/judge-2"),
+    ).toBe(true);
+    expect(
+      judgeModels.filter((model) => model === "zeta/judge-1"),
+    ).toHaveLength(3);
+    expect(
+      judgeModels.filter((model) => model === "yotta/judge-2"),
+    ).toHaveLength(8);
+    expect(warning).toHaveBeenCalledOnce();
   });
 
   it("tries at most two systematically malformed judges", async () => {
