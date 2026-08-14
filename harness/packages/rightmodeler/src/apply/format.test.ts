@@ -308,6 +308,10 @@ describe("formatWithHostFormatter", () => {
 
   it("blocks formatter drift outside the model token's line", async () => {
     const { root, file } = await fixtureDiff("src/misformatted.ts");
+    // The fixture ships a .prettierignore covering misformatted.ts so repo-level formatting can
+    // never "fix" it. The copy must not carry that ignore: this test needs Prettier to really
+    // format the file, and Prettier correctly echoes ignored input unchanged.
+    await unlink(join(root, ".prettierignore"));
 
     const result = await formatWithHostFormatter({
       repoDir: root,

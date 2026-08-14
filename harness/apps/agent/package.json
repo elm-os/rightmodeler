@@ -4,12 +4,11 @@
   "private": true,
   "description": "Agent application for operating the rightmodeler harness.",
   "scripts": {
-    "build:cli": "pnpm --filter @rightmodeler/cli build",
-    "build": "pnpm run build:cli && eve build",
+    "build": "eve build",
     "typecheck": "tsc --noEmit",
-    "info": "pnpm run build:cli && eve info",
-    "eval:list": "pnpm run build:cli && eve eval --list",
-    "eval": "pnpm run build:cli && GITHUB_TOKEN=fixture-github-token RIGHTMODELER_AGENT_EVAL=1 RIGHTMODELER_AGENT_FIXTURE_API_KEY=fixture-api-key eve eval --strict --skip-report",
+    "info": "eve info",
+    "eval:list": "eve eval --list",
+    "eval": "GITHUB_TOKEN=fixture-github-token RIGHTMODELER_AGENT_EVAL=1 RIGHTMODELER_AGENT_FIXTURE_API_KEY=fixture-api-key eve eval --strict --skip-report",
     "check": "pnpm run typecheck && eve info --json && pnpm run eval"
   },
   "type": "module",
