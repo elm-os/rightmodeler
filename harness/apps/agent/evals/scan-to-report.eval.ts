@@ -1,7 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 import { defineEval } from "eve/evals";
 import { equals } from "eve/evals/expect";
@@ -9,6 +11,24 @@ import { z } from "zod";
 
 import { runCli } from "../agent/lib/cli.js";
 import { replayCliArguments } from "../agent/lib/replay.js";
+
+const execFileAsync = promisify(execFile);
+
+async function makeGitFixture(
+  rootDir: string,
+  sourceDir: string,
+): Promise<string> {
+  const repoDir = join(rootDir, "repo");
+  await cp(sourceDir, repoDir, { recursive: true });
+  const git = (args: readonly string[]) =>
+    execFileAsync("git", ["-C", repoDir, ...args]);
+  await git(["init", "--initial-branch", "main"]);
+  await git(["config", "user.name", "Fixture Author"]);
+  await git(["config", "user.email", "fixture@example.com"]);
+  await git(["add", "--all"]);
+  await git(["commit", "--message", "Seed fixture"]);
+  return repoDir;
+}
 
 interface StubProvider {
   port: number;
@@ -50,7 +70,10 @@ export default defineEval({
   async test(t) {
     const tempRoot = await mkdtemp(join(tmpdir(), "rightmodeler-agent-eval-"));
     const store = join(tempRoot, "store");
-    const repo = resolve(process.cwd(), "../../fixtures/demo-app");
+    const repo = await makeGitFixture(
+      tempRoot,
+      resolve(process.cwd(), "../../fixtures/demo-app"),
+    );
     const traces = resolve(
       process.cwd(),
       "../../fixtures/traces/otel-genai.json",
