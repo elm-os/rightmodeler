@@ -340,6 +340,23 @@ async function waitFor(
   }
 }
 
+// After an aborted or reset response the request_attempt row lands in the spool asynchronously;
+// on slow runners a single immediate read can beat the append. Poll until the expected number of
+// attempt rows exists, then let the caller assert their exact content.
+async function attemptsUntil(
+  path: string,
+  count: number,
+): Promise<Record<string, unknown>[]> {
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const attempts = (await readRows(path).catch(() => [])).filter(
+      (row) => row.kind === "request_attempt",
+    );
+    if (attempts.length >= count || Date.now() >= deadline) return attempts;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 async function absoluteRequest(
   egress: EgressListener,
   target: string,
@@ -692,9 +709,7 @@ describe("Mode B proxy and host egress", () => {
 
     expect(response.status).toBe(502);
     expect(performance.now() - startedAt).toBeLessThan(200);
-    const attempts = (await readRows(spoolPath(pair.scratch))).filter(
-      (row) => row.kind === "request_attempt",
-    );
+    const attempts = await attemptsUntil(spoolPath(pair.scratch), 1);
     expect(attempts).toEqual([
       expect.objectContaining({
         kind: "request_attempt",
@@ -737,10 +752,7 @@ describe("Mode B proxy and host egress", () => {
     await callProxy(runtime, "step-reset", "logical-reset")
       .then((response) => response.arrayBuffer())
       .catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    const attempts = (await readRows(spoolPath(scratch))).filter(
-      (row) => row.kind === "request_attempt",
-    );
+    const attempts = await attemptsUntil(spoolPath(scratch), 1);
     expect(attempts).toEqual([
       expect.objectContaining({
         logicalCallId: "logical-reset",
@@ -772,9 +784,7 @@ describe("Mode B proxy and host egress", () => {
     // The bound only needs to discriminate the idle override firing (tens of milliseconds)
     // from the 500ms stall completing or the 1s hard deadline; slow CI runners need headroom.
     expect(performance.now() - startedAt).toBeLessThan(450);
-    const attempts = (await readRows(spoolPath(pair.scratch))).filter(
-      (row) => row.kind === "request_attempt",
-    );
+    const attempts = await attemptsUntil(spoolPath(pair.scratch), 1);
     expect(attempts).toEqual([
       expect.objectContaining({
         kind: "request_attempt",
