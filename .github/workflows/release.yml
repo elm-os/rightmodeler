@@ -1,0 +1,57 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Required for npm trusted publishing: the registry exchanges this OIDC token for
+      # short-lived publish credentials, so no npm token is stored anywhere.
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.7.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the publish artifact
+        run: pnpm exec turbo run build --filter=@rightmodeler/cli
+
+      - name: Check the CLI package
+        working-directory: harness/packages/rightmodeler
+        run: pnpm run check
+
+      - name: Refuse a tag that does not match the manifest version
+        working-directory: harness/packages/rightmodeler
+        run: |
+          manifest_version="$(node -p "require('./dist/publish/package.json').version")"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "${manifest_version}" != "${tag_version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match manifest version ${manifest_version}" >&2
+            exit 1
+          fi
+
+      - name: Publish to npm via trusted publishing
+        working-directory: harness/packages/rightmodeler
+        run: npm publish ./dist/publish --access public
