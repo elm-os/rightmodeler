@@ -103,14 +103,25 @@ not an empty plan.
 Set the agreed inputs. `THROUGH=report` runs the complete pipeline. The API key must
 already exist in the environment variable named by `API_KEY_ENV`.
 
+The spend cap is optional. Leave `MAX_COST_USD` empty to run uncapped: every case and
+judge cell then runs to completion, which is the right choice when completeness and
+evidence quality matter more than cost. Set a cap only when the operator wants a hard
+stop; a capped run halts at the boundary with a named remedy and resumes after the cap
+is raised.
+
 ```bash
 TRACES=/absolute/path/to/traces.json
 THROUGH=report
 PROVIDER_BASE_URL=https://provider.example/v1
 API_KEY_ENV=RIGHTMODELER_API_KEY
-MAX_COST_USD=25
+MAX_COST_USD=
 RUN_LOG=$(mktemp)
 ERROR_LOG=$(mktemp)
+
+CAP_ARGS=()
+if [ -n "$MAX_COST_USD" ]; then
+  CAP_ARGS=(--max-cost-usd "$MAX_COST_USD")
+fi
 
 if "${RIGHTMODELER[@]}" init \
   --yes \
@@ -118,7 +129,7 @@ if "${RIGHTMODELER[@]}" init \
   --traces "$TRACES" \
   --base-url "$PROVIDER_BASE_URL" \
   --api-key-env "$API_KEY_ENV" \
-  --max-cost-usd "$MAX_COST_USD" \
+  "${CAP_ARGS[@]}" \
   --output jsonl \
   --repo "$REPO" \
   >"$RUN_LOG" 2>"$ERROR_LOG"; then
