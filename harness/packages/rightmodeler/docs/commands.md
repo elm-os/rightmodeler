@@ -59,7 +59,9 @@ Options:
   --base-url <url>                    OpenAI-compatible provider base URL
   --api-key-env <name>                environment variable containing the
                                       provider API key
-  --max-cost-usd <amount>             maximum replay spend in USD
+  --max-cost-usd <amount>             optional hard spend cap in USD; omit to
+                                      run uncapped so every case and judge cell
+                                      completes
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -103,7 +105,9 @@ Options:
   --base-url <url>                    OpenAI-compatible provider base URL
   --api-key-env <name>                environment variable containing the
                                       provider API key
-  --max-cost-usd <amount>             maximum replay spend in USD
+  --max-cost-usd <amount>             optional hard spend cap in USD; omit to
+                                      run uncapped so every case and judge cell
+                                      completes
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -212,7 +216,9 @@ Options:
   --base-url <url>                    OpenAI-compatible provider base URL
   --api-key-env <name>                environment variable containing the
                                       provider API key
-  --max-cost-usd <amount>             maximum replay spend in USD
+  --max-cost-usd <amount>             optional hard spend cap in USD; omit to
+                                      run uncapped so every case and judge cell
+                                      completes
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -266,7 +272,9 @@ Options:
   --base-url <url>                    OpenAI-compatible provider base URL
   --api-key-env <name>                environment variable containing the
                                       provider API key
-  --max-cost-usd <amount>             maximum replay spend in USD
+  --max-cost-usd <amount>             optional hard spend cap in USD; omit to
+                                      run uncapped so every case and judge cell
+                                      completes
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")

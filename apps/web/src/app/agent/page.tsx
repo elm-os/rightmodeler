@@ -26,7 +26,7 @@ const POLICY: { key: string; value: string }[] = [
     key: "quality_floor",
     value: `${ILLUSTRATIVE_SCORECARD.floor} · judged against shipped outputs`,
   },
-  { key: "max_cost_usd", value: "hard stop for the whole run" },
+  { key: "max_cost_usd", value: "optional · hard stop when set, uncapped when not" },
   { key: "models", value: "allow openai · anthropic · google · meta" },
   { key: "evaluator", value: "braintrust · falls back to cross-family judge" },
   { key: "merge", value: "open PR only · never auto-merge" },
@@ -43,7 +43,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Does it merge changes on its own?",
-    a: "No. The agent opens pull requests; merging stays with you, and it carries no merge capability at all. Your configuration sets the guardrails: the quality floor, a model allowlist and denylist, a hard spend cap per run, and which evaluator scores the replays.",
+    a: "No. The agent opens pull requests; merging stays with you, and it carries no merge capability at all. Your configuration sets the guardrails: the quality floor, a model allowlist and denylist, an optional hard spend cap per run (omit it and every case runs to completion when evidence matters more than cost), and which evaluator scores the replays.",
   },
   {
     q: "What does it evaluate against?",
