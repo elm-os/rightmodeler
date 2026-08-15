@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 
-// Confirmation and stream-parser tests run real subprocesses and containers; on two-core CI
-// runners under full-graph parallelism they can exceed vitest's five-second default.
+// Suites here run real subprocesses and containers. The timeout is a hang guard only, sized
+// so even very slow machines are never failed for taking their time.
 export default defineConfig({
-  test: { testTimeout: 30_000 },
+  test: { testTimeout: 120_000 },
 });

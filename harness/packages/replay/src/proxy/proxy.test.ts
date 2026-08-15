@@ -347,7 +347,7 @@ async function attemptsUntil(
   path: string,
   count: number,
 ): Promise<Record<string, unknown>[]> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 30_000;
   for (;;) {
     const attempts = (await readRows(path).catch(() => [])).filter(
       (row) => row.kind === "request_attempt",
@@ -697,8 +697,10 @@ describe("Mode B proxy and host egress", () => {
   });
 
   it("uses the spawned hard-deadline override for upstream response headers", async () => {
+    // No wall-clock assertion: the outcome alone discriminates. Only the 20ms deadline firing
+    // can produce a 502; if the override were inert the stub's hold would elapse and the
+    // upstream 200 would come back, however slow the machine.
     const pair = await startPair({ streamHardDeadlineMs: 20 });
-    const startedAt = performance.now();
     const response = await callProxy(
       pair.runtime,
       "step-timeout",
@@ -708,7 +710,6 @@ describe("Mode B proxy and host egress", () => {
     );
 
     expect(response.status).toBe(502);
-    expect(performance.now() - startedAt).toBeLessThan(200);
     const attempts = await attemptsUntil(spoolPath(pair.scratch), 1);
     expect(attempts).toEqual([
       expect.objectContaining({
@@ -764,11 +765,14 @@ describe("Mode B proxy and host egress", () => {
   });
 
   it("uses the spawned idle-timeout override between stream events", async () => {
+    // No wall-clock assertion: the stall and hard deadline are set far beyond the suite
+    // timeout, so the ONLY way this test can complete with a truncated attempt is the 20ms
+    // idle override firing between stream events. An inert override hangs into the test
+    // timeout instead of passing, however slow the machine.
     const pair = await startPair({
       streamIdleTimeoutMs: 20,
-      streamHardDeadlineMs: 1_000,
+      streamHardDeadlineMs: 600_000,
     });
-    const startedAt = performance.now();
     const response = await callProxy(
       pair.runtime,
       "step-idle-timeout",
@@ -776,14 +780,11 @@ describe("Mode B proxy and host egress", () => {
       chatBody({ stream: true }),
       {
         "x-stub-enable-streaming": "1",
-        "x-stub-stall-stream-ms": "500",
+        "x-stub-stall-stream-ms": "600000",
       },
     );
 
     await response.arrayBuffer().catch(() => undefined);
-    // The bound only needs to discriminate the idle override firing (tens of milliseconds)
-    // from the 500ms stall completing or the 1s hard deadline; slow CI runners need headroom.
-    expect(performance.now() - startedAt).toBeLessThan(450);
     const attempts = await attemptsUntil(spoolPath(pair.scratch), 1);
     expect(attempts).toEqual([
       expect.objectContaining({

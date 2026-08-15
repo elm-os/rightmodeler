@@ -342,7 +342,13 @@ export async function startStubProvider({
             10,
           );
           if (index === 0 && stallMs > 0) {
-            await new Promise((resolve) => setTimeout(resolve, stallMs));
+            await new Promise((resolve) => {
+              const timer = setTimeout(resolve, stallMs);
+              response.once("close", () => {
+                clearTimeout(timer);
+                resolve(undefined);
+              });
+            });
             if (response.destroyed) return;
           }
         }
