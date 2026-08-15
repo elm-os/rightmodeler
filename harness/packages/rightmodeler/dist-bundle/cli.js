@@ -45182,7 +45182,7 @@ function rollbackSwaps(options) {
 }
 
 // src/version.ts
-var version2 = "0.1.0";
+var version2 = "0.1.1";
 
 // src/cli.ts
 function createProgram(io = processIo) {
