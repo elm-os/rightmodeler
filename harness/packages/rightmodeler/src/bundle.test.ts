@@ -125,7 +125,9 @@ describe("packed CLI bundle", () => {
       },
     );
 
-    const installedRoot = join(project, "node_modules/@rightmodeler/cli");
+    // The published name is the bare, npx-friendly `rightmodeler`; only the workspace keeps
+    // the scoped name to avoid colliding with the repo root package.
+    const installedRoot = join(project, "node_modules/rightmodeler");
     const installedBinary = join(project, "node_modules/.bin/rightmodeler");
     expect(await realpath(installedBinary)).toBe(
       await realpath(join(installedRoot, "dist-bundle/cli.js")),

@@ -12,9 +12,9 @@ description: >-
 
 # rightmodeler TypeScript CLI runbook
 
-**Current path:** use the installed TypeScript CLI, package `@rightmodeler/cli`
-with bin `rightmodeler`. The legacy Python engine has been retired; the CLI is
-the only engine.
+**Current path:** use the installed TypeScript CLI, published on npm as
+`rightmodeler` (workspace package `@rightmodeler/cli`) with bin `rightmodeler`.
+The legacy Python engine has been retired; the CLI is the only engine.
 
 The CLI is resumable. It stores checkpoints and reports under `.rightmodeler/` in
 the target repository unless `--store` overrides that location. Re-run the same
