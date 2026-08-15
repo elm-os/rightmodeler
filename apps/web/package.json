@@ -10,7 +10,7 @@
     "lint": "eslint . --max-warnings 0",
     "test": "node --test scripts/check-content.test.mjs scripts/check-vs.test.mjs",
     "check-content": "node scripts/check-content.mjs",
-    "check": "pnpm run check-content && pnpm run test && pnpm run check-types && pnpm run build",
+    "check": "pnpm run check-content && pnpm run test && pnpm run check-types",
     "check-types": "next typegen && tsc --noEmit"
   },
   "dependencies": {

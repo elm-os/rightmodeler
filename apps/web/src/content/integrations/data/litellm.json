@@ -2,48 +2,48 @@
   "slug": "litellm",
   "name": "LiteLLM",
   "category": "replay-method",
-  "categoryLabel": "Replay method · E2E",
-  "title": "LiteLLM integration: end-to-end replay on cheaper models",
-  "description": "Replay your real pipeline through a LiteLLM proxy, let tools and loops run, and use rightmodeler to verify whether each model swap survives.",
+  "categoryLabel": "Replay route · your own proxy",
+  "title": "LiteLLM integration: replay through your own proxy",
+  "description": "Point rightmodeler at a LiteLLM proxy as its replay route: candidate calls and the judge run through the gateway you already operate, on your own keys.",
   "h1": "rightmodeler + LiteLLM",
-  "lede": "When a step calls tools or loops, judging one replayed completion is not proof. rightmodeler re-runs your real pipeline with a LiteLLM proxy swapping the model underneath, your code unmodified, the candidate doing the actual work.",
-  "tldr": "A LiteLLM proxy can be rightmodeler's replay provider: set RIGHTMODELER_PROVIDER=litellm and candidate and judge calls use the proxy's live catalog, while x-litellm-response-cost supplies each call's charge when present. LiteLLM also remains the documented injection method for end-to-end replay, where you set litellm_params.api_base to the active replay provider and your pipeline re-runs unmodified in a throwaway git worktree.",
+  "lede": "If a LiteLLM proxy already fronts your model traffic, it can be the route the audit replays through. rightmodeler needs an OpenAI-compatible base URL and the name of the variable holding its key, and your proxy is exactly that.",
+  "tldr": "rightmodeler talks to whatever OpenAI-compatible endpoint you name with --base-url, reading the key from the variable you name with --api-key-env, so a LiteLLM proxy is a first-class replay route: GET /models builds the shortlist and POST /chat/completions runs the replays and the judge. It works when your proxy's model list publishes pricing, because the shortlist is built from price, capability, and context window.",
   "steps": [
     {
-      "label": "01 · Configure",
-      "title": "One config file maps the model underneath",
-      "body": "A LiteLLM config's model_list maps the model name your code requests to the candidate under test. Set litellm_params.model to that provider's model id, litellm_params.api_base to the active replay provider's base URL, and api_key to the matching provider key. When LiteLLM itself is selected with RIGHTMODELER_PROVIDER=litellm, rightmodeler uses the aliases exposed by the proxy's live catalog."
+      "label": "01 · Point",
+      "title": "Name the proxy and the key variable",
+      "body": "Start or reuse your gateway, then pass rightmodeler its base URL and the name of the environment variable holding a virtual key: --base-url http://localhost:4000/v1 --api-key-env LITELLM_API_KEY. The value is read at call time, never written to the store, and stripped from provider error excerpts before anything is logged."
     },
     {
-      "label": "02 · Redirect",
-      "title": "Point the pipeline at localhost, not the provider",
-      "body": "For proxy injection, litellm --config config.yaml starts the gateway and OPENAI_BASE_URL=http://localhost:4000 points your unmodified code at it; the pipeline keeps requesting the model it always requests. When LiteLLM is the active replay provider, the sandbox instead sets OPENAI_BASE_URL to LITELLM_PROXY_API_BASE and also sets the native Anthropic SDK base URL before the pipeline starts."
+      "label": "02 · Catalog",
+      "title": "The shortlist comes from your model list",
+      "body": "GET /models is read as the catalog. A candidate qualifies only when it is strictly cheaper than the incumbent on a blended per-token price, supports what the step needs, and has a context window at least as large as the step's observed tokens. That means the proxy has to publish pricing, context length, and supported parameters for its models; entries without a price cannot be compared and are left out."
     },
     {
-      "label": "03 · Re-run",
-      "title": "The real pipeline, in a throwaway worktree",
-      "body": "rightmodeler re-runs your pipeline from a detached git worktree of your repo's HEAD, seeded with the recorded task input; the candidate takes its own trajectory rather than replaying your old turns. Tools actually fire: side-effecting ones are mocked from the trace, read-only ones run live, and non-model HTTP is frozen with vcrpy."
+      "label": "03 · Replay + judge",
+      "title": "Your route, the same evidence contract",
+      "body": "Candidates replay the step's recorded inputs through POST /chat/completions on your proxy, and the built-in judge makes two temperature-zero calls with the reference and candidate positions swapped, chosen from a family that is neither the candidate's nor the incumbent's. Rate limits are retried with backoff and the concurrency cap adapts down rather than hammering your gateway."
     },
     {
-      "label": "04 · Compare",
-      "title": "Three axes, then a verdict",
-      "body": "The original and candidate runs are compared on tool-call sequence, step and loop count with the cost delta, and final output: deterministic trajectory matching for tool-selection regressions, a trajectory judge for valid-but-different paths. The verdict lands in the per-step report, and you approve, reject, or hold each swap in the TUI."
+      "label": "04 · Confirm",
+      "title": "Coupled steps run in a container",
+      "body": "A step whose output can feed later model-authored steps is confirmed by running your pipeline inside a container image you name in a --modeb-config file, with your app mounted read-only. Model calls leave through rightmodeler's own metered proxy, which swaps the model per step, meters every attempt, and refuses a request carrying no correlation header. Your LiteLLM gateway is the replay route, not the swap mechanism."
     }
   ],
   "setup": {
-    "intro": "There is nothing to install into your app. LiteLLM can be the selected replay provider through an existing proxy, or it can run only inside the replay sandbox as an injection layer in front of your unmodified pipeline.",
+    "intro": "There is nothing to install into your app. If you already run a LiteLLM proxy, the audit can use it as the replay route; if you do not, any other OpenAI-compatible endpoint works the same way.",
     "commands": [
       {
-        "comment": "# make your proxy the replay provider itself",
-        "command": "export LITELLM_PROXY_API_BASE=http://localhost:4000 LITELLM_PROXY_API_KEY=sk-... RIGHTMODELER_PROVIDER=litellm"
-      },
-      {
-        "comment": "# what the E2E replay stands up in front of your code",
+        "comment": "# start (or reuse) the gateway you already operate",
         "command": "litellm --config config.yaml"
       },
       {
-        "comment": "# inside Claude Code, hand the skill your traces and the repo to re-run",
-        "command": "claude \"run the rightmodeler skill on ./traces and confirm swaps against this repo\""
+        "comment": "# project the replay spend through your proxy first",
+        "command": "npx rightmodeler estimate --traces ./traces/spans.json --base-url http://localhost:4000/v1 --api-key-env LITELLM_API_KEY"
+      },
+      {
+        "comment": "# then run the pipeline under a hard spend cap",
+        "command": "npx rightmodeler init --traces ./traces/spans.json --base-url http://localhost:4000/v1 --api-key-env LITELLM_API_KEY --max-cost-usd 25"
       }
     ]
   },
@@ -51,55 +51,52 @@
   "detection": "",
   "useCases": [
     {
-      "title": "Measure a candidate across tool calls and loops",
-      "body": "A step that chooses tools cannot be judged from one replayed completion. The end-to-end re-run shows whether the candidate picks the same calls with the same arguments, stays out of extra loop iterations, and still lands the final output."
-    },
-    {
-      "title": "Audit an Anthropic-SDK pipeline",
-      "body": "When LiteLLM is the selected replay provider, rightmodeler points the native Anthropic SDK at the configured proxy before your pipeline starts, so your code joins the replay without an edit."
-    },
-    {
       "title": "Reuse the gateway you already run",
-      "body": "If LiteLLM already fronts your LLM traffic, set RIGHTMODELER_PROVIDER=litellm and rightmodeler uses that proxy's catalog for replay. Each response's x-litellm-response-cost header supplies the candidate's per-call charge when the proxy returns it."
+      "body": "If LiteLLM already fronts your model traffic, the audit does not need a second account or a second key. The same virtual key, budgets, and provider routing you already configured apply to the replay and judge calls too."
     },
     {
-      "title": "Catch cascades before they ship",
-      "body": "A cheaper model that drifts on one step can wreck the steps that consume its output. Re-running the whole pipeline surfaces those failures while they are still a report finding, not an incident."
+      "title": "Keep replay traffic inside your own perimeter",
+      "body": "Replays are ordinary chat completions against the base URL you name, so a self-hosted proxy keeps recorded inputs on infrastructure you control rather than sending them to a route you do not operate."
+    },
+    {
+      "title": "Bring your own provider mix",
+      "body": "Because the shortlist is built from whatever your proxy's model list publishes, the candidates are the models you have actually enabled, at the prices you have configured, instead of a public catalog you do not buy from."
     }
   ],
   "limits": [
-    "rightmodeler natively ingests LiteLLM proxy StandardLoggingPayload logs through a dedicated adapter. LiteLLM can be both a trace source and the selected replay provider.",
-    "Replays are not bit-exact even at temperature 0 with a fixed seed; GPU float non-associativity and MoE routing still drift. Important steps are re-run several times and read as a distribution, not a single sample.",
-    "When a mocked side-effecting tool is called with different arguments than the trace recorded, there is no stored answer; that replay mainly measures whether the candidate picks the same calls.",
-    "High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, and weak evidence means abstain. A tool that always finds a swap is not measuring anything.",
-    "The proxy lives and dies inside the replay sandbox. rightmodeler never routes production traffic through LiteLLM or anything else; it is an offline report, not a hop in your request path."
+    "rightmodeler has no LiteLLM log adapter. Proxy logs are not a supported trace format; if you want traces from that traffic, export OpenTelemetry GenAI spans and use the OTel adapter, or log OpenAI SDK calls in the JSONL shape that adapter reads.",
+    "The shortlist needs prices. A model list that omits pricing, context length, or supported parameters yields no qualifying candidates, because the audit will not compare models on a price it had to invent.",
+    "Cost comes from what the response body reports. A proxy that returns no cost field leaves rightmodeler computing the amount from catalog prices and token counts, and the ledger labels that figure an estimate.",
+    "One replay endpoint is configured per run. A LiteLLM proxy, OpenRouter, and the Vercel AI Gateway are all OpenAI-compatible routes rightmodeler accepts; it does not mix keys within a run.",
+    "Replays are not bit-exact, even at a fixed temperature. Repeated cases are read as a distribution and the release decision binds on a worst-case lower bound rather than a single sample.",
+    "The proxy is a route, not a hop in production. rightmodeler runs offline on traces you exported and never sits in your request path."
   ],
   "faq": [
     {
       "q": "Do I need to run LiteLLM to use rightmodeler?",
-      "a": "No, unless you choose it as the replay provider. With RIGHTMODELER_PROVIDER=litellm, single-shot replays and judge calls go through the configured proxy and per-call charges come from x-litellm-response-cost when present. With another provider selected, LiteLLM enters only when an end-to-end replay uses it as the local injection layer."
-    },
-    {
-      "q": "Does rightmodeler replace LiteLLM?",
-      "a": "No, they do different jobs. LiteLLM routes live traffic; rightmodeler is an offline audit that borrows it as a swap point during replay and never sits in your request path. If a LiteLLM gateway already fronts your traffic, keep it. Crucible, the planned optimization suite, names LiteLLM as a bring-your-own-routing option."
+      "a": "No. rightmodeler needs an OpenAI-compatible base URL and a key variable name; a LiteLLM proxy is one option, OpenRouter and the Vercel AI Gateway are others. Choose the route you already fund and operate."
     },
     {
       "q": "Can rightmodeler ingest my LiteLLM proxy logs?",
-      "a": "Yes. rightmodeler has a dedicated adapter for LiteLLM StandardLoggingPayload logs, and LiteLLM is one of the source formats the ingester autodetects."
+      "a": "Not directly. There is no LiteLLM trace adapter. The supported paths for that traffic are OpenTelemetry GenAI spans, read by the OTel adapter, or a per-call JSONL log in the OpenAI SDK shape, read by that adapter."
     },
     {
-      "q": "My pipeline uses the Anthropic SDK. How does the swap work?",
-      "a": "When LiteLLM is the selected replay provider, rightmodeler sets ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY to the configured proxy before your pipeline launches. Your code keeps using the native Anthropic SDK."
+      "q": "Why does my run find no candidates through my proxy?",
+      "a": "Almost always because the model list carries no pricing. The shortlist requires a candidate that is strictly cheaper than the incumbent on a blended per-token price, so a catalog without prices produces nothing to compare. Publish pricing on the proxy's model list, or point the run at a route that already does."
     },
     {
-      "q": "Is re-running my pipeline with a cheaper model safe?",
-      "a": "The replay runs in a detached git worktree, so writes never touch your real tree; side-effecting tools are mocked from the trace and read-only ones run live. Worktrees isolate files, not runtime; for untrusted or generated code, the run can be wrapped in Docker."
+      "q": "Does rightmodeler replace LiteLLM?",
+      "a": "No, they do different jobs. LiteLLM routes live traffic; rightmodeler is an offline audit that borrows a route during replay and never sits in your request path. If a LiteLLM gateway already fronts your traffic, keep it."
     },
     {
-      "q": "Will the end-to-end replay always confirm a swap?",
-      "a": "No, and that is the point of running it. The E2E pass exists to kill shortlisted swaps that cascade: a candidate that drifts mid-pipeline fails here even if its isolated outputs looked fine. When trajectories diverge or evidence is thin, the audit abstains; a tool that always finds a swap is not measuring anything."
+      "q": "How does the end-to-end confirmation swap the model?",
+      "a": "Not through your proxy config. Confirmation runs your pipeline in a container and routes its model calls through rightmodeler's own metered proxy, which applies the swap per step, charges every attempt, and fails closed on a request that arrives without correlation metadata rather than guessing which step it belonged to."
+    },
+    {
+      "q": "Will the end-to-end pass always confirm a swap?",
+      "a": "No, and that is why it runs. Confirmation exists to kill shortlisted swaps that cascade: a candidate that drifts mid-pipeline fails here even when its isolated outputs looked fine, and an inconclusive result is a legitimate terminal outcome rather than a pass."
     }
   ],
-  "related": ["openrouter", "openai-sdk", "vercel-ai-gateway"],
+  "related": ["openrouter", "vercel-ai-gateway", "openai-sdk"],
   "cta": "github"
 }

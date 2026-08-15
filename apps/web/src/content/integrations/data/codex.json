@@ -4,49 +4,57 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "Codex CLI integration: replay sessions on cheaper models",
-  "description": "Run rightmodeler on Codex sessions to replay each step through cheaper models and judge every output against the result you accepted.",
+  "description": "Run rightmodeler on Codex sessions to replay each turn through cheaper models and judge every output against the result you accepted.",
   "h1": "rightmodeler + Codex CLI",
-  "lede": "Codex CLI already writes every session to disk as a rollout log. rightmodeler reads those files where they sit, measures cheaper candidates against accepted outputs, and reports the result step by step.",
-  "tldr": "rightmodeler ingests Codex CLI rollout logs straight from ~/.codex/sessions with a dedicated adapter, no export step, because the JSONL files are already on your machine. Each successful step is replayed through cheaper candidates on your selected replay provider and judged against the output you already accepted, so everyday Codex sessions become the evidence for which model each kind of step really needs.",
+  "lede": "Codex CLI already writes every session to disk as a rollout log. rightmodeler reads those files where they sit, measures cheaper candidates against accepted outputs, and reports the result turn by turn.",
+  "tldr": "rightmodeler ingests Codex CLI rollout logs straight from ~/.codex/sessions with a dedicated adapter, no export step, because the JSONL files are already on your machine. The adapter keys on the session_meta record, takes the model from each turn_context, gathers that turn's user messages and assistant output from the response_item records, and derives per-turn usage from the token_count events. Each turn is then replayed against cheaper candidates and scored against the answer Codex gave.",
   "steps": [
     {
       "label": "01 · Locate",
       "title": "Your sessions are already on disk",
-      "body": "Codex CLI writes each session to ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl as you work. There is nothing to export and nothing to instrument; choose one rollout, a day's folder, or the whole directory."
+      "body": "Codex CLI writes each session to ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl as you work. There is nothing to export and nothing to instrument; choose one rollout or a day's folder."
     },
     {
       "label": "02 · Ingest",
-      "title": "Autodetected, then normalized",
-      "body": "The ingester recognizes a rollout by its {timestamp, type, payload} lines. It takes the model from turn_context, folds message payloads into LLM steps, and pairs every function_call with its function_call_output by call_id, so the flat log becomes one per-step schema."
+      "title": "Autodetected, then folded turn by turn",
+      "body": "The adapter recognizes a rollout from its session_meta record (id, cwd, cli_version, model_provider) alongside turn_context, response_item, and event_msg lines. The session id becomes the trace, each turn_context opens a turn with its own model and turn_id, user messages become that turn's inputs, and assistant messages, function calls, tool-call outputs, and search calls become its output. Reasoning items and world-state metadata are skipped."
     },
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you accepted",
-      "body": "Each successful single-shot step is re-run on cheaper candidates from your selected replay provider using the exact inputs from the rollout, and a cross-family judge scores every candidate against the answer Codex already gave, holding a 0.90 quality floor by default. Steps that called tools or looped are confirmed by executing real pipeline code end-to-end in a throwaway git worktree."
+      "body": "Each turn is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
     },
     {
-      "label": "04 · Approve",
+      "label": "04 · Report + apply",
       "title": "A report, and the call stays yours",
-      "body": "The report itemizes each proposed swap with evidence and confidence, and the interactive TUI steps you through approve, reject, or hold, one step at a time. Thin evidence means abstain, and high-risk families like auth and secrets are flagged, not swapped."
+      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
-    "intro": "Install once, then hand the skill a rollout file or the whole sessions directory. Nothing connects to your OpenAI account; the audit runs on files Codex already wrote.",
+    "intro": "Install once, then hand the CLI a rollout file. Nothing connects to your OpenAI account; the audit runs on files Codex already wrote, against whichever replay endpoint you configure.",
     "commands": [
       {
         "comment": "# list your most recent Codex rollouts",
         "command": "ls -t ~/.codex/sessions/*/*/*/rollout-*.jsonl | head -5"
       },
       {
-        "comment": "# inside Claude Code, point the skill at your sessions",
-        "command": "claude \"run the rightmodeler skill on ~/.codex/sessions\""
+        "comment": "# preview the pipeline against a rollout, without spending",
+        "command": "npx rightmodeler init --plan --traces ~/.codex/sessions/2026/08/14/rollout-*.jsonl --repo ."
+      },
+      {
+        "comment": "# then run it against your replay endpoint",
+        "command": "npx rightmodeler init --traces ~/.codex/sessions/2026/08/14/rollout-*.jsonl --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
       }
     ]
   },
   "reads": [
     {
-      "field": "step kind",
-      "source": "payload.type"
+      "field": "trace",
+      "source": "session_meta payload.id"
+    },
+    {
+      "field": "trajectory",
+      "source": "turn_context.turn_id"
     },
     {
       "field": "model",
@@ -54,75 +62,72 @@
     },
     {
       "field": "input messages",
-      "source": "payload.content[]"
+      "source": "response_item, role user"
+    },
+    {
+      "field": "output",
+      "source": "assistant messages + tool calls"
     },
     {
       "field": "tool calls",
-      "source": "function_call"
+      "source": "function_call, custom_tool_call"
     },
     {
       "field": "tool results",
-      "source": "function_call_output (call_id)"
+      "source": "function_call_output"
     },
     {
       "field": "token usage",
-      "source": "event_msg.token_count.usage"
-    },
-    {
-      "field": "success signal",
-      "source": "status / approval"
-    },
-    {
-      "field": "historical cost",
-      "source": "not present in Codex logs"
+      "source": "token_count total, minus baseline"
     }
   ],
-  "detection": "timestamp · type · payload.type",
+  "detection": "session_meta · turn_context · response_item",
   "useCases": [
     {
-      "title": "Audit a month of coding sessions",
-      "body": "Rollouts accumulate under one dated tree, so the audit can take a day, a week, or the whole directory in one pass, and show which step families genuinely earned the model they ran on, across everything you did."
+      "title": "Audit a stretch of coding sessions",
+      "body": "Rollouts accumulate under one dated tree, so the audit can take a day or a week in a pass and show which step families genuinely earned the model they ran on, across everything you did."
     },
     {
       "title": "Evidence before you change the default model",
-      "body": "Instead of flipping your Codex model config and watching for regressions, replay the sessions you already ran and read the per-step verdicts first. The decision gets made on evidence from your own work, not a leaderboard."
+      "body": "Instead of flipping your Codex model config and watching for regressions, replay the sessions you already ran and read the per-family verdicts first. The decision gets made on evidence from your own work, not a leaderboard."
     },
     {
-      "title": "Compare candidate replay prices",
-      "body": "Codex logs token counts, not cost, so missing historical step costs stay unknown. The audit prices candidate calls through your selected replay provider and shows which swaps preserve the output you accepted."
+      "title": "Per-turn usage, not a running total",
+      "body": "Codex reports cumulative token counts. The adapter subtracts each turn's baseline from the running total, so a turn's usage is its own rather than the session's so far, which keeps the cost side of the comparison honest."
     }
   ],
   "limits": [
     "It reads rollout files from disk. It does not hook into Codex, watch live sessions, or change your Codex configuration; acting on the report stays your move.",
-    "Steps where Codex called tools (shell commands, patches, file edits) are not judged from the log alone. They are confirmed by re-running real pipeline code end-to-end, and when a session cannot be re-run that way, the audit abstains on those steps.",
-    "Rollouts do not record the set of tools Codex had available, so candidates are filtered on what each step actually did rather than the full declared tool surface.",
-    "Codex does not log dollar cost. Missing historical step costs stay unknown rather than being derived from a provider catalog.",
+    "A turn needs a turn_context with a model, and a response item needs a turn to attach to. Items that arrive before any turn context, or with an unrecognized payload type, are dropped with a recorded reason rather than guessed at.",
+    "Turns that produced no assistant output are left out entirely, so a session of interrupted turns can yield fewer steps than it appears to contain.",
+    "Codex does not log dollar cost. Historical spend is not derived from the rollout; candidate calls are priced from what your replay endpoint reports and marked as an estimate when the provider returns none.",
+    "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
     "It is a report, not a gateway. Nothing sits between Codex and its provider, and there is no rightmodeler server to see your sessions."
   ],
   "faq": [
     {
       "q": "Where does Codex CLI keep its session logs?",
-      "a": "In ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, one JSONL file per session, written as you work. Hand the skill a single rollout, a day's folder, or the whole directory; the format is autodetected from the {timestamp, type, payload} line shape."
+      "a": "In ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, one JSONL file per session, written as you work. Pass a rollout or a day's folder with --traces; the format is autodetected from the session_meta record and the turn_context and response_item lines that follow it."
     },
     {
       "q": "Do I need to export anything before running the audit?",
-      "a": "No. Codex already writes its rollouts to local disk, so there is no dashboard to visit and no export API to call. The only new credential is your replay provider key, used to run the replays."
+      "a": "No. Codex already writes its rollouts to local disk, so there is no dashboard to visit and no export API to call. The only credential the audit needs is the key for whichever OpenAI-compatible endpoint you replay through."
     },
     {
       "q": "Does rightmodeler change which model Codex uses?",
-      "a": "No. It produces a per-step report and an approve/reject/hold TUI; updating your Codex configuration afterwards is your call. Nothing hooks into Codex or intercepts its traffic."
+      "a": "Not on its own. It produces per-family verdicts with the evidence attached, and where a family clears every gate it opens a draft pull request against your repository that you review and merge. Nothing hooks into Codex or intercepts its traffic."
+    },
+    {
+      "q": "How does it count tokens for a turn?",
+      "a": "From the token_count events. Codex reports a running total, so the adapter takes the total at the end of a turn and subtracts the total carried in from the previous one, falling back to the last-call usage when no total is present."
     },
     {
       "q": "Does my session data leave my machine?",
-      "a": "Only during replay, when step inputs go to candidate models through your selected replay provider under your own key, the same class of call Codex made to produce the log in the first place. There is no rightmodeler server and no account."
+      "a": "Only during replay, when step inputs go to candidate models through the endpoint you configured, under your own key, the same class of call Codex made to produce the log in the first place. There is no rightmodeler server and no account."
     },
     {
-      "q": "Will it always find a cheaper model?",
-      "a": "No, and that is the point. When the judge cannot establish equivalence, or a step touches auth, secrets, deploys, or similar, the audit abstains and the current model stays. A tool that always finds a swap is not measuring anything."
-    },
-    {
-      "q": "What about steps where Codex ran commands or edited files?",
-      "a": "Those are tool steps, and they are never judged from the log alone. They are confirmed by re-running real pipeline code end-to-end in a throwaway git worktree with the candidate model injected; where that re-run is not possible, the audit abstains."
+      "q": "What about turns where Codex ran commands or edited files?",
+      "a": "Those tool calls and their outputs are part of the turn's recorded output, so the judge sees what the model actually did rather than a stripped answer. Where a turn's result can feed later model-authored steps, confirmation runs your pipeline in a container with the candidate swapped in, and without a --modeb-config the recommendation stays unconfirmed."
     }
   ],
   "related": ["claude-code", "openai-sdk", "openrouter"],

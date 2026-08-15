@@ -1,0 +1,135 @@
+{
+  "slug": "weave",
+  "name": "W&B Weave",
+  "category": "trace-source",
+  "categoryLabel": "Trace source · dedicated adapter",
+  "title": "W&B Weave integration: replay calls on cheaper models",
+  "description": "Export W&B Weave calls: rightmodeler replays each recorded call against cheaper candidates and scores every one against the output you already shipped.",
+  "h1": "rightmodeler + W&B Weave",
+  "lede": "Weave already records every op call your agent made, with its inputs, its output, and its token summary. rightmodeler reads those calls with a dedicated adapter, replays them against cheaper candidates, and reports the evidence per step family.",
+  "tldr": "rightmodeler has a dedicated Weave adapter. It recognizes call rows by their id, trace_id, op_name, and started_at keys, takes the model and messages from inputs, reads the output field as the answer you shipped, and pulls token counts out of the per-model usage map in summary. Calls sharing a trace_id become one trajectory, so a multi-step op chain stays a single unit in the statistics.",
+  "steps": [
+    {
+      "label": "01 · Export",
+      "title": "Export calls from your project",
+      "body": "Initialize the client against your project with weave.init(\"entity/project\"), then read the rows with client.get_calls(columns=[\"inputs\", \"output\", \"summary\"]) and save them as JSON or JSONL on disk. id, project_id, trace_id, op_name, and started_at are always included, and those three columns carry everything else the adapter maps."
+    },
+    {
+      "label": "02 · Ingest",
+      "title": "Autodetected, then mapped field by field",
+      "body": "The adapter recognizes the format from id, trace_id, op_name, started_at, and an inputs object. It reads the model from inputs.model, takes messages from inputs.messages, appends inputs.tools when the call declared any, and reads token counts from summary.usage keyed by that model. display_name, or op_name when there is none, names the step family."
+    },
+    {
+      "label": "03 · Replay + judge",
+      "title": "Cheaper candidates, scored against your output",
+      "body": "Each recorded call is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts are confidence lower bounds kept separate per evaluator kind."
+    },
+    {
+      "label": "04 · Report + apply",
+      "title": "A report, then a pull request you review",
+      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else and cites case-id hashes rather than case content. watch reconciles that pull request against CI and review comments, and rollback restores the pre-apply files, refusing unless every restored digest matches what was recorded."
+    }
+  ],
+  "setup": {
+    "intro": "Install once, then point the CLI at your exported calls. Nothing connects to Weights & Biases during the audit: your key is used by the export you run yourself.",
+    "commands": [
+      {
+        "comment": "# export calls from your Weave project to a file",
+        "command": "python -c \"import weave; c = weave.init('entity/project'); c.get_calls(columns=['inputs','output','summary']).to_pandas().to_json('weave.json', orient='records')\""
+      },
+      {
+        "comment": "# preview the pipeline without spending anything",
+        "command": "npx rightmodeler init --plan --traces ./weave.json --repo ."
+      },
+      {
+        "comment": "# then run it against your replay endpoint",
+        "command": "npx rightmodeler init --traces ./weave.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+      }
+    ]
+  },
+  "reads": [
+    {
+      "field": "trajectory",
+      "source": "trace_id"
+    },
+    {
+      "field": "model",
+      "source": "inputs.model"
+    },
+    {
+      "field": "input messages",
+      "source": "inputs.messages"
+    },
+    {
+      "field": "available tools",
+      "source": "inputs.tools"
+    },
+    {
+      "field": "output",
+      "source": "output"
+    },
+    {
+      "field": "token usage",
+      "source": "summary.usage[model]"
+    },
+    {
+      "field": "step family",
+      "source": "display_name, else op_name"
+    },
+    {
+      "field": "timestamp",
+      "source": "started_at"
+    }
+  ],
+  "detection": "id · trace_id · op_name · started_at",
+  "useCases": [
+    {
+      "title": "Price the ops your evals already cover",
+      "body": "Weave tells you how your ops score against the evaluations you wrote. The audit answers the adjacent question: which of those ops are paying frontier prices for a result a cheaper model reproduces, with a verdict per step family."
+    },
+    {
+      "title": "Right-size a traced op chain",
+      "body": "Because every call carries op_name, related calls group into step families and the report reads per family rather than per request. A chain where one op genuinely needs the big model and three do not shows up as exactly that."
+    },
+    {
+      "title": "Reuse traces you already collect",
+      "body": "No new SDK, no re-instrumentation, no change to your decorators. You export calls Weave already stores, run the audit offline, and read the verdicts; Weave keeps tracing production throughout."
+    }
+  ],
+  "limits": [
+    "It reads exported calls on disk, JSON or JSONL. It does not connect to your Weave project, poll its API, or watch new calls arrive.",
+    "Only calls that recorded a model and messages under inputs can be replayed. Ops that wrap non-model work are read and then dropped with a recorded reason rather than counted as steps.",
+    "Token usage comes from the summary.usage entry for the call's own model. Calls whose summary carries no usage for that model fall back to the first usage entry present, and a call with none records zero.",
+    "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
+    "Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in. That needs a --modeb-config file naming the image and the step map; without it the recommendation is reported as unconfirmed.",
+    "It is a report, not a runtime layer. Weave keeps tracing and evaluating your agent; rightmodeler never sits in the request path."
+  ],
+  "faq": [
+    {
+      "q": "How do I export calls from Weave?",
+      "a": "Initialize the client with weave.init(\"entity/project\"), call client.get_calls(columns=[\"inputs\", \"output\", \"summary\"]), and write the rows to JSON or JSONL. id, project_id, trace_id, op_name, and started_at come back on every call; those three columns carry the model, the messages, the output, and the token usage the adapter maps."
+    },
+    {
+      "q": "Does rightmodeler replace my Weave evaluations?",
+      "a": "No. Weave evaluations measure whether your agent clears a bar you defined. rightmodeler measures whether a cheaper model matches the output you already shipped, step family by step family. A swap the audit proposes is exactly the change worth running your Weave evaluations against before it ships."
+    },
+    {
+      "q": "Do I need a Weights & Biases account to run the audit?",
+      "a": "Only to produce the export. Once the calls are on disk the audit runs against them offline, and the only credential it needs is the key for whichever OpenAI-compatible endpoint you replay through."
+    },
+    {
+      "q": "How does it group my calls?",
+      "a": "By trace_id. Calls sharing a trace become one trajectory, which is the clustering unit for the statistics: repeated cases from a trajectory are resampled at the trajectory level rather than treated as independent trials."
+    },
+    {
+      "q": "Does my call data leave my machine?",
+      "a": "Only during replay, when recorded inputs go to candidate models through the endpoint you configured, under your own key. There is no rightmodeler server and no account; the export file and the report stay on your disk."
+    },
+    {
+      "q": "Will it always find a cheaper model?",
+      "a": "No, and that is the point. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor on held-out cases. An audit that always finds a swap is not measuring anything."
+    }
+  ],
+  "related": ["braintrust", "langsmith", "otel"],
+  "cta": "github"
+}

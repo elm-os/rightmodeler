@@ -4,10 +4,10 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "Claude Code integration: replay sessions on cheaper models",
-  "description": "Run the rightmodeler skill on ~/.claude/projects: it replays every session step through cheaper models and measures each against what you accepted.",
+  "description": "Point rightmodeler at ~/.claude/projects: it replays every session turn through cheaper models and measures each against the output you accepted.",
   "h1": "rightmodeler + Claude Code",
   "lede": "rightmodeler runs inside the tool that wrote the traces. Claude Code already keeps every session on disk, so the audit starts with no export step, no SDK, and no re-instrumentation.",
-  "tldr": "rightmodeler is itself a Claude Code skill, and Claude Code already writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter folds each assistant turn into a per-step schema, replays the successful ones through cheaper models from your selected replay provider, and judges every candidate against the output you already accepted.",
+  "tldr": "Claude Code writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter recognizes the transcript by its type, sessionId, uuid, parentUuid, and message keys, joins the rows of one assistant message back together, walks parentUuid up to collect the user turns that prompted it, and folds each assistant message into a step with its own token usage. Those steps are then replayed against cheaper candidates and scored against the answer you accepted.",
   "steps": [
     {
       "label": "01 · Locate",
@@ -16,37 +16,45 @@
     },
     {
       "label": "02 · Ingest",
-      "title": "Each assistant turn becomes a step",
-      "body": "The ingester recognizes Claude Code JSONL by its parentUuid and type/message keys, then folds each assistant turn into one step: plain turns become LLM steps, turns with tool_use blocks become agent steps, and every tool_result from a later user turn is joined back to the call that produced it."
+      "title": "Each assistant message becomes a step",
+      "body": "The adapter recognizes the transcript from user and assistant rows carrying sessionId, uuid, parentUuid, and a message object. Rows that share a session and a message id are stitched into one assistant message, its content blocks concatenated and its final usage kept. Walking parentUuid up to the previous assistant collects the user turns that prompted it, and any tool_result blocks from those turns ride along with the output. Metadata rows, from started and result to permission-mode and pr-link, are skipped."
     },
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you accepted",
-      "body": "Single-shot steps replay through cheaper models from your selected replay provider on the exact inputs from the log, and a judge from a different model family scores each candidate against the output you already accepted, with a quality floor of 0.90 by default. Steps that call tools are confirmed by re-running the work end-to-end in a throwaway git worktree with the candidate injected."
+      "body": "Each step is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, picking a judge from a family that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
     },
     {
-      "label": "04 · Approve",
-      "title": "A per-step report you approve",
-      "body": "The report lists each proposed swap with its evidence and confidence, and the TUI walks you through approve, reject, or hold, per step, never all-or-nothing. Weak evidence means abstain, and sessions that touch deploys, secrets, or migrations are flagged and left alone."
+      "label": "04 · Report + apply",
+      "title": "A per-step report, then a pull request",
+      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
-    "intro": "Install once and the skill runs inside the tool that wrote the traces. Sessions live at ~/.claude/projects; point the skill at the whole directory, one project folder, or a single session file.",
+    "intro": "Install once and the skill runs inside the tool that wrote the traces. Sessions live at ~/.claude/projects; point the CLI at one project folder or a single session file.",
     "commands": [
       {
         "comment": "# your sessions are already on disk, one folder per project",
         "command": "ls ~/.claude/projects"
       },
       {
-        "comment": "# inside Claude Code, run the audit on your own session logs",
-        "command": "claude \"run the rightmodeler skill on ~/.claude/projects\""
+        "comment": "# preview the pipeline against a session, without spending",
+        "command": "npx rightmodeler init --plan --traces ~/.claude/projects/<project>/<session>.jsonl --repo ."
+      },
+      {
+        "comment": "# then run it against your replay endpoint",
+        "command": "npx rightmodeler init --traces ~/.claude/projects/<project>/<session>.jsonl --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
       }
     ]
   },
   "reads": [
     {
-      "field": "step kind",
-      "source": "type + content block type"
+      "field": "trace",
+      "source": "sessionId"
+    },
+    {
+      "field": "step grouping",
+      "source": "sessionId + message.id"
     },
     {
       "field": "model",
@@ -54,78 +62,72 @@
     },
     {
       "field": "input messages",
-      "source": "message.content[]"
+      "source": "ancestor user turns via parentUuid"
     },
     {
-      "field": "tool calls",
-      "source": "tool_use blocks"
+      "field": "output",
+      "source": "assistant content blocks"
     },
     {
       "field": "tool results",
-      "source": "tool_result / toolUseResult"
+      "source": "tool_result blocks in those turns"
     },
     {
-      "field": "step lineage",
-      "source": "uuid / parentUuid"
+      "field": "trajectory",
+      "source": "promptId of the nearest user turn"
     },
     {
       "field": "token usage",
-      "source": "usage.*_tokens"
-    },
-    {
-      "field": "success signal",
-      "source": "is_error"
-    },
-    {
-      "field": "historical cost",
-      "source": "not present in Claude Code logs"
+      "source": "message.usage.input/output_tokens"
     }
   ],
-  "detection": "type · message.content[].tool_use · parentUuid",
+  "detection": "type · sessionId · parentUuid",
   "useCases": [
     {
       "title": "Find out which turns earn the frontier model",
-      "body": "Every assistant turn carries its model and token usage. The audit replays the single-shot ones through cheaper candidates and reports, per step family, where the big model is earning its price and where a smaller one held at the quality floor."
+      "body": "Every assistant message carries its model and token usage. The audit replays those messages against cheaper candidates and reports, per step family, where the big model is earning its price and where a smaller one held the quality floor."
     },
     {
-      "title": "Understand the session's token use",
-      "body": "The session log carries token counts, including cache reads and writes, but not dollar cost. Missing historical step costs stay unknown, while candidate calls are priced through your selected replay provider."
+      "title": "Keep a prompt's turns together in the statistics",
+      "body": "The trajectory comes from the promptId of the user turn that started the exchange, so every assistant message answering one prompt is clustered as a unit. The intervals are resampled at that level rather than treating a long agentic turn as a pile of independent trials."
     },
     {
       "title": "Audit an agent built on Claude Code",
-      "body": "If your team ships automation on headless Claude Code (CI jobs, hooks, subagent fan-outs) the session logs are already complete traces. The audit reads them as-is, so a coding agent gets right-sized without standing up an observability stack first."
+      "body": "If your team ships automation on headless Claude Code (CI jobs, hooks, subagent fan-outs) the session logs are already complete traces. The audit reads them as they are, so a coding agent gets right-sized without standing up an observability stack first."
     }
   ],
   "limits": [
-    "It reads the JSONL session logs already on disk; it does not watch live sessions, and it never changes which model Claude Code uses; applying a swap stays your decision.",
-    "Coding turns are dense with tool calls, and tool-calling steps are never judged from the trace alone. They are confirmed by re-running the work end-to-end in a throwaway git worktree, and where that is not possible, the audit abstains.",
-    "Steps that touch high-risk territory (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, whatever the replay says.",
+    "It reads the JSONL session logs already on disk; it does not watch live sessions, and it never changes which model Claude Code uses. Acting on the report stays your decision.",
+    "An assistant message has to carry a message id, a model, and a usage object. Rows missing any of those are dropped with a recorded reason rather than guessed at, and a message that changed model between rows is dropped too.",
+    "Claude Code logs token counts, including cache reads and writes, but no dollar cost. Historical spend is not derived from them; candidate calls are priced from what your replay endpoint reports.",
+    "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Coding sessions are dense, so a short session usually abstains for want of distinct trajectories rather than producing a thin recommendation.",
+    "Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in. That needs a --modeb-config file naming the image and the step map; without it the recommendation is reported as unconfirmed.",
     "It is a report, not a gateway. Claude Code keeps calling its provider directly; rightmodeler never sits in the request path."
   ],
   "faq": [
     {
       "q": "Where does Claude Code keep its session logs?",
-      "a": "In ~/.claude/projects, with one folder per project (the project path is encoded into the folder name) and one JSONL file per session. Point the skill at a single file, one folder, or the whole directory; the format is autodetected."
+      "a": "In ~/.claude/projects, with one folder per project (the project path is encoded into the folder name) and one JSONL file per session. Pass a single file or a folder with --traces; the format is autodetected from the type, sessionId, and parentUuid keys."
     },
     {
       "q": "Do I need to export my traces first?",
-      "a": "No, this is the one integration with no export step. rightmodeler is itself a Claude Code skill, so it runs inside the tool that wrote the logs and reads them straight off disk."
+      "a": "No, this is the one integration with no export step. rightmodeler is installed as a Claude Code skill, so it runs inside the tool that wrote the logs and reads them straight off disk."
+    },
+    {
+      "q": "How does it turn a transcript into steps?",
+      "a": "One assistant message is one step. Rows sharing a session and a message id are stitched back together, the user turns above it (up to the previous assistant) become its input messages, and tool_result blocks from those turns are attached to the output so the answer is scored with the evidence it was given."
     },
     {
       "q": "Does my code leave my machine?",
-      "a": "Replays send step inputs (which for a coding session include your prompts and code) to candidate models through your selected replay provider with your own key, the same shape of call Claude Code already makes to its provider. There is no rightmodeler server and no account; nothing else holds your traces."
-    },
-    {
-      "q": "Will it always find savings?",
-      "a": "No, and that's deliberate. Coding turns lean hard on tool calls, so plenty of steps resist single-shot replay; when the evidence is weak or a step is high-risk, the audit abstains and the current model stays. A tool that always finds a swap is not measuring anything."
+      "a": "Replays send step inputs, which for a coding session include your prompts and code, to candidate models through the endpoint you configured, under your own key, the same shape of call Claude Code already makes. There is no rightmodeler server and no account; nothing else holds your traces."
     },
     {
       "q": "Can it switch the model my sessions use?",
-      "a": "No. It is a report: per-step verdicts with evidence attached. If a cheaper model clears the reference-agreement floor for a step family, changing the model setting is your move, nothing changes without your approval."
+      "a": "Not on its own. It produces per-step verdicts with the evidence attached, and where a family clears every gate it opens a draft pull request against your repository that you review and merge. Nothing changes without that merge."
     },
     {
       "q": "Does it work on headless (claude -p) runs?",
-      "a": "Yes. Headless runs write the same JSONL session format to the same directory, so the adapter reads them identically, and CI-driven Claude Code pipelines are the best-fit case, because they can be re-run end-to-end to confirm tool-calling steps."
+      "a": "Yes. Headless runs write the same JSONL session format to the same directory, so the adapter reads them identically. CI-driven pipelines are the best-fit case, because they can also be run in a container for the confirmation pass."
     }
   ],
   "related": ["codex", "openai-sdk", "openrouter"],

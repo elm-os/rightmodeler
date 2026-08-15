@@ -5,7 +5,13 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**", "build/**"]
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "!.next/dev/**",
+        "build/**",
+        "dist/**"
+      ]
     },
     "lint": {
       "dependsOn": ["^lint"]
@@ -14,7 +20,15 @@
       "cache": false
     },
     "check": {
-      "dependsOn": ["^check"]
+      "dependsOn": ["build", "^build", "^check"]
+    },
+    "@rightmodeler/cli#check": {
+      "dependsOn": ["build", "^build", "^check"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/harness/docs/parity.md",
+        "$TURBO_ROOT$/harness/fixtures/canonicalization/**"
+      ]
     },
     "check-types": {
       "dependsOn": ["^check-types"]
@@ -22,6 +36,13 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "@rightmodeler/agent#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "@rightmodeler/rightmodeler-skill#build": {
+      "outputs": []
     }
   }
 }

@@ -1,0 +1,131 @@
+{
+  "slug": "helicone",
+  "name": "Helicone",
+  "category": "trace-source",
+  "categoryLabel": "Trace source · dedicated adapter",
+  "title": "Helicone integration: replay requests on cheaper models",
+  "description": "Export Helicone request rows: rightmodeler replays each recorded call against cheaper candidates and scores every one against the response you already shipped.",
+  "h1": "rightmodeler + Helicone",
+  "lede": "Helicone already stores the full request and response for every call it proxied. rightmodeler reads that export with a dedicated adapter, replays each recorded call against cheaper candidates, and reports the evidence per step family.",
+  "tldr": "rightmodeler has a dedicated Helicone adapter. It recognizes request rows by their request_id, response_id, and request_created_at keys, reads the model, messages, and tool definitions out of request_body, and takes response_body as the output you shipped. Rows carrying a Helicone-Session-Id property are grouped into one trajectory, so a multi-call agent run stays a single unit when the statistics are computed.",
+  "steps": [
+    {
+      "label": "01 · Export",
+      "title": "Pull request rows to disk",
+      "body": "Query your requests with POST https://api.helicone.ai/v1/request/query, passing your key in an Authorization header and setting includeInputs so the bodies come back with the rows. Save the result as JSON or JSONL anywhere on disk. Each row needs request_id, response_id, request_created_at, request_body, and response_body."
+    },
+    {
+      "label": "02 · Ingest",
+      "title": "Autodetected, then mapped field by field",
+      "body": "The adapter recognizes the format from request_id, response_id, request_created_at, and the presence of request_body and response_body. It reads the model from the row or from request_body, takes messages from request_body.messages (falling back to llmSchema.request.messages), appends any declared tools, and folds prompt_tokens and completion_tokens into usage. Rows sharing a Helicone-Session-Id become one trajectory."
+    },
+    {
+      "label": "03 · Replay + judge",
+      "title": "Cheaper candidates, scored against your response",
+      "body": "Each recorded call is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts are confidence lower bounds kept separate per evaluator kind."
+    },
+    {
+      "label": "04 · Report + apply",
+      "title": "A report, then a pull request you review",
+      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else and cites case-id hashes rather than case content. watch reconciles that pull request against CI and review comments, and rollback restores the pre-apply files, refusing unless every restored digest matches what was recorded."
+    }
+  ],
+  "setup": {
+    "intro": "Install once, then point the CLI at your exported rows. Nothing connects to your Helicone account during the audit: your key is used by the export call you run yourself.",
+    "commands": [
+      {
+        "comment": "# export request rows, bodies included, to a file",
+        "command": "curl -s https://api.helicone.ai/v1/request/query -H \"Authorization: $HELICONE_API_KEY\" -H 'content-type: application/json' -d '{\"filter\":\"all\",\"limit\":1000,\"includeInputs\":true}' > helicone.json"
+      },
+      {
+        "comment": "# preview the pipeline without spending anything",
+        "command": "npx rightmodeler init --plan --traces ./helicone.json --repo ."
+      },
+      {
+        "comment": "# then run it against your replay endpoint",
+        "command": "npx rightmodeler init --traces ./helicone.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+      }
+    ]
+  },
+  "reads": [
+    {
+      "field": "trajectory",
+      "source": "Helicone-Session-Id, else request_id"
+    },
+    {
+      "field": "model",
+      "source": "model, response_model, request_body.model"
+    },
+    {
+      "field": "input messages",
+      "source": "request_body.messages"
+    },
+    {
+      "field": "available tools",
+      "source": "request_body.tools"
+    },
+    {
+      "field": "output",
+      "source": "response_body"
+    },
+    {
+      "field": "token usage",
+      "source": "prompt_tokens, completion_tokens"
+    },
+    {
+      "field": "timestamp",
+      "source": "request_created_at"
+    }
+  ],
+  "detection": "request_id · response_id · request_created_at",
+  "useCases": [
+    {
+      "title": "Turn gateway logs into a swap decision",
+      "body": "Helicone records what every call cost and returned. The audit adds the column the dashboard leaves open: which of those calls a cheaper model could have answered as well, with a verdict and evidence per step family."
+    },
+    {
+      "title": "Keep agent sessions intact in the statistics",
+      "body": "If you already stamp requests with Helicone-Session-Id, those rows arrive as one trajectory. That matters because repeated cases from a trajectory are resampled at the trajectory level, so a five-call agent over twenty sessions is not counted as a hundred independent trials."
+    },
+    {
+      "title": "Right-size without touching the proxy",
+      "body": "No SDK change, no new header, no code in your app. You export rows Helicone already stores, run the audit offline, and read the verdicts. Helicone keeps proxying production traffic throughout."
+    }
+  ],
+  "limits": [
+    "It reads exported rows on disk, JSON or JSONL. It does not connect to your Helicone project, poll the API, or watch new requests arrive.",
+    "Rows exported without their bodies cannot be replayed. request_body and response_body must be present, so set includeInputs on the query rather than filtering the payload out.",
+    "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
+    "Selection is split-corpus. Candidates are shortlisted on one half of the cases, and the winner has to clear the configured quality floor again on held-out cases against a multiplicity-corrected lower bound.",
+    "Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in. That needs a --modeb-config file naming the image and the step map; without it the recommendation is reported as unconfirmed.",
+    "It is a report, not a second gateway. Helicone stays in your request path and rightmodeler never enters it."
+  ],
+  "faq": [
+    {
+      "q": "How do I get request rows out of Helicone?",
+      "a": "POST to https://api.helicone.ai/v1/request/query with your key in an Authorization header, a filter and limit in the body, and includeInputs set so request_body and response_body come back with each row. Save the response as JSON or JSONL and pass the file with --traces; the format is autodetected."
+    },
+    {
+      "q": "Does rightmodeler replace Helicone?",
+      "a": "No. Helicone proxies, caches, and observes live traffic. rightmodeler runs offline on rows you exported and answers a different question: whether a cheaper model would have produced an equivalent response on the calls you actually made."
+    },
+    {
+      "q": "What happens to my Helicone sessions?",
+      "a": "A row's Helicone-Session-Id property becomes its trajectory, and rows without one fall back to their request_id. Trajectories are the clustering unit for the statistics, so grouped sessions widen the intervals honestly rather than inflating the sample."
+    },
+    {
+      "q": "Does it use Helicone's recorded cost?",
+      "a": "Not as evidence. The audit prices candidate calls from what your replay endpoint reports for the call it just ran, and marks the figure as an estimate when the provider returns no cost. Historical spend stays in Helicone, where you already track it."
+    },
+    {
+      "q": "Does my request data leave my machine?",
+      "a": "Only during replay, when recorded inputs go to candidate models through the endpoint you configured, under your own key. There is no rightmodeler server and no account; the export file and the report stay on your disk."
+    },
+    {
+      "q": "Will it always find savings?",
+      "a": "No, and that is deliberate. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor on held-out cases. An audit that always finds a swap is not measuring anything."
+    }
+  ],
+  "related": ["openrouter", "langfuse", "otel"],
+  "cta": "github"
+}

@@ -11,10 +11,8 @@ build/
 coverage/
 .ruff_cache/
 .venv/
-apps/pipeline/.venv/
 .claude/skills/rightmodeler/
 .claude/skills/cheaper-models/
-skills/rightmodeler/.venv/
 __pycache__/
 *.pyc
 outputs/
@@ -33,3 +31,4 @@ advisor-plans/
 # Agent working notes — todo.md / lessons.md (not version controlled)
 tasks/
 .vercel
+harness/packages/rightmodeler/dist-bundle.staging/

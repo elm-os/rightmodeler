@@ -1,0 +1,27 @@
+{
+  "name": "@rightmodeler/replay",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p src/proxy/tsconfig.build.json && node src/proxy/build-runtime.mjs",
+    "check-types": "tsc --noEmit",
+    "check": "tsc --noEmit && vitest run"
+  },
+  "dependencies": {
+    "@rightmodeler/core": "workspace:*",
+    "@rightmodeler/executor": "workspace:*",
+    "@rightmodeler/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "openai": "7.4.0",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

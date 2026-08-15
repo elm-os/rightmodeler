@@ -7,55 +7,59 @@
   "description": "Point rightmodeler at your OpenAI SDK request log: it replays every call through cheaper models and measures each output against what you accepted.",
   "h1": "rightmodeler + the OpenAI SDK",
   "lede": "No tracing platform required. rightmodeler reads the request and response log your code already writes around the OpenAI SDK, measures cheaper candidates against accepted outputs, and reports the result call by call.",
-  "tldr": "rightmodeler reads per-line OpenAI SDK request+response dumps with a dedicated adapter: each logged call becomes a step, with no tracing platform in between. Successful steps are replayed through cheaper candidates on your selected replay provider and judged against the output you already shipped, with a quality floor of 0.90 by default; tool-using steps are confirmed by re-running your pipeline with the SDK redirected to the candidate.",
+  "tldr": "rightmodeler reads per-line OpenAI SDK request and response dumps with a dedicated adapter: each logged call becomes a step, with no tracing platform in between. Lines are recognized by a messages array beside a response object carrying choices, grouped into trajectories by case_id and ordered by timestamp. Successful steps are replayed against cheaper candidates through the OpenAI-compatible endpoint you configure and scored against the answer you already shipped.",
   "steps": [
     {
       "label": "01 · Log",
       "title": "Dump requests and responses as JSONL",
-      "body": "Each line holds one call: the request's model, messages, and tools next to the response and its usage, the shape you get from dumping your chat.completions kwargs with response.model_dump(). If your agent already writes such a log, that file is the trace. Save it anywhere on disk, one file or a folder of them."
+      "body": "Each line holds one call: a case_id naming the run it belongs to, the request's model and messages, and the response object with its choices and usage, the shape you get from dumping your chat.completions kwargs alongside response.model_dump(). If your agent already writes such a log, adding case_id is the only change. Save it anywhere on disk."
     },
     {
       "label": "02 · Ingest",
       "title": "Autodetected, flat, one call per step",
-      "body": "The ingester recognizes the format by its top-level model, messages, and usage keys and routes it to a dedicated adapter. Each line becomes one step in a flat sequence (no run tree to walk) with the system prompt split out, tool calls read from choices[0].message, and their arguments parsed even when they arrive as JSON strings."
+      "body": "The adapter recognizes the format from a messages array next to a response object with choices, and requires case_id on every line. Lines sharing a case_id become one trajectory in timestamp order, the system messages are split out into the step's system prompt, the rest become its messages, and choices[0].message becomes the output. usage.prompt_tokens and usage.completion_tokens supply usage from the line or the response, whichever carries them."
     },
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you shipped",
-      "body": "Single-shot steps are replayed through cheaper models from your selected replay provider on the exact messages from your log, and a judge from a different model family scores each candidate against the output you already shipped, with a quality floor of 0.90 by default. JSONL logs carry no cost field, so missing historical cost stays unknown; candidate calls are priced through your selected replay provider."
+      "body": "Each step is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Confirm",
-      "title": "Tool-using steps re-run through your real code",
-      "body": "Steps with tool calls or loops are confirmed end-to-end: the skill re-runs your pipeline in a throwaway git worktree, injecting a sitecustomize shim that monkeypatches openai.OpenAI and AsyncOpenAI (and langchain_openai.ChatOpenAI) to route to the candidate model through your selected replay provider. Your code runs unmodified."
+      "title": "Coupled steps re-run in a container",
+      "body": "A step whose output can feed later model-authored steps is not judged from the log alone. rightmodeler runs your pipeline inside a container image you name in a --modeb-config file, mounting your app read-only and mapping each scanner step to the runtime header your app emits. Every model call leaves through a metered proxy that swaps the model per step and fails closed on a request with no correlation header, so the candidate does the real work and the spend is accounted for."
     },
     {
-      "label": "05 · Approve",
-      "title": "A per-step report you approve",
-      "body": "The report lists each proposed swap with its evidence and confidence, and the TUI walks you through approve, reject, or hold, per step, never all-or-nothing. Weak evidence means an abstention, and high-risk steps stay on the current model."
+      "label": "05 · Report + apply",
+      "title": "A per-step report, then a pull request",
+      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
-    "intro": "Install once, then hand the skill your request log. Nothing talks to your OpenAI account; the audit runs on the JSONL files already on your disk.",
+    "intro": "Install once, then hand the CLI your request log. Nothing talks to your OpenAI account; the audit runs on the JSONL files already on your disk.",
     "commands": [
       {
-        "comment": "# sanity-check the shape: model, messages, usage on each line",
+        "comment": "# sanity-check the shape: case_id, messages, response on each line",
         "command": "head -1 ./logs/openai-calls.jsonl | jq 'keys'"
       },
       {
-        "comment": "# inside Claude Code, hand the log to the skill",
-        "command": "claude \"run the rightmodeler skill on ./logs/openai-calls.jsonl\""
+        "comment": "# preview the pipeline against the log, without spending",
+        "command": "npx rightmodeler init --plan --traces ./logs/openai-calls.jsonl --repo ."
+      },
+      {
+        "comment": "# then run it against your replay endpoint",
+        "command": "npx rightmodeler init --traces ./logs/openai-calls.jsonl --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
       }
     ]
   },
   "reads": [
     {
-      "field": "step kind",
-      "source": "tool_calls → agent, else llm"
+      "field": "trajectory",
+      "source": "case_id"
     },
     {
       "field": "model",
-      "source": "model (or response.model)"
+      "source": "model, else response.model"
     },
     {
       "field": "system prompt",
@@ -66,16 +70,8 @@
       "source": "messages, system split out"
     },
     {
-      "field": "available tools",
-      "source": "tools[].function"
-    },
-    {
-      "field": "tool calls",
-      "source": "choices[0].message.tool_calls"
-    },
-    {
       "field": "output",
-      "source": "choices[0].message.content"
+      "source": "response.choices[0].message"
     },
     {
       "field": "token usage",
@@ -83,55 +79,64 @@
     },
     {
       "field": "historical cost",
-      "source": "not present in JSONL logs"
+      "source": "cost_usd, when logged"
+    },
+    {
+      "field": "latency",
+      "source": "duration_ms, latency_ms"
+    },
+    {
+      "field": "step family",
+      "source": "name"
     }
   ],
-  "detection": "model · messages · usage",
+  "detection": "case_id · messages · response.choices",
   "useCases": [
     {
       "title": "Audit an agent with no tracing platform",
-      "body": "You don't need LangSmith, Langfuse, or an OTel collector to get a model audit. A plain JSONL log of your OpenAI SDK calls is enough for the full per-step treatment: replay, judge, verdict, report."
+      "body": "You do not need LangSmith, Langfuse, or an OTel collector to get a model audit. A plain JSONL log of your OpenAI SDK calls is enough for the full per-step treatment: replay, score, verdict, report, pull request."
     },
     {
       "title": "Measure a candidate before you edit a model string",
-      "body": "In OpenAI SDK code the model is a hardcoded string, and changing it is an act of faith. Replay last week's log first and read the verdict per call (judged against outputs your users already accepted) before the string changes."
+      "body": "In OpenAI SDK code the model is a hardcoded string, and changing it is an act of faith. Replay last week's log first and read the verdict per step family, judged against outputs your users already accepted, before the string changes."
     },
     {
-      "title": "Confirm tool loops without touching your code",
-      "body": "Because your pipeline speaks the OpenAI SDK, end-to-end confirmation can redirect it from the outside with a sitecustomize shim, not a code edit. Cascade effects surface on your real pipeline, unmodified, before you commit to a swap."
+      "title": "Bring the cost you already recorded",
+      "body": "If your wrapper logs cost_usd and duration_ms per call, the adapter reads them, so the report compares candidate spend against a figure you measured rather than one it inferred. Lines without them are still replayed; only the historical side stays unknown."
     }
   ],
   "limits": [
-    "There is no export button for this format. The SDK does not write these logs by itself; your code does, by dumping each request and response as a line of JSON. If yours doesn't yet, that wrapper comes before the audit.",
-    "JSONL logs carry no cost field, so missing historical cost stays unknown rather than being derived from a provider catalog.",
-    "Steps with tool calls or loops are not judged from the log alone; they are confirmed by re-running your pipeline end-to-end with the SDK redirected to the candidate model.",
-    "High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, and weak evidence means abstain rather than a recommendation.",
-    "It is a report, not a runtime gateway. rightmodeler never sits between your SDK and OpenAI, and nothing changes in production until you change it."
+    "There is no export button for this format. The SDK does not write these logs by itself; your code does, by dumping each request and response as a line of JSON with a case_id attached. If yours does not yet, that wrapper comes before the audit.",
+    "Every line needs case_id, a messages array, and a response object with a non-empty choices array. A line missing any of them is dropped with a recorded reason rather than guessed at.",
+    "Declared tools are not read from the request. The recorded answer, tool calls included, is what the candidate is scored against, so a step whose difficulty lived in the tool schema is judged on its result rather than its options.",
+    "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
+    "Confirmation for coupled steps runs your pipeline in a container and needs a --modeb-config file naming the image and the step map. Without it the recommendation is reported as unconfirmed rather than quietly promoted.",
+    "It is a report, not a runtime gateway. rightmodeler never sits between your SDK and OpenAI, and nothing changes in production until you merge the pull request."
   ],
   "faq": [
     {
       "q": "What does each line of the log need to contain?",
-      "a": "Top-level model, messages, and usage are what the autodetector looks for; the response object with its choices supplies the shipped output, and tools is read when present. One JSON object per line, the request and its response together."
+      "a": "A case_id, a messages array, and a response object whose choices array is non-empty. model can sit on the line or on the response, usage on either, and timestamp orders the steps within a case. One JSON object per line, the request and its response together."
     },
     {
-      "q": "I don't log my OpenAI calls today. What's the minimum?",
-      "a": "A thin wrapper around chat.completions.create that writes one JSON line per call: the request kwargs plus response.model_dump(). Most agent codebases already have a choke point every call passes through; that's the place."
+      "q": "I do not log my OpenAI calls today. What is the minimum?",
+      "a": "A thin wrapper around chat.completions.create that writes one JSON line per call: a case_id for the run, the request kwargs, and response.model_dump(). Most agent codebases already have a choke point every call passes through; that is the place."
+    },
+    {
+      "q": "Why does it need case_id?",
+      "a": "Because the statistics cluster by trajectory. Cases from the same run are resampled together rather than counted as independent trials, so a ten-call agent run over five cases is not read as fifty. Without a case_id the adapter has nothing honest to cluster on, so it refuses the line."
     },
     {
       "q": "Does rightmodeler replace my observability setup?",
-      "a": "No. It is an offline audit that measures cheaper candidates against the outputs you accepted and reports the evidence for each call. If you later adopt LangSmith, Langfuse, or OTel GenAI, rightmodeler reads those traces too, same skill, different adapter."
+      "a": "No. It is an offline audit that measures cheaper candidates against the outputs you accepted and reports the evidence for each call. If you later adopt LangSmith, Langfuse, or OTel GenAI, rightmodeler reads those traces too, same CLI, different adapter."
     },
     {
-      "q": "My code hardcodes the OpenAI client. How can it replay end-to-end?",
-      "a": "The skill re-runs your pipeline in a throwaway git worktree with a sitecustomize shim on PYTHONPATH that monkeypatches openai.OpenAI and AsyncOpenAI to route to the candidate model through your selected replay provider, using your own key. Your code runs unmodified, and the worktree is discarded afterward."
-    },
-    {
-      "q": "Does my log data leave my machine?",
-      "a": "Replays send step inputs to candidate models through your selected replay provider with your own key, requests of the same shape your agent already sends to OpenAI. There is no rightmodeler server and no account; the report lands on your disk."
+      "q": "My code hardcodes the OpenAI client. How can it confirm end to end?",
+      "a": "By running your pipeline in a container rather than patching your code. You name an image and a command in a --modeb-config file, your app is mounted read-only, and model calls leave through a metered proxy that swaps the model per step. Requests without a correlation header are refused rather than attributed by guesswork."
     },
     {
       "q": "Will it always find savings?",
-      "a": "No, and that is the point. Where the evidence is weak the audit abstains rather than recommends, and high-risk families (auth, payments, migrations) are flagged and left alone. A tool that always finds a swap is not measuring anything."
+      "a": "No, and that is the point. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor again on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],
   "related": ["otel", "codex", "litellm"],

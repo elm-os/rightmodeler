@@ -1,0 +1,2 @@
+langchain-openai>=1
+langgraph>=1

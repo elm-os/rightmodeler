@@ -82,7 +82,7 @@ function LedgerMockup() {
     {
       step: "auth_code_edit",
       swap: "stays on gpt-5.6",
-      meta: "abstain · high-risk",
+      meta: "abstain · thin evidence",
       dim: true,
     },
   ];

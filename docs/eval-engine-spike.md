@@ -2,8 +2,9 @@
 
 ## Purpose & Boundary
 
-The offline deterministic evaluator is built in
-`apps/pipeline/src/pipeline/evaluate.py`. It reads accepted `final_output` values
+The offline deterministic evaluator was built in
+`apps/pipeline/src/pipeline/evaluate.py` (retired; replaced by the TypeScript harness, see
+`harness/docs/Architecture.md`). It read accepted `final_output` values
 from historical run bundles, emits recommendation objects in the report contract
 shape, and stays fully offline.
 
@@ -127,8 +128,8 @@ These PRD section 17 questions remain open:
 
 ## Interface Sketch
 
-Future code could live in `apps/pipeline/src/pipeline/replay.py`, separate from
-the offline evaluator:
+The proposed path, `apps/pipeline/src/pipeline/replay.py`, is retired and replaced by the
+TypeScript harness; see `harness/docs/Architecture.md`. The historical interface sketch was:
 
 ```python
 class ReplayProviderClient:

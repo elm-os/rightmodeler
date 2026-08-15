@@ -1,0 +1,3705 @@
+[
+  {
+    "traceId": "trace-summarize-01",
+    "startTimeUnixNano": "100",
+    "span_id": "span-summarize-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The city opened two cooling centers after three days above 100 degrees."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The city opened two cooling centers during a three-day heat wave. The centers provide residents relief from temperatures above 100 degrees."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 28,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-02",
+    "startTimeUnixNano": "200",
+    "span_id": "span-summarize-02",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "A community garden donated 240 pounds of produce to the neighborhood pantry this month."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The community garden donated 240 pounds of produce this month. The food went to the neighborhood pantry."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 29,
+      "gen_ai.usage.output_tokens": 22,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-03",
+    "startTimeUnixNano": "300",
+    "span_id": "span-summarize-03",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Rail service will add six morning trains beginning Monday, reducing peak wait times by eight minutes."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Six morning trains will be added starting Monday. Peak wait times are expected to fall by eight minutes."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 33,
+      "gen_ai.usage.output_tokens": 24,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-04",
+    "startTimeUnixNano": "400",
+    "span_id": "span-summarize-04",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Researchers found the restored wetland now supports 18 bird species, up from seven before restoration."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The restored wetland supports 18 bird species. Before restoration, researchers observed only seven species."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 32,
+      "gen_ai.usage.output_tokens": 23,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-01",
+    "startTimeUnixNano": "500",
+    "span_id": "span-support-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-104 has shown packed for two days. Can you check it?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-104",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-104" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 42,
+      "gen_ai.usage.output_tokens": 18,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-02",
+    "startTimeUnixNano": "600",
+    "span_id": "span-support-02",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Please find the delivery status for order ORD-205."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-205",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-205" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 38,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-pii-01",
+    "startTimeUnixNano": "700",
+    "span_id": "span-support-pii-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-306 is late. Reply to demo.person@example.test or call +1-202-555-0147."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-306",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-306" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 49,
+      "gen_ai.usage.output_tokens": 18,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-04",
+    "startTimeUnixNano": "800",
+    "span_id": "span-support-04",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Has order ORD-407 left the warehouse yet?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-407",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-407" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 36,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-05",
+    "startTimeUnixNano": "900",
+    "span_id": "span-summarize-05",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The county added evening bus service on three routes after a six-month pilot."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Three county bus routes now offer evening service. The expansion follows a six-month pilot."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 29,
+      "gen_ai.usage.output_tokens": 21,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-support-05",
+    "startTimeUnixNano": "1000",
+    "span_id": "span-support-05",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Check whether order ORD-417 is ready for pickup."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-417",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-417" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 36,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-trajectory-a",
+    "startTimeUnixNano": "1100",
+    "span_id": "span-trajectory-a-01",
+    "parent_span_id": null,
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-508 shipped Tuesday and is expected Friday."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-508 shipped Tuesday. Its expected arrival is Friday."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 25,
+      "gen_ai.usage.output_tokens": 16,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-trajectory-a",
+    "startTimeUnixNano": "1200",
+    "span_id": "span-trajectory-a-02",
+    "parent_span_id": "span-trajectory-a-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Confirm the current status for ORD-508."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-508",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-508" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 35,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-trajectory-b",
+    "startTimeUnixNano": "1300",
+    "span_id": "span-trajectory-b-01",
+    "parent_span_id": null,
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Order ORD-609 was delayed by weather and received a Monday estimate."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Weather delayed order ORD-609. Its updated delivery estimate is Monday."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 27,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-trajectory-b",
+    "startTimeUnixNano": "1400",
+    "span_id": "span-trajectory-b-02",
+    "parent_span_id": "span-trajectory-b-01",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "support",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Look up ORD-609 before drafting the response."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call-609",
+              "name": "lookup_order",
+              "arguments": { "order_id": "ORD-609" }
+            }
+          ],
+          "finish_reason": "tool_call"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 37,
+      "gen_ai.usage.output_tokens": 17,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-06",
+    "startTimeUnixNano": "1500",
+    "span_id": "span-summarize-06",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The library extended weekend hours after Saturday attendance doubled during the spring trial."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The library extended its weekend hours. Saturday attendance doubled during the spring trial."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 30,
+      "gen_ai.usage.output_tokens": 19,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-07",
+    "startTimeUnixNano": "1600",
+    "span_id": "span-summarize-07",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "A school solar project generated 18 percent more electricity than forecast in its first quarter."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The school solar project beat its forecast in the first quarter. It generated 18 percent more electricity than expected."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 31,
+      "gen_ai.usage.output_tokens": 22,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-08",
+    "startTimeUnixNano": "1700",
+    "span_id": "span-summarize-08",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": { "code": "OK" },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The park planted 75 native trees along the creek to reduce erosion before the rainy season."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "The park planted 75 native trees beside the creek. The work aims to reduce erosion before the rainy season."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 30,
+      "gen_ai.usage.output_tokens": 21,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-09",
+    "startTimeUnixNano": "2600",
+    "span_id": "span-summarize-09",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 09 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 09 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-10",
+    "startTimeUnixNano": "2700",
+    "span_id": "span-summarize-10",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 10 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 10 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-11",
+    "startTimeUnixNano": "2800",
+    "span_id": "span-summarize-11",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 11 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 11 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-12",
+    "startTimeUnixNano": "2900",
+    "span_id": "span-summarize-12",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 12 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 12 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-13",
+    "startTimeUnixNano": "3000",
+    "span_id": "span-summarize-13",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 13 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 13 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-14",
+    "startTimeUnixNano": "3100",
+    "span_id": "span-summarize-14",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 14 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 14 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-15",
+    "startTimeUnixNano": "3200",
+    "span_id": "span-summarize-15",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 15 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 15 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-16",
+    "startTimeUnixNano": "3300",
+    "span_id": "span-summarize-16",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 16 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 16 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-17",
+    "startTimeUnixNano": "3400",
+    "span_id": "span-summarize-17",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 17 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 17 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-18",
+    "startTimeUnixNano": "3500",
+    "span_id": "span-summarize-18",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 18 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 18 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-19",
+    "startTimeUnixNano": "3600",
+    "span_id": "span-summarize-19",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 19 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 19 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-20",
+    "startTimeUnixNano": "3700",
+    "span_id": "span-summarize-20",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 20 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 20 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-21",
+    "startTimeUnixNano": "3800",
+    "span_id": "span-summarize-21",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 21 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 21 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-22",
+    "startTimeUnixNano": "3900",
+    "span_id": "span-summarize-22",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 22 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 22 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-23",
+    "startTimeUnixNano": "4000",
+    "span_id": "span-summarize-23",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 23 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 23 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-24",
+    "startTimeUnixNano": "4100",
+    "span_id": "span-summarize-24",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 24 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 24 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-25",
+    "startTimeUnixNano": "4200",
+    "span_id": "span-summarize-25",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 25 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 25 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-26",
+    "startTimeUnixNano": "4300",
+    "span_id": "span-summarize-26",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 26 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 26 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-27",
+    "startTimeUnixNano": "4400",
+    "span_id": "span-summarize-27",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 27 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 27 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-28",
+    "startTimeUnixNano": "4500",
+    "span_id": "span-summarize-28",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 28 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 28 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-29",
+    "startTimeUnixNano": "4600",
+    "span_id": "span-summarize-29",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 29 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 29 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-30",
+    "startTimeUnixNano": "4700",
+    "span_id": "span-summarize-30",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 30 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 30 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-31",
+    "startTimeUnixNano": "4800",
+    "span_id": "span-summarize-31",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 31 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 31 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-32",
+    "startTimeUnixNano": "4900",
+    "span_id": "span-summarize-32",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 32 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 32 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-33",
+    "startTimeUnixNano": "5000",
+    "span_id": "span-summarize-33",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 33 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 33 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-34",
+    "startTimeUnixNano": "5100",
+    "span_id": "span-summarize-34",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 34 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 34 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-35",
+    "startTimeUnixNano": "5200",
+    "span_id": "span-summarize-35",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 35 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 35 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-36",
+    "startTimeUnixNano": "5300",
+    "span_id": "span-summarize-36",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 36 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 36 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-37",
+    "startTimeUnixNano": "5400",
+    "span_id": "span-summarize-37",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 37 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 37 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-38",
+    "startTimeUnixNano": "5500",
+    "span_id": "span-summarize-38",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 38 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 38 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-39",
+    "startTimeUnixNano": "5600",
+    "span_id": "span-summarize-39",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 39 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 39 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-40",
+    "startTimeUnixNano": "5700",
+    "span_id": "span-summarize-40",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 40 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 40 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-41",
+    "startTimeUnixNano": "5800",
+    "span_id": "span-summarize-41",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 41 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 41 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-42",
+    "startTimeUnixNano": "5900",
+    "span_id": "span-summarize-42",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 42 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 42 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-43",
+    "startTimeUnixNano": "6000",
+    "span_id": "span-summarize-43",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 43 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 43 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-44",
+    "startTimeUnixNano": "6100",
+    "span_id": "span-summarize-44",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 44 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 44 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-45",
+    "startTimeUnixNano": "6200",
+    "span_id": "span-summarize-45",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 45 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 45 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-46",
+    "startTimeUnixNano": "6300",
+    "span_id": "span-summarize-46",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 46 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 46 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-47",
+    "startTimeUnixNano": "6400",
+    "span_id": "span-summarize-47",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 47 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 47 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-48",
+    "startTimeUnixNano": "6500",
+    "span_id": "span-summarize-48",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 48 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 48 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-49",
+    "startTimeUnixNano": "6600",
+    "span_id": "span-summarize-49",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 49 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 49 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-50",
+    "startTimeUnixNano": "6700",
+    "span_id": "span-summarize-50",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 50 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 50 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-51",
+    "startTimeUnixNano": "6800",
+    "span_id": "span-summarize-51",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 51 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 51 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-52",
+    "startTimeUnixNano": "6900",
+    "span_id": "span-summarize-52",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 52 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 52 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-53",
+    "startTimeUnixNano": "7000",
+    "span_id": "span-summarize-53",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 53 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 53 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-54",
+    "startTimeUnixNano": "7100",
+    "span_id": "span-summarize-54",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 54 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 54 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-55",
+    "startTimeUnixNano": "7200",
+    "span_id": "span-summarize-55",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 55 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 55 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-56",
+    "startTimeUnixNano": "7300",
+    "span_id": "span-summarize-56",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 56 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 56 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-57",
+    "startTimeUnixNano": "7400",
+    "span_id": "span-summarize-57",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 57 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 57 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-58",
+    "startTimeUnixNano": "7500",
+    "span_id": "span-summarize-58",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 58 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 58 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-59",
+    "startTimeUnixNano": "7600",
+    "span_id": "span-summarize-59",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 59 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 59 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-60",
+    "startTimeUnixNano": "7700",
+    "span_id": "span-summarize-60",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 60 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 60 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-61",
+    "startTimeUnixNano": "7800",
+    "span_id": "span-summarize-61",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 61 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 61 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-62",
+    "startTimeUnixNano": "7900",
+    "span_id": "span-summarize-62",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 62 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 62 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-63",
+    "startTimeUnixNano": "8000",
+    "span_id": "span-summarize-63",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 63 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 63 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-64",
+    "startTimeUnixNano": "8100",
+    "span_id": "span-summarize-64",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 64 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 64 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-65",
+    "startTimeUnixNano": "8200",
+    "span_id": "span-summarize-65",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 65 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 65 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-66",
+    "startTimeUnixNano": "8300",
+    "span_id": "span-summarize-66",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 66 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 66 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-67",
+    "startTimeUnixNano": "8400",
+    "span_id": "span-summarize-67",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 67 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 67 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  },
+  {
+    "traceId": "trace-summarize-68",
+    "startTimeUnixNano": "8500",
+    "span_id": "span-summarize-68",
+    "name": "chat",
+    "kind": "CLIENT",
+    "status": {
+      "code": "OK"
+    },
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "acme",
+      "gen_ai.request.model": "acme/large-1",
+      "gen_ai.response.model": "acme/large-1",
+      "rightmodeler.family": "summarize",
+      "gen_ai.system_instructions": [
+        {
+          "type": "text",
+          "content": "Summarize the article faithfully in two concise sentences."
+        }
+      ],
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Fixture bulletin 68 recorded stable service with no incidents."
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Bulletin 68 reports stable service. No incidents were recorded."
+            }
+          ],
+          "finish_reason": "stop"
+        }
+      ],
+      "gen_ai.usage.input_tokens": 20,
+      "gen_ai.usage.output_tokens": 14,
+      "rightmodeler.accepted": true
+    }
+  }
+]

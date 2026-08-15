@@ -6,8 +6,8 @@
   "title": "OTel GenAI integration: replay spans on cheaper models",
   "description": "Point rightmodeler at OTLP span exports with gen_ai.* attributes. It replays each step on cheaper models and measures candidate agreement with accepted output.",
   "h1": "rightmodeler + OpenTelemetry",
-  "lede": "If your stack emits gen_ai.* spans, the inputs and accepted outputs already exist. rightmodeler reads OTel GenAI telemetry from any OTLP pipeline (no bespoke integration required), measures cheaper candidates against those outputs, and reports the evidence.",
-  "tldr": "rightmodeler reads OTLP span exports through a dedicated OTel GenAI adapter: any pipeline that emits gen_ai.* attributes (whatever framework or language produced them) normalizes into one per-step schema. Each successful step is replayed through cheaper candidates on your selected replay provider and judged against the output you already shipped, with a 0.90 quality floor by default.",
+  "lede": "If your stack emits gen_ai.* spans, the inputs and accepted outputs already exist. rightmodeler reads OTel GenAI telemetry from any OTLP pipeline, no bespoke integration required, measures cheaper candidates against those outputs, and reports the evidence.",
+  "tldr": "rightmodeler reads OTLP span exports through a dedicated OTel GenAI adapter: any pipeline that emits gen_ai.* attributes, whatever framework or language produced it, folds into the same per-step schema. Spans are recognized by gen_ai.operation.name, grouped into trajectories by trace ID and ordered by start time, and read for model, messages, output, system instructions, and token usage. Each step is then replayed against cheaper candidates and scored against the output you already shipped.",
   "steps": [
     {
       "label": "01 · Export",
@@ -17,67 +17,67 @@
     {
       "label": "02 · Ingest",
       "title": "Autodetected by the gen_ai.* attributes",
-      "body": "The ingester recognizes the format when span attributes start with gen_ai.*, un-flattens the indexed dotted keys OTLP uses for arrays, parses message payloads that arrive as JSON strings, and folds each generation span into one per-step schema, with kind from gen_ai.operation.name and model from gen_ai.request.model."
+      "body": "The adapter recognizes the format when a span's attributes carry gen_ai.operation.name, and requires a model in gen_ai.request.model or gen_ai.response.model. Spans sharing a trace ID become one trajectory, ordered by start time, and every span in a multi-span trajectory has to carry one. Messages come from gen_ai.input.messages, the answer from gen_ai.output.messages, the system prompt from gen_ai.system_instructions, and usage from gen_ai.usage.input_tokens and gen_ai.usage.output_tokens."
     },
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against shipped output",
-      "body": "Single-shot steps are replayed through cheaper models from your selected replay provider on the exact inputs recorded in your spans, and a judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you shipped, with a 0.90 quality floor by default. Steps with tool calls or loops are confirmed by re-running your pipeline end-to-end instead."
+      "body": "Each step is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
     },
     {
-      "label": "04 · Approve",
+      "label": "04 · Report + apply",
       "title": "A per-step verdict you act on",
-      "body": "The report lists every candidate swap with its evidence, and an interactive TUI takes an approve, reject, or hold decision per step. Where the evidence is weak the audit abstains, and high-risk families (auth, payments, migrations, deploys, secrets) stay on the current model."
+      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
-    "intro": "Install once, then hand the skill a span export. Nothing connects to your collector or tracing backend; the audit runs offline on files you already have.",
+    "intro": "Install once, then hand the CLI a span export. Nothing connects to your collector or tracing backend; the audit runs offline on files you already have.",
     "commands": [
       {
-        "comment": "# inside Claude Code, point the skill at your span export",
-        "command": "claude \"run the rightmodeler skill on ./traces/otel-spans.json\""
+        "comment": "# preview the pipeline against your spans, without spending",
+        "command": "npx rightmodeler init --plan --traces ./traces/otel-spans.json --repo ."
+      },
+      {
+        "comment": "# then run it against your replay endpoint",
+        "command": "npx rightmodeler init --traces ./traces/otel-spans.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
       }
     ]
   },
   "reads": [
     {
-      "field": "step kind",
-      "source": "gen_ai.operation.name"
+      "field": "trajectory",
+      "source": "traceId, trace_id"
     },
     {
       "field": "model",
-      "source": "gen_ai.request.model"
+      "source": "gen_ai.request.model, gen_ai.response.model"
     },
     {
       "field": "input messages",
       "source": "gen_ai.input.messages"
     },
     {
+      "field": "output",
+      "source": "gen_ai.output.messages"
+    },
+    {
       "field": "system prompt",
       "source": "gen_ai.system_instructions"
     },
     {
-      "field": "tool calls",
-      "source": "execute_tool spans"
-    },
-    {
-      "field": "tool results",
-      "source": "tool span output"
-    },
-    {
       "field": "token usage",
-      "source": "gen_ai.usage.*_tokens"
+      "source": "gen_ai.usage.input/output_tokens"
     },
     {
-      "field": "success signal",
-      "source": "span status"
+      "field": "step family",
+      "source": "rightmodeler.family, else gen_ai.prompt.name"
     },
     {
-      "field": "historical cost",
-      "source": "not present in OTel spans"
+      "field": "ordering",
+      "source": "span start time"
     }
   ],
-  "detection": "gen_ai.request.model · gen_ai.input.messages",
+  "detection": "gen_ai.operation.name · gen_ai.request.model",
   "useCases": [
     {
       "title": "One adapter for everything that speaks OTel",
@@ -85,28 +85,29 @@
     },
     {
       "title": "Right-size a polyglot stack",
-      "body": "Services in different languages that share nothing but the semantic conventions normalize into one per-step schema, so a single audit covers the Python agent and the TypeScript sidecar alike, and shows which steps in each genuinely earn a frontier model."
+      "body": "Services in different languages that share nothing but the semantic conventions fold into the same per-step schema, so a single audit covers the Python agent and the TypeScript sidecar alike, and shows which step families in each genuinely earn a frontier model."
     },
     {
-      "title": "Compare candidate pricing from telemetry",
-      "body": "OTel spans usually do not carry cost, so missing historical step costs stay unknown. The audit prices candidate calls through your selected replay provider while testing cheaper alternatives against the output you shipped."
+      "title": "Name your own step families",
+      "body": "The adapter reads a rightmodeler.family attribute first and falls back to gen_ai.prompt.name, so if your instrumentation already labels prompts you get families that match how you think about the pipeline rather than a flat list of spans."
     }
   ],
   "limits": [
     "It reads OTLP span files on disk, JSON or JSONL. It does not connect to your collector, subscribe to a live OTLP endpoint, or scrape your tracing backend.",
-    "Replay needs real payloads. Many GenAI instrumentations leave message-content capture off by default, and spans without gen_ai.input.messages can be counted but not replayed.",
-    "A step that calls tools or loops cannot be judged from its span alone. rightmodeler confirms those by re-running your actual pipeline code end-to-end in a throwaway git worktree with the candidate model injected.",
-    "The audit prefers silence to guessing: thin evidence yields an abstention, and step families that touch auth, payments, migrations, deploys, or secrets are flagged rather than recommended for a swap.",
+    "Replay needs real payloads. Many GenAI instrumentations leave message-content capture off by default, and a span without gen_ai.input.messages or gen_ai.output.messages is dropped with a recorded reason rather than replayed.",
+    "A trajectory of several spans has to carry a start time on every span, or those spans are dropped: without one the order of a multi-step trajectory cannot be recovered, and a guessed order would change what the judge sees.",
+    "OTel spans usually carry no cost, so historical spend is not derived from them. Candidate calls are priced from what your replay endpoint reports, and marked as an estimate when the provider returns none.",
+    "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
     "It is a report, not a collector processor or a gateway. Your OTel pipeline keeps exporting spans; rightmodeler never sits in the request path."
   ],
   "faq": [
     {
       "q": "How do I export OpenTelemetry spans for rightmodeler?",
-      "a": "Land OTLP trace data on disk as JSON or JSONL: the OTel Collector's file exporter works, as does a span export from your backend or a capture from a local test run. Point the skill at the file or folder; the format is autodetected from the gen_ai.* attributes."
+      "a": "Land OTLP trace data on disk as JSON or JSONL: the OTel Collector's file exporter works, as does a span export from your backend or a capture from a local test run. Pass the file or folder with --traces; the format is autodetected from the gen_ai.* attributes."
     },
     {
       "q": "My framework has no dedicated adapter. Am I stuck?",
-      "a": "No, that is what the OTel path is for. Anything that emits GenAI semantic-convention spans is readable through the same adapter, whatever SDK or language produced them. If you can get gen_ai.* attributes into an OTLP export, you can run the audit."
+      "a": "No, that is what the OTel path is for. Anything that emits GenAI semantic-convention spans is readable through the same adapter, whatever SDK or language produced it. If you can get gen_ai.* attributes into an OTLP export, you can run the audit."
     },
     {
       "q": "Why are my spans ingested but not replayed?",
@@ -118,13 +119,13 @@
     },
     {
       "q": "Does my span data leave my machine?",
-      "a": "Replays send step inputs to candidate models through your selected replay provider using your own key, the same shape of call your service already makes to a provider. There is no rightmodeler server and no account; nothing else touches your spans."
+      "a": "Replays send step inputs to candidate models through the endpoint you configured, under your own key, the same shape of call your service already makes to a provider. There is no rightmodeler server and no account; nothing else touches your spans."
     },
     {
       "q": "Will it always find savings?",
-      "a": "No, and by design. When no candidate clears the quality floor, or a step is high-risk, or the evidence is thin, the audit abstains and leaves the model alone. A tool that always finds a swap is not measuring anything."
+      "a": "No, and by design. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor again on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],
-  "related": ["phoenix", "openai-sdk", "vercel-ai-gateway"],
+  "related": ["phoenix", "openai-sdk", "helicone"],
   "cta": "github"
 }

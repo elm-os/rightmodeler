@@ -13,9 +13,8 @@ npx skills add elm-os/rightmodeler --skill rightmodeler
 
 Then invoke `rightmodeler` in your coding agent.
 
-The skill is the execution layer. It installs the skill bundle, then drives the
-repo's Python scripts for you: preflight, ingest, analyze, replay, judge, TUI,
-and report generation.
+The skill is the runbook for the installed TypeScript CLI. It drives the resumable
+pipeline from ingest through report generation and interprets its machine protocol.
 
 Before first run, configure one replay provider. Only one setup is needed:
 
@@ -41,9 +40,9 @@ set them yourself: the skill never asks you to send a key value and never writes
 one for you. It checks the process environment first, then looks up the current
 repo tree for a project `.env`.
 
-On first run, `rightmodeler` should bootstrap its Python environment, run
-preflight, name anything still missing such as an unset provider variable or a
-trace path, then continue in the same workflow once you reply.
+On first run, `rightmodeler` previews the stage plan, names anything still missing
+such as an unset provider variable or a trace path, then resumes the same workflow
+once you provide it.
 
 ## What it does
 
@@ -79,8 +78,7 @@ Expected layout:
 └── reports/
 ```
 
-This directory is the current handoff boundary between the Python pipeline and the
-rest of the repo.
+This directory is the TypeScript harness state and artifact boundary.
 
 ## License
 
