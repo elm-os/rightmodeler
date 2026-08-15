@@ -117,6 +117,9 @@ await rm(stagingRoot, { recursive: true, force: true });
 const publishManifest = JSON.parse(
   await readFile(resolve(packageRoot, "package.json"), "utf8"),
 );
+// The workspace name stays @rightmodeler/cli (a package named rightmodeler would collide with
+// the repo root); the public npm name is the bare, npx-friendly one the runbook falls back to.
+publishManifest.name = "rightmodeler";
 delete publishManifest.devDependencies;
 delete publishManifest.publishConfig;
 delete publishManifest.scripts;
