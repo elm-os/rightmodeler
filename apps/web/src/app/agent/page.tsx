@@ -12,7 +12,7 @@ import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
-  title: "rightmodeler agent (coming soon)",
+  title: "rightmodeler agent",
   description:
     "rightmodeler agent tests new model releases against your real traces and opens evidence-backed model-swap pull requests when a change clears your bar.",
   path: "/agent",
@@ -26,10 +26,9 @@ const POLICY: { key: string; value: string }[] = [
     key: "quality_floor",
     value: `${ILLUSTRATIVE_SCORECARD.floor} · judged against shipped outputs`,
   },
-  { key: "min_saving", value: "20% per step" },
-  { key: "latency", value: "p95 within current budget" },
-  { key: "providers", value: "allow openai · anthropic · google · meta" },
-  { key: "never_touch", value: "auth_code_edit · payments_*" },
+  { key: "max_cost_usd", value: "hard stop for the whole run" },
+  { key: "models", value: "allow openai · anthropic · google · meta" },
+  { key: "evaluator", value: "braintrust · falls back to cross-family judge" },
   { key: "merge", value: "open PR only · never auto-merge" },
 ];
 
@@ -40,11 +39,11 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "When can I use it?",
-    a: "rightmodeler agent is in active development. Join the waitlist and we will send one note when early access opens. The proof engine behind it, the rightmodeler skill, is available now on GitHub.",
+    a: "Today, if you self-host: the agent ships in the open-source repo and runs on your own infrastructure with your own GitHub and model credentials. Join the waitlist for the hosted version and we will send one note when early access opens.",
   },
   {
     q: "Does it merge changes on its own?",
-    a: "No. The agent opens pull requests; merging stays with you. A preferences file in your repo sets the guardrails: quality floor, minimum saving, latency budget, provider allowlist, and steps it must never touch.",
+    a: "No. The agent opens pull requests; merging stays with you, and it carries no merge capability at all. Your configuration sets the guardrails: the quality floor, a model allowlist and denylist, a hard spend cap per run, and which evaluator scores the replays.",
   },
   {
     q: "What does it evaluate against?",
@@ -52,7 +51,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How is it different from the rightmodeler skill?",
-    a: "Same proof loop, different cadence. The skill is an audit you run when you want it. The agent runs that loop continuously in CI, watches every release, and turns the result into a pull request you review.",
+    a: "Same proof loop, different cadence. The skill is an audit you run when you want it. The agent runs that loop on a schedule: it re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and turns each result into a pull request you review.",
   },
 ];
 
@@ -62,14 +61,14 @@ export default function AgentPage() {
       <JsonLd data={breadcrumbLd("rightmodeler agent", "/agent")} />
 
       <PageHero
-        eyebrow="Coming soon · by rightmodeler"
+        eyebrow="Open source · by rightmodeler"
         title="The last model migration you do by hand."
-        lede="A new model ships. rightmodeler agent replays it against your real traces, prices the swap, and opens a pull request with the evidence attached. You review it like any other change."
+        lede="A new model ships. rightmodeler agent replays it against your real traces, prices the swap, and opens a pull request with the evidence attached. You review it like any other change. It lives in the open-source repo today; a hosted version is on the way."
       >
         <div className="max-w-md">
           <WaitlistForm product="agent" />
           <p className="mt-3 font-mono text-caption text-fog">
-            Get early access. One note when it opens, no spam.
+            Get hosted early access. One note when it opens, no spam.
           </p>
         </div>
       </PageHero>
@@ -93,9 +92,9 @@ export default function AgentPage() {
               Your preferences are the policy.
             </h2>
             <p className="mt-4 text-body text-driftwood">
-              The agent moves only inside guardrails you set. A config in your
-              repo decides what counts as better, what it may touch, and what it
-              must never go near.
+              The agent moves only inside guardrails you set. Your configuration
+              decides what counts as better, which models it may propose, and
+              how much a run may spend.
             </p>
           </Reveal>
 
@@ -120,7 +119,7 @@ export default function AgentPage() {
               Runs where your work lives.
             </h3>
             <div className="mt-4 flex flex-wrap gap-2">
-              {["GitHub Actions", "Scheduled CI", "Your API keys"].map(
+              {["Self-hosted", "Scheduled runs", "Your API keys"].map(
                 (chip) => (
                   <span
                     key={chip}
@@ -132,8 +131,8 @@ export default function AgentPage() {
               )}
             </div>
             <p className="mt-4 max-w-xl text-body text-driftwood">
-              Nothing sits in your request path. The agent wakes in CI, does its
-              work, opens a PR, and goes back to sleep.
+              Nothing sits in your request path. The agent wakes on a schedule,
+              does its work, opens a PR, and goes back to sleep.
             </p>
           </Reveal>
 
@@ -158,6 +157,19 @@ export default function AgentPage() {
                 <p className="mt-1 text-body text-driftwood">
                   No candidate clears your floor, no PR. A tool that always
                   finds a swap is not measuring anything.
+                </p>
+              </li>
+            </Reveal>
+            <Reveal delay={0.12}>
+              <li className="py-5">
+                <p className="font-sans text-heading-sm text-midnight-ink">
+                  Every swap is reversible
+                </p>
+                <p className="mt-1 text-body text-driftwood">
+                  Each applied change records the exact files it touched before
+                  and after. One command opens the pull request that restores
+                  the pre-swap state, and it refuses if the files have moved on
+                  without it.
                 </p>
               </li>
             </Reveal>

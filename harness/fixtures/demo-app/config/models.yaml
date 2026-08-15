@@ -1,0 +1,4 @@
+model_list:
+  - model_name: acme/large-1
+    litellm_params:
+      model: acme/large-1

@@ -43,10 +43,9 @@ export function Body() {
         <A href="https://arxiv.org/abs/2604.22750">
           How Do AI Agents Spend Your Money?
         </A>{" "}
-        We read all of it. The headline result is uncomfortable: nobody
-        can tell you what an agent task will cost before it runs. Not an
-        experienced engineer reading the ticket. Not the agent about to do the
-        work.
+        We read all of it. The headline result is uncomfortable: nobody can tell
+        you what an agent task will cost before it runs. Not an experienced
+        engineer reading the ticket. Not the agent about to do the work.
       </P>
 
       <H2>An agent is not a chatbot with tools</H2>

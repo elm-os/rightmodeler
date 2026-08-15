@@ -26,7 +26,7 @@ source, so `main` is the only supported version.
 **In scope**
 
 - The skill runtime in `skills/rightmodeler`
-- The Python pipeline in `apps/pipeline`
+- The TypeScript CLI and harness in `harness`
 - The schemas in `packages/contracts`
 - www.rightmodeler.com and its API routes in `apps/web`
 

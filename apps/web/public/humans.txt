@@ -21,6 +21,6 @@
 	Doctype: HTML5
 	Standards: HTML5, CSS3, ES2023
 	Components: Next.js, React, TypeScript, Tailwind CSS, Motion
-	Software: pnpm, Turborepo, Python, uv
+	Software: pnpm, Turborepo, TypeScript
 
 	# Every step, on the right model. Proven, not guessed. https://www.rightmodeler.com

@@ -28,6 +28,8 @@ const LOGOS: Record<string, string> = {
   braintrust: "/integrations/logos/braintrust.svg",
   phoenix: "/integrations/logos/phoenix.png",
   otel: "/integrations/logos/otel.svg",
+  helicone: "/integrations/logos/helicone.svg",
+  weave: "/integrations/logos/weave.svg",
   openrouter: "/integrations/logos/openrouter.svg",
   litellm: "/integrations/logos/litellm.png",
   "vercel-ai-gateway": "/integrations/logos/vercel-ai-gateway.svg",

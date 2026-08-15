@@ -43,7 +43,7 @@
     "reason": { "type": ["string", "null"] },
     "repository_revision": {
       "type": "string",
-      "pattern": "^[a-f0-9]{40}$"
+      "pattern": "^([a-f0-9]{40}|[a-f0-9]{64})$"
     },
     "affected_files": {
       "type": "array",

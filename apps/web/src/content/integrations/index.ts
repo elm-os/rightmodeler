@@ -13,6 +13,8 @@ import openaiSdk from "@/content/integrations/data/openai-sdk.json";
 import claudeCode from "@/content/integrations/data/claude-code.json";
 import codex from "@/content/integrations/data/codex.json";
 import otel from "@/content/integrations/data/otel.json";
+import helicone from "@/content/integrations/data/helicone.json";
+import weave from "@/content/integrations/data/weave.json";
 import openrouter from "@/content/integrations/data/openrouter.json";
 import litellm from "@/content/integrations/data/litellm.json";
 import vercelAiGateway from "@/content/integrations/data/vercel-ai-gateway.json";
@@ -26,6 +28,8 @@ const integrations: IntegrationData[] = [
   braintrust,
   phoenix,
   otel,
+  helicone,
+  weave,
   openrouter,
   litellm,
   vercelAiGateway,

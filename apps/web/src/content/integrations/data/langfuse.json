@@ -1,79 +1,99 @@
 {
   "slug": "langfuse",
   "name": "Langfuse",
-  "category": "trace-source-generic",
-  "categoryLabel": "Trace source · autodetected",
+  "category": "trace-source",
+  "categoryLabel": "Trace source · dedicated adapter",
   "title": "Langfuse integration: measure cheaper models on real traces",
   "description": "Export Langfuse observations to disk and rightmodeler replays each step through cheaper models, judging every candidate against the output you already shipped.",
   "h1": "rightmodeler + Langfuse",
-  "lede": "Langfuse already records what every generation cost and produced. rightmodeler replays those observations through cheaper models and reports agreement, evidence, sample size, and abstentions step by step.",
-  "tldr": "rightmodeler autodetects Langfuse exports by their traceId, observations, and usageDetails keys, then normalizes them with its generic adapter, a best-effort pass that pulls model, input messages, and output per record and keeps the rest in raw. Each successful step is replayed through cheaper candidates from your selected replay provider and judged against the output you already shipped, with a 0.90 quality floor by default.",
+  "lede": "Langfuse already records what every generation cost and produced. rightmodeler replays those observations through cheaper models and reports agreement, evidence, sample size, and abstentions step by step, scored by Langfuse itself when you point it there.",
+  "tldr": "rightmodeler has a dedicated Langfuse adapter. It recognizes observation exports by their trace_id, parent_observation_id, and type keys, maps the observations whose type is GENERATION, and reads provided_model_name, input.messages, output, tool calls, and usage_details per record. Langfuse can also be the evaluator: pass --evaluator langfuse and your own scorers grade the replays, with the built-in judge used only when nothing better is reachable.",
   "steps": [
     {
       "label": "01 · Export",
       "title": "Export observations to a file",
-      "body": "Pull observations from GET /api/public/observations (basic auth with your LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY) and save the data array as JSON, or take a JSONL batch export from blob storage. A file or a folder on disk is all the ingester needs."
+      "body": "Pull observations from GET /api/public/observations (basic auth with your LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY) and save the data array as JSON, or take a JSONL batch export from blob storage. A file on disk is all the CLI needs."
     },
     {
       "label": "02 · Ingest",
-      "title": "Autodetected, normalized best-effort",
-      "body": "The ingester recognizes Langfuse by its traceId, observations, and usageDetails keys, then hands the records to the generic adapter: model, input messages, and output are extracted per record, and the untouched original rides along in raw. Langfuse's own observation fields (model, input, output, name) are exactly the names it looks for, so flat observation exports land cleanly."
+      "title": "Autodetected, then mapped field by field",
+      "body": "The adapter recognizes Langfuse by trace_id, parent_observation_id, and an observation type it knows, then keeps the GENERATION records. Each one contributes provided_model_name as the model, input.messages as the messages, output as the answer, and usage_details.input and usage_details.output as usage. tool_definitions ride along with the messages, tool_calls are folded into the output, and session_id becomes the trajectory when it is present."
     },
     {
-      "label": "03 · Replay",
-      "title": "Cheaper candidates, judged against what shipped",
-      "body": "Successful single-shot steps are replayed through cheaper models from your selected replay provider on the exact inputs from your export, and a judge from a different model family (position-swapped, reference-guided) scores each candidate against the output you already shipped, with a 0.90 quality floor by default. Steps with tool calls or loops go to an end-to-end re-run of your pipeline code in a throwaway git worktree instead."
+      "label": "03 · Replay + score",
+      "title": "Cheaper candidates, scored against what shipped",
+      "body": "Each kept generation is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator langfuse, your own scorers grade the replays and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, which makes two temperature-zero calls with the reference and candidate positions swapped. Verdicts are confidence lower bounds kept separate per evaluator kind."
     },
     {
-      "label": "04 · Decide",
-      "title": "A per-step report, approved by you",
-      "body": "The report lays out each proposed swap with its evidence, and the TUI walks you through approve, reject, or hold, per step. Where evidence is weak it abstains, and high-risk families like auth, payments, and migrations are flagged rather than swapped."
+      "label": "04 · Report + apply",
+      "title": "A per-step report, then a pull request",
+      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else; watch reconciles it against CI, and rollback restores the pre-apply files. rightmodeler export --to langfuse pushes trials and verdicts back into a dataset you already review."
     }
   ],
   "setup": {
-    "intro": "Install the skill once, then feed it a file of Langfuse observations. Nothing connects to your Langfuse project: your keys stay in your own curl call, and the audit runs on the export.",
+    "intro": "Install the skill once, then feed the CLI a file of Langfuse observations. The audit runs on the export; your keys are needed for the curl you run yourself, and again if you choose Langfuse as the evaluator.",
     "commands": [
       {
         "comment": "# export observations via the public API (keys from project settings)",
         "command": "curl -su $LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY $LANGFUSE_HOST/api/public/observations | jq .data > lf.json"
       },
       {
-        "comment": "# then hand the export to the skill inside Claude Code",
-        "command": "claude \"run the rightmodeler skill on ./lf.json\""
+        "comment": "# score the replays with your own Langfuse scorers",
+        "command": "npx rightmodeler init --traces ./lf.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --evaluator langfuse --evaluator-scorer correctness"
+      },
+      {
+        "comment": "# push the trials and verdicts back into a Langfuse dataset",
+        "command": "npx rightmodeler export --to langfuse --dataset-id $DATASET"
       }
     ]
   },
   "reads": [
     {
+      "field": "trajectory",
+      "source": "session_id, else trace_id"
+    },
+    {
       "field": "model",
-      "source": "model"
+      "source": "provided_model_name"
     },
     {
       "field": "input messages",
-      "source": "messages, input"
+      "source": "input.messages"
+    },
+    {
+      "field": "available tools",
+      "source": "tool_definitions"
     },
     {
       "field": "output",
-      "source": "output, completion"
+      "source": "output, tool_calls"
     },
     {
-      "field": "step name",
-      "source": "name"
+      "field": "token usage",
+      "source": "usage_details.input/output"
     },
     {
-      "field": "everything else",
-      "source": "kept untouched in raw"
+      "field": "step family",
+      "source": "prompt_name, else name"
+    },
+    {
+      "field": "timestamp",
+      "source": "start_time"
     }
   ],
-  "detection": "traceId · observations · usageDetails",
+  "detection": "trace_id · parent_observation_id · type",
   "useCases": [
     {
       "title": "Turn Langfuse cost tracking into decisions",
-      "body": "Langfuse already tells you what each trace costs. The audit adds the missing column: which steps could run on a cheaper model, with a judged verdict and evidence per step instead of a hunch about the bill."
+      "body": "Langfuse already tells you what each trace costs. The audit adds the missing column: which steps could run on a cheaper model, with a judged verdict and evidence per step family instead of a hunch about the bill."
     },
     {
-      "title": "Right-size without re-instrumenting",
-      "body": "No new SDK, no config change, no code in your app. You export observations you already collect, run the skill offline, and read the verdicts. Langfuse keeps observing production; rightmodeler only ever sees the files."
+      "title": "Score the audit with the scorers you already run",
+      "body": "Pass --evaluator langfuse and your own scorers decide whether a candidate passed, instead of a judge model you did not write. Metric names, rubric versions, and the provider's own pass decision are preserved on each assessment rather than collapsed to a single number."
+    },
+    {
+      "title": "Build the corpus from a curated dataset",
+      "body": "rightmodeler corpus import --from langfuse:dataset builds the replay corpus from a curated dataset instead of raw observations. Curated references are usually human-verified, and reference correctness caps every number downstream, so a verified corpus raises what the audit can prove."
     },
     {
       "title": "Screen a downgrade before any production trial",
@@ -81,38 +101,39 @@
     }
   ],
   "limits": [
-    "Langfuse is autodetected, but there is no bespoke adapter: the generic adapter extracts model, input messages, and output per record, best-effort. usageDetails, scores, and nested observation structure stay in the raw record rather than mapped fields.",
-    "It reads exported files, JSON or JSONL on disk. It does not connect to your Langfuse project, poll the API, or watch new traces arrive.",
-    "Steps with tool calls or loops are never judged from the trace alone; they are confirmed by re-running your pipeline end-to-end in a throwaway git worktree with the candidate model injected.",
-    "High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, and weak evidence means the audit abstains rather than recommends.",
+    "Only observations whose type is GENERATION become steps. Spans, tools, agents, and chains are read for detection, then dropped with a recorded reason rather than replayed.",
+    "The model has to arrive in provided_model_name. An observation that records it somewhere else is dropped with its reason instead of being guessed at.",
+    "It reads exported files, JSON or JSONL on disk. It does not connect to your Langfuse project, poll the API, or watch new traces arrive; the evaluator, corpus import, and export paths are the only ones that call Langfuse, and only when you ask for them.",
+    "Langfuse cost and score fields are not used as evidence. Candidate calls are priced from what your replay endpoint reports, and marked as an estimate when the provider returns no cost.",
+    "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
     "It is a report, not a runtime gateway. Langfuse remains your observability layer; rightmodeler never sits in the request path."
   ],
   "faq": [
     {
       "q": "How do I export traces from Langfuse?",
-      "a": "Call GET /api/public/observations with basic auth (public key as username, secret key as password) and save the data array as JSON, or use a batch export to blob storage in JSONL. Point the skill at the file or folder; the format is autodetected from the traceId, observations, and usageDetails keys."
+      "a": "Call GET /api/public/observations with basic auth (public key as username, secret key as password) and save the data array as JSON, or use a batch export to blob storage in JSONL. Pass the file with --traces; the format is autodetected from the trace_id, parent_observation_id, and type keys."
     },
     {
-      "q": "Why is Langfuse a generic trace source rather than a dedicated adapter?",
-      "a": "Detection is bespoke; normalization is not. The generic adapter takes a best-effort pass (model, input messages, output, and name per record) which happens to match Langfuse's own observation fields, and preserves the full record in raw. What it cannot map it does not guess at: steps with tool calls or loops go to end-to-end replay instead of trace-only judging."
+      "q": "How do I make Langfuse the evaluator?",
+      "a": "Pass --evaluator langfuse with at least one --evaluator-scorer. Credentials come from LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY unless you name other variables with --evaluator-api-key-env and --evaluator-public-key-env. Add --evaluator-gate-metric when several scorers are configured, and --evaluator-gate-threshold when the evaluator returns no pass decision of its own."
+    },
+    {
+      "q": "Can I import a Langfuse dataset instead of traces?",
+      "a": "Yes. rightmodeler corpus import --from langfuse:<dataset> builds the replay corpus from a curated dataset and records each case as a curated reference. Since reference correctness caps every downstream number, a human-verified dataset raises the ceiling the audit is measuring against."
     },
     {
       "q": "Does rightmodeler replace Langfuse?",
-      "a": "No. Langfuse observes, scores, and debugs your agent in production; rightmodeler is an offline audit that measures cheaper candidates against the outputs you accepted and reports the evidence."
-    },
-    {
-      "q": "What does it do with Langfuse's cost data?",
-      "a": "Not much, today. The generic adapter maps model, messages, and output; Langfuse's cost and usage fields stay in each record's raw copy. Missing historical costs stay unknown, while candidate calls are priced through your selected replay provider."
+      "a": "No. Langfuse observes, scores, and debugs your agent in production; rightmodeler is an offline audit that measures cheaper candidates against the outputs you accepted and reports the evidence. Results can be pushed back with rightmodeler export --to langfuse."
     },
     {
       "q": "Does my trace data leave my machine?",
-      "a": "Replays send step inputs to candidate models through your selected replay provider with your own key, the same shape of call your agent already makes. There is no rightmodeler server, and your Langfuse keys are only ever used by the curl you run yourself."
+      "a": "Replays send step inputs to candidate models through the endpoint you configured, under your own key, the same shape of call your agent already makes. There is no rightmodeler server, and Langfuse is contacted only by the curl you run and by the evaluator, import, or export commands when you choose them."
     },
     {
       "q": "Will it always find a swap?",
-      "a": "No, and that is the point. When evidence is weak or a step is high-risk, the audit abstains and the current model stays. A tool that always finds a swap is not measuring anything."
+      "a": "No, and that is the point. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor again on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],
-  "related": ["langsmith", "braintrust", "openrouter"],
+  "related": ["langsmith", "braintrust", "helicone"],
   "cta": "github"
 }

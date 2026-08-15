@@ -1,0 +1,42 @@
+{
+  "name": "@rightmodeler/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "rightmodeler": "./dist-bundle/cli.js"
+  },
+  "exports": "./dist-bundle/cli.js",
+  "files": [
+    "dist-bundle",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "directory": "dist/publish"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && pnpm run bundle",
+    "bundle": "tsx scripts/generate-docs.mjs --check && node build.mjs",
+    "docs:generate": "tsx scripts/generate-docs.mjs --write",
+    "prepack": "pnpm run bundle",
+    "parity": "pnpm run build && vitest run src/parity.test.ts",
+    "check-types": "tsc --noEmit",
+    "check": "tsc --noEmit && vitest run"
+  },
+  "devDependencies": {
+    "@rightmodeler/core": "workspace:*",
+    "@rightmodeler/kernel": "workspace:*",
+    "@rightmodeler/replay": "workspace:*",
+    "@rightmodeler/scanner": "workspace:*",
+    "@types/node": "^24",
+    "ajv": "^8.20.0",
+    "commander": "^14",
+    "esbuild": "^0.28.2",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vitest": "^3",
+    "zod": "^4"
+  }
+}
