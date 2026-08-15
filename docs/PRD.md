@@ -78,8 +78,9 @@ Input quality varies by customer, so the framework must make best use of availab
 
 ## 8. Task Family Detection
 
-The current framework assigns task family labels with the first matching rule in
-`skills/rightmodeler/scripts/analyze.py`. It uses eight hard-coded regular expressions
+The original framework assigned task family labels with the first matching rule in
+`skills/rightmodeler/scripts/analyze.py` (retired; replaced by the TypeScript harness, see
+`harness/docs/Architecture.md`). It used eight hard-coded regular expressions
 for `pr_summary`, `test_generation`, `bug_fix`, `sql_generation`, `code_review`,
 `doc_rewrite`, `support_draft`, and `tool_agent`, followed by a `general` catch-all.
 There is no override at any layer. Automatic data-driven label inference is future scope.

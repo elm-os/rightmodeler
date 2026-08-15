@@ -7,7 +7,8 @@ export const TRACE_SOURCES = [
   "Braintrust",
   "Phoenix (OpenInference)",
   "OpenTelemetry GenAI",
-  "LiteLLM StandardLoggingPayload",
+  "Helicone",
+  "W&B Weave",
 ] as const;
 
 export const ILLUSTRATIVE_SCORECARD = {

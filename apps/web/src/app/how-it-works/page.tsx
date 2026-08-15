@@ -38,16 +38,16 @@ const STEPS: {
   {
     n: "02",
     name: "Measure",
-    body: "It replays each step through cheaper candidates on your real inputs and measures every output against what you accepted. Each candidate gets a cost delta, reference-agreement score, evidence count, and risk flag, and it abstains when the evidence is weak.",
+    body: "It replays each step through cheaper candidates on your real inputs and measures every output against what you accepted. Each candidate gets a cost delta, reference-agreement score, and evidence count, and it abstains when the evidence is weak.",
     label: "scores",
-    line: "cost · agreement · evidence count · risk flag  →  recommendation + confidence · abstain on high-risk",
+    line: "cost · agreement · evidence count  →  recommendation + confidence · abstain on thin evidence",
   },
   {
     n: "03",
     name: "Review",
-    body: "You review each recommendation and rightmodeler applies only the edits you approve via the Skill. A report and an edit, never a live intercept. You decide what to change, and when.",
+    body: "You review the plan, and the CLI ships only the swaps you approve as a pull request with the evidence attached. It then watches CI on that PR, and if you change your mind, one command opens the pull request that restores the exact pre-swap state. Never a live intercept. You decide what to change, and when.",
     label: "applies",
-    line: "approved model edit in your repo, via the Skill · nothing changes without your approval",
+    line: "approved swaps arrive as a pull request · watch reconciles CI · rollback restores byte-exact",
   },
 ];
 
@@ -63,6 +63,10 @@ const FAQ: FaqItem[] = [
   {
     q: "Do you store my data?",
     a: "It runs locally on your own traces and your own replay provider key. Replays call your selected provider, OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy, using your key; there is no rightmodeler server holding your traces.",
+  },
+  {
+    q: "Can I use my existing eval framework?",
+    a: "Yes. Braintrust, Langfuse, LangSmith, and promptfoo can score the replays instead of the built-in judge, and a reachable configured evaluator is always preferred. You can also build the case set from a curated dataset you already maintain, which raises how much the audit can certify, and push trials and verdicts back to your platform when the run completes.",
   },
 ];
 
@@ -159,11 +163,14 @@ export default function HowItWorksPage() {
             </p>
             <p className="mt-2 max-w-xl text-body text-driftwood">
               Hard checks run before a model judge. When judgment is needed, a
-              cross-family judge scores both output orders. Evidence counts show
-              what earned the confidence band, and the evidence type limits how
-              high that band can go. Confidence applies only to the prompt,
-              inputs, and runs evaluated. It measures agreement with what you
-              shipped, not proof of correctness.
+              cross-family judge scores both output orders. Every rate is a
+              statistical lower bound, not a point estimate, and a shortlist
+              winner must clear your quality floor again on held-out cases
+              before it is recommended. Evidence counts show what earned the
+              confidence band, and the evidence type limits how high that band
+              can go. Confidence applies only to the prompt, inputs, and runs
+              evaluated. It measures agreement with what you shipped, not proof
+              of correctness.
             </p>
           </Reveal>
 

@@ -1,0 +1,179 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "openai/gpt-4o",
+      "name": "GPT-4o",
+      "type": "language",
+      "description": "General-purpose language model fixture.",
+      "context_window": 128000,
+      "max_tokens": 16384,
+      "pricing": {
+        "input": "0.0000025",
+        "output": "0.00001",
+        "input_cache_read": "0.00000125",
+        "web_search": "10"
+      },
+      "supported_parameters": [
+        "max_tokens",
+        "temperature",
+        "stop",
+        "tools",
+        "tool_choice"
+      ],
+      "tags": [
+        "file-input",
+        "implicit-caching",
+        "tool-use",
+        "vision",
+        "web-search",
+        "fast"
+      ]
+    },
+    {
+      "id": "openai/gpt-4o-mini",
+      "name": "GPT-4o mini",
+      "type": "language",
+      "description": "Small language model fixture.",
+      "context_window": 128000,
+      "max_tokens": 16384,
+      "pricing": {
+        "input": "0.00000015",
+        "output": "0.0000006",
+        "input_cache_read": "0.000000075"
+      },
+      "supported_parameters": [
+        "max_tokens",
+        "temperature",
+        "stop",
+        "tools",
+        "tool_choice"
+      ],
+      "tags": ["implicit-caching", "tool-use", "vision", "fast"]
+    },
+    {
+      "id": "meta/llama-3.3-70b",
+      "name": "Llama 3.3 70B Instruct",
+      "type": "language",
+      "description": "Instruction-following language model fixture.",
+      "context_window": 128000,
+      "max_tokens": 8192,
+      "pricing": {
+        "input": "0.00000072",
+        "output": "0.00000072"
+      },
+      "supported_parameters": [
+        "max_tokens",
+        "temperature",
+        "stop",
+        "tools",
+        "tool_choice"
+      ],
+      "tags": ["tool-use"]
+    },
+    {
+      "id": "alibaba/qwen-3-235b",
+      "name": "Qwen 3 235B",
+      "type": "language",
+      "description": "Reasoning language model fixture.",
+      "context_window": 262144,
+      "max_tokens": 16384,
+      "pricing": {
+        "input": "0.00000022",
+        "output": "0.00000088"
+      },
+      "supported_parameters": [
+        "max_tokens",
+        "temperature",
+        "stop",
+        "tools",
+        "tool_choice",
+        "reasoning",
+        "include_reasoning"
+      ],
+      "tags": ["tool-use", "reasoning"]
+    },
+    {
+      "id": "sakana/namazu",
+      "name": "Sakana Namazu",
+      "type": "language",
+      "description": "Structured-output language model fixture.",
+      "context_window": 256000,
+      "max_tokens": 256000,
+      "pricing": {
+        "input": "0.00000095",
+        "output": "0.000004",
+        "input_cache_read": "0.00000015"
+      },
+      "supported_parameters": [
+        "max_tokens",
+        "temperature",
+        "stop",
+        "tools",
+        "tool_choice",
+        "reasoning",
+        "include_reasoning",
+        "response_format",
+        "structured_outputs"
+      ],
+      "tags": [
+        "file-input",
+        "reasoning",
+        "structured-output",
+        "tool-use",
+        "vision",
+        "web-search"
+      ]
+    },
+    {
+      "id": "google/gemini-2.5-flash-image",
+      "name": "Gemini 2.5 Flash Image",
+      "type": "language",
+      "description": "Language model fixture without tool support.",
+      "context_window": 32768,
+      "max_tokens": 65536,
+      "pricing": {
+        "input": "0.0000003",
+        "output": "0.0000025",
+        "input_cache_read": "0.00000003"
+      },
+      "supported_parameters": ["max_tokens", "temperature", "stop"],
+      "tags": ["image-generation", "vision", "web-search"]
+    },
+    {
+      "id": "anthropic/claude-opus-4.5",
+      "name": "Claude Opus 4.5",
+      "type": "language",
+      "description": "Higher-priced language model fixture.",
+      "context_window": 200000,
+      "max_tokens": 64000,
+      "pricing": {
+        "input": "0.000005",
+        "output": "0.000025",
+        "input_cache_read": "0.0000005",
+        "input_cache_write": "0.00000625"
+      },
+      "supported_parameters": [
+        "max_tokens",
+        "temperature",
+        "stop",
+        "tools",
+        "tool_choice",
+        "reasoning",
+        "include_reasoning"
+      ],
+      "tags": ["explicit-caching", "reasoning", "tool-use", "vision"]
+    },
+    {
+      "id": "alibaba/qwen3-embedding-0.6b",
+      "name": "Qwen3 Embedding 0.6B",
+      "type": "embedding",
+      "description": "Text embedding model fixture.",
+      "context_window": 32768,
+      "max_tokens": 32768,
+      "pricing": {
+        "input": "0.00000001"
+      }
+    }
+  ]
+}

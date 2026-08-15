@@ -348,11 +348,13 @@ task. Nothing in this set was validated on the exact problem rightmodeler solves
 ## Incidental findings
 
 `docs/PRD.md` section 8 says task family labels are invented automatically.
-`skills/rightmodeler/scripts/analyze.py` implements eight hard-coded regexes plus a
+`skills/rightmodeler/scripts/analyze.py` (retired; replaced by the TypeScript harness, see
+`harness/docs/Architecture.md`) implemented eight hard-coded regexes plus a
 `general` catch-all, with no override at any layer. On a workload those regexes miss,
 every per-family gate collapses into one bucket.
 
-`skills/rightmodeler/scripts/judge.py` maps the ordinal verdict to `{1.0, 0.6, 0.0}` and
+`skills/rightmodeler/scripts/judge.py` (retired; replaced by the TypeScript harness, see
+`harness/docs/Architecture.md`) mapped the ordinal verdict to `{1.0, 0.6, 0.0}` and
 averages two position-swapped calls, so the only achievable single-case scores are
 `{0.0, 0.3, 0.5, 0.6, 0.8, 1.0}`. Any quality floor above 0.8 is therefore exactly the
 test "both orderings said equivalent". The ordinal scale is an illusion at the default

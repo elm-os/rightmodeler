@@ -4,46 +4,46 @@
   "category": "replay-engine",
   "categoryLabel": "Replay engine",
   "title": "Vercel AI Gateway integration: replay on your key",
-  "description": "Use your Vercel AI Gateway key to discover cheaper candidates live, replay real steps at temperature 0, judge quality, and record provider-reported costs.",
+  "description": "Point rightmodeler at the Vercel AI Gateway: it finds cheaper candidates in the live catalog, replays real steps, judges quality, and records reported costs.",
   "h1": "rightmodeler + Vercel AI Gateway",
-  "lede": "Vercel AI Gateway is a shipped replay route in rightmodeler. Candidate calls and the cross-family judge run through the Gateway on your key, against models discovered from its live catalog.",
-  "tldr": "Set AI_GATEWAY_API_KEY and rightmodeler can use the Vercel AI Gateway for the full audit: preflight checks your credit balance, /models supplies current prices and capabilities, /chat/completions runs replays and the cross-family judge at temperature 0, and provider-reported usage or generation records price each call. If a generation record cannot be fetched, the report marks the catalog-and-usage fallback as an estimate.",
+  "lede": "The Vercel AI Gateway is one of the OpenAI-compatible routes rightmodeler replays through. Candidate calls and the judge run on your key, against models discovered from the Gateway's live catalog.",
+  "tldr": "rightmodeler takes any OpenAI-compatible endpoint with --base-url and reads its key from the variable you name with --api-key-env. Against the Gateway that means GET /models supplies per-token pricing, context windows, and capability flags for the shortlist, POST /chat/completions runs the replays and the judge, and the cost reported on each response is recorded as billed, with catalog pricing used as a labelled estimate when none comes back.",
   "steps": [
     {
       "label": "01 · Key",
-      "title": "Check the key and balance before spending",
-      "body": "Export AI_GATEWAY_API_KEY, or keep it in a .env that the skill can find. Preflight calls the Gateway's /credits endpoint and prints the balance and total used before any replay or judge call spends your credits. Set RIGHTMODELER_PROVIDER only when several replay provider keys are configured."
+      "title": "Name the variable, not the key",
+      "body": "Export your Gateway key yourself and pass rightmodeler its variable name: --api-key-env AI_GATEWAY_API_KEY. The value is read at call time, never written to the store, and stripped from provider error excerpts before anything is logged. An unset variable stops the run and names the variable rather than silently trying something else."
     },
     {
       "label": "02 · Catalog",
       "title": "Discover candidates from the live catalog",
-      "body": "GET /models supplies per-token input and output pricing, context windows, and capability tags such as tool use and structured output. rightmodeler normalizes those fields and builds the shortlist at run time, so there is no fixed model list to go stale."
+      "body": "GET /models supplies per-token input and output pricing, context windows, and capability tags such as tool use and structured output. rightmodeler normalizes those fields, including the Gateway's context_window naming, and builds the shortlist at run time from models strictly cheaper than the incumbent that still cover what the step needs, so there is no fixed model list to go stale."
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Replay at temperature 0, judge across families",
-      "body": "Each candidate replays the step's recorded inputs through POST /chat/completions at temperature 0. A judge from a model family different from both the candidate and the model you run today scores the result against the output you shipped; if a neutral family cannot be resolved, the audit requires an explicit judge instead of guessing."
+      "title": "Replay the recorded step, judge across families",
+      "body": "Each candidate replays the step's recorded inputs through POST /chat/completions, with the output limit floored at the smallest value the Gateway accepts so a short recorded answer is not rejected outright. The built-in judge then makes two temperature-zero calls with the reference and candidate positions swapped, chosen from a family that is neither the candidate's nor the incumbent's; if no neutral family can be resolved the run fails rather than borrowing one."
     },
     {
       "label": "04 · Price",
       "title": "Use the Gateway's charge for each call",
-      "body": "rightmodeler records provider-reported usage cost when the response includes it. Otherwise it fetches the Gateway's generation record by response id and reads total_cost. If that record cannot be fetched, token usage and live catalog prices produce a fallback that the report labels as an estimate."
+      "body": "rightmodeler records the cost the response reports, preferring the billed amount and falling back to the market or upstream figure the Gateway includes. A billed zero is not read as free. When no cost comes back, or content arrives with no usage at all, the amount is computed from catalog pricing and token counts and marked as an estimate in the ledger."
     }
   ],
   "setup": {
-    "intro": "Use a Vercel AI Gateway key with credits. Preflight verifies the account endpoint and live model catalog before the audit begins; choose the provider explicitly only when more than one provider is configured.",
+    "intro": "Use a Vercel AI Gateway key with credits, exported by you and named on the command line. Project the spend with estimate before the first paid call, then cap the real run.",
     "commands": [
       {
-        "comment": "# replay and judge calls bill to your Vercel AI Gateway credits",
+        "comment": "# replay and judge calls bill to your Gateway credits",
         "command": "export AI_GATEWAY_API_KEY=..."
       },
       {
-        "comment": "# only needed when several provider keys are set",
-        "command": "export RIGHTMODELER_PROVIDER=vercel-ai-gateway"
+        "comment": "# project the replay spend before anything is billed",
+        "command": "npx rightmodeler estimate --traces ./traces/spans.json --base-url https://ai-gateway.vercel.sh/v1 --api-key-env AI_GATEWAY_API_KEY"
       },
       {
-        "comment": "# then point the skill at any exported trace",
-        "command": "claude \"run the rightmodeler skill on ./traces/\""
+        "comment": "# then run the pipeline under a hard spend cap",
+        "command": "npx rightmodeler init --traces ./traces/spans.json --base-url https://ai-gateway.vercel.sh/v1 --api-key-env AI_GATEWAY_API_KEY --max-cost-usd 25"
       }
     ]
   },
@@ -52,7 +52,7 @@
   "useCases": [
     {
       "title": "Audit on the route you already fund",
-      "body": "If your team already has Vercel AI Gateway credits, the same account can fund candidate replays and judge calls. Preflight shows the balance before the audit starts spending."
+      "body": "If your team already has Gateway credits, the same account can fund candidate replays and judge calls, and estimate tells you roughly what the run will draw down before it starts."
     },
     {
       "title": "Test against a catalog that stays current",
@@ -60,44 +60,45 @@
     },
     {
       "title": "Keep capability checks in the shortlist",
-      "body": "Tool-use and structured-output tags become capability filters, and context windows are checked before a candidate reaches replay. A lower price alone is not enough to make the bench."
+      "body": "Tool-use and structured-output tags become capability filters, and the context window is checked against the step's observed tokens before a candidate reaches replay. A lower price alone is not enough to make the bench."
     },
     {
-      "title": "Confirm complex swaps through the same route",
-      "body": "For end-to-end replay, the throwaway worktree points OPENAI_BASE_URL at the Vercel AI Gateway inside the sandbox, so the candidate pipeline runs through the selected replay provider without changing your real worktree."
+      "title": "Survive a rate limit without corrupting the run",
+      "body": "A 429 halves the concurrency cap and the request is retried with backoff, honoring the Gateway's retry-after when it sends one. A rate limit is a transport event, so it is never recorded as an execution outcome the statistics would count."
     }
   ],
   "limits": [
-    "Replay and judge calls spend your Vercel AI Gateway credits. Preflight reports the available balance first, but the evidence is produced with real billable calls.",
-    "A generation record is the preferred cost authority when usage cost is absent from the response. If the record cannot be fetched, rightmodeler falls back to token usage and live catalog pricing, and the report labels that amount as an estimate.",
-    "A cheaper candidate is not automatically a recommendation. High-risk steps are held, missing capabilities are filtered out, and weak or inconsistent evidence ends in abstention.",
-    "rightmodeler is an offline report on traces you provide, never a runtime gateway or a hop in your production request path. Replay inputs still leave your machine for the Gateway when the audit calls a model.",
-    "End-to-end replay points OPENAI_BASE_URL at the Vercel AI Gateway only inside a throwaway sandbox. It does not rewrite your application's production routing."
+    "Replay and judge calls spend your Gateway credits. estimate projects the spend from catalog prices and the corpus first, and --max-cost-usd caps the run, but the evidence is produced with real billable calls.",
+    "Cost is only as good as what the response reports. When the Gateway returns no cost for a call, rightmodeler falls back to token usage and catalog pricing and labels that amount an estimate rather than presenting it as billed.",
+    "A model the catalog publishes with no pricing cannot be shortlisted, and a step whose current model is missing from the catalog abstains rather than being compared against a guess.",
+    "A cheaper candidate is not automatically a recommendation. Capabilities are filtered first, thin or inconsistent evidence ends in abstention, and the winner has to clear the quality floor again on held-out cases.",
+    "One replay endpoint is configured per run. The Gateway, OpenRouter, and a LiteLLM proxy are all OpenAI-compatible routes rightmodeler accepts; it does not mix keys within a run.",
+    "rightmodeler is an offline report on traces you provide, never a runtime gateway or a hop in your production request path. Replay inputs still leave your machine for the Gateway when the audit calls a model."
   ],
   "faq": [
     {
       "q": "Do I need a Vercel AI Gateway account?",
-      "a": "Yes. You provide AI_GATEWAY_API_KEY and fund the replay and judge calls with your own Gateway credits. Preflight checks /credits and shows the balance and total used before the audit starts spending."
+      "a": "Only if you choose it as the replay route. rightmodeler takes whatever OpenAI-compatible base URL you pass, so OpenRouter or your own LiteLLM proxy work the same way. What it always needs is a catalog at /models and a chat endpoint at /chat/completions."
     },
     {
-      "q": "Why route the audit through the Vercel AI Gateway?",
+      "q": "Why route the audit through the Gateway?",
       "a": "It gives rightmodeler one OpenAI-compatible route plus a live model catalog with pricing, context windows, and capability tags. That is enough to shortlist cheaper capable models, replay them, and choose a judge from a neutral family without a fixed model list."
     },
     {
       "q": "How are replay costs measured?",
-      "a": "rightmodeler uses provider-reported usage cost when it is present. Otherwise it fetches the Gateway generation record for the response and reads total_cost. If that lookup fails, it calculates a fallback from token usage and current catalog prices and labels the result as an estimate."
+      "a": "From the cost the response reports, preferring the billed amount and falling back to the market or upstream figure when the billed one is absent or zero. If none is present, the amount is computed from token usage and current catalog prices and marked as an estimate."
+    },
+    {
+      "q": "How do I know what a run will cost before it runs?",
+      "a": "Run rightmodeler estimate. It projects the spend from the corpus and current catalog prices, split between the shortlist half and the held-out half, before any paid call is made. Then cap the real run with --max-cost-usd, which refuses cases the remaining budget cannot cover."
     },
     {
       "q": "Does my trace data leave my machine?",
-      "a": "The audit and report run locally, but the recorded step inputs used for replays and judging are sent to the Vercel AI Gateway with your key. There is no rightmodeler server and the audit does not add anything to your production request path."
-    },
-    {
-      "q": "Will it always find savings?",
-      "a": "No, and that is the point. Some steps have no cheaper capable candidate, some candidates miss the quality floor, and weak or inconsistent evidence causes the audit to abstain. A tool that always finds a swap is not measuring anything."
+      "a": "The audit and report run locally, but the recorded step inputs used for replays and judging are sent to the Gateway with your key. There is no rightmodeler server, and the audit adds nothing to your production request path."
     },
     {
       "q": "If I approve a swap, must I keep using the Gateway?",
-      "a": "No. The report recommends a model, not a permanent route. The Gateway is the test bench for this audit; you can serve an approved model through the provider or gateway that fits your application."
+      "a": "No. The pull request changes a model identifier, not a route. The Gateway is the test bench for this audit; you can serve an approved model through whichever provider or gateway fits your application."
     }
   ],
   "related": ["openrouter", "litellm", "otel"],

@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in the skill, pipeline, or site is broken.
+description: Something in the skill, TypeScript harness, or site is broken.
 labels: ["bug"]
 body:
   - type: markdown
@@ -34,7 +34,7 @@ body:
       label: Where does it happen
       options:
         - The rightmodeler skill
-        - The Python pipeline (apps/pipeline)
+        - The TypeScript CLI or harness
         - The website (rightmodeler.com)
         - Install or setup
         - Not sure
@@ -64,8 +64,8 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: Output of `node --version`, `python --version`, and `uv --version`.
-      placeholder: node v20.11.0, Python 3.12.4, uv 0.11.26
+      description: Output of `node --version`, `pnpm --version`, and `rightmodeler --version`.
+      placeholder: node v24.6.0, pnpm 11.7.0, rightmodeler 0.1.0
     validations:
       required: true
 

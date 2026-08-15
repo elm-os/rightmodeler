@@ -10,18 +10,13 @@ By contributing you agree that your contributions are licensed under the
 
 - Node.js 20+
 - `pnpm` 11
-- Python 3.12+
-- [`uv`](https://docs.astral.sh/uv/)
 
 ## Setup
 
-Install workspace dependencies and sync the Python environments:
+Install workspace dependencies:
 
 ```bash
 pnpm install
-cd apps/pipeline && uv sync
-cd ../../skills/rightmodeler && uv sync
-cd ../..
 ```
 
 ## Workspace layout
@@ -29,7 +24,7 @@ cd ../..
 | Path                  | What it is                                                      |
 | --------------------- | --------------------------------------------------------------- |
 | `skills/rightmodeler` | The canonical skill source. This is the artifact users install. |
-| `apps/pipeline`       | Python batch pipeline: ingest, analyze, evaluate, report.       |
+| `harness/`            | TypeScript evaluation harness, CLI, agent, and fixtures.        |
 | `apps/web`            | The rightmodeler.com marketing site (Next.js).                  |
 | `packages/contracts`  | JSON Schemas and fixtures. The pipeline contract boundary.      |
 | `docs/`               | Product docs, specs, research, and the design system.           |
@@ -39,7 +34,7 @@ Two rules you cannot infer from the tree:
 - **Edit `skills/rightmodeler` only.** The copies under `.agents/skills/` and
   `.claude/skills/` are generated install targets. Changes there are overwritten.
 - **`.rightmodeler/` is generated output**, not source. It is the handoff boundary
-  between the Python pipeline and the rest of the repo, and it is gitignored.
+  between the TypeScript harness stages, and it is gitignored.
 
 ## Commands
 
@@ -53,18 +48,13 @@ pnpm check
 pnpm build
 ```
 
-Package-local commands:
+Package-local command:
 
 ```bash
-pnpm --filter ./apps/pipeline run smoke
-pnpm --filter ./apps/pipeline run ingest -- --input .rightmodeler/input/source.json
-pnpm --filter ./apps/pipeline run analyze -- --input .rightmodeler/input/historical-run-bundle.json
-pnpm --filter ./apps/pipeline run report -- --analysis-input .rightmodeler/analysis/task-families.json
 pnpm --filter ./skills/rightmodeler run check
 ```
 
-Use `pnpm` for anything JavaScript or TypeScript, and `uv` for Python work in
-`apps/pipeline` and `skills/rightmodeler`.
+Use `pnpm` for repository and package lifecycle commands.
 
 ## Validating a skill change
 

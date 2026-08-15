@@ -11,7 +11,6 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Keep docs in `docs/`, not at the repo root.
 - Do not run the dev server unless explicitly asked.
 - Use `pnpm` for repo-level and JavaScript or TypeScript work.
-- Use `uv` for Python dependency and runtime commands in `apps/pipeline`.
 - Prefer root `pnpm` commands for shared lifecycle tasks: `format`, `check`, `lint`, `build`, `check-types`.
 - Keep app-specific runtime commands local to the owning app or run them via `pnpm --filter`.
 - Treat `packages/contracts` and `.rightmodeler/` as the current pipeline contract boundary.

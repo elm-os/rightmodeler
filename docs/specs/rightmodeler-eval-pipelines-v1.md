@@ -40,7 +40,7 @@ customers to route live model traffic through rightmodeler.
 
 ## Solution
 
-Build one artifact-first evaluation engine behind the existing Python pipeline
+Build one artifact-first evaluation engine behind the now-retired Python pipeline
 command boundary. The engine will turn accepted historical traces into
 versioned benchmark cases, evaluate imported or explicitly replayed candidate
 results, and emit immutable benchmark snapshots containing quality, speed,
@@ -117,7 +117,7 @@ produced by the local engine.
 These decisions define the target v1 design. The implementation status above
 identifies which policy requirements are enforced at the current product seam.
 
-- The Python pipeline command is the single evaluation engine boundary. The installed skill orchestrates it, and Crucible consumes its contracts rather than implementing separate evaluation logic.
+- This Python pipeline command was the single evaluation engine boundary. It is retired and replaced by the TypeScript harness; see `harness/docs/Architecture.md`.
 - The first product implementation is local and artifact-first. Live traffic routing and runtime model gateway behavior are excluded.
 - The primary scoring unit is the task family. Step-level diagnosis and fix-artifact quality are subordinate views used for replay, attribution, and remediation.
 - User-facing workload labels remain metadata. Evaluator routing uses `reference-freeform`, `structured-check`, `tool-trajectory`, and `repo-fix`.

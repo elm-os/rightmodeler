@@ -2,7 +2,8 @@
 
 - Status: `experiment, single run`
 - Date: 2026-07-27
-- Tool under test: `skills/rightmodeler/scripts/reference_audit.py`
+- Tool under test: `skills/rightmodeler/scripts/reference_audit.py` (retired; replaced by the
+  TypeScript harness, see `harness/docs/Architecture.md`)
 
 ## Why this was run
 
