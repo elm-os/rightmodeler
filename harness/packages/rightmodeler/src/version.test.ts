@@ -4,6 +4,6 @@ import { version } from "./version.js";
 
 describe("rightmodeler package", () => {
   it("exports its version", () => {
-    expect(version).toBe("0.1.1");
+    expect(version).toBe("0.1.2");
   });
 });
