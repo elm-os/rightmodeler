@@ -45499,7 +45499,10 @@ function addPipelineOptions(command, provider) {
     command.option("--base-url <url>", "OpenAI-compatible provider base URL").option(
       "--api-key-env <name>",
       "environment variable containing the provider API key"
-    ).option("--max-cost-usd <amount>", "maximum replay spend in USD").addOption(
+    ).option(
+      "--max-cost-usd <amount>",
+      "optional hard spend cap in USD; omit to run uncapped so every case and judge cell completes"
+    ).addOption(
       new Option(
         "--evaluator <provider>",
         "external evaluator provider"

@@ -588,7 +588,10 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         "--api-key-env <name>",
         "environment variable containing the provider API key",
       )
-      .option("--max-cost-usd <amount>", "maximum replay spend in USD")
+      .option(
+        "--max-cost-usd <amount>",
+        "optional hard spend cap in USD; omit to run uncapped so every case and judge cell completes",
+      )
       .addOption(
         new Option(
           "--evaluator <provider>",

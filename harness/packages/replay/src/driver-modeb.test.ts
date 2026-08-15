@@ -365,6 +365,7 @@ async function createContext(
     executor?: DockerExecutor;
     concurrency?: number;
     stub?: StubProvider;
+    uncapped?: boolean;
   } = {},
 ): Promise<TestContext> {
   const root = await mkdtemp(join(tmpdir(), "rightmodeler-modeb-test-"));
@@ -380,7 +381,8 @@ async function createContext(
     store,
     projectId,
     runId: `run-${randomUUID()}`,
-    authorizedTotalUsd: 1,
+    // The spend cap is optional product-wide; uncapped contexts pin the no-cap lease path.
+    ...(options.uncapped ? {} : { authorizedTotalUsd: 1 }),
   });
   const input: ReplayModeBInput = {
     stepRecords: steps(),
@@ -745,7 +747,12 @@ describe("Mode B replay", () => {
         ...recordedCase!,
         headers: { "x-stub-429-once": "modeb-retry" },
       };
-      const context = await createContext([retryCase], { concurrency: 1 });
+      // Uncapped on purpose: the optional spend cap's absence must still grant leases,
+      // meter spend, and complete the case.
+      const context = await createContext([retryCase], {
+        concurrency: 1,
+        uncapped: true,
+      });
       try {
         const result = await replayModeB(context.input);
         const facts = parsedFacts(await readFacts(context.store));
