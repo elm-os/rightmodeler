@@ -16,33 +16,41 @@ Then invoke `rightmodeler` in your coding agent.
 The skill is the runbook for the installed TypeScript CLI. It drives the resumable
 pipeline from ingest through report generation and interprets its machine protocol.
 
-Before first run, configure one replay provider. Only one setup is needed:
+## Run the CLI
 
-```env
-# OpenRouter
-OPENROUTER_API_KEY=your_key_here
+Start in the repository you want to analyze:
 
-# Vercel AI Gateway
-AI_GATEWAY_API_KEY=your_key_here
-
-# LiteLLM proxy
-LITELLM_PROXY_API_BASE=https://your-proxy.example.com
-LITELLM_PROXY_API_KEY=your_key_here
+```bash
+npx rightmodeler init
 ```
 
-Set only the variables for the provider you use. If more than one complete setup
-is present, the skill selects OpenRouter, then the Vercel AI Gateway, then LiteLLM.
-To choose explicitly, optionally set `RIGHTMODELER_PROVIDER` to `openrouter`,
-`vercel-ai-gateway`, or `litellm`.
+Rightmodeler looks for trace logs in conventional project files and in Claude Code
+and Codex session stores for the current repository. In an interactive terminal it
+explains traces, lists what it found, and lets you choose a file. Automated runs
+should keep passing `--traces <path>` explicitly.
 
-Put the variables in your project root `.env`, or export them in your shell. You
-set them yourself: the skill never asks you to send a key value and never writes
-one for you. It checks the process environment first, then looks up the current
-repo tree for a project `.env`.
+Replay needs an OpenAI-compatible endpoint and an API key already exported in your
+shell. Pass the endpoint with `--base-url`. The key variable defaults to
+`RIGHTMODELER_API_KEY`; use `--api-key-env <name>` when your key is stored under a
+different variable.
 
-On first run, `rightmodeler` previews the stage plan, names anything still missing
-such as an unset provider variable or a trace path, then resumes the same workflow
-once you provide it.
+```bash
+export RIGHTMODELER_API_KEY=your_key_here
+npx rightmodeler init --base-url https://provider.example/v1
+```
+
+The CLI never asks for the key value and never reads a secret from standard input.
+It names missing input at a resumable boundary so the same command can continue
+from completed checkpoints.
+
+Before replaying models, project the maximum candidate spend from recorded token
+usage and the endpoint's current model catalog:
+
+```bash
+npx rightmodeler estimate \
+  --traces /path/to/traces.json \
+  --base-url https://provider.example/v1
+```
 
 ## What it does
 
