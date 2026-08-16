@@ -8,10 +8,23 @@ By contributing you agree that your contributions are licensed under the
 
 ## Requirements
 
-- Node.js 20+
-- `pnpm` 11
+- Node.js 24+
+- `pnpm`, installed standalone
 
 ## Setup
+
+Install pnpm with the standalone installer:
+
+```bash
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+```
+
+Do not install pnpm through Corepack. Corepack runs pnpm through an extra
+JavaScript shim, it is not bundled with newer Node releases, and it duplicates
+the version switching pnpm already does on its own: the exact version this repo
+uses is pinned once in the root `packageManager` field, and both pnpm and CI
+read it from there. Never add a second version pin, in a workflow or anywhere
+else.
 
 Install workspace dependencies:
 
