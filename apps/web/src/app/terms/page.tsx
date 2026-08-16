@@ -49,7 +49,7 @@ export default function TermsPage() {
 
           <H2>The service</H2>
           <P>
-            The site describes the rightmodeler skill, rightmodeler agent, and
+            The site describes the rightmodeler CLI, rightmodeler agent, and
             Crucible, and offers early-access waitlists and a feedback form.
             Products described as coming soon or in early access are
             pre-release: their features, availability, and pricing may change or

@@ -9,7 +9,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRightIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
-import { REPO_URL } from "@/lib/site";
 
 type Offering = {
   chip: string;
@@ -24,13 +23,12 @@ type Offering = {
 
 const OFFERINGS: Offering[] = [
   {
-    chip: "Available now",
+    chip: "On npm now",
     strong: true,
-    name: "rightmodeler skill",
-    body: "The audit. Replay your real traces through cheaper models, review an evidence-backed swap plan, and ship the approved swaps as a pull request.",
-    cta: "View on GitHub",
-    href: REPO_URL,
-    external: true,
+    name: "rightmodeler CLI",
+    body: "The audit. Replay your traces through cheaper models and ship approved swaps as a pull request, evidence attached. Your coding agent can drive it through the skill.",
+    cta: "Run the audit",
+    href: "/how-it-works",
     art: "/platform/skill.jpg",
   },
   {

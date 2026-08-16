@@ -48,7 +48,7 @@
         "items": [
           "Keep OpenRouter exactly where it is. The audit runs offline, on your key, and touches nothing in production.",
           "Candidates are graded step by step against answers you already accepted. The production result is the reference, not ground truth.",
-          "A quality floor (a configurable minimum agreement score below which no swap is recommended) guards every verdict, and high-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model."
+          "A quality floor (a configurable minimum agreement score below which no swap is recommended) guards every verdict, and thin evidence produces an abstention instead of a recommendation."
         ]
       }
     },
@@ -153,7 +153,7 @@
       "heading": "The honest part",
       "paragraphs": [
         "OpenRouter works on day one with zero history. One key reaches 400+ models, and it keeps production flowing while rightmodeler never touches live traffic at all. rightmodeler needs recorded traces before it can say anything; no traces, no audit.",
-        "OpenRouter also gives you continuous gateway-side visibility with no pipeline changes: Classifiers (in beta) tag each generation against your taxonomy, and the Activity Explorer shows which models handle which tasks and where spend goes. The rightmodeler skill is a point-in-time report you choose to run.",
+        "OpenRouter also gives you continuous gateway-side visibility with no pipeline changes: Classifiers (in beta) tag each generation against your taxonomy, and the Activity Explorer shows which models handle which tasks and where spend goes. The rightmodeler CLI is a point-in-time report you choose to run.",
         "One more honest number, and it cuts both ways. In the study How Do AI Agents Spend Your Money? (Bai et al., arXiv:2604.22750), a team from Michigan, Stanford, MIT, Google DeepMind, and All Hands AI repeated 500 real GitHub issues four times over on eight frontier models and recorded every token; total usage swung as much as thirtyfold between runs where nothing changed except chance. That variance is why any single-run impression of a model proves very little, whichever tool produced it. It is also why rightmodeler reports sample size beside every recommendation and abstains when the evidence is thin. Some audits end in abstentions instead of savings, and that possibility is precisely what makes the savings believable when they do appear."
       ]
     },
@@ -209,7 +209,7 @@
         },
         {
           "q": "What does each one cost?",
-          "a": "The rightmodeler skill is free on GitHub; you pay for the audit's own calls on your OpenRouter key, and the report lists that spend line by line. OpenRouter's side of the bill is the provider's own pricing with no markup on inference; buying credits carries a small purchase fee."
+          "a": "The rightmodeler CLI is free, on npm and GitHub; you pay for the audit's own calls on your OpenRouter key, and the report lists that spend line by line. OpenRouter's side of the bill is the provider's own pricing with no markup on inference; buying credits carries a small purchase fee."
         }
       ]
     }

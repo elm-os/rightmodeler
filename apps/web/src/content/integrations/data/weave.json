@@ -31,7 +31,7 @@
     }
   ],
   "setup": {
-    "intro": "Install once, then point the CLI at your exported calls. Nothing connects to Weights & Biases during the audit: your key is used by the export you run yourself.",
+    "intro": "Nothing to install: npx runs the published CLI. Point it at your exported calls. Nothing connects to Weights & Biases during the audit: your key is used by the export you run yourself.",
     "commands": [
       {
         "comment": "# export calls from your Weave project to a file",

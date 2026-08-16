@@ -26,7 +26,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "When can I use it?",
-    a: "Crucible is in active development. Join the waitlist and we'll send an early-access note when it opens. The engine behind it, the rightmodeler skill, is available now on GitHub.",
+    a: "Crucible is in active development. Join the waitlist and we'll send an early-access note when it opens. The engine behind it, the rightmodeler CLI, is on npm and GitHub now.",
   },
   {
     q: "How does it connect?",
@@ -89,7 +89,7 @@ export default function CruciblePage() {
               </p>
               <p className="mt-3 max-w-xl text-body text-driftwood">
                 Crucible is in active development. The engine behind it, the
-                rightmodeler skill, is available now on GitHub.
+                rightmodeler CLI, is on npm and GitHub now.
               </p>
               <div className="mt-6">
                 <GithubButton />

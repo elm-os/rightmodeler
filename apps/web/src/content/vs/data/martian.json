@@ -14,7 +14,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Mostly a different job now. You hire Martian for access and understanding: a live gateway with one key to a 200+ model catalog, where you name the model yourself on every call, and an interpretability research program underneath. You hire the rightmodeler skill, free on GitHub, to answer one question with evidence, at every step of your stack: which model belongs here? It replays your recorded traces through cheaper candidates offline and reports what held up against the output you accepted. The per-request router Martian was famous for is legacy now, and the guaranteed cost cut in Martian's orbit belongs to affiliated Thesean's Ship (their claim, in beta). Where the two meet is the model string in your code: the Gateway carries it, the audit tells you what it should say."
+      "body": "Mostly a different job now. You hire Martian for access and understanding: a live gateway with one key to a 200+ model catalog, where you name the model yourself on every call, and an interpretability research program underneath. You hire the rightmodeler CLI, free on npm and GitHub, to answer one question with evidence, at every step of your stack: which model belongs here? It replays your recorded traces through cheaper candidates offline and reports what held up against the output you accepted. The per-request router Martian was famous for is legacy now, and the guaranteed cost cut in Martian's orbit belongs to affiliated Thesean's Ship (their claim, in beta). Where the two meet is the model string in your code: the Gateway carries it, the audit tells you what it should say."
     },
     {
       "type": "prose",
@@ -79,7 +79,7 @@
         {
           "scenario": "You run a multi-layer agent pipeline, you suspect some layers are overpaying, and a downgrade at an early layer could poison everything downstream.",
           "winner": "ours",
-          "why": "That is cascade risk (a swap that looks safe in isolation but degrades the work later steps do with its output), and no per-request tool can see it. The skill replays whole traces end to end in a throwaway copy of your repo (a worktree), judges each step against the output you accepted, flags high-risk step families and leaves them on the current model, and reports per-step evidence. You tip the scale on every swap."
+          "why": "That is cascade risk (a swap that looks safe in isolation but degrades the work later steps do with its output), and no per-request tool can see it. The CLI replays whole traces end to end, confirming multi-step swaps by re-running your pipeline in a sandboxed container, judges each step against the output you accepted, abstains where the evidence is thin, and reports per-step evidence. You tip the scale on every swap."
         },
         {
           "scenario": "Your steps already call Martian's Gateway, and you want to know whether the model string each step names is the right one.",

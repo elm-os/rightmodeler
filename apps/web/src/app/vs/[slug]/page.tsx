@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
 import { CopyCommand } from "@/components/copy-command";
+import { CommandBlock } from "@/components/command-block";
 import { JsonLd } from "@/components/json-ld";
 import { Reveal } from "@/components/reveal";
 import { FaqAccordion } from "@/components/sections/faq-accordion";
@@ -82,21 +83,6 @@ function Band({
 }
 
 // One command block: a mono comment over the copyable command, the same grammar as the hero CTA.
-function CommandBlock({
-  comment,
-  command,
-}: {
-  comment: string;
-  command: string;
-}) {
-  return (
-    <div>
-      <p className="font-mono text-caption text-fog">{comment}</p>
-      <CopyCommand command={command} className="mt-2 max-w-full" />
-    </div>
-  );
-}
-
 // The block renderer: JSON block type -> section. The schema (content/vs/vs-page.schema.json,
 // enforced in `pnpm check`) guarantees each type carries exactly the fields it renders, so the
 // guards below are unreachable fallbacks, not content switches. Winner labels stay lowercase
@@ -351,8 +337,8 @@ export default async function VsDetailPage({
                     Run the audit on your own traces
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
-                    The skill is free on GitHub. One command installs it, and
-                    your own traces settle the question.
+                    The CLI runs from npx, nothing to install, and your own
+                    traces settle the question.
                   </p>
                   <div className="mt-5 flex flex-wrap items-center gap-4">
                     <GithubButton />

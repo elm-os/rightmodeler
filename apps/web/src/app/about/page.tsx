@@ -41,7 +41,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Is it open source?",
-    a: "Yes, MIT licensed. The rightmodeler skill is on GitHub and free to run, fork, and modify on your own traces today. rightmodeler agent, which opens evidence-backed swap PRs, and Crucible, the analytics and optimization suite, are the products being built on top of it.",
+    a: "Yes, MIT licensed. The rightmodeler CLI is on npm and GitHub, free to run, fork, and modify on your own traces today. rightmodeler agent, which opens evidence-backed swap PRs, and Crucible, the analytics and optimization suite, are the products being built on top of it.",
   },
   {
     q: "How is it different from observability or a gateway?",
@@ -81,7 +81,7 @@ export default function AboutPage() {
             and an edit, never a runtime gateway.
           </p>
           <p className="text-body text-driftwood">
-            rightmodeler is an ELM-OS project. The skill is available today;
+            rightmodeler is an ELM-OS project. The CLI is available today;
             rightmodeler agent, which ships swaps as pull requests, and
             Crucible, the analytics and optimization suite, are built on the
             same evidence loop and coming next.

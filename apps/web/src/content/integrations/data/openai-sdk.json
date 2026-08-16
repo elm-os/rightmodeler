@@ -36,7 +36,7 @@
     }
   ],
   "setup": {
-    "intro": "Install once, then hand the CLI your request log. Nothing talks to your OpenAI account; the audit runs on the JSONL files already on your disk.",
+    "intro": "Nothing to install: npx runs the published CLI. Hand it your request log. Nothing talks to your OpenAI account; the audit runs on the JSONL files already on your disk.",
     "commands": [
       {
         "comment": "# sanity-check the shape: case_id, messages, response on each line",
