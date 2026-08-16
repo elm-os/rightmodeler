@@ -14,7 +14,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Not rivals for the same job. You hire promptfoo to test what you are about to ship: you author the prompts, cases, and assertions, and its CI gate fails the build when a pass rate drops. You hire rightmodeler to audit what you already shipped: the skill reruns each step of your recorded traces on cheaper candidates and scores every proposed swap against the output you accepted, step by step. Red teaming (generating adversarial attacks against your app) is entirely promptfoo's turf, and there is no shipped integration between the two; the handoff is manual, and it works."
+      "body": "Not rivals for the same job. You hire promptfoo to test what you are about to ship: you author the prompts, cases, and assertions, and its CI gate fails the build when a pass rate drops. You hire rightmodeler to audit what you already shipped: the CLI reruns each step of your recorded traces on cheaper candidates and scores every proposed swap against the output you accepted, step by step. Red teaming (generating adversarial attacks against your app) is entirely promptfoo's turf, and there is no shipped integration between the two; the handoff is manual, and it works."
     },
     {
       "type": "fork",
@@ -30,7 +30,7 @@
         "heading": "Your test set is traces you already have",
         "items": [
           "Your agent has served real users, and the outputs you accepted are the evidence you trust most.",
-          "You want to know which model belongs at each step without authoring a single case; the skill treats your accepted output as the reference for that exact step.",
+          "You want to know which model belongs at each step without authoring a single case; the CLI treats your accepted output as the reference for that exact step.",
           "You want every step to carry its own verdict, how many samples backed it, and an abstention (the audit recommends nothing for a step when the evidence is thin). Start with rightmodeler."
         ]
       }
@@ -73,7 +73,7 @@
         {
           "scenario": "Your agent has run in production for months, one expensive model sits on every step, and you want to know which steps a cheaper model can actually hold.",
           "winner": "ours",
-          "why": "There is no suite to write for this, and writing one would recreate what your traces already contain. The skill turns the traces into the test set: each step reruns on cheaper candidates, each candidate is scored against the answer you shipped, and every verdict arrives with its sample size and any abstentions. The high-risk families (auth, payments, migrations, deploys, secrets) are excluded from swaps outright, and you approve each change."
+          "why": "There is no suite to write for this, and writing one would recreate what your traces already contain. The CLI turns the traces into the test set: each step reruns on cheaper candidates, each candidate is scored against the answer you shipped, and every verdict arrives with its sample size and any abstentions. Where the evidence is thin it abstains rather than calling a winner, and you approve each change."
         }
       ]
     },
@@ -83,7 +83,7 @@
       "paragraphs": [
         "Red teaming and security testing belong to promptfoo, full stop. Plugin-generated attacks on agents and RAG apps, prompt injection, jailbreaks, PII leaks, authorization flaws: rightmodeler does none of this, and an audit will never tell you your agent is safe.",
         "promptfoo works before an app has ever served a user. rightmodeler requires real traces, so it has nothing to say about a system with no production history.",
-        "promptfoo can run on every pull request and fail the build. The rightmodeler skill has no seat in CI: you invoke it, it reads the traces you hand it, and it leaves a report behind. Not observability. Not a runtime gateway. It runs after the fact, outside your pipeline entirely.",
+        "promptfoo can run on every pull request and fail the build. The rightmodeler CLI takes a different seat in CI: a scheduled job you choose to run, streaming JSON events with exit codes as verdicts, leaving a report behind. Not observability. Not a runtime gateway. It runs after the fact, outside your pipeline entirely.",
         "And the audit's own limits, stated plainly: a passing score means the candidate agreed with what you shipped, not that either answer was correct; the production result is the reference, not ground truth. Thin evidence on a step ends in an abstention, not a guess, and some steps come back with no verdict at all."
       ]
     },
@@ -123,7 +123,7 @@
       "items": [
         {
           "q": "Does rightmodeler replace promptfoo?",
-          "a": "No. promptfoo tests what you are about to ship against cases you author, and red-teams it for vulnerabilities. rightmodeler asks a different question of every step you have already shipped, and answers it with receipts: is this the model the step needs? Keep your suite; the skill is a report you run on your own traces, not a runtime gateway."
+          "a": "No. promptfoo tests what you are about to ship against cases you author, and red-teams it for vulnerabilities. rightmodeler asks a different question of every step you have already shipped, and answers it with receipts: is this the model the step needs? Keep your suite; the CLI is a report you run on your own traces, not a runtime gateway."
         },
         {
           "q": "Is there an integration between rightmodeler and promptfoo?",

@@ -31,7 +31,7 @@
     }
   ],
   "setup": {
-    "intro": "Install once, then point the CLI at an exported run tree. The audit reads the file offline; your LangSmith key is needed only if you choose LangSmith as the evaluator or import one of its datasets.",
+    "intro": "Nothing to install: npx runs the published CLI. Point it at an exported run tree. The audit reads the file offline; your LangSmith key is needed only if you choose LangSmith as the evaluator or import one of its datasets.",
     "commands": [
       {
         "comment": "# preview the pipeline against the export, without spending",

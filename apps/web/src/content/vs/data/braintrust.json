@@ -14,7 +14,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Not competitors. Braintrust's job is grading: your agent, held to a bar you built from versioned datasets, scorers, and online scoring of live traffic. rightmodeler's job is one decision that bar was never asked to make: which model belongs at each step. The skill, free on GitHub, reruns your real traces on cheaper candidates and scores every candidate against the output you accepted, reporting per step what held up, on how many samples, and where it declined to call a winner. Keep Braintrust. An approved swap then has one more gate to clear: your eval suite."
+      "body": "Not competitors. Braintrust's job is grading: your agent, held to a bar you built from versioned datasets, scorers, and online scoring of live traffic. rightmodeler's job is one decision that bar was never asked to make: which model belongs at each step. The CLI, on npm and free on GitHub, reruns your real traces on cheaper candidates and scores every candidate against the output you accepted, reporting per step what held up, on how many samples, and where it declined to call a winner. Keep Braintrust. An approved swap then has one more gate to clear: your eval suite."
     },
     {
       "type": "definitions",
@@ -66,7 +66,7 @@
         "items": [
           "The reference set already exists: the outputs your agent produced in the traces you fetched. No dataset to curate, no scorer to write.",
           "Each step is replayed through cheaper candidates and judged against the accepted output (deterministic checks like tests, builds, schemas, and valid tool calls first; a cross-family judge, meaning one from a different model family than either model being compared, only when nothing stronger applies), guarded by the quality floor.",
-          "You approve every swap yourself, high-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model, and your Braintrust evals confirm the change before it ships."
+          "You approve every swap yourself, thin evidence produces an abstention instead of a recommendation, and your Braintrust evals confirm the change before it ships."
         ]
       }
     },
@@ -97,7 +97,7 @@
       "heading": "rightmodeler runs on the traces Braintrust already logs",
       "intro": "No re-instrumentation, no new telemetry, no abandoning your stack.",
       "paragraphs": [
-        "If Braintrust logs your agent today, the input to an audit already exists. You export rows you already have, save the files to disk, and run the skill on them. The audit never touches your Braintrust account. It runs on the files you already exported, and replays go through your selected replay provider on your own key. Nothing runs on our side: no server, no account, no telemetry. The integration page covers the export and field-mapping details.",
+        "If Braintrust logs your agent today, the input to an audit already exists. You export rows you already have, save the files to disk, and run the CLI on them. The audit never touches your Braintrust account. It runs on the files you already exported, and replays go through your selected replay provider on your own key. Nothing runs on our side: no server, no account, no telemetry. The integration page covers the export and field-mapping details.",
         "Braintrust stays on production duty throughout. The division of labor is clean: rightmodeler proposes the swap with the evidence attached, and validation stays with the eval suite you already trust. The report recommends a model, not a route, and you tip the scale."
       ]
     },
@@ -107,7 +107,7 @@
       "paragraphs": [
         "Braintrust watches production continuously: scalable trace ingestion, live monitoring, online scoring, and alerts. rightmodeler works after the fact, on exported files, and will never tell you something broke an hour ago, by design.",
         "Braintrust owns the whole eval lifecycle: versioned datasets, code and LLM scorers, immutable experiments, human review queues, and CI quality gates. rightmodeler ships none of that. It answers one question and expects your eval suite to remain the bar.",
-        "Braintrust is enterprise observability infrastructure: SOC 2 Type II, hybrid deployment, granular permissions, and Brainstore, a database built for querying traces at terabyte scale. rightmodeler's skill is a free report run locally against exported files, not a place your team's traces live.",
+        "Braintrust is enterprise observability infrastructure: SOC 2 Type II, hybrid deployment, granular permissions, and Brainstore, a database built for querying traces at terabyte scale. rightmodeler's CLI is a free report run locally against exported files, not a place your team's traces live.",
         "And the audit's verdicts carry their own hedge: they report how closely a candidate tracked the output you shipped, which is not the same thing as being right. Where the evidence runs thin, the audit files an abstention instead of an opinion."
       ]
     },

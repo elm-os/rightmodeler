@@ -14,7 +14,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Different job, same traces. You hire LangSmith to watch your agent: step-by-step trace trees, dashboards and alerts, evaluator scores on live traffic, and increasingly to run the agent itself. You hire rightmodeler for one decision the platform does not make for you: which model belongs at each step. The rightmodeler skill, free on GitHub, replays the run trees you export from LangSmith through cheaper models, judges each candidate against the output you already accepted, and reports the evidence, sample size, and abstentions (steps where the evidence was too thin to call). Not observability. Not a runtime gateway."
+      "body": "Different job, same traces. You hire LangSmith to watch your agent: step-by-step trace trees, dashboards and alerts, evaluator scores on live traffic, and increasingly to run the agent itself. You hire rightmodeler for one decision the platform does not make for you: which model belongs at each step. The rightmodeler CLI, free on npm and GitHub, replays the run trees you export from LangSmith through cheaper models, judges each candidate against the output you already accepted, and reports the evidence, sample size, and abstentions (steps where the evidence was too thin to call). Not observability. Not a runtime gateway."
     },
     {
       "type": "scenarios",
@@ -92,12 +92,12 @@
       "heading": "How the audit runs on your exports",
       "intro": "No new instrumentation and no account access. The traces LangSmith already collected are the whole input.",
       "paragraphs": [
-        "Export run trees from your LangSmith project and save them anywhere on disk. The skill autodetects the format, walks each tree, and reads files only: it never connects to your LangSmith account, and there is no rightmodeler server, no account with us, no telemetry.",
-        "What comes back is a per-step report: for each step, the cheaper candidates tried on your recorded inputs, the agreement each one earned against the output you accepted, and the sample size behind that score. Steps that call tools or loop are never judged from one replay; they are confirmed end to end in a throwaway sandbox so cascading failures surface before you swap. A candidate only becomes a recommendation when it clears the configurable floor. Anything touching auth, payments, migrations, deploys, or secrets is marked high-risk and never offered a swap. And when the sample is too small to call, the report records an abstention instead of a guess."
+        "Export run trees from your LangSmith project and save them anywhere on disk. The CLI autodetects the format, walks each tree, and reads files only: it never connects to your LangSmith account, and there is no rightmodeler server, no account with us, no telemetry.",
+        "What comes back is a per-step report: for each step, the cheaper candidates tried on your recorded inputs, the agreement each one earned against the output you accepted, and the sample size behind that score. Steps that call tools or loop are never judged from one replay; they are confirmed end to end in a throwaway sandbox so cascading failures surface before you swap. A candidate only becomes a recommendation when it clears the configurable floor. And when the sample is too small to call, the report records an abstention instead of a guess, so nothing sensitive gets swapped on thin evidence."
       ],
       "commands": [
         {
-          "comment": "# export run trees from your project, then hand the folder to the skill",
+          "comment": "# export run trees from your project, then hand the folder to the CLI",
           "command": "claude \"run the rightmodeler skill on ./exports/langsmith/\""
         }
       ]
@@ -108,7 +108,7 @@
       "terms": [
         {
           "term": "model downgrade audit",
-          "def": "The report the skill produces: every step of a recorded run, replayed through cheaper candidates, with a per-step recommendation or an abstention.",
+          "def": "The report the CLI produces: every step of a recorded run, replayed through cheaper candidates, with a per-step recommendation or an abstention.",
           "slug": "model-downgrade-audit"
         },
         {
@@ -149,7 +149,7 @@
         },
         {
           "q": "Does every audit end in recommended swaps?",
-          "a": "No, and it is designed not to. Steps with thin evidence get an abstention, high-risk steps stay put, and a clean bill is a possible outcome: the report can come back saying your current model assignments already earn their cost."
+          "a": "No, and it is designed not to. Steps with thin evidence get an abstention rather than a swap, and a clean bill is a possible outcome: the report can come back saying your current model assignments already earn their cost."
         }
       ]
     }
