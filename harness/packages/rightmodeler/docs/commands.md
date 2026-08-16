@@ -84,8 +84,8 @@ Options:
                                       "ingest", "reconcile", "scrub", "corpus",
                                       "audit-sample", "shortlist", "replay",
                                       "aggregate", "confirm", "report")
-  --yes                               accept defaults (reserved for future
-                                      prompts)
+  --yes                               accept the newest discovered trace without
+                                      prompting
   -h, --help                          display help for command
 ```
 
@@ -125,6 +125,8 @@ Options:
   --evaluator-gate-metric <name>      scorer metric used for release gates
   --evaluator-gate-threshold <value>  fallback pass threshold when the evaluator
                                       omits a pass decision
+  --yes                               accept the newest discovered trace without
+                                      prompting
   --approved-run <digest>             scope projection to one merged approved
                                       swap
   -h, --help                          display help for command

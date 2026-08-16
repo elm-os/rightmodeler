@@ -2,7 +2,9 @@
 
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { Writable, type Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import { Command, CommanderError, Option } from "commander";
@@ -35,10 +37,14 @@ import {
 import { createGithubClient } from "./github/index.js";
 import {
   processIo,
+  ProtocolError,
   Reporter,
   type CliIo,
   type OutputMode,
 } from "./protocol.js";
+import { discoverTraces, type DiscoveredTrace } from "./data/discover.js";
+import { TraceAdaptError } from "./data/index.js";
+import { promptForProviderBaseUrl, promptForTracePath } from "./guidance.js";
 import {
   approveDriftProposal,
   publishDriftProposal,
@@ -150,7 +156,26 @@ export interface ProgramHandle {
   exitCode(): number;
 }
 
-export function createProgram(io: CliIo = processIo): ProgramHandle {
+interface CliRuntime {
+  readonly stdin: Readable & { readonly isTTY?: boolean };
+  readonly stdout: Writable & { readonly isTTY?: boolean };
+  readonly env: NodeJS.ProcessEnv;
+  readonly homeDir: string;
+  now(): Date;
+}
+
+const processRuntime: CliRuntime = {
+  stdin: process.stdin,
+  stdout: process.stdout,
+  env: process.env,
+  homeDir: homedir(),
+  now: () => new Date(),
+};
+
+export function createProgram(
+  io: CliIo = processIo,
+  runtime: CliRuntime = processRuntime,
+): ProgramHandle {
   let code = 0;
   const program = new Command()
     .name("rightmodeler")
@@ -194,15 +219,26 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
   );
   run(init, async (reporter, global) => {
     const local = init.opts<PipelineCommandOptions>();
-    const options = pipelineOptions(global, local, reporter);
-    const result = local.plan
-      ? {
-          stages: await planPipeline(options),
-          executedStages: [],
-          verdicts: [],
-          recommendationExists: false,
-        }
-      : await runPipeline(options);
+    const prepared = await guidedPipelineOptions(
+      global,
+      local,
+      reporter,
+      runtime,
+    );
+    const result = await withInputGuidance(
+      prepared,
+      local,
+      runtime,
+      async (options) =>
+        local.plan
+          ? {
+              stages: await planPipeline(options),
+              executedStages: [],
+              verdicts: [],
+              recommendationExists: false,
+            }
+          : runPipeline(options),
+    );
     reporter.result(result);
     return local.plan ||
       (local.through !== undefined && local.through !== "report")
@@ -222,13 +258,23 @@ export function createProgram(io: CliIo = processIo): ProgramHandle {
     "scope projection to one merged approved swap",
   );
   run(estimate, async (reporter, global) => {
-    const options = pipelineOptions(
+    const local = estimate.opts<PipelineCommandOptions>();
+    const prepared = await guidedPipelineOptions(
       global,
-      estimate.opts<PipelineCommandOptions>(),
+      local,
       reporter,
+      runtime,
     );
-    await runPipeline({ ...options, through: "shortlist" });
-    reporter.result(await estimateReplay(options));
+    const result = await withInputGuidance(
+      prepared,
+      local,
+      runtime,
+      async (options) => {
+        await runPipeline({ ...options, through: "shortlist" });
+        return estimateReplay(options);
+      },
+    );
+    reporter.result(result);
     return 0;
   });
 
@@ -640,8 +686,13 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         new Option("--through <stage>", "stop after this stage").choices([
           ...PIPELINE_STAGES,
         ]),
-      )
-      .option("--yes", "accept defaults (reserved for future prompts)");
+      );
+  }
+  if (command.name() === "init" || command.name() === "estimate") {
+    command.option(
+      "--yes",
+      "accept the newest discovered trace without prompting",
+    );
   }
   return command;
 }
@@ -712,6 +763,142 @@ function pipelineOptions(
     plan: local.plan,
     reporter,
   };
+}
+
+async function guidedPipelineOptions(
+  global: GlobalOptions,
+  local: PipelineCommandOptions,
+  reporter: Reporter,
+  runtime: CliRuntime,
+): Promise<{
+  readonly options: PipelineOptions;
+  readonly candidates: readonly DiscoveredTrace[];
+  readonly interactive: boolean;
+  readonly selectedDiscoveredTrace?: string;
+}> {
+  const options = pipelineOptions(global, local, reporter);
+  const interactive =
+    global.output === "human" &&
+    runtime.stdin.isTTY === true &&
+    runtime.stdout.isTTY === true;
+  if (local.traces !== undefined || local.plan || local.through === "scan") {
+    return { options, candidates: [], interactive };
+  }
+  const candidates = await discoverTraces({
+    repo: global.repo,
+    homeDir: runtime.homeDir,
+  });
+  const traces = local.yes
+    ? candidates[0]?.path
+    : interactive
+      ? await promptForTracePath({
+          candidates,
+          repo: resolve(global.repo),
+          homeDir: runtime.homeDir,
+          now: runtime.now(),
+          input: runtime.stdin,
+          output: promptOutput(reporter.io, runtime.stdout.isTTY),
+        })
+      : undefined;
+  if (local.yes && traces !== undefined && global.output === "human") {
+    reporter.io.stdout(`Using trace file: ${traces}\n`);
+  }
+  return {
+    options: traces === undefined ? options : { ...options, traces },
+    candidates,
+    interactive,
+    ...(traces === undefined ? {} : { selectedDiscoveredTrace: traces }),
+  };
+}
+
+async function withInputGuidance<T>(
+  prepared: {
+    readonly options: PipelineOptions;
+    readonly candidates: readonly DiscoveredTrace[];
+    readonly interactive: boolean;
+    readonly selectedDiscoveredTrace?: string;
+  },
+  local: PipelineCommandOptions,
+  runtime: CliRuntime,
+  operation: (options: PipelineOptions) => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation(prepared.options);
+  } catch (error) {
+    if (
+      error instanceof ProtocolError &&
+      error.code === "missing_traces_path" &&
+      prepared.candidates.length > 0
+    ) {
+      throw new ProtocolError({
+        exitCode: error.exitCode,
+        code: error.code,
+        message: error.message,
+        remedy: `${error.remedy} ${candidateRemedy(prepared.candidates)}`,
+      });
+    }
+    if (
+      prepared.selectedDiscoveredTrace !== undefined &&
+      error instanceof TraceAdaptError
+    ) {
+      throw new ProtocolError({
+        exitCode: 2,
+        code: "unusable_trace_input",
+        message: error.message,
+        remedy: "Rerun the command and choose a different trace file.",
+      });
+    }
+    if (
+      !(error instanceof ProtocolError) ||
+      error.code !== "missing_provider_configuration" ||
+      !prepared.interactive
+    ) {
+      throw error;
+    }
+    const baseUrl = await promptForProviderBaseUrl({
+      current: local.baseUrl,
+      input: runtime.stdin,
+      output: promptOutput(prepared.options.reporter.io, runtime.stdout.isTTY),
+    });
+    if (baseUrl === undefined) throw error;
+    const apiKeyEnv = local.apiKeyEnv ?? "RIGHTMODELER_API_KEY";
+    if (!runtime.env[apiKeyEnv]) {
+      throw new ProtocolError({
+        exitCode: 2,
+        code: "missing_provider_configuration",
+        message: `Provider API key environment variable is not set: ${apiKeyEnv}.`,
+        remedy: `Set the environment variable ${apiKeyEnv} to your provider API key, then rerun.`,
+      });
+    }
+    return operation({
+      ...prepared.options,
+      baseUrl,
+      apiKeyEnv,
+    });
+  }
+}
+
+function promptOutput(
+  io: CliIo,
+  isTTY: boolean | undefined,
+): Writable & { readonly isTTY?: boolean } {
+  return Object.assign(
+    new Writable({
+      write(chunk, _encoding, callback) {
+        io.stdout(String(chunk));
+        callback();
+      },
+    }),
+    { isTTY },
+  );
+}
+
+function candidateRemedy(candidates: readonly DiscoveredTrace[]): string {
+  const shown = candidates.slice(0, 3).map(({ path }) => path);
+  const more = candidates.length - shown.length;
+  const paths =
+    more === 0 ? shown.join(", ") : `${shown.join(", ")}, and ${more} more`;
+  return `Found ${candidates.length} candidate ${candidates.length === 1 ? "trace file" : "trace files"}: ${paths}. Pass --traces <path>.`;
 }
 
 function evaluatorConfig(
@@ -991,8 +1178,9 @@ function appendCliOption(
 export async function executeCli(
   argv: readonly string[],
   io: CliIo = processIo,
+  runtime: CliRuntime = processRuntime,
 ): Promise<number> {
-  const handle = createProgram(io);
+  const handle = createProgram(io, runtime);
   try {
     await handle.program.parseAsync([...argv], { from: "user" });
     return handle.exitCode();

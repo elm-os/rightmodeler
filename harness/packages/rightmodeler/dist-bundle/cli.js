@@ -6418,7 +6418,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve10.call(this, root, ref);
+      let _sch = resolve12.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -6445,7 +6445,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve10(root, ref) {
+    function resolve12(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -7076,55 +7076,55 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve10(baseURI, relativeURI, options) {
+    function resolve12(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative7, options, skipNormalization) {
+    function resolveComponent(base, relative9, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse3(serialize(base, options), options);
-        relative7 = parse3(serialize(relative7, options), options);
+        relative9 = parse3(serialize(relative9, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative7.scheme) {
-        target.scheme = relative7.scheme;
-        target.userinfo = relative7.userinfo;
-        target.host = relative7.host;
-        target.port = relative7.port;
-        target.path = removeDotSegments(relative7.path || "");
-        target.query = relative7.query;
+      if (!options.tolerant && relative9.scheme) {
+        target.scheme = relative9.scheme;
+        target.userinfo = relative9.userinfo;
+        target.host = relative9.host;
+        target.port = relative9.port;
+        target.path = removeDotSegments(relative9.path || "");
+        target.query = relative9.query;
       } else {
-        if (relative7.userinfo !== void 0 || relative7.host !== void 0 || relative7.port !== void 0) {
-          target.userinfo = relative7.userinfo;
-          target.host = relative7.host;
-          target.port = relative7.port;
-          target.path = removeDotSegments(relative7.path || "");
-          target.query = relative7.query;
+        if (relative9.userinfo !== void 0 || relative9.host !== void 0 || relative9.port !== void 0) {
+          target.userinfo = relative9.userinfo;
+          target.host = relative9.host;
+          target.port = relative9.port;
+          target.path = removeDotSegments(relative9.path || "");
+          target.query = relative9.query;
         } else {
-          if (!relative7.path) {
+          if (!relative9.path) {
             target.path = base.path;
-            if (relative7.query !== void 0) {
-              target.query = relative7.query;
+            if (relative9.query !== void 0) {
+              target.query = relative9.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative7.path[0] === "/") {
-              target.path = removeDotSegments(relative7.path);
+            if (relative9.path[0] === "/") {
+              target.path = removeDotSegments(relative9.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative7.path;
+                target.path = "/" + relative9.path;
               } else if (!base.path) {
-                target.path = relative7.path;
+                target.path = relative9.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative7.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative9.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative7.query;
+            target.query = relative9.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -7132,7 +7132,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative7.fragment;
+      target.fragment = relative9.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -7340,7 +7340,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve10,
+      resolve: resolve12,
       resolveComponent,
       equal,
       serialize,
@@ -10590,7 +10590,9 @@ var require__ = __commonJS({
 // src/cli.ts
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { resolve as resolve9 } from "node:path";
+import { homedir as homedir2 } from "node:os";
+import { resolve as resolve11 } from "node:path";
+import { Writable } from "node:stream";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // ../../../node_modules/.pnpm/commander@14.0.3/node_modules/commander/esm.mjs
@@ -15363,8 +15365,8 @@ var error3 = () => {
         const sizing = getSizing(issue3.origin);
         if (sizing) {
           const maxValue = Number(issue3.maximum);
-          const unit = getBelarusianPlural(maxValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u0432\u044F\u043B\u0456\u043A\u0456: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u044D\u043D\u043D\u0435"} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 ${sizing.verb} ${adj}${issue3.maximum.toString()} ${unit}`;
+          const unit2 = getBelarusianPlural(maxValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
+          return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u0432\u044F\u043B\u0456\u043A\u0456: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u044D\u043D\u043D\u0435"} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 ${sizing.verb} ${adj}${issue3.maximum.toString()} ${unit2}`;
         }
         return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u0432\u044F\u043B\u0456\u043A\u0456: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u044D\u043D\u043D\u0435"} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 \u0431\u044B\u0446\u044C ${adj}${issue3.maximum.toString()}`;
       }
@@ -15373,8 +15375,8 @@ var error3 = () => {
         const sizing = getSizing(issue3.origin);
         if (sizing) {
           const minValue = Number(issue3.minimum);
-          const unit = getBelarusianPlural(minValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u043C\u0430\u043B\u044B: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 ${sizing.verb} ${adj}${issue3.minimum.toString()} ${unit}`;
+          const unit2 = getBelarusianPlural(minValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
+          return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u043C\u0430\u043B\u044B: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 ${sizing.verb} ${adj}${issue3.minimum.toString()} ${unit2}`;
         }
         return `\u0417\u0430\u043D\u0430\u0434\u0442\u0430 \u043C\u0430\u043B\u044B: \u0447\u0430\u043A\u0430\u043B\u0430\u0441\u044F, \u0448\u0442\u043E ${issue3.origin} \u043F\u0430\u0432\u0456\u043D\u043D\u0430 \u0431\u044B\u0446\u044C ${adj}${issue3.minimum.toString()}`;
       }
@@ -17433,8 +17435,8 @@ var error20 = () => {
         const sizing = getSizing(issue3.origin);
         if (sizing) {
           const maxValue = Number(issue3.maximum);
-          const unit = getArmenianPlural(maxValue, sizing.unit.one, sizing.unit.many);
-          return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0574\u0565\u056E \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin ?? "\u0561\u0580\u056A\u0565\u0584")} \u056F\u0578\u0582\u0576\u0565\u0576\u0561 ${adj}${issue3.maximum.toString()} ${unit}`;
+          const unit2 = getArmenianPlural(maxValue, sizing.unit.one, sizing.unit.many);
+          return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0574\u0565\u056E \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin ?? "\u0561\u0580\u056A\u0565\u0584")} \u056F\u0578\u0582\u0576\u0565\u0576\u0561 ${adj}${issue3.maximum.toString()} ${unit2}`;
         }
         return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0574\u0565\u056E \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin ?? "\u0561\u0580\u056A\u0565\u0584")} \u056C\u056B\u0576\u056B ${adj}${issue3.maximum.toString()}`;
       }
@@ -17443,8 +17445,8 @@ var error20 = () => {
         const sizing = getSizing(issue3.origin);
         if (sizing) {
           const minValue = Number(issue3.minimum);
-          const unit = getArmenianPlural(minValue, sizing.unit.one, sizing.unit.many);
-          return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0583\u0578\u0584\u0580 \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin)} \u056F\u0578\u0582\u0576\u0565\u0576\u0561 ${adj}${issue3.minimum.toString()} ${unit}`;
+          const unit2 = getArmenianPlural(minValue, sizing.unit.one, sizing.unit.many);
+          return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0583\u0578\u0584\u0580 \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin)} \u056F\u0578\u0582\u0576\u0565\u0576\u0561 ${adj}${issue3.minimum.toString()} ${unit2}`;
         }
         return `\u0549\u0561\u0583\u0561\u0566\u0561\u0576\u0581 \u0583\u0578\u0584\u0580 \u0561\u0580\u056A\u0565\u0584\u2024 \u057D\u057A\u0561\u057D\u057E\u0578\u0582\u0574 \u0567, \u0578\u0580 ${withDefiniteArticle(issue3.origin)} \u056C\u056B\u0576\u056B ${adj}${issue3.minimum.toString()}`;
       }
@@ -18207,18 +18209,18 @@ var error27 = () => {
         const adj = issue3.inclusive ? "\uC774\uD558" : "\uBBF8\uB9CC";
         const suffix = adj === "\uBBF8\uB9CC" ? "\uC774\uC5B4\uC57C \uD569\uB2C8\uB2E4" : "\uC5EC\uC57C \uD569\uB2C8\uB2E4";
         const sizing = getSizing(issue3.origin);
-        const unit = sizing?.unit ?? "\uC694\uC18C";
+        const unit2 = sizing?.unit ?? "\uC694\uC18C";
         if (sizing)
-          return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uD07D\uB2C8\uB2E4: ${issue3.maximum.toString()}${unit} ${adj}${suffix}`;
+          return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uD07D\uB2C8\uB2E4: ${issue3.maximum.toString()}${unit2} ${adj}${suffix}`;
         return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uD07D\uB2C8\uB2E4: ${issue3.maximum.toString()} ${adj}${suffix}`;
       }
       case "too_small": {
         const adj = issue3.inclusive ? "\uC774\uC0C1" : "\uCD08\uACFC";
         const suffix = adj === "\uC774\uC0C1" ? "\uC774\uC5B4\uC57C \uD569\uB2C8\uB2E4" : "\uC5EC\uC57C \uD569\uB2C8\uB2E4";
         const sizing = getSizing(issue3.origin);
-        const unit = sizing?.unit ?? "\uC694\uC18C";
+        const unit2 = sizing?.unit ?? "\uC694\uC18C";
         if (sizing) {
-          return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uC791\uC2B5\uB2C8\uB2E4: ${issue3.minimum.toString()}${unit} ${adj}${suffix}`;
+          return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uC791\uC2B5\uB2C8\uB2E4: ${issue3.minimum.toString()}${unit2} ${adj}${suffix}`;
         }
         return `${issue3.origin ?? "\uAC12"}\uC774 \uB108\uBB34 \uC791\uC2B5\uB2C8\uB2E4: ${issue3.minimum.toString()} ${adj}${suffix}`;
       }
@@ -19571,8 +19573,8 @@ var error38 = () => {
         const sizing = getSizing(issue3.origin);
         if (sizing) {
           const maxValue = Number(issue3.maximum);
-          const unit = getRussianPlural(maxValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435"} \u0431\u0443\u0434\u0435\u0442 \u0438\u043C\u0435\u0442\u044C ${adj}${issue3.maximum.toString()} ${unit}`;
+          const unit2 = getRussianPlural(maxValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
+          return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435"} \u0431\u0443\u0434\u0435\u0442 \u0438\u043C\u0435\u0442\u044C ${adj}${issue3.maximum.toString()} ${unit2}`;
         }
         return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin ?? "\u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435"} \u0431\u0443\u0434\u0435\u0442 ${adj}${issue3.maximum.toString()}`;
       }
@@ -19581,8 +19583,8 @@ var error38 = () => {
         const sizing = getSizing(issue3.origin);
         if (sizing) {
           const minValue = Number(issue3.minimum);
-          const unit = getRussianPlural(minValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
-          return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u0430\u043B\u0435\u043D\u044C\u043A\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin} \u0431\u0443\u0434\u0435\u0442 \u0438\u043C\u0435\u0442\u044C ${adj}${issue3.minimum.toString()} ${unit}`;
+          const unit2 = getRussianPlural(minValue, sizing.unit.one, sizing.unit.few, sizing.unit.many);
+          return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u0430\u043B\u0435\u043D\u044C\u043A\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin} \u0431\u0443\u0434\u0435\u0442 \u0438\u043C\u0435\u0442\u044C ${adj}${issue3.minimum.toString()} ${unit2}`;
         }
         return `\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u0430\u043B\u0435\u043D\u044C\u043A\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: \u043E\u0436\u0438\u0434\u0430\u043B\u043E\u0441\u044C, \u0447\u0442\u043E ${issue3.origin} \u0431\u0443\u0434\u0435\u0442 ${adj}${issue3.minimum.toString()}`;
       }
@@ -27220,8 +27222,8 @@ function compareSignals(left, right) {
 // ../kernel/dist/selection.js
 import { createHash as createHash2 } from "node:crypto";
 function assignSplits(caseIds, seed) {
-  const unique = new Set(caseIds);
-  if (unique.size !== caseIds.length) {
+  const unique2 = new Set(caseIds);
+  if (unique2.size !== caseIds.length) {
     throw new Error("caseIds contains a duplicate identifier");
   }
   const ranked = [...caseIds].sort((left, right) => {
@@ -28010,10 +28012,10 @@ var AdaptiveLimiter = class {
       this.active += 1;
       return Promise.resolve();
     }
-    return new Promise((resolve10) => {
+    return new Promise((resolve12) => {
       this.waiters.push(() => {
         this.active += 1;
-        resolve10();
+        resolve12();
       });
     });
   }
@@ -28081,7 +28083,7 @@ function retryDelay(response, attempt) {
   return backoff + Math.random() * backoff * 0.25;
 }
 function sleep(milliseconds) {
-  return new Promise((resolve10) => setTimeout(resolve10, milliseconds));
+  return new Promise((resolve12) => setTimeout(resolve12, milliseconds));
 }
 function isRetryable(status) {
   return status === 429 || status >= 500;
@@ -28629,7 +28631,7 @@ async function replayModeA(input) {
           if (refunds.length > 0) {
             await Promise.race(refunds);
           } else {
-            await new Promise((resolve10) => setTimeout(resolve10, 0));
+            await new Promise((resolve12) => setTimeout(resolve12, 0));
           }
           continue;
         }
@@ -28647,8 +28649,8 @@ async function replayModeA(input) {
       }
     }
     let resolveRefund = () => void 0;
-    const refundComplete = new Promise((resolve10) => {
-      resolveRefund = resolve10;
+    const refundComplete = new Promise((resolve12) => {
+      resolveRefund = resolve12;
     });
     activeRefunds.add(refundComplete);
     const executionId = mintExecutionId();
@@ -28835,8 +28837,8 @@ function redactCredential(body, credential) {
   return Buffer.from(body.toString("utf8").split(credential).join("[REDACTED]"), "utf8");
 }
 function close(server) {
-  return new Promise((resolve10, reject) => {
-    server.close((error51) => error51 === void 0 ? resolve10() : reject(error51));
+  return new Promise((resolve12, reject) => {
+    server.close((error51) => error51 === void 0 ? resolve12() : reject(error51));
   });
 }
 async function startEgressListener(options) {
@@ -28904,9 +28906,9 @@ async function startEgressListener(options) {
     incoming.pipe(upstream);
   });
   const hostname5 = options.hostname ?? "0.0.0.0";
-  await new Promise((resolve10, reject) => {
+  await new Promise((resolve12, reject) => {
     server.once("error", reject);
-    server.listen(options.port ?? 0, hostname5, resolve10);
+    server.listen(options.port ?? 0, hostname5, resolve12);
   });
   const address = server.address();
   return {
@@ -29066,11 +29068,11 @@ function validatePricing(steps, policy, table) {
   }
 }
 function createWaiter() {
-  let resolve10 = () => void 0;
+  let resolve12 = () => void 0;
   const promise2 = new Promise((done) => {
-    resolve10 = done;
+    resolve12 = done;
   });
-  return { promise: promise2, resolve: resolve10 };
+  return { promise: promise2, resolve: resolve12 };
 }
 async function reserveCase(input, activeRefunds) {
   for (; ; ) {
@@ -29173,7 +29175,7 @@ async function waitForExit(executor, handle) {
     const status = await executor.status(handle);
     if (status.state === "exited")
       return status;
-    await new Promise((resolve10) => setTimeout(resolve10, 50));
+    await new Promise((resolve12) => setTimeout(resolve12, 50));
   }
 }
 function textFiles(collected) {
@@ -30511,12 +30513,12 @@ function enclosingSymbol(content, position) {
   return nearest;
 }
 function extractCallText(content, position) {
-  const open = content.indexOf("(", position);
-  if (open === -1)
+  const open2 = content.indexOf("(", position);
+  if (open2 === -1)
     return content.slice(position, position + 240);
   let depth = 0;
   let quote = null;
-  for (let index = open; index < content.length; index += 1) {
+  for (let index = open2; index < content.length; index += 1) {
     const character = content[index];
     if (quote !== null) {
       if (character === "\\")
@@ -30576,11 +30578,11 @@ function splitTopLevel(value) {
   return parts;
 }
 function argumentKeys(callText) {
-  const open = callText.indexOf("(");
+  const open2 = callText.indexOf("(");
   const close2 = callText.lastIndexOf(")");
-  if (open === -1 || close2 <= open)
+  if (open2 === -1 || close2 <= open2)
     return [];
-  let argumentsText = callText.slice(open + 1, close2).trim();
+  let argumentsText = callText.slice(open2 + 1, close2).trim();
   let separator = "=";
   if (argumentsText.startsWith("{")) {
     const objectClose = argumentsText.lastIndexOf("}");
@@ -33978,7 +33980,7 @@ function isRateLimited(response) {
   return response.status === 429 || response.status === 403 && (response.headers.has("retry-after") || response.headers.get("x-ratelimit-remaining") === "0");
 }
 function sleep2(milliseconds) {
-  return new Promise((resolve10) => setTimeout(resolve10, milliseconds));
+  return new Promise((resolve12) => setTimeout(resolve12, milliseconds));
 }
 function parseJson(text, label) {
   try {
@@ -34487,10 +34489,10 @@ function lineText(content, line) {
 }
 function callEnd(content, start) {
   const searchable = scanSource(content).mask;
-  const open = searchable.indexOf("(", start);
-  if (open === -1) return -1;
+  const open2 = searchable.indexOf("(", start);
+  if (open2 === -1) return -1;
   let depth = 0;
-  for (let index = open; index < searchable.length; index += 1) {
+  for (let index = open2; index < searchable.length; index += 1) {
     const character = searchable[index];
     if (character === "(") {
       depth += 1;
@@ -34536,13 +34538,13 @@ function splitTopLevel2(content, start, end) {
   return ranges;
 }
 function topLevelModelSpans(content, callStart, callEndOffset) {
-  const open = content.indexOf("(", callStart);
-  if (open === -1 || callEndOffset <= open + 1) return null;
-  const outer = splitTopLevel2(content, open + 1, callEndOffset - 1);
+  const open2 = content.indexOf("(", callStart);
+  if (open2 === -1 || callEndOffset <= open2 + 1) return null;
+  const outer = splitTopLevel2(content, open2 + 1, callEndOffset - 1);
   if (outer === null) return null;
   const first = trimRange(
     content,
-    outer[0] ?? { start: open + 1, end: open + 1 }
+    outer[0] ?? { start: open2 + 1, end: open2 + 1 }
   );
   let parts = outer;
   let separator = "=";
@@ -35195,14 +35197,14 @@ function formatterCommand(repoDir, formatter) {
   return null;
 }
 function runFormatter(command, filePath, cwd, input) {
-  return new Promise((resolve10, reject) => {
+  return new Promise((resolve12, reject) => {
     const child = execFile2(
       command.executable,
       command.args(filePath),
       { cwd, encoding: "utf8" },
       (error51, stdout) => {
         if (error51 !== null) reject(error51);
-        else resolve10(command.stdin ? stdout : null);
+        else resolve12(command.stdin ? stdout : null);
       }
     );
     if (command.stdin) child.stdin?.end(input);
@@ -36236,7 +36238,7 @@ function reviewersFor(verdicts) {
       slash === -1 ? { kind: "user", value: identity } : { kind: "team", value: identity.slice(slash + 1) }
     );
   }
-  const unique = [
+  const unique2 = [
     ...new Map(
       selected.map((reviewer) => [
         `${reviewer.kind}:${reviewer.value.toLowerCase()}`,
@@ -36245,8 +36247,8 @@ function reviewersFor(verdicts) {
     ).values()
   ];
   return {
-    reviewers: unique.flatMap(({ kind, value }) => kind === "user" ? [value] : []).slice(0, reviewerLimit),
-    teamReviewers: unique.flatMap(({ kind, value }) => kind === "team" ? [value] : []).slice(0, reviewerLimit)
+    reviewers: unique2.flatMap(({ kind, value }) => kind === "user" ? [value] : []).slice(0, reviewerLimit),
+    teamReviewers: unique2.flatMap(({ kind, value }) => kind === "team" ? [value] : []).slice(0, reviewerLimit)
   };
 }
 async function gitOutput(repoDir, args) {
@@ -38523,7 +38525,7 @@ async function pollEvaluator(evaluator, providerRunId) {
   const delays = [0, 25, 50, 100, 200, 400];
   for (const delay of delays) {
     if (delay > 0) {
-      await new Promise((resolve10) => setTimeout(resolve10, delay));
+      await new Promise((resolve12) => setTimeout(resolve12, delay));
     }
     const status = await evaluator.status(providerRunId);
     if (status === "complete" || status === "failed") return status;
@@ -38685,13 +38687,13 @@ async function importCorpus(config2, options) {
       `Cannot import an empty ${config2.provider} dataset: ${config2.dataset}`
     );
   }
-  const unique = /* @__PURE__ */ new Map();
+  const unique2 = /* @__PURE__ */ new Map();
   for (const item of items) {
     const content = importedContent(config2.provider, item);
     const caseId = computeRunSpecDigest(contentJson(content));
-    unique.set(caseId, { caseId, content, split: "shortlist" });
+    unique2.set(caseId, { caseId, content, split: "shortlist" });
   }
-  const unsplitCases = [...unique.values()];
+  const unsplitCases = [...unique2.values()];
   const splits = assignSplits(
     unsplitCases.map(({ caseId }) => caseId),
     options.seed
@@ -40688,24 +40690,24 @@ ${marker}`
     await renew();
     observedIssueComments.push(...issueComments);
     const handled = new Set(state.handledEventKeys);
-    for (const question of questions(
+    for (const question2 of questions(
       reviews,
       reviewComments,
       issueComments,
       input.prNumber
     )) {
-      const key = question.eventKey;
+      const key = question2.eventKey;
       if (handled.has(key)) continue;
       const selected = affectedVerdicts(
         prVerdicts,
-        [question.body],
-        question.path === void 0 ? [] : [question.path]
+        [question2.body],
+        question2.path === void 0 ? [] : [question2.path]
       );
       const postedCommentId = await comment(key, evidenceReply(selected));
       const event = await record2("comment_posted", {
         handledEventKey: key,
-        source: question.source,
-        sourceCommentId: question.id,
+        source: question2.source,
+        sourceCommentId: question2.id,
         postedCommentId,
         familyIds: selected.map(({ verdict }) => verdict.familyId)
       });
@@ -40717,8 +40719,8 @@ ${marker}`
       };
       actions.push(
         action("evidence_replied", {
-          source: question.source,
-          commentId: question.id,
+          source: question2.source,
+          commentId: question2.id,
           familyIds: selected.map(({ verdict }) => verdict.familyId)
         })
       );
@@ -41286,6 +41288,17 @@ async function runPipeline(options) {
       verdicts: verdicts2,
       recommendationExists: false
     };
+  }
+  await repositoryRevision(context2.repo);
+  const initialState = await readSetupState(context2.store, context2.projectId);
+  const ingestCheckpoint = initialState.stages.ingest;
+  if (stagesThrough(options.through).includes("ingest") && context2.traces === void 0 && (ingestCheckpoint === void 0 || !await checkpointOutputExists(context2, "ingest", ingestCheckpoint))) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "missing_traces_path",
+      message: "A trace input path is required when ingest is reached.",
+      remedy: "Pass --traces <path> with an OTel GenAI JSON or OpenAI JSONL trace file."
+    });
   }
   if (options.existingRunId !== void 0) {
     const existing = await requireRunningReplayRun(
@@ -43938,12 +43951,40 @@ async function repositoryDigest(repo, storeRoot) {
   });
 }
 async function repositoryRevision(repo) {
-  const { stdout } = await execFileAsync6(
-    "git",
-    ["-C", repo, "rev-parse", "HEAD"],
-    { encoding: "utf8" }
-  );
-  return stdout.trim();
+  let insideWorkTree;
+  try {
+    ({ stdout: insideWorkTree } = await execFileAsync6(
+      "git",
+      ["-C", repo, "rev-parse", "--is-inside-work-tree"],
+      { encoding: "utf8" }
+    ));
+  } catch {
+    throw notGitRepository();
+  }
+  if (insideWorkTree.trim() !== "true") throw notGitRepository();
+  try {
+    const { stdout } = await execFileAsync6(
+      "git",
+      ["-C", repo, "rev-parse", "--verify", "HEAD"],
+      { encoding: "utf8" }
+    );
+    return stdout.trim();
+  } catch {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "git_repository_has_no_commits",
+      message: "This git repository has no commits. Rightmodeler ties findings to your code, so make an initial commit and rerun.",
+      remedy: "Create the first commit, then rerun the command."
+    });
+  }
+}
+function notGitRepository() {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "not_git_repository",
+    message: "This folder is not a git repository. Rightmodeler ties findings to your code, so run it inside the project you want audited (or run git init and commit first).",
+    remedy: "Run the command again from a Git repository with at least one commit."
+  });
 }
 function corpusOutput(corpus) {
   return {
@@ -44564,9 +44605,399 @@ function applySwaps2(options) {
   });
 }
 
+// src/data/discover.ts
+import { open, readdir as readdir4, realpath as realpath2, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { isAbsolute as isAbsolute2, join as join14, relative as relative7, resolve as resolve8 } from "node:path";
+var MAX_FILES = 50;
+var MAX_READ_BYTES = 64 * 1024;
+var MAX_SAMPLE_RECORDS = 20;
+var SOURCE_BUDGETS = { local: 20, claude: 15, codex: 15 };
+async function discoverTraces(options) {
+  const repo = resolve8(options.repo);
+  const homeDir = resolve8(options.homeDir ?? homedir());
+  const candidates = await candidateFiles(repo, homeDir);
+  const discovered = [];
+  for (const candidate of candidates.slice(0, MAX_FILES)) {
+    try {
+      const head = await detectionHead(candidate.path, candidate.size);
+      if (candidate.source === "codex" && codexSessionCwd(head.text) !== repo) {
+        continue;
+      }
+      const adapter = detectFormat(head.text, traceAdapters);
+      discovered.push({
+        path: candidate.path,
+        format: adapter.name,
+        approximateRecords: head.approximateRecords,
+        modifiedAt: new Date(candidate.modifiedAtMs),
+        sourceOrder: candidate.sourceOrder
+      });
+    } catch {
+    }
+  }
+  return discovered.sort(
+    (left, right) => right.modifiedAt.getTime() - left.modifiedAt.getTime() || left.sourceOrder - right.sourceOrder || compareText14(left.path, right.path)
+  ).map(({ sourceOrder: _sourceOrder, ...candidate }) => candidate);
+}
+function sanitizeClaudeProjectPath(repo) {
+  const absolute = resolve8(repo);
+  const sanitized = absolute.replace(/[^a-zA-Z0-9]/g, "-");
+  if (sanitized.length <= 200) return sanitized;
+  let hash2 = 0;
+  for (let index = 0; index < absolute.length; index += 1) {
+    hash2 = hash2 * 31 + absolute.charCodeAt(index) | 0;
+  }
+  return `${sanitized.slice(0, 200)}-${Math.abs(hash2).toString(36)}`;
+}
+async function candidateFiles(repo, homeDir) {
+  const localPaths = await localCandidatePaths(repo);
+  const claudePaths = (await jsonFiles(
+    join14(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
+    false
+  )).sort(compareText14);
+  const codexPaths = (await jsonFiles(join14(homeDir, ".codex", "sessions"), true)).filter((path) => path.endsWith(".jsonl")).sort((left, right) => compareText14(right, left));
+  const sources = [
+    {
+      source: "local",
+      files: await statCandidates(localPaths, "local", false)
+    },
+    {
+      source: "claude",
+      files: await statCandidates(claudePaths, "claude", true)
+    },
+    {
+      source: "codex",
+      files: await statCandidates(codexPaths, "codex", false)
+    }
+  ];
+  const selected = [];
+  const offsets = /* @__PURE__ */ new Map();
+  for (const source of sources) {
+    const count = Math.min(SOURCE_BUDGETS[source.source], source.files.length);
+    selected.push(...source.files.slice(0, count));
+    offsets.set(source.source, count);
+  }
+  for (const source of sources) {
+    const remaining = MAX_FILES - selected.length;
+    if (remaining === 0) break;
+    const offset = offsets.get(source.source) ?? 0;
+    const extra = source.files.slice(offset, offset + remaining);
+    selected.push(...extra);
+    offsets.set(source.source, offset + extra.length);
+  }
+  return selected.map((file2, sourceOrder) => ({ ...file2, sourceOrder }));
+}
+async function statCandidates(paths, source, sortNewest) {
+  const selectedPaths = sortNewest ? paths : paths.slice(0, MAX_FILES);
+  const files = (await Promise.all(
+    selectedPaths.map(async (path) => {
+      try {
+        const metadata = await stat(path);
+        return {
+          path,
+          source,
+          sourceOrder: 0,
+          size: metadata.size,
+          modifiedAtMs: metadata.mtimeMs
+        };
+      } catch {
+        return void 0;
+      }
+    })
+  )).filter((file2) => file2 !== void 0);
+  if (sortNewest) {
+    files.sort(
+      (left, right) => right.modifiedAtMs - left.modifiedAtMs || compareText14(left.path, right.path)
+    );
+  }
+  return files.slice(0, MAX_FILES);
+}
+async function localCandidatePaths(repo) {
+  const tracesDirectory = join14(repo, "traces");
+  const [realRepo, realTracesDirectory] = await Promise.all([
+    realpath2(repo).catch(() => void 0),
+    realpath2(tracesDirectory).catch(() => void 0)
+  ]);
+  const nested = realRepo !== void 0 && realTracesDirectory !== void 0 && isWithin(realRepo, realTracesDirectory) ? (await jsonFiles(tracesDirectory, false)).sort(compareText14) : [];
+  const topLevel = (await jsonFiles(repo, false)).sort((left, right) => {
+    const leftJsonl = left.endsWith(".jsonl");
+    const rightJsonl = right.endsWith(".jsonl");
+    return leftJsonl === rightJsonl ? compareText14(left, right) : leftJsonl ? -1 : 1;
+  });
+  const topLevelSet = new Set(topLevel);
+  return unique([
+    ...[join14(repo, "traces.json"), join14(repo, "traces.jsonl")].filter(
+      (path) => topLevelSet.has(path)
+    ),
+    ...nested,
+    ...topLevel
+  ]);
+}
+async function jsonFiles(root, recursive) {
+  let entries;
+  try {
+    entries = await readdir4(root, { recursive, withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries.filter(
+    (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
+  ).map((entry) => join14(entry.parentPath, entry.name));
+}
+function isWithin(root, path) {
+  const fromRoot = relative7(root, path);
+  return fromRoot === "" || !fromRoot.startsWith("..") && !isAbsolute2(fromRoot);
+}
+async function detectionHead(path, fileSize) {
+  const handle = await open(path, "r");
+  try {
+    const buffer = Buffer.alloc(Math.min(MAX_READ_BYTES, fileSize));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const raw = buffer.toString("utf8", 0, bytesRead);
+    const complete = bytesRead === fileSize;
+    const parsed2 = complete ? parseWholeJson(raw) : void 0;
+    if (parsed2 !== void 0) {
+      const records = Array.isArray(parsed2) ? parsed2 : [parsed2];
+      return {
+        text: JSON.stringify(records.slice(0, MAX_SAMPLE_RECORDS)),
+        approximateRecords: Math.max(1, records.length)
+      };
+    }
+    const trimmed = raw.trimStart();
+    if (trimmed.startsWith("[")) {
+      const records = leadingArrayRecords(trimmed, MAX_SAMPLE_RECORDS);
+      return {
+        text: JSON.stringify(records),
+        approximateRecords: approximateRecordCount(
+          records.length,
+          bytesRead,
+          fileSize
+        )
+      };
+    }
+    const completeText = complete ? raw : raw.slice(0, Math.max(0, raw.lastIndexOf("\n") + 1));
+    const lines = completeText.split(/\r?\n/).filter((line) => line.trim() !== "");
+    return {
+      text: lines.slice(0, MAX_SAMPLE_RECORDS).join("\n"),
+      approximateRecords: approximateRecordCount(
+        lines.length,
+        bytesRead,
+        fileSize
+      )
+    };
+  } finally {
+    await handle.close();
+  }
+}
+function leadingArrayRecords(text, limit) {
+  const records = [];
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = 1; index < text.length && records.length < limit; index += 1) {
+    const character = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      if (start === -1) start = index;
+      continue;
+    }
+    if (start === -1) {
+      if (/\s|,/u.test(character)) continue;
+      if (character === "]") break;
+      start = index;
+    }
+    if (character === "{" || character === "[") depth += 1;
+    if (character === "}" || character === "]") depth -= 1;
+    if (depth === 0 && (character === "}" || character === "]")) {
+      const parsed2 = parseWholeJson(text.slice(start, index + 1));
+      if (parsed2 !== void 0) records.push(parsed2);
+      start = -1;
+    }
+  }
+  return records;
+}
+function codexSessionCwd(text) {
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+    const record2 = parseWholeJson(line);
+    if (isRecord4(record2) && record2.type === "session_meta" && isRecord4(record2.payload) && typeof record2.payload.cwd === "string") {
+      return resolve8(record2.payload.cwd);
+    }
+  }
+  return void 0;
+}
+function parseWholeJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return void 0;
+  }
+}
+function approximateRecordCount(observed, bytesRead, fileSize) {
+  if (observed === 0) return 0;
+  if (bytesRead === 0 || bytesRead === fileSize) return observed;
+  return Math.max(observed, Math.round(observed * fileSize / bytesRead));
+}
+function unique(values) {
+  return [...new Set(values)];
+}
+function compareText14(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+// src/guidance.ts
+import { createInterface } from "node:readline";
+import { isAbsolute as isAbsolute3, relative as relative8, resolve as resolve9 } from "node:path";
+async function promptForTracePath(options) {
+  if (options.candidates.length === 0) {
+    options.output.write(
+      [
+        "Traces are logs that your AI tools already write.",
+        "If you use Claude Code or Codex in this project, run a few tasks there and run this command again. Rightmodeler finds those logs automatically.",
+        "If your app logs to Langfuse, Braintrust, LangSmith, Helicone, or W&B Weave, export a file and enter its path.",
+        "See the supported sources at https://www.rightmodeler.com/integrations",
+        ""
+      ].join("\n")
+    );
+    const asked2 = await question(
+      options,
+      "Trace file path (leave empty to stop): "
+    );
+    const typed = asked2.answer.trim();
+    return asked2.cancelled || typed === "" ? void 0 : resolve9(options.repo, typed);
+  }
+  options.output.write("Found trace files:\n");
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  for (const [index, candidate] of options.candidates.entries()) {
+    options.output.write(
+      `${index + 1}. ${formatName(candidate.format)}, about ${candidate.approximateRecords} ${unit("model call", candidate.approximateRecords)}, ${formatAge(candidate.modifiedAt, now)}, ${shortPath(candidate.path, options.repo, options.homeDir)}
+`
+    );
+  }
+  const asked = await question(
+    options,
+    "Choose a trace file [1]: ",
+    (value) => {
+      const choice = value.trim();
+      if (/^[0-9]+$/u.test(choice)) {
+        const selected = options.candidates[Number(choice) - 1];
+        if (selected === void 0) {
+          options.output.write(
+            `Choose a number from 1 to ${options.candidates.length}.
+`
+          );
+          return false;
+        }
+      }
+      return true;
+    }
+  );
+  if (asked.cancelled) return void 0;
+  const answer = asked.answer.trim();
+  if (answer === "") return options.candidates[0].path;
+  if (/^[1-9][0-9]*$/u.test(answer)) {
+    const selected = options.candidates[Number(answer) - 1];
+    if (selected !== void 0) return selected.path;
+  }
+  return resolve9(options.repo, answer);
+}
+async function promptForProviderBaseUrl(options) {
+  options.output.write(
+    "Replay calls cheaper models through any OpenAI-compatible endpoint, such as OpenRouter or the Vercel AI Gateway.\n"
+  );
+  const suffix = options.current === void 0 ? "" : ` [${options.current}]`;
+  const asked = await question(options, `Provider base URL${suffix}: `);
+  if (asked.cancelled) return options.current;
+  const answer = asked.answer.trim();
+  return answer === "" ? options.current : answer;
+}
+function question(streams, prompt, accept = () => true) {
+  const readline = createInterface({
+    input: streams.input,
+    output: streams.output
+  });
+  return new Promise((resolveAnswer) => {
+    let settled = false;
+    const finish = (asked) => {
+      if (settled) return;
+      settled = true;
+      resolveAnswer(asked);
+    };
+    const ask = () => {
+      readline.question(prompt, (answer) => {
+        if (!accept(answer)) {
+          ask();
+          return;
+        }
+        finish({ answer, cancelled: false });
+        readline.close();
+      });
+    };
+    readline.once("close", () => finish({ answer: "", cancelled: true }));
+    streams.input.once("close", () => {
+      readline.close();
+      finish({ answer: "", cancelled: true });
+    });
+    streams.output.once("close", () => {
+      readline.close();
+      finish({ answer: "", cancelled: true });
+    });
+    ask();
+  });
+}
+function formatName(format9) {
+  const names = {
+    "otel-genai": "OpenTelemetry GenAI export",
+    "openai-jsonl": "OpenAI log",
+    langfuse: "Langfuse export",
+    braintrust: "Braintrust export",
+    langsmith: "LangSmith export",
+    openinference: "OpenInference export",
+    helicone: "Helicone export",
+    weave: "Weave export",
+    "claude-code": "Claude Code session",
+    codex: "Codex session"
+  };
+  return names[format9];
+}
+function shortPath(path, repo, homeDir) {
+  const fromRepo = relative8(resolve9(repo), path);
+  if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute3(fromRepo)) {
+    return `./${fromRepo}`;
+  }
+  const fromHome = relative8(resolve9(homeDir), path);
+  if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute3(fromHome)) {
+    return `~/${fromHome}`;
+  }
+  return path;
+}
+function formatAge(modifiedAt, now) {
+  const seconds = Math.max(
+    0,
+    Math.floor((now.getTime() - modifiedAt.getTime()) / 1e3)
+  );
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} ${unit("minute", minutes)} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ${unit("hour", hours)} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${unit("day", days)} ago`;
+}
+function unit(label, value) {
+  return value === 1 ? label : `${label}s`;
+}
+
 // src/rollback.ts
 import { randomUUID as randomUUID12 } from "node:crypto";
-import { basename as basename3, join as join14, resolve as resolve8 } from "node:path";
+import { basename as basename3, join as join15, resolve as resolve10 } from "node:path";
 var projectId2 = "project";
 var RollbackServiceError = class extends Error {
   code;
@@ -45166,10 +45597,10 @@ async function rollbackPreparedSwaps({
   }
 }
 function rollbackSwaps(options) {
-  const repoDir = resolve8(options.repo);
+  const repoDir = resolve10(options.repo);
   return rollbackPreparedSwaps({
     store: new FsStore(
-      resolve8(options.store ?? join14(repoDir, ".rightmodeler"))
+      resolve10(options.store ?? join15(repoDir, ".rightmodeler"))
     ),
     githubClient: createGithubClient({
       baseUrl: options.githubBaseUrl,
@@ -45182,10 +45613,17 @@ function rollbackSwaps(options) {
 }
 
 // src/version.ts
-var version2 = "0.1.2";
+var version2 = "0.2.0";
 
 // src/cli.ts
-function createProgram(io = processIo) {
+var processRuntime = {
+  stdin: process.stdin,
+  stdout: process.stdout,
+  env: process.env,
+  homeDir: homedir2(),
+  now: () => /* @__PURE__ */ new Date()
+};
+function createProgram(io = processIo, runtime = processRuntime) {
   let code = 0;
   const program2 = new Command().name("rightmodeler").description("Find and prove safe model substitutions.").addHelpText(
     "after",
@@ -45213,13 +45651,23 @@ function createProgram(io = processIo) {
   );
   run(init, async (reporter, global) => {
     const local = init.opts();
-    const options = pipelineOptions(global, local, reporter);
-    const result2 = local.plan ? {
-      stages: await planPipeline(options),
-      executedStages: [],
-      verdicts: [],
-      recommendationExists: false
-    } : await runPipeline(options);
+    const prepared = await guidedPipelineOptions(
+      global,
+      local,
+      reporter,
+      runtime
+    );
+    const result2 = await withInputGuidance(
+      prepared,
+      local,
+      runtime,
+      async (options) => local.plan ? {
+        stages: await planPipeline(options),
+        executedStages: [],
+        verdicts: [],
+        recommendationExists: false
+      } : runPipeline(options)
+    );
     reporter.result(result2);
     return local.plan || local.through !== void 0 && local.through !== "report" ? 0 : result2.recommendationExists ? 1 : 0;
   });
@@ -45231,13 +45679,23 @@ function createProgram(io = processIo) {
     "scope projection to one merged approved swap"
   );
   run(estimate, async (reporter, global) => {
-    const options = pipelineOptions(
+    const local = estimate.opts();
+    const prepared = await guidedPipelineOptions(
       global,
-      estimate.opts(),
-      reporter
+      local,
+      reporter,
+      runtime
     );
-    await runPipeline({ ...options, through: "shortlist" });
-    reporter.result(await estimateReplay(options));
+    const result2 = await withInputGuidance(
+      prepared,
+      local,
+      runtime,
+      async (options) => {
+        await runPipeline({ ...options, through: "shortlist" });
+        return estimateReplay(options);
+      }
+    );
+    reporter.result(result2);
     return 0;
   });
   for (const stage of PIPELINE_STAGES.slice(0, -1)) {
@@ -45539,7 +45997,13 @@ function addPipelineOptions(command, provider) {
       new Option("--through <stage>", "stop after this stage").choices([
         ...PIPELINE_STAGES
       ])
-    ).option("--yes", "accept defaults (reserved for future prompts)");
+    );
+  }
+  if (command.name() === "init" || command.name() === "estimate") {
+    command.option(
+      "--yes",
+      "accept the newest discovered trace without prompting"
+    );
   }
   return command;
 }
@@ -45581,6 +46045,97 @@ function pipelineOptions(global, local, reporter) {
     plan: local.plan,
     reporter
   };
+}
+async function guidedPipelineOptions(global, local, reporter, runtime) {
+  const options = pipelineOptions(global, local, reporter);
+  const interactive = global.output === "human" && runtime.stdin.isTTY === true && runtime.stdout.isTTY === true;
+  if (local.traces !== void 0 || local.plan || local.through === "scan") {
+    return { options, candidates: [], interactive };
+  }
+  const candidates = await discoverTraces({
+    repo: global.repo,
+    homeDir: runtime.homeDir
+  });
+  const traces = local.yes ? candidates[0]?.path : interactive ? await promptForTracePath({
+    candidates,
+    repo: resolve11(global.repo),
+    homeDir: runtime.homeDir,
+    now: runtime.now(),
+    input: runtime.stdin,
+    output: promptOutput(reporter.io, runtime.stdout.isTTY)
+  }) : void 0;
+  if (local.yes && traces !== void 0 && global.output === "human") {
+    reporter.io.stdout(`Using trace file: ${traces}
+`);
+  }
+  return {
+    options: traces === void 0 ? options : { ...options, traces },
+    candidates,
+    interactive,
+    ...traces === void 0 ? {} : { selectedDiscoveredTrace: traces }
+  };
+}
+async function withInputGuidance(prepared, local, runtime, operation) {
+  try {
+    return await operation(prepared.options);
+  } catch (error51) {
+    if (error51 instanceof ProtocolError && error51.code === "missing_traces_path" && prepared.candidates.length > 0) {
+      throw new ProtocolError({
+        exitCode: error51.exitCode,
+        code: error51.code,
+        message: error51.message,
+        remedy: `${error51.remedy} ${candidateRemedy(prepared.candidates)}`
+      });
+    }
+    if (prepared.selectedDiscoveredTrace !== void 0 && error51 instanceof TraceAdaptError) {
+      throw new ProtocolError({
+        exitCode: 2,
+        code: "unusable_trace_input",
+        message: error51.message,
+        remedy: "Rerun the command and choose a different trace file."
+      });
+    }
+    if (!(error51 instanceof ProtocolError) || error51.code !== "missing_provider_configuration" || !prepared.interactive) {
+      throw error51;
+    }
+    const baseUrl = await promptForProviderBaseUrl({
+      current: local.baseUrl,
+      input: runtime.stdin,
+      output: promptOutput(prepared.options.reporter.io, runtime.stdout.isTTY)
+    });
+    if (baseUrl === void 0) throw error51;
+    const apiKeyEnv = local.apiKeyEnv ?? "RIGHTMODELER_API_KEY";
+    if (!runtime.env[apiKeyEnv]) {
+      throw new ProtocolError({
+        exitCode: 2,
+        code: "missing_provider_configuration",
+        message: `Provider API key environment variable is not set: ${apiKeyEnv}.`,
+        remedy: `Set the environment variable ${apiKeyEnv} to your provider API key, then rerun.`
+      });
+    }
+    return operation({
+      ...prepared.options,
+      baseUrl,
+      apiKeyEnv
+    });
+  }
+}
+function promptOutput(io, isTTY) {
+  return Object.assign(
+    new Writable({
+      write(chunk, _encoding, callback) {
+        io.stdout(String(chunk));
+        callback();
+      }
+    }),
+    { isTTY }
+  );
+}
+function candidateRemedy(candidates) {
+  const shown = candidates.slice(0, 3).map(({ path }) => path);
+  const more = candidates.length - shown.length;
+  const paths = more === 0 ? shown.join(", ") : `${shown.join(", ")}, and ${more} more`;
+  return `Found ${candidates.length} candidate ${candidates.length === 1 ? "trace file" : "trace files"}: ${paths}. Pass --traces <path>.`;
 }
 function evaluatorConfig(local, gateThreshold) {
   const provider = local.evaluator;
@@ -45735,23 +46290,23 @@ async function startDetachedReplay(global, local, runId) {
   const args = [
     fileURLToPath2(import.meta.url),
     "--repo",
-    resolve9(global.repo),
+    resolve11(global.repo),
     "--output",
     "json"
   ];
   if (global.store !== void 0) {
-    args.push("--store", resolve9(global.store));
+    args.push("--store", resolve11(global.store));
   }
   args.push("replay");
   appendCliOption(
     args,
     "--traces",
-    local.traces === void 0 ? void 0 : resolve9(local.traces)
+    local.traces === void 0 ? void 0 : resolve11(local.traces)
   );
   appendCliOption(
     args,
     "--modeb-config",
-    local.modebConfig === void 0 ? void 0 : resolve9(local.modebConfig)
+    local.modebConfig === void 0 ? void 0 : resolve11(local.modebConfig)
   );
   appendCliOption(args, "--base-url", local.baseUrl);
   appendCliOption(args, "--api-key-env", local.apiKeyEnv);
@@ -45775,7 +46330,7 @@ async function startDetachedReplay(global, local, runId) {
   appendCliOption(
     args,
     "--evaluator-config",
-    local.evaluatorConfig === void 0 ? void 0 : resolve9(local.evaluatorConfig)
+    local.evaluatorConfig === void 0 ? void 0 : resolve11(local.evaluatorConfig)
   );
   for (const scorer of local.evaluatorScorer ?? []) {
     appendCliOption(args, "--evaluator-scorer", scorer);
@@ -45789,7 +46344,7 @@ async function startDetachedReplay(global, local, runId) {
   appendCliOption(args, "--internal-run-id", runId);
   await new Promise((resolveSpawn, rejectSpawn) => {
     const child = spawn(process.execPath, args, {
-      cwd: resolve9(global.repo),
+      cwd: resolve11(global.repo),
       detached: true,
       env: process.env,
       stdio: "ignore"
@@ -45803,13 +46358,13 @@ async function startDetachedReplay(global, local, runId) {
 }
 function detachedCommand(value) {
   if (value === void 0) return void 0;
-  return value.startsWith("./") || value.startsWith("../") || value.includes("/") || value.includes("\\") ? resolve9(value) : value;
+  return value.startsWith("./") || value.startsWith("../") || value.includes("/") || value.includes("\\") ? resolve11(value) : value;
 }
 function appendCliOption(args, flag, value) {
   if (value !== void 0) args.push(flag, value);
 }
-async function executeCli(argv, io = processIo) {
-  const handle = createProgram(io);
+async function executeCli(argv, io = processIo, runtime = processRuntime) {
+  const handle = createProgram(io, runtime);
   try {
     await handle.program.parseAsync([...argv], { from: "user" });
     return handle.exitCode();
