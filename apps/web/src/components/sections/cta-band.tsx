@@ -44,8 +44,8 @@ export function CtaBand() {
               <span aria-hidden className="select-none text-fog">
                 #{" "}
               </span>
-              It’s a report, not a runtime gateway. Measure the savings on your
-              own data first.
+              Free until replay, then your own provider key. It’s a report, not
+              a runtime gateway.
             </p>
           </Reveal>
 

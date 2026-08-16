@@ -26,7 +26,10 @@ const POLICY: { key: string; value: string }[] = [
     key: "quality_floor",
     value: `${ILLUSTRATIVE_SCORECARD.floor} · judged against shipped outputs`,
   },
-  { key: "max_cost_usd", value: "optional · hard stop when set, uncapped when not" },
+  {
+    key: "max_cost_usd",
+    value: "optional · hard stop when set, uncapped when not",
+  },
   { key: "models", value: "allow openai · anthropic · google · meta" },
   { key: "evaluator", value: "braintrust · falls back to cross-family judge" },
   { key: "merge", value: "open PR only · never auto-merge" },
@@ -50,8 +53,8 @@ const FAQ: FaqItem[] = [
     a: "Your own traces and the outputs you already shipped, not public benchmarks. Judging is cross-family, position-swapped, and reference-guided, and the agent abstains instead of opening a PR when the evidence is weak.",
   },
   {
-    q: "How is it different from the rightmodeler skill?",
-    a: "Same proof loop, different cadence. The skill is an audit you run when you want it. The agent runs that loop on a schedule: it re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and turns each result into a pull request you review.",
+    q: "How is it different from running the CLI myself?",
+    a: "Same proof loop, different cadence. The CLI is an audit you run when you want it. The agent runs that loop on a schedule: it re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and turns each result into a pull request you review.",
   },
 ];
 
@@ -177,8 +180,8 @@ export default function AgentPage() {
 
           <Reveal delay={0.1} className="mt-10">
             <p className="max-w-xl text-body text-driftwood">
-              The proof engine behind the agent is the rightmodeler skill, and
-              you can run it on your own traces today.
+              The proof engine behind the agent is the rightmodeler CLI, and you
+              can run it on your own traces today with npx rightmodeler init.
             </p>
             <div className="mt-6">
               <GithubButton />

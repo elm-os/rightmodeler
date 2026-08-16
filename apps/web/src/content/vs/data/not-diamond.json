@@ -14,7 +14,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Different jobs on different clocks. Not Diamond is hired to route: a trained meta-model predicts, live, which model (and for coding agents, which reasoning effort) should take the next request or session step, then hands the call back to your own provider or gateway. rightmodeler is hired to decide: the free skill replays your accepted agent traces through cheaper candidates offline, measures how well each one agrees with the output you shipped, and gives your team a per-step recommendation to approve. Both refuse the gateway seat, from opposite ends: Not Diamond predicts and hands back; rightmodeler never sees a live request at all. Routers pick a lane per request. We decide the stack."
+      "body": "Different jobs on different clocks. Not Diamond is hired to route: a trained meta-model predicts, live, which model (and for coding agents, which reasoning effort) should take the next request or session step, then hands the call back to your own provider or gateway. rightmodeler is hired to decide: the free CLI replays your accepted agent traces through cheaper candidates offline, measures how well each one agrees with the output you shipped, and gives your team a per-step recommendation to approve. Both refuse the gateway seat, from opposite ends: Not Diamond predicts and hands back; rightmodeler never sees a live request at all. Routers pick a lane per request. We decide the stack."
     },
     {
       "type": "table",
@@ -59,7 +59,7 @@
         {
           "scenario": "A regulated team wants the savings but cannot let any third-party service influence production requests or see request metadata, and payment and auth steps must not move.",
           "winner": "ours",
-          "why": "The skill runs offline on your own traces with your own keys and adds nothing to your request path; there is no rightmodeler server, no account with us, no telemetry. High-risk step families (auth, payments, migrations, deploys, secrets) are flagged and left on the current model. Even Not Diamond's proxy, which per their docs sends only derived metadata, still talks to their service at runtime."
+          "why": "The CLI runs offline on your own traces with your own keys and adds nothing to your request path; there is no rightmodeler server, no account with us, no telemetry. Where the evidence is thin it abstains rather than proposing a swap. Even Not Diamond's proxy, which per their docs sends only derived metadata, still talks to their service at runtime."
         },
         {
           "scenario": "A team is evaluating Not Diamond and wants to know whether a router would actually save money on their pipeline before wiring it in.",
@@ -92,7 +92,7 @@
         "heading": "Bring in rightmodeler when",
         "items": [
           "You want evidence against a quality floor (the minimum agreement bar you set) that a reviewer can approve before any model change ships.",
-          "High-risk step families (auth, payments, migrations, deploys, secrets) must stay pinned to the current model.",
+          "Steps whose evidence is thin must produce an abstention, never a swap.",
           "You are deciding whether a router belongs in your stack at all; the audit answers that question first, from your own traces."
         ]
       }
@@ -106,7 +106,7 @@
         },
         {
           "q": "Does rightmodeler integrate with Not Diamond?",
-          "a": "No integration ships today: there is no Not Diamond trace adapter and no Not Diamond replay provider. The honest relationship is sequencing, not plumbing. The skill reads the traces your harness or gateway already logs, so a stack that routes through Not Diamond still produces traces you can audit."
+          "a": "No integration ships today: there is no Not Diamond trace adapter and no Not Diamond replay provider. The honest relationship is sequencing, not plumbing. The CLI reads the traces your harness or gateway already logs, so a stack that routes through Not Diamond still produces traces you can audit."
         },
         {
           "q": "Is Not Diamond Code generally available?",
@@ -118,7 +118,7 @@
         },
         {
           "q": "Does Not Diamond see my prompts and code?",
-          "a": "Per their docs, no: the Not Diamond Code proxy computes derived metadata about the session, sends only that to their optimization service, and the model call itself runs through your configured provider or gateway. We have not independently verified this. rightmodeler's answer to the same worry is structural: there is no rightmodeler server, no account with us, no telemetry; the skill runs on your machine against your own traces."
+          "a": "Per their docs, no: the Not Diamond Code proxy computes derived metadata about the session, sends only that to their optimization service, and the model call itself runs through your configured provider or gateway. We have not independently verified this. rightmodeler's answer to the same worry is structural: there is no rightmodeler server, no account with us, no telemetry; the CLI runs on your machine against your own traces."
         }
       ]
     }

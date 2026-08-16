@@ -31,7 +31,7 @@
     }
   ],
   "setup": {
-    "intro": "Install once, then hand the CLI an exported span file. Nothing connects to your Phoenix instance; the audit runs offline on the spans you already collected, against whichever replay endpoint you configure.",
+    "intro": "Nothing to install: npx runs the published CLI. Hand it an exported span file. Nothing connects to your Phoenix instance; the audit runs offline on the spans you already collected, against whichever replay endpoint you configure.",
     "commands": [
       {
         "comment": "# preview the pipeline against your spans, without spending",

@@ -257,3 +257,95 @@ export function PullRequestIcon({ size = 18, ...props }: IconProps) {
     </svg>
   );
 }
+
+// Terminal — a prompt waiting: the chevron and the line where the command goes.
+export function TerminalIcon({ size = 18, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="m5 7 5 5-5 5" />
+      <path d="M13 17h6" />
+    </svg>
+  );
+}
+
+// Coding agent — a spark: the assistant that reads the runbook and drives the loop.
+export function AgentSparkIcon({ size = 18, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M12 4v5" />
+      <path d="M12 15v5" />
+      <path d="M4 12h5" />
+      <path d="M15 12h5" />
+      <path d="m7.2 7.2 2.6 2.6" />
+      <path d="m14.2 14.2 2.6 2.6" />
+      <path d="m16.8 7.2-2.6 2.6" />
+      <path d="m9.8 14.2-2.6 2.6" />
+    </svg>
+  );
+}
+
+// Scheduled CI — a clock about to strike: the audit that runs itself on a cadence.
+export function ScheduleIcon({ size = 18, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
+// Self-hosted — two racked machines: the agent on a host you run.
+export function ServerRackIcon({ size = 18, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect x="4" y="4.5" width="16" height="6" rx="1.8" />
+      <rect x="4" y="13.5" width="16" height="6" rx="1.8" />
+      <circle cx="8" cy="7.5" r="0.4" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="16.5" r="0.4" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}

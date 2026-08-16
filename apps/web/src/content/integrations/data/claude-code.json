@@ -31,7 +31,7 @@
     }
   ],
   "setup": {
-    "intro": "Install once and the skill runs inside the tool that wrote the traces. Sessions live at ~/.claude/projects; point the CLI at one project folder or a single session file.",
+    "intro": "Nothing to install: npx runs the published CLI, and init finds your Claude Code sessions on disk automatically. The coding-agent skill also runs inside the tool that wrote the traces. Sessions live at ~/.claude/projects; point the CLI at one project folder or a single session file.",
     "commands": [
       {
         "comment": "# your sessions are already on disk, one folder per project",

@@ -31,7 +31,7 @@
     }
   ],
   "setup": {
-    "intro": "Install once, then hand the CLI a span export. Nothing connects to your collector or tracing backend; the audit runs offline on files you already have.",
+    "intro": "Nothing to install: npx runs the published CLI. Hand it a span export. Nothing connects to your collector or tracing backend; the audit runs offline on files you already have.",
     "commands": [
       {
         "comment": "# preview the pipeline against your spans, without spending",

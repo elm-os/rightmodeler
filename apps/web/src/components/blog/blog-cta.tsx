@@ -27,8 +27,8 @@ export function BlogCta() {
             <span aria-hidden className="select-none text-fog">
               #{" "}
             </span>
-            It is a report, not a runtime gateway. Measure the savings on your
-            own data first.
+            Free until replay, then your own provider key. It is a report, not a
+            runtime gateway.
           </p>
         </Reveal>
 

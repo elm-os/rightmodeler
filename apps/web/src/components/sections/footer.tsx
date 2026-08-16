@@ -21,7 +21,7 @@ export function Footer() {
             Every model decision, measured and reviewable.
           </h2>
           <p className="mt-5 max-w-md text-body text-driftwood">
-            The skill measures candidates on your traces today. The agent opens
+            The CLI measures candidates on your traces today. The agent opens
             the evidence as a pull request. Crucible keeps watch.
           </p>
         </Reveal>
