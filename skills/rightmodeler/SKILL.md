@@ -30,7 +30,7 @@ Read the documentation shipped with the installed CLI before driving it:
 - `harness/packages/rightmodeler/docs/modeb.md`
 
 In an installed dependency, the same files are under
-`node_modules/@rightmodeler/cli/docs/`. The shipped docs describe the version that
+`node_modules/rightmodeler/docs/`. The shipped docs describe the version that
 is actually installed and take precedence over this runbook if versions differ.
 
 ## 1. Establish scope and goal
@@ -38,7 +38,9 @@ is actually installed and take precedence over this runbook if versions differ.
 Ask only for inputs that are not already known:
 
 - The repository root.
-- The trace file path. The CLI accepts OTel GenAI JSON and OpenAI JSONL.
+- The trace file path. Interactive `init` and `estimate` can discover supported
+  local, Claude Code, and Codex files, but agent and other non-interactive runs
+  should keep passing `--traces` explicitly for deterministic operation.
 - The goal and stopping stage. Use `report` for a complete recommendation run.
 - The OpenAI-compatible provider base URL and the name of the environment variable
   that already contains its API key.
@@ -192,6 +194,11 @@ for the user or repository owner to provide it. Common remedies include adding
 `--traces`, adding `--base-url`, naming an API-key environment variable with
 `--api-key-env`, or supplying required confirmation configuration. Never guess a
 missing value. Resume with the same store after the input is available.
+
+A `missing_traces_path` remedy can append up to the three newest discovered paths
+and the number of additional candidates, followed by `Pass --traces <path>.`
+Treat those paths as suggestions only. In the runbook command, continue to pass
+the operator-approved trace path explicitly.
 
 On exit 3, report that the configured budget boundary stopped the run. Include the
 error `message` and `remedy`, the configured `--max-cost-usd`, and the last completed

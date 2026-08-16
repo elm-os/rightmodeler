@@ -658,6 +658,24 @@ export async function runPipeline(
     };
   }
 
+  await repositoryRevision(context.repo);
+  const initialState = await readSetupState(context.store, context.projectId);
+  const ingestCheckpoint = initialState.stages.ingest;
+  if (
+    stagesThrough(options.through).includes("ingest") &&
+    context.traces === undefined &&
+    (ingestCheckpoint === undefined ||
+      !(await checkpointOutputExists(context, "ingest", ingestCheckpoint)))
+  ) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "missing_traces_path",
+      message: "A trace input path is required when ingest is reached.",
+      remedy:
+        "Pass --traces <path> with an OTel GenAI JSON or OpenAI JSONL trace file.",
+    });
+  }
+
   if (options.existingRunId !== undefined) {
     const existing = await requireRunningReplayRun(
       context,
@@ -4081,12 +4099,44 @@ async function repositoryDigest(
 }
 
 async function repositoryRevision(repo: string): Promise<string> {
-  const { stdout } = await execFileAsync(
-    "git",
-    ["-C", repo, "rev-parse", "HEAD"],
-    { encoding: "utf8" },
-  );
-  return stdout.trim();
+  let insideWorkTree: string;
+  try {
+    ({ stdout: insideWorkTree } = await execFileAsync(
+      "git",
+      ["-C", repo, "rev-parse", "--is-inside-work-tree"],
+      { encoding: "utf8" },
+    ));
+  } catch {
+    throw notGitRepository();
+  }
+  if (insideWorkTree.trim() !== "true") throw notGitRepository();
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", repo, "rev-parse", "--verify", "HEAD"],
+      { encoding: "utf8" },
+    );
+    return stdout.trim();
+  } catch {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "git_repository_has_no_commits",
+      message:
+        "This git repository has no commits. Rightmodeler ties findings to your code, so make an initial commit and rerun.",
+      remedy: "Create the first commit, then rerun the command.",
+    });
+  }
+}
+
+function notGitRepository(): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "not_git_repository",
+    message:
+      "This folder is not a git repository. Rightmodeler ties findings to your code, so run it inside the project you want audited (or run git init and commit first).",
+    remedy:
+      "Run the command again from a Git repository with at least one commit.",
+  });
 }
 
 function corpusOutput(corpus: Corpus) {
