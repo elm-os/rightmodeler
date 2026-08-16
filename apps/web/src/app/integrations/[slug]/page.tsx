@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CopyCommand } from "@/components/copy-command";
+import { CommandBlock } from "@/components/command-block";
 import { JsonLd } from "@/components/json-ld";
 import { Reveal } from "@/components/reveal";
 import { FaqAccordion } from "@/components/sections/faq-accordion";
@@ -13,7 +14,7 @@ import { Tldr } from "@/components/sections/tldr";
 import { getAllSlugs, getIntegration } from "@/content/integrations";
 import { getComparison } from "@/content/vs";
 import { pageMetadata } from "@/lib/seo";
-import { RUN_COMMAND, SITE_URL } from "@/lib/site";
+import { RUN_COMMAND, SITE_URL, SKILL_COMMAND } from "@/lib/site";
 
 // Prerender every integration at build time. Cache Components requires generateStaticParams to
 // return at least one param; unknown slugs are handled by notFound() in the page below.
@@ -76,22 +77,6 @@ function Band({
         </div>
       </div>
     </section>
-  );
-}
-
-// One command block: a mono comment over the copyable command, the same grammar as the hero CTA.
-function CommandBlock({
-  comment,
-  command,
-}: {
-  comment: string;
-  command: string;
-}) {
-  return (
-    <div>
-      <p className="font-mono text-caption text-fog">{comment}</p>
-      <CopyCommand command={command} className="mt-2 max-w-full" />
-    </div>
   );
 }
 
@@ -180,14 +165,10 @@ export default async function IntegrationPage({
 
       {rule}
 
-      {/* ── Setup: the standard install command first (from lib/site, so it never drifts), then
-          the tool-specific commands from the data file. ── */}
+      {/* ── Setup: the tool-specific commands from the data file (npx runs the published CLI, so
+          there is nothing to install first), then the coding-agent option. ── */}
       <Band heading="Setup" intro={data.setup.intro}>
         <div className="space-y-6">
-          <CommandBlock
-            comment="# install the rightmodeler skill"
-            command={RUN_COMMAND}
-          />
           {data.setup.commands.map((entry) => (
             <CommandBlock
               key={entry.command}
@@ -195,6 +176,10 @@ export default async function IntegrationPage({
               command={entry.command}
             />
           ))}
+          <CommandBlock
+            comment="# or let your coding agent drive it"
+            command={SKILL_COMMAND}
+          />
         </div>
       </Band>
 
@@ -309,8 +294,8 @@ export default async function IntegrationPage({
                     Run the audit on your own traces
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
-                    The skill is free on GitHub. One command installs it; your{" "}
-                    {data.name} traces do the rest.
+                    The CLI runs from npx, nothing to install; your {data.name}{" "}
+                    traces do the rest.
                   </p>
                   <div className="mt-5 flex flex-wrap items-center gap-4">
                     <GithubButton />

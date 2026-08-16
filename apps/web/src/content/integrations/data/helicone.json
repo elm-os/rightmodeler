@@ -31,7 +31,7 @@
     }
   ],
   "setup": {
-    "intro": "Install once, then point the CLI at your exported rows. Nothing connects to your Helicone account during the audit: your key is used by the export call you run yourself.",
+    "intro": "Nothing to install: npx runs the published CLI. Point it at your exported rows. Nothing connects to your Helicone account during the audit: your key is used by the export call you run yourself.",
     "commands": [
       {
         "comment": "# export request rows, bodies included, to a file",

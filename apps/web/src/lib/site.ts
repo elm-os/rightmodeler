@@ -6,9 +6,12 @@ export const SITE_NAME = "rightmodeler";
 export const SITE_AUTHOR = "The rightmodeler team";
 
 // The engineer's first click and first command — imported everywhere they appear (nav, hero,
-// CTA band, blog CTA) so the strings can never drift between surfaces.
+// CTA band, blog CTA, integrations, vs) so the strings can never drift between surfaces.
+// RUN_COMMAND is the published CLI's guided first run; SKILL_COMMAND installs the runbook that
+// lets Claude Code and Codex-class agents drive the same CLI.
 export const REPO_URL = "https://github.com/elm-os/rightmodeler";
-export const RUN_COMMAND =
+export const RUN_COMMAND = "npx rightmodeler init";
+export const SKILL_COMMAND =
   "npx skills add elm-os/rightmodeler --skill rightmodeler";
 
 // The MIT grant itself. Linked from the footer's legal row, so the license the site

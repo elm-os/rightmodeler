@@ -11,7 +11,7 @@ import { SITE_NAME, SITE_URL, REPO_URL, RUN_COMMAND } from "@/lib/site";
 // One-paragraph summary for the llms.txt blockquote. Stands alone: an LLM should grasp the whole
 // platform (skill, agent, Crucible) and the key caveat (the skill is a report, not a gateway).
 const SUMMARY =
-  "rightmodeler keeps AI agents on the right model at every step. The rightmodeler skill, free on GitHub, drives the rightmodeler CLI: it replays your real agent traces through cheaper models, measures each candidate against the output you accepted, reports the evidence, sample size, and abstentions, and ships approved swaps as a pull request you can roll back byte-exact. rightmodeler agent, open source in the same repo with a hosted version coming, watches prices, drift, and new model releases and opens evidence-backed model-change pull requests in your repo. Crucible, in early access, is the analytics and optimization suite that shows what every layer of your agent system costs, how fast it runs, and where it fails, and keeps your stack right-sized continuously. The skill is a report you run on your own traces, not a runtime gateway.";
+  "rightmodeler keeps AI agents on the right model at every step. The rightmodeler CLI, published on npm as rightmodeler, replays your real agent traces through cheaper models, measures each candidate against the output you accepted, reports the evidence, sample size, and abstentions, and ships approved swaps as a pull request you can roll back byte-exact. npx rightmodeler init finds the traces Claude Code and Codex already left on disk and runs free through shortlist; a coding-agent skill lets Claude Code and Codex-class agents drive the same CLI end to end. rightmodeler agent, open source in the same repo with a hosted version coming, watches prices, drift, and new model releases and opens evidence-backed model-change pull requests in your repo. Crucible, in early access, is the analytics and optimization suite that shows what every layer of your agent system costs, how fast it runs, and where it fails, and keeps your stack right-sized continuously. The CLI produces a report you run on your own traces, not a runtime gateway.";
 
 // Product overview in Markdown for llms-context.txt (indented code block avoids backticks here).
 const OVERVIEW = `## What it is
@@ -20,7 +20,7 @@ ${SITE_NAME} is the model layer for teams running multi-agent LLM systems. New m
 
 Three offerings:
 
-- The ${SITE_NAME} skill (available now): an audit you run on your own traces, driving the ${SITE_NAME} CLI. It replays your real agent traces through cheaper candidate models, measures each output against what you already accepted, and produces a per-step recommendation report with reference agreement, evidence, sample size, and abstentions. Approved swaps ship as a pull request with the evidence attached; a rollback command restores the exact pre-swap state. It is a report and a PR, not a runtime gateway; it never sits in your request path. Bring-your-own evaluation is supported: Braintrust, Langfuse, LangSmith, or promptfoo can score the replays, curated datasets can seed the case set, and results can be exported back.
+- The ${SITE_NAME} CLI (on npm as rightmodeler, available now): an audit you run on your own traces. npx rightmodeler init finds the traces Claude Code and Codex already left on disk, or asks for a file, and runs free through shortlist before any provider key is needed. It replays your real agent traces through cheaper candidate models, measures each output against what you already accepted, and produces a per-step recommendation report with reference agreement, evidence, sample size, and abstentions. Approved swaps ship as a pull request with the evidence attached; a rollback command restores the exact pre-swap state. It is a report and a PR, not a runtime gateway; it never sits in your request path. Bring-your-own evaluation is supported: Braintrust, Langfuse, LangSmith, or promptfoo can score the replays, curated datasets can seed the case set, and results can be exported back. A coding-agent skill (npx skills add elm-os/rightmodeler --skill rightmodeler) gives Claude Code and Codex-class agents the runbook to drive the same CLI end to end.
 - ${SITE_NAME} agent (open source now, hosted version coming): the same measurement loop, continuous. It runs on a schedule, re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and when a candidate clears your configured quality floor and preferences it opens a pull request in your repo with the evidence attached. It opens pull requests only and never merges. Model migrations become code review.
 - Crucible (early access): the analytics and optimization suite for your agents. Cost per layer, speed per step, failed tool calls and regressions as they happen, connected over MCP, while it keeps your model stack right-sized continuously.
 
@@ -32,7 +32,7 @@ Three offerings:
 
 ## Get started
 
-Run the skill on your own traces:
+Run it on your own traces:
 
     ${RUN_COMMAND}
 

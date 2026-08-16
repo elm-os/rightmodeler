@@ -31,7 +31,7 @@
     }
   ],
   "setup": {
-    "intro": "Install the skill once, then feed the CLI a file of Langfuse observations. The audit runs on the export; your keys are needed for the curl you run yourself, and again if you choose Langfuse as the evaluator.",
+    "intro": "Nothing to install: npx runs the published CLI. Feed it a file of Langfuse observations. The audit runs on the export; your keys are needed for the curl you run yourself, and again if you choose Langfuse as the evaluator.",
     "commands": [
       {
         "comment": "# export observations via the public API (keys from project settings)",

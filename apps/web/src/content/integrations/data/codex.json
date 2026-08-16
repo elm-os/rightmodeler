@@ -31,7 +31,7 @@
     }
   ],
   "setup": {
-    "intro": "Install once, then hand the CLI a rollout file. Nothing connects to your OpenAI account; the audit runs on files Codex already wrote, against whichever replay endpoint you configure.",
+    "intro": "Nothing to install: npx runs the published CLI, and init finds your Codex rollouts on disk automatically. Nothing connects to your OpenAI account; the audit runs on files Codex already wrote, against whichever replay endpoint you configure.",
     "commands": [
       {
         "comment": "# list your most recent Codex rollouts",

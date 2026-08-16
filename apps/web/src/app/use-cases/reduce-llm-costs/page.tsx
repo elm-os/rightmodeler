@@ -278,9 +278,9 @@ export default function ReduceLlmCostsPage() {
                     Run the audit today
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
-                    One command installs the skill. The report runs on the
-                    traces you already have and hands you recommendations with
-                    their evidence.
+                    One command runs the audit, nothing to install. The report
+                    runs on the traces you already have and hands you
+                    recommendations with their evidence.
                   </p>
                   <div className="mt-5">
                     <GithubButton />
