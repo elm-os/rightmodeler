@@ -9,6 +9,25 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 - Trace input in a supported format.
 - An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins.
 
+Supported trace sources are OTel GenAI, OpenAI JSONL, Langfuse, Braintrust,
+LangSmith, OpenInference, Helicone, W&B Weave, Claude Code, and Codex.
+
+## Start with automatic discovery
+
+Run this from the repository you want to analyze:
+
+```sh
+npx rightmodeler init
+```
+
+Rightmodeler checks conventional local trace files, Claude Code transcripts for
+the repository, and Codex sessions whose recorded working directory matches the
+repository. In an interactive terminal it lists matches newest-first with an
+approximate model-call count. If nothing is found, it explains how to produce or
+export a trace and asks for a path. Leaving the answer empty, pressing Ctrl-C or
+Ctrl-D, or closing standard input stops cleanly with exit code `2` and a remedy
+for rerunning.
+
 ## Preview without changing the repository
 
 ```sh
@@ -27,6 +46,19 @@ npx rightmodeler init --through corpus --traces /path/to/traces.json --output js
 export RIGHTMODELER_API_KEY="provider-key"
 npx rightmodeler init --traces /path/to/traces.json --base-url https://provider.example/v1 --output json --repo /path/to/repository
 ```
+
+`RIGHTMODELER_API_KEY` is the default key variable. Pass
+`--api-key-env <name>` to use a different exported variable. The CLI does not ask
+for a secret value.
+
+## Estimate replay spend
+
+```sh
+npx rightmodeler estimate --traces /path/to/traces.json --base-url https://provider.example/v1 --output json --repo /path/to/repository
+```
+
+Estimate projects candidate replay spend from recorded token usage and the current
+model catalog before paid model calls begin.
 
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md` and `.rightmodeler/project/reports/report.json`.
 

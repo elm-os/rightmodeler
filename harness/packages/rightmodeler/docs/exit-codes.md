@@ -6,7 +6,7 @@ Rightmodeler reserves exit codes `0` through `3` for machine-readable outcomes. 
 
 - `0`: the command completed and no recommendation is being reported. Planning and partial `--through` runs also return `0` when successful.
 - `1`: a complete `init` or `report` found an actionable recommendation.
-- `2`: the run needs input at a resumable boundary, such as missing traces, provider configuration, or required confirmation configuration.
+- `2`: the run needs input at a resumable boundary, such as missing traces, a cancelled trace prompt, provider configuration, or required confirmation configuration.
 - `3`: the cost budget was reached at a resumable boundary.
 - `10` or greater: command-line or runtime failure.
 

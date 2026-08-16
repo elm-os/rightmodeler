@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import {
+  chmod,
   cp,
   mkdir,
   mkdtemp,
@@ -167,6 +168,12 @@ async function fixtureCopy(
   await cp(demoAppPath, repo, { recursive: true });
   await initializeFixtureRepository(repo);
   return { root, repo };
+}
+
+async function fixtureHome(root: string): Promise<string> {
+  const home = join(root, "home");
+  await mkdir(home, { recursive: true });
+  return home;
 }
 
 async function initializeFixtureRepository(repo: string): Promise<void> {
@@ -3170,15 +3177,18 @@ describe("built CLI pipeline", () => {
 
   it("surfaces missing traces and budget refusals at resumable boundaries", async () => {
     const missing = await fixtureCopy("missing-traces");
-    const missingResult = await runCli([
-      "init",
-      "--through",
-      "ingest",
-      "--output",
-      "json",
-      "--repo",
-      missing.repo,
-    ]);
+    const missingResult = await runCli(
+      [
+        "init",
+        "--through",
+        "ingest",
+        "--output",
+        "json",
+        "--repo",
+        missing.repo,
+      ],
+      { env: { HOME: await fixtureHome(missing.root) } },
+    );
     expect(missingResult.code).toBe(2);
     expect(JSON.parse(missingResult.stderr)).toMatchObject({
       code: "missing_traces_path",
@@ -3215,5 +3225,151 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
+  });
+
+  it("includes discovered trace candidates in the non-interactive remedy", async () => {
+    const fixture = await fixtureCopy("discovered-trace-remedy");
+    const home = await fixtureHome(fixture.root);
+    const discovered = join(fixture.repo, "traces.json");
+    await cp(tracesPath, discovered);
+
+    const result = await runCli(
+      [
+        "init",
+        "--through",
+        "ingest",
+        "--output",
+        "json",
+        "--repo",
+        fixture.repo,
+      ],
+      { env: { HOME: home } },
+    );
+
+    expect(result.code).toBe(2);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      code: "missing_traces_path",
+      remedy: expect.stringContaining(
+        `Found 1 candidate trace file: ${discovered}. Pass --traces <path>.`,
+      ),
+    });
+  });
+
+  it("adopts the newest discovered trace with --yes in non-interactive use", async () => {
+    const fixture = await fixtureCopy("discovered-trace-yes");
+    const home = await fixtureHome(fixture.root);
+    await cp(tracesPath, join(fixture.repo, "traces.json"));
+
+    const result = await runCli(
+      [
+        "init",
+        "--yes",
+        "--through",
+        "ingest",
+        "--output",
+        "json",
+        "--repo",
+        fixture.repo,
+      ],
+      { env: { HOME: home } },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(jsonOutput(result).executedStages).toContain("ingest");
+  });
+
+  it.each(["unreadable file", "traces file", "unreadable traces directory"])(
+    "keeps discovery best-effort with %s",
+    async (offender) => {
+      const fixture = await fixtureCopy(
+        `discovery-${offender.replaceAll(" ", "-")}`,
+      );
+      const home = await fixtureHome(fixture.root);
+      const healthy = join(fixture.repo, "traces.json");
+      await cp(tracesPath, healthy);
+      const unreadable = join(fixture.repo, "unreadable.json");
+      const traces = join(fixture.repo, "traces");
+      if (offender === "unreadable file") {
+        await writeFile(unreadable, "{}");
+        await chmod(unreadable, 0o000);
+      } else if (offender === "traces file") {
+        await writeFile(traces, "not a directory");
+      } else {
+        await mkdir(traces);
+        await chmod(traces, 0o000);
+      }
+
+      try {
+        const result = await runCli(
+          [
+            "init",
+            "--through",
+            "ingest",
+            "--output",
+            "json",
+            "--repo",
+            fixture.repo,
+          ],
+          { env: { HOME: home } },
+        );
+
+        expect(result.code).toBe(2);
+        expect(result.stdout).toBe("");
+        expect(JSON.parse(result.stderr)).toMatchObject({
+          code: "missing_traces_path",
+          remedy: expect.stringContaining(healthy),
+        });
+        expect(result.stderr).not.toMatch(/EACCES|ENOTDIR|errno|stack/iu);
+      } finally {
+        if (offender === "unreadable file") await chmod(unreadable, 0o600);
+        if (offender === "unreadable traces directory") {
+          await chmod(traces, 0o700);
+        }
+      }
+    },
+  );
+
+  it("reports plain-language Git preconditions before scanning", async () => {
+    const root = await mkdtemp(
+      join(tmpdir(), "rightmodeler-git-preconditions-"),
+    );
+    temporaryDirectories.push(root);
+    const home = await fixtureHome(root);
+    const plain = join(root, "plain");
+    const empty = join(root, "empty");
+    await Promise.all([mkdir(plain), mkdir(empty)]);
+    await execFileAsync("git", [
+      "-C",
+      empty,
+      "init",
+      "--initial-branch",
+      "main",
+    ]);
+
+    const notRepository = await runCli(
+      ["init", "--output", "json", "--repo", plain],
+      { env: { HOME: home } },
+    );
+    expect(notRepository.code).toBe(2);
+    expect(JSON.parse(notRepository.stderr)).toEqual({
+      code: "not_git_repository",
+      message:
+        "This folder is not a git repository. Rightmodeler ties findings to your code, so run it inside the project you want audited (or run git init and commit first).",
+      remedy:
+        "Run the command again from a Git repository with at least one commit.",
+    });
+
+    const noCommits = await runCli(
+      ["init", "--output", "json", "--repo", empty],
+      { env: { HOME: home } },
+    );
+    expect(noCommits.code).toBe(2);
+    expect(JSON.parse(noCommits.stderr)).toEqual({
+      code: "git_repository_has_no_commits",
+      message:
+        "This git repository has no commits. Rightmodeler ties findings to your code, so make an initial commit and rerun.",
+      remedy: "Create the first commit, then rerun the command.",
+    });
   });
 });
