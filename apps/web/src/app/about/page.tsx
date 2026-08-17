@@ -13,6 +13,7 @@ import {
   SITE_NAME,
   SITE_URL,
   X_URL,
+  NPM_PACKAGE_URL,
 } from "@/lib/site";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
@@ -31,7 +32,14 @@ const organizationLd = {
   logo: `${SITE_URL}/icon.png`,
   description:
     "rightmodeler measures candidate models against accepted outputs on real traces, opens evidence-backed model-change pull requests, and watches every layer with Crucible.",
-  sameAs: [X_URL, LINKEDIN_URL, REDDIT_URL, REPO_URL, GITHUB_ORG_URL],
+  sameAs: [
+    X_URL,
+    LINKEDIN_URL,
+    REDDIT_URL,
+    REPO_URL,
+    GITHUB_ORG_URL,
+    NPM_PACKAGE_URL,
+  ],
 };
 
 const FAQ: FaqItem[] = [
