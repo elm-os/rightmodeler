@@ -9,7 +9,13 @@ import { Platform } from "@/components/sections/platform";
 import { SourcesBar } from "@/components/sections/sources-bar";
 import { TestimonialBand } from "@/components/sections/testimonial-band";
 import { DEFAULT_SOCIAL_IMAGE, socialImage } from "@/lib/seo";
-import { SITE_NAME, SITE_URL } from "@/lib/site";
+import {
+  LICENSE_URL,
+  NPM_PACKAGE_URL,
+  REPO_URL,
+  SITE_NAME,
+  SITE_URL,
+} from "@/lib/site";
 
 const description =
   "Measure candidate models against outputs you accepted, review the evidence, sample size, and abstentions, then ship approved model changes as pull requests.";
@@ -22,6 +28,27 @@ const websiteLd = {
   "@type": "WebSite",
   name: SITE_NAME,
   url: SITE_URL,
+};
+
+// The product itself, so the site and the published package resolve to each other:
+// the npm manifest points its homepage here, and this points install and download at
+// npm. Only facts that hold today, with no version pin to go stale and no ratings.
+const softwareLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: SITE_NAME,
+  description,
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "macOS, Linux, Windows",
+  softwareRequirements: "Node.js 24 or newer",
+  url: SITE_URL,
+  installUrl: NPM_PACKAGE_URL,
+  downloadUrl: NPM_PACKAGE_URL,
+  codeRepository: REPO_URL,
+  license: LICENSE_URL,
+  isAccessibleForFree: true,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  sameAs: [NPM_PACKAGE_URL, REPO_URL],
 };
 
 export const metadata: Metadata = {
@@ -57,6 +84,7 @@ export default function Home() {
   return (
     <>
       <JsonLd data={websiteLd} />
+      <JsonLd data={softwareLd} />
       <span id="top" aria-hidden className="sr-only" />
       <Nav />
       <main data-overscroll-content>

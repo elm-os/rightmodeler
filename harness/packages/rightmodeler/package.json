@@ -1,6 +1,8 @@
 {
   "name": "@rightmodeler/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
+  "description": "Find and prove safe model substitutions from the agent traces you already have.",
+  "homepage": "https://www.rightmodeler.com",
   "type": "module",
   "bin": {
     "rightmodeler": "./dist-bundle/cli.js"

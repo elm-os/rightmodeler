@@ -45613,7 +45613,7 @@ function rollbackSwaps(options) {
 }
 
 // src/version.ts
-var version2 = "0.2.0";
+var version2 = "0.2.1";
 
 // src/cli.ts
 var processRuntime = {

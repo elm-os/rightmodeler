@@ -10,6 +10,9 @@ export const SITE_AUTHOR = "The rightmodeler team";
 // RUN_COMMAND is the published CLI's guided first run; SKILL_COMMAND installs the runbook that
 // lets Claude Code and Codex-class agents drive the same CLI.
 export const REPO_URL = "https://github.com/elm-os/rightmodeler";
+// The published CLI. Linked from the structured data so the site and the package
+// resolve to each other; the package manifest points its homepage back here.
+export const NPM_PACKAGE_URL = "https://www.npmjs.com/package/rightmodeler";
 export const RUN_COMMAND = "npx rightmodeler init";
 export const SKILL_COMMAND =
   "npx skills add elm-os/rightmodeler --skill rightmodeler";
