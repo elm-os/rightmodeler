@@ -268,6 +268,13 @@ function runInstalled(
 }
 
 async function assertPackedDocumentation(installedRoot: string): Promise<void> {
+  // Packed docs must read offline, so every link is relative and resolves to a file in
+  // the tarball. The one absolute link allowed is the manifest's own homepage: a single
+  // canonical pointer back to the site, not a doc cross-reference. Taking it from the
+  // manifest rather than a literal keeps the exception from drifting from what ships.
+  const { homepage } = JSON.parse(
+    await readFile(join(installedRoot, "package.json"), "utf8"),
+  ) as { homepage?: string };
   const markdownFiles = await collectMarkdown(installedRoot);
   expect(
     markdownFiles.map((path) => relative(installedRoot, path)).sort(),
@@ -284,6 +291,7 @@ async function assertPackedDocumentation(installedRoot: string): Promise<void> {
     const markdown = await readFile(markdownPath, "utf8");
     for (const match of markdown.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
       const link = match[1]!;
+      if (homepage !== undefined && link === homepage) continue;
       expect(link, relative(installedRoot, markdownPath)).not.toMatch(
         /^(?:[a-z]+:|\/\/)/i,
       );
