@@ -252,6 +252,7 @@ function ApprovalTable() {
           return (
             <motion.div
               key={row.key}
+              data-reveal
               className="relative px-4 py-3.5"
               initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
               whileInView={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
@@ -354,6 +355,7 @@ function ApprovalTable() {
             {ROWS.map((row, i) => (
               <motion.div
                 key={row.key}
+                data-reveal
                 className="grid items-center gap-x-3 border-b border-ash-border font-mono text-[13px]"
                 style={{ gridTemplateColumns: GRID, height: ROW_H }}
                 initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}

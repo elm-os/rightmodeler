@@ -6,7 +6,16 @@
 import { getAllPosts } from "@/content/blog";
 import { getAllIntegrations } from "@/content/integrations";
 import { getAllComparisons } from "@/content/vs";
-import { SITE_NAME, SITE_URL, REPO_URL, RUN_COMMAND } from "@/lib/site";
+import {
+  DOCS_URL,
+  docsFileUrl,
+  NPM_PACKAGE_URL,
+  REPO_URL,
+  RUN_COMMAND,
+  SITE_NAME,
+  SITE_URL,
+  SKILL_COMMAND,
+} from "@/lib/site";
 
 // One-paragraph summary for the llms.txt blockquote. Stands alone: an LLM should grasp the whole
 // platform (skill, agent, Crucible) and the key caveat (the skill is a report, not a gateway).
@@ -112,6 +121,12 @@ const PAGES: { path: string; title: string; description: string }[] = [
     description: "What rightmodeler is and the mission behind it.",
   },
   {
+    path: "/contact",
+    title: "Contact",
+    description:
+      "Every way to reach the rightmodeler team: email for questions and licensing, GitHub issues for bugs, the feedback form for product input, and the security policy for vulnerability reports.",
+  },
+  {
     path: "/feedback",
     title: "Feedback",
     description:
@@ -130,6 +145,18 @@ const PAGES: { path: string; title: string; description: string }[] = [
       "The terms that govern use of the rightmodeler website, in plain English.",
   },
 ];
+
+// The developer surface, named so a model asked for rightmodeler's API docs, CLI reference, or
+// agent skill has real URLs to return. These files ship inside the published npm tarball; the
+// canonical copies live in the repository.
+const DEVELOPER_RESOURCES = `- [CLI documentation](${DOCS_URL}): Command reference, getting started, exit codes, evaluators, and Mode B. Ships with the npm package.
+- [Getting started](${docsFileUrl("getting-started.md")}): Install, point it at traces, and read the first report.
+- [Command reference](${docsFileUrl("commands.md")}): Every command and flag, generated from the CLI itself.
+- [Exit codes](${docsFileUrl("exit-codes.md")}): What each exit status means, for scripting and CI.
+- [Evaluators](${docsFileUrl("evaluators.md")}): Scoring replays with Braintrust, Langfuse, LangSmith, or promptfoo instead of the built-in judge.
+- [Coding-agent skill](${REPO_URL}/blob/main/skills/rightmodeler/SKILL.md): The runbook that lets Claude Code and Codex-class agents drive the CLI end to end. Install with ${SKILL_COMMAND}
+- [npm package](${NPM_PACKAGE_URL}): The published CLI. Run it with ${RUN_COMMAND}
+- [Source repository](${REPO_URL}): The pipeline, the agent, and the schemas. MIT licensed.`;
 
 const pageLinks = PAGES.map(
   (page) => `- [${page.title}](${SITE_URL}${page.path}): ${page.description}`,
@@ -172,6 +199,10 @@ ${SITE_NAME} is a developer tool from ELM-OS for teams running multi-agent LLM s
 - [${SITE_NAME}](${SITE_URL}): Home. What it does, how the evidence-backed downgrade report works, and the first command to run.
 - [GitHub repository](${REPO_URL}): Source code and the pipeline you run on your own traces. Open source under the MIT license.
 
+## Developer resources
+
+${DEVELOPER_RESOURCES}
+
 ## Pages
 
 ${pageLinks}
@@ -212,6 +243,10 @@ export function buildLlmsContext(): string {
 Source: ${SITE_URL}
 
 ${OVERVIEW}
+
+## Developer resources
+
+${DEVELOPER_RESOURCES}
 
 ## Page index
 
