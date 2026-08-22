@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "source": "/((?!_next/|_vercel/|api/|.*\\.).*)",
+      "headers": [
+        {
+          "key": "Vary",
+          "value": "Accept, RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Router-Segment-Prefetch"
+        }
+      ]
+    }
+  ]
+}
