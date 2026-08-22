@@ -53,3 +53,29 @@ the product-fact gate in `scripts/check-content.mjs` both cover it.
   the same constraint the `OVERVIEW` constant in `src/lib/llms.ts` works under.
 - Escape a literal `$` before `{` as `\$`.
 - **No em dashes**, anywhere, ever. CI fails the build on one.
+
+## Response headers: what the platform honours
+
+Header rules live in `vercel.json`, not `next.config.ts`. Two findings, both verified rather
+than assumed, so nobody has to rediscover them:
+
+1. **`next.config.ts` `headers()` is not applied to prerendered responses** in Next
+   16.3.0-preview.5. A literal single-path rule with `src/proxy.ts` removed entirely was still
+   dropped under `next start`, and the rule compiled into `routes-manifest.json` correctly yet
+   production served the page without it.
+2. **`Vary` cannot be set on a prerendered page at all** on the current deployment platform. A
+   custom marker header and `Vary` were shipped from the _same_ `vercel.json` rule: the marker
+   arrived on the response, `Vary` did not. The platform manages `Vary` on cached responses
+   itself.
+
+Consequences worth knowing before you debug this again:
+
+- Headers set on a `NextResponse.next()` in `src/proxy.ts` do not reach a prerendered asset
+  either. Only a `Response` the origin actually constructs keeps its headers, which is why the
+  `406` and the Markdown representation both carry `Vary: Accept` correctly while the HTML
+  representation does not.
+- This costs nothing in cache correctness here: the Markdown representation is served from a
+  different URL (`/api/markdown/...`) after the rewrite, so the two representations already have
+  separate cache keys and cannot be served to the wrong audience.
+- The `vercel.json` rule is kept as a statement of intent. If the platform stops managing `Vary`,
+  it starts working with no code change.
