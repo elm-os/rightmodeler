@@ -80,9 +80,13 @@ function OfferingCard({ offering }: { offering: Offering }) {
         >
           {offering.chip}
         </span>
-        <span className="mt-4 block font-sans text-heading-sm text-midnight-ink">
+        {/* h3 under the section's h2. `block` was already on the class list, so this renders
+            identically; the same pattern already ships on /how-it-works. A heading inside an
+            anchor is valid HTML5: anchors take flow content, only nested interactive content
+            is forbidden. */}
+        <h3 className="mt-4 block font-sans text-heading-sm text-midnight-ink">
           {offering.name}
-        </span>
+        </h3>
         {/* Reserve four body lines at desktop so the three CTA arrows sit on one line. */}
         <span className="mt-2 block text-body text-driftwood md:min-h-24">
           {offering.body}

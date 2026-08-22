@@ -8,8 +8,15 @@ import { Nav } from "@/components/sections/nav";
 import { Platform } from "@/components/sections/platform";
 import { SourcesBar } from "@/components/sections/sources-bar";
 import { TestimonialBand } from "@/components/sections/testimonial-band";
-import { DEFAULT_SOCIAL_IMAGE, socialImage } from "@/lib/seo";
 import {
+  alternatesFor,
+  DEFAULT_SOCIAL_IMAGE,
+  organizationLd,
+  ORGANIZATION_ID,
+  socialImage,
+} from "@/lib/seo";
+import {
+  DOCS_URL,
   LICENSE_URL,
   NPM_PACKAGE_URL,
   REPO_URL,
@@ -48,6 +55,14 @@ const softwareLd = {
   license: LICENSE_URL,
   isAccessibleForFree: true,
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  // Where the command reference, trace-format list, and exit codes actually live. Named so a
+  // model answering "where are rightmodeler's docs" has a URL to give.
+  softwareHelp: {
+    "@type": "CreativeWork",
+    name: "rightmodeler CLI documentation",
+    url: DOCS_URL,
+  },
+  publisher: { "@id": ORGANIZATION_ID },
   sameAs: [NPM_PACKAGE_URL, REPO_URL],
 };
 
@@ -56,7 +71,7 @@ export const metadata: Metadata = {
     absolute: "rightmodeler: measure candidates against what you shipped",
   },
   description,
-  alternates: { canonical: "/" },
+  alternates: alternatesFor("/"),
   openGraph: {
     title: "rightmodeler",
     description,
@@ -84,6 +99,9 @@ export default function Home() {
   return (
     <>
       <JsonLd data={websiteLd} />
+      {/* The Organization also renders on /about and /contact under the same @id, so the three
+          merge into one entity. It belongs here because verifiers look at the home page. */}
+      <JsonLd data={organizationLd()} />
       <JsonLd data={softwareLd} />
       <span id="top" aria-hidden className="sr-only" />
       <Nav />
