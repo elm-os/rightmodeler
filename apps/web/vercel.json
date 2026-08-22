@@ -4,10 +4,8 @@
     {
       "source": "/((?!_next/|_vercel/|api/|.*\\.).*)",
       "headers": [
-        {
-          "key": "Vary",
-          "value": "Accept, RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Router-Segment-Prefetch"
-        }
+        { "key": "Vary", "value": "Accept, RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Router-Segment-Prefetch" },
+        { "key": "X-Vercel-Config-From", "value": "apps-web" }
       ]
     }
   ]
