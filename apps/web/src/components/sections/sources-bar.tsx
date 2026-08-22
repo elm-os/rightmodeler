@@ -34,9 +34,12 @@ export function SourcesBar() {
   return (
     <section className="mx-auto max-w-4xl border-t border-ash-border px-6 py-10 sm:px-10 sm:py-12">
       <Reveal>
-        <p className="font-sans text-body text-driftwood">
+        {/* A real section heading, not a styled paragraph: this is the band's title, and the
+            outline needs it. Tailwind preflight makes h2 inherit font-size and font-weight and
+            zeroes its margin, so the tag swap changes no pixels. */}
+        <h2 className="font-sans text-body text-driftwood">
           Reads the traces you already have.
-        </p>
+        </h2>
         <p className="mt-1 font-mono text-caption text-driftwood">
           Autodetects {TRACE_SOURCES.length} trace formats into one per-step
           schema.

@@ -3,6 +3,10 @@
 // Scroll-into-view reveal: a small opacity + translateY(8px) entrance on the strong ease-out
 // curve, fired once. Stagger by passing an incremental `delay`. Under reduced-motion it
 // becomes opacity-only (no movement). Emil bar: transform/opacity only, sub-500ms, ease-out.
+//
+// data-reveal is the hook the <noscript> rule in app/layout.tsx targets. whileInView needs
+// JavaScript, so without it every revealed element would sit at opacity:0 forever and a
+// no-JS reader would see a blank page.
 
 import { motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
@@ -21,6 +25,7 @@ export function Reveal({
   const reduce = useReducedMotion();
   return (
     <motion.div
+      data-reveal
       className={className}
       initial={reduce ? { opacity: 0 } : { opacity: 0, y }}
       whileInView={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
