@@ -42,6 +42,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/manifesto",
     "/glossary",
     "/about",
+    "/contact",
     "/privacy",
     "/terms",
   ].map((path) => ({

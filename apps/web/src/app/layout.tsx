@@ -66,6 +66,17 @@ export default function RootLayout({
       className={`${inter.variable} ${dmSans.variable} ${spaceGrotesk.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {/*
+          Reveal and the hero ledger enter with motion's whileInView, which needs JavaScript, so
+          they server-render at opacity:0. Without this rule a reader or crawler with JS off sees
+          a blank page: the h1, the lede, every section heading, and the whole ledger stay
+          invisible. An !important author rule outranks the inline non-important declaration.
+          Scoped to [data-reveal] on purpose: a blanket transform:none would also stop the
+          trace-source marquee, which is pure CSS and should keep running without JS.
+        */}
+        <noscript>
+          <style>{`[data-reveal]{opacity:1!important;transform:none!important}`}</style>
+        </noscript>
         {children}
         <Analytics />
       </body>

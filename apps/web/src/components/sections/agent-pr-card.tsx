@@ -94,7 +94,7 @@ export function AgentPrCard() {
 
       <div className="divide-y divide-ash-border">
         {/* PR title. */}
-        <motion.div variants={block} className="px-4 py-3">
+        <motion.div data-reveal variants={block} className="px-4 py-3">
           <p className="font-sans text-body font-medium text-midnight-ink">
             swap: summarize step to gpt-5.4-mini
           </p>
@@ -102,6 +102,7 @@ export function AgentPrCard() {
 
         {/* Evidence rows — the case, before the verdict. */}
         <motion.div
+          data-reveal
           variants={block}
           className="flex flex-col gap-y-1.5 px-4 py-3"
         >
@@ -122,7 +123,7 @@ export function AgentPrCard() {
         </motion.div>
 
         {/* The diff itself — recessed mono slab, glyphs and ink only (no red/green, ever). */}
-        <motion.div variants={block} className="px-4 py-3">
+        <motion.div data-reveal variants={block} className="px-4 py-3">
           <div className="overflow-x-auto rounded-lg border border-ash-border bg-midnight-ink/5 p-2.5 font-mono text-[13px]">
             <div className="min-w-max">
               <p className="text-driftwood">steps/summarize.ts</p>
@@ -138,7 +139,7 @@ export function AgentPrCard() {
 
         {/* The verdict number — counts up only once it is actually in view. The invisible twin
             reserves the final width so the line never reflows as digits grow. */}
-        <motion.div variants={block} className="px-4 py-3">
+        <motion.div data-reveal variants={block} className="px-4 py-3">
           <div ref={numberRef}>
             <span className="relative inline-block font-display text-heading text-midnight-ink">
               <span aria-hidden className="invisible">

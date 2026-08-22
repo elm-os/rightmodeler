@@ -74,6 +74,9 @@ export function Footer() {
             <Link href="/feedback" className={linkClass}>
               Feedback
             </Link>
+            <Link href="/contact" className={linkClass}>
+              Contact
+            </Link>
             <SocialLinks className="-ml-2" />
           </nav>
         </Reveal>

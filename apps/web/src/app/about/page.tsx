@@ -5,17 +5,7 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { SocialLinks } from "@/components/sections/social-links";
-import {
-  GITHUB_ORG_URL,
-  LINKEDIN_URL,
-  REDDIT_URL,
-  REPO_URL,
-  SITE_NAME,
-  SITE_URL,
-  X_URL,
-  NPM_PACKAGE_URL,
-} from "@/lib/site";
-import { breadcrumbLd, pageMetadata } from "@/lib/seo";
+import { breadcrumbLd, organizationLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "About",
@@ -23,24 +13,6 @@ export const metadata: Metadata = pageMetadata({
     "rightmodeler measures cheaper candidates against outputs you accepted, then reports the evidence and abstentions. Open source, for multi-agent LLM teams.",
   path: "/about",
 });
-
-const organizationLd = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: SITE_NAME,
-  url: SITE_URL,
-  logo: `${SITE_URL}/icon.png`,
-  description:
-    "rightmodeler measures candidate models against accepted outputs on real traces, opens evidence-backed model-change pull requests, and watches every layer with Crucible.",
-  sameAs: [
-    X_URL,
-    LINKEDIN_URL,
-    REDDIT_URL,
-    REPO_URL,
-    GITHUB_ORG_URL,
-    NPM_PACKAGE_URL,
-  ],
-};
 
 const FAQ: FaqItem[] = [
   {
@@ -61,7 +33,7 @@ export default function AboutPage() {
   return (
     <PageShell>
       <JsonLd data={breadcrumbLd("About", "/about")} />
-      <JsonLd data={organizationLd} />
+      <JsonLd data={organizationLd()} />
 
       <PageHero
         eyebrow="About"
