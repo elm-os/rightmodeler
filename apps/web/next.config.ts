@@ -24,10 +24,10 @@ const nextConfig: NextConfig = {
   rewrites: async () => ({
     beforeFiles: [],
     afterFiles: [
-      { source: "/index.md", destination: "/api/markdown" },
-      { source: "/:a.md", destination: "/api/markdown/:a" },
-      { source: "/:a/:b.md", destination: "/api/markdown/:a/:b" },
-      { source: "/:a/:b/:c.md", destination: "/api/markdown/:a/:b/:c" },
+      { source: "/index.md", destination: "/md" },
+      { source: "/:a.md", destination: "/md/:a" },
+      { source: "/:a/:b.md", destination: "/md/:a/:b" },
+      { source: "/:a/:b/:c.md", destination: "/md/:a/:b/:c" },
     ],
     fallback: [],
   }),

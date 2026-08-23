@@ -11,6 +11,7 @@ import path from "node:path";
 import test from "node:test";
 import { listFiles, webRoot } from "./check-content.mjs";
 import {
+  MARKDOWN_HANDLER_BASE,
   markdownHandlerPath,
   markdownSiblingPath,
   STATIC_MARKDOWN_PATHS,
@@ -170,11 +171,11 @@ test("the .md sibling of every route is rewritten by next.config", () => {
 
 test("markdownSiblingPath and markdownHandlerPath agree on the root", () => {
   assert.equal(markdownSiblingPath("/"), "/index.md");
-  assert.equal(markdownHandlerPath("/"), "/api/markdown");
+  assert.equal(markdownHandlerPath("/"), "/md");
   assert.equal(markdownSiblingPath("/about"), "/about.md");
-  assert.equal(markdownHandlerPath("/about"), "/api/markdown/about");
+  assert.equal(markdownHandlerPath("/about"), "/md/about");
   // Trailing slashes are normalized away before either mapping.
-  assert.equal(markdownHandlerPath("/about/"), "/api/markdown/about");
+  assert.equal(markdownHandlerPath("/about/"), "/md/about");
 });
 
 test("the proxy matcher skips assets, internals, and the handler it rewrites to", () => {
@@ -187,6 +188,7 @@ test("the proxy matcher skips assets, internals, and the handler it rewrites to"
     "/_next/image",
     "/_vercel/insights/view",
     "/api/feedback",
+    "/md/about",
     "/api/markdown/about",
     "/robots.txt",
     "/sitemap.xml",
@@ -242,4 +244,33 @@ test("the 404 body points agents at the index files", () => {
       `the Markdown 404 does not name ${target}`,
     );
   }
+});
+
+test("the Markdown handler stays out of /api/, and robots keeps it uncrawlable", () => {
+  // Regression guard. When this handler lived at /api/markdown it returned 200 on GET, which
+  // readiness scanners read as evidence of a public HTTP API. This site has none, and being
+  // judged as though it did activated checks it cannot pass. Keep the rewrite target off /api/
+  // and out of the crawl.
+  assert.ok(
+    !MARKDOWN_HANDLER_BASE.startsWith("/api"),
+    `the Markdown handler is at ${MARKDOWN_HANDLER_BASE}; a GET-serving /api/* path reads as a public API`,
+  );
+  assert.ok(
+    !fs.existsSync(path.join(webRoot, "src", "app", "api", "markdown")),
+    "src/app/api/markdown still exists",
+  );
+
+  const robots = read("src/app/robots.ts");
+  for (const prefix of ["/api/", `${MARKDOWN_HANDLER_BASE}/`]) {
+    assert.ok(
+      robots.includes(`"${prefix}"`),
+      `${prefix} is not disallowed in robots.ts`,
+    );
+  }
+
+  // The public .md siblings must stay crawlable: they are the advertised representation.
+  assert.ok(
+    !robots.includes('".md"'),
+    "the .md siblings must not be disallowed; they are what rel=alternate points at",
+  );
 });
