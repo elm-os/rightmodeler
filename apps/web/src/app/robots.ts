@@ -1,7 +1,11 @@
 // Native App Router robots (MetadataRoute.Robots), served at /robots.txt.
 //
 // Open posture: rightmodeler is a developer tool that wants to be crawled, indexed, and cited by both
-// search engines and AI assistants. Nothing on the site is private, so everything is allowed. The
+// search engines and AI assistants. Every page is allowed. The two disallowed prefixes are not
+// content: /api holds the POST-only form handlers, and /md is the internal target the .md siblings
+// and Accept negotiation rewrite to. Neither is a public interface, and leaving them crawlable made
+// readiness scanners infer an HTTP API this site does not have. The .md siblings themselves live at
+// /<path>.md and stay allowed. Disallow governs crawlers only, so the forms are unaffected. The
 // second group explicitly welcomes AI crawlers — redundant for compliant bots (the `*` group already
 // allows them) but it documents intent and overrides any "managed" CDN default that blocks them.
 // (`Host` is intentionally omitted: it is a deprecated, Yandex-only directive; canonicalization is
@@ -29,11 +33,14 @@ const AI_CRAWLERS = [
   "CCBot",
 ];
 
+// Route prefixes that serve no content to a reader: form handlers and the Markdown rewrite target.
+const NON_CONTENT = ["/api/", "/md/"];
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
-      { userAgent: "*", allow: "/" },
-      { userAgent: AI_CRAWLERS, allow: "/" },
+      { userAgent: "*", allow: "/", disallow: NON_CONTENT },
+      { userAgent: AI_CRAWLERS, allow: "/", disallow: NON_CONTENT },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,
   };
