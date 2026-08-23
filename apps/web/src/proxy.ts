@@ -55,7 +55,7 @@ export const config = {
       // pageview); the markdown handler itself; and any path containing a dot, which covers the
       // .md siblings plus robots.txt, sitemap.xml, manifest.webmanifest, llms*.txt, humans.txt,
       // and every asset under public/.
-      source: "/((?!_next/|_vercel/|api/|.*\\.).*)",
+      source: "/((?!_next/|_vercel/|api/|md/|.*\\.).*)",
       // Keep RSC navigation, prefetch, and PPR resume traffic off the proxy entirely: same
       // behaviour as before this file existed, no extra invocations, and no chance of
       // negotiating a Flight response. next-resume comes from routes-manifest ppr.chain.headers.
