@@ -27,9 +27,12 @@ export const STATIC_MARKDOWN_PATHS: readonly string[] = [
   "/vs",
 ];
 
-export const MARKDOWN_HANDLER_BASE = "/api/markdown";
+// Deliberately NOT under /api/. A GET-serving /api/* path reads as a public HTTP API to crawlers
+// and readiness scanners, and this site has none: /md is the internal target the .md siblings and
+// the Accept negotiation rewrite to, and robots.txt disallows it so it is never crawled directly.
+export const MARKDOWN_HANDLER_BASE = "/md";
 
-// "/about" -> "/api/markdown/about"; "/" -> "/api/markdown"
+// "/about" -> "/md/about"; "/" -> "/md"
 export function markdownHandlerPath(pathname: string): string {
   const trimmed = pathname.replace(/\/+$/, "");
   return trimmed === ""

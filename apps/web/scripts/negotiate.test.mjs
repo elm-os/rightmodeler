@@ -139,25 +139,25 @@ const decide = (pathname, accept, method = "GET") =>
 test("a markdown request rewrites to the handler", () => {
   assert.deepEqual(decide("/about", MD), {
     type: "rewrite",
-    destination: "/api/markdown/about",
+    destination: "/md/about",
   });
 });
 
 test("the root rewrites to the bare handler path", () => {
   assert.deepEqual(decide("/", MD), {
     type: "rewrite",
-    destination: "/api/markdown",
+    destination: "/md",
   });
 });
 
 test("nested paths keep every segment", () => {
   assert.equal(
     decide("/blog/the-tuesday-problem", MD).destination,
-    "/api/markdown/blog/the-tuesday-problem",
+    "/md/blog/the-tuesday-problem",
   );
   assert.equal(
     decide("/use-cases/reduce-llm-costs", MD).destination,
-    "/api/markdown/use-cases/reduce-llm-costs",
+    "/md/use-cases/reduce-llm-costs",
   );
 });
 
