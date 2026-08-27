@@ -1,15 +1,17 @@
 // The trace field: a bespoke WebGL1 particle engine for the numbers band. One cloud of
-// "trace" particles reorganizes into a diagram per stat: confluence (many formats, one
-// schema), descent (cost stepping down), ring (quality holding), slipstream (speed).
-// No dependencies, ~one draw call per layer (lines then points).
+// particles settles into a different etched plate per stat: a braided river delta
+// (many formats, one schema), descending terraces (cost stepping down), a planetary
+// ring (quality holding), and a suspension bridge (speed and throughput). The resting
+// positions are density-sampled from fine line-art images, the same technique Stripe's
+// stats scene uses (their dot-generation worker samples an image mask); the flight
+// between plates is closed-form on the GPU and untouched by where the dots land.
 //
-// Why hand-rolled: Stripe's stats scene, which this band answers, is itself raw WebGL
-// (custom GLSL, no three.js in that scene), and this repo's rule is minimum code over
-// speculative dependencies. All motion is closed-form on the GPU: the vertex shader
-// evaluates position(progress, time) twice, once at now and once a beat earlier, and
-// draws the segment between the two, so comet trails fall out of the math with zero
-// per-frame CPU work. On a retarget mid-flight the CPU mirrors the same math once to
-// snapshot current positions, which keeps every transition interruptible.
+// Why hand-rolled: Stripe's scene is likewise raw WebGL (custom GLSL, no three.js in
+// that scene), and this repo's rule is minimum code over speculative dependencies.
+// The vertex shader evaluates position(progress, time) twice, once at now and once a
+// beat earlier, and draws the segment between the two, so comet trails during flight
+// cost zero per-frame CPU. On a retarget mid-flight the CPU mirrors the same math
+// once to snapshot current positions, keeping every transition interruptible.
 //
 // Coordinates: x in [-aspect, aspect], y in [-1, 1], y up. The canvas is transparent;
 // the section supplies the paper wash behind it.
@@ -23,6 +25,13 @@ export const SHAPE_ORDER: ShapeName[] = [
   "ring",
   "slipstream",
 ];
+
+/** Decoded pixels of one etched plate, used to place resting particles. */
+export type ShapeMask = {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+};
 
 // Illustration-only accent recipes (docs/design.md: accents never touch UI chrome).
 // Stops run along the gradient axis; wash tints the CSS backdrop behind the canvas.
@@ -52,9 +61,10 @@ export const PALETTES: Record<
   },
 };
 
-// Motion constants, tuned against the harness. The morph is deliberately slower than
-// UI motion (it is illustration, not interface): a 1.5s flight with a third of the
-// window spent on per-particle stagger reads as one coherent wave.
+// Motion constants. The flight is deliberately slower than UI motion (it is
+// illustration, not interface): a 1.5s glide with a large stagger window reads as
+// one coherent wave. The flight math is settled; the rest states around it change
+// freely, the flight itself does not.
 const MORPH_MS = 1500;
 const STAGGER_SPAN = 0.42;
 const TRAIL_SECONDS = 0.085; // two-time evaluation gap while in flight
@@ -74,264 +84,172 @@ function mulberry32(seed: number) {
   };
 }
 
-// --- shape generators ------------------------------------------------------------
-// Each returns, per particle: position, unit-tangent angle, and an assembly order in
-// [0, 1) that choreographs how the shape gathers (its own entrance direction).
+// --- shape data ------------------------------------------------------------------
+// Every shape is N particles of (x, y, packed w) where w carries the assembly order
+// (8 bits), a brightness level (2 bits: 0 anchors the darkest ink, 3 is paper dust)
+// and the local ink darkness (fraction): w = (order256 * 4 + level) + darkness.
 
 type ShapePoint = {
   x: number;
   y: number;
-  tangent: number;
-  order: number;
+  order: number; // 0..1, assembly choreography
+  level: number; // 0..3 brightness tier
+  darkness: number; // 0..1 local ink density
 };
 
-function cubic(
-  p0: number,
-  p1: number,
-  p2: number,
-  p3: number,
-  t: number,
-): number {
-  const u = 1 - t;
-  return (
-    u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
-  );
+function pack(p: ShapePoint): number {
+  const orderQ = Math.max(0, Math.min(255, Math.round(p.order * 255)));
+  const level = Math.max(0, Math.min(3, p.level | 0));
+  return orderQ * 4 + level + Math.min(Math.max(p.darkness, 0), 0.999);
 }
 
-function cubicTangent(
-  p0: number,
-  p1: number,
-  p2: number,
-  p3: number,
-  t: number,
-): number {
-  const u = 1 - t;
-  return 3 * u * u * (p1 - p0) + 6 * u * t * (p2 - p1) + 3 * t * t * (p3 - p2);
-}
+type OrderMode = "x" | "diag" | "angle" | "centerOut";
+const MASK_ORDER: OrderMode[] = ["x", "diag", "angle", "centerOut"];
+// Contrast exponent per plate: high values favor the darkest strokes (the delta is
+// uniformly detailed and needs hierarchy), low values lift thin light threads (the
+// ring is drawn in fine hairlines).
+const MASK_GAMMA = [1.6, 1.6, 1.45, 1.7];
+// Pre-blur radius per plate (pixels). Blurring the weight map turns "uniform fine
+// detail" into "density of detail", so a uniformly busy drawing like the delta
+// resolves into its main channels instead of noise.
+const MASK_BLUR = [1, 0, 0, 0];
 
-// Ten tributaries braid into one bright spine: the autodetected formats becoming one
-// per-step schema. Assembly sweeps left to right, the way a trace flows in.
-function confluence(n: number, a: number, rand: () => number): ShapePoint[] {
-  const pts: ShapePoint[] = [];
-  const streams = 10;
-  const joinX = -0.06 * a;
-  const spineEndX = 0.88 * a;
-  const sourceX = -0.92 * a;
-  const spineShare = 0.42;
-  const ys: number[] = [];
-  for (let i = 0; i < streams; i++) {
-    const t = i / (streams - 1);
-    ys.push((t - 0.5) * 1.62 + (rand() - 0.5) * 0.05);
+// Density-sample one etched plate. Weight follows ink density, so particles trace
+// the drawing's strokes; a flatter-weighted tail slice becomes the paper dust
+// around the drawing.
+function maskShape(
+  mask: ShapeMask,
+  n: number,
+  aspect: number,
+  rand: () => number,
+  orderMode: OrderMode,
+  gamma: number,
+  blur: number,
+): ShapePoint[] {
+  const { data, width, height } = mask;
+  const px = width * height;
+  const weight = new Float32Array(px);
+  let peak = 0;
+  for (let i = 0; i < px; i++) {
+    const o = i * 4;
+    const lum =
+      (data[o] * 0.299 + data[o + 1] * 0.587 + data[o + 2] * 0.114) / 255;
+    const w = 1 - lum;
+    weight[i] = w < 0.08 ? 0 : w;
+    if (w > peak) peak = w;
   }
-  // The spine carries a slow meander so the braid reads as a river, not a ruler.
-  const meander = (s: number) => Math.sin(s * 2.6 + 0.4) * 0.05;
-  for (let i = 0; i < n; i++) {
-    const onSpine = rand() < spineShare;
-    if (onSpine) {
-      const s = rand();
-      const x = joinX + (spineEndX - joinX) * s;
-      const decay = Math.exp(-s * 2.6);
-      const braid =
-        Math.sin(s * 17 + rand() * Math.PI * 2) * 0.04 * (0.3 + decay);
-      const y = meander(s) + braid + (rand() - 0.5) * 0.045 * (0.35 + decay);
-      const slope =
-        (meander(s + 0.01) - meander(s)) / ((spineEndX - joinX) * 0.01);
-      pts.push({
-        x,
-        y,
-        tangent: Math.atan2(slope + (rand() - 0.5) * 0.1, 1),
-        order: 0.55 + s * 0.45,
-      });
-    } else {
-      const lane = Math.floor(rand() * streams);
-      const y0 = ys[lane];
-      // Streams release before the join at staggered depths, so the mouth is a soft
-      // interleave rather than a knot.
-      const release = 0.9 + rand() * 0.1;
-      const s = Math.pow(rand(), 0.8) * release;
-      const joinXi = joinX + (rand() - 0.5) * 0.06 * a;
-      const p1x = sourceX + (joinXi - sourceX) * 0.5;
-      const p2x = sourceX + (joinXi - sourceX) * 0.85;
-      const x = cubic(sourceX, p1x, p2x, joinXi, s);
-      const y =
-        cubic(y0, y0 * 0.96, y0 * 0.28, meander(0), s) + (rand() - 0.5) * 0.03;
-      const dx = cubicTangent(sourceX, p1x, p2x, joinXi, s);
-      const dy = cubicTangent(y0, y0 * 0.96, y0 * 0.28, meander(0), s);
-      pts.push({
-        x,
-        y,
-        tangent: Math.atan2(dy, dx),
-        order: s * 0.55,
-      });
+  if (blur > 0) {
+    // separable box blur, horizontal then vertical
+    const tmp = new Float32Array(px);
+    const span = blur * 2 + 1;
+    for (let y = 0; y < height; y++) {
+      let accRow = 0;
+      const row = y * width;
+      for (let x = -blur; x <= blur; x++) {
+        accRow += weight[row + Math.min(Math.max(x, 0), width - 1)];
+      }
+      for (let x = 0; x < width; x++) {
+        tmp[row + x] = accRow / span;
+        const drop = row + Math.max(x - blur, 0);
+        const add = row + Math.min(x + blur + 1, width - 1);
+        accRow += weight[add] - weight[drop];
+      }
     }
-  }
-  return pts;
-}
-
-// The bill stepping down: a five-tread staircase, one tread per approved step, the
-// first drop the steepest, the way the savings actually land. Dense horizontal treads,
-// sparse vertical falls, and a settled pool at the foot. Assembly walks down the stairs.
-function descent(n: number, a: number, rand: () => number): ShapePoint[] {
-  const pts: ShapePoint[] = [];
-  const x0 = -0.84 * a;
-  const x1 = 0.8 * a;
-  const treads = 5;
-  // Cumulative heights: a steep first saving, then diminishing returns.
-  const drops = [0, 0.42, 0.68, 0.85, 0.96];
-  const yTop = 0.58;
-  const ySpan = 1.14;
-  const treadW = (x1 - x0) / treads;
-  const poolShare = 0.12;
-  const fallShare = 0.1;
-  for (let i = 0; i < n; i++) {
-    const roll = rand();
-    if (roll < poolShare) {
-      // the landing: a loose sediment mound settling under the last tread
-      const spread = (rand() + rand() + rand()) / 3 - 0.5;
-      const depth = Math.pow(rand(), 1.7);
-      pts.push({
-        x: x1 - treadW * 0.55 + spread * treadW * 1.5,
-        y:
-          yTop -
-          ySpan * drops[treads - 1] -
-          0.045 -
-          depth * 0.12 * (1 - Math.abs(spread)),
-        tangent: (rand() - 0.5) * 0.5,
-        order: 0.88 + rand() * 0.12,
-      });
-      continue;
+    for (let x = 0; x < width; x++) {
+      let accCol = 0;
+      for (let y = -blur; y <= blur; y++) {
+        accCol += tmp[Math.min(Math.max(y, 0), height - 1) * width + x];
+      }
+      for (let y = 0; y < height; y++) {
+        weight[y * width + x] = accCol / span;
+        const drop = Math.max(y - blur, 0) * width + x;
+        const add = Math.min(y + blur + 1, height - 1) * width + x;
+        accCol += tmp[add] - tmp[drop];
+      }
     }
-    if (roll < poolShare + fallShare) {
-      // a fall between two treads
-      const step = 1 + Math.floor(rand() * (treads - 1));
-      const yA = yTop - ySpan * drops[step - 1];
-      const yB = yTop - ySpan * drops[step];
-      const v = rand();
-      pts.push({
-        x: x0 + treadW * step + (rand() - 0.5) * 0.014 * a,
-        y: yA + (yB - yA) * v,
-        tangent: -Math.PI / 2,
-        order: ((step - 1) / treads) * 0.85 + 0.09,
-      });
-      continue;
-    }
-    // a tread
-    const step = Math.floor(rand() * treads);
-    const u = rand();
-    pts.push({
-      x: x0 + treadW * (step + u) + (rand() - 0.5) * 0.01 * a,
-      y: yTop - ySpan * drops[step] + (rand() - 0.5) * 0.035,
-      tangent: (rand() - 0.5) * 0.06,
-      order: ((step + u) / treads) * 0.85,
-    });
+    peak = 0;
+    for (let i = 0; i < px; i++) if (weight[i] > peak) peak = weight[i];
   }
-  return pts;
-}
+  // Normalize before the contrast curve so plates drawn in light hairlines carry
+  // the same presence as plates drawn in heavy ink.
+  const inv = peak > 0 ? 1 / peak : 1;
+  for (let i = 0; i < px; i++) {
+    if (weight[i] > 0) weight[i] = Math.pow(weight[i] * inv, gamma);
+  }
+  const cdf = new Float32Array(px);
+  let acc = 0;
+  for (let i = 0; i < px; i++) {
+    acc += weight[i];
+    cdf[i] = acc;
+  }
 
-// Quality holding at the benchmark: one complete, unbroken circle, with a faint inner
-// echo and a little dust. Points are spaced by arc length so the rim reads evenly, and
-// assembly sweeps around the circumference like a gauge closing to full.
-function ring(n: number, a: number, rand: () => number): ShapePoint[] {
-  const pts: ShapePoint[] = [];
-  const cx = 0;
-  const cy = 0.03;
-  const R = 0.6;
-  const stretch = 1.35;
-  // Uniform-by-arc-length lookup for the ellipse (x = stretch R cos, y = R sin).
-  const STEPS = 512;
-  const cum = new Float32Array(STEPS + 1);
-  for (let i = 1; i <= STEPS; i++) {
-    const t0 = ((i - 1) / STEPS) * Math.PI * 2;
-    const t1 = (i / STEPS) * Math.PI * 2;
-    const dx = stretch * R * (Math.cos(t1) - Math.cos(t0));
-    const dy = R * (Math.sin(t1) - Math.sin(t0));
-    cum[i] = cum[i - 1] + Math.hypot(dx, dy);
-  }
-  const total = cum[STEPS];
-  const angleAt = (s: number) => {
-    const target = s * total;
+  const imgAspect = width / height;
+  // Fit the plate inside the viewport, height-first, and keep a paper margin.
+  const scaleY = Math.min((0.94 * aspect) / imgAspect, 0.9);
+  const pick = (r: number) => {
+    const target = r * acc;
     let lo = 0;
-    let hi = STEPS;
+    let hi = px - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (cum[mid] < target) lo = mid + 1;
+      if (cdf[mid] < target) lo = mid + 1;
       else hi = mid;
     }
-    const seg = Math.max(lo, 1);
-    const frac =
-      (target - cum[seg - 1]) / Math.max(cum[seg] - cum[seg - 1], 1e-6);
-    return ((seg - 1 + frac) / STEPS) * Math.PI * 2;
+    return lo;
   };
-  const place = (radius: number, jitter: number) => {
-    const ang = angleAt(rand());
-    const r = radius + (rand() - 0.5) * jitter;
-    // tangent of the ellipse, not the circle, so strokes hug the rim
-    const tx = -stretch * Math.sin(ang);
-    const ty = Math.cos(ang);
-    return {
-      x: cx + Math.cos(ang) * r * stretch,
-      y: cy + Math.sin(ang) * r,
-      tangent: Math.atan2(ty, tx),
-      order: ((ang / (Math.PI * 2) + 0.25) % 1) * 0.9,
-    };
-  };
-  for (let i = 0; i < n; i++) {
-    const roll = rand();
-    if (roll < 0.9) {
-      // one complete rim, nothing broken about it
-      pts.push(place(R, 0.02));
-    } else {
-      const ang = rand() * Math.PI * 2;
-      const r = Math.sqrt(rand()) * 0.4;
-      pts.push({
-        x: cx + Math.cos(ang) * r * stretch,
-        y: cy + Math.sin(ang) * r,
-        tangent: rand() * Math.PI * 2,
-        order: rand(),
-      });
-    }
-  }
-  return pts;
-}
 
-// Right-sized and faster: lanes of comet streaks all surging one way, bright tight
-// heads and long dissolving tails. Lanes launch in a loose stagger, heads first.
-function slipstream(n: number, a: number, rand: () => number): ShapePoint[] {
-  const pts: ShapePoint[] = [];
-  const lanes = 13;
-  const laneY: number[] = [];
-  const laneHead: number[] = [];
-  const laneLen: number[] = [];
-  const laneOrd: number[] = [];
-  for (let i = 0; i < lanes; i++) {
-    const t = i / (lanes - 1);
-    const centered = 1 - Math.abs(t - 0.5) * 2;
-    laneY.push((t - 0.5) * 1.56 + (rand() - 0.5) * 0.05);
-    laneHead.push((0.3 + rand() * 0.55) * a * (0.62 + centered * 0.38));
-    laneLen.push((0.75 + rand() * 0.5) * a);
-    laneOrd.push(rand());
-  }
-  for (let i = 0; i < n; i++) {
-    const lane = Math.floor(rand() * lanes);
-    if (rand() < 0.18) {
-      // the comet head: a tight bright cluster just behind the leading edge
-      const r = Math.pow(rand(), 1.6) * 0.05 * a;
-      pts.push({
-        x: laneHead[lane] - r,
-        y: laneY[lane] + (rand() - 0.5) * 0.022,
-        tangent: (rand() - 0.5) * 0.04,
-        order: laneOrd[lane] * 0.35,
-      });
-      continue;
+  const cx = width / 2;
+  const cy = height / 2;
+  const orderOf = (ix: number, iy: number): number => {
+    if (orderMode === "x") return ix / width;
+    if (orderMode === "diag") return (ix / width + iy / height) / 2;
+    if (orderMode === "angle") {
+      const ang = Math.atan2(iy - cy, ix - cx);
+      return (ang / (Math.PI * 2) + 0.75) % 1;
     }
-    const back = Math.pow(rand(), 2.4);
-    const x = laneHead[lane] - 0.05 * a - back * laneLen[lane];
-    const y = laneY[lane] + (rand() - 0.5) * 0.02 * (0.5 + back * 2.4);
+    return Math.abs(ix - cx) / cx; // centerOut
+  };
+
+  const dustShare = 0.08;
+  const hits = new Uint8Array(px);
+  const pts: ShapePoint[] = [];
+  for (let i = 0; i < n; i++) {
+    const dust = i >= n * (1 - dustShare);
+    let idx = pick(rand());
+    // spread repeated hits off the very same pixel so strokes read as even grain
+    if (hits[idx] >= 2) idx = pick(rand());
+    hits[idx] += 1;
+    if (dust) {
+      // flat-ish resample: a soft aura instead of strokes
+      for (let tries = 0; tries < 24; tries++) {
+        const cand = Math.floor(rand() * px);
+        if (weight[cand] > 0) {
+          idx = cand;
+          break;
+        }
+      }
+    }
+    const iy = Math.floor(idx / width);
+    const ix = idx % width;
+    const jx = ix + (rand() - 0.5) * 0.9;
+    const jy = iy + (rand() - 0.5) * 0.9;
+    const x = ((jx / width) * 2 - 1) * scaleY * imgAspect;
+    const y = (1 - (jy / height) * 2) * scaleY;
+    const dark = Math.min(weight[idx], 1);
+    const roll = rand();
+    const level = dust
+      ? 3
+      : roll < 0.07 && dark > 0.45
+        ? 0
+        : roll < 0.72
+          ? 1
+          : 2;
     pts.push({
       x,
       y,
-      tangent: (rand() - 0.5) * 0.05,
-      order: laneOrd[lane] * 0.35 + back * 0.65,
+      order: Math.min(0.999, orderOf(ix, iy) * 0.94 + rand() * 0.06),
+      level,
+      darkness: dust ? dark * 0.4 : dark,
     });
   }
   return pts;
@@ -344,15 +262,65 @@ function scatter(n: number, a: number, rand: () => number): ShapePoint[] {
     pts.push({
       x: (rand() * 2 - 1) * a * 0.96,
       y: (rand() * 2 - 1) * 0.92,
-      tangent: rand() * Math.PI * 2,
       order: rand(),
+      level: rand() < 0.75 ? 2 : 3,
+      darkness: 0.3 + rand() * 0.4,
     });
   }
   return pts;
 }
 
-const GENERATORS = [confluence, descent, ring, slipstream, scatter];
+// Procedural fallbacks, one silhouette per stat, used only when the plates fail to
+// load or decode. Deliberately simple: a stream fan, a falling glide, a rim, and
+// speed lanes.
+function fallbackShape(
+  which: number,
+  n: number,
+  a: number,
+  rand: () => number,
+): ShapePoint[] {
+  const pts: ShapePoint[] = [];
+  for (let i = 0; i < n; i++) {
+    const u = rand();
+    let x = 0;
+    let y = 0;
+    let order = u;
+    if (which === 0) {
+      const lane = Math.floor(rand() * 10);
+      const y0 = (lane / 9 - 0.5) * 1.5;
+      x = -0.9 * a + u * 1.8 * a;
+      const k = Math.min(1, Math.max(0, (x / a + 0.9) / 0.85));
+      y = y0 * (1 - k * k) + (rand() - 0.5) * 0.05;
+      order = u;
+    } else if (which === 1) {
+      x = -0.85 * a + u * 1.7 * a;
+      y = 0.55 - Math.pow(u, 1.3) * 1.1 + (rand() - 0.5) * 0.06;
+    } else if (which === 2) {
+      const ang = rand() * Math.PI * 2;
+      x = Math.cos(ang) * 1.35 * 0.6;
+      y = 0.03 + Math.sin(ang) * 0.6;
+      order = ((ang / (Math.PI * 2) + 0.25) % 1) * 0.9;
+    } else {
+      const lane = Math.floor(rand() * 14);
+      const yl = (lane / 13 - 0.5) * 1.5;
+      const back = Math.pow(rand(), 2);
+      x = (0.65 - back * 1.4) * a;
+      y = yl + (rand() - 0.5) * 0.03;
+      order = back;
+    }
+    pts.push({
+      x,
+      y,
+      order: Math.min(0.999, order),
+      level: rand() < 0.06 ? 0 : rand() < 0.8 ? 1 : 2,
+      darkness: 0.5 + rand() * 0.4,
+    });
+  }
+  return pts;
+}
+
 const SCATTER_INDEX = 4;
+const SHAPE_COUNT = 5;
 
 // --- shared math, mirrored between GLSL and the JS snapshot ----------------------
 
@@ -360,71 +328,35 @@ function easeInOutCubic(p: number): number {
   return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
 }
 
-// Per-shape ambient drift so a settled diagram keeps breathing. Mirrored in GLSL;
-// change one, change both. `tang` is the structural tangent angle.
-function ambientJs(
-  shape: number,
-  x: number,
-  y: number,
-  tang: number,
-  seed: number,
-  t: number,
-): [number, number] {
+// One near-still ambient for every plate: the rest states are drawings, so they
+// breathe rather than move. Mirrored in GLSL; change one, change both.
+function ambientJs(seed: number, t: number): [number, number] {
   const ph = seed * 6.2832;
-  if (shape === 0) {
-    // confluence: creep along the flow
-    const c = Math.cos(tang);
-    const s = Math.sin(tang);
-    const w = Math.sin(t * 0.7 + ph) * 0.008;
-    return [c * w + Math.sin(t * 0.53 + ph * 2) * 0.0035, s * w];
-  }
-  if (shape === 1) {
-    // descent: slow slide downhill
-    const w = Math.sin(t * 0.6 + ph) * 0.007;
-    return [w * 0.6, -Math.abs(w) * 0.5 + Math.sin(t * 0.41 + ph) * 0.004];
-  }
-  if (shape === 2) {
-    // ring: lockstep orbit plus a faint breath
-    const ang = Math.atan2(y - 0.03, x / 1.35);
-    const wob = Math.sin(t * 0.32 + ph) * 0.004;
-    const orbit = t * 0.06 + wob;
-    const r = Math.hypot(x / 1.35, y - 0.03);
-    const nx = Math.cos(ang + orbit * 0.13) * r * 1.35;
-    const ny = 0.03 + Math.sin(ang + orbit * 0.13) * r;
-    return [nx - x + wob * Math.cos(ang), ny - y + wob * Math.sin(ang)];
-  }
-  if (shape === 3) {
-    // slipstream: perpetual surge
-    const w = Math.sin(t * 1.1 + ph) * 0.5 + 0.5;
-    return [w * 0.02 + Math.sin(t * 0.9 + ph * 3) * 0.004, 0];
-  }
-  // scatter: aimless drift
-  return [Math.sin(t * 0.4 + ph) * 0.01, Math.cos(t * 0.31 + ph * 2) * 0.01];
+  return [
+    Math.sin(t * 0.32 + ph) * 0.0045 + Math.sin(t * 0.11 + ph * 2.3) * 0.002,
+    Math.cos(t * 0.27 + ph * 1.7) * 0.004,
+  ];
 }
 
 type FlightUniforms = {
   progress: number;
-  fromShape: number;
-  toShape: number;
   fromAmbientK: number;
   focusX: number;
   focusY: number;
 };
 
-// Head position at (progress, time) for one particle: the JS twin of the GLSL below,
-// used once per retarget to snapshot an in-flight cloud.
+// Head position at (progress, time) for one particle: the JS twin of the GLSL
+// below, used once per retarget to snapshot an in-flight cloud.
 function positionJs(
   fx: number,
   fy: number,
-  fTang: number,
   tx: number,
   ty: number,
-  tTang: number,
   tOrder: number,
   seed: number,
   u: FlightUniforms,
   time: number,
-): { x: number; y: number; tang: number } {
+): { x: number; y: number } {
   const window = 1 - STAGGER_SPAN;
   const p = Math.min(
     Math.max((u.progress - tOrder * STAGGER_SPAN) / window, 0),
@@ -447,41 +379,31 @@ function positionJs(
     x += (u.focusX - (fx + tx) * 0.5) * arc * 0.16;
     y += (u.focusY - (fy + ty) * 0.5) * arc * 0.16;
   }
-  const [ax0, ay0] = ambientJs(u.fromShape, x, y, fTang, seed, time);
-  const [ax1, ay1] = ambientJs(u.toShape, x, y, tTang, seed, time);
-  x += ax0 * (1 - e) * u.fromAmbientK + ax1 * e;
-  y += ay0 * (1 - e) * u.fromAmbientK + ay1 * e;
-  const c0 = Math.cos(fTang);
-  const s0 = Math.sin(fTang);
-  const c1 = Math.cos(tTang);
-  const s1 = Math.sin(tTang);
-  const tc = c0 + (c1 - c0) * e;
-  const ts = s0 + (s1 - s0) * e;
-  return { x, y, tang: Math.atan2(ts, tc) };
+  const [ax, ay] = ambientJs(seed, time);
+  x += ax * (1 - e) * u.fromAmbientK + ax * e;
+  y += ay * (1 - e) * u.fromAmbientK + ay * e;
+  return { x, y };
 }
 
 // --- GLSL ------------------------------------------------------------------------
 
 // Vertex chunk. highp is mandatory in WebGL1 vertex shaders and required here: the
-// order+tangent packing in a_*.w needs ~20 mantissa bits, far beyond fp16 mediump.
+// order+level packing in a_*.w needs far more mantissa than fp16 mediump offers.
 const SHARED_GLSL = `
 precision highp float;
 
-attribute vec4 a_from;   // xyz unused z, w packs floor(order*1023) + tangent01
+attribute vec4 a_from;   // xy position, w packs order*4*255 + level + darkness
 attribute vec4 a_to;
 attribute vec4 a_meta;   // seed, sizeScale, alphaScale, endFlag (0 head / 1 tail)
 
-uniform vec2  u_scale;     // 1/aspect, 1 (plus zoom)
+uniform vec2  u_scale;     // 1/aspect, 1
 uniform vec2  u_shift;     // parallax
 uniform float u_progress;
 uniform float u_progressPrev;
 uniform float u_time;
 uniform float u_timePrev;
-uniform float u_fromShape;
-uniform float u_toShape;
 uniform float u_fromAmbientK; // 0 while a_from is a snapshot with ambient baked in
 uniform vec2  u_focus;
-uniform float u_stroke;    // structural stroke length
 uniform float u_alpha;     // global fade
 uniform vec3  u_colA;
 uniform vec3  u_colB;
@@ -495,38 +417,26 @@ float easeInOut(float p) {
   return p < 0.5 ? 4.0 * p * p * p : 1.0 - pow(-2.0 * p + 2.0, 3.0) / 2.0;
 }
 
-vec2 ambient(float shape, vec2 pos, float tang, float seed, float t) {
+vec2 ambient(float seed, float t) {
   float ph = seed * 6.2832;
-  if (shape < 0.5) {
-    float w = sin(t * 0.7 + ph) * 0.008;
-    return vec2(cos(tang) * w + sin(t * 0.53 + ph * 2.0) * 0.0035, sin(tang) * w);
-  } else if (shape < 1.5) {
-    float w = sin(t * 0.6 + ph) * 0.007;
-    return vec2(w * 0.6, -abs(w) * 0.5 + sin(t * 0.41 + ph) * 0.004);
-  } else if (shape < 2.5) {
-    float ang = atan(pos.y - 0.03, pos.x / 1.35);
-    float wob = sin(t * 0.32 + ph) * 0.004;
-    float orbit = t * 0.06 + wob;
-    float r = length(vec2(pos.x / 1.35, pos.y - 0.03));
-    vec2 np = vec2(cos(ang + orbit * 0.13) * r * 1.35, 0.03 + sin(ang + orbit * 0.13) * r);
-    return np - pos + wob * vec2(cos(ang), sin(ang));
-  } else if (shape < 3.5) {
-    float w = sin(t * 1.1 + ph) * 0.5 + 0.5;
-    return vec2(w * 0.02 + sin(t * 0.9 + ph * 3.0) * 0.004, 0.0);
-  }
-  return vec2(sin(t * 0.4 + ph) * 0.01, cos(t * 0.31 + ph * 2.0) * 0.01);
+  return vec2(
+    sin(t * 0.32 + ph) * 0.0045 + sin(t * 0.11 + ph * 2.3) * 0.002,
+    cos(t * 0.27 + ph * 1.7) * 0.004
+  );
 }
 
-// order in x, tangent in y
-vec2 unpack(float w) {
-  return vec2(floor(w) / 1023.0, fract(w) * 6.2832);
+// order in x, level in y, darkness in z
+vec3 unpack(float w) {
+  float i = floor(w);
+  return vec3(floor(i / 4.0) / 255.0, mod(i, 4.0), fract(w));
 }
 
+// The settled flight math: mix + perpendicular swirl + a soft gather toward the
+// focus. Returns position and the particle's eased arrival e.
 vec3 flight(float progress, float t) {
   vec2 f = a_from.xy;
   vec2 to = a_to.xy;
-  vec2 fw = unpack(a_from.w);
-  vec2 tw = unpack(a_to.w);
+  vec3 tw = unpack(a_to.w);
   float seed = a_meta.x;
 
   float p = clamp((progress - tw.x * ${STAGGER_SPAN.toFixed(3)}) / ${(1 - STAGGER_SPAN).toFixed(3)}, 0.0, 1.0);
@@ -544,14 +454,17 @@ vec3 flight(float progress, float t) {
     pos += (u_focus - (f + to) * 0.5) * arc * 0.16;
   }
 
-  // Both ambients read the same pre-ambient position (the JS mirror does the same),
-  // and the from-side is dropped entirely when a_from already has ambient baked in.
-  vec2 amb0 = ambient(u_fromShape, pos, fw.y, seed, t);
-  vec2 amb1 = ambient(u_toShape, pos, tw.y, seed, t);
-  pos += amb0 * (1.0 - e) * u_fromAmbientK + amb1 * e;
+  vec2 amb = ambient(seed, t);
+  pos += amb * (1.0 - e) * u_fromAmbientK + amb * e;
+  return vec3(pos, e);
+}
 
-  vec2 tanv = normalize(mix(vec2(cos(fw.y), sin(fw.y)), vec2(cos(tw.y), sin(tw.y)), e) + vec2(1e-4));
-  return vec3(pos, atan(tanv.y, tanv.x));
+float levelAlpha(float level) {
+  return level < 0.5 ? 1.0 : level < 1.5 ? 0.86 : level < 2.5 ? 0.58 : 0.3;
+}
+
+float levelSize(float level) {
+  return level < 0.5 ? 1.8 : level < 1.5 ? 1.0 : level < 2.5 ? 0.8 : 0.62;
 }
 
 vec4 shade(vec2 pos, float seed, float alphaScale) {
@@ -561,27 +474,29 @@ vec4 shade(vec2 pos, float seed, float alphaScale) {
 }
 `;
 
-const LINE_VERT = `${SHARED_GLSL}
+// Comet streaks, alive only while a particle is actually flying. At rest this pass
+// contributes nothing: the settled plate is carried by the dots alone.
+const STREAK_VERT = `${SHARED_GLSL}
 void main() {
   vec3 head = flight(u_progress, u_time);
   vec3 back = flight(u_progressPrev, u_timePrev);
   vec2 motion = head.xy - back.xy;
   float speed = length(motion);
-  // Structural stroke along the local tangent while settled; the comet trail takes
-  // over as soon as the particle is actually moving.
-  float strokeK = 1.0 - clamp(speed * 26.0, 0.0, 1.0);
-  vec2 stroke = vec2(cos(head.z), sin(head.z)) * u_stroke * (0.7 + a_meta.x * 0.5) * strokeK;
+  float flying = smoothstep(0.0035, 0.014, speed);
   vec2 trail = motion * (1.7 + a_meta.x * 1.2);
   float trailLen = length(trail);
   if (trailLen > 0.34) trail *= 0.34 / trailLen;
-  vec2 tail = head.xy - stroke - trail;
+  vec2 tail = head.xy - trail;
 
   vec2 pos = mix(head.xy, tail, a_meta.w);
   gl_Position = vec4((pos + u_shift) * u_scale, 0.0, 1.0);
 
+  vec3 fw = unpack(a_from.w);
+  vec3 tw = unpack(a_to.w);
+  float lvlA = mix(levelAlpha(fw.y), levelAlpha(tw.y), head.z);
   vec4 c = shade(head.xy, a_meta.x, a_meta.z);
   float endFade = 1.0 - a_meta.w * 0.92;
-  v_color = vec4(c.rgb, c.a * endFade * 0.5 * u_alpha);
+  v_color = vec4(c.rgb, c.a * endFade * 0.5 * lvlA * flying * u_alpha);
 }
 `;
 
@@ -589,13 +504,25 @@ const POINT_VERT = `${SHARED_GLSL}
 void main() {
   vec3 head = flight(u_progress, u_time);
   gl_Position = vec4((head.xy + u_shift) * u_scale, 0.0, 1.0);
-  gl_PointSize = (1.6 + a_meta.y * 2.1) * u_pixelScale;
+
+  vec3 fw = unpack(a_from.w);
+  vec3 tw = unpack(a_to.w);
+  float e = head.z;
+  float lvlS = mix(levelSize(fw.y), levelSize(tw.y), e);
+  float lvlA = mix(levelAlpha(fw.y), levelAlpha(tw.y), e);
+  float dark = mix(fw.z, tw.z, e);
+
+  gl_PointSize = (1.3 + a_meta.y * 1.3) * lvlS * u_pixelScale;
+
+  // Denser ink reads brighter; a faint slow twinkle keeps the plate alive.
+  float twinkle = 0.9 + 0.1 * sin(u_time * 1.35 + a_meta.x * 41.0);
   vec4 c = shade(head.xy, a_meta.x, a_meta.z);
-  v_color = vec4(c.rgb, c.a * 0.92 * u_alpha);
+  float alpha = c.a * lvlA * (0.55 + dark * 0.45) * twinkle * u_alpha;
+  v_color = vec4(c.rgb, alpha);
 }
 `;
 
-const LINE_FRAG = `
+const STREAK_FRAG = `
 precision mediump float;
 varying vec4 v_color;
 void main() {
@@ -608,7 +535,7 @@ precision mediump float;
 varying vec4 v_color;
 void main() {
   float d = length(gl_PointCoord - 0.5);
-  float a = smoothstep(0.5, 0.32, d) * v_color.a;
+  float a = smoothstep(0.5, 0.4, d) * v_color.a;
   gl_FragColor = vec4(v_color.rgb * a, a);
 }
 `;
@@ -669,6 +596,8 @@ export function createTraceField(
     reducedMotion?: boolean;
     /** Start on this shape without the scatter intro (reduced motion). */
     initialShape?: number;
+    /** The four etched plates. Falls back to procedural silhouettes if absent. */
+    masks?: ShapeMask[];
   } = {},
 ): TraceField | null {
   const glMaybe = canvas.getContext("webgl", {
@@ -683,11 +612,14 @@ export function createTraceField(
   const gl = glMaybe;
 
   const reduced = options.reducedMotion ?? false;
+  const masks =
+    options.masks && options.masks.length === 4 ? options.masks : null;
 
-  // Particle count scales with rendered area, clamped for phones and 5K monitors alike.
+  // Particle count scales with rendered area, clamped for phones and 5K monitors
+  // alike. The plates want density: they are drawings made of dots.
   const rect = canvas.getBoundingClientRect();
   const area = Math.max(rect.width * rect.height, 1);
-  const count = Math.round(Math.min(1500, Math.max(520, area / 700)));
+  const count = Math.round(Math.min(4200, Math.max(1600, area / 190)));
   let aspect = Math.max(rect.width / Math.max(rect.height, 1), 0.1);
 
   const rand = mulberry32(0x5eed);
@@ -699,35 +631,49 @@ export function createTraceField(
   for (let i = 0; i < count; i++) {
     seeds[i] = rand();
     const big = rand();
-    sizes[i] = big < 0.08 ? 1.3 + rand() * 0.9 : 0.25 + rand() * 0.75;
-    alphas[i] = 0.45 + rand() * 0.55;
+    sizes[i] = big < 0.07 ? 1.4 + rand() * 0.9 : 0.3 + rand() * 0.7;
+    alphas[i] = 0.62 + rand() * 0.38;
   }
 
-  // Shape target data: vec4 per particle (x, y, 0, packed order+tangent).
   let genAspect = aspect;
   function buildShapes(forAspect: number): Float32Array[] {
-    return GENERATORS.map((gen, gi) => {
-      const pts = gen(count, forAspect, mulberry32(0xfeed + gi * 7919));
+    const out: Float32Array[] = [];
+    for (let s = 0; s < SHAPE_COUNT; s++) {
+      const r = mulberry32(0xfeed + s * 7919);
+      let pts: ShapePoint[];
+      if (s === SCATTER_INDEX) {
+        pts = scatter(count, forAspect, r);
+      } else if (masks) {
+        pts = maskShape(
+          masks[s],
+          count,
+          forAspect,
+          r,
+          MASK_ORDER[s],
+          MASK_GAMMA[s],
+          MASK_BLUR[s],
+        );
+      } else {
+        pts = fallbackShape(s, count, forAspect, r);
+      }
       const arr = new Float32Array(count * 4);
       for (let i = 0; i < count; i++) {
         const p = pts[i];
-        const tang01 =
-          (((p.tangent % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) /
-          (Math.PI * 2);
         arr[i * 4] = p.x;
         arr[i * 4 + 1] = p.y;
         arr[i * 4 + 2] = 0;
-        arr[i * 4 + 3] = Math.round(p.order * 1023) + Math.min(tang01, 0.9995);
+        arr[i * 4 + 3] = pack(p);
       }
-      return arr;
-    });
+      out.push(arr);
+    }
+    return out;
   }
   let shapeData = buildShapes(genAspect);
 
-  // CPU mirrors of the GPU buffers. The line pass reads two copies of each particle
-  // (head + tail flag in meta.w); the point pass reads the head copies with a doubled
-  // stride. Keeping these arrays current is what makes context restoration a plain
-  // re-upload.
+  // CPU mirrors of the GPU buffers. The streak pass reads two copies of each
+  // particle (head + tail flag in meta.w); the point pass reads the head copies
+  // with a doubled stride. Keeping these arrays current is what makes context
+  // restoration a plain re-upload.
   const fromArr = new Float32Array(count * 8);
   const toArr = new Float32Array(count * 8);
   const metaArr = new Float32Array(count * 8);
@@ -761,11 +707,8 @@ export function createTraceField(
     "u_progressPrev",
     "u_time",
     "u_timePrev",
-    "u_fromShape",
-    "u_toShape",
     "u_fromAmbientK",
     "u_focus",
-    "u_stroke",
     "u_alpha",
     "u_colA",
     "u_colB",
@@ -784,7 +727,7 @@ export function createTraceField(
     attr: { from: number; to: number; meta: number };
   };
   type GlRes = {
-    line: Pass;
+    streak: Pass;
     point: Pass;
     fromBuf: WebGLBuffer | null;
     toBuf: WebGLBuffer | null;
@@ -813,9 +756,9 @@ export function createTraceField(
   // Builds every GL-side resource from current CPU state. Runs once at creation and
   // again after webglcontextrestored, so a driver reset never leaves a blank panel.
   function initGL(): boolean {
-    const line = makePass(LINE_VERT, LINE_FRAG);
+    const streak = makePass(STREAK_VERT, STREAK_FRAG);
     const point = makePass(POINT_VERT, POINT_FRAG);
-    if (!line || !point) return false;
+    if (!streak || !point) return false;
     const fromBuf = gl.createBuffer();
     const toBuf = gl.createBuffer();
     const metaBuf = gl.createBuffer();
@@ -829,7 +772,7 @@ export function createTraceField(
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.clearColor(0, 0, 0, 0);
-    res = { line, point, fromBuf, toBuf, metaBuf };
+    res = { streak, point, fromBuf, toBuf, metaBuf };
     return true;
   }
 
@@ -874,9 +817,9 @@ export function createTraceField(
       canvas.height = h;
     }
     aspect = r.width / Math.max(r.height, 1);
-    // Rotation or a drastic reflow reshapes the diagrams themselves. The old
-    // geometry (and any in-flight snapshot of it) is meaningless in the new frame,
-    // so the flight lands immediately rather than flying to remapped targets.
+    // Rotation or a drastic reflow reshapes the plates themselves. The old geometry
+    // (and any in-flight snapshot of it) is meaningless in the new frame, so the
+    // flight lands immediately rather than flying to remapped targets.
     if (Math.abs(aspect - genAspect) > 0.25) {
       genAspect = aspect;
       shapeData = buildShapes(genAspect);
@@ -917,11 +860,8 @@ export function createTraceField(
     gl.uniform1f(u.u_progressPrev, progressPrev);
     gl.uniform1f(u.u_time, t);
     gl.uniform1f(u.u_timePrev, tPrev);
-    gl.uniform1f(u.u_fromShape, fromShape);
-    gl.uniform1f(u.u_toShape, toShape);
     gl.uniform1f(u.u_fromAmbientK, fromAmbientK);
     gl.uniform2f(u.u_focus, 0, 0.04);
-    gl.uniform1f(u.u_stroke, 0.038);
     gl.uniform1f(u.u_alpha, globalAlpha);
     gl.uniform3f(u.u_colA, colors[0][0], colors[0][1], colors[0][2]);
     gl.uniform3f(u.u_colB, colors[1][0], colors[1][1], colors[1][2]);
@@ -960,16 +900,16 @@ export function createTraceField(
 
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.useProgram(res.line.program);
+    gl.useProgram(res.streak.program);
     setSharedUniforms(
-      res.line.u,
+      res.streak.u,
       tSec,
       progress,
       progressPrev,
       tSec - dt,
       colors,
     );
-    bindPass(res.line, 0);
+    bindPass(res.streak, 0);
     gl.drawArrays(gl.LINES, 0, count * 2);
 
     gl.useProgram(res.point.program);
@@ -993,12 +933,10 @@ export function createTraceField(
 
   // Snapshot the in-flight cloud into the from-buffer so a retarget mid-morph
   // continues from exactly what is on screen. Must be called BEFORE any state that
-  // feeds progressAt or the ambient blend (intro, fromShape, fromAmbientK) changes.
+  // feeds progressAt or the ambient blend (intro, fromAmbientK) changes.
   function snapshot(t: number) {
     const u: FlightUniforms = {
       progress: progressAt(t),
-      fromShape,
-      toShape,
       fromAmbientK,
       focusX: 0,
       focusY: 0.04,
@@ -1008,29 +946,23 @@ export function createTraceField(
     const tSec = t / 1000;
     const out = new Float32Array(count * 4);
     for (let i = 0; i < count; i++) {
-      const fw = from[i * 4 + 3];
       const tw = to[i * 4 + 3];
-      const fTang = (fw % 1) * Math.PI * 2;
-      const tOrder = Math.floor(tw) / 1023;
-      const tTang = (tw % 1) * Math.PI * 2;
+      const tOrder = Math.floor(tw / 4) / 255;
       const p = positionJs(
         from[i * 4],
         from[i * 4 + 1],
-        fTang,
         to[i * 4],
         to[i * 4 + 1],
-        tTang,
         tOrder,
         seeds[i],
         u,
         tSec,
       );
-      const tang01 =
-        (((p.tang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) /
-        (Math.PI * 2);
       out[i * 4] = p.x;
       out[i * 4 + 1] = p.y;
-      out[i * 4 + 3] = Math.floor(fw) + Math.min(tang01, 0.9995);
+      // Carry the destination's packed order/level/darkness: it is what the eye has
+      // been converging toward, and the from-side ambient is gated off anyway.
+      out[i * 4 + 3] = tw;
     }
     return out;
   }
@@ -1076,7 +1008,7 @@ export function createTraceField(
 
   const field: TraceField = {
     setShape(index) {
-      const target = Math.max(0, Math.min(GENERATORS.length - 2, index));
+      const target = Math.max(0, Math.min(SHAPE_COUNT - 2, index));
       if (target === toShape && !intro) return;
       const t = now || performance.now();
       if (reduced) {
@@ -1151,7 +1083,7 @@ export function createTraceField(
         gl.deleteBuffer(res.fromBuf);
         gl.deleteBuffer(res.toBuf);
         gl.deleteBuffer(res.metaBuf);
-        gl.deleteProgram(res.line.program);
+        gl.deleteProgram(res.streak.program);
         gl.deleteProgram(res.point.program);
         res = null;
       }

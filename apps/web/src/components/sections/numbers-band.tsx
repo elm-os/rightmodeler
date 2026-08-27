@@ -1,17 +1,18 @@
 "use client";
 
-// Numbers band: the proof section. Four numbers drive one WebGL field of trace
-// particles (trace-field-engine) that reorganizes into a diagram per stat: ten
-// tributaries joining one spine, a five-tread cost staircase, one unbroken quality
-// ring, and speed-lane comets. The answer to Stripe's morphing stats section, but in
-// the house voice: ink chrome on paper, accent hues confined to the illustration.
+// Numbers band: the proof section. Four numbers drive one WebGL field of particles
+// (trace-field-engine) that settles into a different etched plate per stat: a braided
+// river delta (many formats, one schema), descending terraces (cost stepping down), a
+// planetary ring (quality holding), and a suspension bridge (speed and throughput).
+// The answer to Stripe's morphing stats section, in the house voice: ink chrome on
+// paper, accent hues confined to the illustration.
 //
 // Rules honored here: the stat buttons, indicator, and palette control stay strictly
-// monochrome (accents are decorative only); figures come from the product-facts and
-// case-study registries rather than fresh strings; the graphic pauses off-screen and
-// under reduced motion swaps shapes with a quiet crossfade instead of flight. The
-// rotation pattern (one slow advance per beat, paused on hover or focus, none under
-// reduced motion) is TestimonialBand's, at the same calm cadence.
+// monochrome (accents are decorative only); the format count comes from the
+// product-facts registry; the graphic pauses off-screen and under reduced motion
+// swaps plates with a quiet crossfade instead of flight. The rotation pattern (one
+// slow advance per beat, paused on hover or focus, none under reduced motion) is
+// TestimonialBand's, at the same calm cadence.
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
@@ -20,18 +21,47 @@ import {
   createTraceField,
   PALETTES,
   type PaletteName,
+  type ShapeMask,
   type TraceField,
 } from "@/components/trace-field-engine";
-import { BSIDE } from "@/content/case-studies";
 import { TRACE_SOURCES } from "@/lib/product-facts";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const ROTATE_MS = 9000;
 const PALETTE_ORDER: PaletteName[] = ["duet", "violet", "ember", "dawn"];
 
+// The four etched plates the particles settle into, one per stat: a braided river
+// delta, descending terraces, a planetary ring, a suspension bridge.
+const PLATES = ["delta", "terraces", "ring", "bridge"] as const;
+
+// Decode the plates into pixel masks for the engine's density sampler. Any failure
+// returns null and the engine falls back to procedural silhouettes.
+async function loadPlates(): Promise<ShapeMask[] | null> {
+  try {
+    return await Promise.all(
+      PLATES.map(async (name) => {
+        const res = await fetch(`/numbers/${name}.jpg`);
+        if (!res.ok) throw new Error(`${name}: ${res.status}`);
+        const bitmap = await createImageBitmap(await res.blob());
+        const c = document.createElement("canvas");
+        c.width = bitmap.width;
+        c.height = bitmap.height;
+        const ctx = c.getContext("2d");
+        if (!ctx) throw new Error("2d context unavailable");
+        ctx.drawImage(bitmap, 0, 0);
+        const img = ctx.getImageData(0, 0, c.width, c.height);
+        bitmap.close();
+        return { data: img.data, width: img.width, height: img.height };
+      }),
+    );
+  } catch {
+    return null;
+  }
+}
+
 // The three percentage figures are quoted verbatim from the B:Side engagement
-// write-up (content/case-studies.ts BSIDE); the evidence note below the graphic is
-// imported from the same registry so the hedge can never drift from the source.
+// write-up (content/case-studies.ts BSIDE); the captions carry the projected versus
+// measured hedges inline.
 const STATS: { value: string; caption: string }[] = [
   {
     value: `${TRACE_SOURCES.length}`,
@@ -117,17 +147,31 @@ export function NumbersBand() {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
 
-  // The engine lives for the component's lifetime; visibility only starts and stops
-  // its clock. Reduced motion renders settled frames instead of running one.
+  // The engine mounts once the plates decode; until then only the wash shows. It
+  // then lives for the component's lifetime, and visibility only starts and stops
+  // its clock. Reduced motion renders settled frames instead of running a loop.
+  const [fieldReady, setFieldReady] = useState(false);
+  const stateRef = useRef({ active, palette });
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const field = createTraceField(canvas, {
-      palette: "duet",
-      reducedMotion: reduce ?? false,
+    stateRef.current = { active, palette };
+  }, [active, palette]);
+  useEffect(() => {
+    let cancelled = false;
+    let field: TraceField | null = null;
+    loadPlates().then((masks) => {
+      const canvas = canvasRef.current;
+      if (cancelled || !canvas) return;
+      field = createTraceField(canvas, {
+        palette: stateRef.current.palette,
+        reducedMotion: reduce ?? false,
+        initialShape: stateRef.current.active,
+        masks: masks ?? undefined,
+      });
+      fieldRef.current = field;
+      setFieldReady(true);
     });
-    fieldRef.current = field;
     return () => {
+      cancelled = true;
       fieldRef.current = null;
       if (dimTimer.current !== null) window.clearTimeout(dimTimer.current);
       field?.destroy();
@@ -142,7 +186,7 @@ export function NumbersBand() {
     if (!field) return;
     if (inView) field.start();
     else field.stop();
-  }, [inView]);
+  }, [inView, fieldReady]);
 
   const selectStat = useCallback(
     (index: number) => {
@@ -287,10 +331,11 @@ export function NumbersBand() {
           </div>
         </Reveal>
 
-        {/* The trace field. One wash layer per palette sits under the canvas and
-            only opacity crossfades between them: gradients are not interpolable in
-            CSS, so swapping one background would snap while the particles fade.
-            Decorative throughout, so aria-hidden. */}
+        {/* The trace field. One soft bloom rises from the floor of the panel behind
+            the particles, the way the reference section stages its scene. One wash
+            layer per palette, and only opacity crossfades between them: gradients
+            are not interpolable in CSS, so swapping one background would snap while
+            the particles fade. Decorative throughout, so aria-hidden. */}
         <Reveal delay={0.12}>
           <div className="relative mt-10 overflow-hidden rounded-2xl border border-ash-border">
             {PALETTE_ORDER.map((name) => {
@@ -300,10 +345,10 @@ export function NumbersBand() {
                   key={name}
                   aria-hidden
                   className={`absolute inset-0 transition-opacity duration-500 ease-out ${
-                    name === palette ? "opacity-[0.13]" : "opacity-0"
+                    name === palette ? "opacity-[0.15]" : "opacity-0"
                   }`}
                   style={{
-                    background: `radial-gradient(120% 90% at 16% 28%, ${washA} 0%, transparent 56%), radial-gradient(115% 95% at 84% 78%, ${washB} 0%, transparent 56%)`,
+                    background: `radial-gradient(95% 85% at 50% 104%, ${washA} 0%, transparent 64%), radial-gradient(52% 44% at 72% 102%, ${washB} 0%, transparent 62%)`,
                   }}
                 />
               );
@@ -373,14 +418,6 @@ export function NumbersBand() {
               )}
             </div>
           </div>
-        </Reveal>
-
-        <Reveal delay={0.18}>
-          <p className="mt-4 text-body text-fog">
-            {BSIDE.testimonial.evidenceNote} The cost figure is a projection
-            from the same engagement; the format count comes from the current
-            ingest registry.
-          </p>
         </Reveal>
       </div>
     </section>

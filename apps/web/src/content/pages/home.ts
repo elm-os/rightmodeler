@@ -1,6 +1,5 @@
 // Markdown twin of the / route (src/app/page.tsx and the hero, sources bar, platform, numbers
 // band, testimonial band, and CTA band sections it composes). Keep the two in sync.
-import { BSIDE } from "@/content/case-studies";
 import { ILLUSTRATIVE_SCORECARD, TRACE_SOURCES } from "@/lib/product-facts";
 import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 
@@ -77,8 +76,6 @@ ${TRACE_SOURCES.length} trace formats autodetected into one per-step schema
 100% quality held, measured on the acceptance benchmark
 
 53.3% faster responses on the benchmarked workloads
-
-${BSIDE.testimonial.evidenceNote} The cost figure is a projection from the same engagement; the format count comes from the current ingest registry.
 
 > "rightmodeler took AI Assist from brute force to precision routing. Costs fell 70.8%, responses got twice as fast, and quality held at 100%, measured, not assumed."
 
