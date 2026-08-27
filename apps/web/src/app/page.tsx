@@ -5,6 +5,7 @@ import { CtaBand } from "@/components/sections/cta-band";
 import { Footer } from "@/components/sections/footer";
 import { Hero } from "@/components/sections/hero";
 import { Nav } from "@/components/sections/nav";
+import { NumbersBand } from "@/components/sections/numbers-band";
 import { Platform } from "@/components/sections/platform";
 import { SourcesBar } from "@/components/sections/sources-bar";
 import { TestimonialBand } from "@/components/sections/testimonial-band";
@@ -113,6 +114,10 @@ export default function Home() {
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">
           <Platform />
+        </div>
+        <div aria-hidden className="h-px w-full bg-ash-border" />
+        <div className="mx-auto max-w-6xl border-x border-ash-border">
+          <NumbersBand />
         </div>
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">
