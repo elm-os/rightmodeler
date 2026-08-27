@@ -1,5 +1,5 @@
-// Markdown twin of the / route (src/app/page.tsx and the hero, sources bar, platform, testimonial
-// band, and CTA band sections it composes). Keep the two in sync.
+// Markdown twin of the / route (src/app/page.tsx and the hero, sources bar, platform, numbers
+// band, testimonial band, and CTA band sections it composes). Keep the two in sync.
 import { ILLUSTRATIVE_SCORECARD, TRACE_SOURCES } from "@/lib/product-facts";
 import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 
@@ -64,6 +64,18 @@ Early access
 The instruments. Cost per layer, speed per step, failures as they happen, and a stack that stays right-sized.
 
 Meet Crucible: /crucible
+
+The numbers
+
+## What the replays showed
+
+${TRACE_SOURCES.length} trace formats autodetected into one per-step schema
+
+70.8% lower inference cost after right-sizing
+
+100% quality held against shipped outputs
+
+53.3% faster responses on the same workloads
 
 > "rightmodeler took AI Assist from brute force to precision routing. Costs fell 70.8%, responses got twice as fast, and quality held at 100%, measured, not assumed."
 
