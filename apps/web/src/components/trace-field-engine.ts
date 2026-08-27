@@ -934,8 +934,11 @@ export function createTraceField(
     if (globalAlpha < 1) globalAlpha = Math.min(1, globalAlpha + frameDt / 500);
 
     const dtS = Math.min(frameDt, 50) / 1000;
-    const STIFF = 46;
-    const DAMP = 13;
+    // Stiff, critically damped cursor spring: the yield reads as immediate
+    // (bulk of the motion lands within ~100ms) while still gliding, never
+    // snapping or overshooting.
+    const STIFF = 170;
+    const DAMP = 26;
     pointerVX += (pointerTX * aspect - pointerPX) * STIFF * dtS;
     pointerVY += (pointerTY - pointerPY) * STIFF * dtS;
     pointerVX *= Math.max(0, 1 - DAMP * dtS);
@@ -945,7 +948,7 @@ export function createTraceField(
     // activation rises quicker than it falls, so leaving never snaps
     pointerK +=
       ((pointerActive ? 1 : 0) - pointerK) *
-      Math.min(1, (pointerActive ? 9 : 4.5) * dtS);
+      Math.min(1, (pointerActive ? 18 : 6) * dtS);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
 
