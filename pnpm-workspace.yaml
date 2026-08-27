@@ -5,8 +5,11 @@ packages:
   - harness/apps/*
   - skills/*
 allowBuilds:
+  # The two vgpu natives are the Node/Dawn adapter, unused by the browser path.
+  "@vgpu/adapter-node": false
   esbuild: true
   sharp: true
   unrs-resolver: true
+  webgpu: false
 minimumReleaseAgeExclude:
   - eve@0.36.0
