@@ -30,17 +30,18 @@ const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const ROTATE_MS = 9000;
 const PALETTE_ORDER: PaletteName[] = ["duet", "violet", "ember", "dawn"];
 
-// The bloom behind the particles: one light source at the exact center of the
-// bottom border, the way the reference scenes stage theirs, with the palette's
-// hues as stops inside that single radial (a hot core cooling outward). Alphas
-// live in the stops; the container only crossfades.
+// The bloom behind the particles: one circular light source at the exact center
+// of the bottom border, the way the reference scenes stage theirs. A hot core
+// cools outward through the palette's hues, and the final stop stays tinted so
+// color reaches the panel's corners instead of fading to paper. Alphas live in
+// the stops; the container only crossfades.
 const WASHES: Record<PaletteName, string> = {
-  duet: "radial-gradient(circle at 50% 102%, #ff47043d 0%, #7a5cff38 22%, #0447ff30 42%, transparent 66%)",
+  duet: "radial-gradient(circle at 50% 102%, #ffb4888c 0%, #ff6a2e59 22%, #7a5cff4d 48%, #b3aaff2e 78%)",
   violet:
-    "radial-gradient(circle at 50% 102%, #5f7bff45 0%, #0447ff36 26%, #a5b6ff22 46%, transparent 68%)",
+    "radial-gradient(circle at 50% 102%, #5f7bff80 0%, #0447ff4d 26%, #8fa0ff38 52%, #c9d0ff26 80%)",
   ember:
-    "radial-gradient(circle at 50% 102%, #ffb48848 0%, #ff6a2e3a 24%, #ff47042c 44%, transparent 68%)",
-  dawn: "radial-gradient(circle at 50% 102%, #ff8c5242 0%, #b58fd636 26%, #6f5ae82a 46%, transparent 68%)",
+    "radial-gradient(circle at 50% 102%, #ffb4888c 0%, #ff6a2e59 24%, #ff470440 50%, #ffd4bd29 80%)",
+  dawn: "radial-gradient(circle at 50% 102%, #ff9e6685 0%, #ff8c5250 24%, #b58fd642 50%, #d8c8f22b 80%)",
 };
 
 // The four etched plates the particles settle into, one per stat: a railway throat
@@ -371,7 +372,7 @@ export function NumbersBand() {
             <canvas
               ref={canvasRef}
               aria-hidden
-              className="relative block h-[380px] w-full transition-opacity duration-150 ease-out sm:h-[440px] lg:h-[500px]"
+              className="relative block h-60 w-full transition-opacity duration-150 ease-out sm:h-[440px] lg:h-[500px]"
               style={{ opacity: canvasDim ? 0 : 1 }}
               onPointerMove={(e) => {
                 if (!finePointer.current) return;
@@ -394,7 +395,7 @@ export function NumbersBand() {
                 aria-controls={menuId}
                 aria-label={`Illustration palette: ${PALETTES[palette].label}. Choose a palette`}
                 onClick={() => setMenuOpen((v) => !v)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-ash-border bg-parchment-white/90 text-driftwood backdrop-blur-sm transition-[background-color,color,transform] duration-150 ease-out hover:bg-warm-sand hover:text-midnight-ink active:scale-[0.93] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-ash-border bg-parchment-white/90 text-driftwood backdrop-blur-sm transition-[background-color,color,transform] duration-150 ease-out hover:bg-warm-sand hover:text-midnight-ink active:scale-[0.93] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40"
               >
                 <PaletteIcon name={palette} />
               </button>
@@ -420,7 +421,7 @@ export function NumbersBand() {
                         type="button"
                         aria-pressed={isActive}
                         onClick={() => choosePalette(name)}
-                        className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-body transition-colors duration-150 ease-out hover:bg-warm-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 ${
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-body transition-colors duration-150 ease-out hover:bg-warm-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 ${
                           isActive
                             ? "font-medium text-midnight-ink"
                             : "text-driftwood"

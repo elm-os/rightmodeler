@@ -184,8 +184,10 @@ function maskShape(
   }
 
   const imgAspect = width / height;
-  // Fit the plate inside the viewport, height-first, and keep a paper margin.
-  const scaleY = Math.min((0.94 * aspect) / imgAspect, 0.9);
+  // Fit the plate inside the viewport, height-first. Wide canvases keep a paper
+  // margin; narrow (phone) canvases may crop a few percent of the plate's own
+  // baked-in margins so the drawing keeps its presence.
+  const scaleY = Math.min((1.06 * aspect) / imgAspect, 0.9);
   const pick = (r: number) => {
     const target = r * acc;
     let lo = 0;
@@ -640,7 +642,11 @@ export function createTraceField(
   // alike. The plates want density: they are drawings made of dots.
   const rect = canvas.getBoundingClientRect();
   const area = Math.max(rect.width * rect.height, 1);
-  const count = Math.round(Math.min(4830, Math.max(1840, area / 165)));
+  // Two regimes: large canvases scale by area; small (phone) canvases cap lower
+  // so the etched plates stay crisp stipple instead of clotting together.
+  const count = Math.round(
+    Math.min(5310, Math.max(area / 150, Math.min(2090, area / 50))),
+  );
   let aspect = Math.max(rect.width / Math.max(rect.height, 1), 0.1);
 
   const rand = mulberry32(0x5eed);
