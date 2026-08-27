@@ -65,8 +65,8 @@ export const PALETTES: Record<
 // illustration, not interface): a 1.5s glide with a large stagger window reads as
 // one coherent wave. The flight math is settled; the rest states around it change
 // freely, the flight itself does not.
-const MORPH_MS = 1500;
-const STAGGER_SPAN = 0.42;
+const MORPH_MS = 900;
+const STAGGER_SPAN = 0.3;
 const TRAIL_SECONDS = 0.085; // two-time evaluation gap while in flight
 const PALETTE_FADE_MS = 450;
 const MAX_DPR = 2;
@@ -326,8 +326,8 @@ const SHAPE_COUNT = 5;
 
 // --- shared math, mirrored between GLSL and the JS snapshot ----------------------
 
-function easeInOutCubic(p: number): number {
-  return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+function flightEase(p: number): number {
+  return 1 - Math.pow(1 - p, 3);
 }
 
 // One near-still ambient for every plate: the rest states are drawings, so they
@@ -367,7 +367,7 @@ function positionJs(
     Math.max((u.progress - tOrder * STAGGER_SPAN) / window, 0),
     1,
   );
-  const e = easeInOutCubic(p);
+  const e = flightEase(p);
   let x = fx + (tx - fx) * e;
   let y = fy + (ty - fy) * e;
   const dx = tx - fx;
@@ -427,8 +427,8 @@ uniform float u_pixelScale; // dpr for point sizing
 
 varying vec4 v_color;
 
-float easeInOut(float p) {
-  return p < 0.5 ? 4.0 * p * p * p : 1.0 - pow(-2.0 * p + 2.0, 3.0) / 2.0;
+float flightEase(float p) {
+  return 1.0 - pow(1.0 - p, 3.0);
 }
 
 vec2 ambient(float seed, float t) {
@@ -454,7 +454,7 @@ vec3 flight(float progress, float t) {
   float seed = a_meta.x;
 
   float p = clamp((progress - tw.x * ${STAGGER_SPAN.toFixed(3)}) / ${(1 - STAGGER_SPAN).toFixed(3)}, 0.0, 1.0);
-  float e = easeInOut(p);
+  float e = flightEase(p);
   vec2 pos = mix(f, to, e);
 
   vec2 d = to - f;
@@ -642,11 +642,9 @@ export function createTraceField(
   // alike. The plates want density: they are drawings made of dots.
   const rect = canvas.getBoundingClientRect();
   const area = Math.max(rect.width * rect.height, 1);
-  // Two regimes: large canvases scale by area; small (phone) canvases cap lower
-  // so the etched plates stay crisp stipple instead of clotting together.
-  const count = Math.round(
-    Math.min(5310, Math.max(area / 150, Math.min(2090, area / 50))),
-  );
+  // One density for every size: the phone ratio, where dots overlap along the
+  // plate strokes into continuous ink. Desktop simply gets more particles.
+  const count = Math.round(Math.min(12000, Math.max(1200, area / 50)));
   let aspect = Math.max(rect.width / Math.max(rect.height, 1), 0.1);
 
   const rand = mulberry32(0x5eed);
@@ -832,6 +830,7 @@ export function createTraceField(
   let pointerVY = 0;
   let pointerK = 0;
   let dpr = 1;
+  let pixelScale = 1;
   let raf = 0;
   let running = false;
   let now = 0;
@@ -845,6 +844,9 @@ export function createTraceField(
     const r = canvas.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) return;
     dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+    // Dots on a wide canvas are relatively smaller than the same dots on a
+    // phone; a modest boost keeps the perceived weight consistent.
+    pixelScale = dpr * (r.width > 900 ? 1.1 : 1);
     const w = Math.round(r.width * dpr);
     const h = Math.round(r.height * dpr);
     if (canvas.width !== w || canvas.height !== h) {
@@ -903,7 +905,7 @@ export function createTraceField(
     gl.uniform3f(u.u_colB, colors[1][0], colors[1][1], colors[1][2]);
     gl.uniform3f(u.u_colC, colors[2][0], colors[2][1], colors[2][2]);
     gl.uniform2f(u.u_gradDir, 0.94, -0.34);
-    gl.uniform1f(u.u_pixelScale, dpr);
+    gl.uniform1f(u.u_pixelScale, pixelScale);
   }
 
   function draw(t: number) {
@@ -929,7 +931,7 @@ export function createTraceField(
     if (intro && progress >= 1) intro = false;
     // The fade-in rides its own clock, so an early retarget can neither freeze it
     // below 1 nor pop it to 1 in a single frame.
-    if (globalAlpha < 1) globalAlpha = Math.min(1, globalAlpha + frameDt / 650);
+    if (globalAlpha < 1) globalAlpha = Math.min(1, globalAlpha + frameDt / 500);
 
     const dtS = Math.min(frameDt, 50) / 1000;
     const STIFF = 46;

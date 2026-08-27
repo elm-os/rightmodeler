@@ -224,7 +224,7 @@ export function NumbersBand() {
           dimTimer.current = null;
           fieldRef.current?.setShape(index);
           setCanvasDim(false);
-        }, 160);
+        }, 120);
       } else {
         field.setShape(index);
       }
@@ -302,7 +302,7 @@ export function NumbersBand() {
 
         {/* The stat menu: all four numbers stay readable; the active one is ink and
             carries a sliding hairline overhead, the way a ledger rules its columns. */}
-        <Reveal delay={0.06}>
+        <Reveal>
           <div className="mt-7 grid grid-cols-2 gap-x-4 gap-y-6 sm:mt-8 lg:grid-cols-4">
             {STATS.map((stat, i) => {
               const isActive = i === active;
@@ -357,7 +357,7 @@ export function NumbersBand() {
             layer per palette, and only opacity crossfades between them: gradients
             are not interpolable in CSS, so swapping one background would snap while
             the particles fade. Decorative throughout, so aria-hidden. */}
-        <Reveal delay={0.12}>
+        <Reveal>
           <div className="relative mt-10 overflow-hidden rounded-2xl border border-ash-border">
             {PALETTE_ORDER.map((name) => (
               <div
