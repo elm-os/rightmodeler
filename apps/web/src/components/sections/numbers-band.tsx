@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
+import { createLightWash, type LightWash } from "@/components/light-wash";
 import { Reveal } from "@/components/reveal";
 import {
   createTraceField,
@@ -35,6 +36,10 @@ const PALETTE_ORDER: PaletteName[] = ["duet", "violet", "ember", "dawn"];
 // cools outward through the palette's hues, and the final stop stays tinted so
 // color reaches the panel's corners instead of fading to paper. Alphas live in
 // the stops; the container only crossfades.
+//
+// These CSS washes are now the SSR/no-WebGPU fallback: where WebGPU initializes,
+// the light-wash canvas (a vgpu pass rendering the same staging as one physical
+// light source) fades in over them and becomes the backdrop.
 const WASHES: Record<PaletteName, string> = {
   duet: "radial-gradient(circle at 50% 102%, #ffb4888c 0%, #ff6a2e59 22%, #7a5cff4d 48%, #b3aaff2e 78%)",
   violet:
@@ -151,6 +156,8 @@ export function NumbersBand() {
   const sectionRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fieldRef = useRef<TraceField | null>(null);
+  const lightCanvasRef = useRef<HTMLCanvasElement>(null);
+  const lightRef = useRef<LightWash | null>(null);
   const inView = useInView(sectionRef, { margin: "160px 0px 160px 0px" });
   const [active, setActive] = useState(0);
   const [palette, setPalette] = useState<PaletteName>("duet");
@@ -167,6 +174,9 @@ export function NumbersBand() {
   // then lives for the component's lifetime, and visibility only starts and stops
   // its clock. Reduced motion renders settled frames instead of running a loop.
   const [fieldReady, setFieldReady] = useState(false);
+  // The light canvas stays invisible until its first WebGPU frame is on screen;
+  // where init fails it never flips, and the CSS washes remain the backdrop.
+  const [lightReady, setLightReady] = useState(false);
   const stateRef = useRef({ active, palette });
   useEffect(() => {
     stateRef.current = { active, palette };
@@ -179,6 +189,17 @@ export function NumbersBand() {
     ).matches;
     let cancelled = false;
     let field: TraceField | null = null;
+    const lightCanvas = lightCanvasRef.current;
+    const light = lightCanvas
+      ? createLightWash(lightCanvas, {
+          palette: stateRef.current.palette,
+          reducedMotion: reduce ?? false,
+          onReady: () => {
+            if (!cancelled) setLightReady(true);
+          },
+        })
+      : null;
+    lightRef.current = light;
     loadPlates().then((masks) => {
       const canvas = canvasRef.current;
       if (cancelled || !canvas) return;
@@ -194,8 +215,10 @@ export function NumbersBand() {
     return () => {
       cancelled = true;
       fieldRef.current = null;
+      lightRef.current = null;
       if (dimTimer.current !== null) window.clearTimeout(dimTimer.current);
       field?.destroy();
+      light?.destroy();
     };
     // The engine is deliberately not rebuilt when `reduce` flips mid-visit; the
     // preference is read once per mount, which matches how the OS setting behaves.
@@ -204,9 +227,14 @@ export function NumbersBand() {
 
   useEffect(() => {
     const field = fieldRef.current;
-    if (!field) return;
-    if (inView) field.start();
-    else field.stop();
+    const light = lightRef.current;
+    if (inView) {
+      field?.start();
+      light?.start();
+    } else {
+      field?.stop();
+      light?.stop();
+    }
   }, [inView, fieldReady]);
 
   const selectStat = useCallback(
@@ -248,6 +276,7 @@ export function NumbersBand() {
   const choosePalette = useCallback((name: PaletteName) => {
     setPalette(name);
     fieldRef.current?.setPalette(name);
+    lightRef.current?.setPalette(name);
     setMenuOpen(false);
     menuButtonRef.current?.focus();
   }, []);
@@ -369,6 +398,15 @@ export function NumbersBand() {
                 style={{ background: WASHES[name] }}
               />
             ))}
+            {/* The vgpu light: fades in over the washes once its first WebGPU
+                frame is on screen; stays invisible wherever init fails. */}
+            <canvas
+              ref={lightCanvasRef}
+              aria-hidden
+              className={`pointer-events-none absolute inset-0 h-full w-full transition-opacity duration-500 ease-out ${
+                lightReady ? "opacity-100" : "opacity-0"
+              }`}
+            />
             <canvas
               ref={canvasRef}
               aria-hidden
@@ -377,12 +415,15 @@ export function NumbersBand() {
               onPointerMove={(e) => {
                 if (!finePointer.current) return;
                 const r = e.currentTarget.getBoundingClientRect();
-                fieldRef.current?.setPointer(
-                  ((e.clientX - r.left) / r.width) * 2 - 1,
-                  (1 - (e.clientY - r.top) / r.height) * 2 - 1,
-                );
+                const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+                const ny = (1 - (e.clientY - r.top) / r.height) * 2 - 1;
+                fieldRef.current?.setPointer(nx, ny);
+                lightRef.current?.setPointer(nx, ny);
               }}
-              onPointerLeave={() => fieldRef.current?.setPointerActive(false)}
+              onPointerLeave={() => {
+                fieldRef.current?.setPointerActive(false);
+                lightRef.current?.setPointerActive(false);
+              }}
             />
 
             {/* Palette control, top right like the section it answers. Monochrome
