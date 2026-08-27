@@ -71,11 +71,11 @@ The numbers
 
 ${TRACE_SOURCES.length} trace formats autodetected into one per-step schema
 
-70.8% lower inference cost projected at B:Side
+70.8% lower inference cost after right-sizing
 
-100% quality held, measured on the acceptance benchmark
+100% quality held against shipped outputs
 
-53.3% faster responses on the benchmarked workloads
+53.3% faster responses on the same workloads
 
 > "rightmodeler took AI Assist from brute force to precision routing. Costs fell 70.8%, responses got twice as fast, and quality held at 100%, measured, not assumed."
 

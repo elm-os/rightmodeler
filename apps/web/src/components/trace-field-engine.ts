@@ -343,6 +343,9 @@ type FlightUniforms = {
   fromAmbientK: number;
   focusX: number;
   focusY: number;
+  pointerX: number;
+  pointerY: number;
+  pointerK: number;
 };
 
 // Head position at (progress, time) for one particle: the JS twin of the GLSL
@@ -382,6 +385,14 @@ function positionJs(
   const [ax, ay] = ambientJs(seed, time);
   x += ax * (1 - e) * u.fromAmbientK + ax * e;
   y += ay * (1 - e) * u.fromAmbientK + ay * e;
+  const rx = x - u.pointerX;
+  const ry = y - u.pointerY;
+  const pd = Math.hypot(rx, ry);
+  const t01 = Math.min(Math.max(pd / 0.38, 0), 1);
+  const fall = 1 - t01 * t01 * (3 - 2 * t01);
+  const push = ((fall * fall * 0.03) / Math.max(pd, 0.04)) * u.pointerK;
+  x += rx * push;
+  y += ry * push;
   return { x, y };
 }
 
@@ -397,7 +408,8 @@ attribute vec4 a_to;
 attribute vec4 a_meta;   // seed, sizeScale, alphaScale, endFlag (0 head / 1 tail)
 
 uniform vec2  u_scale;     // 1/aspect, 1
-uniform vec2  u_shift;     // parallax
+uniform vec2  u_pointer;   // spring-smoothed cursor, world coords
+uniform float u_pointerK;  // hover activation, eased in and out
 uniform float u_progress;
 uniform float u_progressPrev;
 uniform float u_time;
@@ -456,6 +468,14 @@ vec3 flight(float progress, float t) {
 
   vec2 amb = ambient(seed, t);
   pos += amb * (1.0 - e) * u_fromAmbientK + amb * e;
+
+  // Cursor proximity: particles yield away from the sprung pointer, a few pixels
+  // at most, with a soft squared falloff. The spring lives on the CPU, so the
+  // motion never tracks the mouse raw (raw tracking reads as artificial).
+  vec2 dp = pos - u_pointer;
+  float pd = length(dp);
+  float fall = 1.0 - smoothstep(0.0, 0.38, pd);
+  pos += dp / max(pd, 0.04) * fall * fall * 0.03 * u_pointerK;
   return vec3(pos, e);
 }
 
@@ -489,7 +509,7 @@ void main() {
   vec2 tail = head.xy - trail;
 
   vec2 pos = mix(head.xy, tail, a_meta.w);
-  gl_Position = vec4((pos + u_shift) * u_scale, 0.0, 1.0);
+  gl_Position = vec4(pos * u_scale, 0.0, 1.0);
 
   vec3 fw = unpack(a_from.w);
   vec3 tw = unpack(a_to.w);
@@ -503,7 +523,7 @@ void main() {
 const POINT_VERT = `${SHARED_GLSL}
 void main() {
   vec3 head = flight(u_progress, u_time);
-  gl_Position = vec4((head.xy + u_shift) * u_scale, 0.0, 1.0);
+  gl_Position = vec4(head.xy * u_scale, 0.0, 1.0);
 
   vec3 fw = unpack(a_from.w);
   vec3 tw = unpack(a_to.w);
@@ -582,6 +602,7 @@ export type TraceField = {
   setShape: (index: number) => void;
   setPalette: (name: PaletteName) => void;
   setPointer: (nx: number, ny: number) => void;
+  setPointerActive: (active: boolean) => void;
   start: () => void;
   stop: () => void;
   destroy: () => void;
@@ -619,7 +640,7 @@ export function createTraceField(
   // alike. The plates want density: they are drawings made of dots.
   const rect = canvas.getBoundingClientRect();
   const area = Math.max(rect.width * rect.height, 1);
-  const count = Math.round(Math.min(4200, Math.max(1600, area / 190)));
+  const count = Math.round(Math.min(4830, Math.max(1840, area / 165)));
   let aspect = Math.max(rect.width / Math.max(rect.height, 1), 0.1);
 
   const rand = mulberry32(0x5eed);
@@ -702,7 +723,8 @@ export function createTraceField(
 
   const UNIFORM_NAMES = [
     "u_scale",
-    "u_shift",
+    "u_pointer",
+    "u_pointerK",
     "u_progress",
     "u_progressPrev",
     "u_time",
@@ -792,10 +814,17 @@ export function createTraceField(
   let fromAmbientK = 1;
   let globalAlpha = reduced ? 1 : 0;
   let lastDrawT = 0;
-  let pointerX = 0;
-  let pointerY = 0;
-  let pointerCurX = 0;
-  let pointerCurY = 0;
+  // Cursor spring (Emil: never tie visuals to the raw mouse; interpolate with
+  // spring physics so the yield is alive and interruptible). Near-critical
+  // damping, a whisker under, so the settle has a breath of life.
+  let pointerTX = 0;
+  let pointerTY = 0;
+  let pointerActive = false;
+  let pointerPX = 0;
+  let pointerPY = 0;
+  let pointerVX = 0;
+  let pointerVY = 0;
+  let pointerK = 0;
   let dpr = 1;
   let raf = 0;
   let running = false;
@@ -855,7 +884,8 @@ export function createTraceField(
     colors: [number, number, number][],
   ) {
     gl.uniform2f(u.u_scale, 1 / aspect, 1);
-    gl.uniform2f(u.u_shift, pointerCurX * 0.05, pointerCurY * 0.035);
+    gl.uniform2f(u.u_pointer, pointerPX, pointerPY);
+    gl.uniform1f(u.u_pointerK, pointerK);
     gl.uniform1f(u.u_progress, progress);
     gl.uniform1f(u.u_progressPrev, progressPrev);
     gl.uniform1f(u.u_time, t);
@@ -895,8 +925,19 @@ export function createTraceField(
     // below 1 nor pop it to 1 in a single frame.
     if (globalAlpha < 1) globalAlpha = Math.min(1, globalAlpha + frameDt / 650);
 
-    pointerCurX += (pointerX - pointerCurX) * 0.06;
-    pointerCurY += (pointerY - pointerCurY) * 0.06;
+    const dtS = Math.min(frameDt, 50) / 1000;
+    const STIFF = 46;
+    const DAMP = 13;
+    pointerVX += (pointerTX * aspect - pointerPX) * STIFF * dtS;
+    pointerVY += (pointerTY - pointerPY) * STIFF * dtS;
+    pointerVX *= Math.max(0, 1 - DAMP * dtS);
+    pointerVY *= Math.max(0, 1 - DAMP * dtS);
+    pointerPX += pointerVX * dtS;
+    pointerPY += pointerVY * dtS;
+    // activation rises quicker than it falls, so leaving never snaps
+    pointerK +=
+      ((pointerActive ? 1 : 0) - pointerK) *
+      Math.min(1, (pointerActive ? 9 : 4.5) * dtS);
 
     gl.clear(gl.COLOR_BUFFER_BIT);
 
@@ -940,6 +981,9 @@ export function createTraceField(
       fromAmbientK,
       focusX: 0,
       focusY: 0.04,
+      pointerX: pointerPX,
+      pointerY: pointerPY,
+      pointerK,
     };
     const from = shapeData[fromShape];
     const to = shapeData[toShape];
@@ -1057,8 +1101,12 @@ export function createTraceField(
       if (reduced || !running) draw(performance.now());
     },
     setPointer(nx, ny) {
-      pointerX = nx;
-      pointerY = ny;
+      pointerTX = nx;
+      pointerTY = ny;
+      pointerActive = true;
+    },
+    setPointerActive(active) {
+      pointerActive = active;
     },
     start() {
       if (running || reduced) return;

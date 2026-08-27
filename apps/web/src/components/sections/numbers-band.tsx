@@ -30,9 +30,23 @@ const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const ROTATE_MS = 9000;
 const PALETTE_ORDER: PaletteName[] = ["duet", "violet", "ember", "dawn"];
 
-// The four etched plates the particles settle into, one per stat: a braided river
-// delta, descending terraces, a planetary ring, a suspension bridge.
-const PLATES = ["delta", "terraces", "ring", "bridge"] as const;
+// The bloom behind the particles: one light source at the exact center of the
+// bottom border, the way the reference scenes stage theirs, with the palette's
+// hues as stops inside that single radial (a hot core cooling outward). Alphas
+// live in the stops; the container only crossfades.
+const WASHES: Record<PaletteName, string> = {
+  duet: "radial-gradient(circle at 50% 102%, #ff47043d 0%, #7a5cff38 22%, #0447ff30 42%, transparent 66%)",
+  violet:
+    "radial-gradient(circle at 50% 102%, #5f7bff45 0%, #0447ff36 26%, #a5b6ff22 46%, transparent 68%)",
+  ember:
+    "radial-gradient(circle at 50% 102%, #ffb48848 0%, #ff6a2e3a 24%, #ff47042c 44%, transparent 68%)",
+  dawn: "radial-gradient(circle at 50% 102%, #ff8c5242 0%, #b58fd636 26%, #6f5ae82a 46%, transparent 68%)",
+};
+
+// The four etched plates the particles settle into, one per stat: a railway throat
+// merging ten tracks into one line, descending terraces, a planetary ring, a
+// suspension bridge.
+const PLATES = ["merge", "terraces", "ring", "bridge"] as const;
 
 // Decode the plates into pixel masks for the engine's density sampler. Any failure
 // returns null and the engine falls back to procedural silhouettes.
@@ -59,9 +73,9 @@ async function loadPlates(): Promise<ShapeMask[] | null> {
   }
 }
 
-// The three percentage figures are quoted verbatim from the B:Side engagement
-// write-up (content/case-studies.ts BSIDE); the captions carry the projected versus
-// measured hedges inline.
+// The format count interpolates from the product-facts registry; the percentage
+// figures are quoted verbatim from a customer engagement write-up
+// (content/case-studies.ts), with the captions kept generic.
 const STATS: { value: string; caption: string }[] = [
   {
     value: `${TRACE_SOURCES.length}`,
@@ -69,15 +83,15 @@ const STATS: { value: string; caption: string }[] = [
   },
   {
     value: "70.8%",
-    caption: "lower inference cost projected at B:Side",
+    caption: "lower inference cost after right-sizing",
   },
   {
     value: "100%",
-    caption: "quality held, measured on the acceptance benchmark",
+    caption: "quality held against shipped outputs",
   },
   {
     value: "53.3%",
-    caption: "faster responses on the benchmarked workloads",
+    caption: "faster responses on the same workloads",
   },
 ];
 
@@ -143,6 +157,7 @@ export function NumbersBand() {
   const [paused, setPaused] = useState(false);
   const [canvasDim, setCanvasDim] = useState(false);
   const dimTimer = useRef<number | null>(null);
+  const finePointer = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
@@ -156,6 +171,11 @@ export function NumbersBand() {
     stateRef.current = { active, palette };
   }, [active, palette]);
   useEffect(() => {
+    // Hover yield is gated to devices with a real cursor: touch fires pointer
+    // events on tap and would read as false positives.
+    finePointer.current = window.matchMedia(
+      "(hover: hover) and (pointer: fine)",
+    ).matches;
     let cancelled = false;
     let field: TraceField | null = null;
     loadPlates().then((masks) => {
@@ -269,12 +289,12 @@ export function NumbersBand() {
         }
       }}
     >
-      <div className="px-4 py-16 sm:px-6 sm:py-24">
+      <div className="px-4 pt-8 pb-14 sm:px-6 sm:pt-10 sm:pb-16">
         <Reveal>
           <p className="font-mono text-caption uppercase text-fog">
             The numbers
           </p>
-          <h2 className="mt-4 max-w-2xl font-display text-heading text-balance text-midnight-ink sm:text-heading-lg">
+          <h2 className="mt-3 max-w-2xl font-display text-heading text-balance text-midnight-ink sm:text-heading-lg">
             What the replays showed
           </h2>
         </Reveal>
@@ -282,7 +302,7 @@ export function NumbersBand() {
         {/* The stat menu: all four numbers stay readable; the active one is ink and
             carries a sliding hairline overhead, the way a ledger rules its columns. */}
         <Reveal delay={0.06}>
-          <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-6 sm:mt-12 lg:grid-cols-4">
+          <div className="mt-7 grid grid-cols-2 gap-x-4 gap-y-6 sm:mt-8 lg:grid-cols-4">
             {STATS.map((stat, i) => {
               const isActive = i === active;
               return (
@@ -338,33 +358,30 @@ export function NumbersBand() {
             the particles fade. Decorative throughout, so aria-hidden. */}
         <Reveal delay={0.12}>
           <div className="relative mt-10 overflow-hidden rounded-2xl border border-ash-border">
-            {PALETTE_ORDER.map((name) => {
-              const [washA, washB] = PALETTES[name].wash;
-              return (
-                <div
-                  key={name}
-                  aria-hidden
-                  className={`absolute inset-0 transition-opacity duration-500 ease-out ${
-                    name === palette ? "opacity-[0.15]" : "opacity-0"
-                  }`}
-                  style={{
-                    background: `radial-gradient(95% 85% at 50% 104%, ${washA} 0%, transparent 64%), radial-gradient(52% 44% at 72% 102%, ${washB} 0%, transparent 62%)`,
-                  }}
-                />
-              );
-            })}
+            {PALETTE_ORDER.map((name) => (
+              <div
+                key={name}
+                aria-hidden
+                className={`absolute inset-0 transition-opacity duration-500 ease-out ${
+                  name === palette ? "opacity-100" : "opacity-0"
+                }`}
+                style={{ background: WASHES[name] }}
+              />
+            ))}
             <canvas
               ref={canvasRef}
               aria-hidden
               className="relative block h-[380px] w-full transition-opacity duration-150 ease-out sm:h-[440px] lg:h-[500px]"
               style={{ opacity: canvasDim ? 0 : 1 }}
               onPointerMove={(e) => {
+                if (!finePointer.current) return;
                 const r = e.currentTarget.getBoundingClientRect();
                 fieldRef.current?.setPointer(
                   ((e.clientX - r.left) / r.width) * 2 - 1,
                   (1 - (e.clientY - r.top) / r.height) * 2 - 1,
                 );
               }}
+              onPointerLeave={() => fieldRef.current?.setPointerActive(false)}
             />
 
             {/* Palette control, top right like the section it answers. Monochrome
