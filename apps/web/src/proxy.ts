@@ -39,7 +39,7 @@ export function proxy(request: NextRequest) {
   // that list. Next strips rsc / next-router-* from request.headers inside the proxy, so the
   // clone would be missing them and they would be dropped upstream.
   // Carries Vary on the Markdown branch and the 406. It does NOT reach a prerendered HTML
-  // response: under next start in 16.3.0-preview.5 those are served from the incremental cache
+  // response: under next start in 16.3.4 those are served from the incremental cache
   // with their stored headers, and anything set here is dropped. The HTML branch relies on the
   // Vary rule in vercel.json instead; AGENTS.md records what the platform honours of it.
   response.headers.set("vary", VARY);

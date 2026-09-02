@@ -56,17 +56,17 @@ the product-fact gate in `scripts/check-content.mjs` both cover it.
 
 ## Response headers: what the platform honours
 
-Header rules live in `vercel.json`, not `next.config.ts`. Two findings, both verified rather
-than assumed, so nobody has to rediscover them:
+Header rules stay in `vercel.json` because the deployment platform, not local `next start`, serves
+the site. Two findings, both verified rather than assumed, so nobody has to rediscover them:
 
-1. **`next.config.ts` `headers()` is not applied to prerendered responses** in Next
-   16.3.0-preview.5. A literal single-path rule with `src/proxy.ts` removed entirely was still
-   dropped under `next start`, and the rule compiled into `routes-manifest.json` correctly yet
-   production served the page without it.
+1. **`next.config.ts` `headers()` reaches prerendered responses locally** in Next 16.3.4. A marker
+   header for `/about` arrived under `next start`, and the rule compiled into
+   `routes-manifest.json`. The same probe was dropped on the previously pinned prerelease.
 2. **`Vary` cannot be set on a prerendered page at all** on the current deployment platform. A
    custom marker header and `Vary` were shipped from the _same_ `vercel.json` rule: the marker
    arrived on the response, `Vary` did not. The platform manages `Vary` on cached responses
-   itself.
+   itself. This finding was not re-verified during the 16.3.4 check because that check ran under
+   local `next start`, not on the deployment platform.
 
 Consequences worth knowing before you debug this again:
 
