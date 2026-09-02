@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Assessment, CascadeFinding } from "@rightmodeler/core";
+import type { Assessment } from "@rightmodeler/core";
 
 import {
   ABSTAIN_REASONS,
@@ -7,6 +7,7 @@ import {
   EXCLUDED_FRACTION_MAX,
   aggregate,
   evaluatorWorstCaseBound,
+  type AggregateCascadeFinding,
 } from "./aggregation.js";
 import {
   MIN_DISTINCT_STEPS,
@@ -28,8 +29,8 @@ const options = {
 } as const;
 
 function cascadeFinding(
-  overrides: Partial<CascadeFinding> = {},
-): CascadeFinding {
+  overrides: Partial<AggregateCascadeFinding> = {},
+): AggregateCascadeFinding {
   return {
     cascadeId: "cascade-1",
     familyId: "family-1",
@@ -63,6 +64,8 @@ describe("aggregate", () => {
     expect(EVIDENCE_EXCLUSION_REASONS).toEqual(
       expect.arrayContaining([
         "assessment_evidence_missing",
+        "attribution_ambiguous",
+        "attribution_lost",
         "judge_evidence_incomplete",
       ]),
     );
@@ -171,6 +174,30 @@ describe("aggregate", () => {
     expect(verdict).not.toHaveProperty("abstainReason");
   });
 
+  it("attaches a candidate-scoped cascade finding only to that candidate", () => {
+    const facts = [
+      ...aggregationFacts(20, { candidateId: "candidate-a" }),
+      ...aggregationFacts(20, (index) => ({
+        candidateId: "candidate-b",
+        executionId: `execution-b-${index}`,
+      })),
+    ];
+    const verdicts = aggregate(facts, options, [
+      cascadeFinding({ candidateId: "candidate-a" }),
+    ]);
+
+    expect(
+      verdicts.map(({ candidateId, decision }) => [candidateId, decision]),
+    ).toEqual([
+      ["candidate-a", "reject"],
+      ["candidate-b", "recommend"],
+    ]);
+    expect(verdicts[0]).toMatchObject({
+      cascadeStatus: { verdict: "isolated" },
+    });
+    expect(verdicts[1]).not.toHaveProperty("cascadeStatus");
+  });
+
   it("reports evaluator kinds separately and applies the weakest kind", () => {
     const [verdict] = aggregate(aggregationScenarios.evaluatorKinds, options);
 
@@ -228,6 +255,59 @@ describe("aggregate", () => {
     expect(verdict).toMatchObject({
       decision: "abstain",
       abstainReason: { reason: "insufficient_availability" },
+    });
+  });
+
+  it("keeps silent failures out of the exclusion ratio", () => {
+    const facts = aggregationFacts(100, (index) => ({
+      attribution: index < 8 ? "silent-failure" : "ok",
+    }));
+    const [verdict] = aggregate(facts, { ...options, availabilityFloor: 0.7 });
+
+    expect(verdict).toMatchObject({
+      nReviewTrials: 92,
+      excludedExecutions: 0,
+      excludedFraction: 0,
+      assessmentAbsent: 0,
+      assessmentAbsentReasons: [],
+      decision: "recommend",
+    });
+    expect(verdict.availability).toMatchObject({
+      availableExecutions: 92,
+      executions: 100,
+      rate: 0.92,
+    });
+    expect(verdict.availability.lowerBound).toBeCloseTo(
+      wilson(92, 100).lower,
+      12,
+    );
+    expect(verdict.worstCaseBound).toBeCloseTo(wilson(92, 100).lower, 12);
+    expect(verdict.evaluatorKinds[0]).toMatchObject({
+      trials: 92,
+      excludedExecutions: 0,
+      worstCasePassRate: 0.92,
+    });
+  });
+
+  it("names attribution-based exclusions", () => {
+    const facts = aggregationFacts(100, (index) => ({
+      attribution: index < 5 ? "lost" : index < 8 ? "ambiguous" : "ok",
+    }));
+
+    expect(aggregate(facts, options)[0]).toMatchObject({
+      excludedExecutions: 8,
+      excludedFraction: 0.08,
+      assessmentAbsent: 8,
+      assessmentAbsentReasons: [
+        { reason: "attribution_ambiguous", count: 3 },
+        { reason: "attribution_lost", count: 5 },
+      ],
+      decision: "abstain",
+      abstainReason: {
+        reason: "excluded_fraction_exceeded",
+        observed: 0.08,
+        required: EXCLUDED_FRACTION_MAX,
+      },
     });
   });
 

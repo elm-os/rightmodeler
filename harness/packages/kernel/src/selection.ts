@@ -131,6 +131,7 @@ export function selectWinner(
     candidates.length,
   );
   const selected =
+    verdicts.holdout.decision === "recommend" &&
     evaluateGates([verdicts.holdout], policy).every((gate) => gate.pass) &&
     selectionAdjustedEstimate.lower >= policy.qualityFloor;
 

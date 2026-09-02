@@ -271,7 +271,9 @@ function remediationProof(
   const regressedGateIds = [...baselineGates]
     .filter(
       ([gateId, gate]) =>
-        gate.status === "pass" && postFixGates.get(gateId)?.status !== "pass",
+        postFix !== undefined &&
+        gate.status === "pass" &&
+        postFixGates.get(gateId)?.status !== "pass",
     )
     .map(([gateId]) => gateId)
     .sort(compareText);

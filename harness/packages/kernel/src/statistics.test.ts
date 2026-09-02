@@ -5,6 +5,7 @@ import {
   MIN_DISTINCT_TRAJECTORIES,
   MIN_REVIEW_TRIALS,
   clusterBootstrap,
+  minimumTrialsForFloor,
   wilson,
 } from "./statistics.js";
 
@@ -171,6 +172,44 @@ describe("wilson", () => {
     [0, 1, { comparisons: 1.5 }],
   ] as const)("rejects invalid inputs %#", (passes, n, options) => {
     expect(() => wilson(passes, n, options)).toThrow();
+  });
+});
+
+describe("minimumTrialsForFloor", () => {
+  it.each([
+    [0.85, 1, 22],
+    [0.85, 2, 29],
+    [0.85, 3, 33],
+  ])("finds the minimum for %#", (floor, comparisons, expected) => {
+    expect(minimumTrialsForFloor(floor, comparisons)).toBe(expected);
+  });
+
+  it("returns the first all-pass sample that clears the floor", () => {
+    for (const floor of [0.81, 0.85, 0.9, 0.95]) {
+      for (const comparisons of [1, 2, 3, 8]) {
+        for (const confidence of [0.9, 0.95]) {
+          const n = minimumTrialsForFloor(floor, comparisons, confidence);
+
+          expect(
+            wilson(n, n, { confidence, comparisons }).lower,
+          ).toBeGreaterThanOrEqual(floor);
+          if (n > 1) {
+            expect(
+              wilson(n - 1, n - 1, { confidence, comparisons }).lower,
+            ).toBeLessThan(floor);
+          }
+        }
+      }
+    }
+  });
+
+  it.each([
+    [0, 1],
+    [1, 1],
+    [Number.NaN, 1],
+    [0.85, 0],
+  ])("rejects invalid inputs %#", (floor, comparisons) => {
+    expect(() => minimumTrialsForFloor(floor, comparisons)).toThrow();
   });
 });
 
