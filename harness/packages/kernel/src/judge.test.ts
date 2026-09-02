@@ -76,6 +76,36 @@ describe("pickJudge", () => {
     ).toBe("neutral/judge");
   });
 
+  it("excludes model variants while retaining their base models", () => {
+    const catalog: ModelCatalogEntry[] = [
+      {
+        id: "vendor/model:batch",
+        family: "vendor",
+        contextLength: 100,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 10,
+      },
+      {
+        id: "vendor/model",
+        family: "vendor",
+        contextLength: 100,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 10,
+      },
+    ];
+
+    expect(
+      pickJudges(catalog, {
+        candidateFamily: "candidate",
+        referenceFamily: "reference",
+      }),
+    ).toEqual(["vendor/model"]);
+  });
+
   it("ranks eligible models by summed signal percentiles", () => {
     const catalog: ModelCatalogEntry[] = [
       {

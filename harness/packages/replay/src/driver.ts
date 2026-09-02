@@ -311,7 +311,7 @@ export async function replayModeA(
   const activeRefunds = new Set<Promise<void>>();
   let nextCell = 0;
   let failure: unknown;
-  const judges = input.judge?.rankedModels.slice(0, 2) ?? [];
+  const judges = input.judge?.rankedModels.slice(0, 4) ?? [];
   if (input.judge !== undefined && judges.length === 0) {
     throw new Error("At least one ranked judge model is required");
   }

@@ -124,6 +124,8 @@ export function pickJudges(
   }
 
   const eligible = catalog.filter((model) => {
+    if (model.id.includes(":")) return false;
+
     const outputModalities = model.outputModalities ?? [];
     if (outputModalities.length > 0 && !outputModalities.includes("text")) {
       return false;

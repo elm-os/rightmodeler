@@ -4526,7 +4526,7 @@ function effectiveVerdict(
   return shortlist;
 }
 
-const JUDGE_OUTPUT_TOKEN_CAP = 4_096;
+const JUDGE_OUTPUT_TOKEN_CAP = 512;
 
 function judgeChat(
   provider: ProviderClient,

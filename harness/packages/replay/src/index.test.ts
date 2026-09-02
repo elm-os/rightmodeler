@@ -2118,18 +2118,9 @@ describe("Mode A replay", () => {
     expect(warning).toHaveBeenCalledOnce();
   });
 
-  it("tries at most two systematically malformed judges", async () => {
-    await stub.close();
-    stub = await startStub({
-      malformedJudgeModels: ["zeta/judge-1", "yotta/judge-2"],
-    });
-    provider = createProvider({
-      providerId: "stub-provider",
-      baseUrl: baseUrl(stub),
-      apiKeyEnv: "REPLAY_TEST_API_KEY",
-      maxConcurrency: 4,
-    });
+  it("tries at most four systematically malformed judges", async () => {
     const warning = vi.fn();
+    const judgeModels: string[] = [];
     const cases = Array.from({ length: 4 }, (_, index) =>
       recordedCase({
         caseId: `case-${index}`,
@@ -2139,7 +2130,10 @@ describe("Mode A replay", () => {
 
     const result = await run(
       cases,
-      providerJudge,
+      async (request) => {
+        judgeModels.push(request.model);
+        return judgeReply('{"verdict":');
+      },
       4,
       "zeta/judge-1",
       [
@@ -2152,33 +2146,52 @@ describe("Mode A replay", () => {
           supportsStructuredOutput: false,
         },
         {
-          judgeModel: "unused/judge-3",
+          judgeModel: "xray/judge-3",
+          supportsStructuredOutput: false,
+        },
+        {
+          judgeModel: "whiskey/judge-4",
+          supportsStructuredOutput: false,
+        },
+        {
+          judgeModel: "unused/judge-5",
           supportsStructuredOutput: false,
         },
       ],
       warning,
     );
     const facts = await readFacts(store);
-    const requests = stub.getRequests();
 
     expect(result).toMatchObject({ completed: 4, blocked: [] });
     expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(0);
     expect(
       facts.filter((fact) => "executionId" in fact && "caseId" in fact),
     ).toHaveLength(4);
-    expect(
-      requests.filter(({ model }) => model === "acme/small-1"),
-    ).toHaveLength(4);
     expect([6, 8]).toContain(
-      requests.filter(({ model }) => model === "zeta/judge-1").length,
+      judgeModels.filter((model) => model === "zeta/judge-1").length,
     );
     expect([6, 8]).toContain(
-      requests.filter(({ model }) => model === "yotta/judge-2").length,
+      judgeModels.filter((model) => model === "yotta/judge-2").length,
     );
-    expect(requests.some(({ model }) => model === "unused/judge-3")).toBe(
-      false,
+    expect([6, 8]).toContain(
+      judgeModels.filter((model) => model === "xray/judge-3").length,
     );
-    expect(warning).toHaveBeenCalledTimes(2);
+    expect([6, 8]).toContain(
+      judgeModels.filter((model) => model === "whiskey/judge-4").length,
+    );
+    expect(judgeModels).not.toContain("unused/judge-5");
+    expect(Array.from(new Set(judgeModels))).toEqual([
+      "zeta/judge-1",
+      "yotta/judge-2",
+      "xray/judge-3",
+      "whiskey/judge-4",
+    ]);
+    expect(warning).toHaveBeenCalledTimes(4);
+    expect(warning).toHaveBeenNthCalledWith(
+      4,
+      "judge_unusable",
+      "Judge whiskey/judge-4 is unusable after three consecutive terminal failures; no eligible fallback judge remains.",
+    );
   });
 
   it("bounds judge failure forensics to 300 characters", async () => {
