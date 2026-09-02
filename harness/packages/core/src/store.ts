@@ -43,6 +43,7 @@ const temporaryDirectory = "temporary";
 const lockDirectory = ".rightmodeler-store.lock";
 const reservedStoreSegments = new Set([metadataDirectory, lockDirectory]);
 const versionFilePattern = /^v([1-9]\d*)\.json$/;
+const listConcurrency = 16;
 
 function isMissing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -126,7 +127,10 @@ export class FsStore implements Store {
   async list(prefix: string): Promise<string[]> {
     assertStoreKey(prefix, true);
     const keys: string[] = [];
-    await this.walkEntries(this.entriesRoot(), keys);
+    await this.walkEntries(
+      this.entryDirectory(prefix.slice(0, prefix.lastIndexOf("/") + 1)),
+      keys,
+    );
     return keys.filter((key) => key.startsWith(prefix)).sort();
   }
 
@@ -294,14 +298,15 @@ export class FsStore implements Store {
         (entry) => entry.isFile() && versionFilePattern.test(entry.name),
       )
     ) {
-      const key = relative(this.entriesRoot(), directory).split(sep).join("/");
-      await this.readCurrent(key);
-      keys.push(key);
+      keys.push(relative(this.entriesRoot(), directory).split(sep).join("/"));
     }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        await this.walkEntries(join(directory, entry.name), keys);
-      }
+    const children = entries.filter((entry) => entry.isDirectory());
+    for (let index = 0; index < children.length; index += listConcurrency) {
+      await Promise.all(
+        children
+          .slice(index, index + listConcurrency)
+          .map((entry) => this.walkEntries(join(directory, entry.name), keys)),
+      );
     }
   }
 }
