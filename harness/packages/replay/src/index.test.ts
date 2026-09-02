@@ -14,7 +14,11 @@ import {
   type JsonValue,
   type Store,
 } from "@rightmodeler/core";
-import { aggregate, type JudgeChat } from "@rightmodeler/kernel";
+import {
+  aggregate,
+  type JudgeChat,
+  type JudgeChatResult,
+} from "@rightmodeler/kernel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -112,11 +116,22 @@ function judge(counter?: { calls: number }): JudgeChat {
   return async (request) => {
     if (counter !== undefined) counter.calls += 1;
     expect(request.temperature).toBe(0);
-    return JSON.stringify({
-      verdict: "equivalent",
-      score: 1,
-      justification: "Equivalent fixture outputs.",
-    });
+    return judgeReply(
+      JSON.stringify({
+        verdict: "equivalent",
+        score: 1,
+        justification: "Equivalent fixture outputs.",
+      }),
+    );
+  };
+}
+
+function judgeReply(content: string): JudgeChatResult {
+  return {
+    content,
+    costUsd: 0.000001,
+    costIsEstimate: true,
+    usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
 
@@ -199,6 +214,10 @@ describe("provider client", () => {
       pricing: { input: 0.0000002, output: 0.0000008 },
       supportsTools: false,
       supportsStructuredOutput: false,
+      releasedAt: null,
+      maxOutputTokens: 16_384,
+      outputModalities: [],
+      requiresReasoning: false,
     });
 
     const response = await provider.chat({
@@ -275,19 +294,41 @@ describe("AI Gateway catalog", () => {
 
   async function listFixtureModels(
     fixtureBody?: string,
+    options: {
+      modelInfoBody?: string;
+      modelInfoStatus?: number;
+      warning?: (code: string, message: string) => void;
+    } = {},
   ): Promise<ModelCatalogEntry[]> {
     const body = fixtureBody ?? (await readFile(aiGatewayFixtureUrl, "utf8"));
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(body, {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) =>
+        new Response(
+          String(input).endsWith("/models")
+            ? body
+            : (options.modelInfoBody ?? JSON.stringify({ data: [] })),
+          {
+            status: String(input).endsWith("/models")
+              ? 200
+              : (options.modelInfoStatus ?? 200),
+            headers: { "content-type": "application/json" },
+          },
+        ),
     );
     return createProvider({
       providerId: "vercel-ai-gateway",
       baseUrl: "https://catalog.example/v1",
       apiKeyEnv: "REPLAY_TEST_API_KEY",
+      ...(options.warning === undefined ? {} : { warning: options.warning }),
     }).listModels();
+  }
+
+  async function fixtureWithoutPricing(): Promise<string> {
+    const fixture = JSON.parse(await readFile(aiGatewayFixtureUrl, "utf8")) as {
+      data: Array<Record<string, unknown>>;
+    };
+    for (const model of fixture.data) delete model.pricing;
+    return JSON.stringify(fixture);
   }
 
   it("normalizes string pricing, context, and capabilities while excluding embeddings", async () => {
@@ -301,6 +342,10 @@ describe("AI Gateway catalog", () => {
       pricing: { input: 0.0000025, output: 0.00001 },
       supportsTools: true,
       supportsStructuredOutput: false,
+      releasedAt: null,
+      maxOutputTokens: 16_384,
+      outputModalities: [],
+      requiresReasoning: false,
     });
     expect(catalog.find(({ id }) => id === "sakana/namazu")).toMatchObject({
       supportsTools: true,
@@ -312,6 +357,135 @@ describe("AI Gateway catalog", () => {
     expect(
       catalog.some(({ id }) => id === "alibaba/qwen3-embedding-0.6b"),
     ).toBe(false);
+  });
+
+  it("normalizes AI Gateway output ceilings", async () => {
+    const catalog = await listFixtureModels();
+
+    expect(
+      catalog.find(({ id }) => id === "meta/llama-3.3-70b")?.maxOutputTokens,
+    ).toBe(8_192);
+    expect(
+      catalog.find(({ id }) => id === "sakana/namazu")?.maxOutputTokens,
+    ).toBe(256_000);
+  });
+
+  it("normalizes OpenRouter release, output, modality, and reasoning fields", async () => {
+    const [model] = await listFixtureModels(
+      JSON.stringify({
+        data: [
+          {
+            id: "openai/example",
+            created: 1_788_285_838,
+            context_length: 200_000,
+            pricing: { prompt: "0.000001", completion: "0.000002" },
+            top_provider: { max_completion_tokens: 128_000 },
+            architecture: { output_modalities: ["text"] },
+            reasoning: { mandatory: true },
+          },
+        ],
+      }),
+    );
+
+    expect(model).toMatchObject({
+      releasedAt: 1_788_285_838,
+      maxOutputTokens: 128_000,
+      outputModalities: ["text"],
+      requiresReasoning: true,
+    });
+  });
+
+  it("applies pricing overrides without fetching another endpoint", async () => {
+    const body = await fixtureWithoutPricing();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const catalog = await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://catalog.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      pricingOverrides: {
+        "openai/gpt-4o": {
+          input: 0.001,
+          output: 0.002,
+          maxOutputTokens: 32_768,
+        },
+      },
+    }).listModels();
+
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o")).toMatchObject({
+      pricing: { input: 0.001, output: 0.002 },
+      maxOutputTokens: 32_768,
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
+  it("fills an unpriced catalog from LiteLLM model info", async () => {
+    const catalog = await listFixtureModels(await fixtureWithoutPricing(), {
+      modelInfoBody: JSON.stringify({
+        data: [
+          {
+            model_name: "openai/gpt-4o",
+            model_info: {
+              input_cost_per_token: 0.000001,
+              output_cost_per_token: 0.000002,
+              max_output_tokens: 32_768,
+            },
+          },
+          {
+            model_name: "meta/llama-3.3-70b",
+            model_info: {
+              input_cost_per_token: 0.0000003,
+              output_cost_per_token: 0.0000004,
+              max_tokens: 12_345,
+            },
+          },
+        ],
+      }),
+    });
+
+    expect(
+      catalog
+        .filter(({ pricing }) => pricing !== null)
+        .map(({ id }) => id)
+        .sort(),
+    ).toEqual(["meta/llama-3.3-70b", "openai/gpt-4o"]);
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o")).toMatchObject({
+      pricing: { input: 0.000001, output: 0.000002 },
+      maxOutputTokens: 32_768,
+    });
+    expect(catalog.find(({ id }) => id === "meta/llama-3.3-70b")).toMatchObject(
+      {
+        pricing: { input: 0.0000003, output: 0.0000004 },
+        maxOutputTokens: 12_345,
+      },
+    );
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "https://catalog.example/model/info",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("warns when LiteLLM model info is unavailable", async () => {
+    const warning = vi.fn();
+    const catalog = await listFixtureModels(await fixtureWithoutPricing(), {
+      modelInfoStatus: 401,
+      warning,
+    });
+
+    expect(catalog.every(({ pricing }) => pricing === null)).toBe(true);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(warning).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledWith(
+      "catalog_pricing_unavailable",
+      expect.stringContaining("vercel-ai-gateway"),
+    );
   });
 
   it("marks non-numeric string pricing as unavailable", async () => {
@@ -1300,6 +1474,96 @@ describe("shortlist", () => {
     });
   });
 
+  it("resolves a bare recorded model id to one gateway slug", () => {
+    const result = shortlist(
+      [step({ currentModel: "gpt-4o" })],
+      [
+        { ...catalog[0]!, id: "openai/gpt-4o", family: "openai" },
+        { ...catalog[1]!, id: "openai/gpt-4o-mini", family: "openai" },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      resolvedCurrentModelId: "openai/gpt-4o",
+      candidates: [{ id: "openai/gpt-4o-mini" }],
+    });
+  });
+
+  it("abstains when a bare recorded model id matches more than one slug", () => {
+    const result = shortlist(
+      [step({ currentModel: "gpt-4o" })],
+      [
+        { ...catalog[0]!, id: "openai/gpt-4o", family: "openai" },
+        { ...catalog[0]!, id: "azure/gpt-4o", family: "azure" },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      candidates: [],
+      droppedByOutputCeiling: 0,
+      abstention: {
+        kind: "current-model-ambiguous",
+        message:
+          "Recorded model gpt-4o matches more than one catalog model: azure/gpt-4o, openai/gpt-4o",
+      },
+    });
+  });
+
+  it("drops candidates below the recorded output ceiling", () => {
+    const result = shortlist(
+      [
+        step({
+          currentModel: "openai/gpt-4o",
+          recordedMaxOutputTokens: 16_384,
+        }),
+      ],
+      [
+        {
+          ...catalog[0]!,
+          id: "openai/gpt-4o",
+          family: "openai",
+          maxOutputTokens: 16_384,
+        },
+        {
+          ...catalog[1]!,
+          id: "meta/llama-3.3-70b",
+          family: "meta",
+          maxOutputTokens: 8_192,
+        },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      candidates: [],
+      droppedByOutputCeiling: 1,
+    });
+  });
+
+  it("names an all-null pricing catalog", () => {
+    const result = shortlist(
+      [step({ currentModel: "openai/gpt-4o" })],
+      [
+        {
+          ...catalog[0]!,
+          id: "openai/gpt-4o",
+          family: "openai",
+          pricing: null,
+        },
+        {
+          ...catalog[1]!,
+          id: "meta/llama-3.3-70b",
+          family: "meta",
+          pricing: null,
+        },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      candidates: [],
+      abstention: { kind: "no-priced-candidates" },
+    });
+  });
+
   it("ranks the cheapest candidates first and defaults to eight", () => {
     const rankedCatalog = [
       { ...catalog[0]!, pricing: { input: 100, output: 100 } },
@@ -1473,6 +1737,7 @@ describe("Mode A replay", () => {
           candidates: [candidate],
           droppedByTop: 0,
           droppedFreeModels: 0,
+          droppedByOutputCeiling: 0,
         },
       ],
       provider,
@@ -1488,15 +1753,13 @@ describe("Mode A replay", () => {
   }
 
   const providerJudge: JudgeChat = async (request) =>
-    (
-      await provider.chat({
-        model: request.model,
-        messages: request.messages,
-        temperature: request.temperature,
-        maxOutputTokens: 256,
-        responseFormat: request.responseFormat as JsonValue,
-      })
-    ).content;
+    provider.chat({
+      model: request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      maxOutputTokens: 256,
+      responseFormat: request.responseFormat as JsonValue,
+    });
 
   it("records two attempts but one terminal execution after a one-time 429", async () => {
     const result = await run([
@@ -1527,6 +1790,11 @@ describe("Mode A replay", () => {
       spend.filter((event) => event.actor === "replay-driver"),
     ).toHaveLength(2);
     expect(spend.filter((event) => event.actor === "judge")).toHaveLength(2);
+    expect(
+      spend
+        .filter((event) => event.actor === "judge")
+        .reduce((total, event) => total + event.costUsd, 0),
+    ).toBeGreaterThan(0);
     expect(
       spend
         .filter((event) => event.actor === "replay-driver")
@@ -1581,11 +1849,13 @@ describe("Mode A replay", () => {
     const requests: Parameters<JudgeChat>[0][] = [];
     await run([recordedCase()], async (request) => {
       requests.push(request);
-      return JSON.stringify({
-        verdict: "equivalent",
-        score: 1,
-        justification: "Equivalent fixture outputs.",
-      });
+      return judgeReply(
+        JSON.stringify({
+          verdict: "equivalent",
+          score: 1,
+          justification: "Equivalent fixture outputs.",
+        }),
+      );
     });
     const facts = await readFacts(store);
     const assessment = facts.find((fact) => "assessmentId" in fact);
@@ -1649,11 +1919,13 @@ describe("Mode A replay", () => {
       maxInFlight = Math.max(maxInFlight, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 100));
       inFlight -= 1;
-      return JSON.stringify({
-        verdict: "equivalent",
-        score: 1,
-        justification: "Equivalent fixture outputs.",
-      });
+      return judgeReply(
+        JSON.stringify({
+          verdict: "equivalent",
+          score: 1,
+          justification: "Equivalent fixture outputs.",
+        }),
+      );
     };
     const cases = Array.from({ length: 4 }, (_, index) =>
       recordedCase({
@@ -1766,13 +2038,15 @@ describe("Mode A replay", () => {
           if (failure === "provider_error") {
             throw new Error("Terminal provider failure");
           }
-          return '{"verdict":';
+          return judgeReply('{"verdict":');
         }
-        return JSON.stringify({
-          verdict: "equivalent",
-          score: 1,
-          justification: "Equivalent fixture outputs.",
-        });
+        return judgeReply(
+          JSON.stringify({
+            verdict: "equivalent",
+            score: 1,
+            justification: "Equivalent fixture outputs.",
+          }),
+        );
       },
       4,
       "zeta/judge-1",
@@ -2225,6 +2499,7 @@ describe("Mode A replay", () => {
             candidates: [candidate],
             droppedByTop: 0,
             droppedFreeModels: 0,
+            droppedByOutputCeiling: 0,
           },
         ],
         provider: gatedProvider,
@@ -2294,6 +2569,7 @@ describe("Mode A replay", () => {
           candidates: [candidate],
           droppedByTop: 0,
           droppedFreeModels: 0,
+          droppedByOutputCeiling: 0,
         },
       ],
       provider: immediateProvider,
@@ -2364,6 +2640,7 @@ describe("Mode A replay", () => {
             candidates: [candidate],
             droppedByTop: 0,
             droppedFreeModels: 0,
+            droppedByOutputCeiling: 0,
           },
         ],
         provider: settlingProvider,
@@ -2432,6 +2709,7 @@ describe("Mode A replay", () => {
           candidates: [candidate],
           droppedByTop: 0,
           droppedFreeModels: 0,
+          droppedByOutputCeiling: 0,
         },
       ],
       provider: delayedProvider,
@@ -2451,7 +2729,7 @@ describe("Mode A replay", () => {
 
     expect(result).toMatchObject({ completed: 2, blocked: [] });
     expect(await budget.state()).toMatchObject({
-      spentUsd: 0.002,
+      spentUsd: 0.002004,
       reservedUsd: 0,
     });
   });
@@ -2610,6 +2888,7 @@ describe("Mode A replay", () => {
           candidates: [candidate],
           droppedByTop: 0,
           droppedFreeModels: 0,
+          droppedByOutputCeiling: 0,
         },
       ],
       provider,

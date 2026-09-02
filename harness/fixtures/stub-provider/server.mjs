@@ -72,6 +72,7 @@ async function readJson(request) {
 export async function startStubProvider({
   port,
   catalogPageSize,
+  catalogTotalCount,
   errorModels = [],
   includeFreeModel = false,
   malformedJudgeModels = [],
@@ -108,7 +109,7 @@ export async function startStubProvider({
       json(response, 200, {
         object: "list",
         data: page,
-        total_count: catalogModels.length,
+        total_count: catalogTotalCount ?? catalogModels.length,
         links: {
           next:
             offset + page.length < catalogModels.length

@@ -1,24 +1,6 @@
-import type { Assessment } from "@rightmodeler/core";
+import type { Assessment, ModelCatalogEntry } from "@rightmodeler/core";
 
 export type JudgeVerdict = "equivalent" | "minor_drift" | "divergent";
-
-export interface JudgeCatalogEntry {
-  readonly id: string;
-  readonly family: string;
-  readonly type?: string | null;
-  readonly released?: number | string | null;
-  readonly created?: number | string | null;
-  readonly context_length?: number | string | null;
-  readonly context_window?: number | string | null;
-  readonly pricing?: {
-    readonly prompt?: number | string | null;
-    readonly completion?: number | string | null;
-  } | null;
-  readonly architecture?: {
-    readonly output_modalities?: readonly string[] | null;
-  } | null;
-  readonly supported_parameters?: readonly string[] | null;
-}
 
 export interface JudgeChatRequest {
   readonly model: string;
@@ -37,7 +19,17 @@ export interface JudgeChatRequest {
   };
 }
 
-export type JudgeChat = (request: JudgeChatRequest) => Promise<string>;
+export interface JudgeChatResult {
+  readonly content: string;
+  readonly costUsd: number;
+  readonly costIsEstimate: boolean;
+  readonly usage: {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+  };
+}
+
+export type JudgeChat = (request: JudgeChatRequest) => Promise<JudgeChatResult>;
 
 export interface JudgeAssessment extends Omit<
   Assessment,
@@ -60,6 +52,7 @@ interface JudgeSignals {
   readonly recency: number;
   readonly context: number;
   readonly price: number;
+  readonly requiresReasoning: boolean;
   readonly strength: number;
 }
 
@@ -105,7 +98,7 @@ const SYSTEM_PROMPT = [
 ].join(" ");
 
 export function pickJudge(
-  catalog: readonly JudgeCatalogEntry[],
+  catalog: readonly ModelCatalogEntry[],
   options: {
     readonly candidateFamily: string;
     readonly referenceFamily: string;
@@ -115,7 +108,7 @@ export function pickJudge(
 }
 
 export function pickJudges(
-  catalog: readonly JudgeCatalogEntry[],
+  catalog: readonly ModelCatalogEntry[],
   options: {
     readonly candidateFamily: string;
     readonly referenceFamily: string;
@@ -131,9 +124,7 @@ export function pickJudges(
   }
 
   const eligible = catalog.filter((model) => {
-    if (model.type && model.type !== "language") return false;
-
-    const outputModalities = model.architecture?.output_modalities ?? [];
+    const outputModalities = model.outputModalities ?? [];
     if (outputModalities.length > 0 && !outputModalities.includes("text")) {
       return false;
     }
@@ -152,14 +143,10 @@ export function pickJudges(
 
   const rawSignals = eligible.map((model) => ({
     id: model.id,
-    recency: signalNumber(model.released || model.created, "recency"),
-    context: signalNumber(
-      model.context_length || model.context_window,
-      "context length",
-    ),
-    price:
-      signalNumber(model.pricing?.prompt, "price") +
-      signalNumber(model.pricing?.completion, "price"),
+    recency: model.releasedAt ?? 0,
+    context: model.contextLength,
+    price: (model.pricing?.input ?? 0) + (model.pricing?.output ?? 0),
+    requiresReasoning: model.requiresReasoning === true,
   }));
   const recencies = rawSignals.map((signals) => signals.recency);
   const contexts = rawSignals.map((signals) => signals.context);
@@ -172,9 +159,11 @@ export function pickJudges(
       signalPercentile(item.price, prices),
   }));
 
-  return signals
-    .sort((left, right) => compareSignals(right, left))
-    .map(({ id }) => id);
+  const sorted = signals.sort((left, right) => compareSignals(right, left));
+  return [
+    ...sorted.filter((item) => !item.requiresReasoning),
+    ...sorted.filter((item) => item.requiresReasoning),
+  ].map(({ id }) => id);
 }
 
 export async function judgeExecution(input: {
@@ -260,7 +249,7 @@ async function judgeOnce(
     ...(supportsStructuredOutput ? { responseFormat: RESPONSE_FORMAT } : {}),
   });
 
-  return parseJudgeOutput(response);
+  return parseJudgeOutput(response.content);
 }
 
 function fencedBlock(
@@ -351,30 +340,6 @@ function isJudgeVerdict(value: unknown): value is JudgeVerdict {
     value === "equivalent" || value === "minor_drift" || value === "divergent"
   );
 }
-
-function signalNumber(
-  value: number | string | null | undefined,
-  name: string,
-): number {
-  if (value === undefined || value === null || value === "") {
-    return 0;
-  }
-  if (typeof value === "number") {
-    if (Number.isFinite(value)) return value;
-    throw new TypeError(`judge catalog ${name} must be finite`);
-  }
-  const normalized = value.trim();
-  if (!DECIMAL_NUMBER.test(normalized)) {
-    throw new TypeError(`judge catalog ${name} must be numeric`);
-  }
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed)) {
-    throw new TypeError(`judge catalog ${name} must be finite`);
-  }
-  return parsed;
-}
-
-const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
 function signalPercentile(value: number, values: readonly number[]): number {
   const ranked = [...new Set(values.filter((candidate) => candidate > 0))].sort(

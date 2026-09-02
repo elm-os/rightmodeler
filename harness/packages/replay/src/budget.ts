@@ -46,6 +46,7 @@ export interface Budget {
   readonly projectId: string;
   readonly runId: string;
   reserveExecution(input: ReserveExecutionInput): Promise<BudgetReservation>;
+  charge(costUsd: number): Promise<void>;
   state(): Promise<BudgetState>;
 }
 
@@ -376,11 +377,34 @@ export function createBudget(options: CreateBudgetOptions): Budget {
     };
   }
 
+  async function charge(costUsd: number): Promise<void> {
+    assertAmount(costUsd, "costUsd");
+    if (costUsd === 0) return;
+    for (;;) {
+      const latest = await load(false);
+      const charged: BudgetLedger = {
+        ...latest.ledger,
+        spentUsd: latest.ledger.spentUsd + costUsd,
+      };
+      if (
+        await options.store.compareAndSwap(
+          key,
+          latest.version,
+          encode(charged),
+          latest.fenceToken,
+        )
+      ) {
+        return;
+      }
+    }
+  }
+
   return {
     store: options.store,
     projectId: options.projectId,
     runId: options.runId,
     reserveExecution,
+    charge,
     state,
   };
 }

@@ -1,3 +1,4 @@
+export * from "./catalog.js";
 export * from "./facts.js";
 export * from "./identity.js";
 export * from "./keys.js";

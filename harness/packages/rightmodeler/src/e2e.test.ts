@@ -122,6 +122,7 @@ interface StubProvider {
 interface StubProviderModule {
   startStubProvider(options: {
     port: number;
+    catalogTotalCount?: number;
     errorModels?: string[];
     includeFreeModel?: boolean;
     malformedJudgeModels?: string[];
@@ -410,6 +411,7 @@ function jsonOutput(result: ChildResult): Record<string, unknown> {
 
 async function startStub(
   options: {
+    catalogTotalCount?: number;
     errorModels?: string[];
     includeFreeModel?: boolean;
     malformedJudgeModels?: string[];
@@ -420,6 +422,68 @@ async function startStub(
 ): Promise<StubProvider> {
   const module = (await import(stubModuleUrl)) as StubProviderModule;
   return module.startStubProvider({ port: 0, ...options });
+}
+
+async function startUnpricedCatalogStub(): Promise<StubProvider> {
+  const upstream = await startStub();
+  let hitCount = 0;
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const body = Buffer.concat(chunks);
+    const upstreamResponse = await fetch(
+      `http://127.0.0.1:${upstream.port}${request.url ?? "/"}`,
+      {
+        method: request.method,
+        headers: { "content-type": "application/json" },
+        ...(body.length === 0 ? {} : { body }),
+      },
+    );
+    if (request.method === "GET" && request.url === "/v1/models") {
+      const catalog = (await upstreamResponse.json()) as {
+        object: string;
+        data: Array<Record<string, unknown>>;
+      };
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          ...catalog,
+          data: catalog.data.map((model) => {
+            const unpriced = { ...model };
+            delete unpriced.pricing;
+            return unpriced;
+          }),
+        }),
+      );
+      return;
+    }
+    hitCount += 1;
+    response.writeHead(upstreamResponse.status, {
+      "content-type":
+        upstreamResponse.headers.get("content-type") ?? "application/json",
+    });
+    response.end(Buffer.from(await upstreamResponse.arrayBuffer()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    await upstream.close();
+    throw new Error("Unpriced catalog stub did not bind a TCP port");
+  }
+  return {
+    port: address.port,
+    getHitCount: () => hitCount,
+    getMaxInFlight: () => upstream.getMaxInFlight(),
+    close: async () => {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      await upstream.close();
+    },
+  };
 }
 
 async function startCatalogDriftStub(): Promise<StubProvider> {
@@ -444,14 +508,16 @@ async function startCatalogDriftStub(): Promise<StubProvider> {
         object: string;
         data: Array<{ id: string }>;
       };
+      const data =
+        catalogRequests === 1
+          ? catalog.data
+          : catalog.data.filter(({ id }) => id.startsWith("zeta/"));
       response.writeHead(200, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
           ...catalog,
-          data:
-            catalogRequests === 1
-              ? catalog.data
-              : catalog.data.filter(({ id }) => id.startsWith("zeta/")),
+          data,
+          total_count: data.length,
         }),
       );
       return;
@@ -918,16 +984,14 @@ describe("built CLI pipeline", () => {
         apiKeyEnv,
       });
       const chat: JudgeChat = async (request) =>
-        (
-          await provider.chat({
-            model: request.model,
-            messages: request.messages,
-            temperature: request.temperature,
-            ...(request.responseFormat === undefined
-              ? {}
-              : { responseFormat: request.responseFormat as JsonValue }),
-          })
-        ).content;
+        provider.chat({
+          model: request.model,
+          messages: request.messages,
+          temperature: request.temperature,
+          ...(request.responseFormat === undefined
+            ? {}
+            : { responseFormat: request.responseFormat as JsonValue }),
+        });
 
       const normal = await judgeExecution({
         chat,
@@ -2037,6 +2101,158 @@ describe("built CLI pipeline", () => {
           ({ familyId }) => familyId === "support",
         )?.verdict.abstainReason?.reason,
       ).toBe("holdout_below_floor_minimum");
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("forwards catalog truncation warnings during estimates", async () => {
+    const { repo } = await fixtureCopy("catalog-truncated");
+    const stub = await startStub({ catalogTotalCount: 99 });
+    const apiKeyEnv = "RIGHTMODELER_CATALOG_TRUNCATED_API_KEY";
+    try {
+      const result = await runCli(
+        [
+          "estimate",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "jsonl",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const events = result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "warning",
+          code: "catalog_truncated",
+        }),
+      );
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("resolves a bare recorded model id against the provider catalog", async () => {
+    const { repo } = await fixtureCopy("shortlist-model-resolution");
+    await Promise.all(
+      ["summarize.ts", "extract.ts", "triage.py", "support.py"].map(
+        async (name) => {
+          const path = join(repo, "src", name);
+          await writeFile(
+            path,
+            (await readFile(path, "utf8")).replaceAll(
+              "acme/large-1",
+              "large-1",
+            ),
+          );
+        },
+      ),
+    );
+    const tracesDirectory = await mkdtemp(
+      join(tmpdir(), "rightmodeler-bare-model-"),
+    );
+    temporaryDirectories.push(tracesDirectory);
+    const traces = join(tracesDirectory, "otel-genai.json");
+    await writeFile(
+      traces,
+      (await readFile(tracesPath, "utf8")).replaceAll(
+        "acme/large-1",
+        "large-1",
+      ),
+    );
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_MODEL_RESOLUTION_API_KEY";
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "jsonl",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const warnings = result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter(({ event }) => event === "warning");
+      const resolved = warnings.find(
+        ({ code }) => code === "shortlist_current_model_resolved",
+      );
+      expect(resolved?.message).toContain("large-1");
+      expect(resolved?.message).toContain("acme/large-1");
+      expect(warnings).not.toContainEqual(
+        expect.objectContaining({ code: "shortlist_current_model_absent" }),
+      );
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("refuses an unpriced catalog until a pricing file is supplied", async () => {
+    const { root, repo } = await fixtureCopy("unpriced-catalog");
+    const stub = await startUnpricedCatalogStub();
+    const apiKeyEnv = "RIGHTMODELER_UNPRICED_CATALOG_API_KEY";
+    const baseArgs = [
+      "estimate",
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--repo",
+      repo,
+    ];
+    try {
+      const unpriced = await runCli([...baseArgs, "--output", "jsonl"], {
+        env: { [apiKeyEnv]: secret },
+      });
+
+      expect(unpriced.code).toBe(2);
+      expect(JSON.parse(unpriced.stderr)).toMatchObject({
+        code: "no_priced_candidates",
+        remedy: expect.stringContaining("--pricing-file"),
+      });
+
+      const pricingFile = join(root, "pricing.json");
+      await writeFile(
+        pricingFile,
+        JSON.stringify({
+          "acme/large-1": { input: 0.000001, output: 0.000003 },
+          "acme/small-1": { input: 0.0000002, output: 0.0000008 },
+          "zeta/judge-1": { input: 0.000004, output: 0.000012 },
+        }),
+      );
+      const priced = await runCli(
+        [...baseArgs, "--pricing-file", pricingFile, "--output", "json"],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(priced.code, priced.stderr).toBe(0);
+      expect(jsonOutput(priced).candidateExecutions).not.toBe(0);
     } finally {
       await stub.close();
     }

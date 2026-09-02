@@ -85,6 +85,7 @@ interface PipelineCommandOptions {
   evaluatorGateThreshold?: string;
   maxCostUsd?: string;
   maxConcurrency?: string;
+  pricingFile?: string;
   includeFree?: boolean;
   modebConfig?: string;
   through?: PipelineStage;
@@ -669,6 +670,10 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         "optional hard spend cap in USD; omit to run uncapped so every case and judge cell completes",
       )
       .option("--max-concurrency <n>", "maximum concurrent provider requests")
+      .option(
+        "--pricing-file <path>",
+        "JSON map from model id to per-token input and output USD, for catalogs without pricing",
+      )
       .addOption(
         new Option(
           "--evaluator <provider>",
@@ -804,6 +809,7 @@ function pipelineOptions(
     apiKeyEnv: local.apiKeyEnv,
     maxCostUsd,
     maxConcurrency,
+    pricingFilePath: local.pricingFile,
     includeFreeModels: local.includeFree,
     ...(local.evaluator === undefined
       ? {}
@@ -1143,6 +1149,97 @@ function collectOption(value: string, previous?: string[]): string[] {
   return [...(previous ?? []), value];
 }
 
+const PIPELINE_ARG_OPTIONS = [
+  { flag: "--traces", key: "traces", kind: "path" },
+  { flag: "--matchers", key: "matchers", kind: "path" },
+  { flag: "--modeb-config", key: "modebConfig", kind: "path" },
+  { flag: "--base-url", key: "baseUrl", kind: "value" },
+  { flag: "--api-key-env", key: "apiKeyEnv", kind: "value" },
+  { flag: "--max-cost-usd", key: "maxCostUsd", kind: "value" },
+  { flag: "--max-concurrency", key: "maxConcurrency", kind: "value" },
+  { flag: "--pricing-file", key: "pricingFile", kind: "path" },
+  { flag: "--include-free", key: "includeFree", kind: "flag" },
+  { flag: "--approved-run", key: "approvedRun", kind: "value" },
+  { flag: "--evaluator", key: "evaluator", kind: "value" },
+  {
+    flag: "--evaluator-base-url",
+    key: "evaluatorBaseUrl",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-api-key-env",
+    key: "evaluatorApiKeyEnv",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-public-key-env",
+    key: "evaluatorPublicKeyEnv",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-project-id",
+    key: "evaluatorProjectId",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-command",
+    key: "evaluatorCommand",
+    kind: "command",
+  },
+  {
+    flag: "--evaluator-config",
+    key: "evaluatorConfig",
+    kind: "path",
+  },
+  {
+    flag: "--evaluator-scorer",
+    key: "evaluatorScorer",
+    kind: "repeated",
+  },
+  {
+    flag: "--evaluator-gate-metric",
+    key: "evaluatorGateMetric",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-gate-threshold",
+    key: "evaluatorGateThreshold",
+    kind: "value",
+  },
+] as const satisfies readonly {
+  flag: string;
+  key: keyof PipelineCommandOptions;
+  kind: "value" | "path" | "command" | "flag" | "repeated";
+}[];
+
+export function pipelineArgv(options: PipelineCommandOptions): string[] {
+  const args: string[] = [];
+  for (const { flag, key, kind } of PIPELINE_ARG_OPTIONS) {
+    const value = options[key];
+    if (kind === "flag") {
+      if (value === true) args.push(flag);
+      continue;
+    }
+    if (kind === "repeated") {
+      for (const item of (value as string[] | undefined) ?? []) {
+        appendCliOption(args, flag, item);
+      }
+      continue;
+    }
+    if (typeof value !== "string") continue;
+    appendCliOption(
+      args,
+      flag,
+      kind === "path"
+        ? resolve(value)
+        : kind === "command"
+          ? detachedCommand(value)
+          : value,
+    );
+  }
+  return args;
+}
+
 async function startDetachedReplay(
   global: GlobalOptions,
   local: PipelineCommandOptions,
@@ -1158,58 +1255,7 @@ async function startDetachedReplay(
   if (global.store !== undefined) {
     args.push("--store", resolve(global.store));
   }
-  args.push("replay");
-  appendCliOption(
-    args,
-    "--traces",
-    local.traces === undefined ? undefined : resolve(local.traces),
-  );
-  appendCliOption(
-    args,
-    "--modeb-config",
-    local.modebConfig === undefined ? undefined : resolve(local.modebConfig),
-  );
-  appendCliOption(
-    args,
-    "--matchers",
-    local.matchers === undefined ? undefined : resolve(local.matchers),
-  );
-  appendCliOption(args, "--base-url", local.baseUrl);
-  appendCliOption(args, "--api-key-env", local.apiKeyEnv);
-  appendCliOption(args, "--max-cost-usd", local.maxCostUsd);
-  appendCliOption(args, "--max-concurrency", local.maxConcurrency);
-  if (local.includeFree) args.push("--include-free");
-  appendCliOption(args, "--approved-run", local.approvedRun);
-  appendCliOption(args, "--evaluator", local.evaluator);
-  appendCliOption(args, "--evaluator-base-url", local.evaluatorBaseUrl);
-  appendCliOption(args, "--evaluator-api-key-env", local.evaluatorApiKeyEnv);
-  appendCliOption(
-    args,
-    "--evaluator-public-key-env",
-    local.evaluatorPublicKeyEnv,
-  );
-  appendCliOption(args, "--evaluator-project-id", local.evaluatorProjectId);
-  appendCliOption(
-    args,
-    "--evaluator-command",
-    detachedCommand(local.evaluatorCommand),
-  );
-  appendCliOption(
-    args,
-    "--evaluator-config",
-    local.evaluatorConfig === undefined
-      ? undefined
-      : resolve(local.evaluatorConfig),
-  );
-  for (const scorer of local.evaluatorScorer ?? []) {
-    appendCliOption(args, "--evaluator-scorer", scorer);
-  }
-  appendCliOption(args, "--evaluator-gate-metric", local.evaluatorGateMetric);
-  appendCliOption(
-    args,
-    "--evaluator-gate-threshold",
-    local.evaluatorGateThreshold,
-  );
+  args.push("replay", ...pipelineArgv(local));
   appendCliOption(args, "--internal-run-id", runId);
 
   await new Promise<void>((resolveSpawn, rejectSpawn) => {
@@ -1299,6 +1345,7 @@ export type {
   ApproveDriftProposalOptions,
   ApplySwapsOptions,
   ApplySwapsResult,
+  PipelineCommandOptions,
   PublishDriftProposalOptions,
   RollbackResult,
   RollbackSwapsOptions,

@@ -17,7 +17,7 @@ import {
   createDockerExecutor,
   type DockerExecutor,
 } from "@rightmodeler/executor";
-import { ReleaseGatePolicy } from "@rightmodeler/kernel";
+import { ReleaseGatePolicy, type JudgeChatResult } from "@rightmodeler/kernel";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { createBudget } from "./budget.js";
@@ -183,11 +183,22 @@ function judgeChat() {
       candidate === "accepted" || candidate.startsWith("Deterministic reply ")
         ? "equivalent"
         : "divergent";
-    return JSON.stringify({
-      verdict,
-      score: verdict === "equivalent" ? 1 : 0,
-      justification: "deterministic confirmation judge",
-    });
+    return judgeReply(
+      JSON.stringify({
+        verdict,
+        score: verdict === "equivalent" ? 1 : 0,
+        justification: "deterministic confirmation judge",
+      }),
+    );
+  };
+}
+
+function judgeReply(content: string): JudgeChatResult {
+  return {
+    content,
+    costUsd: 0.000001,
+    costIsEstimate: true,
+    usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
 
@@ -656,15 +667,13 @@ describe.skipIf(skipDocker)("confirmSwapSet", () => {
             ...context.input.modeB,
             judge: {
               chat: async (request) =>
-                (
-                  await provider.chat({
-                    model: request.model,
-                    messages: request.messages,
-                    temperature: request.temperature,
-                    maxOutputTokens: 256,
-                    responseFormat: request.responseFormat as JsonValue,
-                  })
-                ).content,
+                provider.chat({
+                  model: request.model,
+                  messages: request.messages,
+                  temperature: request.temperature,
+                  maxOutputTokens: 256,
+                  responseFormat: request.responseFormat as JsonValue,
+                }),
               judgeModel: "zeta/judge-1",
               supportsStructuredOutput: true,
               providerId: provider.providerId,

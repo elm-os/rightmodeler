@@ -65,6 +65,9 @@ Options:
                                       run uncapped so every case and judge cell
                                       completes
   --max-concurrency <n>               maximum concurrent provider requests
+  --pricing-file <path>               JSON map from model id to per-token input
+                                      and output USD, for catalogs without
+                                      pricing
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -113,6 +116,9 @@ Options:
                                       run uncapped so every case and judge cell
                                       completes
   --max-concurrency <n>               maximum concurrent provider requests
+  --pricing-file <path>               JSON map from model id to per-token input
+                                      and output USD, for catalogs without
+                                      pricing
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -233,6 +239,9 @@ Options:
                                       run uncapped so every case and judge cell
                                       completes
   --max-concurrency <n>               maximum concurrent provider requests
+  --pricing-file <path>               JSON map from model id to per-token input
+                                      and output USD, for catalogs without
+                                      pricing
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -292,6 +301,9 @@ Options:
                                       run uncapped so every case and judge cell
                                       completes
   --max-concurrency <n>               maximum concurrent provider requests
+  --pricing-file <path>               JSON map from model id to per-token input
+                                      and output USD, for catalogs without
+                                      pricing
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")

@@ -7,7 +7,7 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 - Node.js 24 or newer.
 - A Git repository to analyze.
 - Trace input in a supported format.
-- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins.
+- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for bare OpenAI or another unpriced endpoint, pass `--pricing-file`.
 
 Supported trace sources are OTel GenAI, OpenAI JSONL, Langfuse, Braintrust,
 LangSmith, OpenInference, Helicone, W&B Weave, Claude Code, and Codex.
@@ -61,6 +61,35 @@ npx rightmodeler estimate --traces /path/to/traces.json --base-url https://provi
 
 Estimate projects candidate replay spend from recorded token usage and the current
 model catalog before paid model calls begin.
+
+## Catalogs without pricing
+
+Rightmodeler reads per-token pricing from the model catalog. When every catalog
+entry has null pricing and no `--pricing-file` is set, it requests LiteLLM
+`GET /model/info` on the same host. Use `--pricing-file` for bare OpenAI
+endpoints or when `/model/info` has no usable per-token costs; file entries
+override provider pricing.
+
+```sh
+npx rightmodeler estimate --base-url https://provider.example/v1 --pricing-file /path/to/pricing.json --repo /path/to/repository
+```
+
+The pricing file maps each model id to input and output USD per token and may
+include the model's output ceiling:
+
+```json
+{
+  "acme/model": {
+    "input": 0.000001,
+    "output": 0.000002,
+    "maxOutputTokens": 4096
+  }
+}
+```
+
+Without usable pricing from the catalog, LiteLLM `/model/info`, or a pricing
+file, the run refuses with `no_priced_candidates` instead of reporting zero
+cost.
 
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md` and `.rightmodeler/project/reports/report.json`.
 

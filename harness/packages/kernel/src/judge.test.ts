@@ -1,51 +1,70 @@
 import { describe, expect, it } from "vitest";
 
+import type { ModelCatalogEntry } from "@rightmodeler/core";
+
 import {
   judgeExecution,
   pickJudge,
   pickJudges,
-  type JudgeCatalogEntry,
   type JudgeChatRequest,
+  type JudgeChatResult,
 } from "./judge.js";
+
+function reply(content: string): JudgeChatResult {
+  return {
+    content,
+    costUsd: 0,
+    costIsEstimate: true,
+    usage: { inputTokens: 0, outputTokens: 0 },
+  };
+}
 
 function response(
   verdict: "equivalent" | "minor_drift" | "divergent",
   score: number,
   justification = "fixture judgement",
-): string {
-  return JSON.stringify({ verdict, score, justification });
+): JudgeChatResult {
+  return reply(JSON.stringify({ verdict, score, justification }));
 }
 
 describe("pickJudge", () => {
   it("excludes candidate, reference, and unknown families", () => {
-    const catalog: JudgeCatalogEntry[] = [
+    const catalog: ModelCatalogEntry[] = [
       {
         id: "candidate/cheapest",
         family: "candidate",
-        released: 10,
-        context_length: 10,
-        pricing: { prompt: 0.001, completion: 0.001 },
+        contextLength: 10,
+        pricing: { input: 0.001, output: 0.001 },
+        supportsTools: false,
+        supportsStructuredOutput: false,
+        releasedAt: 10,
       },
       {
         id: "reference/cheap",
         family: "reference",
-        released: 9,
-        context_length: 9,
-        pricing: { prompt: 0.002, completion: 0.002 },
+        contextLength: 9,
+        pricing: { input: 0.002, output: 0.002 },
+        supportsTools: false,
+        supportsStructuredOutput: false,
+        releasedAt: 9,
       },
       {
         id: "mystery/model",
         family: "unknown",
-        released: 20,
-        context_length: 20,
-        pricing: { prompt: 20, completion: 20 },
+        contextLength: 20,
+        pricing: { input: 20, output: 20 },
+        supportsTools: false,
+        supportsStructuredOutput: false,
+        releasedAt: 20,
       },
       {
         id: "neutral/judge",
         family: "neutral",
-        released: 1,
-        context_length: 1,
-        pricing: { prompt: 1, completion: 1 },
+        contextLength: 1,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: false,
+        releasedAt: 1,
       },
     ];
 
@@ -57,46 +76,36 @@ describe("pickJudge", () => {
     ).toBe("neutral/judge");
   });
 
-  it("filters incompatible models and ranks eligible models by summed signal percentiles", () => {
-    const catalog: JudgeCatalogEntry[] = [
-      {
-        id: "neutral/non-language",
-        family: "neutral-a",
-        type: "embedding",
-        supported_parameters: ["structured_outputs"],
-      },
-      {
-        id: "neutral/non-text",
-        family: "neutral-b",
-        architecture: { output_modalities: ["image"] },
-        supported_parameters: ["structured_outputs"],
-      },
+  it("ranks eligible models by summed signal percentiles", () => {
+    const catalog: ModelCatalogEntry[] = [
       {
         id: "neutral/no-structure",
         family: "neutral-c",
-        released: 100,
-        context_length: 100,
-        pricing: { prompt: 100, completion: 100 },
+        contextLength: 100,
+        pricing: { input: 100, output: 100 },
+        supportsTools: false,
+        supportsStructuredOutput: false,
+        releasedAt: 100,
       },
       {
         id: "neutral/recent",
         family: "neutral-d",
-        type: "language",
-        released: 30,
-        context_length: 10,
-        pricing: { prompt: 1, completion: 1 },
-        architecture: { output_modalities: ["text"] },
-        supported_parameters: ["structured_outputs"],
+        contextLength: 10,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 30,
+        outputModalities: ["text"],
       },
       {
         id: "neutral/strongest",
         family: "neutral-e",
-        type: "language",
-        released: 20,
-        context_length: 30,
-        pricing: { prompt: 4, completion: 4 },
-        architecture: { output_modalities: ["text"] },
-        supported_parameters: ["structured_outputs"],
+        contextLength: 30,
+        pricing: { input: 4, output: 4 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 20,
+        outputModalities: ["text"],
       },
     ];
 
@@ -108,57 +117,107 @@ describe("pickJudge", () => {
     ).toEqual(["neutral/no-structure", "neutral/strongest", "neutral/recent"]);
   });
 
-  it("uses fallback fields, numeric strings, and the model id tie-break", () => {
-    const catalog: JudgeCatalogEntry[] = [
+  it("never returns a model without text output", () => {
+    const catalog: ModelCatalogEntry[] = [
       {
-        id: "neutral/a",
-        family: "neutral-a",
-        created: "20",
-        context_window: "100",
-        pricing: { prompt: "0.1", completion: "0.2" },
+        id: "neutral/image",
+        family: "neutral-image",
+        contextLength: 100,
+        pricing: { input: 100, output: 100 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 100,
+        outputModalities: ["image"],
       },
       {
-        id: "neutral/z",
-        family: "neutral-z",
-        released: "20",
-        context_length: "100",
-        pricing: { prompt: "0.1", completion: "0.2" },
+        id: "neutral/text",
+        family: "neutral-text",
+        contextLength: 1,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 1,
+        outputModalities: ["text"],
       },
     ];
 
     expect(
-      pickJudge(catalog, {
+      pickJudges(catalog, {
         candidateFamily: "candidate",
         referenceFamily: "reference",
       }),
-    ).toBe("neutral/z");
+    ).toEqual(["neutral/text"]);
   });
 
-  it("fails loudly on malformed strength signals", () => {
-    expect(() =>
-      pickJudge(
-        [{ id: "neutral/judge", family: "neutral", released: "recent" }],
-        {
-          candidateFamily: "candidate",
-          referenceFamily: "reference",
-        },
-      ),
-    ).toThrow(/recency/);
-    expect(() =>
-      pickJudge(
-        [
-          {
-            id: "neutral/judge",
-            family: "neutral",
-            pricing: { prompt: "unknown" },
-          },
-        ],
-        {
-          candidateFamily: "candidate",
-          referenceFamily: "reference",
-        },
-      ),
-    ).toThrow(/price/);
+  it("prefers a non-reasoning model over its reasoning twin", () => {
+    const catalog: ModelCatalogEntry[] = [
+      {
+        id: "neutral/z-reasoning",
+        family: "neutral-reasoning",
+        contextLength: 100,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 10,
+        requiresReasoning: true,
+      },
+      {
+        id: "neutral/a-standard",
+        family: "neutral-standard",
+        contextLength: 100,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 10,
+        requiresReasoning: false,
+      },
+    ];
+
+    expect(
+      pickJudges(catalog, {
+        candidateFamily: "candidate",
+        referenceFamily: "reference",
+      }),
+    ).toEqual(["neutral/a-standard", "neutral/z-reasoning"]);
+  });
+
+  it("uses releasedAt and the model id to break ties", () => {
+    const catalog: ModelCatalogEntry[] = [
+      {
+        id: "neutral/older",
+        family: "neutral-older",
+        contextLength: 100,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 10,
+      },
+      {
+        id: "neutral/a",
+        family: "neutral-a",
+        contextLength: 100,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 20,
+      },
+      {
+        id: "neutral/z",
+        family: "neutral-z",
+        contextLength: 100,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 20,
+      },
+    ];
+
+    expect(
+      pickJudges(catalog, {
+        candidateFamily: "candidate",
+        referenceFamily: "reference",
+      }),
+    ).toEqual(["neutral/z", "neutral/a", "neutral/older"]);
   });
 });
 
@@ -295,18 +354,20 @@ describe("judgeExecution", () => {
     };
 
     await expect(
-      judgeExecution({ ...base, chat: async () => "not json" }),
+      judgeExecution({ ...base, chat: async () => reply("not json") }),
     ).rejects.toThrow();
     await expect(
       judgeExecution({
         ...base,
         chat: async () =>
-          JSON.stringify({
-            verdict: "equivalent",
-            score: 1,
-            justification: "ok",
-            extra: true,
-          }),
+          reply(
+            JSON.stringify({
+              verdict: "equivalent",
+              score: 1,
+              justification: "ok",
+              extra: true,
+            }),
+          ),
       }),
     ).rejects.toThrow("exactly");
   });
@@ -323,18 +384,21 @@ describe("judgeExecution", () => {
     await expect(
       judgeExecution({
         ...base,
-        chat: async () => `\`\`\`json\n${response("equivalent", 1)}\n\`\`\``,
+        chat: async () =>
+          reply(`\`\`\`json\n${response("equivalent", 1).content}\n\`\`\``),
       }),
     ).resolves.toMatchObject({ verdict: "equivalent", passed: true });
     await expect(
       judgeExecution({
         ...base,
         chat: async () =>
-          `Here is the result: ${response("equivalent", 1, "brace { in text }")}`,
+          reply(
+            `Here is the result: ${response("equivalent", 1, "brace { in text }").content}`,
+          ),
       }),
     ).resolves.toMatchObject({ verdict: "equivalent", passed: true });
     await expect(
-      judgeExecution({ ...base, chat: async () => '{"verdict":' }),
+      judgeExecution({ ...base, chat: async () => reply('{"verdict":') }),
     ).rejects.toThrow();
   });
 

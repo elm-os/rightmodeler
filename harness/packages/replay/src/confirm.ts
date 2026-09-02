@@ -20,6 +20,7 @@ import {
   type DeltaDebugLogEntry,
   type DeltaDebugTestOutcome,
   type JudgeChat,
+  type JudgeChatResult,
   type ReleaseGatePolicy,
 } from "@rightmodeler/kernel";
 
@@ -114,6 +115,11 @@ export interface ConfirmSwapSetResult {
   readonly members: readonly ConfirmMemberResult[];
   readonly runSetsUsed: number;
   readonly log: readonly DeltaDebugLogEntry<string>[];
+  readonly lostReasons: Readonly<Record<string, number>>;
+  readonly infrastructureBlocks: readonly {
+    readonly reason: string;
+    readonly message: string;
+  }[];
   readonly requiredMaxRunSets?: number;
 }
 
@@ -571,9 +577,11 @@ async function assessExecution(
   try {
     judged = await judgeExecution({
       chat: async (request) => {
+        let judgeResponse: JudgeChatResult | undefined;
         invocation += 1;
         try {
-          return await input.modeB.judge.chat(request);
+          judgeResponse = await input.modeB.judge.chat(request);
+          return judgeResponse;
         } catch (error) {
           if (error instanceof ProviderConfigurationError) throw error;
           judgeFailureKind = "provider_error";
@@ -588,7 +596,7 @@ async function assessExecution(
               spendEventSchema.parse({
                 actor: "judge",
                 phase: "confirm",
-                costUsd: 0,
+                costUsd: judgeResponse?.costUsd ?? 0,
                 provider:
                   input.modeB.judge.providerId ??
                   input.modeB.input.egress.providerId,
@@ -596,11 +604,16 @@ async function assessExecution(
                   executionId: execution.executionId,
                   judgeModel: input.modeB.judge.judgeModel,
                   invocation,
-                  costUnavailable: true,
+                  costUnavailable: judgeResponse === undefined,
+                  costIsEstimate: judgeResponse?.costIsEstimate ?? true,
+                  usage: judgeResponse?.usage ?? null,
                   subsetKey: key,
                 },
               }),
             );
+            if (judgeResponse !== undefined && judgeResponse.costUsd > 0) {
+              await input.budget.modeB.charge(judgeResponse.costUsd);
+            }
           } catch (persistenceError) {
             judgePersistenceFailure = persistenceError;
             throw persistenceError;
@@ -796,6 +809,8 @@ export async function confirmSwapSet(
   const inputDigest = confirmInputDigest(familyId, input);
   const planKey = confirmPlanKey(input.budget.modeB.projectId, familyId);
   await ensurePlan(input.store, planKey, familyId, inputDigest);
+  const lostReasons: Record<string, number> = {};
+  const infrastructureBlocks: { reason: string; message: string }[] = [];
 
   const runSubset = async (
     members: readonly string[],
@@ -855,6 +870,17 @@ export async function confirmSwapSet(
       store: input.store,
       budget: input.budget.modeB,
     });
+    for (const [reason, count] of Object.entries(result.lostReasons)) {
+      lostReasons[reason] = (lostReasons[reason] ?? 0) + count;
+    }
+    for (const block of result.blocked) {
+      if (block.kind === "infrastructure") {
+        infrastructureBlocks.push({
+          reason: block.reason,
+          message: block.message,
+        });
+      }
+    }
     outcome = await outcomeFromFacts(
       input,
       key,
@@ -974,6 +1000,8 @@ export async function confirmSwapSet(
     members,
     runSetsUsed: result.runSetsUsed,
     log: result.log,
+    lostReasons,
+    infrastructureBlocks,
     ...(capped ? { requiredMaxRunSets: input.budget.maxRunSets + 1 } : {}),
   };
 }

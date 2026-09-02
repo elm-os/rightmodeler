@@ -7,13 +7,17 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { executeCli } from "./cli.js";
+import {
+  executeCli,
+  pipelineArgv,
+  type PipelineCommandOptions,
+} from "./cli.js";
 import type { CliIo } from "./protocol.js";
 import { makeGitFixture } from "./test-utils/git-fixture.js";
 
@@ -116,6 +120,82 @@ function runtime(
     runtimeOutput: () => runtimeOutput,
   };
 }
+
+describe("pipelineArgv", () => {
+  it("serializes every pipeline option in command order", () => {
+    const approvedRun = "a".repeat(64);
+    const options: PipelineCommandOptions = {
+      traces: "./traces.json",
+      matchers: "./matchers.json",
+      modebConfig: "./modeb.json",
+      baseUrl: "https://provider.example/v1",
+      apiKeyEnv: "PROVIDER_API_KEY",
+      maxCostUsd: "1.25",
+      maxConcurrency: "3",
+      pricingFile: "./pricing.json",
+      includeFree: true,
+      approvedRun,
+      evaluator: "promptfoo",
+      evaluatorBaseUrl: "https://evaluator.example",
+      evaluatorApiKeyEnv: "EVALUATOR_API_KEY",
+      evaluatorPublicKeyEnv: "EVALUATOR_PUBLIC_KEY",
+      evaluatorProjectId: "project-1",
+      evaluatorCommand: "./bin/promptfoo",
+      evaluatorConfig: "./promptfoo.yaml",
+      evaluatorScorer: ["quality", "safety"],
+      evaluatorGateMetric: "quality",
+      evaluatorGateThreshold: "0.8",
+    };
+
+    expect(pipelineArgv(options)).toEqual([
+      "--traces",
+      resolve("./traces.json"),
+      "--matchers",
+      resolve("./matchers.json"),
+      "--modeb-config",
+      resolve("./modeb.json"),
+      "--base-url",
+      "https://provider.example/v1",
+      "--api-key-env",
+      "PROVIDER_API_KEY",
+      "--max-cost-usd",
+      "1.25",
+      "--max-concurrency",
+      "3",
+      "--pricing-file",
+      resolve("./pricing.json"),
+      "--include-free",
+      "--approved-run",
+      approvedRun,
+      "--evaluator",
+      "promptfoo",
+      "--evaluator-base-url",
+      "https://evaluator.example",
+      "--evaluator-api-key-env",
+      "EVALUATOR_API_KEY",
+      "--evaluator-public-key-env",
+      "EVALUATOR_PUBLIC_KEY",
+      "--evaluator-project-id",
+      "project-1",
+      "--evaluator-command",
+      resolve("./bin/promptfoo"),
+      "--evaluator-config",
+      resolve("./promptfoo.yaml"),
+      "--evaluator-scorer",
+      "quality",
+      "--evaluator-scorer",
+      "safety",
+      "--evaluator-gate-metric",
+      "quality",
+      "--evaluator-gate-threshold",
+      "0.8",
+    ]);
+  });
+
+  it("serializes empty options to an empty array", () => {
+    expect(pipelineArgv({})).toEqual([]);
+  });
+});
 
 describe("CLI trace guidance wiring", () => {
   it("prompts through injected IO in a TTY and uses the selected candidate", async () => {

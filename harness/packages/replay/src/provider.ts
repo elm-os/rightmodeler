@@ -1,18 +1,10 @@
-import type { JsonValue } from "@rightmodeler/core";
+import type {
+  JsonValue,
+  ModelCatalogEntry,
+  ModelPricing,
+} from "@rightmodeler/core";
 
-export interface ModelPricing {
-  input: number;
-  output: number;
-}
-
-export interface ModelCatalogEntry {
-  id: string;
-  family: string;
-  contextLength: number;
-  pricing: ModelPricing | null;
-  supportsTools: boolean;
-  supportsStructuredOutput: boolean;
-}
+export type { ModelCatalogEntry, ModelPricing };
 
 export type ChatMessage =
   | {
@@ -73,6 +65,9 @@ export interface CreateProviderOptions {
   apiKeyEnv: string;
   maxConcurrency?: number;
   warning?: (code: string, message: string) => void;
+  pricingOverrides?: Readonly<
+    Record<string, { input: number; output: number; maxOutputTokens?: number }>
+  >;
 }
 
 export type BlockedErrorInit =
@@ -245,6 +240,12 @@ function tokenCount(value: unknown, label: string): number {
   return count;
 }
 
+function releaseDate(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function price(value: unknown, label: string): number | null {
   if (value === undefined || value === null || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(value);
@@ -348,6 +349,22 @@ function normalizeModel(
     model.pricing ?? {},
     `models[${index}].pricing`,
   );
+  const topProvider = objectValue(
+    model.top_provider ?? {},
+    `models[${index}].top_provider`,
+  );
+  const architecture = objectValue(
+    model.architecture ?? {},
+    `models[${index}].architecture`,
+  );
+  const modalities = objectValue(
+    model.modalities ?? {},
+    `models[${index}].modalities`,
+  );
+  const reasoning = objectValue(
+    model.reasoning ?? {},
+    `models[${index}].reasoning`,
+  );
   const supported = Array.isArray(model.supported_parameters)
     ? model.supported_parameters
     : [];
@@ -363,6 +380,22 @@ function normalizeModel(
     rawContext,
     `models[${index}].${contextField}`,
   );
+  const rawMaxOutputTokens =
+    model.max_tokens ?? topProvider.max_completion_tokens;
+  const maxOutputTokens =
+    rawMaxOutputTokens === undefined ||
+    rawMaxOutputTokens === null ||
+    rawMaxOutputTokens === 0
+      ? null
+      : tokenCount(rawMaxOutputTokens, `models[${index}].max output tokens`);
+  const outputModalities =
+    architecture.output_modalities ?? modalities.output ?? [];
+  if (
+    !Array.isArray(outputModalities) ||
+    !outputModalities.every((modality) => typeof modality === "string")
+  ) {
+    throw new Error(`models[${index}].output modalities must contain strings`);
+  }
 
   return {
     id: model.id,
@@ -383,6 +416,10 @@ function normalizeModel(
     supportsStructuredOutput:
       supported.includes("response_format") ||
       supported.includes("structured_outputs"),
+    releasedAt: releaseDate(model.released ?? model.created),
+    maxOutputTokens,
+    outputModalities,
+    requiresReasoning: reasoning.mandatory === true,
   };
 }
 
@@ -575,6 +612,90 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         "catalog_truncated",
         `Provider ${options.providerId} catalog is truncated: collected ${rawCount} of ${totalCount ?? "an unknown number of"} models`,
       );
+    }
+    if (options.pricingOverrides !== undefined) {
+      for (const entry of entries) {
+        const override = options.pricingOverrides[entry.id];
+        if (override === undefined) continue;
+        entry.pricing = { input: override.input, output: override.output };
+        if (override.maxOutputTokens !== undefined) {
+          entry.maxOutputTokens = override.maxOutputTokens;
+        }
+      }
+    } else if (
+      entries.length > 0 &&
+      entries.every(({ pricing }) => pricing === null)
+    ) {
+      try {
+        const { response, text } = await physicalFetch(
+          new URL("/model/info", baseUrl).href,
+          { method: "GET" },
+        );
+        if (!response.ok) throw new Error("LiteLLM model info request failed");
+        const envelope = objectValue(JSON.parse(text), "LiteLLM model info");
+        if (!Array.isArray(envelope.data)) {
+          throw new Error("LiteLLM model info data must be an array");
+        }
+        const pricingByModel = new Map<
+          string,
+          { pricing: ModelPricing; maxOutputTokens?: number }
+        >();
+        for (const [index, value] of envelope.data.entries()) {
+          const row = objectValue(value, `model info data[${index}]`);
+          if (
+            typeof row.model_name !== "string" ||
+            row.model_name.length === 0
+          ) {
+            throw new Error(
+              `model info data[${index}].model_name must be a non-empty string`,
+            );
+          }
+          const modelInfo = objectValue(
+            row.model_info,
+            `model info data[${index}].model_info`,
+          );
+          const input = price(
+            modelInfo.input_cost_per_token,
+            `model info data[${index}].model_info.input_cost_per_token`,
+          );
+          const output = price(
+            modelInfo.output_cost_per_token,
+            `model info data[${index}].model_info.output_cost_per_token`,
+          );
+          const rawMaxOutputTokens =
+            modelInfo.max_output_tokens ?? modelInfo.max_tokens;
+          const maxOutputTokens =
+            rawMaxOutputTokens === undefined ||
+            rawMaxOutputTokens === null ||
+            rawMaxOutputTokens === 0
+              ? undefined
+              : tokenCount(
+                  rawMaxOutputTokens,
+                  `model info data[${index}].model_info.max_output_tokens`,
+                );
+          if (input !== null && output !== null) {
+            pricingByModel.set(row.model_name, {
+              pricing: { input, output },
+              ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+            });
+          }
+        }
+        for (const entry of entries) {
+          if (entry.pricing !== null) continue;
+          const modelInfo = pricingByModel.get(entry.id);
+          if (modelInfo === undefined) continue;
+          entry.pricing = modelInfo.pricing;
+          if (modelInfo.maxOutputTokens !== undefined) {
+            entry.maxOutputTokens = modelInfo.maxOutputTokens;
+          }
+        }
+      } catch {}
+      if (entries.every(({ pricing }) => pricing === null)) {
+        options.warning?.(
+          "catalog_pricing_unavailable",
+          `Provider ${options.providerId} catalog does not publish per-token pricing`,
+        );
+      }
     }
     catalog = entries;
     return catalog;

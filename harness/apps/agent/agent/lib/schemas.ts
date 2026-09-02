@@ -7,6 +7,7 @@ export const harnessInputSchema = z.strictObject({
 
 export const replayStartInputSchema = harnessInputSchema.extend({
   traces: z.string().min(1).optional(),
+  matchers: z.string().min(1).optional(),
   modeBConfig: z.string().min(1).optional(),
   baseUrl: z.string().url().optional(),
   apiKeyEnv: z
@@ -14,15 +15,28 @@ export const replayStartInputSchema = harnessInputSchema.extend({
     .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u)
     .optional(),
   maxCostUsd: z.number().positive().optional(),
+  maxConcurrency: z.number().int().positive().optional(),
+  pricingFile: z.string().min(1).optional(),
+  includeFree: z.boolean().optional(),
+  approvedRun: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/u)
+    .optional(),
   evaluator: z
     .strictObject({
-      provider: z.literal("braintrust"),
+      provider: z.enum(["braintrust", "langfuse", "langsmith", "promptfoo"]),
       baseUrl: z.string().url().optional(),
       apiKeyEnv: z
         .string()
         .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u)
         .optional(),
+      publicKeyEnv: z
+        .string()
+        .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u)
+        .optional(),
       projectId: z.string().min(1).optional(),
+      command: z.string().min(1).optional(),
+      config: z.string().min(1).optional(),
       scorers: z.array(z.string().min(1)).min(1).optional(),
       gateMetric: z.string().min(1).optional(),
       gateThreshold: z.number().min(0).max(1).optional(),

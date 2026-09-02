@@ -20,6 +20,7 @@ import {
   judgeExecution,
   type CorpusSplit,
   type JudgeChat,
+  type JudgeChatResult,
 } from "@rightmodeler/kernel";
 
 import {
@@ -405,10 +406,12 @@ export async function replayModeA(
     try {
       const assessment = await judgeExecution({
         chat: async (request) => {
+          let judgeResponse: JudgeChatResult | undefined;
           judgeInvocation += 1;
           const judgeLogicalCallId = randomUUID();
           try {
-            return await input.judge!.chat(request);
+            judgeResponse = await input.judge!.chat(request);
+            return judgeResponse;
           } catch (error) {
             if (error instanceof ProviderConfigurationError) throw error;
             judgeFailureKind = "provider_error";
@@ -445,16 +448,21 @@ export async function replayModeA(
                   actor: "judge",
                   phase:
                     job.cell.step.selectionStage ?? job.cell.step.corpusSplit,
-                  costUsd: 0,
+                  costUsd: judgeResponse?.costUsd ?? 0,
                   provider: input.provider.providerId,
                   reconcilableTo: {
                     executionId: job.executionId,
                     judgeModel: judge.judgeModel,
                     invocation: judgeInvocation,
-                    costUnavailable: true,
+                    costUnavailable: judgeResponse === undefined,
+                    costIsEstimate: judgeResponse?.costIsEstimate ?? true,
+                    usage: judgeResponse?.usage ?? null,
                   },
                 }),
               );
+              if (judgeResponse !== undefined && judgeResponse.costUsd > 0) {
+                await input.budget.charge(judgeResponse.costUsd);
+              }
             } catch (persistenceError) {
               judgePersistenceFailure = persistenceError;
               throw persistenceError;

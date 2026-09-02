@@ -65,9 +65,11 @@ import {
   createProvider,
   ProviderConfigurationError,
   replayModeA,
+  resolveCurrentModel,
   shortlist,
   type ModelCatalogEntry,
   type ModeBCase,
+  type ProviderClient,
   type RecordedCase,
   type ReplayStep,
   type StepShortlist,
@@ -269,6 +271,7 @@ const replayPlanStepSchema = z.strictObject({
   needsTools: z.boolean(),
   needsStructuredOutput: z.boolean(),
   observedContextTokens: z.number().int().nonnegative(),
+  recordedMaxOutputTokens: z.number().int().positive().optional(),
 });
 const familyPlanSchema = z.strictObject({
   familyId: z.string().min(1),
@@ -309,6 +312,10 @@ const modelCatalogSchema = z.strictObject({
     .nullable(),
   supportsTools: z.boolean(),
   supportsStructuredOutput: z.boolean(),
+  releasedAt: z.number().nonnegative().nullable().optional(),
+  maxOutputTokens: z.number().int().positive().nullable().optional(),
+  outputModalities: z.array(z.string()).optional(),
+  requiresReasoning: z.boolean().optional(),
 });
 const detachedReplayCatalogSchema = z.strictObject({
   runId: z.string().min(1),
@@ -323,9 +330,15 @@ const replayOutputSchema = z.strictObject({
       candidates: z.array(modelCatalogSchema),
       droppedByTop: z.number().int().nonnegative(),
       droppedFreeModels: z.number().int().nonnegative(),
+      droppedByOutputCeiling: z.number().int().nonnegative().default(0),
+      resolvedCurrentModelId: z.string().min(1).optional(),
       abstention: z
         .strictObject({
-          kind: z.literal("current-model-absent"),
+          kind: z.enum([
+            "current-model-absent",
+            "current-model-ambiguous",
+            "no-priced-candidates",
+          ]),
           message: z.string(),
         })
         .optional(),
@@ -433,6 +446,17 @@ const familyOutcomeSchema = z.strictObject({
       maxRunSets: z.number().int().nonnegative().optional(),
       requiredMaxRunSets: z.number().int().nonnegative().optional(),
       blocker: z.string().min(1).optional(),
+      lostReasons: z
+        .record(z.string(), z.number().int().nonnegative())
+        .optional(),
+      infrastructureBlocks: z
+        .array(
+          z.strictObject({
+            reason: z.string().min(1),
+            message: z.string(),
+          }),
+        )
+        .optional(),
     })
     .optional(),
 });
@@ -512,6 +536,8 @@ interface PipelineContext {
   evaluator?: ResolvedEvaluatorConfig;
   modeBConfig?: ModeBConfig;
   modeBConfigPath?: string;
+  pricingOverrides?: z.infer<typeof pricingFileSchema>;
+  pricingFilePath?: string;
   matchers?: readonly DeclarativeMatcher[];
   matchersPath?: string;
   existingRunId?: string;
@@ -531,6 +557,7 @@ export interface PipelineOptions {
   includeFreeModels?: boolean;
   evaluator?: EvaluatorConfig;
   modeBConfigPath?: string;
+  pricingFilePath?: string;
   matchersPath?: string;
   approvedRunSpecDigest?: string;
   through?: PipelineStage;
@@ -635,6 +662,11 @@ interface FamilyOutcome {
     maxRunSets?: number;
     requiredMaxRunSets?: number;
     blocker?: string;
+    lostReasons?: Readonly<Record<string, number>>;
+    infrastructureBlocks?: readonly {
+      readonly reason: string;
+      readonly message: string;
+    }[];
   };
 }
 
@@ -649,6 +681,15 @@ const modeBConfigSchema = z.strictObject({
   stepMap: z.record(z.string().min(1), z.string().min(1)),
   confirmMaxRunSets: z.number().int().nonnegative().optional(),
 });
+
+const pricingFileSchema = z.record(
+  z.string().min(1),
+  z.strictObject({
+    input: z.number().nonnegative(),
+    output: z.number().nonnegative(),
+    maxOutputTokens: z.number().int().positive().optional(),
+  }),
+);
 
 export type ModeBConfig = z.infer<typeof modeBConfigSchema>;
 
@@ -852,23 +893,78 @@ export async function estimateReplay(
     baseUrl: context.baseUrl,
     apiKeyEnv: context.apiKeyEnv,
     maxConcurrency: context.maxConcurrency,
+    warning: (code, message) => context.reporter.warning(code, message),
+    pricingOverrides: context.pricingOverrides,
   });
   const catalog =
     context.existingRunId === undefined
       ? await provider.listModels()
       : await readDetachedReplayCatalog(context, context.existingRunId);
+  const candidates =
+    context.approvedRunSpecDigest === undefined
+      ? replayCandidates(plan, catalog)
+      : await approvedReplayCandidates(
+          context,
+          plan,
+          catalog,
+          context.approvedRunSpecDigest,
+        );
+  reportShortlistAbstentions(context, plan, candidates);
+  assertPricedCandidates(context.baseUrl, candidates);
+  const candidateFamily = candidates
+    .flatMap(({ candidates: models }) => models)
+    .at(0)?.family;
+  const judge =
+    context.evaluator !== undefined || candidateFamily === undefined
+      ? undefined
+      : (() => {
+          const stepIds = new Set(
+            candidates
+              .filter(({ candidates: models }) =>
+                models.some(({ family }) => family === candidateFamily),
+              )
+              .map(({ stepId }) => stepId),
+          );
+          const resolvedByStepId = new Map(
+            candidates.map(({ stepId, resolvedCurrentModelId }) => [
+              stepId,
+              resolvedCurrentModelId,
+            ]),
+          );
+          const referenceFamilies = new Set(
+            plan.steps
+              .filter(({ stepId }) => stepIds.has(stepId))
+              .map(({ stepId, currentModel }) =>
+                modelFamily(resolvedByStepId.get(stepId) ?? currentModel),
+              ),
+          );
+          if (referenceFamilies.size !== 1) {
+            throw new Error(
+              `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
+            );
+          }
+          const modelId = pickJudges(catalog, {
+            candidateFamily,
+            referenceFamily: [...referenceFamilies][0]!,
+          })[0]!;
+          const entry = catalog.find(({ id }) => id === modelId)!;
+          if (entry.pricing === null) {
+            throw new Error(`Selected judge has no pricing: ${modelId}`);
+          }
+          return {
+            modelId,
+            pricing: entry.pricing,
+            maxOutputTokens: Math.min(
+              entry.maxOutputTokens ?? JUDGE_OUTPUT_TOKEN_CAP,
+              JUDGE_OUTPUT_TOKEN_CAP,
+            ),
+          };
+        })();
   return estimateReplayCost({
     steps: plan.steps,
     cases: plan.cases,
-    candidates:
-      context.approvedRunSpecDigest === undefined
-        ? replayCandidates(plan, catalog)
-        : await approvedReplayCandidates(
-            context,
-            plan,
-            catalog,
-            context.approvedRunSpecDigest,
-          ),
+    candidates,
+    judge,
   });
 }
 
@@ -904,6 +1000,8 @@ export async function claimDetachedReplay(
       baseUrl: context.baseUrl,
       apiKeyEnv: context.apiKeyEnv,
       maxConcurrency: context.maxConcurrency,
+      warning: (code, message) => context.reporter.warning(code, message),
+      pricingOverrides: context.pricingOverrides,
     }).listModels()
   ).sort((left, right) => compareText(left.id, right.id));
   const targetPhase = options.through ?? "replay";
@@ -1647,6 +1745,10 @@ function createContext(options: PipelineOptions): PipelineContext {
     options.modeBConfigPath === undefined
       ? undefined
       : resolve(options.modeBConfigPath);
+  const pricingFilePath =
+    options.pricingFilePath === undefined
+      ? undefined
+      : resolve(options.pricingFilePath);
   return {
     repo,
     storeRoot,
@@ -1666,6 +1768,12 @@ function createContext(options: PipelineOptions): PipelineContext {
       : {
           modeBConfigPath,
           modeBConfig: readModeBConfig(modeBConfigPath),
+        }),
+    ...(pricingFilePath === undefined
+      ? {}
+      : {
+          pricingFilePath,
+          pricingOverrides: readPricingFile(pricingFilePath),
         }),
     ...(options.matchersPath === undefined
       ? {}
@@ -1729,6 +1837,26 @@ function readModeBConfig(path: string): ModeBConfig {
       mountPath: resolve(dirname(path), parsed.data.appSpec.mountPath),
     },
   };
+}
+
+function readPricingFile(path: string): z.infer<typeof pricingFileSchema> {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch (error) {
+    throw invalidPricingFile(
+      `Invalid --pricing-file: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const parsed = pricingFileSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]!;
+    const field = issue.path.length === 0 ? "pricing" : issue.path.join(".");
+    throw invalidPricingFile(
+      `Invalid --pricing-file field ${field}: ${issue.message}`,
+    );
+  }
+  return parsed.data;
 }
 
 function loadMatchers(path: string): readonly DeclarativeMatcher[] {
@@ -2000,6 +2128,16 @@ function invalidModeBConfig(message: string): ProtocolError {
     code: "invalid_modeb_config",
     message,
     remedy: "Fix the named field in the --modeb-config file and rerun.",
+  });
+}
+
+function invalidPricingFile(message: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "invalid_pricing_file",
+    message,
+    remedy:
+      'Use a JSON object mapping each model id to { "input": <non-negative USD per token>, "output": <non-negative USD per token>, "maxOutputTokens": <optional positive integer> }.',
   });
 }
 
@@ -2437,6 +2575,7 @@ async function executeShortlist(
     const observedContextTokens = new Map<string, number>(
       stepIds.map((stepId) => [stepId, 0] as const),
     );
+    const recordedMaxOutputTokens = new Map<string, number>();
     for (const split of ["shortlist", "holdout"] as const) {
       familyCases
         .filter((corpusCase) => corpusCase.split === split)
@@ -2453,7 +2592,7 @@ async function executeShortlist(
               contextTokens,
             ),
           );
-          cases.push({
+          const replayCase: RecordedCase & { family: string } = {
             family,
             caseId: corpusCase.caseId,
             stepId: step.stepId,
@@ -2467,7 +2606,16 @@ async function executeShortlist(
             contextTokens,
             maxOutputTokens: 256,
             referenceOutput: corpusCase.content.output,
-          });
+          };
+          recordedMaxOutputTokens.set(
+            step.stepId,
+            Math.max(
+              recordedMaxOutputTokens.get(step.stepId) ?? 0,
+              replayCase.maxOutputTokens,
+              corpusCase.observation?.usage?.outputTokens ?? 0,
+            ),
+          );
+          cases.push(replayCase);
         });
     }
     for (const stepId of stepIds) {
@@ -2483,6 +2631,11 @@ async function executeShortlist(
         needsStructuredOutput:
           record.capabilityRequirements.includes("structured_output"),
         observedContextTokens: observedContextTokens.get(stepId) ?? 0,
+        ...(recordedMaxOutputTokens.get(stepId)
+          ? {
+              recordedMaxOutputTokens: recordedMaxOutputTokens.get(stepId)!,
+            }
+          : {}),
       });
     }
   }
@@ -2629,6 +2782,59 @@ function replayCandidates(
   });
 }
 
+function reportShortlistAbstentions(
+  context: PipelineContext,
+  plan: z.infer<typeof replayPlanSchema>,
+  candidates: readonly StepShortlist[],
+): void {
+  const warned = new Set<string>();
+  for (const assignment of candidates) {
+    const step = plan.steps.find(({ stepId }) => stepId === assignment.stepId)!;
+    const warning =
+      assignment.abstention === undefined
+        ? assignment.resolvedCurrentModelId === undefined
+          ? undefined
+          : {
+              code: "shortlist_current_model_resolved",
+              message: `Family ${step.family}: recorded model ${step.currentModel} resolved to catalog model ${assignment.resolvedCurrentModelId}`,
+            }
+        : {
+            code:
+              assignment.abstention.kind === "current-model-absent"
+                ? "shortlist_current_model_absent"
+                : assignment.abstention.kind === "current-model-ambiguous"
+                  ? "shortlist_current_model_ambiguous"
+                  : "no_priced_candidates",
+            message: `Family ${step.family}: ${assignment.abstention.message}`,
+          };
+    if (warning === undefined) continue;
+    const warningKey = JSON.stringify([step.family, step.currentModel]);
+    if (warned.has(warningKey)) continue;
+    warned.add(warningKey);
+    context.reporter.warning(warning.code, warning.message);
+  }
+}
+
+function assertPricedCandidates(
+  baseUrl: string,
+  candidates: readonly StepShortlist[],
+): void {
+  if (
+    candidates.length > 0 &&
+    candidates.every(
+      ({ abstention }) => abstention?.kind === "no-priced-candidates",
+    )
+  ) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "no_priced_candidates",
+      message: `The model catalog at ${baseUrl} publishes no per-token pricing, so no candidate can be priced.`,
+      remedy:
+        "Point --base-url at a catalog that publishes pricing, or pass --pricing-file <path> mapping each model id to its input and output USD per token.",
+    });
+  }
+}
+
 async function approvedReplayCandidates(
   context: PipelineContext,
   plan: z.infer<typeof replayPlanSchema>,
@@ -2684,6 +2890,7 @@ async function approvedReplayCandidates(
       candidates: [model],
       droppedByTop: 0,
       droppedFreeModels: 0,
+      droppedByOutputCeiling: 0,
     };
   });
 }
@@ -2703,6 +2910,8 @@ async function executeReplay(
     baseUrl: context.baseUrl,
     apiKeyEnv: context.apiKeyEnv,
     maxConcurrency: context.maxConcurrency,
+    warning: (code, message) => context.reporter.warning(code, message),
+    pricingOverrides: context.pricingOverrides,
   });
   const catalog =
     context.existingRunId === undefined
@@ -2723,18 +2932,14 @@ async function executeReplay(
           catalog,
           context.approvedRunSpecDigest,
         );
-  const shortlistWarnings = new Set<string>();
-  for (const assignment of candidates) {
-    if (assignment.abstention === undefined) continue;
-    const step = plan.steps.find(({ stepId }) => stepId === assignment.stepId)!;
-    const warningKey = JSON.stringify([step.family, step.currentModel]);
-    if (shortlistWarnings.has(warningKey)) continue;
-    shortlistWarnings.add(warningKey);
-    context.reporter.warning(
-      "shortlist_current_model_absent",
-      `Family ${step.family}: ${assignment.abstention.message}`,
-    );
-  }
+  reportShortlistAbstentions(context, plan, candidates);
+  assertPricedCandidates(context.baseUrl, candidates);
+  const resolvedByStepId = new Map(
+    candidates.map(({ stepId, resolvedCurrentModelId }) => [
+      stepId,
+      resolvedCurrentModelId,
+    ]),
+  );
   let externalEvaluator: EvaluatorProvider | undefined;
   if (context.evaluator !== undefined) {
     const configured = createEvaluator(context.evaluator);
@@ -2791,34 +2996,19 @@ async function executeReplay(
         const referenceFamilies = new Set(
           plan.steps
             .filter(({ stepId }) => stepIds.has(stepId))
-            .map(({ currentModel }) => modelFamily(currentModel)),
+            .map(({ stepId, currentModel }) =>
+              modelFamily(resolvedByStepId.get(stepId) ?? currentModel),
+            ),
         );
         if (referenceFamilies.size !== 1) {
           throw new Error(
             `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
           );
         }
-        const rankedModels = pickJudges(
-          catalog.map((model) => ({
-            id: model.id,
-            family: model.family,
-            context_length: model.contextLength,
-            pricing:
-              model.pricing === null
-                ? null
-                : {
-                    prompt: model.pricing.input,
-                    completion: model.pricing.output,
-                  },
-            supported_parameters: model.supportsStructuredOutput
-              ? ["structured_outputs"]
-              : [],
-          })),
-          {
-            candidateFamily,
-            referenceFamily: [...referenceFamilies][0]!,
-          },
-        ).map((judgeModel) => ({
+        const rankedModels = pickJudges(catalog, {
+          candidateFamily,
+          referenceFamily: [...referenceFamilies][0]!,
+        }).map((judgeModel) => ({
           judgeModel,
           supportsStructuredOutput: catalog.find(({ id }) => id === judgeModel)!
             .supportsStructuredOutput,
@@ -2827,20 +3017,7 @@ async function executeReplay(
           rankedModels,
           warning: (code: string, message: string) =>
             context.reporter.warning(code, message),
-          chat: async (request: Parameters<JudgeChat>[0]) =>
-            (
-              await provider.chat({
-                model: request.model,
-                messages: request.messages.map((message) => ({ ...message })),
-                temperature: request.temperature,
-                maxOutputTokens: 256,
-                ...(request.responseFormat === undefined
-                  ? {}
-                  : {
-                      responseFormat: jsonValue(request.responseFormat),
-                    }),
-              })
-            ).content,
+          chat: judgeChat(provider, catalog),
         };
       })();
       const result = await replayModeA({
@@ -3115,7 +3292,7 @@ function buildFamilyOutcomes(
 
 function familyCandidates(
   plan: z.infer<typeof replayPlanSchema>,
-  candidates: z.infer<typeof replayOutputSchema>["candidates"],
+  candidates: readonly StepShortlist[],
   familyId: string,
 ): ModelCatalogEntry[] {
   const familyStepIds = new Set(
@@ -3347,38 +3524,31 @@ async function executeConfirm(
       baseUrl: context.baseUrl,
       apiKeyEnv: context.apiKeyEnv,
       maxConcurrency: context.maxConcurrency,
+      warning: (code, message) => context.reporter.warning(code, message),
+      pricingOverrides: context.pricingOverrides,
     });
     const catalog = await provider.listModels();
     const configuredRecords = configuredStepRecords(config, reconciled.records);
     const orderedRecords = topologicalRecords(configuredRecords);
     const runtimeByCanonical = config.stepMap;
-    const runtimeRecords = orderedRecords.map((record) => ({
-      stepId: runtimeByCanonical[record.stepId]!,
-      currentModel: record.currentModel,
-      needsTools: record.capabilityRequirements.includes("tools"),
-      needsStructuredOutput:
-        record.capabilityRequirements.includes("structured_output"),
-      observedContextTokens: 0,
-      corpusSplit: "holdout" as const,
-      selectionStage: "confirm",
-    }));
+    const runtimeRecords = orderedRecords.map((record) => {
+      const resolution = resolveCurrentModel(catalog, record.currentModel);
+      return {
+        stepId: runtimeByCanonical[record.stepId]!,
+        currentModel:
+          resolution.kind === "exact" || resolution.kind === "resolved"
+            ? resolution.model.id
+            : record.currentModel,
+        needsTools: record.capabilityRequirements.includes("tools"),
+        needsStructuredOutput:
+          record.capabilityRequirements.includes("structured_output"),
+        observedContextTokens: 0,
+        corpusSplit: "holdout" as const,
+        selectionStage: "confirm",
+      };
+    });
     const targetStepId = runtimeRecords.at(-1)!.stepId;
     const scrubbedRuns = (await loadScrub(context)).runs;
-    const judgeCatalog = catalog.map((model) => ({
-      id: model.id,
-      family: model.family,
-      context_length: model.contextLength,
-      pricing:
-        model.pricing === null
-          ? null
-          : {
-              prompt: model.pricing.input,
-              completion: model.pricing.output,
-            },
-      supported_parameters: model.supportsStructuredOutput
-        ? ["structured_outputs"]
-        : [],
-    }));
     const budget = createBudget({
       store: context.store,
       projectId: context.projectId,
@@ -3438,8 +3608,17 @@ async function executeConfirm(
         );
         continue;
       }
-      const referenceFamily = modelFamily(configuredRecords[0]!.currentModel);
-      const judgeModel = pickJudges(judgeCatalog, {
+      const referenceResolution = resolveCurrentModel(
+        catalog,
+        configuredRecords[0]!.currentModel,
+      );
+      const referenceFamily = modelFamily(
+        referenceResolution.kind === "exact" ||
+          referenceResolution.kind === "resolved"
+          ? referenceResolution.model.id
+          : configuredRecords[0]!.currentModel,
+      );
+      const judgeModel = pickJudges(catalog, {
         candidateFamily: selectedCatalogEntry.family,
         referenceFamily,
       })[0]!;
@@ -3504,6 +3683,7 @@ async function executeConfirm(
                 : { installCommand: config.appSpec.installCommand }),
             },
             concurrency: 4,
+            warning: (code, message) => context.reporter.warning(code, message),
           },
           stepRecords: runtimeRecords.map((record) => ({
             ...record,
@@ -3513,20 +3693,7 @@ async function executeConfirm(
             judgeModel,
             supportsStructuredOutput: judgeSupportsStructuredOutput,
             providerId: provider.providerId,
-            chat: async (request) =>
-              (
-                await provider.chat({
-                  model: request.model,
-                  messages: request.messages.map((message) => ({ ...message })),
-                  temperature: request.temperature,
-                  maxOutputTokens: 256,
-                  ...(request.responseFormat === undefined
-                    ? {}
-                    : {
-                        responseFormat: jsonValue(request.responseFormat),
-                      }),
-                })
-              ).content,
+            chat: judgeChat(provider, catalog),
           },
         },
         store: context.store,
@@ -3534,12 +3701,33 @@ async function executeConfirm(
         policy: RELEASE_GATE_POLICY,
       });
       confirmedFamilies += 1;
+      const lostReasonEntries = Object.entries(result.lostReasons).sort(
+        ([left], [right]) => compareText(left, right),
+      );
+      const lostRows = lostReasonEntries.reduce(
+        (total, [, count]) => total + count,
+        0,
+      );
+      if (lostRows > 0) {
+        context.reporter.warning(
+          "modeb_rows_lost",
+          `Family ${familyId}: ${lostRows} Mode B rows lost (${lostReasonEntries.map(([reason, count]) => `${reason}=${count}`).join(", ")})`,
+        );
+      }
+      for (const block of result.infrastructureBlocks) {
+        context.reporter.warning(
+          "modeb_infrastructure_block",
+          `Family ${familyId}: ${block.reason}: ${block.message}`,
+        );
+      }
       confirmations.set(familyId, {
         status: result.verdict,
         runSetsUsed: result.runSetsUsed,
         culprits: result.culprits.map((culprit) => [...culprit]),
         cascadeSeedStepId: result.cascadeSeed ?? null,
         maxRunSets,
+        lostReasons: result.lostReasons,
+        infrastructureBlocks: result.infrastructureBlocks,
         ...(result.requiredMaxRunSets === undefined
           ? {}
           : { requiredMaxRunSets: result.requiredMaxRunSets }),
@@ -3945,7 +4133,7 @@ async function materializeAggregationFacts(
   context: PipelineContext,
   ledger: Ledger,
   plan: z.infer<typeof replayPlanSchema>,
-  candidates: z.infer<typeof replayOutputSchema>["candidates"],
+  candidates: readonly StepShortlist[],
   evaluation: z.infer<typeof replayOutputSchema>["evaluation"],
   ceilings: readonly ReferenceCeiling[],
 ): Promise<AggregationFact[]> {
@@ -4123,6 +4311,30 @@ function effectiveVerdict(
     return undefined;
   }
   return shortlist;
+}
+
+const JUDGE_OUTPUT_TOKEN_CAP = 4_096;
+
+function judgeChat(
+  provider: ProviderClient,
+  catalog: readonly ModelCatalogEntry[],
+): JudgeChat {
+  return (request) => {
+    const ceiling =
+      catalog.find(({ id }) => id === request.model)?.maxOutputTokens ?? null;
+    return provider.chat({
+      model: request.model,
+      messages: request.messages.map((message) => ({ ...message })),
+      temperature: request.temperature,
+      maxOutputTokens:
+        ceiling === null
+          ? JUDGE_OUTPUT_TOKEN_CAP
+          : Math.min(ceiling, JUDGE_OUTPUT_TOKEN_CAP),
+      ...(request.responseFormat === undefined
+        ? {}
+        : { responseFormat: jsonValue(request.responseFormat) }),
+    });
+  };
 }
 
 function modelFamily(modelId: string | null): string {
