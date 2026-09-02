@@ -3,7 +3,7 @@
 // array or string hides its section exactly as it does in the page component.
 
 import type { IntegrationData } from "@/content/integrations/types";
-import { RUN_COMMAND } from "@/lib/site";
+import { SKILL_COMMAND } from "@/lib/site";
 
 export function renderIntegrationMarkdown(data: IntegrationData): string {
   const lines = [`# ${data.h1}`, "", data.lede, "", data.tldr, ""];
@@ -16,12 +16,16 @@ export function renderIntegrationMarkdown(data: IntegrationData): string {
   }
 
   lines.push("## Setup", "", data.setup.intro, "");
-  // The standard install command renders first on the page too, from lib/site, so it can never
-  // drift between the two representations.
-  lines.push("```bash", RUN_COMMAND, "```", "");
   for (const entry of data.setup.commands) {
-    lines.push("```bash", `# ${entry.comment}`, entry.command, "```", "");
+    lines.push("```bash", entry.comment, entry.command, "```", "");
   }
+  lines.push(
+    "```bash",
+    "# or let your coding agent drive it",
+    SKILL_COMMAND,
+    "```",
+    "",
+  );
 
   if (data.reads.length > 0) {
     lines.push(`## What rightmodeler reads from ${data.name}`, "");

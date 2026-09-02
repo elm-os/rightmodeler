@@ -1,12 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Reporter } from "../protocol.js";
 import {
   createBraintrustEvaluator,
+  EVALUATOR_POLL_BUDGET_MS,
   pollEvaluator,
   preferEvaluatorWhenReachable,
   resolveBraintrustEvaluatorConfig,
 } from "./braintrust.js";
+import type { EvaluatorProvider } from "./types.js";
 
 const stubModuleUrl = new URL(
   "../../../../fixtures/eval-stub/server.mjs",
@@ -25,6 +27,7 @@ interface StubModule {
   startEvalStub(options: {
     port: number;
     pendingPolls?: number;
+    pendingMs?: number;
     fail?: boolean;
     omitCaseId?: string;
     reflectAuthError?: boolean;
@@ -36,6 +39,7 @@ interface StubModule {
 const openStubs: StubServer[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   delete process.env[apiKeyEnv];
   await Promise.all(openStubs.splice(0).map((stub) => stub.close()));
 });
@@ -73,6 +77,24 @@ const cases = [
     output: "Parish",
   },
 ] as const;
+
+function pendingProvider(
+  completeAfterMs: number,
+  polls: number[],
+): EvaluatorProvider {
+  const startedAt = Date.now();
+  return {
+    id: "pending",
+    detectAvailability: async () => true,
+    launch: async () => ({ providerRunId: "pending-run" }),
+    status: async () => {
+      const elapsed = Date.now() - startedAt;
+      polls.push(elapsed);
+      return elapsed >= completeAfterMs ? "complete" : "pending";
+    },
+    collect: async () => [],
+  };
+}
 
 describe("Braintrust evaluator adapter", () => {
   it("detects availability, launches configured scorers, and collects asynchronous metrics", async () => {
@@ -175,7 +197,7 @@ describe("Braintrust evaluator adapter", () => {
     expect(await provider.collect(providerRunId)).toEqual([]);
   });
 
-  it("bounds polling when an expected event never arrives", async () => {
+  it("stays pending and collects only the events that arrived", async () => {
     process.env[apiKeyEnv] = secret;
     const stub = await startStub({
       pendingPolls: 0,
@@ -187,13 +209,11 @@ describe("Braintrust evaluator adapter", () => {
       cases,
     });
 
-    expect(await pollEvaluator(provider, providerRunId)).toBe(
-      "polling_exhausted",
-    );
+    expect(await provider.status(providerRunId)).toBe("pending");
+    expect(await provider.collect(providerRunId)).toHaveLength(1);
     expect(
       stub.getHitCount("GET", `/v1/experiment/${providerRunId}/fetch`),
-    ).toBe(6);
-    expect(await provider.collect(providerRunId)).toHaveLength(1);
+    ).toBe(1);
   });
 
   it("fails loudly on a malformed successful fetch response", async () => {
@@ -265,5 +285,52 @@ describe("Braintrust evaluator adapter", () => {
     );
 
     expect(stderr).toBe("WARNING: Falling back to the built-in judge.\n");
+  });
+
+  it("waits for a provider that finishes after the first poll", async () => {
+    process.env[apiKeyEnv] = secret;
+    const stub = await startStub({ pendingPolls: 0, pendingMs: 600 });
+    const provider = evaluator(stub);
+    const { providerRunId } = await provider.launch({
+      experimentName: "slow",
+      cases,
+    });
+
+    expect(await pollEvaluator(provider, providerRunId)).toBe("complete");
+    expect(
+      stub.getHitCount("GET", `/v1/experiment/${providerRunId}/fetch`),
+    ).toBeGreaterThanOrEqual(2);
+    expect(await provider.collect(providerRunId)).toHaveLength(2);
+  });
+
+  it("polls on a capped exponential schedule", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const polls: number[] = [];
+    const result = pollEvaluator(pendingProvider(90_000, polls), "pending-run");
+
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(await result).toBe("complete");
+    expect(polls).toEqual([
+      0, 250, 750, 1750, 3750, 7750, 15750, 25750, 35750, 45750, 55750, 65750,
+      75750, 85750, 95750,
+    ]);
+  });
+
+  it("gives up exactly at the polling budget", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const polls: number[] = [];
+    const startedAt = Date.now();
+    const result = pollEvaluator(
+      pendingProvider(Number.POSITIVE_INFINITY, polls),
+      "pending-run",
+    );
+
+    await vi.advanceTimersByTimeAsync(EVALUATOR_POLL_BUDGET_MS);
+
+    expect(await result).toBe("polling_exhausted");
+    expect(polls).toHaveLength(36);
+    expect(polls.at(-1)).toBe(EVALUATOR_POLL_BUDGET_MS);
+    expect(Date.now() - startedAt).toBe(EVALUATOR_POLL_BUDGET_MS);
   });
 });

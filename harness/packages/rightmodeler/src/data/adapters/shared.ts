@@ -1,6 +1,8 @@
-import type { JsonValue } from "@rightmodeler/core";
+import { isRecord, type JsonValue } from "@rightmodeler/core";
 
-import type { NormalizedRun } from "../normalized-run.js";
+export { isRecord };
+
+import type { NormalizedRun, NormalizedUsage } from "../normalized-run.js";
 
 export type TraceFormat =
   | "otel-genai"
@@ -53,7 +55,7 @@ export class TraceAdaptError extends Error {
   }
 }
 
-export class TraceRecordsDroppedError extends TraceAdaptError {
+class TraceRecordsDroppedError extends TraceAdaptError {
   readonly result: TraceAdaptResult;
 
   constructor(format: TraceFormat, result: TraceAdaptResult) {
@@ -89,10 +91,59 @@ export class FormatDetectionError extends Error {
 }
 
 const minimumConfidence = 0.6;
+const detectionSampleSize = 20;
 const ambiguityMargin = 0.1;
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function otlpValue(value: unknown): unknown {
+  if (!isRecord(value)) return undefined;
+  if ("stringValue" in value) return value.stringValue;
+  if ("intValue" in value) {
+    const parsed = Number(value.intValue);
+    return Number.isSafeInteger(parsed) ? parsed : undefined;
+  }
+  if ("doubleValue" in value) return value.doubleValue;
+  if ("boolValue" in value) return value.boolValue;
+  if (isRecord(value.arrayValue) && Array.isArray(value.arrayValue.values)) {
+    return value.arrayValue.values.map(otlpValue);
+  }
+  if (isRecord(value.kvlistValue) && Array.isArray(value.kvlistValue.values)) {
+    return Object.fromEntries(
+      value.kvlistValue.values.flatMap((item) =>
+        isRecord(item) && typeof item.key === "string"
+          ? [[item.key, otlpValue(item.value)]]
+          : [],
+      ),
+    );
+  }
+  return undefined;
+}
+
+export function otlpAttributes(
+  span: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Array.isArray(span.attributes)) return {};
+  return Object.fromEntries(
+    span.attributes.flatMap((attribute) =>
+      isRecord(attribute) && typeof attribute.key === "string"
+        ? [[attribute.key, otlpValue(attribute.value)]]
+        : [],
+    ),
+  );
+}
+
+export function otlpSpans(
+  record: Record<string, unknown>,
+): Record<string, unknown>[] {
+  if (!Array.isArray(record.resourceSpans)) return [];
+  return record.resourceSpans.flatMap((resource) =>
+    isRecord(resource) && Array.isArray(resource.scopeSpans)
+      ? resource.scopeSpans.flatMap((scope) =>
+          isRecord(scope) && Array.isArray(scope.spans)
+            ? scope.spans.filter(isRecord)
+            : [],
+        )
+      : [],
+  );
 }
 
 function parseJsonCandidate(text: string): unknown {
@@ -119,6 +170,26 @@ export function sampleRecords(sample: unknown): unknown[] {
     const record = parseJsonCandidate(line);
     if (record === undefined) return [];
     records.push(record);
+  }
+  return records;
+}
+
+function detectionRecords(text: string): unknown[] {
+  const parsed = parseJsonCandidate(text);
+  if (parsed !== undefined) {
+    return (Array.isArray(parsed) ? parsed : [parsed]).slice(
+      0,
+      detectionSampleSize,
+    );
+  }
+
+  const records: unknown[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+    const record = parseJsonCandidate(line);
+    if (record === undefined) return [];
+    records.push(record);
+    if (records.length === detectionSampleSize) break;
   }
   return records;
 }
@@ -162,11 +233,12 @@ export function detectFormat(
   sample: string,
   adapters: readonly NamedTraceAdapter[],
 ): NamedTraceAdapter {
+  const records = detectionRecords(sample);
   const scored = adapters
     .map((adapter) => ({
       adapter,
       name: adapter.name,
-      confidence: clampConfidence(adapter.detect(sample)),
+      confidence: clampConfidence(adapter.detect(records)),
     }))
     .sort(
       (left, right) =>
@@ -236,6 +308,31 @@ export function tokenCount(
   return value as number;
 }
 
+export function optionalTokenCount(
+  value: unknown,
+  label: string,
+  format: TraceFormat,
+): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  return tokenCount(value, label, format);
+}
+
+export function optionalUsage(
+  input: unknown,
+  output: unknown,
+  label: string,
+  format: TraceFormat,
+): NormalizedUsage | undefined {
+  const inputTokens = optionalTokenCount(input, `${label} input usage`, format);
+  const outputTokens = optionalTokenCount(
+    output,
+    `${label} output usage`,
+    format,
+  );
+  if (inputTokens === undefined || outputTokens === undefined) return undefined;
+  return { inputTokens, outputTokens };
+}
+
 export function optionalNonnegativeNumber(
   value: unknown,
   label: string,
@@ -260,7 +357,7 @@ export function jsonValue(
   return parsed;
 }
 
-export function normalizedJsonValue(value: unknown): JsonValue | undefined {
+function normalizedJsonValue(value: unknown): JsonValue | undefined {
   if (
     value === null ||
     typeof value === "string" ||

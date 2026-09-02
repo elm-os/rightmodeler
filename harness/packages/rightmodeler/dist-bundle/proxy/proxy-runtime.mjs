@@ -69,7 +69,32 @@ function parseConfig() {
         "RM_PRICING_TABLE values must contain non-negative input and output prices",
       );
     }
-    pricingTable[model] = { input: pricing.input, output: pricing.output };
+    if (
+      pricing.maxOutputTokens !== undefined &&
+      (!Number.isSafeInteger(pricing.maxOutputTokens) ||
+        pricing.maxOutputTokens <= 0)
+    ) {
+      throw new Error(
+        "RM_PRICING_TABLE maxOutputTokens must be a positive integer",
+      );
+    }
+    pricingTable[model] = {
+      input: pricing.input,
+      output: pricing.output,
+      ...(pricing.maxOutputTokens === undefined
+        ? {}
+        : { maxOutputTokens: pricing.maxOutputTokens }),
+    };
+  }
+
+  const defaultMaxOutputTokens = Number(
+    requiredEnv("RM_DEFAULT_MAX_OUTPUT_TOKENS"),
+  );
+  if (
+    !Number.isSafeInteger(defaultMaxOutputTokens) ||
+    defaultMaxOutputTokens <= 0
+  ) {
+    throw new Error("RM_DEFAULT_MAX_OUTPUT_TOKENS must be a positive integer");
   }
 
   const lease = jsonEnv("RM_BUDGET_LEASE");
@@ -98,6 +123,7 @@ function parseConfig() {
     egressUrl,
     swapPolicy,
     pricingTable,
+    defaultMaxOutputTokens,
     lease,
   };
 }
@@ -624,13 +650,14 @@ async function main() {
       return;
     }
 
-    const maxTokens = parsed?.max_tokens;
+    const requestedLimit =
+      parsed?.max_completion_tokens ?? parsed?.max_tokens ?? undefined;
     if (
       !isObject(parsed) ||
       typeof parsed.model !== "string" ||
       parsed.model.length === 0 ||
-      !Number.isSafeInteger(maxTokens) ||
-      maxTokens < 0
+      (requestedLimit !== undefined &&
+        (!Number.isSafeInteger(requestedLimit) || requestedLimit < 0))
     ) {
       recordLost({
         attemptGroup,
@@ -640,13 +667,25 @@ async function main() {
         startedAt,
       });
       sendJson(outgoing, 400, {
-        error: "Request body requires model and a non-negative max_tokens.",
+        error:
+          "Request body requires model; max_completion_tokens or max_tokens must be a non-negative integer when present.",
       });
       return;
     }
 
     const model = config.swapPolicy[stepId] ?? parsed.model;
-    const rewritten = { ...parsed, model };
+    const rewritten = {
+      ...parsed,
+      model,
+      ...(parsed.stream === true
+        ? {
+            stream_options: {
+              ...(isObject(parsed.stream_options) ? parsed.stream_options : {}),
+              include_usage: true,
+            },
+          }
+        : {}),
+    };
     const forwardedBody = Buffer.from(JSON.stringify(rewritten));
     const pricing = config.pricingTable[model];
     if (pricing === undefined) {
@@ -662,6 +701,10 @@ async function main() {
       });
       return;
     }
+    const maxTokens =
+      requestedLimit ??
+      pricing.maxOutputTokens ??
+      config.defaultMaxOutputTokens;
 
     const estimatedInputTokens = forwardedBody.length;
     const estimatedWorstCaseUsd =

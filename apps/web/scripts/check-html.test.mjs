@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { webRoot } from "./check-content.mjs";
+import { SKILL_COMMAND } from "../src/lib/site.ts";
 
 const appDir = path.join(webRoot, ".next", "server", "app");
 const built = fs.existsSync(path.join(appDir, "index.html"));
@@ -122,17 +123,47 @@ gate("the home page carries an Organization with contact points", () => {
 });
 
 gate("every page advertises its Markdown sibling", () => {
-  for (const file of [
-    "index.html",
-    "about.html",
-    "contact.html",
-    "how-it-works.html",
-  ]) {
-    const html = read(path.join(appDir, file));
+  for (const file of allBuiltHtml()) {
+    const html = read(file);
+    // _not-found and _global-error are not pages; a dynamic segment's fallback shell is empty.
+    if (path.basename(file).startsWith("_") || html.length === 0) continue;
     assert.match(
       html,
       /<link rel="alternate" type="text\/markdown" href="[^"]+\.md"/,
-      `${file} has no rel="alternate" pointing at its .md sibling`,
+      `${rel(file)} has no rel="alternate" pointing at its .md sibling`,
+    );
+  }
+});
+
+gate("the templated twins say what their pages say", () => {
+  const twins = (family) => {
+    const dir = path.join(appDir, "md", family);
+    return fs
+      .readdirSync(dir)
+      .filter((name) => name.endsWith(".body"))
+      .map((name) => path.join(dir, name));
+  };
+  const vs = twins("vs");
+  const integrations = twins("integrations");
+  assert.ok(vs.length > 0 && integrations.length > 0, "no built twins found");
+  for (const file of vs) {
+    assert.doesNotMatch(
+      read(file),
+      /^Use: (?:ours|theirs|both)$/m,
+      `${rel(file)} prints the raw winner enum instead of the page's label`,
+    );
+  }
+  for (const file of [...vs, ...integrations]) {
+    assert.doesNotMatch(
+      read(file),
+      /^# #/m,
+      `${rel(file)} doubles a command comment marker`,
+    );
+  }
+  for (const file of integrations) {
+    assert.ok(
+      read(file).includes(SKILL_COMMAND),
+      `${rel(file)} omits the coding-agent install command the page shows`,
     );
   }
 });

@@ -11,7 +11,8 @@
 // the animation is actually seen at the foot of the page. Reduced-motion fades it in instead.
 
 import { useRef } from "react";
-import { useInView, useReducedMotion } from "motion/react";
+import { useInView } from "@/components/use-in-view";
+import { usePrefersReducedMotion } from "@/components/use-prefers-reduced-motion";
 
 type Stop = { offset: number; color: string };
 
@@ -62,8 +63,11 @@ export function DiaGradient({
   rise?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const reduce = useReducedMotion();
-  const inView = useInView(ref, { once: true, margin: "0px 0px -8% 0px" });
+  const reduce = usePrefersReducedMotion();
+  const inView = useInView(ref, {
+    once: true,
+    rootMargin: "0px 0px -8% 0px",
+  });
   // rise=false renders it statically (fully shown) — used when something else (the overscroll
   // spring) provides the reveal motion.
   const shown = rise ? inView : true;

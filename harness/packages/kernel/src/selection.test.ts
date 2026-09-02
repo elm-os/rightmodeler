@@ -7,7 +7,7 @@ import {
 import { aggregate, type FamilyVerdict } from "./aggregation.js";
 import { wilson } from "./statistics.js";
 import { assignDriftSplit, assignSplits, selectWinner } from "./selection.js";
-import { ReleaseGatePolicy } from "./gates.js";
+import { evaluateGates, ReleaseGatePolicy } from "./gates.js";
 
 const policy = new ReleaseGatePolicy({
   gatePolicyVersion: "gate-1",
@@ -352,5 +352,44 @@ describe("selectWinner", () => {
     expect(
       selectWithExistingHoldouts({ candidate: failingCoverage }).status,
     ).toBe("holdout_failed");
+  });
+
+  it("refuses selection when the holdout verdict abstains", () => {
+    const abstaining = candidate({
+      candidateId: "candidate",
+      cost: 0.1,
+      shortlistPasses: 40,
+      holdoutPasses: 40,
+      trials: 40,
+    });
+    abstaining.holdout = aggregate(
+      aggregationFacts(40, (index) => ({
+        candidateId: "candidate",
+        candidateCostUsd: 0.1,
+        caseId: `holdout-case-${index}`,
+        corpusSplit: "holdout",
+        stepId: "only-step",
+      })),
+      {
+        gatePolicyVersion: "gate-1",
+        qualityFloor: 0.8,
+        availabilityFloor: 0.8,
+      },
+    )[0]!;
+    const selection = selectWithExistingHoldouts({ candidate: abstaining });
+
+    expect(abstaining.holdout).toMatchObject({
+      decision: "abstain",
+      abstainReason: { reason: "insufficient_distinct_steps" },
+    });
+    expect(
+      evaluateGates([abstaining.holdout], policy).every((gate) => gate.pass),
+    ).toBe(true);
+    expect(
+      "selectionAdjustedEstimate" in selection &&
+        selection.selectionAdjustedEstimate.lower,
+    ).toBeGreaterThan(0.9);
+    expect(selection.status).toBe("holdout_failed");
+    expect(selection).not.toHaveProperty("selectedCandidateId");
   });
 });

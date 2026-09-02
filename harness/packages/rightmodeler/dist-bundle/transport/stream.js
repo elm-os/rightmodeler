@@ -65,13 +65,13 @@ function parseUsage(value) {
     if (!isRecord(value) ||
         typeof value.prompt_tokens !== "number" ||
         typeof value.completion_tokens !== "number" ||
-        typeof value.total_tokens !== "number") {
+        (value.total_tokens !== undefined && typeof value.total_tokens !== "number")) {
         return null;
     }
     return {
         inputTokens: value.prompt_tokens,
         outputTokens: value.completion_tokens,
-        totalTokens: value.total_tokens,
+        totalTokens: value.total_tokens ?? value.prompt_tokens + value.completion_tokens,
     };
 }
 function parseEvent(data) {

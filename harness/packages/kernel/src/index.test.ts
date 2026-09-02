@@ -8,6 +8,7 @@ import {
   clusterBootstrap,
   evaluateGates,
   judgeExecution,
+  minimumTrialsForFloor,
   pickJudge,
   selectWinner,
   wilson,
@@ -22,6 +23,7 @@ describe("kernel public API", () => {
     expect(clusterBootstrap).toBeTypeOf("function");
     expect(evaluateGates).toBeTypeOf("function");
     expect(judgeExecution).toBeTypeOf("function");
+    expect(minimumTrialsForFloor).toBeTypeOf("function");
     expect(pickJudge).toBeTypeOf("function");
     expect(selectWinner).toBeTypeOf("function");
     expect(wilson).toBeTypeOf("function");

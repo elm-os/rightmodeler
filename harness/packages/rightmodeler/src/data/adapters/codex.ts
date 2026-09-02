@@ -8,24 +8,18 @@ import {
   isRecord,
   jsonValue,
   optionalString,
+  optionalTokenCount,
+  optionalUsage,
   recordList,
   requiredString,
   sampleRecords,
   strictRuns,
-  tokenCount,
   type DroppedTraceRecord,
   type NamedTraceAdapter,
   type TraceAdaptResult,
 } from "./shared.js";
 
 const format = "codex";
-const metadataTypes = new Set([
-  "compacted",
-  "inter_agent_communication",
-  "inter_agent_communication_metadata",
-  "security_risk_score",
-  "world_state",
-]);
 
 function confidence(sample: unknown): number {
   const records = sampleRecords(sample).filter(isRecord);
@@ -84,6 +78,7 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
   const source = recordList(records, format, "Codex rollout");
   const droppedRecords: DroppedTraceRecord[] = [];
   const turns = new Map<string, TurnState>();
+  const pendingInputs = new Map<string, unknown[]>();
   let traceId: string | undefined;
   let activeTurn: TurnState | undefined;
   let cumulativeUsage: Usage | undefined;
@@ -102,7 +97,6 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
       droppedRecords.push({ recordIndex, reason: "record type is missing" });
       continue;
     }
-    if (metadataTypes.has(type)) continue;
     if (type === "session_meta") {
       try {
         const id = requiredString(
@@ -136,10 +130,11 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
           model,
           order: recordIndex,
           timestamp: optionalString(candidate.timestamp),
-          inputs: [],
+          inputs: pendingInputs.get(turnId) ?? [],
           outputs: [],
           baselineUsage: cumulativeUsage,
         };
+        pendingInputs.delete(turnId);
         turns.set(turnId, activeTurn);
       } catch (error) {
         activeTurn = undefined;
@@ -158,12 +153,12 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
           const last = usage(info.last_token_usage);
           for (const candidateUsage of [total, last]) {
             if (candidateUsage === undefined) continue;
-            tokenCount(
+            optionalTokenCount(
               candidateUsage.input_tokens,
               `Codex record ${recordIndex + 1} input usage`,
               format,
             );
-            tokenCount(
+            optionalTokenCount(
               candidateUsage.output_tokens,
               `Codex record ${recordIndex + 1} output usage`,
               format,
@@ -183,28 +178,28 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
       }
       continue;
     }
-    if (type !== "response_item") {
-      droppedRecords.push({
-        recordIndex,
-        reason: `unsupported Codex rollout type ${type}`,
-      });
-      continue;
-    }
+    if (type !== "response_item") continue;
     const passthrough = isRecord(
       payload.internal_chat_message_metadata_passthrough,
     )
       ? payload.internal_chat_message_metadata_passthrough
       : {};
-    const turn =
-      turns.get(optionalString(passthrough.turn_id) ?? "") ?? activeTurn;
+    const payloadType = optionalString(payload.type);
+    const turnId = optionalString(passthrough.turn_id);
+    const turn = turns.get(turnId ?? "") ?? activeTurn;
     if (turn === undefined) {
-      droppedRecords.push({
-        recordIndex,
-        reason: "Codex response item has no turn context",
-      });
+      if (
+        payloadType === "message" &&
+        payload.role === "user" &&
+        Array.isArray(payload.content) &&
+        turnId !== undefined
+      ) {
+        const inputs = pendingInputs.get(turnId) ?? [];
+        inputs.push(payload);
+        pendingInputs.set(turnId, inputs);
+      }
       continue;
     }
-    const payloadType = optionalString(payload.type);
     if (payloadType === "message" || payloadType === "agent_message") {
       if (!Array.isArray(payload.content)) {
         droppedRecords.push({
@@ -233,11 +228,7 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
       turn.outputs.push(payload);
       continue;
     }
-    if (payloadType === "reasoning") continue;
-    droppedRecords.push({
-      recordIndex,
-      reason: `unsupported Codex response item ${payloadType ?? "<missing>"}`,
-    });
+    continue;
   }
 
   const runs: NormalizedRun[] = [];
@@ -249,6 +240,16 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
       const final = turn.finalUsage;
       const baseline = turn.baselineUsage;
       const selected = final ?? turn.lastUsage ?? {};
+      const stepUsage = optionalUsage(
+        final === undefined
+          ? selected.input_tokens
+          : usageDelta(final.input_tokens, baseline?.input_tokens),
+        final === undefined
+          ? selected.output_tokens
+          : usageDelta(final.output_tokens, baseline?.output_tokens),
+        `Codex turn ${turn.turnId}`,
+        format,
+      );
       return {
         stepIndex,
         model: turn.model,
@@ -264,22 +265,7 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
           `Codex turn ${turn.turnId} output`,
           format,
         ),
-        usage: {
-          inputTokens: tokenCount(
-            final === undefined
-              ? selected.input_tokens
-              : usageDelta(final.input_tokens, baseline?.input_tokens),
-            `Codex turn ${turn.turnId} input usage`,
-            format,
-          ),
-          outputTokens: tokenCount(
-            final === undefined
-              ? selected.output_tokens
-              : usageDelta(final.output_tokens, baseline?.output_tokens),
-            `Codex turn ${turn.turnId} output usage`,
-            format,
-          ),
-        },
+        ...(stepUsage === undefined ? {} : { usage: stepUsage }),
         trajectoryId: turn.turnId,
         ...(turn.timestamp === undefined ? {} : { timestamp: turn.timestamp }),
       };

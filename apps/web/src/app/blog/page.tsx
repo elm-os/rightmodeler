@@ -4,7 +4,7 @@ import { PostCard } from "@/components/blog/post-card";
 import { HeroGradient } from "@/components/hero-gradient";
 import { Reveal } from "@/components/reveal";
 import { getAllPosts } from "@/content/blog";
-import { socialImage } from "@/lib/seo";
+import { alternatesFor, socialImage } from "@/lib/seo";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 // Parchment legibility veil over the grain-gradient hero — densest behind the top-left masthead copy,
@@ -23,7 +23,7 @@ const preview = socialImage(
 export const metadata: Metadata = {
   title: "Blog",
   description,
-  alternates: { canonical: "/blog" },
+  alternates: alternatesFor("/blog"),
   openGraph: {
     type: "website",
     title: `Blog · ${SITE_NAME}`,

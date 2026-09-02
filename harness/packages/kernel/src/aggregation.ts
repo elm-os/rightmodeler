@@ -1,4 +1,9 @@
-import type { Assessment, CascadeFinding, Execution } from "@rightmodeler/core";
+import {
+  compareText,
+  type Assessment,
+  type CascadeFinding,
+  type Execution,
+} from "@rightmodeler/core";
 
 import {
   MIN_DISTINCT_STEPS,
@@ -16,6 +21,8 @@ const AGGREGATION_BOOTSTRAP_RESAMPLES = 2_000;
 
 export const EVIDENCE_EXCLUSION_REASONS = [
   "assessment_evidence_missing",
+  "attribution_ambiguous",
+  "attribution_lost",
   "judge_evidence_incomplete",
 ] as const;
 
@@ -25,6 +32,7 @@ export const ABSTAIN_REASONS = [
   "insufficient_review_trials",
   "insufficient_distinct_steps",
   "insufficient_distinct_trajectories",
+  "holdout_below_floor_minimum",
   "missing_deterministic_evidence",
   "required_abstention",
   "incomplete_evidence_coverage",
@@ -131,6 +139,10 @@ export interface FamilyCascadeStatus {
   readonly runSetsUsed: number;
 }
 
+export type AggregateCascadeFinding = CascadeFinding & {
+  readonly candidateId?: string;
+};
+
 interface FamilyVerdictBase {
   readonly evidenceQuestionId: string;
   readonly corpusSplit: string;
@@ -202,7 +214,7 @@ export interface AggregateOptions {
 export function aggregate(
   facts: readonly AggregationFact[],
   { gatePolicyVersion, qualityFloor, availabilityFloor }: AggregateOptions,
-  cascadeFindings: readonly CascadeFinding[] = [],
+  cascadeFindings: readonly AggregateCascadeFinding[] = [],
 ): FamilyVerdict[] {
   if (gatePolicyVersion.length === 0) {
     throw new TypeError("gatePolicyVersion must not be empty");
@@ -255,7 +267,7 @@ function aggregateGroup(
   gatePolicyVersion: string,
   qualityFloor: number,
   availabilityFloor: number,
-  cascadeFindings: readonly CascadeFinding[],
+  cascadeFindings: readonly AggregateCascadeFinding[],
 ): FamilyVerdict {
   const first = facts[0]!;
   assertConsistentGroup(facts, first);
@@ -268,9 +280,7 @@ function aggregateGroup(
       evidenceExclusionReason(fact) === undefined,
   );
   const excludedExecutions = facts.filter(
-    (fact) =>
-      fact.execution.attribution !== "ok" ||
-      evidenceExclusionReason(fact) !== undefined,
+    (fact) => evidenceExclusionReason(fact) !== undefined,
   ).length;
   const excludedFraction = excludedExecutions / facts.length;
   const assessmentAbsentReasons = countAssessmentAbsenceReasons(facts);
@@ -377,6 +387,7 @@ function aggregateGroup(
   const cascadeFinding = latestCascadeFinding(cascadeFindings, {
     familyId: first.familyId,
     evidenceQuestionId: first.execution.evidenceQuestionId,
+    candidateId: first.execution.candidateId,
   });
   const base: FamilyVerdictBase = {
     evidenceQuestionId: first.execution.evidenceQuestionId,
@@ -465,7 +476,9 @@ function aggregateEvaluatorKind(
   const orderConsistency = judgeFacts.flatMap((fact) =>
     fact.orderConsistent === undefined ? [] : [fact.orderConsistent],
   );
-  const excludedExecutions = conditionalFacts.length - included.length;
+  const excludedExecutions = conditionalFacts.filter(
+    (fact) => evidenceExclusionReason(fact) !== undefined,
+  ).length;
   const assessmentAbsentReasons =
     countAssessmentAbsenceReasons(conditionalFacts);
   const includedOutcomes = outcomesByTrajectory(included, (fact) =>
@@ -756,17 +769,20 @@ export function evaluatorWorstCaseBound(
 }
 
 function latestCascadeFinding(
-  findings: readonly CascadeFinding[],
+  findings: readonly AggregateCascadeFinding[],
   partition: {
     readonly familyId: string;
     readonly evidenceQuestionId: string;
+    readonly candidateId: string;
   },
-): CascadeFinding | undefined {
-  let latest: CascadeFinding | undefined;
+): AggregateCascadeFinding | undefined {
+  let latest: AggregateCascadeFinding | undefined;
   for (const finding of findings) {
     if (
       finding.familyId === partition.familyId &&
       finding.evidenceQuestionId === partition.evidenceQuestionId &&
+      (finding.candidateId === undefined ||
+        finding.candidateId === partition.candidateId) &&
       (latest === undefined ||
         Date.parse(finding.createdAt) >= Date.parse(latest.createdAt))
     ) {
@@ -893,7 +909,11 @@ function evidenceExclusionReason(fact: AggregationFact): string | undefined {
   if (fact.assessmentAbsentReason !== undefined) {
     return fact.assessmentAbsentReason;
   }
-  if (fact.execution.attribution !== "ok" || fact.requiredAbstention) {
+  const { attribution } = fact.execution;
+  if (attribution === "ambiguous" || attribution === "lost") {
+    return `attribution_${attribution}`;
+  }
+  if (attribution !== "ok" || fact.requiredAbstention) {
     return undefined;
   }
   if (fact.assessment === undefined) {
@@ -989,10 +1009,6 @@ function compareVerdicts(left: FamilyVerdict, right: FamilyVerdict): number {
     compareText(left.candidateId, right.candidateId) ||
     compareText(left.corpusSplit, right.corpusSplit)
   );
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function stableSeed(value: string): number {

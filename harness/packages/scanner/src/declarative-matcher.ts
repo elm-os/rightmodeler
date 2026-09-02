@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
+
 import { z } from "zod";
 
-import { candidateFromText, extractCallText } from "./matchers/utils.js";
+import {
+  candidateFromText,
+  extractCallText,
+  maskSource,
+} from "./matchers/utils.js";
 import type { CandidateMatch, Matcher } from "./types.js";
 
 const declarativeMatcherErrorCodes = [
@@ -345,10 +351,14 @@ export function compileDeclarativeMatchers(
       filePatterns: [...spec.filePatterns],
       examples: [...spec.examples],
       closesSurfaceIds: [...spec.closesSurfaceIds],
-      match(content): CandidateMatch[] {
+      match(
+        content,
+        filePath,
+        searchable = maskSource(content, filePath),
+      ): CandidateMatch[] {
         const matches: CandidateMatch[] = [];
         for (const pattern of patterns) {
-          for (const match of content.matchAll(pattern.regex)) {
+          for (const match of searchable.matchAll(pattern.regex)) {
             const position = match.index;
             const matchedText = extractCallText(content, position);
             matches.push(
@@ -369,4 +379,16 @@ export function compileDeclarativeMatchers(
   }
 
   return { matchers, rejections };
+}
+
+export function loadDeclarativeMatchers(
+  filePath: string,
+): DeclarativeMatcherCompilation {
+  const parsed: unknown = JSON.parse(readFileSync(filePath, "utf8"));
+  if (!Array.isArray(parsed)) {
+    throw new Error(
+      `${filePath} must contain a JSON array of matcher definitions`,
+    );
+  }
+  return compileDeclarativeMatchers(parsed);
 }

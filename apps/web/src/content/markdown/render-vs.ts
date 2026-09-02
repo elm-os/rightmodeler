@@ -14,7 +14,7 @@ function side(part: VsSide | undefined): string[] {
   ];
 }
 
-function block(item: VsBlock): string[] {
+function block(item: VsBlock, name: string): string[] {
   switch (item.type) {
     case "tldr":
       return [item.body ?? "", ""];
@@ -31,7 +31,13 @@ function block(item: VsBlock): string[] {
         lines.push(
           `### ${entry.scenario}`,
           "",
-          `Use: ${entry.winner}`,
+          `the right hire: ${
+            entry.winner === "ours"
+              ? "rightmodeler"
+              : entry.winner === "both"
+                ? "both, together"
+                : name
+          }`,
           "",
           entry.why,
           "",
@@ -59,7 +65,7 @@ function block(item: VsBlock): string[] {
       if (item.intro) lines.push(item.intro, "");
       for (const paragraph of item.paragraphs ?? []) lines.push(paragraph, "");
       for (const entry of item.commands ?? []) {
-        lines.push("```bash", `# ${entry.comment}`, entry.command, "```", "");
+        lines.push("```bash", entry.comment, entry.command, "```", "");
       }
       return lines;
     }
@@ -96,8 +102,8 @@ function block(item: VsBlock): string[] {
 }
 
 export function renderVsMarkdown(data: VsPageData): string {
-  const lines = [`# ${data.h1}`, "", data.lede, ""];
-  for (const entry of data.blocks) lines.push(...block(entry));
+  const lines = [`# ${data.h1}`, "", data.lede, "", data.verdictLabel, ""];
+  for (const entry of data.blocks) lines.push(...block(entry, data.name));
   return lines
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")

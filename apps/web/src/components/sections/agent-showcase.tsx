@@ -1,4 +1,4 @@
-// AgentShowcase — the /agent feature spread: two equal panels over a four-box step row, filling
+// AgentShowcase: the /agent feature spread, two equal panels over a four-box step row, filling
 // the framed column edge to edge. The left panel is the deliverable: the PR-card artifact inset
 // from the left and bleeding off the right edge (clipped by the panel), over a grainy
 // brand-gradient image that stays visible along the left sliver and bottom band, where the
@@ -6,7 +6,7 @@
 // anchored bottom. Below, the four decision steps as equal boxes (square at desktop), each marked
 // by a bespoke stroke glyph from the house icon set in a squircle seat. The accent hues live only
 // inside the generated grain image; every control and every word stays monochrome. Server
-// component — Reveal and the PR card are the client leaves.
+// component. Reveal and the PR card are the client leaves.
 
 import Image from "next/image";
 import {
@@ -26,7 +26,7 @@ const STEPS: {
   {
     Icon: WatchSignalIcon,
     name: "Watch",
-    body: "Every release, every provider, tracked live. Candidates get flagged per step the moment they ship.",
+    body: "A weekly schedule rechecks the provider catalog and recalculates the shortlist, so a newly listed or repriced model gets flagged per step.",
   },
   {
     Icon: ReplayLoopIcon,
@@ -63,13 +63,13 @@ export function AgentShowcase() {
               className="-z-10 object-cover object-left-bottom"
               sizes="(min-width: 1024px) 50vw, 100vw"
             />
-            {/* The artifact — inset left so the grain shows as a sliver, flush to the top, and
+            {/* The artifact: inset left so the grain shows as a sliver, flush to the top, and
                 bleeding off the right edge on desktop like a window onto a wider screen. */}
             <div className="ml-4 sm:ml-8 lg:-mr-16">
               <AgentPrCard />
             </div>
 
-            {/* Caption — left edge aligned to the artifact's inset; the body reserves two lines
+            {/* Caption: left edge aligned to the artifact's inset; the body reserves two lines
                 so this kicker sits on the same line as the right panel's, whatever wraps. */}
             <div className="mt-auto max-w-lg px-4 pb-4 pt-6 sm:px-8 sm:pb-8">
               <p className="font-mono text-caption uppercase text-driftwood">
@@ -97,7 +97,7 @@ export function AgentShowcase() {
               </p>
             </div>
 
-            {/* Caption — same inset scale and reserved two-line body as the left panel's, so the
+            {/* Caption: same inset scale and reserved two-line body as the left panel's, so the
                 two kickers and bodies align across the pair. */}
             <div className="mt-auto max-w-md pt-10">
               <p className="font-mono text-caption uppercase text-driftwood">

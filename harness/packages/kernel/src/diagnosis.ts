@@ -1,6 +1,10 @@
-import { computeRunSpecDigest, type JsonValue } from "@rightmodeler/core";
+import {
+  compareText,
+  computeRunSpecDigest,
+  type JsonValue,
+} from "@rightmodeler/core";
 
-export const ISSUE_CLASSES = [
+const ISSUE_CLASSES = [
   "ingestion",
   "evaluator",
   "replay",
@@ -11,7 +15,7 @@ export const ISSUE_CLASSES = [
 
 export type IssueClass = (typeof ISSUE_CLASSES)[number];
 
-export const ISSUE_ACTIONS = {
+const ISSUE_ACTIONS = {
   ingestion: "fix-ingestion",
   evaluator: "fix-evaluator",
   replay: "fix-replay",
@@ -271,7 +275,9 @@ function remediationProof(
   const regressedGateIds = [...baselineGates]
     .filter(
       ([gateId, gate]) =>
-        gate.status === "pass" && postFixGates.get(gateId)?.status !== "pass",
+        postFix !== undefined &&
+        gate.status === "pass" &&
+        postFixGates.get(gateId)?.status !== "pass",
     )
     .map(([gateId]) => gateId)
     .sort(compareText);
@@ -489,8 +495,4 @@ function triggerCaseIds(
     return [];
   });
   return [...new Set(caseIds)].sort(compareText);
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

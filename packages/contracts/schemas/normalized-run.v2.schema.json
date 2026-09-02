@@ -57,14 +57,7 @@
     },
     "step": {
       "type": "object",
-      "required": [
-        "stepIndex",
-        "model",
-        "messages",
-        "output",
-        "usage",
-        "trajectoryId"
-      ],
+      "required": ["stepIndex", "model", "messages", "output", "trajectoryId"],
       "properties": {
         "stepIndex": {
           "type": "integer",

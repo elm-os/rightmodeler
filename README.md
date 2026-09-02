@@ -24,6 +24,8 @@ Start in the repository you want to analyze:
 npx rightmodeler init
 ```
 
+The CLI is published on npm as `rightmodeler`.
+
 Rightmodeler looks for trace logs in conventional project files and in Claude Code
 and Codex session stores for the current repository. In an interactive terminal it
 explains traces, lists what it found, and lets you choose a file. Automated runs
@@ -80,13 +82,15 @@ Expected layout:
 
 ```text
 .rightmodeler/
-├── input/
-├── normalized/
-├── analysis/
-└── reports/
+├── project/
+│   └── reports/report.md
+└── .rightmodeler-store/entries/
+    └── project/{setup,cases,steps,facts,judgements,budget,confirm,verdicts,runs,reports}/
 ```
 
-This directory is the TypeScript harness state and artifact boundary.
+`.rightmodeler/` is the harness state and artifact boundary. The human-readable report is
+`.rightmodeler/project/reports/report.md`. Everything else is versioned store state; read it
+through the CLI rather than by path.
 
 ## License
 

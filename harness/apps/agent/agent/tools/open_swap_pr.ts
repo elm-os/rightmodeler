@@ -2,6 +2,7 @@ import { defineTool } from "eve/tools";
 
 import { applySwaps } from "@rightmodeler/cli";
 import { machineApproval } from "../lib/approval.js";
+import { resolveOpenSwapPrInput } from "../lib/defaults.js";
 import { openSwapPrInputSchema } from "../lib/schemas.js";
 
 export const openSwapPrTool = defineTool({
@@ -10,7 +11,7 @@ export const openSwapPrTool = defineTool({
   inputSchema: openSwapPrInputSchema,
   approval: machineApproval,
   async execute(input) {
-    return applySwaps(input);
+    return applySwaps(resolveOpenSwapPrInput(input));
   },
 });
 

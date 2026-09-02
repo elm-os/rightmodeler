@@ -7,9 +7,14 @@ export const reportTool = defineTool({
   description:
     "Write and return the harness report after every family has reached a terminal state.",
   inputSchema: harnessInputSchema,
-  async execute(input) {
-    return (await runCli("report", [], { ...input, acceptedExitCodes: [0, 1] }))
-      .result;
+  async execute(input, ctx) {
+    return (
+      await runCli("report", [], {
+        ...input,
+        acceptedExitCodes: [0, 1],
+        signal: ctx.abortSignal,
+      })
+    ).result;
   },
 });
 

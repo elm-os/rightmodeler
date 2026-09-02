@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { runCli } from "../lib/cli.js";
 import {
   handOffSchedule,
+  scheduleCliTimeoutMs,
   scheduleGitHubTarget,
   scheduleTraceInput,
 } from "../lib/schedules.js";
@@ -14,11 +15,10 @@ export default defineSchedule({
     const input = scheduleTraceInput("drift-watch");
     const target = scheduleGitHubTarget("drift-watch");
     if (input === undefined || target === undefined) return;
-    const drift = await runCli(
-      "drift",
-      ["--traces", resolve(input.traces)],
-      input,
-    );
+    const drift = await runCli("drift", ["--traces", resolve(input.traces)], {
+      ...input,
+      timeoutMs: scheduleCliTimeoutMs,
+    });
     handOffSchedule(
       args,
       target,

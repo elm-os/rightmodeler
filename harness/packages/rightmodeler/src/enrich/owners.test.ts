@@ -22,6 +22,38 @@ async function git(repoDir: string, args: readonly string[]): Promise<void> {
   await execFileAsync("git", ["-C", repoDir, ...args]);
 }
 
+async function commitAs(
+  repoDir: string,
+  subject: string,
+  {
+    authorName,
+    authorEmail,
+    authorDate,
+    committerName,
+    committerEmail,
+    committerDate,
+  }: {
+    readonly authorName: string;
+    readonly authorEmail: string;
+    readonly authorDate: string;
+    readonly committerName: string;
+    readonly committerEmail: string;
+    readonly committerDate: string;
+  },
+): Promise<void> {
+  await execFileAsync("git", ["-C", repoDir, "commit", "--message", subject], {
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: authorName,
+      GIT_AUTHOR_EMAIL: authorEmail,
+      GIT_AUTHOR_DATE: authorDate,
+      GIT_COMMITTER_NAME: committerName,
+      GIT_COMMITTER_EMAIL: committerEmail,
+      GIT_COMMITTER_DATE: committerDate,
+    },
+  });
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories
@@ -192,6 +224,30 @@ describe("resolveOwners", () => {
           { handle: "recent@example.com", source: "blame" },
           { handle: "primary@example.com", source: "blame" },
         ],
+      },
+    ]);
+  });
+
+  it("ranks a squash commit by author instead of committer", async () => {
+    const root = await temporaryRepository();
+    const repoDir = await makeGitFixture(root);
+    await writeFile(join(repoDir, "squashed.txt"), "squashed\n");
+    await git(repoDir, ["add", "--", "squashed.txt"]);
+    await commitAs(repoDir, "Add squashed fixture", {
+      authorName: "Squashed Author",
+      authorEmail: "squashed@example.com",
+      authorDate: "2026-01-02T00:00:00Z",
+      committerName: "GitHub",
+      committerEmail: "noreply@github.com",
+      committerDate: "2026-01-03T00:00:00Z",
+    });
+
+    await expect(
+      resolveOwners({ repoDir, filePaths: ["squashed.txt"] }),
+    ).resolves.toEqual([
+      {
+        path: "squashed.txt",
+        owners: [{ handle: "squashed@example.com", source: "blame" }],
       },
     ]);
   });

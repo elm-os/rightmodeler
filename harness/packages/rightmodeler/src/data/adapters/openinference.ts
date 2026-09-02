@@ -3,68 +3,22 @@ import {
   jsonEncodedValue,
   jsonValue,
   optionalString,
+  optionalUsage,
+  otlpAttributes,
+  otlpSpans,
   requiredString,
   sampleRecords,
-  tokenCount,
 } from "./shared.js";
 import { createRowAdapter, type MappedTraceStep } from "./row-adapter.js";
 
 const format = "openinference";
 
-function otlpValue(value: unknown): unknown {
-  if (!isRecord(value)) return undefined;
-  if ("stringValue" in value) return value.stringValue;
-  if ("intValue" in value) {
-    const parsed = Number(value.intValue);
-    return Number.isSafeInteger(parsed) ? parsed : undefined;
-  }
-  if ("doubleValue" in value) return value.doubleValue;
-  if ("boolValue" in value) return value.boolValue;
-  if (isRecord(value.arrayValue) && Array.isArray(value.arrayValue.values)) {
-    return value.arrayValue.values.map(otlpValue);
-  }
-  if (isRecord(value.kvlistValue) && Array.isArray(value.kvlistValue.values)) {
-    return Object.fromEntries(
-      value.kvlistValue.values.flatMap((item) =>
-        isRecord(item) && typeof item.key === "string"
-          ? [[item.key, otlpValue(item.value)]]
-          : [],
-      ),
-    );
-  }
-  return undefined;
-}
-
-function attributes(span: Record<string, unknown>): Record<string, unknown> {
-  if (!Array.isArray(span.attributes)) return {};
-  return Object.fromEntries(
-    span.attributes.flatMap((attribute) =>
-      isRecord(attribute) && typeof attribute.key === "string"
-        ? [[attribute.key, otlpValue(attribute.value)]]
-        : [],
-    ),
-  );
-}
-
-function spans(record: Record<string, unknown>): Record<string, unknown>[] {
-  if (!Array.isArray(record.resourceSpans)) return [];
-  return record.resourceSpans.flatMap((resource) =>
-    isRecord(resource) && Array.isArray(resource.scopeSpans)
-      ? resource.scopeSpans.flatMap((scope) =>
-          isRecord(scope) && Array.isArray(scope.spans)
-            ? scope.spans.filter(isRecord)
-            : [],
-        )
-      : [],
-  );
-}
-
 function confidence(sample: unknown): number {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
   const matching = records.filter((record) =>
-    spans(record).some((span) => {
-      const spanAttributes = attributes(span);
+    otlpSpans(record).some((span) => {
+      const spanAttributes = otlpAttributes(span);
       return (
         typeof spanAttributes["openinference.span.kind"] === "string" &&
         Object.keys(spanAttributes).some((key) => key.startsWith("llm."))
@@ -106,8 +60,8 @@ export const openInferenceAdapter = createRowAdapter({
   detect: confidence,
   mapRecord(record, recordIndex) {
     const mapped: MappedTraceStep[] = [];
-    for (const [spanIndex, span] of spans(record).entries()) {
-      const spanAttributes = attributes(span);
+    for (const [spanIndex, span] of otlpSpans(record).entries()) {
+      const spanAttributes = otlpAttributes(span);
       if (spanAttributes["openinference.span.kind"] !== "LLM") continue;
       const traceId = requiredString(
         span.traceId,
@@ -140,6 +94,12 @@ export const openInferenceAdapter = createRowAdapter({
         outputMessages.length > 0
           ? outputMessages
           : jsonEncodedValue(spanAttributes["output.value"]);
+      const usage = optionalUsage(
+        spanAttributes["llm.token_count.prompt"],
+        spanAttributes["llm.token_count.completion"],
+        `OpenInference record ${recordIndex + 1}`,
+        format,
+      );
       mapped.push({
         traceId,
         sortValue: optionalString(span.startTimeUnixNano),
@@ -158,18 +118,7 @@ export const openInferenceAdapter = createRowAdapter({
             `OpenInference record ${recordIndex + 1} output`,
             format,
           ),
-          usage: {
-            inputTokens: tokenCount(
-              spanAttributes["llm.token_count.prompt"],
-              `OpenInference record ${recordIndex + 1} prompt usage`,
-              format,
-            ),
-            outputTokens: tokenCount(
-              spanAttributes["llm.token_count.completion"],
-              `OpenInference record ${recordIndex + 1} completion usage`,
-              format,
-            ),
-          },
+          ...(usage === undefined ? {} : { usage }),
           trajectoryId: optionalString(spanAttributes["session.id"]) ?? traceId,
           ...(optionalString(span.name) === undefined
             ? {}

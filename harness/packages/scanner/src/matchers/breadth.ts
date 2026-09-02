@@ -1,3 +1,7 @@
+import {
+  compileDeclarativeMatchers,
+  type DeclarativeMatcherSpec,
+} from "../declarative-matcher.js";
 import { candidateFromText, createCallMatcher } from "./utils.js";
 import type { CandidateMatch, Matcher } from "../types.js";
 
@@ -257,7 +261,12 @@ const jsonModelMatcher: Matcher = {
     '{"providers":{"openai":{"modelId":"acme/large-1"}}}',
   ],
   match(content): CandidateMatch[] {
-    const parsed: unknown = JSON.parse(content);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content.replace(/^\uFEFF/, ""));
+    } catch {
+      return [];
+    }
     let cursor = 0;
     return jsonModelPins(parsed).map((pin) => {
       const valueText = JSON.stringify(pin.modelId);
@@ -284,8 +293,39 @@ const jsonModelMatcher: Matcher = {
   },
 };
 
+const declarativeSpecs: DeclarativeMatcherSpec[] = [
+  {
+    slug: "py-crewai-llm",
+    description: "CrewAI LLM construction bound to an agent",
+    noiseTier: "normal",
+    filePatterns: pythonFiles,
+    patterns: [{ regex: "\\bLLM\\s*\\(\\s*model\\s*=", label: "CrewAI LLM" }],
+    examples: [
+      'from crewai import Agent, LLM\nresearcher = Agent(role="Researcher", llm=LLM(model="acme/large-1"))',
+    ],
+    closesSurfaceIds: ["crewai"],
+  },
+  {
+    slug: "py-autogen-model-client",
+    description: "AutoGen AgentChat model client construction",
+    noiseTier: "normal",
+    filePatterns: pythonFiles,
+    patterns: [
+      {
+        regex: "\\b(?:Azure)?OpenAIChatCompletionClient\\s*\\(",
+        label: "AutoGen model client",
+      },
+    ],
+    examples: [
+      'from autogen_ext.models.openai import OpenAIChatCompletionClient\nmodel_client = OpenAIChatCompletionClient(model="acme/large-1")',
+    ],
+    closesSurfaceIds: ["autogen"],
+  },
+];
+
 export const breadthMatchers: readonly Matcher[] = Object.freeze([
   ...callMatchers,
   envModelMatcher,
   jsonModelMatcher,
+  ...compileDeclarativeMatchers(declarativeSpecs).matchers,
 ]);

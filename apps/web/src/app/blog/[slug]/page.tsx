@@ -4,6 +4,7 @@ import { BlogCta } from "@/components/blog/blog-cta";
 import { BlogShell } from "@/components/blog/blog-shell";
 import { PostHeader } from "@/components/blog/post-header";
 import { getAllSlugs, getPost } from "@/content/blog";
+import { alternatesFor } from "@/lib/seo";
 import { SITE_AUTHOR, SITE_NAME, SITE_URL } from "@/lib/site";
 
 // Prerender every post at build time. Cache Components requires generateStaticParams to return at
@@ -37,7 +38,7 @@ export async function generateMetadata({
   return {
     title: { absolute: branded },
     description: meta.description,
-    alternates: { canonical: `/blog/${meta.slug}` },
+    alternates: alternatesFor(`/blog/${meta.slug}`),
     openGraph: {
       type: "article",
       title: meta.title,

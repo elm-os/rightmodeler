@@ -1,5 +1,8 @@
 # Cheaper Models Recommendation Report PRD
 
+Written before the TypeScript harness. Where this document and
+`harness/docs/Architecture.md` disagree, Architecture.md is the design of record.
+
 ## 1. Summary
 
 Engineering teams often default to frontier AI models for agentic or LLM-powered workflows because they do not have reliable evidence that cheaper models can complete their specific tasks. This product generates a recommendation report from historical agent/model runs, identifying where cheaper models can replace expensive frontier models while preserving task quality.
@@ -69,7 +72,7 @@ Input quality varies by customer, so the framework must make best use of availab
 
 1. Ingest historical runs.
 2. Normalize prompts, outputs, tool calls, model metadata, costs, and success signals.
-3. Assign task families with the built-in classification rules.
+3. Group call sites into families from the scanner's call-site identity.
 4. Select the strongest available evaluation method for each task family.
 5. Replay or re-run representative tasks across candidate cheaper models.
 6. Score candidate models against task-specific success criteria.
@@ -265,7 +268,6 @@ MVP must support:
 
 - Upload or local ingestion of historical run bundles.
 - Schema normalization for prompts, outputs, tool calls, model, tokens, cost, and success signals.
-- Rule-based task family classification with a `general` catch-all.
 - Configurable candidate model list.
 - Cost calculation.
 - At least three evaluator types:
@@ -283,7 +285,9 @@ Possible follow-on products:
 - Policy-based routing by task family.
 - Continuous eval monitoring.
 - Regression alerts when cheaper model quality drops.
-- Human review workflow for approving task families and recommendations.
+- Human review workflow for approving task families and recommendations (superseded: decision 7
+  in `harness/docs/plan.md` puts the review on the draft pull request, and
+  `harness/docs/Architecture.md` section 16 records that there is no interactive approval TUI).
 - Automatic data-driven task family inference and label overrides.
 - Integration with LangSmith, Braintrust, OpenAI Evals, Phoenix, or internal tracing systems.
 - Provider price syncing.

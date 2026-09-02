@@ -21,7 +21,11 @@ export interface Matcher extends MatcherPlugin {
   readonly noiseTier: NoiseTier;
   readonly filePatterns: readonly string[];
   readonly examples: readonly string[];
-  match(content: string, filePath: string): CandidateMatch[];
+  match(
+    content: string,
+    filePath: string,
+    searchable?: string,
+  ): CandidateMatch[];
 }
 
 export interface NormalizedStepInput {

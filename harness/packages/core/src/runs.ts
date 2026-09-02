@@ -6,7 +6,7 @@ import { z } from "zod";
 import { runKey } from "./keys.js";
 import type { Store, StoreEntry } from "./store.js";
 
-export const runStatusSchema = z.enum(["running", "completed", "failed"]);
+const runStatusSchema = z.enum(["running", "completed", "failed"]);
 export type RunStatus = z.infer<typeof runStatusSchema>;
 
 export const runMetaSchema = z.strictObject({

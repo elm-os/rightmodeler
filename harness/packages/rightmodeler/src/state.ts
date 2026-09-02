@@ -1,11 +1,20 @@
+import { join, resolve } from "node:path";
+
 import { z } from "zod";
 
-import { setupStateKey, type JsonValue, type Store } from "@rightmodeler/core";
+import {
+  canonicalJson,
+  jsonValueSchema,
+  setupStateKey,
+  type JsonValue,
+  type Store,
+} from "@rightmodeler/core";
 
 const checkpointSchema = z.strictObject({
   inputDigest: z.string().min(1),
   outputKey: z.string().min(1),
   completedAt: z.string().min(1),
+  traceSource: z.string().min(1).optional(),
 });
 
 const setupStateSchema = z.strictObject({
@@ -15,6 +24,21 @@ const setupStateSchema = z.strictObject({
 
 export type Checkpoint = z.infer<typeof checkpointSchema>;
 export type SetupState = z.infer<typeof setupStateSchema>;
+
+export function resolveStoreRoot(repoDir: string, store?: string): string {
+  return resolve(store ?? join(repoDir, ".rightmodeler"));
+}
+
+export async function putImmutableJson(
+  store: Store,
+  key: string,
+  value: unknown,
+): Promise<void> {
+  await store.putImmutable(
+    key,
+    Buffer.from(canonicalJson(jsonValueSchema.parse(value)), "utf8"),
+  );
+}
 
 export async function readSetupState(
   store: Store,

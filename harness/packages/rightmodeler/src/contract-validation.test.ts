@@ -1,13 +1,13 @@
-import invalidBenchmarkCases from "../../../../packages/contracts/fixtures/benchmark-cases.invalid.json" with { type: "json" };
-import validBenchmarkCases from "../../../../packages/contracts/fixtures/benchmark-cases.valid.json" with { type: "json" };
-import invalidDriftProposal from "../../../../packages/contracts/fixtures/corpus-drift-proposal.invalid.json" with { type: "json" };
-import validDriftProposal from "../../../../packages/contracts/fixtures/corpus-drift-proposal.valid.json" with { type: "json" };
-import invalidCorpusManifest from "../../../../packages/contracts/fixtures/corpus-manifest.invalid.json" with { type: "json" };
-import validCorpusManifest from "../../../../packages/contracts/fixtures/corpus-manifest.valid.json" with { type: "json" };
-import invalidRemediationEvidence from "../../../../packages/contracts/fixtures/remediation-evidence.invalid.json" with { type: "json" };
-import validRemediationEvidence from "../../../../packages/contracts/fixtures/remediation-evidence.valid.json" with { type: "json" };
-import invalidRemediationLifecycle from "../../../../packages/contracts/fixtures/remediation-lifecycle.invalid.json" with { type: "json" };
-import validRemediationLifecycle from "../../../../packages/contracts/fixtures/remediation-lifecycle.valid.json" with { type: "json" };
+import invalidBenchmarkCases from "@repo/contracts/fixtures/benchmark-cases.invalid.json" with { type: "json" };
+import validBenchmarkCases from "@repo/contracts/fixtures/benchmark-cases.valid.json" with { type: "json" };
+import invalidDriftProposal from "@repo/contracts/fixtures/corpus-drift-proposal.invalid.json" with { type: "json" };
+import validDriftProposal from "@repo/contracts/fixtures/corpus-drift-proposal.valid.json" with { type: "json" };
+import invalidCorpusManifest from "@repo/contracts/fixtures/corpus-manifest.invalid.json" with { type: "json" };
+import validCorpusManifest from "@repo/contracts/fixtures/corpus-manifest.valid.json" with { type: "json" };
+import invalidRemediationEvidence from "@repo/contracts/fixtures/remediation-evidence.invalid.json" with { type: "json" };
+import validRemediationEvidence from "@repo/contracts/fixtures/remediation-evidence.valid.json" with { type: "json" };
+import invalidRemediationLifecycle from "@repo/contracts/fixtures/remediation-lifecycle.invalid.json" with { type: "json" };
+import validRemediationLifecycle from "@repo/contracts/fixtures/remediation-lifecycle.valid.json" with { type: "json" };
 
 import type { Store } from "@rightmodeler/core";
 import { describe, expect, it } from "vitest";

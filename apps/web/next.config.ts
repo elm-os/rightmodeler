@@ -6,11 +6,9 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
 
-  // Response headers deliberately do NOT live here. headers() is not applied to prerendered
-  // responses in 16.3.0-preview.5: a literal single-path rule with no proxy present was dropped
-  // under next start, and the rule reached routes-manifest.json correctly yet production served
-  // the page without it. The Vary rule lives in vercel.json instead. See that file, and the note
-  // in AGENTS.md, for what the platform does and does not honour.
+  // Response header rules live in vercel.json because that is the layer the deployment platform
+  // honours. See the response headers section in AGENTS.md for the separately verified local and
+  // platform behaviour.
 
   // The .md siblings advertised by <link rel="alternate" type="text/markdown">. These serve
   // Markdown regardless of Accept, which is what a crawler that follows rel="alternate" needs,

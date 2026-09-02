@@ -231,4 +231,15 @@ describe("evaluateGates", () => {
     expect(results["evidence-coverage"]).toBe(false);
     expect(results.availability).toBe(false);
   });
+
+  it("fails the quality gate for a verdict with no evaluator evidence", () => {
+    const [verdict] = verdicts();
+    const quality = evaluateGates(
+      [{ ...verdict!, evaluatorKinds: [] }],
+      policy,
+    ).find((result) => result.id === "quality")!;
+
+    expect(quality.pass).toBe(false);
+    expect(quality.reason).toMatch(/no evaluator evidence/);
+  });
 });

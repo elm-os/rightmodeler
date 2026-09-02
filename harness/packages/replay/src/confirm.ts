@@ -5,9 +5,9 @@ import {
   cascadeFindingSchema,
   confirmPlanKey,
   computeRunSpecDigest,
-  executionSchema,
-  factSchema,
-  factsPrefix,
+  isRecord,
+  nonemptyString,
+  readLedger,
   spendEventSchema,
   type Assessment,
   type CascadeFinding,
@@ -22,10 +22,15 @@ import {
   type DeltaDebugLogEntry,
   type DeltaDebugTestOutcome,
   type JudgeChat,
+  type JudgeChatResult,
   type ReleaseGatePolicy,
 } from "@rightmodeler/kernel";
 
 export { createDockerExecutor } from "@rightmodeler/executor";
+export {
+  createCloudExecutor,
+  detectCloudAvailability,
+} from "@rightmodeler/executor/cloud-sandbox";
 
 import type { Budget } from "./budget.js";
 import {
@@ -116,6 +121,11 @@ export interface ConfirmSwapSetResult {
   readonly members: readonly ConfirmMemberResult[];
   readonly runSetsUsed: number;
   readonly log: readonly DeltaDebugLogEntry<string>[];
+  readonly lostReasons: Readonly<Record<string, number>>;
+  readonly infrastructureBlocks: readonly {
+    readonly reason: string;
+    readonly message: string;
+  }[];
   readonly requiredMaxRunSets?: number;
 }
 
@@ -127,14 +137,6 @@ interface FactsIndex {
 }
 
 type RunSetOutcome = DeltaDebugTestOutcome | "incomplete";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function nonemptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 
 function stringArray(value: unknown): value is string[] {
   return (
@@ -513,26 +515,13 @@ function candidateId(policy: ModeBSwapPolicy): string {
 }
 
 async function readFacts(store: Store, projectId: string): Promise<FactsIndex> {
-  const executions: Execution[] = [];
-  const assessments: Assessment[] = [];
-  const spendEvents: SpendEvent[] = [];
-  const cascadeFindings: CascadeFinding[] = [];
-  for (const key of await store.list(factsPrefix(projectId))) {
-    const entry = await store.get(key);
-    if (entry === null) throw new Error(`Listed fact is missing: ${key}`);
-    const fact = factSchema.parse(
-      JSON.parse(Buffer.from(entry.body).toString("utf8")) as unknown,
-    );
-    const execution = executionSchema.safeParse(fact);
-    if (execution.success) executions.push(execution.data);
-    const assessment = assessmentSchema.safeParse(fact);
-    if (assessment.success) assessments.push(assessment.data);
-    const spendEvent = spendEventSchema.safeParse(fact);
-    if (spendEvent.success) spendEvents.push(spendEvent.data);
-    const cascadeFinding = cascadeFindingSchema.safeParse(fact);
-    if (cascadeFinding.success) cascadeFindings.push(cascadeFinding.data);
-  }
-  return { executions, assessments, spendEvents, cascadeFindings };
+  const ledger = await readLedger(store, projectId);
+  return {
+    executions: ledger.executions,
+    assessments: ledger.assessments,
+    spendEvents: ledger.spendEvents,
+    cascadeFindings: ledger.cascadeFindings,
+  };
 }
 
 function expectedExecutions(
@@ -563,32 +552,12 @@ function deterministicFactId(
   return `${kind}-${computeRunSpecDigest([kind, ...parts])}`;
 }
 
-function hasJudgeEvidenceFailure(
-  spendEvents: readonly SpendEvent[],
-  executionId: string,
-  key: string,
-): boolean {
-  return spendEvents.some((event) => {
-    if (event.actor !== "judge" || event.phase !== "confirm") return false;
-    if (!isRecord(event.reconcilableTo)) return false;
-    return (
-      event.reconcilableTo.executionId === executionId &&
-      event.reconcilableTo.subsetKey === key &&
-      event.reconcilableTo.assessmentAbsentReason ===
-        "judge_evidence_incomplete" &&
-      (event.reconcilableTo.judgeFailureKind === "response_malformed" ||
-        event.reconcilableTo.judgeFailureKind === "provider_error")
-    );
-  });
-}
-
 async function assessExecution(
   input: ConfirmSwapSetInput,
   recordedCase: ModeBCase,
   execution: Execution,
   key: string,
   existing: readonly Assessment[],
-  spendEvents: readonly SpendEvent[],
 ): Promise<Assessment | "ambiguous" | "judge_evidence_incomplete"> {
   const matches = existing.filter(
     (assessment) =>
@@ -597,9 +566,6 @@ async function assessExecution(
   );
   if (matches.length > 1) return "ambiguous";
   if (matches[0] !== undefined) return matches[0];
-  if (hasJudgeEvidenceFailure(spendEvents, execution.executionId, key)) {
-    return "judge_evidence_incomplete";
-  }
 
   let invocation = 0;
   let judgeFailureKind: "response_malformed" | "provider_error" =
@@ -609,9 +575,11 @@ async function assessExecution(
   try {
     judged = await judgeExecution({
       chat: async (request) => {
+        let judgeResponse: JudgeChatResult | undefined;
         invocation += 1;
         try {
-          return await input.modeB.judge.chat(request);
+          judgeResponse = await input.modeB.judge.chat(request);
+          return judgeResponse;
         } catch (error) {
           if (error instanceof ProviderConfigurationError) throw error;
           judgeFailureKind = "provider_error";
@@ -626,7 +594,7 @@ async function assessExecution(
               spendEventSchema.parse({
                 actor: "judge",
                 phase: "confirm",
-                costUsd: 0,
+                costUsd: judgeResponse?.costUsd ?? 0,
                 provider:
                   input.modeB.judge.providerId ??
                   input.modeB.input.egress.providerId,
@@ -634,11 +602,16 @@ async function assessExecution(
                   executionId: execution.executionId,
                   judgeModel: input.modeB.judge.judgeModel,
                   invocation,
-                  costUnavailable: true,
+                  costUnavailable: judgeResponse === undefined,
+                  costIsEstimate: judgeResponse?.costIsEstimate ?? true,
+                  usage: judgeResponse?.usage ?? null,
                   subsetKey: key,
                 },
               }),
             );
+            if (judgeResponse !== undefined && judgeResponse.costUsd > 0) {
+              await input.budget.modeB.charge(judgeResponse.costUsd);
+            }
           } catch (persistenceError) {
             judgePersistenceFailure = persistenceError;
             throw persistenceError;
@@ -740,6 +713,7 @@ async function outcomeFromFacts(
   if (executions.size < input.cases.length) return "incomplete";
 
   let ambiguous = false;
+  let incomplete = false;
   const observations: Array<{
     trajectoryId: string;
     passed: boolean;
@@ -772,15 +746,10 @@ async function outcomeFromFacts(
       execution,
       key,
       facts.assessments,
-      facts.spendEvents,
     );
     if (assessment === "ambiguous") ambiguous = true;
-    else if (assessment === "judge_evidence_incomplete") {
-      observations.push({
-        trajectoryId: execution.trajectoryId,
-        passed: false,
-      });
-    } else {
+    else if (assessment === "judge_evidence_incomplete") incomplete = true;
+    else {
       observations.push({
         trajectoryId: execution.trajectoryId,
         passed: assessment.passed,
@@ -788,6 +757,7 @@ async function outcomeFromFacts(
     }
   }
   if (ambiguous) return "ambiguous";
+  if (incomplete) return "incomplete";
   const bound = evaluatorWorstCaseBound(observations, `${questionId}\0judge`);
   return bound < input.policy.qualityFloor ? "fail" : "pass";
 }
@@ -837,6 +807,8 @@ export async function confirmSwapSet(
   const inputDigest = confirmInputDigest(familyId, input);
   const planKey = confirmPlanKey(input.budget.modeB.projectId, familyId);
   await ensurePlan(input.store, planKey, familyId, inputDigest);
+  const lostReasons: Record<string, number> = {};
+  const infrastructureBlocks: { reason: string; message: string }[] = [];
 
   const runSubset = async (
     members: readonly string[],
@@ -896,6 +868,17 @@ export async function confirmSwapSet(
       store: input.store,
       budget: input.budget.modeB,
     });
+    for (const [reason, count] of Object.entries(result.lostReasons)) {
+      lostReasons[reason] = (lostReasons[reason] ?? 0) + count;
+    }
+    for (const block of result.blocked) {
+      if (block.kind === "infrastructure") {
+        infrastructureBlocks.push({
+          reason: block.reason,
+          message: block.message,
+        });
+      }
+    }
     outcome = await outcomeFromFacts(
       input,
       key,
@@ -982,6 +965,10 @@ export async function confirmSwapSet(
   const existingFinding = (
     await readFacts(input.store, input.budget.modeB.projectId)
   ).cascadeFindings.find((finding) => finding.cascadeId === cascadeId);
+  const swapCandidate = input.swapSet[0]!.candidateModel;
+  const sharedCandidate = input.swapSet.every(
+    (swap) => swap.candidateModel === swapCandidate,
+  );
   if (existingFinding === undefined) {
     await writeReplayFact(
       input.store,
@@ -997,6 +984,7 @@ export async function confirmSwapSet(
         cascadeSeedStepId: cascadeSeed ?? null,
         uncertainStepIds,
         runSetsUsed: result.runSetsUsed,
+        ...(sharedCandidate ? { candidateId: swapCandidate } : {}),
         createdAt: new Date().toISOString(),
       }),
     );
@@ -1010,6 +998,8 @@ export async function confirmSwapSet(
     members,
     runSetsUsed: result.runSetsUsed,
     log: result.log,
+    lostReasons,
+    infrastructureBlocks,
     ...(capped ? { requiredMaxRunSets: input.budget.maxRunSets + 1 } : {}),
   };
 }

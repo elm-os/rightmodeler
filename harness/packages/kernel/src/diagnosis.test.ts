@@ -574,6 +574,30 @@ describe("diagnoseRemediationEvidence", () => {
     );
   });
 
+  it("does not claim regressions for a draft with no post-fix snapshot", () => {
+    const evidence = diagnoseRemediationEvidence({
+      baseline: snapshot({
+        gates: [
+          { id: "quality", status: "fail" },
+          { id: "speed", status: "pass" },
+        ],
+        cases: [
+          caseFact({ terminalVerdict: "fail", failureCode: "invalid_json" }),
+        ],
+      }),
+      proposal: proposedChange(),
+    });
+
+    expect(evidence.status).toBe("draft");
+    expect(evidence.proof.regressed_gate_ids).toEqual([]);
+    expect(evidence.residual_risks).toContain(
+      "Post-fix benchmark proof has not been supplied.",
+    );
+    expect(evidence.residual_risks).not.toContain(
+      "The proposed fix regressed gates: speed.",
+    );
+  });
+
   it("keeps post-fix regressions and incomplete delegated validation in review", () => {
     const evidence = diagnoseRemediationEvidence({
       baseline: snapshot({

@@ -7,6 +7,7 @@ import type { ExecutorProvider } from "@rightmodeler/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createDockerExecutor,
+  detectDockerAvailability,
   ensureImage,
   SCRATCH_CONTAINER_PATH,
   type DockerExecutor,
@@ -27,6 +28,10 @@ const activeContainers: Array<{
 }> = [];
 const temporaryDirectories: string[] = [];
 const activeServers: Server[] = [];
+const skipDocker = process.env.RIGHTMODELER_SKIP_DOCKER === "1";
+if (skipDocker) {
+  console.warn("[docker executor] SKIPPED: RIGHTMODELER_SKIP_DOCKER=1");
+}
 
 async function docker(args: string[]): Promise<string> {
   const result = await execFileAsync("docker", args, {
@@ -88,7 +93,29 @@ afterEach(async () => {
   }
 });
 
-describe("docker executor", () => {
+describe.skipIf(skipDocker)("docker executor", () => {
+  it("reports a reachable daemon and a missing CLI", async () => {
+    await expect(detectDockerAvailability()).resolves.toEqual({
+      available: true,
+    });
+
+    const emptyPath = await mkdtemp(
+      join(import.meta.dirname, ".docker-missing-"),
+    );
+    const previousPath = process.env.PATH;
+    try {
+      process.env.PATH = emptyPath;
+      await expect(detectDockerAvailability()).resolves.toMatchObject({
+        available: false,
+        reason: "cli-unavailable",
+      });
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      await rm(emptyPath, { recursive: true, force: true });
+    }
+  });
+
   it(
     "launches with env and collects exactly the requested namespaces",
     async () => {
@@ -558,6 +585,111 @@ while True:
       expect(Buffer.from(result.files[0].contents).toString("utf8")).toBe(
         "persisted",
       );
+    },
+    testTimeoutMs,
+  );
+
+  it(
+    "continues when a listed container disappears and leaves a young container running",
+    async () => {
+      const executor = createDockerExecutor({ maxBytesPerNamespace: 1024 });
+      const raceLabel = `reaper-race-${process.pid}-${Date.now()}`;
+      const survivor = track(
+        executor,
+        await docker([
+          "run",
+          "--detach",
+          "--label",
+          "com.rightmodeler.executor=1",
+          "--label",
+          `com.rightmodeler.test=${raceLabel}-survivor`,
+          "node:22-alpine",
+          "node",
+          "-e",
+          "setInterval(() => {}, 60_000)",
+        ]),
+      );
+      const disappearing = track(
+        executor,
+        await docker([
+          "run",
+          "--detach",
+          "--label",
+          "com.rightmodeler.executor=1",
+          "--label",
+          `com.rightmodeler.test=${raceLabel}-target`,
+          "node:22-alpine",
+          "node",
+          "-e",
+          "setInterval(() => {}, 60_000)",
+        ]),
+      );
+      const listedHandle = await docker([
+        "ps",
+        "--all",
+        "--quiet",
+        "--filter",
+        "label=com.rightmodeler.executor=1",
+        "--filter",
+        `label=com.rightmodeler.test=${raceLabel}-target`,
+      ]);
+      expect(listedHandle).not.toBe("");
+      expect(disappearing.startsWith(listedHandle)).toBe(true);
+
+      const wrapperDirectory = await mkdtemp(
+        join(import.meta.dirname, ".docker-reaper-race-"),
+      );
+      const wrapperPath = join(wrapperDirectory, "docker");
+      await writeFile(
+        wrapperPath,
+        [
+          "#!/bin/sh",
+          'if [ "$1" = "ps" ]; then',
+          '  PATH="$RM_REAPER_TEST_PATH" docker "$@"',
+          "  reaper_status=$?",
+          '  if [ "$reaper_status" -ne 0 ]; then',
+          '    exit "$reaper_status"',
+          "  fi",
+          '  PATH="$RM_REAPER_TEST_PATH" docker rm --force "$RM_REAPER_TEST_HANDLE" >/dev/null 2>&1',
+          "  exit $?",
+          "fi",
+          'PATH="$RM_REAPER_TEST_PATH" exec docker "$@"',
+          "",
+        ].join("\n"),
+        { encoding: "utf8", mode: 0o755 },
+      );
+      const previousPath = process.env.PATH;
+      const previousReaperPath = process.env.RM_REAPER_TEST_PATH;
+      const previousReaperHandle = process.env.RM_REAPER_TEST_HANDLE;
+      try {
+        process.env.RM_REAPER_TEST_PATH = previousPath ?? "";
+        process.env.RM_REAPER_TEST_HANDLE = listedHandle;
+        process.env.PATH = wrapperDirectory;
+        await expect(
+          executor.reapOrphans({ olderThanMs: Number.MAX_SAFE_INTEGER }),
+        ).resolves.toBeUndefined();
+      } finally {
+        if (previousPath === undefined) delete process.env.PATH;
+        else process.env.PATH = previousPath;
+        if (previousReaperPath === undefined) {
+          delete process.env.RM_REAPER_TEST_PATH;
+        } else {
+          process.env.RM_REAPER_TEST_PATH = previousReaperPath;
+        }
+        if (previousReaperHandle === undefined) {
+          delete process.env.RM_REAPER_TEST_HANDLE;
+        } else {
+          process.env.RM_REAPER_TEST_HANDLE = previousReaperHandle;
+        }
+        await rm(wrapperDirectory, { recursive: true, force: true });
+      }
+
+      await expect(docker(["inspect", disappearing])).rejects.toThrow(
+        /No such object|No such container/i,
+      );
+      expect(
+        await docker(["inspect", "--format", "{{.State.Status}}", survivor]),
+      ).toBe("running");
     },
     testTimeoutMs,
   );

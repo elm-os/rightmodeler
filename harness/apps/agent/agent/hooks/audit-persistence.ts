@@ -2,9 +2,16 @@ import { defineHook } from "eve/hooks";
 
 import { persistAgentRecord } from "../lib/persistence.js";
 
+const skippedAuditEvents = new Set([
+  "action.partial",
+  "message.appended",
+  "reasoning.appended",
+]);
+
 export default defineHook({
   events: {
     async "*"(event, ctx) {
+      if (skippedAuditEvents.has(event.type)) return;
       await persistAgentRecord("audit", event.meta.id, {
         schemaVersion: 1,
         kind: "agent_audit_event",

@@ -56,6 +56,11 @@ dimension, pooled with measured judge-agreement carried as extra variance. A par
 that includes every dimension fragments a 24 case family below every minimum and abstains
 forever, which is a different way to be wrong.
 
+`computeEvidenceQuestionId` in `core/src/identity.ts` hashes exactly those six fields. The
+pipeline's `evidenceQuestionIdentity` binds `promptRevision` to the replay prompt revision and
+`replayMode` to `single_shot`, and folds the family, its step ids and any reproof request ids
+into `stepFingerprint`.
+
 ### Reconciliation happens before any spend
 
 Trace records and scanned call sites are reconciled immediately after `scan` and `ingest`, and
@@ -90,15 +95,21 @@ archive extracted over the store is genuinely additive.
 ### The Store contract
 
 ```ts
+interface StoreEntry {
+  body: Bytes;
+  version: Version;
+  fenceToken: FenceToken;
+}
+
 interface Store {
-  get(key: string): Promise<Bytes | null>;
+  get(key: string): Promise<StoreEntry | null>;
   list(prefix: string): Promise<string[]>;
   putImmutable(key: string, body: Bytes): Promise<void>;
   compareAndSwap(
     key: string,
-    expected: Version,
+    expectedVersion: Version,
     body: Bytes,
-    fence: FenceToken,
+    fenceToken: FenceToken,
   ): Promise<boolean>;
 }
 ```
@@ -107,17 +118,21 @@ Fencing tokens are required, not optional. Without them, a worker whose lease ex
 commit stale results or clear the lock of the worker that reclaimed its work. Fencing makes the
 late write lose.
 
-There is an `fs` implementation for local runs and a blob implementation for the deployed
-agent, and `paths.ts` returns **keys** rather than filesystem paths. In the deployed agent the
-runtime is ephemeral, a sandbox is explicitly not durable storage, and sandboxes are keyed per
-session, so a scheduled run and a channel session would otherwise each see a different, empty
-dataset.
+A commit writes a staged file and hard links it into place, so two writers racing on the same
+version cannot both win. Retention keeps the latest two versions and skips any version a live
+staged write still needs.
+
+`FsStore` is the only implementation. `paths.ts` returns **keys** rather than filesystem paths.
+The deployed agent's runtime is ephemeral, so it needs its store root on a persistent volume; a
+sandbox is explicitly not durable storage, and sandboxes are keyed per session, so a scheduled
+run and a channel session would otherwise each see a different, empty dataset. A blob-backed
+store is a direction item, not shipped.
 
 ### On-disk layout
 
 ```
 <store>/<projectId>/
-  project.json   INFO.md   config.json
+  project.json
   setup/         setup-state.json, call-site-inventory.json
   cases/         immutable content-addressed corpus, per-stratum sampling weights
   steps/         <stepId>.json, the locked unit
@@ -130,26 +145,34 @@ dataset.
   reports/
 ```
 
+Those are logical keys. On disk `FsStore` encodes each one as
+`<store>/.rightmodeler-store/entries/<key>/v<N>.json`, holding a base64 envelope with the
+version and fence token. Only `reports/report.md` is additionally written as a plain file at
+`<store>/<projectId>/reports/report.md`.
+
 ## 4. Stages
 
-| Stage                                      | Cost          | Produces                                                           |
-| ------------------------------------------ | ------------- | ------------------------------------------------------------------ |
-| `init` / `setup`                           | mixed         | resumable onboarding, `INFO.md`, generated matchers, baseline scan |
-| `scan`                                     | free          | `StepRecord` per call site, status pending                         |
-| `ingest`                                   | free          | normalized trace records                                           |
-| `reconcile`                                | free          | trace records joined to call sites, ambiguity policy applied       |
-| `scrub`                                    | free          | PII removed, fails closed                                          |
-| `corpus`                                   | free          | immutable content-addressed case set with stratum weights          |
-| `audit`                                    | human         | reference correctness ceiling, stratified by family                |
-| `shortlist`                                | cheap         | ranked candidates, capability filtered, price filtered             |
-| `replay`                                   | high          | executions and attempts                                            |
-| `revalidate`                               | high          | more samples, swapped judge family, swapped output order           |
-| `confirm`                                  | highest       | cascade evidence for a swap set                                    |
-| `aggregate`                                | free          | `FamilyVerdict`                                                    |
-| `enrich`                                   | free          | owners, spend attribution, blast radius                            |
-| `report` / `export` / `metrics` / `status` | free          | read-only projections                                              |
-| `apply`                                    | machine-gated | branch, draft PR, review request to owners                         |
-| `watch`                                    | free          | review replies, CI triage, terminal event on merge                 |
+| Stage                                    | Cost          | Produces                                                     |
+| ---------------------------------------- | ------------- | ------------------------------------------------------------ |
+| `init`                                   | mixed         | resumable onboarding, discovered traces, baseline scan       |
+| `scan`                                   | free          | `StepRecord` per call site, status pending                   |
+| `ingest`                                 | free          | normalized trace records                                     |
+| `reconcile`                              | free          | trace records joined to call sites, ambiguity policy applied |
+| `scrub`                                  | free          | PII removed, fails closed                                    |
+| `corpus`                                 | free          | immutable content-addressed case set with stratum weights    |
+| `audit`                                  | human         | reference correctness ceiling, stratified by family          |
+| `shortlist`                              | cheap         | ranked candidates, capability filtered, price filtered       |
+| `replay`                                 | high          | executions and attempts                                      |
+| `confirm`                                | highest       | cascade evidence for a swap set                              |
+| `aggregate`                              | free          | `FamilyVerdict`                                              |
+| `enrich`                                 | free          | owners and blast radius, resolved inside `apply`             |
+| `report` / `export` / `status` / `drift` | free          | read-only projections                                        |
+| `apply`                                  | machine-gated | branch, draft PR, review request to owners                   |
+| `watch`                                  | free          | review replies, CI triage, terminal event on merge           |
+
+The shipped command surface is the generated
+[command reference](../packages/rightmodeler/docs/commands.md). Stage names above that are not
+commands run inside another command.
 
 `scan` is deliberately over-inclusive. A matcher's `noiseTier` is a scheduling signal, never a
 severity signal.
@@ -178,13 +201,15 @@ is the one artifact a human reads before authorizing spend.
 A test file beside a call site may only exercise a retry wrapper with a mocked client.
 Proximity is not exercise. Before a step is promoted from "calibrated judge" to "deterministic
 check", the harness corrupts the recorded output, re-runs the check, and promotes only if the
-check fails. This is roughly fifty lines of code and it is the difference between a signal and
-a lie.
+check fails. This check is not implemented. Until it is, no step is promoted to deterministic
+evidence, and the kernel's `missing_deterministic_evidence` abstention is unreachable in a real
+run.
 
-### Generated matchers
+### Declarative matchers
 
-Setup can ask a model for additional matchers covering a bespoke framework. Model output is
-strict JSON data compiled without evaluating generated code, and is rejected on:
+Additional matchers covering a bespoke framework are authored as strict JSON data and loaded
+with `--matchers <path>`, compiled by `loadDeclarativeMatchers` without evaluating generated
+code. Asking a model to write them is deferred. Compilation rejects:
 
 - ReDoS risk, glob breadth, match explosion, path traversal, slug collision
 - a `g` flag, because a shared regex carrying `lastIndex` makes scans nondeterministic across
@@ -195,8 +220,8 @@ strict JSON data compiled without evaluating generated code, and is rejected on:
 - a missing `closesSurfaceIds`, which binds the matcher to the coverage surface it was accepted
   to close
 
-Rejection removes the matcher from the generated file, the live registry, and every persisted
-record.
+A rejected matcher never reaches the registry. The compiler returns every rejection and the
+run refuses with `invalid_matchers_file` naming them.
 
 ### Coverage gate
 
@@ -204,10 +229,10 @@ A frozen, versioned policy object, plus ground-then-strictly-validate reconcilia
 model's claimed surfaces against the scanner's real file universe, plus an attempt ledger, plus
 a hard stop before any paid work.
 
-Plus one check specific to this domain: reconcile call-site-attributed spend against the
-provider invoice total and fail below a configured share. Without it, a repository that routes
-every model call through one unrecognized helper passes coverage vacuously and reports a
-fraction of its real bill.
+The coverage policy declares `invoiceReconciliationMinimumShare` for reconciling
+call-site-attributed spend against the provider invoice total. It is unset and no code reads
+it, so a repository that routes every model call through one unrecognized helper still passes
+coverage on the two implemented checks alone.
 
 ## 6. Replay
 
@@ -261,10 +286,10 @@ with a sandbox-trusted CA, and after that an authored per-repository adapter.
 
 ### Live docs preflight
 
-Before any provider work, and before the proxy's request and response shapes are trusted, the
-harness fetches the current provider API documentation and validates base-URL variable names,
-endpoint paths, and the location of the model field. Shipped snapshots are dated; live
-documentation wins on any conflict. No model list is ever pinned.
+No preflight is implemented. Shipped snapshots are dated and live documentation wins on any
+conflict, so the standing rule is that provider request and response shapes are re-read from
+the vendor's current documentation before they are changed. No model list is ever pinned:
+candidates come from the configured catalog at run time.
 
 ### Sandboxes never score
 
@@ -299,7 +324,8 @@ twenty trajectories presents as `n = 100` and behaves closer to `n = 33`.
 **Minimums name their unit.** `MIN_REVIEW_TRIALS`, `MIN_DISTINCT_STEPS`,
 `MIN_DISTINCT_TRAJECTORIES`. The legacy constant counted steps; silently reusing it for
 executions would let one call site across ten cases clear a bar that previously required ten
-call sites.
+call sites. The three minimums are fixed at 10 review trials, 2 distinct steps and 5 distinct
+trajectories, and are not configurable.
 
 **Exclusions gate.** A candidate whose call sequence diverges from the recorded one is a
 case-level failure, not a dropped row. Refuse `recommend` above a configured excluded fraction,
@@ -311,14 +337,16 @@ not win on filtered conditional quality. Conditional quality and availability ar
 gated independently, and the release decision uses the worst-case-imputed bound.
 
 **Reference ceiling.** Stratified by family with a per-family minimum before it is applied
-there. Modeled as two-sided contamination rather than a scalar cap, because a same-family
-candidate reproduces the reference's own errors and is scored equivalent. The auditor may not
-use a model in the reference's family, the same exclusion the judge already enforces.
+there. Computed today as a coverage-weighted scalar from the audited agreement point, and
+carried onto the verdict as a reported number only: it enters no bound and no gate. The
+two-sided contamination model, and applying the ceiling to the worst-case bound, are deferred.
 
 **Mode A optimism is an abstention trigger.** Route to `confirm` when
 `prefixProvenance === "model_authored"` **or** `downstreamStepIds` is non-empty. Optimism is an
 upstream property, so a terminal step scored on an expensive model's prefix is exactly the case
-a downstream-only rule misses. Abstain when the measured delta exceeds the margin over the bar.
+a downstream-only rule misses. The delta itself is not measured. Routing to `confirm` is the
+whole mechanism today; a step that reaches `confirm` is scored there rather than borrowing a
+single-shot number.
 
 **One precedence.** The release gate binds. The pass fraction is a shortlist filter. The
 per-case quality floor is validated into the range where an order-consistent outcome is
@@ -357,7 +385,9 @@ only by manufacturing invalid executions.
 Worst-case cost is **reserved before forwarding**, computed from context size, maximum output,
 and pinned pricing. Concurrency is capped against available reservation. The unused remainder is
 refunded on completion. The host holds authorized totals in `budget/<runId>.json`; the proxy
-enforces; re-leasing is a host round trip.
+enforces; re-leasing is a host round trip. Judge spend is metered and charged against the same
+ledger after the call, not reserved before it, so a judge can carry the ledger past the
+authorized total until the next execution reservation refuses.
 
 Caps are opt-in bounds, not defaults.
 
@@ -372,16 +402,18 @@ non-empty.
 **No silent caps.** Any bound on coverage, including top-N selection, sampling, a skipped
 family, or a dropped shard, is printed and carried onto the verdict.
 
-**Generous defaults.** Sampling above the minimums. `revalidate` on by default. Two independent
-judges on important swaps. `confirm` by default for coupled or model-authored-prefix steps.
-Cheaper settings exist and are opt-in.
+**Generous defaults.** Sampling above the minimums. `confirm` by default for coupled or
+model-authored-prefix steps. One judge runs per cell; a judge that fails three consecutive
+terminal calls is marked unusable and the next-ranked neutral-family model re-judges the
+affected cells. Cheaper settings exist and are opt-in.
 
 **Rate limits are throughput to discover, not a ceiling to hide under.** A per-provider adaptive
 concurrency controller ramps while requests succeed and backs off multiplicatively on 429 or
 5xx, honoring `Retry-After`, with a floor so a transient burst cannot collapse a run to serial.
-A rate-limited request is a retry, never an execution outcome, and never counts against a
-candidate. Exhausting retries reports `blocked: rate-limit` with the observed ceiling, so the
-answer is "raise this limit" rather than a quietly worse verdict.
+The floor is a quarter of the configured ceiling, never below two, and `--max-concurrency` sets
+the ceiling. A rate-limited request is a retry, never an execution outcome, and never counts
+against a candidate. Exhausting retries reports `blocked: rate-limit` with the observed
+ceiling, so the answer is "raise this limit" rather than a quietly worse verdict.
 
 ## 11. Concurrency and recovery
 
@@ -398,8 +430,9 @@ exclusive create. On collision, the existing `runId` is returned. Dispatching to
 return immediately rather than owning multi-hour work inside one durable step.
 
 **Torn reads and salvage.** Facts are immutable objects, so a reader never observes a partial
-write. Malformed objects are salvaged per item with an explicit `droppedRows` count that flows
-onto the verdict. A silent shrink is the same confident-wrong-number failure the
+write. Malformed objects are salvaged per item with an explicit `droppedRows` count. The count
+raises a `facts_dropped` warning and appears in `status`; carrying it onto the verdict is not
+implemented. A silent shrink is the same confident-wrong-number failure the
 `evidenceQuestionId` design exists to prevent.
 
 **Hostile pipelines.** Client code runs in its own process group and is killed by negative
@@ -426,36 +459,40 @@ markers defused, and flattened before it reaches Markdown, so a trace cannot for
 Step names, justifications, and candidate outputs are data, never instructions.
 
 Mode B never runs on the host. `local` is Mode A only, where no client code executes. The
-container backend honors only allow-all or deny-all, so it cannot provide domain allowlists or
-firewall credential transforms; secure Mode B therefore requires either a separately
-implemented and tested host gateway for local containers, or a firewall-capable backend. Mode B
-**refuses** rather than degrading onto a host with real egress and a real environment, which
-would silently falsify the security claim on the default path.
+container backend applies no network configuration at all, so it can provide neither domain
+allowlists nor firewall credential transforms; the only host restriction is the single-origin
+check in the egress listener. The cloud backend is selected with `"backend": "cloud"` in the
+Mode B config file and fails closed with `modeb_cloud_unavailable` before any case runs when the
+sandbox SDK or its credentials are absent. Its network policy attaches the model credential to
+one host by header transform and keeps a wildcard entry that preserves other egress, so it is
+credential brokering rather than an allowlist. Mode B **refuses** rather than degrading onto a
+host with real egress and a real environment, which would silently falsify the security claim
+on the default path.
 
-`.rightmodeler/` is a self-severing workspace root inside the client repository: `workspaces:
-[]`, a workspace file declaring no packages, and a pinned package manager, so no package manager
-walks up into the host monorepo.
+`.rightmodeler/` is the store root inside the client repository and is excluded from scanning.
+Isolating it as its own workspace root, with an empty workspace file and a pinned package
+manager so no package manager walks up into the host monorepo, is not implemented.
 
 ## 13. Integrations
 
 Every integration is a package behind a declared contract with its own conformance suite.
-Registries are built from the plugin list at load time and consulted everywhere; no integration
-is hard-coded at a call site.
+A registry built from a plugin list is planned, not shipped: the unwired one was deleted, and
+each contract is reached from a fixed call site today.
 
-| Kind                | Contract                                 | Merge     |
-| ------------------- | ---------------------------------------- | --------- |
-| Trace adapter       | `detect(sample)`, `adapt(records)`       | additive  |
-| Evaluator provider  | `launch`, `status`, `collect`            | additive  |
-| Model provider      | `listModels`, `chat`, cost authority     | additive  |
-| Matcher             | `match(content, path)` plus `examples[]` | additive  |
-| Harness reference   | the `_template.md` question set          | additive  |
-| Agent adapter       | `AsyncGenerator<Progress, Result>`       | additive  |
-| Notifier / exporter | `notify(params)`                         | additive  |
-| Executor            | `launch`, `collect`, `status`            | last wins |
-| Ownership / people  | provider lookups                         | last wins |
+| Kind                | Contract                                 | Merge     | Status  |
+| ------------------- | ---------------------------------------- | --------- | ------- |
+| Trace adapter       | `detect(sample)`, `adapt(records)`       | additive  | shipped |
+| Evaluator provider  | `launch`, `status`, `collect`            | additive  | shipped |
+| Model provider      | `listModels`, `chat`, cost authority     | additive  | shipped |
+| Matcher             | `match(content, path)` plus `examples[]` | additive  | shipped |
+| Harness reference   | the `_template.md` question set          | additive  | shipped |
+| Agent adapter       | `AsyncGenerator<Progress, Result>`       | additive  | planned |
+| Notifier / exporter | `notify(params)`                         | additive  | planned |
+| Executor            | `launch`, `collect`, `status`            | last wins | shipped |
+| Ownership / people  | provider lookups                         | last wins | planned |
 
-Plus `commands(program)` for CLI extension. `rightmodeler status --integrations` prints what is
-registered and reachable.
+A CLI extension point and an integration listing on `status` are planned. `status` today
+summarizes the store.
 
 ### Bring your own eval framework
 
@@ -467,8 +504,9 @@ versions, raw artifact references, and the provider's own normalized pass decisi
 
 Interop runs in three directions. **Evaluators in**: the built-in judge runs only when nothing
 better is reachable. **Corpus in**: curated datasets usually carry human-verified references,
-which raises the reference correctness ceiling that caps every downstream number. **Results
-out**: experiments and dataset runs are pushed back into the tool the team already reviews.
+which raises the reference correctness ceiling reported alongside every family verdict.
+**Results out**: experiments and dataset runs are pushed back into the tool the team already
+reviews.
 
 Ingest ships OTel GenAI and OpenAI JSONL first, because OTel GenAI is the vendor-neutral format
 that several platforms emit, and the rest follow behind the same contract.
@@ -486,8 +524,9 @@ environment variable carries it, how to mock side-effecting tools from a recorde
 pipeline's natural entry point, and how to detect downstream coupling. Every file begins by
 naming the live API documentation to fetch first.
 
-One source ships to both the CLI runbook and the agent subagent. Adding a framework is one
-matcher plus one reference file, and `_template.md` is what a fixture test asserts against.
+One source ships with the CLI runbook. The agent's `load_skill` tool is disabled, so the agent
+does not load them today. Adding a framework is one matcher plus one reference file, and
+`_template.md` is what a fixture test asserts against.
 
 ## 15. The working agreement the harness follows
 
@@ -496,38 +535,39 @@ principles are mechanical gates rather than prompt advice. Each has a test.
 
 **Think before coding.** At a genuine fork the harness never guesses. Interactively the CLI asks
 and waits. Unattended it emits a terminal abstention naming the confusion and what would
-resolve it, which is the same principle expressed for a context with no human. An eval asserts
-that every ambiguity path ends in a question or a named abstention.
+resolve it, which is the same principle expressed for a context with no human. No eval asserts
+this today; `harness/apps/agent/evals/` holds `github-gate`, `no-merge`, `pre-pr-approval`,
+`scan-to-report` and `schedules` only.
 
 **Simplicity first.** An authored adapter has one required export and a size budget. A generated
-matcher is data, not code. No configuration key ships without a consumer, enforced by an
-unreferenced-export check and a schema test.
+matcher is data, not code. No configuration key ships without a consumer, enforced by
+`scripts/unreferenced-exports.mjs` in the root check and a schema test.
 
 **Surgical changes.** A swap pull request changes model identifiers and nothing else. A diff
 linter runs before the pull request opens and rejects any hunk touching anything but a model
 literal, a model constant, or its configuration entry: no reformatting, no import reordering, no
-drive-by refactor, no comment rewrites, no lockfile churn. A genuinely required adjacent change
-is stated in the body as a separate labeled hunk and requested explicitly. This is what makes
-the pull request reviewable in thirty seconds, which is the difference between a swap that
-merges and one that rots.
+drive-by refactor, no comment rewrites, no lockfile churn. This is what makes the pull request
+reviewable in thirty seconds, which is the difference between a swap that merges and one that
+rots.
 
 **Goal-driven execution.** Every stage declares its success criterion and loops until verified
 rather than reporting attempts. `scan` succeeds when coverage is satisfied and reconciled
 against the invoice. `replay` succeeds when every expected cell has a terminal execution.
 `confirm` succeeds when the frontier is empty. `apply` succeeds when the diff linter passes and
-CI is green.
+the draft pull request is open with review requested. `watch` is what reconciles CI afterwards.
 
 ### The target repository's rules outrank ours
 
-Repository analysis reads the host project's own conventions and folds them into `INFO.md`,
-which is injected into every prompt and enforced at the diff linter:
+Repository analysis reads the host project's own conventions into the captured-conventions
+record that `enrich` persists, and the diff linter enforces them:
 
-- `AGENTS.md` and `CLAUDE.md`, following `@file` includes and the convention where one is a
-  pointer to the other
-- nested per-directory `AGENTS.md` for the paths a swap actually touches
-- `.claude/skills/` and `.agents/skills/`
-- `CONTRIBUTING.md`, the pull request template, `CODEOWNERS`, `.editorconfig`
-- the formatter and linter actually configured in the repository
+- `AGENTS.md` and `CLAUDE.md`, following one level of `@file` includes
+- every nested `AGENTS.md` in the repository
+- the pull request template
+- the `CODEOWNERS` path
+- the configured formatter, one of prettier, ruff or gofmt
+
+`CONTRIBUTING.md`, `.editorconfig`, skill directories and linter detection are not read today.
 
 Commit message and branch naming conventions are inferred from recent history rather than
 assumed. The pull request body renders from the repository's own template when one exists. The
@@ -549,14 +589,28 @@ npx rightmodeler init
 
 is the whole onboarding, resumable, with a machine protocol so a coding agent can drive it
 unattended: `--plan --output json` to preview, `--yes --through <phase> --output jsonl` to run
-and stream events, and `--max-cost-usd` / `--max-duration` to bound a run.
+and stream events, and `--max-cost-usd` to bound a run.
 
-Exit codes: `0` clean, `1` findings, `2` needs input, `3` a cost or duration limit reached at a
-resumable boundary.
+Exit codes: `0` clean, `1` findings, `2` needs input, `3` the cost budget reached at a resumable
+boundary.
 
-Commands: `init`, `setup`, `scan`, `ingest`, `reconcile`, `scrub`, `corpus`, `audit`,
-`shortlist`, `replay`, `revalidate`, `confirm`, `aggregate`, `enrich`, `report`, `export`,
-`metrics`, `status`, `apply`, `rollback`, `watch`, `sandbox <cmd>`.
+The shipped commands are listed in the generated
+[command reference](../packages/rightmodeler/docs/commands.md), which is the source of truth.
+The table below records what earlier drafts of this document promised and where each item
+stands.
+
+| Item                     | Status  | Reason                                                                          |
+| ------------------------ | ------- | ------------------------------------------------------------------------------- |
+| `setup`                  | dropped | Onboarding is resumable inside `init`; a separate command would duplicate it.   |
+| `revalidate`             | planned | Swapped judge family and swapped output order are not exposed as a rerun stage. |
+| `enrich`                 | dropped | Owner resolution and blast radius run inside `apply`, not as a user command.    |
+| `metrics`                | planned | `status` and `report` cover the shipped read-only projections.                  |
+| `sandbox <cmd>`          | dropped | Mode B is configured by file and backend, not by a sandbox subcommand.          |
+| `agent init`             | planned | The agent is copied from `harness/apps/agent`; no scaffolder ships.             |
+| `status --integrations`  | planned | There is no registry to enumerate.                                              |
+| `--max-duration`         | planned | Only the cost budget bounds a run; exit `3` is the cost boundary.               |
+| Second independent judge | planned | One judge runs per cell; a second model is used only after judge failure.       |
+| Blob `Store`             | planned | `FsStore` is the only implementation; the agent needs a persistent volume.      |
 
 There is no interactive approval TUI. It would contradict the autonomy boundary, since nothing
 waits for a human before the pull request. Output is headless JSON and JSONL plus reports.
@@ -570,18 +624,20 @@ has.
 agent/
   agent.ts            model, reasoning, limits, compaction
   instructions.md     the golden rules and the runbook
-  instrumentation.ts  telemetry
   tools/              typed wrappers; dispatching tools enqueue and return
-  skills/             harnesses/, evidence/, working-agreement/
-  subagents/          analyst, adapter-author, auditor, pr-steward
-  channels/           eve (real auth), github, slack
+  channels/           eve, github, github-review (the review-submission webhook)
   extensions/         github tools, pull-request-author preset
-  connections/        MCP over http, OpenAPI provider catalogs
-  schedules/          price-decay, drift-watch, pr-watch, budget-report
-  sandbox/            deny-all plus provider allowlist, credential brokering
+  schedules/          price-decay, drift-watch, pr-watch, replay-watch,
+                      approved-regression, budget-report
   hooks/              cost ledger, audit persistence
+  lib/                shared helpers for the tools, schedules and channels
 evals/
 ```
+
+Subagents, loadable skills, MCP and OpenAPI connections, a sandbox with a provider allowlist,
+and a separate telemetry module are planned, not shipped. `load_skill` and delegation are
+explicitly disabled. The `eve` channel ships the framework's placeholder auth, which rejects
+production traffic, so the HTTP channel is closed until a deployment replaces it.
 
 **Every schedule uses the handler form**, including the budget report. A markdown task-mode
 schedule discards its output and cannot reach a human, so a report schedule would complete
@@ -601,18 +657,19 @@ and every mutation is independently idempotent.
 
 **A custom webhook adapter handles formal reviews.** The framework parses review _comments_ but
 not the top-level review submission event, so an owner clicking "Request changes" without an
-inline comment would never wake the agent. The adapter verifies the signature and feeds its
-delivery identifier into the lifecycle log.
+inline comment would never wake the agent. The adapter verifies the signature before dispatching
+the watch pass. Threading the delivery identifier into the lifecycle log is not implemented.
 
 **No sleep-polling.** Each durable wake costs another model call, so five-minute polling across
 a six-hour fanout is roughly seventy-two continuation calls of pure overhead. Progress arrives
 by job-completion webhook and deterministic status schedules. The durable sleep tool is reserved
 for short bounded retries inside one active turn.
 
-**Cost is accounted at the provider boundary**, not from root hooks. Parent hooks do not observe
-subagent turns, retried steps emit duplicate events, and compaction performs its own paid model
-call outside ordinary usage accounting. Attempt cost is distinguished from winning-step cost and
-reconciled against provider invoices.
+**Cost is accounted at the provider boundary.** Attempt cost is distinguished from winning-step
+cost and reconciled against provider invoices. The agent's root `cost-ledger` hook records
+per-step usage as a supplementary record, and inherits the limits below: parent hooks do not
+observe subagent turns, retried steps emit duplicate events, and compaction performs its own
+paid model call outside ordinary usage accounting.
 
 ## 18. Autonomy
 
@@ -624,17 +681,22 @@ writing. There is no force flag.
 Then it opens the branch and draft pull request, puts the evidence in the body, and **requests
 review from the owners** resolved by `enrich`, appending a remediation lifecycle event.
 
+The review request is a resumable step: it never requests the pull request author, it survives
+a per-reviewer rejection, and a rerun reuses the recorded reviewer set instead of
+re-requesting. The pull request body carries the cost and latency receipt projected from replay
+evidence; no realized delta is measured after merge.
+
 Because the run is unattended, the pre-pull-request path must never be able to park. Approval
 helpers are absent from every pre-pull-request tool by construction, and an eval asserts it.
 
-| Event                                     | Behavior                                                                                                                    |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| review comment, review submitted, mention | answers with the stored evidence behind the number being questioned                                                         |
-| changes requested                         | re-proves against the objection, pushes or narrows the swap set, replies with the delta                                     |
-| CI failure                                | pulls the failing job, decides regression versus flake, fixes or converts the verdict to `reject` and closes with reasoning |
-| base branch moved                         | re-runs the digest check and re-proves on drift before touching the pull request                                            |
-| merged                                    | terminal lifecycle event, realized cost delta recorded, watch ends                                                          |
-| closed unmerged                           | records the rejection so the swap is not re-proposed without new data                                                       |
+| Event                                     | Behavior                                                                                                                                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| review comment, review submitted, mention | answers with the stored evidence behind the number being questioned                                                                                                                                                                               |
+| changes requested                         | flags the affected verdicts for re-proof and acknowledges the request naming them; re-proof happens when the pipeline runs again                                                                                                                  |
+| CI failure                                | reads completed check runs and combined commit statuses on the head commit, comments the diagnosis on the first failure, and closes the pull request only when a check of the same name fails again under a different check id on the same commit |
+| base branch moved                         | refetches each swapped file at the new base and flags for re-proof only when a pre-apply digest changed                                                                                                                                           |
+| merged                                    | terminal lifecycle event, watch ends                                                                                                                                                                                                              |
+| closed unmerged                           | records the rejection so the swap is not re-proposed without new data                                                                                                                                                                             |
 
 Every paid invocation writes a forensic artifact containing raw responses, both position-swapped
 verdicts, repair attempts, and reconciliation diagnostics. Without it, the only way to answer
@@ -644,8 +706,9 @@ verdicts, repair attempts, and reconciliation diagnostics. Without it, the only 
 ends watches whose pull requests merged while a webhook was missed. Watch state lives in
 lifecycle events, never in memory.
 
-The agent never merges. Merge, branch update, reference deletion, release creation, and
-workflow-file writes are excluded from the tool set.
+The agent never merges. Merge, release creation and file writes are excluded from the tool set
+by name. Branch update and reference deletion are held by the instructions and asserted by an
+eval.
 
 ## 19. Deployment
 
@@ -654,13 +717,16 @@ and `local` for Mode A. This is the path a coding agent drives through the runbo
 
 **Cloud** is the same commands with work fanned out to microVMs in the **client's own account**,
 linked by their own CLI and authenticated by their own token. The host keeps the model
-credential and injects it only at the egress firewall.
+credential and injects it only at the egress firewall. It is selected per run with
+`"backend": "cloud"` in the Mode B config file and refuses before any case runs when the sandbox
+SDK or its credentials are absent.
 
-**The agent** is scaffolded by `rightmodeler agent init` and deployed by the client into their
-own project. Their source, traces, corpora, keys, and spend stay theirs. Session state is the
-durable workflow journal, so there is no database to operate. Self-hosting works with the
-workflow data directory on a persistent volume and both framework path prefixes forwarded
-unrewritten, noting that the scheduler uses server local time off-platform rather than UTC.
+**The agent** is a workspace application under `harness/apps/agent`, deployed by the client into
+their own project with their own GitHub and model credentials. A scaffolding command is planned.
+Their source, traces, corpora, keys, and spend stay theirs. Session state is the durable workflow
+journal, so there is no database to operate. Self-hosting works with the workflow data directory
+on a persistent volume and both framework path prefixes forwarded unrewritten, noting that the
+scheduler uses server local time off-platform rather than UTC.
 
 There is no `tenantId` threading. It is not free: it permanently expands identity, locking,
 cache, and migration semantics for a tier that does not exist. The client deployment is the
@@ -672,14 +738,12 @@ The gates are safety properties, not "did it answer".
 
 - abstains below `MIN_REVIEW_TRIALS`, `MIN_DISTINCT_STEPS`, or `MIN_DISTINCT_TRAJECTORIES`
 - abstains on a high-risk family without deterministic evidence
-- abstains when the Mode A optimism delta exceeds the margin
 - refuses a naive interval when cases per trajectory exceeds one
 - never recommends a coupled or model-authored-prefix step without `confirm` evidence
 - refuses to open a pull request on stale evidence, and re-proves instead
-- never selects a judge or an auditor from the reference's or candidate's family
+- never selects a judge from the reference's or candidate's family
 - prefers a configured external evaluator over the built-in judge whenever reachable
 - never pools a pass rate across evaluator kinds
-- promotes to deterministic evidence only after the mutation check fails the test
 - gates availability separately from conditional quality
 - refuses `recommend` above the excluded-fraction ceiling and publishes the worst-case bound
 - no pre-pull-request tool declares an approval other than never
@@ -690,7 +754,6 @@ The gates are safety properties, not "did it answer".
 - the watch terminates on merge and does not re-open
 - a swap pull request diff touches model identifiers and nothing else
 - a rate-limited request is retried, never recorded as an execution outcome
-- every ambiguity ends in a question or a named abstention
 - no run reports a summary while any family is non-terminal, and every cap is printed
 
 Evals that need real spend are tagged, so continuous integration runs the deterministic suite
@@ -705,9 +768,11 @@ tokens. A select-and-claim mutex. Heartbeat-based lock reclamation. Bounded retr
 exponential backoff and jitter. A JSON, then field, then refusal repair ladder. Adaptive split
 on ambiguity. Worker stdout caps and orchestrator stream caps. A heap watchdog host-side and
 inside the proxy. An archive entry allowlist with per-namespace caps that skip rather than
-throw. Exactly one allowed egress host per backend. Credential brokering asserted by a test
-that no environment value contains the secret. Environment allowlists that replace the process
-environment for agent subprocesses. A secret redactor applied before both persist and render.
+throw. One allowed egress origin on the Docker backend, enforced at the host listener. On the
+cloud backend the credential is attached to one host and other egress is preserved. Credential
+brokering asserted by a test that no environment value contains the secret. Environment
+allowlists that replace the process environment for agent subprocesses. A secret redactor
+applied before both persist and render.
 Fail-loud on unparseable agent output. Fixture-driven matcher tests where every matcher's
 examples must fire. Golden prompt snapshots regenerated behind an environment flag. A stub agent
 and a stub provider that drive the whole pipeline with zero credentials.

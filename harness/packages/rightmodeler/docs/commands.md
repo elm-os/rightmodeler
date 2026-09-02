@@ -40,6 +40,7 @@ Commands:
   watch [options]      reconcile one open model-swap pull request
   report               write report.md and report.json
   status [options]     summarize the current store
+  docs [name]          print documentation packaged with this CLI
   help [command]       display help for command
 ```
 
@@ -51,7 +52,8 @@ Usage: rightmodeler init [options]
 run the resumable Phase A pipeline
 
 Options:
-  --traces <path>                     trace input file
+  --traces <path>                     trace input file or directory
+  --matchers <path>                   declarative matcher definitions JSON file
   --include-free                      include zero-priced models in candidate
                                       shortlists
   --modeb-config <path>               versioned Mode B runtime configuration
@@ -62,6 +64,12 @@ Options:
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
+  --max-concurrency <n>               maximum concurrent provider requests
+  --pricing-file <path>               JSON map from model id to per-token input
+                                      and output USD, for catalogs without
+                                      pricing
+  --policy <path>                     release policy JSON file: quality floor,
+                                      shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -97,7 +105,8 @@ Usage: rightmodeler estimate [options]
 project replay spend before paid model calls
 
 Options:
-  --traces <path>                     trace input file
+  --traces <path>                     trace input file or directory
+  --matchers <path>                   declarative matcher definitions JSON file
   --include-free                      include zero-priced models in candidate
                                       shortlists
   --modeb-config <path>               versioned Mode B runtime configuration
@@ -108,6 +117,12 @@ Options:
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
+  --max-concurrency <n>               maximum concurrent provider requests
+  --pricing-file <path>               JSON map from model id to per-token input
+                                      and output USD, for catalogs without
+                                      pricing
+  --policy <path>                     release policy JSON file: quality floor,
+                                      shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -140,7 +155,8 @@ Usage: rightmodeler scan [options]
 run through the scan stage
 
 Options:
-  --traces <path>        trace input file
+  --traces <path>        trace input file or directory
+  --matchers <path>      declarative matcher definitions JSON file
   --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
@@ -154,7 +170,8 @@ Usage: rightmodeler ingest [options]
 run through the ingest stage
 
 Options:
-  --traces <path>        trace input file
+  --traces <path>        trace input file or directory
+  --matchers <path>      declarative matcher definitions JSON file
   --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
@@ -168,7 +185,8 @@ Usage: rightmodeler reconcile [options]
 run through the reconcile stage
 
 Options:
-  --traces <path>        trace input file
+  --traces <path>        trace input file or directory
+  --matchers <path>      declarative matcher definitions JSON file
   --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
@@ -182,7 +200,8 @@ Usage: rightmodeler scrub [options]
 run through the scrub stage
 
 Options:
-  --traces <path>        trace input file
+  --traces <path>        trace input file or directory
+  --matchers <path>      declarative matcher definitions JSON file
   --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
@@ -196,7 +215,8 @@ Usage: rightmodeler shortlist [options]
 run through the shortlist stage
 
 Options:
-  --traces <path>        trace input file
+  --traces <path>        trace input file or directory
+  --matchers <path>      declarative matcher definitions JSON file
   --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
@@ -210,7 +230,8 @@ Usage: rightmodeler replay [options]
 run through the replay stage
 
 Options:
-  --traces <path>                     trace input file
+  --traces <path>                     trace input file or directory
+  --matchers <path>                   declarative matcher definitions JSON file
   --include-free                      include zero-priced models in candidate
                                       shortlists
   --modeb-config <path>               versioned Mode B runtime configuration
@@ -221,6 +242,12 @@ Options:
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
+  --max-concurrency <n>               maximum concurrent provider requests
+  --pricing-file <path>               JSON map from model id to per-token input
+                                      and output USD, for catalogs without
+                                      pricing
+  --policy <path>                     release policy JSON file: quality floor,
+                                      shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -252,7 +279,8 @@ Usage: rightmodeler aggregate [options]
 run through the aggregate stage
 
 Options:
-  --traces <path>        trace input file
+  --traces <path>        trace input file or directory
+  --matchers <path>      declarative matcher definitions JSON file
   --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
@@ -266,7 +294,8 @@ Usage: rightmodeler confirm [options]
 run through the confirm stage
 
 Options:
-  --traces <path>                     trace input file
+  --traces <path>                     trace input file or directory
+  --matchers <path>                   declarative matcher definitions JSON file
   --include-free                      include zero-priced models in candidate
                                       shortlists
   --modeb-config <path>               versioned Mode B runtime configuration
@@ -277,6 +306,12 @@ Options:
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
+  --max-concurrency <n>               maximum concurrent provider requests
+  --pricing-file <path>               JSON map from model id to per-token input
+                                      and output USD, for catalogs without
+                                      pricing
+  --policy <path>                     release policy JSON file: quality floor,
+                                      shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
                                       "braintrust", "langfuse", "langsmith",
                                       "promptfoo")
@@ -305,7 +340,8 @@ Usage: rightmodeler corpus [options] [command]
 build or import the replay corpus
 
 Options:
-  --traces <path>        trace input file
+  --traces <path>        trace input file or directory
+  --matchers <path>      declarative matcher definitions JSON file
   --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
@@ -375,7 +411,8 @@ Usage: rightmodeler audit sample [options]
 write the audit worksheet without blocking
 
 Options:
-  --traces <path>        trace input file
+  --traces <path>        trace input file or directory
+  --matchers <path>      declarative matcher definitions JSON file
   --include-free         include zero-priced models in candidate shortlists
   --modeb-config <path>  versioned Mode B runtime configuration JSON file
   -h, --help             display help for command
@@ -402,6 +439,8 @@ open a draft pull request for proven model swaps
 
 Options:
   --owner <owner>            GitHub repository owner
+  --github-repo <repo>       GitHub repository name (default: the repository
+                             directory name)
   --github-base-url <url>    GitHub API base URL
   --github-token-env <name>  environment variable containing the GitHub token
   --dry-run                  run all machine gates without writing GitHub state
@@ -417,6 +456,8 @@ open a draft pull request restoring a prior model swap
 
 Options:
   --owner <owner>            GitHub repository owner
+  --github-repo <repo>       GitHub repository name (default: the repository
+                             directory name)
   --pr <number>              merged pull request number
   --github-base-url <url>    GitHub API base URL
   --github-token-env <name>  environment variable containing the GitHub token
@@ -502,4 +543,19 @@ summarize the current store
 Options:
   --run <runId>  report one detached replay run
   -h, --help     display help for command
+```
+
+## `rightmodeler docs`
+
+```text
+Usage: rightmodeler docs [options] [name]
+
+print documentation packaged with this CLI
+
+Arguments:
+  name        packaged document name (choices: "commands", "evaluators",
+              "exit-codes", "getting-started", "modeb")
+
+Options:
+  -h, --help  display help for command
 ```

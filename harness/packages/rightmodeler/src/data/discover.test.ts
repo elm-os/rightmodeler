@@ -24,6 +24,22 @@ const otelTrace = JSON.stringify([
   },
 ]);
 const otelRecord = otelTrace.slice(1, -1);
+const codexSession = (cwd: string): string =>
+  [
+    JSON.stringify({
+      type: "session_meta",
+      payload: {
+        id: "session-1",
+        cwd,
+        cli_version: "0.1.0",
+        model_provider: "openai",
+      },
+    }),
+    JSON.stringify({
+      type: "turn_context",
+      payload: { turn_id: "turn-1", model: "acme/large-1" },
+    }),
+  ].join("\n");
 
 afterEach(async () => {
   await Promise.all(
@@ -209,22 +225,6 @@ describe("trace discovery", () => {
     const sessions = join(homeDir, ".codex", "sessions", "2026", "08", "15");
     await mkdir(sessions, { recursive: true });
     const matching = join(sessions, "rollout-matching.jsonl");
-    const codexSession = (cwd: string): string =>
-      [
-        JSON.stringify({
-          type: "session_meta",
-          payload: {
-            id: "session-1",
-            cwd,
-            cli_version: "0.1.0",
-            model_provider: "openai",
-          },
-        }),
-        JSON.stringify({
-          type: "turn_context",
-          payload: { turn_id: "turn-1", model: "acme/large-1" },
-        }),
-      ].join("\n");
     await Promise.all([
       writeFile(matching, `${codexSession(resolve(repo))}\n`),
       writeFile(
@@ -235,6 +235,47 @@ describe("trace discovery", () => {
 
     expect(await discoverTraces({ repo, homeDir })).toMatchObject([
       { path: matching, format: "codex", approximateRecords: 2 },
+    ]);
+  });
+
+  it("finds a matching Codex session after the global file cap", async () => {
+    const { root, repo, homeDir } = await fixtureRoot("codex-file-cap");
+    const foreignSessions = join(
+      homeDir,
+      ".codex",
+      "sessions",
+      "2026",
+      "08",
+      "16",
+    );
+    const matchingSessions = join(
+      homeDir,
+      ".codex",
+      "sessions",
+      "2026",
+      "08",
+      "15",
+    );
+    await Promise.all([
+      mkdir(foreignSessions, { recursive: true }),
+      mkdir(matchingSessions, { recursive: true }),
+    ]);
+    await Promise.all(
+      Array.from({ length: 55 }, (_, index) =>
+        writeFile(
+          join(
+            foreignSessions,
+            `rollout-foreign-${String(index).padStart(2, "0")}.jsonl`,
+          ),
+          `${codexSession(resolve(root, "other"))}\n`,
+        ),
+      ),
+    );
+    const matching = join(matchingSessions, "rollout-matching.jsonl");
+    await writeFile(matching, `${codexSession(resolve(repo))}\n`);
+
+    expect(await discoverTraces({ repo, homeDir })).toMatchObject([
+      { path: matching },
     ]);
   });
 });

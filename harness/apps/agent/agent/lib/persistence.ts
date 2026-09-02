@@ -24,7 +24,7 @@ const spendRecordSchema = z.strictObject({
 let warnedMissingStore = false;
 
 export async function persistAgentRecord(
-  namespace: "audit" | "spend",
+  namespace: "audit" | "handoff" | "spend",
   eventId: string,
   record: unknown,
 ): Promise<"written" | "existing" | "skipped"> {

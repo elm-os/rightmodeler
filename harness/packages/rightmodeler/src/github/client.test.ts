@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   BlockedError,
@@ -46,6 +46,9 @@ interface StubModule {
     foreignPaginationLink?: boolean;
     contentDirectoryResponse?: boolean;
     contentEncodingNoneResponse?: boolean;
+    tokenLogin?: string;
+    transientFailures?: number;
+    rejectReviewRequestFor?: string;
   }): Promise<StubServer>;
 }
 
@@ -366,7 +369,10 @@ describe("GitHub client conformance", () => {
       "createOrUpdateFile",
       "createPullRequest",
       "createRef",
+      "findCommitAuthorLogin",
       "findOpenPullRequest",
+      "getAuthenticatedUserLogin",
+      "getCombinedStatusForRef",
       "getFileContent",
       "getPullRequest",
       "getRef",
@@ -383,6 +389,44 @@ describe("GitHub client conformance", () => {
       "GithubRequestError",
       "createGithubClient",
     ]);
+  });
+
+  it("reads combined commit status and the authenticated user", async () => {
+    process.env[tokenEnv] = token;
+    const stub = await startStub({ tokenLogin: "octocat" });
+    const seeded = await seed(stub);
+    await control(stub, "/__test/commit-statuses", {
+      ...repository,
+      ref: seeded.sha,
+      statuses: [
+        { context: "ci/circleci", state: "failure" },
+        { context: "deploy", state: "success" },
+      ],
+    });
+    const github = client(stub);
+
+    await expect(
+      github.getCombinedStatusForRef({ ...repository, ref: seeded.sha }),
+    ).resolves.toMatchObject({
+      state: "failure",
+      sha: seeded.sha,
+      totalCount: 2,
+      statuses: [
+        {
+          id: expect.any(Number),
+          context: "ci/circleci",
+          state: "failure",
+          updatedAt: expect.any(String),
+        },
+        {
+          id: expect.any(Number),
+          context: "deploy",
+          state: "success",
+          updatedAt: expect.any(String),
+        },
+      ],
+    });
+    await expect(github.getAuthenticatedUserLogin()).resolves.toBe("octocat");
   });
 
   it("paginates reviews, comments, and check runs while preserving event authors and states", async () => {
@@ -513,6 +557,62 @@ describe("GitHub client conformance", () => {
 });
 
 describe("GitHub client rate limits and credential hygiene", () => {
+  it("retries a transient GET response", async () => {
+    process.env[tokenEnv] = token;
+    const stub = await startStub({ transientFailures: 2 });
+    const seeded = await seed(stub);
+
+    await expect(
+      client(stub).getRef({ ...repository, ref: "heads/main" }),
+    ).resolves.toEqual({
+      ref: "refs/heads/main",
+      sha: seeded.sha,
+    });
+    expect(
+      stub
+        .getHits()
+        .filter(({ path }) => path === "/repos/acme/demo/git/ref/heads/main"),
+    ).toHaveLength(3);
+  });
+
+  it("does not retry a transient pull request creation", async () => {
+    process.env[tokenEnv] = token;
+    const stub = await startStub({ transientFailures: 1 });
+    await seed(stub);
+
+    await expect(
+      client(stub).createPullRequest({
+        ...repository,
+        title: "Do not retry",
+        body: "Evidence",
+        head: "main",
+        base: "main",
+        draft: true,
+      }),
+    ).rejects.toBeInstanceOf(GithubHttpError);
+    expect(
+      stub.getHits().filter(({ path }) => path === "/repos/acme/demo/pulls"),
+    ).toHaveLength(1);
+  });
+
+  it("retries a rejected GET five times before surfacing the request error", async () => {
+    process.env[tokenEnv] = token;
+    const stub = await startStub();
+    await seed(stub);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("socket hang up"));
+
+    try {
+      await expect(
+        client(stub).getRef({ ...repository, ref: "heads/main" }),
+      ).rejects.toBeInstanceOf(GithubRequestError);
+      expect(fetchSpy).toHaveBeenCalledTimes(5);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it("honors Retry-After before retrying a rate-limited request", async () => {
     process.env[tokenEnv] = token;
     const stub = await startStub({
@@ -610,7 +710,14 @@ describe("GitHub client rate limits and credential hygiene", () => {
 
     let failure: Error | undefined;
     try {
-      await github.getRef({ ...repository, ref: "heads/main" });
+      await github.createPullRequest({
+        ...repository,
+        title: "Reflect auth",
+        body: "Evidence",
+        head: "main",
+        base: "main",
+        draft: true,
+      });
     } catch (error) {
       if (error instanceof Error) failure = error;
     }

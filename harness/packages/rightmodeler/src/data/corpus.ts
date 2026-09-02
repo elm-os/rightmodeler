@@ -1,6 +1,7 @@
 import {
   canonicalJson,
   caseKey,
+  compareText,
   computeRunSpecDigest,
   type JsonValue,
   type Store,
@@ -21,7 +22,7 @@ export interface CorpusCaseContent {
 
 export interface CorpusCaseObservation {
   traceId?: string;
-  usage: { inputTokens: number; outputTokens: number };
+  usage?: { inputTokens: number; outputTokens: number };
   timestamp?: string;
   costUsd?: number;
   durationMs?: number;
@@ -52,7 +53,7 @@ export interface Corpus {
   strata: StratumWeight[];
 }
 
-export class CorpusError extends Error {
+class CorpusError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "CorpusError";
@@ -92,7 +93,7 @@ function caseObservation(
 ): CorpusCaseObservation {
   return {
     traceId,
-    usage: { ...step.usage },
+    ...(step.usage === undefined ? {} : { usage: { ...step.usage } }),
     toolCalls: toolCalls(step.output),
     ...(step.timestamp === undefined ? {} : { timestamp: step.timestamp }),
     ...(step.costUsd === undefined ? {} : { costUsd: step.costUsd }),
@@ -125,7 +126,9 @@ function caseObservationJson(observation: CorpusCaseObservation): JsonValue {
     ...(observation.traceId === undefined
       ? {}
       : { traceId: observation.traceId }),
-    usage: { ...observation.usage },
+    ...(observation.usage === undefined
+      ? {}
+      : { usage: { ...observation.usage } }),
     toolCalls: [...observation.toolCalls],
     ...(observation.timestamp === undefined
       ? {}
@@ -271,8 +274,4 @@ export async function writeCorpus(
     `${projectId}/corpus/corpus-${corpus.corpusVersionId}.json`,
     Buffer.from(canonicalJson(corpusManifest(corpus)), "utf8"),
   );
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

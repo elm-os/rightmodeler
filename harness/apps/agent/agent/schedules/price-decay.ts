@@ -5,6 +5,7 @@ import { runCli } from "../lib/cli.js";
 import { replayCliArguments } from "../lib/replay.js";
 import {
   handOffSchedule,
+  scheduleCliTimeoutMs,
   scheduleGitHubTarget,
   scheduleReplayInput,
 } from "../lib/schedules.js";
@@ -25,7 +26,10 @@ export default defineSchedule({
       return;
     }
     const estimate = (
-      await runCli("estimate", replayCliArguments(input), input)
+      await runCli("estimate", replayCliArguments(input), {
+        ...input,
+        timeoutMs: scheduleCliTimeoutMs,
+      })
     ).result;
     handOffSchedule(
       args,

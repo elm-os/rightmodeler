@@ -9,6 +9,7 @@ import {
   FormatDetectionError,
   TraceAdaptError,
   TraceParseError,
+  claudeCodeAdapter,
   detectFormat,
   langfuseAdapter,
   openAiJsonlAdapter,
@@ -82,6 +83,47 @@ describe("trace adapters", () => {
         ],
       }) as FormatDetectionError,
     );
+  });
+
+  it("detects from the first 20 parsed records only", () => {
+    let seen: unknown;
+    const adapters: readonly NamedTraceAdapter[] = [
+      {
+        name: "otel-genai",
+        detect: (sample) => {
+          seen = sample;
+          return 1;
+        },
+        adapt: () => [],
+        adaptWithReport: () => ({ runs: [], droppedRecords: [] }),
+      },
+      {
+        name: "openai-jsonl",
+        detect: () => 0,
+        adapt: () => [],
+        adaptWithReport: () => ({ runs: [], droppedRecords: [] }),
+      },
+    ];
+    const records = Array.from({ length: 25 }, () => '{"kind":"x"}');
+
+    detectFormat(records.join("\n"), adapters);
+
+    expect(Array.isArray(seen)).toBe(true);
+    expect(seen).toHaveLength(20);
+
+    const claudeRecords = Array.from({ length: 20 }, (_, index) =>
+      JSON.stringify({
+        type: "assistant",
+        sessionId: "s",
+        uuid: `u${index}`,
+        parentUuid: "p",
+        message: {},
+      }),
+    );
+
+    expect(
+      detectFormat([...claudeRecords, "not-json"].join("\n"), traceAdapters),
+    ).toBe(claudeCodeAdapter);
   });
 
   it("reports both candidates when every format is below threshold", () => {

@@ -7,11 +7,12 @@ import {
   factKey,
   FsStore,
   lifecycleEventSchema,
+  readLedger,
   type LifecycleEvent,
 } from "@rightmodeler/core";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { derivePrState } from "./aggregate.js";
+import { derivePrState, readPrLifecycleEvents } from "./aggregate.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -73,7 +74,9 @@ describe("derivePrState", () => {
       detail: { handledEventKey: "review:7:9" },
     });
 
-    await expect(derivePrState({ store, prNumber: 7 })).resolves.toEqual({
+    expect(
+      derivePrState(await readPrLifecycleEvents({ store, prNumber: 7 })),
+    ).toEqual({
       phase: "reproving",
       lastEventId: "reproof",
       handledEventKeys: new Set(["comment:7:41", "review:7:9"]),
@@ -85,7 +88,9 @@ describe("derivePrState", () => {
       createdAt: "2026-01-01T00:00:03.000Z",
       detail: {},
     });
-    expect((await derivePrState({ store, prNumber: 7 })).phase).toBe("merged");
+    expect(
+      derivePrState(await readPrLifecycleEvents({ store, prNumber: 7 })).phase,
+    ).toBe("merged");
 
     await append(store, {
       eventId: "ended",
@@ -93,10 +98,9 @@ describe("derivePrState", () => {
       createdAt: "2026-01-01T00:00:04.000Z",
       detail: {},
     });
-    expect(await derivePrState({ store, prNumber: 7 })).toMatchObject({
-      phase: "ended",
-      lastEventId: "ended",
-    });
+    expect(
+      derivePrState(await readPrLifecycleEvents({ store, prNumber: 7 })),
+    ).toMatchObject({ phase: "ended", lastEventId: "ended" });
 
     await append(store, {
       eventId: "late-reproof",
@@ -104,7 +108,9 @@ describe("derivePrState", () => {
       createdAt: "2026-01-01T00:00:05.000Z",
       detail: { handledEventKey: "review:7:late" },
     });
-    expect(await derivePrState({ store, prNumber: 7 })).toMatchObject({
+    expect(
+      derivePrState(await readPrLifecycleEvents({ store, prNumber: 7 })),
+    ).toMatchObject({
       phase: "ended",
       lastEventId: "late-reproof",
       handledEventKeys: new Set([
@@ -130,19 +136,29 @@ describe("derivePrState", () => {
       detail: { reason: "closed_unmerged" },
     });
 
-    await expect(derivePrState({ store, prNumber: 7 })).resolves.toMatchObject({
-      phase: "closed_rejected",
-      lastEventId: "rejected",
-    });
+    expect(
+      derivePrState(await readPrLifecycleEvents({ store, prNumber: 7 })),
+    ).toMatchObject({ phase: "closed_rejected", lastEventId: "rejected" });
   });
 
-  it("fails loudly when a listed fact is malformed", async () => {
+  it("salvages a malformed fact and keeps the readable lifecycle events", async () => {
     const store = await createStore();
+    await append(store, {
+      eventId: "opened-salvaged",
+      kind: "pr_opened",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      detail: {},
+    });
     await store.putImmutable(
       factKey("project", "broken"),
       Buffer.from('{"kind":"pr_opened"}', "utf8"),
     );
 
-    await expect(derivePrState({ store, prNumber: 7 })).rejects.toThrow();
+    await expect(readLedger(store, "project")).resolves.toMatchObject({
+      droppedRows: 1,
+    });
+    expect(
+      derivePrState(await readPrLifecycleEvents({ store, prNumber: 7 })).phase,
+    ).toBe("open");
   });
 });

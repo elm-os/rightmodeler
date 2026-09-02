@@ -7,9 +7,13 @@ import {
   TraceAdaptError,
   compareStartValues,
   isRecord,
+  jsonEncodedValue,
   jsonValue,
   optionalNonnegativeNumber,
   optionalString,
+  optionalUsage,
+  otlpAttributes,
+  otlpSpans,
   requiredString,
   sampleRecords,
   startValue,
@@ -38,8 +42,19 @@ export { langsmithAdapter } from "./adapters/langsmith.js";
 export { openInferenceAdapter } from "./adapters/openinference.js";
 export { weaveAdapter } from "./adapters/weave.js";
 
+function otelSpans(records: unknown[]): unknown[] {
+  return records.flatMap((record) =>
+    isRecord(record) && Array.isArray(record.resourceSpans)
+      ? otlpSpans(record).map((span) => ({
+          ...span,
+          attributes: otlpAttributes(span),
+        }))
+      : [record],
+  );
+}
+
 function otelConfidence(sample: unknown): number {
-  const records = sampleRecords(sample).filter(isRecord);
+  const records = otelSpans(sampleRecords(sample)).filter(isRecord);
   if (records.length === 0) return 0;
   const matching = records.filter((record) => {
     const attributes = record.attributes;
@@ -61,7 +76,7 @@ function adaptOtel(records: unknown): NormalizedRun[] {
     string,
     { record: Record<string, unknown>; sourceIndex: number }[]
   >();
-  for (const [sourceIndex, candidate] of records.entries()) {
+  for (const [sourceIndex, candidate] of otelSpans(records).entries()) {
     if (!isRecord(candidate)) {
       throw new TraceAdaptError(
         format,
@@ -118,7 +133,13 @@ function adaptOtel(records: unknown): NormalizedRun[] {
         `OTel trace ${traceId} model`,
         format,
       );
-      const messages = attributes["gen_ai.input.messages"];
+      const usage = optionalUsage(
+        attributes["gen_ai.usage.input_tokens"],
+        attributes["gen_ai.usage.output_tokens"],
+        `OTel trace ${traceId}`,
+        format,
+      );
+      const messages = jsonEncodedValue(attributes["gen_ai.input.messages"]);
       if (!Array.isArray(messages)) {
         throw new TraceAdaptError(
           format,
@@ -143,25 +164,16 @@ function adaptOtel(records: unknown): NormalizedRun[] {
           ),
         ),
         output: jsonValue(
-          attributes["gen_ai.output.messages"],
+          jsonEncodedValue(attributes["gen_ai.output.messages"]),
           `OTel trace ${traceId} output messages`,
           format,
         ),
-        usage: {
-          inputTokens: tokenCount(
-            attributes["gen_ai.usage.input_tokens"],
-            `OTel trace ${traceId} input usage`,
-            format,
-          ),
-          outputTokens: tokenCount(
-            attributes["gen_ai.usage.output_tokens"],
-            `OTel trace ${traceId} output usage`,
-            format,
-          ),
-        },
+        ...(usage === undefined ? {} : { usage }),
         trajectoryId: traceId,
       };
-      const systemPrompt = textParts(attributes["gen_ai.system_instructions"]);
+      const systemPrompt = textParts(
+        jsonEncodedValue(attributes["gen_ai.system_instructions"]),
+      );
       if (systemPrompt !== undefined) step.systemPrompt = systemPrompt;
       // Family attribution is v0: prefer the explicit custom attribute, then the legacy heuristic.
       const family =
@@ -263,6 +275,12 @@ function adaptOpenAi(records: unknown): NormalizedRun[] {
         : isRecord(response.usage)
           ? response.usage
           : {};
+      const stepUsage = optionalUsage(
+        usage.prompt_tokens,
+        usage.completion_tokens,
+        `OpenAI trace ${traceId}`,
+        format,
+      );
       const systemMessages = record.messages.filter(
         (message) => isRecord(message) && message.role === "system",
       );
@@ -284,18 +302,7 @@ function adaptOpenAi(records: unknown): NormalizedRun[] {
           `OpenAI trace ${traceId} response message`,
           format,
         ),
-        usage: {
-          inputTokens: tokenCount(
-            usage.prompt_tokens,
-            `OpenAI trace ${traceId} input usage`,
-            format,
-          ),
-          outputTokens: tokenCount(
-            usage.completion_tokens,
-            `OpenAI trace ${traceId} output usage`,
-            format,
-          ),
-        },
+        ...(stepUsage === undefined ? {} : { usage: stepUsage }),
         trajectoryId: traceId,
       };
       const systemPrompt = systemMessages

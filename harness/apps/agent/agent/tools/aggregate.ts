@@ -7,8 +7,10 @@ export const aggregateTool = defineTool({
   description:
     "Aggregate terminal replay evidence into family verdicts using the resumable harness store.",
   inputSchema: harnessInputSchema,
-  async execute(input) {
-    return (await runCli("aggregate", [], input)).result;
+  async execute(input, ctx) {
+    return (
+      await runCli("aggregate", [], { ...input, signal: ctx.abortSignal })
+    ).result;
   },
 });
 

@@ -8,25 +8,29 @@ import {
   type StepRecord,
 } from "@rightmodeler/core";
 
+import { IGNORED_DIRECTORIES } from "./ignored-directories.js";
 import { MatcherRegistry } from "./matcher-registry.js";
+import { maskSource } from "./matchers/utils.js";
 import { matchesFilePatterns } from "./path-pattern.js";
 import type { CandidateMatch } from "./types.js";
 
-const ignoredDirectories = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  ".venv",
-  "build",
-  "__pycache__",
-]);
+export interface ScanSkip {
+  readonly path: string;
+  readonly matcherSlug?: string;
+  readonly reason: string;
+}
+
+export interface ScanResult {
+  readonly records: StepRecord[];
+  readonly skipped: ScanSkip[];
+}
 
 function sourceFiles(rootDir: string): string[] {
   const files: string[] = [];
   const visit = (directory: string): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        if (!ignoredDirectories.has(entry.name))
+        if (!IGNORED_DIRECTORIES.has(entry.name))
           visit(join(directory, entry.name));
       } else if (entry.isFile()) {
         files.push(join(directory, entry.name));
@@ -52,13 +56,18 @@ function capabilityRequirements(candidate: CandidateMatch): string[] {
   return requirements;
 }
 
-export function scan(
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function scanRepository(
   rootDir: string,
   registry: MatcherRegistry,
   projectId: string,
-): StepRecord[] {
+): ScanResult {
   const absoluteRoot = resolve(rootDir);
   const records: StepRecord[] = [];
+  const skipped: ScanSkip[] = [];
   const matchers = registry.getAll();
 
   for (const absolutePath of sourceFiles(absoluteRoot)) {
@@ -69,12 +78,30 @@ export function scan(
       matchesFilePatterns(normalizedPath, matcher.filePatterns),
     );
     if (fileMatchers.length === 0) continue;
-    const content = readFileSync(absolutePath, "utf8").replaceAll("\r\n", "\n");
+    let content: string;
+    try {
+      content = readFileSync(absolutePath, "utf8").replaceAll("\r\n", "\n");
+    } catch (error) {
+      skipped.push({ path: normalizedPath, reason: message(error) });
+      continue;
+    }
+    const searchable = maskSource(content, normalizedPath);
     const contentHash = createHash("sha256").update(content).digest("hex");
     const seen = new Set<string>();
 
     for (const matcher of fileMatchers) {
-      for (const candidate of matcher.match(content, normalizedPath)) {
+      let candidates: CandidateMatch[];
+      try {
+        candidates = matcher.match(content, normalizedPath, searchable);
+      } catch (error) {
+        skipped.push({
+          path: normalizedPath,
+          matcherSlug: matcher.slug,
+          reason: message(error),
+        });
+        continue;
+      }
+      for (const candidate of candidates) {
         const key = candidateKey(candidate);
         if (seen.has(key)) continue;
         seen.add(key);
@@ -112,10 +139,21 @@ export function scan(
     }
   }
 
-  return records.sort(
-    (left, right) =>
-      left.callSite.path.localeCompare(right.callSite.path) ||
-      left.callSite.line - right.callSite.line ||
-      left.callSite.matcherSlug.localeCompare(right.callSite.matcherSlug),
-  );
+  return {
+    records: records.sort(
+      (left, right) =>
+        left.callSite.path.localeCompare(right.callSite.path) ||
+        left.callSite.line - right.callSite.line ||
+        left.callSite.matcherSlug.localeCompare(right.callSite.matcherSlug),
+    ),
+    skipped,
+  };
+}
+
+export function scan(
+  rootDir: string,
+  registry: MatcherRegistry,
+  projectId: string,
+): StepRecord[] {
+  return scanRepository(rootDir, registry, projectId).records;
 }

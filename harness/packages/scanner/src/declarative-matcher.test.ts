@@ -1,10 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   compileDeclarativeMatchers,
+  createMatcherRegistry,
   declarativeMatcherSpecSchema,
+  loadDeclarativeMatchers,
   type DeclarativeMatcherErrorCode,
 } from "./index.js";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
 
 function validSpec() {
   return {
@@ -38,6 +54,15 @@ describe("declarative matcher compiler", () => {
     expect(rejections).toEqual([]);
     expect(matcher!.closesSurfaceIds).toEqual(["custom-framework"]);
     expect(matcher!.match("customCall(input)", "src/model.ts")).toHaveLength(1);
+  });
+
+  it("searches the supplied masked text instead of re-masking", () => {
+    const [matcher] = compileDeclarativeMatchers([validSpec()]).matchers;
+
+    expect(
+      matcher!.match("customCall(input)", "src/model.ts", " ".repeat(17)),
+    ).toEqual([]);
+    expect(matcher!.match("# customCall(input)", "src/model.py")).toEqual([]);
   });
 
   it("rejects an invalid regular expression", () => {
@@ -154,4 +179,28 @@ describe("declarative matcher compiler", () => {
       expectCode([spec], "MISSING_SURFACE_IDS");
     },
   );
+
+  it("loads and compiles a JSON array from disk", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-matchers-load-"));
+    temporaryDirectories.push(root);
+    const filePath = join(root, "matchers.json");
+    await writeFile(filePath, JSON.stringify([validSpec()]));
+
+    const { matchers, rejections } = loadDeclarativeMatchers(filePath);
+
+    expect(rejections).toEqual([]);
+    expect(matchers).toHaveLength(1);
+    expect(
+      createMatcherRegistry(matchers).getBySlug("custom-model-call"),
+    ).toBeDefined();
+  });
+
+  it("rejects a file that is not a JSON array", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-matchers-shape-"));
+    temporaryDirectories.push(root);
+    const filePath = join(root, "matchers.json");
+    await writeFile(filePath, "{}");
+
+    expect(() => loadDeclarativeMatchers(filePath)).toThrow(/JSON array/);
+  });
 });

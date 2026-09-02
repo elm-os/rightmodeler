@@ -1,7 +1,7 @@
 import { defineSchedule } from "eve/schedules";
 
 import { listWatchablePullRequests } from "@rightmodeler/cli";
-import { runCli } from "../lib/cli.js";
+import { githubTokenEnvName, watchPullRequest } from "../lib/pr-watch.js";
 import {
   handOffSchedule,
   scheduleGitHubTarget,
@@ -14,13 +14,7 @@ export default defineSchedule({
     const input = scheduleHarnessInput("pr-watch");
     const target = scheduleGitHubTarget("pr-watch");
     if (input === undefined || target === undefined) return;
-    const tokenEnv =
-      process.env.RIGHTMODELER_GITHUB_TOKEN_ENV ?? "GITHUB_TOKEN";
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(tokenEnv)) {
-      throw new Error(
-        "RIGHTMODELER_GITHUB_TOKEN_ENV must name an environment variable",
-      );
-    }
+    const tokenEnv = githubTokenEnvName();
     if (!process.env[tokenEnv]) {
       console.warn(`pr-watch schedule skipped: ${tokenEnv} is not configured`);
       return;
@@ -29,25 +23,8 @@ export default defineSchedule({
     const results = [];
     for (const { prNumber } of pullRequests) {
       results.push(
-        (
-          await runCli(
-            "watch",
-            [
-              "--owner",
-              target.owner,
-              "--github-repo",
-              target.repo,
-              "--pr",
-              String(prNumber),
-              "--github-base-url",
-              process.env.RIGHTMODELER_GITHUB_API_BASE_URL ??
-                "https://api.github.com",
-              "--github-token-env",
-              tokenEnv,
-            ],
-            { ...input, acceptedExitCodes: [0, 1, 2] },
-          )
-        ).result,
+        (await watchPullRequest(input, target.owner, target.repo, prNumber))
+          .result,
       );
     }
     handOffSchedule(

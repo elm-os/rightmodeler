@@ -217,6 +217,50 @@ describe("fact schemas", () => {
     });
   });
 
+  it("accepts an optional provider response id and finish reason", () => {
+    expect(
+      requestAttemptSchema.parse({
+        ...requestAttempt,
+        providerResponseId: "gen-1",
+        finishReason: "length",
+      }),
+    ).toMatchObject({
+      providerResponseId: "gen-1",
+      finishReason: "length",
+    });
+    expect(
+      requestAttemptSchema.safeParse({
+        ...requestAttempt,
+        providerResponseId: "",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts an optional attempt latency and rejects a negative one", () => {
+    expect(
+      requestAttemptSchema.parse({ ...requestAttempt, latencyMs: 1234 })
+        .latencyMs,
+    ).toBe(1234);
+    expect(requestAttemptSchema.safeParse(requestAttempt).success).toBe(true);
+    expect(
+      requestAttemptSchema.safeParse({ ...requestAttempt, latencyMs: -1 })
+        .success,
+    ).toBe(false);
+  });
+
+  it("accepts an optional candidate id on cascade findings", () => {
+    expect(
+      cascadeFindingSchema.parse({
+        ...cascadeFinding,
+        candidateId: "acme/small-1",
+      }),
+    ).toMatchObject({ candidateId: "acme/small-1" });
+    expect(
+      cascadeFindingSchema.safeParse({ ...cascadeFinding, candidateId: "" })
+        .success,
+    ).toBe(false);
+  });
+
   it("rejects provider error excerpts over 500 characters", () => {
     expect(
       requestAttemptSchema.safeParse({

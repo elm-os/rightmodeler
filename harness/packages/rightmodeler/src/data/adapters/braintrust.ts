@@ -2,9 +2,9 @@ import {
   isRecord,
   jsonValue,
   optionalString,
+  optionalUsage,
   requiredString,
   sampleRecords,
-  tokenCount,
 } from "./shared.js";
 import { createRowAdapter } from "./row-adapter.js";
 
@@ -48,6 +48,12 @@ export const braintrustAdapter = createRowAdapter({
       ? record.input
       : [record.input];
     const timestamp = optionalString(record.created);
+    const usage = optionalUsage(
+      metrics.prompt_tokens,
+      metrics.completion_tokens,
+      `Braintrust record ${recordIndex + 1}`,
+      format,
+    );
     return [
       {
         traceId,
@@ -68,18 +74,7 @@ export const braintrustAdapter = createRowAdapter({
             `Braintrust record ${recordIndex + 1} output`,
             format,
           ),
-          usage: {
-            inputTokens: tokenCount(
-              metrics.prompt_tokens,
-              `Braintrust record ${recordIndex + 1} prompt usage`,
-              format,
-            ),
-            outputTokens: tokenCount(
-              metrics.completion_tokens,
-              `Braintrust record ${recordIndex + 1} completion usage`,
-              format,
-            ),
-          },
+          ...(usage === undefined ? {} : { usage }),
           trajectoryId: traceId,
           ...(optionalString(attributes.name) === undefined
             ? {}

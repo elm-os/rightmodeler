@@ -2,6 +2,7 @@ import type { GitHubReceiveTarget } from "eve/channels/github";
 import type { ScheduleHandlerArgs } from "eve/schedules";
 
 import github from "../channels/github.js";
+import { persistAgentRecord } from "./persistence.js";
 import type { ReplayStartInput } from "./schemas.js";
 
 export interface ScheduleHarnessInput {
@@ -12,6 +13,8 @@ export interface ScheduleHarnessInput {
 export interface ScheduleTraceInput extends ScheduleHarnessInput {
   readonly traces: string;
 }
+
+export const scheduleCliTimeoutMs = 30 * 60 * 1_000;
 
 export function scheduleHarnessInput(
   schedule: string,
@@ -102,6 +105,20 @@ export function handOffSchedule(
   message: string,
 ): void {
   args.waitUntil(args.to(github, target).send(message, { auth: args.appAuth }));
+}
+
+export async function claimScheduleHandoff(
+  schedule: string,
+  key: string,
+  record: unknown,
+): Promise<boolean> {
+  const outcome = await persistAgentRecord("handoff", key, record);
+  if (outcome === "skipped") {
+    console.warn(
+      `${schedule} schedule skipped: RIGHTMODELER_AGENT_STORE is not configured`,
+    );
+  }
+  return outcome === "written";
 }
 
 function requiredEnvironment(

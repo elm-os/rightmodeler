@@ -89,6 +89,20 @@ export interface GithubCheckRuns {
   readonly checkRuns: readonly GithubCheckRun[];
 }
 
+export interface GithubCommitStatus {
+  readonly id: number;
+  readonly context: string;
+  readonly state: "error" | "failure" | "pending" | "success";
+  readonly updatedAt: string;
+}
+
+export interface GithubCombinedStatus {
+  readonly state: string;
+  readonly sha: string;
+  readonly totalCount: number;
+  readonly statuses: readonly GithubCommitStatus[];
+}
+
 export interface GithubComparison {
   readonly status: "ahead" | "behind" | "diverged" | "identical";
   readonly aheadBy: number;
@@ -174,6 +188,13 @@ export interface GithubClient {
   listCheckRunsForRef(
     input: GithubRepository & { readonly ref: string },
   ): Promise<GithubCheckRuns>;
+  getCombinedStatusForRef(
+    input: GithubRepository & { readonly ref: string },
+  ): Promise<GithubCombinedStatus>;
+  getAuthenticatedUserLogin(): Promise<string>;
+  findCommitAuthorLogin(
+    input: GithubRepository & { readonly email: string },
+  ): Promise<string | null>;
   closePullRequest(
     input: GithubRepository & { readonly pullNumber: number },
   ): Promise<GithubPullRequest>;
@@ -302,6 +323,23 @@ const checkRunsSchema = z.object({
   total_count: z.number().int(),
   check_runs: z.array(checkRunSchema),
 });
+const combinedStatusSchema = z.object({
+  state: z.string(),
+  sha: z.string(),
+  total_count: z.number().int(),
+  statuses: z.array(
+    z.object({
+      id: z.number().int(),
+      context: z.string(),
+      state: z.enum(["error", "failure", "pending", "success"]),
+      updated_at: z.string(),
+    }),
+  ),
+});
+const commitAuthorSchema = z.object({
+  sha: z.string(),
+  author: userSchema.nullable(),
+});
 const comparisonSchema = z.object({
   status: z.enum(["ahead", "behind", "diverged", "identical"]),
   ahead_by: z.number().int(),
@@ -322,6 +360,7 @@ const comparisonSchema = z.object({
 
 const maxAttempts = 5;
 const maxRetryDelayMs = 60_000;
+const transientBaseDelayMs = 100;
 
 function redact(value: string, token: string): string {
   return value.replaceAll(token, "[redacted]");
@@ -376,6 +415,30 @@ function isRateLimited(response: Response): boolean {
     (response.status === 403 &&
       (response.headers.has("retry-after") ||
         response.headers.get("x-ratelimit-remaining") === "0"))
+  );
+}
+
+function retryableRequest(init: RequestInit): boolean {
+  const method = (init.method ?? "GET").toUpperCase();
+  if (method === "GET") return true;
+  if (method !== "PUT" && method !== "PATCH") return false;
+  if (typeof init.body !== "string") return false;
+  try {
+    const parsed: unknown = JSON.parse(init.body);
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof (parsed as { sha?: unknown }).sha === "string"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function transientDelay(attempt: number): number {
+  return (
+    Math.random() *
+    Math.min(maxRetryDelayMs, transientBaseDelayMs * 2 ** (attempt - 1))
   );
 }
 
@@ -466,6 +529,10 @@ export function createGithubClient(
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        if (retryableRequest(init) && attempt < maxAttempts) {
+          await sleep(transientDelay(attempt));
+          continue;
+        }
         throw new GithubRequestError(redact(message, requestToken));
       }
 
@@ -478,6 +545,16 @@ export function createGithubClient(
           throw new BlockedError(new Date(lastResetAt).toISOString());
         }
         await sleep(timing.delay);
+        continue;
+      }
+
+      if (
+        response.status >= 500 &&
+        retryableRequest(init) &&
+        attempt < maxAttempts
+      ) {
+        await response.body?.cancel();
+        await sleep(transientDelay(attempt));
         continue;
       }
 
@@ -785,6 +862,46 @@ export function createGithubClient(
           completedAt: run.completed_at,
         })),
       };
+    },
+
+    async getCombinedStatusForRef(input) {
+      const raw = await requestJson(
+        `${repositoryPath(input)}/commits/${pathPart(input.ref)}/status?per_page=100`,
+        {},
+        combinedStatusSchema,
+        "GitHub combined-status response",
+      );
+      return {
+        state: raw.state,
+        sha: raw.sha,
+        totalCount: raw.total_count,
+        statuses: raw.statuses.map((status) => ({
+          id: status.id,
+          context: status.context,
+          state: status.state,
+          updatedAt: status.updated_at,
+        })),
+      };
+    },
+
+    async getAuthenticatedUserLogin() {
+      const raw = await requestJson(
+        "/user",
+        {},
+        userSchema,
+        "GitHub user response",
+      );
+      return raw.login;
+    },
+
+    async findCommitAuthorLogin(input) {
+      const raw = await requestJson(
+        `${repositoryPath(input)}/commits?author=${encodeURIComponent(input.email)}&per_page=1`,
+        {},
+        z.array(commitAuthorSchema),
+        "GitHub commits response",
+      );
+      return raw[0]?.author?.login ?? null;
     },
 
     async closePullRequest(input) {
