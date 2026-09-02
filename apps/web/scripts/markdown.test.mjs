@@ -16,6 +16,7 @@ import {
   markdownSiblingPath,
   STATIC_MARKDOWN_PATHS,
 } from "../src/lib/markdown-routes.ts";
+import { renderVsMarkdown } from "../src/content/markdown/render-vs.ts";
 
 const read = (rel) => fs.readFileSync(path.join(webRoot, rel), "utf8");
 
@@ -272,5 +273,39 @@ test("the Markdown handler stays out of /api/, and robots keeps it uncrawlable",
   assert.ok(
     !robots.includes('".md"'),
     "the .md siblings must not be disallowed; they are what rel=alternate points at",
+  );
+});
+
+test("the vs twin spells out scenario verdicts and the hero verdict the way the page does", () => {
+  const markdown = renderVsMarkdown({
+    name: "Acme",
+    h1: "rightmodeler vs Acme",
+    lede: "Lede.",
+    verdictLabel: "Complement · rightmodeler runs on top",
+    blocks: [
+      {
+        type: "scenarios",
+        heading: "Scenarios",
+        scenarios: [
+          { scenario: "A", winner: "theirs", why: "w" },
+          { scenario: "B", winner: "ours", why: "w" },
+          { scenario: "C", winner: "both", why: "w" },
+        ],
+      },
+    ],
+  });
+  assert.doesNotMatch(markdown, /^Use: (?:ours|theirs|both)$/m);
+  for (const label of [
+    "the right hire: Acme",
+    "the right hire: rightmodeler",
+    "the right hire: both, together",
+  ]) {
+    assert.ok(markdown.includes(label), `missing "${label}"`);
+  }
+  const verdictAt = markdown.indexOf("Complement · rightmodeler runs on top");
+  assert.notEqual(verdictAt, -1, "the verdict label is missing");
+  assert.ok(
+    verdictAt < markdown.indexOf("## Scenarios"),
+    "the verdict label must sit under the h1, before the first section",
   );
 });

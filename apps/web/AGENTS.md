@@ -12,7 +12,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This site content-negotiates Markdown per [acceptmarkdown.com](https://acceptmarkdown.com). An
 agent that sends `Accept: text/markdown`, or fetches `<path>.md`, gets Markdown instead of HTML
 from the same URL. That means **every route needs a Markdown representation**, and the build
-fails without one (`src/app/api/markdown/[[...slug]]/route.ts` throws in `generateStaticParams`).
+fails without one (`src/app/md/[[...slug]]/route.ts` throws in `generateStaticParams`).
 
 ## Adding a page
 
@@ -75,7 +75,7 @@ Consequences worth knowing before you debug this again:
   `406` and the Markdown representation both carry `Vary: Accept` correctly while the HTML
   representation does not.
 - This costs nothing in cache correctness here: the Markdown representation is served from a
-  different URL (`/api/markdown/...`) after the rewrite, so the two representations already have
+  different URL (`/md/...`) after the rewrite, so the two representations already have
   separate cache keys and cannot be served to the wrong audience.
 - The `vercel.json` rule is kept as a statement of intent. If the platform stops managing `Vary`,
   it starts working with no code change.

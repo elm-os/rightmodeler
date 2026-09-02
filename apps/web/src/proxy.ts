@@ -40,9 +40,8 @@ export function proxy(request: NextRequest) {
   // clone would be missing them and they would be dropped upstream.
   // Carries Vary on the Markdown branch and the 406. It does NOT reach a prerendered HTML
   // response: under next start in 16.3.0-preview.5 those are served from the incremental cache
-  // with their stored headers, and anything set here is dropped. Vary for the HTML branch comes
-  // from next.config.ts headers() instead, which the platform router applies from
-  // routes-manifest.json. Setting it in both places is deliberate belt and braces.
+  // with their stored headers, and anything set here is dropped. The HTML branch relies on the
+  // Vary rule in vercel.json instead; AGENTS.md records what the platform honours of it.
   response.headers.set("vary", VARY);
   return response;
 }

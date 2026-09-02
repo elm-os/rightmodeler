@@ -27,6 +27,7 @@ import {
 import { JsonLd } from "@/components/json-ld";
 import { Reveal } from "@/components/reveal";
 import { IAM360 } from "@/content/case-studies";
+import { alternatesFor } from "@/lib/seo";
 import { SITE_AUTHOR, SITE_NAME, SITE_URL } from "@/lib/site";
 
 const study = IAM360;
@@ -35,7 +36,7 @@ const url = `${SITE_URL}/case-study/${study.slug}`;
 export const metadata: Metadata = {
   title: { absolute: `${study.company} case study · ${SITE_NAME}` },
   description: study.description,
-  alternates: { canonical: `/case-study/${study.slug}` },
+  alternates: alternatesFor(`/case-study/${study.slug}`),
   openGraph: {
     type: "article",
     title: study.title,
