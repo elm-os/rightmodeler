@@ -61,7 +61,7 @@ const STREAM_OUTCOMES = new Set([
   "truncated",
 ]);
 const liveContainers = new Set<{
-  executor: DockerExecutor;
+  executor: ModeBExecutor;
   handle: string;
 }>();
 
@@ -85,11 +85,16 @@ export interface ModeBEgress extends EgressListenerOptions {
   readonly catalog: readonly ModelCatalogEntry[];
 }
 
+export type ModeBExecutor = Omit<DockerExecutor, "reapOrphans"> & {
+  reapOrphans?: DockerExecutor["reapOrphans"];
+};
+
 export interface ReplayModeBInput {
   readonly stepRecords: readonly ReplayStep[];
   readonly cases: readonly ModeBCase[];
   readonly swapPolicy: ModeBSwapPolicy;
-  readonly executor: DockerExecutor;
+  readonly executor: ModeBExecutor;
+  readonly backend?: "docker" | "cloud";
   readonly egress: ModeBEgress;
   readonly store: Store;
   readonly budget: Budget;
@@ -466,7 +471,7 @@ async function prepareScratch(
 
 function launchCase(
   input: ReplayModeBInput,
-  listener: EgressListener,
+  listener: EgressListener | null,
   cell: ModeBCell,
   executionId: string,
   scratchHostPath: string,
@@ -491,7 +496,10 @@ function launchCase(
       RM_SCRATCH: SCRATCH_CONTAINER_PATH,
       RM_PROXY_HOST: "127.0.0.1",
       RM_PROXY_PORT: String(PROXY_PORT),
-      RM_EGRESS_URL: `http://host.docker.internal:${listener.port}`,
+      RM_EGRESS_URL:
+        listener === null
+          ? input.egress.providerBaseUrl
+          : `http://host.docker.internal:${listener.port}`,
       RM_SWAP_POLICY: JSON.stringify(policy),
       RM_PRICING_TABLE: JSON.stringify(table),
       RM_DEFAULT_MAX_OUTPUT_TOKENS: String(DEFAULT_MAX_OUTPUT_TOKENS),
@@ -513,12 +521,16 @@ function launchCase(
     ],
     scratchHostPath,
     timeoutMs: input.appSpec.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    hostPorts: [
-      {
-        containerHost: "host.docker.internal",
-        note: `Mode B egress on host port ${listener.port}`,
-      },
-    ],
+    ...(listener === null
+      ? {}
+      : {
+          hostPorts: [
+            {
+              containerHost: "host.docker.internal" as const,
+              note: `Mode B egress on host port ${listener.port}`,
+            },
+          ],
+        }),
     labels: {
       "com.rightmodeler.run": input.budget.runId,
       "com.rightmodeler.case": cell.recordedCase.caseId,
@@ -528,7 +540,7 @@ function launchCase(
 }
 
 async function waitForExit(
-  executor: DockerExecutor,
+  executor: ModeBExecutor,
   handle: string,
   timeoutMs: number,
 ): Promise<DockerStatus> {
@@ -1153,7 +1165,7 @@ function shouldResume(
 
 async function runContainer(
   input: ReplayModeBInput,
-  listener: EgressListener,
+  listener: EgressListener | null,
   cell: ModeBCell,
   executionId: string,
   scratchHostPath: string,
@@ -1430,6 +1442,7 @@ export async function replayModeB(
   input: ReplayModeBInput,
 ): Promise<ReplayModeBResult> {
   validateInput(input);
+  const backend = input.backend ?? "docker";
   const steps = stepMap(input.stepRecords);
   const policy = normalizedSwapPolicy(input.swapPolicy, steps);
   const cells = cellsFor(input, steps, policy);
@@ -1448,22 +1461,26 @@ export async function replayModeB(
   };
   if (pending.length === 0) return result;
 
-  const docker = await detectDockerAvailability();
-  if (!docker.available) {
-    for (const cell of pending) {
-      result.blocked.push({
-        kind: "infrastructure",
-        reason: "docker-unavailable",
-        stepId: cell.executionStep.stepId,
-        caseId: cell.recordedCase.caseId,
-        candidateId: cell.candidateId,
-        message: docker.message,
-      });
-    }
-    return result;
-  }
   const timeoutMs = input.appSpec.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  await input.executor.reapOrphans({ olderThanMs: timeoutMs + EXIT_GRACE_MS });
+  if (backend === "docker") {
+    const docker = await detectDockerAvailability();
+    if (!docker.available) {
+      for (const cell of pending) {
+        result.blocked.push({
+          kind: "infrastructure",
+          reason: "docker-unavailable",
+          stepId: cell.executionStep.stepId,
+          caseId: cell.recordedCase.caseId,
+          candidateId: cell.candidateId,
+          message: docker.message,
+        });
+      }
+      return result;
+    }
+    await input.executor.reapOrphans?.({
+      olderThanMs: timeoutMs + EXIT_GRACE_MS,
+    });
+  }
 
   const table = pricingTable(input.egress.catalog);
   validatePricing(input.stepRecords, policy, table);
@@ -1534,7 +1551,7 @@ export async function replayModeB(
     }, BUDGET_HEARTBEAT_INTERVAL_MS);
     const executionId = randomUUID();
     try {
-      if (scratchRoot === null || listener === null) {
+      if (scratchRoot === null) {
         throw new Error("Mode B runtime is not initialized");
       }
       const scratchHostPath = await prepareScratch(
@@ -1719,12 +1736,15 @@ export async function replayModeB(
   }
 
   try {
-    listener = await startEgressListener({
-      providerBaseUrl: input.egress.providerBaseUrl,
-      apiKeyEnv: input.egress.apiKeyEnv,
-      hostname: input.egress.hostname,
-      port: input.egress.port,
-    });
+    listener =
+      backend === "cloud"
+        ? null
+        : await startEgressListener({
+            providerBaseUrl: input.egress.providerBaseUrl,
+            apiKeyEnv: input.egress.apiKeyEnv,
+            hostname: input.egress.hostname,
+            port: input.egress.port,
+          });
     scratchRoot = await mkdtemp(
       join(dirname(resolve(input.appSpec.mountPath)), ".rightmodeler-modeb-"),
     );

@@ -65,6 +65,7 @@ await build({
   format: "esm",
   target: "node24",
   packages: "bundle",
+  external: ["@vercel/sandbox"],
   plugins: [bundleRuntimePlugin],
   define: {
     __RIGHTMODELER_VERSION__: JSON.stringify(manifest.version),

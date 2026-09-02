@@ -39,6 +39,7 @@ Use `--output json` for one result object or `--output jsonl` for stage events f
 - `mixed_trace_formats` (exit `2`): split the directory so every file uses the same trace format, or pass one file with `--traces`.
 - `invalid_option` (exit `2`): correct the option and rerun; use `rightmodeler <command> --help` for accepted values.
 - `invalid_modeb_config` (exit `2`): fix the named field in the `--modeb-config` file and rerun.
+- `modeb_cloud_unavailable` (exit `2`): install the optional sandbox SDK and set its credentials, or set `"backend": "docker"` in the `--modeb-config` file, then rerun.
 - `invalid_pricing_file` (exit `2`): fix `--pricing-file` to map each model id to non-negative `input` and `output` USD per token and, optionally, a positive integer `maxOutputTokens`, then rerun.
 - `invalid_policy_file` (exit `2`): fix the named field in the `--policy` file and rerun; `qualityFloor` must be greater than 0.8 and less than 1, `shortlistTop` a positive integer, `allowModels` and `denyModels` arrays of model ids.
 - `invalid_matchers_file` (exit `2`): fix the listed matcher definitions in the `--matchers` file and rerun.

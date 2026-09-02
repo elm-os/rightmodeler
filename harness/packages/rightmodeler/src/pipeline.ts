@@ -64,8 +64,10 @@ import {
   BudgetRefusalError,
   confirmSwapSet,
   createBudget,
+  createCloudExecutor,
   createDockerExecutor,
   createProvider,
+  detectCloudAvailability,
   ProviderConfigurationError,
   replayModeA,
   resolveCurrentModel,
@@ -695,6 +697,7 @@ const modeBConfigSchema = z.strictObject({
     installCommand: z.array(z.string().min(1)).min(1).optional(),
   }),
   stepMap: z.record(z.string().min(1), z.string().min(1)),
+  backend: z.enum(["docker", "cloud"]).optional(),
   confirmMaxRunSets: z.number().int().nonnegative().optional(),
 });
 
@@ -2274,6 +2277,16 @@ function invalidModeBConfig(message: string): ProtocolError {
   });
 }
 
+function modeBCloudUnavailable(message: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "modeb_cloud_unavailable",
+    message,
+    remedy:
+      'Install the optional @vercel/sandbox package and set the sandbox credentials, or set "backend": "docker" in the --modeb-config file, then rerun.',
+  });
+}
+
 function invalidPricingFile(message: string): ProtocolError {
   return new ProtocolError({
     exitCode: 2,
@@ -3697,6 +3710,16 @@ async function executeConfirm(
       throw new Error("Provider base URL is unavailable for confirmation");
     }
     const config = context.modeBConfig!;
+    const backend = config.backend ?? "docker";
+    if (backend === "cloud") {
+      const cloud = await detectCloudAvailability();
+      if (!cloud.available) throw modeBCloudUnavailable(cloud.message);
+      if ((process.env[context.apiKeyEnv] ?? "").length === 0) {
+        throw modeBCloudUnavailable(
+          `The model credential environment variable ${context.apiKeyEnv} is empty, so the egress firewall has no key to broker.`,
+        );
+      }
+    }
     const provider = createProvider({
       providerId: "configured-provider",
       baseUrl: context.baseUrl,
@@ -3840,9 +3863,20 @@ async function executeConfirm(
         cases,
         modeB: {
           input: {
-            executor: createDockerExecutor({
-              maxBytesPerNamespace: 16 * 1024 * 1024,
-            }),
+            executor:
+              backend === "cloud"
+                ? createCloudExecutor({
+                    maxBytesPerNamespace: 16 * 1024 * 1024,
+                    modelCredential: {
+                      host: new URL(context.baseUrl).hostname,
+                      headerName: "authorization",
+                      value: `Bearer ${process.env[context.apiKeyEnv]!}`,
+                    },
+                  })
+                : createDockerExecutor({
+                    maxBytesPerNamespace: 16 * 1024 * 1024,
+                  }),
+            backend,
             egress: {
               providerId: provider.providerId,
               providerBaseUrl: modeBProviderBaseUrl(context.baseUrl),

@@ -3548,6 +3548,54 @@ describe("built CLI pipeline", () => {
     }
   }, 120_000);
 
+  it("refuses the cloud Mode B backend before confirmation when it is unavailable", async () => {
+    const { root, repo, traces } = await langgraphFixtureCopy("catalog-drift");
+    const modeBConfig = await writeModeBConfig(root, repo, "unused-image");
+    const parsed = JSON.parse(await readFile(modeBConfig, "utf8"));
+    await writeFile(
+      modeBConfig,
+      JSON.stringify({ ...parsed, backend: "cloud" }),
+    );
+    const stub = await startCatalogDriftStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_CATALOG_DRIFT_API_KEY",
+          "--modeb-config",
+          modeBConfig,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        {
+          env: {
+            RIGHTMODELER_CATALOG_DRIFT_API_KEY: secret,
+            VERCEL_OIDC_TOKEN: "",
+            VERCEL_TOKEN: "",
+            VERCEL_TEAM_ID: "",
+            VERCEL_PROJECT_ID: "",
+          },
+        },
+      );
+
+      expect(result.code).toBe(2);
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        code: "modeb_cloud_unavailable",
+        remedy: expect.stringContaining("backend"),
+        message: expect.stringMatching(/@vercel\/sandbox|VERCEL_OIDC_TOKEN/),
+      });
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
   it("abstains an affected family when confirmation model metadata is missing", async () => {
     const { root, repo, traces } = await langgraphFixtureCopy(
       "confirmation-model-metadata",

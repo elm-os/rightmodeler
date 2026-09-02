@@ -27,6 +27,10 @@ import {
 } from "@rightmodeler/kernel";
 
 export { createDockerExecutor } from "@rightmodeler/executor";
+export {
+  createCloudExecutor,
+  detectCloudAvailability,
+} from "@rightmodeler/executor/cloud-sandbox";
 
 import type { Budget } from "./budget.js";
 import {

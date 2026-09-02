@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   const creates: Array<Record<string, unknown>> = [];
   let nextId = 1;
   let createFailure: Error | undefined;
+  let settledExitCode = 0;
 
   class FakeCommand {
     readonly cmdId = "cmd-1";
@@ -22,7 +23,7 @@ const mocks = vi.hoisted(() => {
     exitCode: number | null = null;
 
     async wait(): Promise<FakeCommand> {
-      this.exitCode = 0;
+      this.exitCode = settledExitCode;
       return this;
     }
   }
@@ -126,11 +127,15 @@ const mocks = vi.hoisted(() => {
     failCreate(error: Error | undefined): void {
       createFailure = error;
     },
+    setExitCode(code: number): void {
+      settledExitCode = code;
+    },
     reset(): void {
       creates.length = 0;
       sandboxes.clear();
       nextId = 1;
       createFailure = undefined;
+      settledExitCode = 0;
     },
   };
 });
@@ -266,6 +271,36 @@ describe("cloud sandbox contract", () => {
       exitCode: 0,
       oomKilled: false,
       timedOut: false,
+    });
+  });
+
+  it("reports a non-zero workload exit without calling it a timeout", async () => {
+    mocks.setExitCode(3);
+    const executor = createCloudExecutor({ maxBytesPerNamespace: 10 });
+    const handle = await executor.launch({
+      ...launchSpec(),
+      timeoutMs: 60_000,
+    });
+
+    await expect(executor.status(handle)).resolves.toMatchObject({
+      state: "exited",
+      exitCode: 3,
+      oomKilled: false,
+      timedOut: false,
+    });
+  });
+
+  it("classifies a killed workload past its deadline as a timeout", async () => {
+    mocks.setExitCode(137);
+    const executor = createCloudExecutor({ maxBytesPerNamespace: 10 });
+    const handle = await executor.launch({ ...launchSpec(), timeoutMs: 1 });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    await expect(executor.status(handle)).resolves.toMatchObject({
+      state: "exited",
+      exitCode: 137,
+      timedOut: true,
     });
   });
 
