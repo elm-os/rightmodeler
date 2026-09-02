@@ -75,10 +75,17 @@ test("blog parity fails closed on self-closing custom components", () => {
 test("web surfaces use product-facts constants for shared counts and scores", () => {
   const factsPath = path.join(webRoot, "src", "lib", "product-facts.ts");
   const facts = readProductFacts(fs.readFileSync(factsPath, "utf8"), factsPath);
+  const twinDirs = ["content", "lib"].map(
+    (dir) => path.join(webRoot, "src", dir) + path.sep,
+  );
   const surfaceFiles = listFiles(
     path.join(webRoot, "src"),
     (filePath) =>
-      (filePath.endsWith(".tsx") || filePath.endsWith(".json")) &&
+      (filePath.endsWith(".tsx") ||
+        filePath.endsWith(".json") ||
+        (filePath.endsWith(".ts") &&
+          twinDirs.some((dir) => filePath.startsWith(dir)) &&
+          path.basename(filePath) !== "product-facts.ts")) &&
       !filePath.includes(`${path.sep}case-study${path.sep}`),
   );
   const violations = surfaceFiles.flatMap((filePath) =>

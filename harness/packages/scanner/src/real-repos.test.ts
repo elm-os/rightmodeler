@@ -73,6 +73,18 @@ const fixtures = [
     redHerrings: ["internal/chat_mock.go"],
     coverage: false,
   },
+  {
+    name: "crewai-examples-py",
+    expected: [["src/crew.py", "py-crewai-llm"]],
+    redHerrings: ["tests/test_mocks.py"],
+    coverage: true,
+  },
+  {
+    name: "autogen-agentchat-py",
+    expected: [["src/team.py", "py-autogen-model-client"]],
+    redHerrings: ["tests/test_mocks.py"],
+    coverage: true,
+  },
 ] as const;
 
 describe("representative open-source repository scans", () => {

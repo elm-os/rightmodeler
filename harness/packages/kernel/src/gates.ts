@@ -66,6 +66,9 @@ export function evaluateGates(
     (total, verdict) => total + verdict.unsafeSubstitutions,
     0,
   );
+  const evidencelessVerdicts = verdicts.filter(
+    (verdict) => verdict.evaluatorKinds.length === 0,
+  );
   const qualityFailures = verdicts.filter((verdict) => {
     return verdict.evaluatorKinds.some(
       (kind) => kind.worstCaseBound < policy.qualityFloor,
@@ -101,12 +104,16 @@ export function evaluateGates(
     ),
     result(
       "quality",
-      verdicts.length > 0 && qualityFailures.length === 0,
+      verdicts.length > 0 &&
+        evidencelessVerdicts.length === 0 &&
+        qualityFailures.length === 0,
       verdicts.length === 0
         ? "No verdicts were available for the quality gate."
-        : qualityFailures.length === 0
-          ? `Every worst-case-imputed evaluator lower bound meets the ${policy.qualityFloor} quality floor.`
-          : `${qualityFailures.length} verdict(s) miss the ${policy.qualityFloor} worst-case-imputed quality floor.`,
+        : evidencelessVerdicts.length > 0
+          ? `${evidencelessVerdicts.length} verdict(s) have no evaluator evidence for the quality gate.`
+          : qualityFailures.length === 0
+            ? `Every worst-case-imputed evaluator lower bound meets the ${policy.qualityFloor} quality floor.`
+            : `${qualityFailures.length} verdict(s) miss the ${policy.qualityFloor} worst-case-imputed quality floor.`,
     ),
     result(
       "evidence-coverage",

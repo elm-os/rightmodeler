@@ -7,8 +7,9 @@ export const scanTool = defineTool({
   description:
     "Scan a repository for model call sites and persist the resumable harness state.",
   inputSchema: harnessInputSchema,
-  async execute(input) {
-    return (await runCli("scan", [], input)).result;
+  async execute(input, ctx) {
+    return (await runCli("scan", [], { ...input, signal: ctx.abortSignal }))
+      .result;
   },
 });
 

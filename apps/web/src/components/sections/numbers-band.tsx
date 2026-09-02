@@ -181,7 +181,17 @@ export function NumbersBand() {
   useEffect(() => {
     stateRef.current = { active, palette };
   }, [active, palette]);
+
+  // Two GPU contexts, four plate fetches and the particle sampling pass, all below the
+  // fold: nothing is built until the band is about to be seen. `armed` never goes back.
+  const [armed, setArmed] = useState(false);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (inView) setArmed(true);
+  }, [inView]);
+
+  useEffect(() => {
+    if (!armed) return;
     // Hover yield is gated to devices with a real cursor: touch fires pointer
     // events on tap and would read as false positives.
     finePointer.current = window.matchMedia(
@@ -200,6 +210,7 @@ export function NumbersBand() {
         })
       : null;
     lightRef.current = light;
+    light?.start();
     loadPlates().then((masks) => {
       const canvas = canvasRef.current;
       if (cancelled || !canvas) return;
@@ -223,7 +234,7 @@ export function NumbersBand() {
     // The engine is deliberately not rebuilt when `reduce` flips mid-visit; the
     // preference is read once per mount, which matches how the OS setting behaves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [armed]);
 
   useEffect(() => {
     const field = fieldRef.current;

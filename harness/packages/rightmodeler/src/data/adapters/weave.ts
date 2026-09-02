@@ -2,9 +2,9 @@ import {
   isRecord,
   jsonValue,
   optionalString,
+  optionalUsage,
   requiredString,
   sampleRecords,
-  tokenCount,
 } from "./shared.js";
 import { createRowAdapter } from "./row-adapter.js";
 
@@ -51,6 +51,12 @@ export const weaveAdapter = createRowAdapter({
     const usage = isRecord(usageByModel[model])
       ? usageByModel[model]
       : (Object.values(usageByModel).find(isRecord) ?? {});
+    const stepUsage = optionalUsage(
+      usage.prompt_tokens ?? usage.input_tokens,
+      usage.completion_tokens ?? usage.output_tokens,
+      `Weave record ${recordIndex + 1}`,
+      format,
+    );
     const timestamp = optionalString(record.started_at);
     const family = optionalString(record.display_name ?? record.op_name);
     return [
@@ -72,18 +78,7 @@ export const weaveAdapter = createRowAdapter({
             `Weave record ${recordIndex + 1} output`,
             format,
           ),
-          usage: {
-            inputTokens: tokenCount(
-              usage.prompt_tokens,
-              `Weave record ${recordIndex + 1} prompt usage`,
-              format,
-            ),
-            outputTokens: tokenCount(
-              usage.completion_tokens,
-              `Weave record ${recordIndex + 1} completion usage`,
-              format,
-            ),
-          },
+          ...(stepUsage === undefined ? {} : { usage: stepUsage }),
           trajectoryId: traceId,
           ...(family === undefined ? {} : { family }),
           ...(timestamp === undefined ? {} : { timestamp }),

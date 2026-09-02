@@ -1,12 +1,23 @@
-import { copyFile, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { executeCli } from "./cli.js";
+import {
+  executeCli,
+  pipelineArgv,
+  type PipelineCommandOptions,
+} from "./cli.js";
 import type { CliIo } from "./protocol.js";
 import { makeGitFixture } from "./test-utils/git-fixture.js";
 
@@ -110,7 +121,104 @@ function runtime(
   };
 }
 
+describe("pipelineArgv", () => {
+  it("serializes every pipeline option in command order", () => {
+    const approvedRun = "a".repeat(64);
+    const options: PipelineCommandOptions = {
+      traces: "./traces.json",
+      matchers: "./matchers.json",
+      modebConfig: "./modeb.json",
+      baseUrl: "https://provider.example/v1",
+      apiKeyEnv: "PROVIDER_API_KEY",
+      maxCostUsd: "1.25",
+      maxConcurrency: "3",
+      pricingFile: "./pricing.json",
+      policy: "./policy.json",
+      includeFree: true,
+      approvedRun,
+      evaluator: "promptfoo",
+      evaluatorBaseUrl: "https://evaluator.example",
+      evaluatorApiKeyEnv: "EVALUATOR_API_KEY",
+      evaluatorPublicKeyEnv: "EVALUATOR_PUBLIC_KEY",
+      evaluatorProjectId: "project-1",
+      evaluatorCommand: "./bin/promptfoo",
+      evaluatorConfig: "./promptfoo.yaml",
+      evaluatorScorer: ["quality", "safety"],
+      evaluatorGateMetric: "quality",
+      evaluatorGateThreshold: "0.8",
+    };
+
+    expect(pipelineArgv(options)).toEqual([
+      "--traces",
+      resolve("./traces.json"),
+      "--matchers",
+      resolve("./matchers.json"),
+      "--modeb-config",
+      resolve("./modeb.json"),
+      "--base-url",
+      "https://provider.example/v1",
+      "--api-key-env",
+      "PROVIDER_API_KEY",
+      "--max-cost-usd",
+      "1.25",
+      "--max-concurrency",
+      "3",
+      "--pricing-file",
+      resolve("./pricing.json"),
+      "--policy",
+      resolve("./policy.json"),
+      "--include-free",
+      "--approved-run",
+      approvedRun,
+      "--evaluator",
+      "promptfoo",
+      "--evaluator-base-url",
+      "https://evaluator.example",
+      "--evaluator-api-key-env",
+      "EVALUATOR_API_KEY",
+      "--evaluator-public-key-env",
+      "EVALUATOR_PUBLIC_KEY",
+      "--evaluator-project-id",
+      "project-1",
+      "--evaluator-command",
+      resolve("./bin/promptfoo"),
+      "--evaluator-config",
+      resolve("./promptfoo.yaml"),
+      "--evaluator-scorer",
+      "quality",
+      "--evaluator-scorer",
+      "safety",
+      "--evaluator-gate-metric",
+      "quality",
+      "--evaluator-gate-threshold",
+      "0.8",
+    ]);
+  });
+
+  it("serializes empty options to an empty array", () => {
+    expect(pipelineArgv({})).toEqual([]);
+  });
+});
+
 describe("CLI trace guidance wiring", () => {
+  it("reports an invalid release policy before trace guidance", async () => {
+    const { repo, homeDir } = await fixture();
+    const policyRoot = await mkdtemp(join(tmpdir(), "rightmodeler-policy-"));
+    temporaryDirectories.push(policyRoot);
+    const policyPath = join(policyRoot, "policy.json");
+    await writeFile(policyPath, JSON.stringify({ qualityFloor: 0.5 }));
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        ["estimate", "--policy", policyPath, "--repo", repo],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(2);
+    expect(captured.stderr()).toContain("Invalid --policy field qualityFloor");
+  });
+
   it("prompts through injected IO in a TTY and uses the selected candidate", async () => {
     const { repo, homeDir, older } = await fixture();
     const captured = captureIo();
@@ -199,5 +307,299 @@ describe("CLI trace guidance wiring", () => {
 
     expect(await executeCli(["estimate", "--help"], captured.io)).toBe(0);
     expect(captured.stdout()).toContain("--yes");
+  });
+
+  it("registers --policy on init", async () => {
+    const captured = captureIo();
+
+    expect(await executeCli(["init", "--help"], captured.io)).toBe(0);
+    expect(captured.stdout()).toContain("--policy <path>");
+  });
+
+  it("resumes the ingested trace before discovery", async () => {
+    const { repo, homeDir, older } = await fixture();
+    const first = captureIo();
+
+    expect(
+      await executeCli(
+        ["init", "--through", "ingest", "--traces", older, "--repo", repo],
+        first.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(0);
+
+    const resumed = captureIo();
+    expect(
+      await executeCli(
+        ["init", "--yes", "--through", "ingest", "--repo", repo],
+        resumed.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(0);
+    expect(resumed.stdout()).toContain(`Resuming the ingested trace: ${older}`);
+    expect(resumed.stdout()).not.toContain("Using trace file:");
+  });
+});
+
+describe("CLI exit codes", () => {
+  it("exits 0 for --version and help <command>", async () => {
+    const versionOutput = captureIo();
+
+    expect(await executeCli(["--version"], versionOutput.io)).toBe(0);
+    expect(versionOutput.stdout()).toMatch(/^\d+\.\d+\.\d+/u);
+    expect(versionOutput.stderr()).toBe("");
+
+    const helpOutput = captureIo();
+
+    expect(await executeCli(["help", "init"], helpOutput.io)).toBe(0);
+    expect(helpOutput.stdout()).toContain("Usage: rightmodeler init");
+    expect(helpOutput.stderr()).toBe("");
+  });
+
+  it("reports usage errors in the selected output mode", async () => {
+    const humanOutput = captureIo();
+
+    expect(await executeCli(["init", "--bogus"], humanOutput.io)).toBe(10);
+    expect(humanOutput.stdout()).toBe("");
+    expect(humanOutput.stderr()).toContain("unknown option '--bogus'");
+
+    for (const mode of ["json", "jsonl"] as const) {
+      const machineOutput = captureIo();
+
+      expect(
+        await executeCli(
+          ["--output", mode, "init", "--through", "nope"],
+          machineOutput.io,
+        ),
+      ).toBe(10);
+      expect(machineOutput.stdout()).toBe("");
+      const lines = machineOutput.stderr().trimEnd().split("\n");
+      expect(lines).toHaveLength(1);
+      expect(JSON.parse(lines[0]!)).toEqual({
+        code: "usage_error",
+        message: expect.stringContaining("'nope' is invalid"),
+        remedy: expect.stringContaining("--help"),
+      });
+    }
+  });
+
+  it("prints packaged documentation and rejects unknown names", async () => {
+    const list = captureIo();
+    expect(await executeCli(["docs"], list.io)).toBe(0);
+    expect(list.stdout()).toContain("getting-started");
+
+    const document = captureIo();
+    expect(await executeCli(["docs", "exit-codes"], document.io)).toBe(0);
+    expect(document.stdout()).toContain("# Exit codes");
+
+    const unknown = captureIo();
+    expect(await executeCli(["docs", "nope"], unknown.io)).toBe(10);
+    expect(unknown.stderr()).toContain("Allowed choices are");
+  });
+});
+
+describe("CLI needs-input errors", () => {
+  it("rejects a non-positive provider concurrency", async () => {
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        ["--output", "json", "init", "--max-concurrency", "0"],
+        captured.io,
+      ),
+    ).toBe(2);
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "invalid_option",
+      message: "--max-concurrency must be a positive integer",
+    });
+  });
+
+  it("accepts valid declarative matchers", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const matchers = join(root, "matchers.json");
+    await writeFile(
+      matchers,
+      JSON.stringify([
+        {
+          slug: "custom-model-call",
+          description: "Custom model call",
+          noiseTier: "normal",
+          filePatterns: ["**/*.ts"],
+          patterns: [
+            {
+              regex: { source: "customCall\\s*\\(", flags: "i" },
+              label: "custom call",
+            },
+          ],
+          examples: ["customCall(input)"],
+          closesSurfaceIds: ["custom-framework"],
+        },
+      ]),
+    );
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "--output",
+          "json",
+          "init",
+          "--through",
+          "scan",
+          "--matchers",
+          matchers,
+          "--repo",
+          repo,
+        ],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(0);
+    expect(JSON.parse(captured.stdout()).executedStages).toContain("scan");
+  });
+
+  it("rejects invalid declarative matcher flags", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const matchers = join(root, "matchers.json");
+    await writeFile(
+      matchers,
+      JSON.stringify([
+        {
+          slug: "custom-model-call",
+          description: "Custom model call",
+          noiseTier: "normal",
+          filePatterns: ["**/*.ts"],
+          patterns: [
+            {
+              regex: { source: "customCall\\s*\\(", flags: "g" },
+              label: "custom call",
+            },
+          ],
+          examples: ["customCall(input)"],
+          closesSurfaceIds: ["custom-framework"],
+        },
+      ]),
+    );
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "--output",
+          "json",
+          "init",
+          "--through",
+          "scan",
+          "--matchers",
+          matchers,
+          "--repo",
+          repo,
+        ],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(2);
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "invalid_matchers_file",
+      message: expect.stringContaining("INVALID_FLAGS"),
+    });
+  });
+
+  it("rejects a directory containing mixed trace formats", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const traces = join(root, "mixed-traces");
+    await mkdir(traces);
+    await Promise.all([
+      copyFile(validTracePath, join(traces, "a.json")),
+      writeFile(join(traces, "b.jsonl"), `${emptyCodexSession}\n`),
+    ]);
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "--output",
+          "json",
+          "init",
+          "--through",
+          "ingest",
+          "--traces",
+          traces,
+          "--repo",
+          repo,
+        ],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(2);
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "mixed_trace_formats",
+    });
+  });
+
+  it("rejects an empty trace directory", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const traces = join(root, "empty-traces");
+    await mkdir(traces);
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "--output",
+          "json",
+          "init",
+          "--through",
+          "ingest",
+          "--traces",
+          traces,
+          "--repo",
+          repo,
+        ],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(2);
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "empty_traces_directory",
+    });
+  });
+
+  it("reports missing drift traces as a needs-input error", async () => {
+    const { repo, homeDir } = await fixture();
+    const captured = captureIo();
+    const nonTerminal = runtime(homeDir, "", undefined).runtime;
+
+    expect(
+      await executeCli(
+        ["--output", "json", "drift", "--repo", repo],
+        captured.io,
+        nonTerminal,
+      ),
+    ).toBe(2);
+    expect(captured.stdout()).toBe("");
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "missing_traces_path",
+      message: "--traces is required",
+    });
+  });
+
+  it("reports invalid evaluator options as a needs-input error", async () => {
+    const { repo, homeDir } = await fixture();
+    const captured = captureIo();
+    const nonTerminal = runtime(homeDir, "", undefined).runtime;
+
+    expect(
+      await executeCli(
+        ["--output", "json", "init", "--evaluator-scorer", "x", "--repo", repo],
+        captured.io,
+        nonTerminal,
+      ),
+    ).toBe(2);
+    expect(captured.stdout()).toBe("");
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "invalid_option",
+      message: "Evaluator options require --evaluator <provider>",
+    });
   });
 });

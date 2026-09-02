@@ -23,7 +23,7 @@
     "lint": "turbo run lint",
     "format": "turbo run format && prettier --write .",
     "parity": "pnpm --filter @rightmodeler/cli run parity",
-    "check": "turbo run check",
+    "check": "turbo run check && node scripts/unreferenced-exports.mjs",
     "check-types": "turbo run check-types"
   },
   "devDependencies": {

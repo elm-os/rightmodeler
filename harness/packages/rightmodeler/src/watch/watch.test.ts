@@ -22,10 +22,11 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ApplyVerdict } from "../apply/index.js";
+import { createAppliedRemediationLifecycleEvent } from "../apply/remediation.js";
 import { assertContractArtifact } from "../contract-validation.js";
 import type { CapturedConventions } from "../enrich/index.js";
 import { createGithubClient, type GithubClient } from "../github/index.js";
-import { derivePrState } from "./aggregate.js";
+import { derivePrState, readPrLifecycleEvents } from "./aggregate.js";
 import { watchOnce } from "./watch.js";
 
 const stubModuleUrl = new URL(
@@ -57,6 +58,7 @@ interface StubModule {
   startGithubStub(options: {
     readonly port: number;
     readonly token?: string;
+    readonly tokenLogin?: string;
   }): Promise<StubServer>;
 }
 
@@ -196,6 +198,12 @@ function applyVerdict(revision: string): ApplyVerdict {
       owners: [{ handle: "@owner", source: "codeowners" }],
     },
     caps: [{ name: "replay sample size", value: 2 }],
+    receipts: {
+      winnerCostPerCaseUsd: 0.000_12,
+      incumbentCostPerCaseUsd: 0.000_3,
+      costDeltaPct: -60,
+      winnerLatencyP50Ms: 820,
+    },
   };
 }
 
@@ -256,11 +264,13 @@ async function remediationEvidenceArtifacts(
   return artifacts;
 }
 
-async function createHarness(): Promise<Harness> {
+async function createHarness({
+  tokenLogin,
+}: { tokenLogin?: string } = {}): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "rightmodeler-watch-"));
   temporaryDirectories.push(root);
   const module = (await import(stubModuleUrl)) as StubModule;
-  const stub = await module.startGithubStub({ port: 0, token });
+  const stub = await module.startGithubStub({ port: 0, token, tokenLogin });
   openStubs.push(stub);
   process.env[tokenEnv] = token;
   const seeded = await control<{ sha: string }>(stub, "/__test/seed", {
@@ -297,6 +307,18 @@ async function createHarness(): Promise<Harness> {
   });
   const store = new FsStore(join(root, "store"));
   const verdict = applyVerdict(seeded.sha);
+  const runSpecDigest = "a".repeat(64);
+  const remediation = createAppliedRemediationLifecycleEvent({
+    runSpecDigest,
+    repositoryRevision: seeded.sha,
+    files: [
+      {
+        path: "src/model.ts",
+        before: originalSource,
+        after: 'export const model = "acme/small-1";\n',
+      },
+    ],
+  });
   await store.compareAndSwap(
     verdictKey("project", familyId),
     0,
@@ -314,9 +336,9 @@ async function createHarness(): Promise<Harness> {
       corpusVersionId: "corpus-1",
       gatePolicyVersion: "policy-1",
     },
-    runSpecDigest: "run-spec-1",
+    runSpecDigest,
     createdAt: "2026-01-01T00:00:00.000Z",
-    detail: { branch: "rightmodeler/swap", title: "Swap model" },
+    detail: { branch: "rightmodeler/swap", title: "Swap model", remediation },
   });
   return {
     root,
@@ -448,6 +470,24 @@ describe("watchOnce", () => {
     expect(body).not.toContain("private-case-content");
   });
 
+  it("does not answer its own issue comment under a user token", async () => {
+    const harness = await createHarness({ tokenLogin: "octocat" });
+    await control(harness.stub, "/__test/issue-comments", {
+      ...repository,
+      pullNumber: harness.prNumber,
+      author: "owner",
+      body: "why is the bound only 0.78?",
+    });
+
+    await expect(watchOnce(watchInput(harness))).resolves.toMatchObject({
+      status: "actions_taken",
+    });
+    await expect(watchOnce(watchInput(harness))).resolves.toMatchObject({
+      status: "quiet",
+    });
+    expect(postedComments(harness.stub, harness.prNumber)).toHaveLength(1);
+  });
+
   it("recovers a posted evidence reply when its first response is lost", async () => {
     const harness = await createHarness();
     await control(harness.stub, "/__test/issue-comments", {
@@ -534,7 +574,7 @@ describe("watchOnce", () => {
         await control(harness.stub, "/__test/advance-base", {
           ...repository,
           branch: "main",
-          tree: { README: "advanced\n" },
+          tree: { src: { "model.ts": 'export const model = "acme/max-2";\n' } },
         });
       }
       const fencedStore = fenceOutBeforeVerdictMutation(harness.store);
@@ -556,7 +596,7 @@ describe("watchOnce", () => {
     },
   );
 
-  it("waits on one CI failure pass and closes after the same failure persists", async () => {
+  it("comments once on a failing check and stays open when the same run is seen again", async () => {
     const harness = await createHarness();
     await control(harness.stub, "/__test/check-runs", {
       ...repository,
@@ -588,7 +628,7 @@ describe("watchOnce", () => {
     expect(firstCommentBody).toContain(
       "Diagnosis: repo-validation (fix-repo-validation)",
     );
-    expect(firstCommentBody).not.toContain("docs");
+    expect(firstCommentBody).toContain("docs");
     expect(first.actions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -613,24 +653,51 @@ describe("watchOnce", () => {
     ]);
 
     const second = await watchOnce(watchInput(harness));
-    expect(second.status).toBe("actions_taken");
+    expect(second.status).toBe("quiet");
+    await expect(
+      harness.githubClient.getPullRequest({
+        ...repository,
+        pullNumber: harness.prNumber,
+      }),
+    ).resolves.toMatchObject({ state: "open", merged: false });
+    expect(postedComments(harness.stub, harness.prNumber)).toHaveLength(1);
+  });
+
+  it("closes after a rerun of the same check fails again", async () => {
+    const harness = await createHarness();
+    await control(harness.stub, "/__test/check-runs", {
+      ...repository,
+      ref: harness.head,
+      runs: [{ name: "unit test", conclusion: "failure" }],
+    });
+    await watchOnce(watchInput(harness));
+    await control(harness.stub, "/__test/check-runs", {
+      ...repository,
+      ref: harness.head,
+      runs: [{ name: "unit test", conclusion: "failure" }],
+    });
+
+    await watchOnce(watchInput(harness));
+
     await expect(
       harness.githubClient.getPullRequest({
         ...repository,
         pullNumber: harness.prNumber,
       }),
     ).resolves.toMatchObject({ state: "closed", merged: false });
-    expect(postedComments(harness.stub, harness.prNumber)).toHaveLength(1);
     expect(await lifecycleEvents(harness.store)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kind: "pr_closed_rejected" }),
-        expect.objectContaining({ kind: "watch_ended" }),
+        expect.objectContaining({
+          kind: "pr_closed_rejected",
+          detail: expect.objectContaining({
+            reason: "persistent_ci_failure",
+          }),
+        }),
       ]),
     );
-    expect((await watchOnce(watchInput(harness))).status).toBe("quiet");
   });
 
-  it("resets CI persistence when a completed check is rerun", async () => {
+  it("proves remediation when a rerun of the failing check succeeds", async () => {
     const harness = await createHarness();
     await control(harness.stub, "/__test/check-runs", {
       ...repository,
@@ -639,7 +706,7 @@ describe("watchOnce", () => {
     });
     await watchOnce(watchInput(harness));
 
-    await control(harness.stub, "/__test/check-run-conclusions", {
+    await control(harness.stub, "/__test/check-runs", {
       ...repository,
       ref: harness.head,
       runs: [{ name: "unit test", conclusion: "success" }],
@@ -662,28 +729,6 @@ describe("watchOnce", () => {
         },
       },
     });
-
-    await control(harness.stub, "/__test/check-run-conclusions", {
-      ...repository,
-      ref: harness.head,
-      runs: [{ name: "unit test", conclusion: "failure" }],
-    });
-    expect((await watchOnce(watchInput(harness))).status).toBe("actions_taken");
-    await expect(
-      harness.githubClient.getPullRequest({
-        ...repository,
-        pullNumber: harness.prNumber,
-      }),
-    ).resolves.toMatchObject({ state: "open" });
-    expect(postedComments(harness.stub, harness.prNumber)).toHaveLength(2);
-
-    await watchOnce(watchInput(harness));
-    await expect(
-      harness.githubClient.getPullRequest({
-        ...repository,
-        pullNumber: harness.prNumber,
-      }),
-    ).resolves.toMatchObject({ state: "closed" });
   });
 
   it("does not prove remediation evidence when only some baseline failures pass", async () => {
@@ -738,7 +783,7 @@ describe("watchOnce", () => {
     ).toEqual(["draft"]);
   });
 
-  it.each(["cancelled", "timed_out", "action_required", "neutral", "skipped"])(
+  it.each(["neutral", "skipped"])(
     "does not prove remediation evidence for a completed %s baseline check",
     async (conclusion) => {
       const harness = await createHarness();
@@ -767,7 +812,37 @@ describe("watchOnce", () => {
     },
   );
 
-  it("counts persisted failure observations when a check disappears for one pass", async () => {
+  it.each(["cancelled", "timed_out", "action_required"])(
+    "closes after a completed %s rerun of a failing check",
+    async (conclusion) => {
+      const harness = await createHarness();
+      await control(harness.stub, "/__test/check-runs", {
+        ...repository,
+        ref: harness.head,
+        runs: [{ name: "unit test", conclusion: "failure" }],
+      });
+      await watchOnce(watchInput(harness));
+
+      await control(harness.stub, "/__test/check-runs", {
+        ...repository,
+        ref: harness.head,
+        runs: [
+          { name: "unit test", conclusion },
+          { name: "build", conclusion: "success" },
+        ],
+      });
+      await watchOnce(watchInput(harness));
+
+      await expect(
+        harness.githubClient.getPullRequest({
+          ...repository,
+          pullNumber: harness.prNumber,
+        }),
+      ).resolves.toMatchObject({ state: "closed", merged: false });
+    },
+  );
+
+  it("does not close when the same run id reappears after a blank pass", async () => {
     const harness = await createHarness();
     let checkPass = 0;
     const intermittentClient: GithubClient = {
@@ -802,11 +877,11 @@ describe("watchOnce", () => {
         ...repository,
         pullNumber: harness.prNumber,
       }),
-    ).resolves.toMatchObject({ state: "closed" });
+    ).resolves.toMatchObject({ state: "open" });
     expect(postedComments(harness.stub, harness.prNumber)).toHaveLength(1);
   });
 
-  it("closes when one failing check persists as another failure appears", async () => {
+  it("stays open when a second distinct check fails for the first time", async () => {
     const harness = await createHarness();
     await control(harness.stub, "/__test/check-runs", {
       ...repository,
@@ -828,13 +903,37 @@ describe("watchOnce", () => {
         ...repository,
         pullNumber: harness.prNumber,
       }),
-    ).resolves.toMatchObject({ state: "closed" });
-    expect(postedComments(harness.stub, harness.prNumber)).toHaveLength(1);
+    ).resolves.toMatchObject({ state: "open" });
+    expect(postedComments(harness.stub, harness.prNumber)).toHaveLength(2);
+  });
+
+  it("triages a failing commit status with no check run", async () => {
+    const harness = await createHarness();
+    await control(harness.stub, "/__test/commit-statuses", {
+      ...repository,
+      ref: harness.head,
+      statuses: [{ context: "ci/circleci", state: "failure" }],
+    });
+
+    await expect(watchOnce(watchInput(harness))).resolves.toMatchObject({
+      status: "actions_taken",
+    });
+    const comment = postedComments(harness.stub, harness.prNumber)[0];
+    expect(
+      String((comment?.body as Record<string, unknown> | undefined)?.body),
+    ).toContain("ci/circleci");
     expect(await lifecycleEvents(harness.store)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          kind: "pr_closed_rejected",
-          detail: expect.objectContaining({ checkNames: ["unit test"] }),
+          kind: "comment_posted",
+          detail: expect.objectContaining({
+            failingChecks: [
+              expect.objectContaining({
+                name: "ci/circleci",
+                source: "commit_status",
+              }),
+            ],
+          }),
         }),
       ]),
     );
@@ -857,7 +956,9 @@ describe("watchOnce", () => {
     const hitCount = harness.stub.getHits().length;
     expect((await watchOnce(watchInput(harness))).status).toBe("quiet");
     expect(harness.stub.getHits()).toHaveLength(hitCount);
-    expect((await derivePrState(watchInput(harness))).phase).toBe("ended");
+    expect(
+      derivePrState(await readPrLifecycleEvents(watchInput(harness))).phase,
+    ).toBe("ended");
   });
 
   it("records a human close as a terminal rejection", async () => {
@@ -873,7 +974,7 @@ describe("watchOnce", () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: "pr_closed_rejected",
-          runSpecDigest: "run-spec-1",
+          runSpecDigest: "a".repeat(64),
           detail: expect.objectContaining({ reason: "closed_unmerged" }),
         }),
         expect.objectContaining({ kind: "watch_ended" }),
@@ -886,7 +987,7 @@ describe("watchOnce", () => {
     await control(harness.stub, "/__test/advance-base", {
       ...repository,
       branch: "main",
-      tree: { README: "advanced\n" },
+      tree: { src: { "model.ts": 'export const model = "acme/max-2";\n' } },
     });
 
     await expect(watchOnce(watchInput(harness))).resolves.toMatchObject({
@@ -915,6 +1016,25 @@ describe("watchOnce", () => {
       reproof_requested: true,
       reproof_request_ids: [expect.stringMatching(/^base:/)],
     });
+  });
+
+  it("stays quiet when the base advances without touching a swapped file", async () => {
+    const harness = await createHarness();
+    await control(harness.stub, "/__test/advance-base", {
+      ...repository,
+      branch: "main",
+      tree: { README: "advanced\n" },
+    });
+
+    await expect(watchOnce(watchInput(harness))).resolves.toMatchObject({
+      status: "quiet",
+    });
+    expect(postedComments(harness.stub, harness.prNumber)).toHaveLength(0);
+    const stored = await harness.store.get(verdictKey("project", familyId));
+    expect(stored).not.toBeNull();
+    expect(
+      JSON.parse(Buffer.from(stored!.body).toString("utf8")),
+    ).not.toHaveProperty("reproof_requested");
   });
 
   it("lets only one concurrent worker hold the fenced PR lock", async () => {

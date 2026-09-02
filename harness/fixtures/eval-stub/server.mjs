@@ -30,7 +30,10 @@ function similarity(output, expected) {
 
 function runState(experiment) {
   if (experiment.fail) return "failed";
-  return experiment.polls <= experiment.pendingPolls ? "pending" : "complete";
+  if (experiment.polls <= experiment.pendingPolls) return "pending";
+  return Date.now() - experiment.createdAt < experiment.pendingMs
+    ? "pending"
+    : "complete";
 }
 
 function fetchedEvents(experiment) {
@@ -81,6 +84,7 @@ function fetchedEvents(experiment) {
 export async function startEvalStub({
   port,
   pendingPolls = 1,
+  pendingMs = 0,
   fail = false,
   omitCaseId,
   reflectAuthError = false,
@@ -177,6 +181,8 @@ export async function startEvalStub({
         events: [],
         polls: 0,
         pendingPolls,
+        createdAt: Date.now(),
+        pendingMs,
         fail,
         omitCaseId,
         malformedFetch,

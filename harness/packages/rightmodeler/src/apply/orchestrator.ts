@@ -1,15 +1,16 @@
 import { execFile } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
 import {
+  appendLifecycleEvent,
   canonicalJson,
+  compareText,
   computeRunSpecDigest,
-  factKey,
   jsonValueSchema,
-  lifecycleEventSchema,
+  lifecycleDetail,
   type JsonValue,
   type LifecycleEvent,
   type Store,
@@ -22,10 +23,21 @@ import type {
 } from "../enrich/index.js";
 import {
   type GithubClient,
-  type GithubFileContent,
   GithubHttpError,
   type GithubPullRequest,
 } from "../github/index.js";
+import {
+  optionalFile,
+  optionalRef,
+  restoreBranch,
+} from "../github/branch-ops.js";
+import {
+  escapeCell,
+  formatDeltaPct,
+  formatLatencyMs,
+  formatUsdPerCase,
+  percent,
+} from "../report/format.js";
 import { buildSwapDiff, type SwapDiffFile, type SwapRequest } from "./diff.js";
 import { lintSwapDiff, type DiffViolation } from "./difflint.js";
 import { formatWithHostFormatter, type FormatterBlocker } from "./format.js";
@@ -63,6 +75,12 @@ export interface ApplyVerdict {
   readonly swaps: readonly SwapRequest[];
   readonly blastRadius: FamilyBlastRadius;
   readonly caps: readonly ApplyCap[];
+  readonly receipts: {
+    readonly winnerCostPerCaseUsd: number | null;
+    readonly incumbentCostPerCaseUsd: number | null;
+    readonly costDeltaPct: number | null;
+    readonly winnerLatencyP50Ms: number | null;
+  };
 }
 
 export type ApplyRefusalCode =
@@ -72,11 +90,11 @@ export type ApplyRefusalCode =
   | "previously_rejected"
   | "stale_evidence"
   | "detached_head"
+  | "dirty_worktree"
   | "stale_location"
   | "diff_lint_failed"
   | "formatter_blocked"
   | "host_conventions_unreadable"
-  | "no_requestable_reviewers"
   | "invalid_repository_revision"
   | "apply_branch_unowned"
   | "apply_branch_scope_mismatch"
@@ -153,10 +171,6 @@ function refusal(
   };
 }
 
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
 function lintFiles(files: readonly SwapDiffFile[]) {
   return files.map((file) => ({
     path: file.path,
@@ -214,12 +228,79 @@ function changeTitle(
     : `Swap ${families} models`;
 }
 
-function percent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
+interface EvidenceRow {
+  readonly family: string;
+  readonly decision: string;
+  readonly evaluatorKinds: string;
+  readonly cascade: string;
+  readonly worstCaseBound: string;
+  readonly from: string;
+  readonly to: string;
+  readonly incumbentCostPerCase: string;
+  readonly winnerCostPerCase: string;
+  readonly delta: string;
+  readonly p50Latency: string;
+  readonly caps: string;
+  readonly caseIds: string;
 }
 
-function escapeCell(value: string): string {
-  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
+const evidenceColumns = [
+  ["Family", "family"],
+  ["Decision", "decision"],
+  ["Evaluator kinds", "evaluatorKinds"],
+  ["Cascade", "cascade"],
+  ["Worst-case bound", "worstCaseBound"],
+  ["From", "from"],
+  ["To", "to"],
+  ["Incumbent $/case", "incumbentCostPerCase"],
+  ["Winner $/case", "winnerCostPerCase"],
+  ["Delta", "delta"],
+  ["p50 latency", "p50Latency"],
+  ["Caps", "caps"],
+  ["Case IDs", "caseIds"],
+] as const satisfies readonly (readonly [string, keyof EvidenceRow])[];
+
+function evidenceRow({
+  verdict,
+  cascadeStatus,
+  caps,
+  swaps,
+  receipts,
+}: ApplyVerdict): EvidenceRow {
+  const evaluators = verdict.evaluatorKinds
+    .map(({ evaluatorKind }) => evaluatorKind)
+    .join(", ");
+  const renderedCaps = caps
+    .map(({ name, value }) => `${name}: ${value}`)
+    .join("; ");
+  const caseIds = verdict.caseIds.filter((caseId) =>
+    caseIdPattern.test(caseId),
+  );
+  const renderedCaseIds = caseIds.slice(0, 5).map((caseId) => `\`${caseId}\``);
+  if (caseIds.length > 5) {
+    renderedCaseIds.push(`and ${caseIds.length - 5} more`);
+  }
+  const invalidCaseIds = verdict.caseIds.length - caseIds.length;
+  if (invalidCaseIds > 0) {
+    renderedCaseIds.push(
+      `${invalidCaseIds} invalid case ID${invalidCaseIds === 1 ? "" : "s"} omitted`,
+    );
+  }
+  return {
+    family: escapeCell(verdict.familyId),
+    decision: verdict.decision,
+    evaluatorKinds: escapeCell(evaluators),
+    cascade: cascadeStatus,
+    worstCaseBound: percent(verdict.worstCaseBound),
+    from: `\`${escapeCell(swaps[0]!.fromModel)}\``,
+    to: `\`${escapeCell(swaps[0]!.toModel)}\``,
+    incumbentCostPerCase: formatUsdPerCase(receipts.incumbentCostPerCaseUsd),
+    winnerCostPerCase: formatUsdPerCase(receipts.winnerCostPerCaseUsd),
+    delta: formatDeltaPct(receipts.costDeltaPct),
+    p50Latency: formatLatencyMs(receipts.winnerLatencyP50Ms),
+    caps: escapeCell(renderedCaps || "none"),
+    caseIds: renderedCaseIds.join(", "),
+  };
 }
 
 function evidenceBody(
@@ -233,32 +314,15 @@ function evidenceBody(
     `Revision: \`${evidence.revision}\``,
     `Corpus version: \`${evidence.corpusVersionId}\``,
     "",
-    "| Family | Decision | Evaluator kinds | Cascade | Worst-case bound | Caps | Case IDs |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
-    ...verdicts.map(({ verdict, cascadeStatus, caps }) => {
-      const evaluators = verdict.evaluatorKinds
-        .map(({ evaluatorKind }) => evaluatorKind)
-        .join(", ");
-      const renderedCaps = caps
-        .map(({ name, value }) => `${name}: ${value}`)
-        .join("; ");
-      const caseIds = verdict.caseIds.filter((caseId) =>
-        caseIdPattern.test(caseId),
-      );
-      const renderedCaseIds = caseIds
-        .slice(0, 5)
-        .map((caseId) => `\`${caseId}\``);
-      if (caseIds.length > 5) {
-        renderedCaseIds.push(`and ${caseIds.length - 5} more`);
-      }
-      const invalidCaseIds = verdict.caseIds.length - caseIds.length;
-      if (invalidCaseIds > 0) {
-        renderedCaseIds.push(
-          `${invalidCaseIds} invalid case ID${invalidCaseIds === 1 ? "" : "s"} omitted`,
-        );
-      }
-      return `| ${escapeCell(verdict.familyId)} | ${verdict.decision} | ${escapeCell(evaluators)} | ${cascadeStatus} | ${percent(verdict.worstCaseBound)} | ${escapeCell(renderedCaps || "none")} | ${renderedCaseIds.join(", ")} |`;
+    `| ${evidenceColumns.map(([heading]) => heading).join(" | ")} |`,
+    `| ${evidenceColumns.map(() => "---").join(" | ")} |`,
+    ...verdicts.map((entry) => {
+      const row = evidenceRow(entry);
+      return `| ${evidenceColumns.map(([, field]) => row[field]).join(" | ")} |`;
     }),
+    "",
+    "Costs are dollars per replayed case. `n/a` means the number is not in the store: the replayed case carries no recorded token usage, the catalog publishes no price for the incumbent model, or no attempt recorded a duration.",
+    "Case IDs are SHA-256 digests of the replayed case, not file paths.",
     "",
   ].join("\n");
   const template = conventions.prTemplate?.trimEnd();
@@ -267,24 +331,50 @@ function evidenceBody(
     : `${template}\n\n${table}`;
 }
 
-function reviewersFor(verdicts: readonly ApplyVerdict[]): ReviewerSet {
-  const handles = [
-    ...new Set(
-      verdicts.flatMap(({ blastRadius }) =>
-        blastRadius.owners.map(({ handle }) => handle),
-      ),
-    ),
-  ].sort(compareText);
+async function reviewersFor(
+  githubClient: GithubClient,
+  owner: string,
+  repo: string,
+  verdicts: readonly ApplyVerdict[],
+): Promise<ReviewerSet & { readonly unresolvedOwners: number }> {
+  const owners = [
+    ...new Map(
+      verdicts
+        .flatMap(({ blastRadius }) => blastRadius.owners)
+        .map((rankedOwner) => [rankedOwner.handle, rankedOwner] as const),
+    ).values(),
+  ].sort((left, right) => compareText(left.handle, right.handle));
   const selected: ReviewIdentity[] = [];
-  for (const handle of handles) {
-    if (!handle.startsWith("@")) continue;
-    const identity = handle.slice(1);
-    const slash = identity.indexOf("/");
-    selected.push(
-      slash === -1
-        ? { kind: "user", value: identity }
-        : { kind: "team", value: identity.slice(slash + 1) },
-    );
+  let unresolvedOwners = 0;
+  for (const { handle, source } of owners) {
+    if (handle.startsWith("@")) {
+      const identity = handle.slice(1);
+      const slash = identity.indexOf("/");
+      selected.push(
+        slash === -1
+          ? { kind: "user", value: identity }
+          : { kind: "team", value: identity.slice(slash + 1) },
+      );
+      continue;
+    }
+    const noreply =
+      /^(?:\d+\+)?([A-Za-z0-9-]+)@users\.noreply\.github\.com$/.exec(handle);
+    if (noreply !== null) {
+      selected.push({ kind: "user", value: noreply[1]! });
+      continue;
+    }
+    if (source === "blame") {
+      const login = await githubClient.findCommitAuthorLogin({
+        owner,
+        repo,
+        email: handle,
+      });
+      if (login !== null) {
+        selected.push({ kind: "user", value: login });
+        continue;
+      }
+    }
+    unresolvedOwners += 1;
   }
   const unique = [
     ...new Map(
@@ -301,6 +391,7 @@ function reviewersFor(verdicts: readonly ApplyVerdict[]): ReviewerSet {
     teamReviewers: unique
       .flatMap(({ kind, value }) => (kind === "team" ? [value] : []))
       .slice(0, reviewerLimit),
+    unresolvedOwners,
   };
 }
 
@@ -311,49 +402,36 @@ async function gitOutput(repoDir: string, args: readonly string[]) {
   return stdout.trim();
 }
 
-function blobSha(content: string): string {
-  return createHash("sha1")
-    .update(`blob ${Buffer.byteLength(content)}\0${content}`)
-    .digest("hex");
-}
-
-function lifecycleDetail(event: LifecycleEvent): Record<string, JsonValue> {
-  if (
-    typeof event.detail !== "object" ||
-    event.detail === null ||
-    Array.isArray(event.detail)
-  ) {
-    return {};
-  }
-  return event.detail;
-}
-
-async function optionalGithubFile(
-  githubClient: GithubClient,
-  input: Parameters<GithubClient["getFileContent"]>[0],
-): Promise<GithubFileContent | undefined> {
-  try {
-    return await githubClient.getFileContent(input);
-  } catch (error) {
-    if (error instanceof GithubHttpError && error.status === 404) {
-      return undefined;
+async function dirtySwapPaths(
+  repoDir: string,
+  paths: readonly string[],
+): Promise<string[]> {
+  const dirty: string[] = [];
+  for (const path of paths) {
+    try {
+      await execFileAsync(
+        "git",
+        ["-C", repoDir, "diff", "--quiet", "HEAD", "--", path],
+        { encoding: "utf8" },
+      );
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === 1
+      ) {
+        dirty.push(path);
+        continue;
+      }
+      throw error;
     }
-    throw error;
   }
+  return dirty;
 }
 
-async function optionalBranchSha(
-  githubClient: GithubClient,
-  input: Parameters<GithubClient["getRef"]>[0],
-): Promise<string | undefined> {
-  try {
-    return (await githubClient.getRef(input)).sha;
-  } catch (error) {
-    if (error instanceof GithubHttpError && error.status === 404) {
-      return undefined;
-    }
-    throw error;
-  }
+function committedBlobSha(repoDir: string, path: string): Promise<string> {
+  return gitOutput(repoDir, ["rev-parse", `HEAD:${path}`]);
 }
 
 async function resumedApplyUpdates({
@@ -371,7 +449,7 @@ async function resumedApplyUpdates({
 }): Promise<ApplyBranchUpdate[]> {
   const updates: ApplyBranchUpdate[] = [];
   for (const file of files) {
-    const current = await optionalGithubFile(githubClient, {
+    const current = await optionalFile(githubClient, {
       owner,
       repo,
       path: file.path,
@@ -421,79 +499,6 @@ async function assertApplyBranchScope({
       `Existing apply branch changed files outside its declared scope: ${unexpected.join(", ")}`,
       { paths: unexpected },
     );
-  }
-}
-
-async function restoreApplyBranch({
-  githubClient,
-  owner,
-  repo,
-  branch,
-  title,
-  files,
-  failedDigests,
-}: {
-  readonly githubClient: GithubClient;
-  readonly owner: string;
-  readonly repo: string;
-  readonly branch: string;
-  readonly title: string;
-  readonly files: readonly {
-    readonly path: string;
-    readonly before: string;
-  }[];
-  readonly failedDigests: FileDigestMap;
-}): Promise<void> {
-  const branchSha = await optionalBranchSha(githubClient, {
-    owner,
-    repo,
-    ref: `heads/${branch}`,
-  });
-  if (branchSha === undefined) {
-    return;
-  }
-
-  const currentFiles = new Map<string, GithubFileContent | undefined>();
-  for (const file of files) {
-    const current = await optionalGithubFile(githubClient, {
-      owner,
-      repo,
-      path: file.path,
-      ref: branchSha,
-    });
-    currentFiles.set(file.path, current);
-    failedDigests[file.path] =
-      current === undefined ? null : digestFileContent(current.contentBytes);
-  }
-
-  for (const file of files) {
-    const current = currentFiles.get(file.path);
-    if (current?.content === file.before) continue;
-    await githubClient.createOrUpdateFile({
-      owner,
-      repo,
-      path: file.path,
-      message: `Restore after failed ${title}`,
-      content: file.before,
-      branch,
-      ...(current === undefined ? {} : { sha: current.sha }),
-    });
-  }
-
-  for (const file of files) {
-    const restored = await optionalGithubFile(githubClient, {
-      owner,
-      repo,
-      path: file.path,
-      ref: branch,
-    });
-    if (restored?.content !== file.before) {
-      throw new ApplyServiceError(
-        "apply_restore_failed",
-        `Apply failure did not restore ${file.path}`,
-        { path: file.path },
-      );
-    }
   }
 }
 
@@ -595,7 +600,6 @@ function existingPullRequest(
       prNumber: number;
       branch?: string;
       title?: string;
-      reviewerSet?: ReviewerSet;
     }
   | { status: "rejected"; prNumber: number; detail: JsonValue }
   | null {
@@ -635,13 +639,11 @@ function existingPullRequest(
         `Merged run ${runSpecDigest} has no complete pr_opened lifecycle fact`,
       );
     }
-    const reviewerSet = recordedReviewers(matching, terminal.prNumber);
     return {
       status: "existing",
       prNumber: terminal.prNumber,
       branch: detail.branch,
       title: detail.title,
-      ...(reviewerSet === null ? {} : { reviewerSet }),
     };
   }
   const opened = [...matching]
@@ -662,19 +664,88 @@ function existingPullRequest(
   };
 }
 
-async function appendLifecycleEvent(
-  store: Store,
-  event: Omit<LifecycleEvent, "eventId" | "createdAt">,
-): Promise<void> {
-  const value = lifecycleEventSchema.parse({
-    ...event,
-    eventId: randomUUID(),
-    createdAt: new Date().toISOString(),
-  });
-  await store.putImmutable(
-    factKey(projectId, value.eventId),
-    Buffer.from(canonicalJson(value), "utf8"),
+async function ensureReviewRequested({
+  githubClient,
+  store,
+  lifecycle,
+  owner,
+  repo,
+  events,
+  prNumber,
+  reviewerSet,
+}: {
+  readonly githubClient: GithubClient;
+  readonly store: Store;
+  readonly lifecycle: Pick<
+    LifecycleEvent,
+    "repo" | "familyIds" | "evidence" | "runSpecDigest"
+  >;
+  readonly owner: string;
+  readonly repo: string;
+  readonly events: readonly LifecycleEvent[];
+  readonly prNumber: number;
+  readonly reviewerSet: ReviewerSet & { readonly unresolvedOwners: number };
+}): Promise<ReviewerSet> {
+  const recorded = recordedReviewers(events, prNumber);
+  if (recorded !== null) return recorded;
+
+  const author = await githubClient.getAuthenticatedUserLogin();
+  let reviewers = reviewerSet.reviewers.filter(
+    (reviewer) => reviewer.toLowerCase() !== author.toLowerCase(),
   );
+  let teamReviewers = reviewerSet.teamReviewers;
+  if (reviewers.length > 0 || teamReviewers.length > 0) {
+    try {
+      await githubClient.requestReviewers({
+        owner,
+        repo,
+        pullNumber: prNumber,
+        reviewers,
+        teamReviewers,
+      });
+    } catch (error) {
+      if (!(error instanceof GithubHttpError) || error.status !== 422) {
+        throw error;
+      }
+      const granted: string[] = [];
+      let teamReviewersGranted = false;
+      for (const reviewer of reviewers) {
+        try {
+          await githubClient.requestReviewers({
+            owner,
+            repo,
+            pullNumber: prNumber,
+            reviewers: [reviewer],
+            teamReviewers,
+          });
+          granted.push(reviewer);
+          teamReviewersGranted = true;
+        } catch (reviewerError) {
+          if (
+            !(reviewerError instanceof GithubHttpError) ||
+            reviewerError.status !== 422
+          ) {
+            throw reviewerError;
+          }
+        }
+      }
+      reviewers = granted;
+      if (!teamReviewersGranted) teamReviewers = [];
+    }
+  }
+  const requested = reviewers.length > 0 || teamReviewers.length > 0;
+  await appendLifecycleEvent(store, projectId, {
+    ...lifecycle,
+    prNumber,
+    kind: "review_requested",
+    detail: {
+      reviewers: [...reviewers],
+      teamReviewers: [...teamReviewers],
+      unresolvedOwners: reviewerSet.unresolvedOwners,
+      ...(requested ? {} : { reason: "no_requestable_reviewers" }),
+    },
+  });
+  return { reviewers, teamReviewers };
 }
 
 function lintRefusal(violations: readonly DiffViolation[]): ApplyResult {
@@ -779,9 +850,19 @@ export async function applySwaps({
     corpusVersionId: evidence.corpusVersionId,
   });
   const familyIds = selected.map(({ verdict }) => verdict.familyId);
+  const lifecycle = {
+    repo: repository,
+    familyIds,
+    evidence: {
+      revision: evidence.revision,
+      corpusVersionId: evidence.corpusVersionId,
+      gatePolicyVersion,
+    },
+    runSpecDigest,
+  } as const;
   const branch = branchName(conventions, familyIds, runSpecDigest);
   const title = changeTitle(conventions, familyIds);
-  const reviewerSet = reviewersFor(selected);
+  const reviewerSet = await reviewersFor(githubClient, owner, repo, selected);
   const lifecycleEvents = await readRemediationLifecycleEvents(
     store,
     projectId,
@@ -795,13 +876,23 @@ export async function applySwaps({
     );
   }
   if (existing !== null) {
+    const requestedReviewers = await ensureReviewRequested({
+      githubClient,
+      store,
+      lifecycle,
+      owner,
+      repo,
+      events: lifecycleEvents,
+      prNumber: existing.prNumber,
+      reviewerSet,
+    });
     return {
       status: "existing",
       runSpecDigest,
       prNumber: existing.prNumber,
       branch: existing.branch ?? branch,
       title: existing.title ?? title,
-      ...(existing.reviewerSet ?? reviewerSet),
+      ...requestedReviewers,
     };
   }
 
@@ -838,6 +929,17 @@ export async function applySwaps({
   }
 
   const swaps = selected.flatMap(({ swaps }) => swaps);
+  const swapPaths = [
+    ...new Set(swaps.map(({ stepRecord }) => stepRecord.callSite.path)),
+  ].sort(compareText);
+  const dirty = await dirtySwapPaths(repoDir, swapPaths);
+  if (dirty.length > 0) {
+    return refusal(
+      "dirty_worktree",
+      "At least one file the swap touches has uncommitted changes; commit or stash them before applying.",
+      { paths: dirty },
+    );
+  }
   const staleDigests = await staleDigestPaths(repoDir, swaps);
   if (staleDigests.length > 0) {
     return refusal(
@@ -876,16 +978,6 @@ export async function applySwaps({
   const finalLint = lintSwapDiff({ files: lintFiles(formatted.files) });
   if (!finalLint.pass) return lintRefusal(finalLint.violations);
 
-  if (
-    reviewerSet.reviewers.length === 0 &&
-    reviewerSet.teamReviewers.length === 0
-  ) {
-    return refusal(
-      "no_requestable_reviewers",
-      "No enriched owner can be requested through the GitHub review API.",
-    );
-  }
-
   if (dryRun) {
     return {
       status: "dry_run",
@@ -893,7 +985,8 @@ export async function applySwaps({
       branch,
       title,
       files: formatted.files.map(({ path }) => path),
-      ...reviewerSet,
+      reviewers: reviewerSet.reviewers,
+      teamReviewers: reviewerSet.teamReviewers,
     };
   }
 
@@ -902,16 +995,6 @@ export async function applySwaps({
     repositoryRevision: evidence.revision,
     files: formatted.files,
   });
-  const lifecycle = {
-    repo: repository,
-    familyIds,
-    evidence: {
-      revision: evidence.revision,
-      corpusVersionId: evidence.corpusVersionId,
-      gatePolicyVersion,
-    },
-    runSpecDigest,
-  } as const;
   const sortedFiles = [...formatted.files].sort((left, right) =>
     compareText(left.path, right.path),
   );
@@ -927,11 +1010,13 @@ export async function applySwaps({
     const mismatch = applyStartMismatch(started, remediation);
     if (mismatch !== null) return mismatch;
   }
-  const existingBranchSha = await optionalBranchSha(githubClient, {
-    owner,
-    repo,
-    ref: `heads/${branch}`,
-  });
+  const existingBranchSha = (
+    await optionalRef(githubClient, {
+      owner,
+      repo,
+      ref: `heads/${branch}`,
+    })
+  )?.sha;
   if (existingBranchSha !== undefined && started === undefined) {
     return refusal(
       "apply_branch_unowned",
@@ -965,7 +1050,7 @@ export async function applySwaps({
     throw error;
   }
   if (started === undefined) {
-    await appendLifecycleEvent(store, {
+    await appendLifecycleEvent(store, projectId, {
       ...lifecycle,
       prNumber: null,
       kind: "apply_started",
@@ -987,7 +1072,12 @@ export async function applySwaps({
     }
     const updates =
       resumedUpdates ??
-      sortedFiles.map((file) => ({ file, sha: blobSha(file.before) }));
+      (await Promise.all(
+        sortedFiles.map(async (file) => ({
+          file,
+          sha: await committedBlobSha(repoDir, file.path),
+        })),
+      ));
     for (const { file, sha } of updates) {
       await githubClient.createOrUpdateFile({
         owner,
@@ -1032,14 +1122,24 @@ export async function applySwaps({
     let restoreFailure: unknown;
     if (ownsBranch) {
       try {
-        await restoreApplyBranch({
+        await restoreBranch({
           githubClient,
           owner,
           repo,
           branch,
           title,
-          files: sortedFiles,
+          files: sortedFiles.map(({ path, before }) => ({
+            path,
+            content: before,
+            contentBytes: Buffer.from(before, "utf8"),
+          })),
           failedDigests,
+          unrestored: (path) =>
+            new ApplyServiceError(
+              "apply_restore_failed",
+              `Apply failure did not restore ${path}`,
+              { path },
+            ),
         });
       } catch (caught) {
         restoreFailure = caught;
@@ -1057,7 +1157,7 @@ export async function applySwaps({
       postApplyDigests: failedDigests,
       restored: ownsBranch && restoreFailure === undefined,
     });
-    await appendLifecycleEvent(store, {
+    await appendLifecycleEvent(store, projectId, {
       ...lifecycle,
       prNumber: null,
       kind: "apply_started",
@@ -1086,28 +1186,22 @@ export async function applySwaps({
       },
     );
   }
-  await appendLifecycleEvent(store, {
+  await appendLifecycleEvent(store, projectId, {
     ...lifecycle,
     prNumber: pullRequest.number,
     kind: "pr_opened",
     detail: { operation: "apply", branch, title, remediation },
   });
 
-  await githubClient.requestReviewers({
+  const requestedReviewers = await ensureReviewRequested({
+    githubClient,
+    store,
+    lifecycle,
     owner,
     repo,
-    pullNumber: pullRequest.number,
-    reviewers: reviewerSet.reviewers,
-    teamReviewers: reviewerSet.teamReviewers,
-  });
-  await appendLifecycleEvent(store, {
-    ...lifecycle,
+    events: lifecycleEvents,
     prNumber: pullRequest.number,
-    kind: "review_requested",
-    detail: {
-      reviewers: [...reviewerSet.reviewers],
-      teamReviewers: [...reviewerSet.teamReviewers],
-    },
+    reviewerSet,
   });
 
   return {
@@ -1116,6 +1210,6 @@ export async function applySwaps({
     prNumber: pullRequest.number,
     branch,
     title,
-    ...reviewerSet,
+    ...requestedReviewers,
   };
 }

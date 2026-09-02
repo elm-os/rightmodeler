@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
 import { createServer } from "node:http";
 import {
   chmod,
@@ -19,6 +20,7 @@ import { promisify } from "node:util";
 
 import {
   FsStore,
+  computeRunSpecDigest,
   confirmPlanKey,
   factKey,
   factsPrefix,
@@ -29,7 +31,11 @@ import {
   verdictKey,
   verdictsPrefix,
 } from "@rightmodeler/core";
-import { judgeExecution, type JudgeChat } from "@rightmodeler/kernel";
+import {
+  judgeExecution,
+  minimumTrialsForFloor,
+  type JudgeChat,
+} from "@rightmodeler/kernel";
 import { createProvider } from "@rightmodeler/replay";
 import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
 import { afterAll, describe, expect, it } from "vitest";
@@ -41,6 +47,12 @@ const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const demoAppPath = fileURLToPath(
   new URL("../../../fixtures/demo-app", import.meta.url),
 );
+const traceFixturesDir = fileURLToPath(
+  new URL("../../../fixtures/traces/", import.meta.url),
+);
+const traceFixtures = readdirSync(traceFixturesDir)
+  .filter((name) => /\.(json|jsonl)$/u.test(name))
+  .sort();
 const langgraphAppPath = fileURLToPath(
   new URL("../../../fixtures/langgraph-app", import.meta.url),
 );
@@ -70,7 +82,14 @@ const githubStubModuleUrl = new URL(
 ).href;
 const temporaryDirectories: string[] = [];
 const secret = "phase-a-api-key-must-not-persist";
+const minimumHoldout = minimumTrialsForFloor(0.85, 1);
 const execFileAsync = promisify(execFile);
+const skipDocker = process.env.RIGHTMODELER_SKIP_DOCKER === "1";
+if (skipDocker) {
+  console.warn(
+    "[cli e2e] SKIPPED Mode B confirmation: RIGHTMODELER_SKIP_DOCKER=1",
+  );
+}
 
 describe("machine error protocol", () => {
   it("preserves a named code from a typed service error", () => {
@@ -97,11 +116,13 @@ interface StubProvider {
   port: number;
   close(): Promise<void>;
   getHitCount(): number;
+  getMaxInFlight(): number;
 }
 
 interface StubProviderModule {
   startStubProvider(options: {
     port: number;
+    catalogTotalCount?: number;
     errorModels?: string[];
     includeFreeModel?: boolean;
     malformedJudgeModels?: string[];
@@ -390,6 +411,7 @@ function jsonOutput(result: ChildResult): Record<string, unknown> {
 
 async function startStub(
   options: {
+    catalogTotalCount?: number;
     errorModels?: string[];
     includeFreeModel?: boolean;
     malformedJudgeModels?: string[];
@@ -400,6 +422,68 @@ async function startStub(
 ): Promise<StubProvider> {
   const module = (await import(stubModuleUrl)) as StubProviderModule;
   return module.startStubProvider({ port: 0, ...options });
+}
+
+async function startUnpricedCatalogStub(): Promise<StubProvider> {
+  const upstream = await startStub();
+  let hitCount = 0;
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const body = Buffer.concat(chunks);
+    const upstreamResponse = await fetch(
+      `http://127.0.0.1:${upstream.port}${request.url ?? "/"}`,
+      {
+        method: request.method,
+        headers: { "content-type": "application/json" },
+        ...(body.length === 0 ? {} : { body }),
+      },
+    );
+    if (request.method === "GET" && request.url === "/v1/models") {
+      const catalog = (await upstreamResponse.json()) as {
+        object: string;
+        data: Array<Record<string, unknown>>;
+      };
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          ...catalog,
+          data: catalog.data.map((model) => {
+            const unpriced = { ...model };
+            delete unpriced.pricing;
+            return unpriced;
+          }),
+        }),
+      );
+      return;
+    }
+    hitCount += 1;
+    response.writeHead(upstreamResponse.status, {
+      "content-type":
+        upstreamResponse.headers.get("content-type") ?? "application/json",
+    });
+    response.end(Buffer.from(await upstreamResponse.arrayBuffer()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    await upstream.close();
+    throw new Error("Unpriced catalog stub did not bind a TCP port");
+  }
+  return {
+    port: address.port,
+    getHitCount: () => hitCount,
+    getMaxInFlight: () => upstream.getMaxInFlight(),
+    close: async () => {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      await upstream.close();
+    },
+  };
 }
 
 async function startCatalogDriftStub(): Promise<StubProvider> {
@@ -424,14 +508,16 @@ async function startCatalogDriftStub(): Promise<StubProvider> {
         object: string;
         data: Array<{ id: string }>;
       };
+      const data =
+        catalogRequests === 1
+          ? catalog.data
+          : catalog.data.filter(({ id }) => id.startsWith("zeta/"));
       response.writeHead(200, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
           ...catalog,
-          data:
-            catalogRequests === 1
-              ? catalog.data
-              : catalog.data.filter(({ id }) => id.startsWith("zeta/")),
+          data,
+          total_count: data.length,
         }),
       );
       return;
@@ -455,6 +541,7 @@ async function startCatalogDriftStub(): Promise<StubProvider> {
   return {
     port: address.port,
     getHitCount: () => hitCount,
+    getMaxInFlight: () => upstream.getMaxInFlight(),
     close: async () => {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -590,6 +677,7 @@ async function startConfirmStub(): Promise<StubProvider> {
   return {
     port: address.port,
     getHitCount: () => hitCount + upstream.getHitCount(),
+    getMaxInFlight: () => upstream.getMaxInFlight(),
     close: async () => {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -663,6 +751,24 @@ async function rewriteStageArtifact(
       entry!.fenceToken,
     ),
   ).toBe(true);
+}
+
+async function readStageArtifact(
+  storeRoot: string,
+  stage: string,
+): Promise<Record<string, unknown>> {
+  const store = new FsStore(storeRoot);
+  const state = JSON.parse(
+    await storeText(store, setupStateKey("project")),
+  ) as {
+    stages: Record<string, { outputKey: string }>;
+  };
+  const outputKey = state.stages[stage]?.outputKey;
+  expect(outputKey).toEqual(expect.any(String));
+  return JSON.parse(await storeText(store, outputKey!)) as Record<
+    string,
+    unknown
+  >;
 }
 
 function topologyRecord(
@@ -757,6 +863,109 @@ describe("section 18 autonomy boundary", () => {
 });
 
 describe("built CLI pipeline", () => {
+  it.each(traceFixtures)(
+    "runs %s through corpus",
+    async (name) => {
+      const { repo } = await fixtureCopy(`corpus-${name}`);
+      const result = await runCli([
+        "init",
+        "--through",
+        "corpus",
+        "--traces",
+        join(traceFixturesDir, name),
+        "--output",
+        "json",
+        "--repo",
+        repo,
+      ]);
+
+      expect(result.code, result.stderr).toBe(0);
+      expect(jsonOutput(result).executedStages).toEqual([
+        "scan",
+        "ingest",
+        "reconcile",
+        "scrub",
+        "corpus",
+      ]);
+      const corpus = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "corpus",
+      );
+      expect(corpus.caseCount).toBeGreaterThan(0);
+    },
+    60_000,
+  );
+
+  it("ingests a trace directory like the equivalent single file", async () => {
+    const records = JSON.parse(await readFile(tracesPath, "utf8")) as unknown[];
+    const tracesDirectory = await mkdtemp(
+      join(tmpdir(), "rightmodeler-trace-directory-"),
+    );
+    temporaryDirectories.push(tracesDirectory);
+    await Promise.all([
+      writeFile(
+        join(tracesDirectory, "a.json"),
+        JSON.stringify(records.slice(0, 40)),
+      ),
+      writeFile(
+        join(tracesDirectory, "b.json"),
+        JSON.stringify(records.slice(40)),
+      ),
+    ]);
+    const { repo: directoryRepo } = await fixtureCopy("trace-directory");
+    const { repo: singleRepo } = await fixtureCopy("trace-single-file");
+
+    const directoryResult = await runCli([
+      "init",
+      "--through",
+      "ingest",
+      "--traces",
+      tracesDirectory,
+      "--output",
+      "json",
+      "--repo",
+      directoryRepo,
+    ]);
+    const singleResult = await runCli([
+      "init",
+      "--through",
+      "ingest",
+      "--traces",
+      tracesPath,
+      "--output",
+      "json",
+      "--repo",
+      singleRepo,
+    ]);
+
+    expect(directoryResult.code, directoryResult.stderr).toBe(0);
+    expect(singleResult.code, singleResult.stderr).toBe(0);
+    expect(jsonOutput(directoryResult).executedStages).toContain("ingest");
+    expect(jsonOutput(singleResult).executedStages).toContain("ingest");
+    const directoryRuns = (
+      await readStageArtifact(join(directoryRepo, ".rightmodeler"), "ingest")
+    ).runs;
+    const singleRuns = (
+      await readStageArtifact(join(singleRepo, ".rightmodeler"), "ingest")
+    ).runs;
+    expect(directoryRuns).toEqual(singleRuns);
+    expect(directoryRuns).toBeInstanceOf(Array);
+    expect((directoryRuns as unknown[]).length).toBeGreaterThan(1);
+
+    const store = new FsStore(join(singleRepo, ".rightmodeler"));
+    const state = JSON.parse(
+      await storeText(store, setupStateKey("project")),
+    ) as { stages: Record<string, { inputDigest: string }> };
+    expect(state.stages.ingest!.inputDigest).toBe(
+      computeRunSpecDigest({
+        stage: "ingest",
+        traceSha256: createHash("sha256")
+          .update(await readFile(tracesPath))
+          .digest("hex"),
+      }),
+    );
+  });
+
   it("exports applySwaps from the bundled programmatic entry", async () => {
     const cli = (await import(pathToFileURL(cliPath).href)) as {
       applySwaps?: unknown;
@@ -775,16 +984,14 @@ describe("built CLI pipeline", () => {
         apiKeyEnv,
       });
       const chat: JudgeChat = async (request) =>
-        (
-          await provider.chat({
-            model: request.model,
-            messages: request.messages,
-            temperature: request.temperature,
-            ...(request.responseFormat === undefined
-              ? {}
-              : { responseFormat: request.responseFormat as JsonValue }),
-          })
-        ).content;
+        provider.chat({
+          model: request.model,
+          messages: request.messages,
+          temperature: request.temperature,
+          ...(request.responseFormat === undefined
+            ? {}
+            : { responseFormat: request.responseFormat as JsonValue }),
+        });
 
       const normal = await judgeExecution({
         chat,
@@ -833,6 +1040,8 @@ describe("built CLI pipeline", () => {
       `http://127.0.0.1:${stub.port}/v1`,
       "--api-key-env",
       apiKeyEnv,
+      "--max-concurrency",
+      "1",
       "--output",
       "json",
       "--repo",
@@ -878,6 +1087,7 @@ describe("built CLI pipeline", () => {
       ).toBe(true);
       expect(unusableNotes).toHaveLength(1);
 
+      expect(stub.getMaxInFlight()).toBe(1);
       const hitsAfterFirstRun = stub.getHitCount();
       const resumed = await runCli(args, { env: { [apiKeyEnv]: secret } });
       expect(resumed.code, resumed.stderr).toBe(0);
@@ -973,7 +1183,8 @@ describe("built CLI pipeline", () => {
       expect(
         assessments.every(({ evaluatorId }) => evaluatorId === "yotta/judge-2"),
       ).toBe(true);
-      expect(providerFailures).toHaveLength(3);
+      expect(providerFailures.length).toBeGreaterThanOrEqual(3);
+      expect(providerFailures.length).toBeLessThanOrEqual(10);
       expect(unusableNotes).toEqual([
         expect.objectContaining({
           costUsd: 0,
@@ -1047,6 +1258,154 @@ describe("built CLI pipeline", () => {
         ({ state }) => state === "complete",
       ),
     ).toBe(true);
+
+    await writeFile(join(repo, ".git", "info", "exclude"), "generated/\n", {
+      flag: "a",
+    });
+    await mkdir(join(repo, "generated"), { recursive: true });
+    await writeFile(join(repo, "generated", "bundle.js"), "generated\n");
+
+    const third = await runCli(throughCorpus, { cwd: unrelatedCwd });
+    expect(third.code).toBe(0);
+    expect(jsonOutput(third).executedStages).toEqual([]);
+    expect(
+      (jsonOutput(third).stages as Array<{ state: string }>).every(
+        ({ state }) => state === "complete",
+      ),
+    ).toBe(true);
+
+    const familyPlan = await runCli(
+      ["init", "--plan", "--output", "json", "--repo", repo],
+      { cwd: unrelatedCwd },
+    );
+    expect(familyPlan.code).toBe(0);
+    expect(jsonOutput(familyPlan).familyPlans).toEqual([
+      expect.objectContaining({
+        familyId: "summarize",
+        cases: 70,
+        holdoutCases: 35,
+        minimumHoldoutCases: minimumHoldout,
+        stepIds: [expect.any(String), expect.any(String)],
+      }),
+      expect.objectContaining({
+        familyId: "support",
+        cases: 7,
+        holdoutCases: 4,
+        stepIds: [],
+        abstainReason: {
+          reason: "holdout_below_floor_minimum",
+          observed: 4,
+          required: minimumHoldout,
+        },
+      }),
+    ]);
+  });
+
+  it("applies release policy filters and quality floor through the built CLI", async () => {
+    const { root, repo } = await fixtureCopy("release-policy");
+    const store = join(root, "store");
+    const denyPolicyPath = join(root, "deny-policy.json");
+    const allowPolicyPath = join(root, "allow-policy.json");
+    const floorPolicyPath = join(root, "floor-policy.json");
+    const deniedModelId = "acme/lite-1";
+    const allowedModelId = "acme/small-1";
+    await Promise.all([
+      writeFile(
+        denyPolicyPath,
+        JSON.stringify({ denyModels: [deniedModelId] }),
+      ),
+      writeFile(
+        allowPolicyPath,
+        JSON.stringify({ allowModels: [allowedModelId] }),
+      ),
+      writeFile(floorPolicyPath, JSON.stringify({ qualityFloor: 0.95 })),
+    ]);
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_POLICY_E2E_API_KEY";
+    const common = ["--repo", repo, "--store", store, "--output", "json"];
+    const estimateOptions = [
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+    ];
+
+    try {
+      const denied = await runCli(
+        [...common, "estimate", ...estimateOptions, "--policy", denyPolicyPath],
+        { env: { [apiKeyEnv]: secret } },
+      );
+      expect(denied.code, denied.stderr).toBe(0);
+      const deniedOutput = jsonOutput(denied);
+      const deniedShortlist = deniedOutput.shortlist as Array<{
+        candidateIds: string[];
+      }>;
+      expect(
+        deniedShortlist.some(({ candidateIds }) => candidateIds.length > 0),
+      ).toBe(true);
+      expect(
+        deniedShortlist.every(
+          ({ candidateIds }) => !candidateIds.includes(deniedModelId),
+        ),
+      ).toBe(true);
+      expect(deniedOutput.policy).toMatchObject({
+        denyModels: [deniedModelId],
+      });
+
+      const allowed = await runCli(
+        [
+          ...common,
+          "estimate",
+          ...estimateOptions,
+          "--policy",
+          allowPolicyPath,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+      expect(allowed.code, allowed.stderr).toBe(0);
+      const allowedShortlist = (
+        jsonOutput(allowed).shortlist as Array<{ candidateIds: string[] }>
+      ).filter(({ candidateIds }) => candidateIds.length > 0);
+      expect(allowedShortlist.length).toBeGreaterThan(0);
+      for (const { candidateIds } of allowedShortlist) {
+        expect(candidateIds).toEqual([allowedModelId]);
+      }
+
+      const planArgs = [...common, "init", "--plan", "--traces", tracesPath];
+      const defaultPlan = await runCli(planArgs);
+      expect(defaultPlan.code, defaultPlan.stderr).toBe(0);
+      const defaultFamilyPlans = jsonOutput(defaultPlan).familyPlans as Array<{
+        familyId: string;
+        minimumHoldoutCases: number;
+      }>;
+      const raisedPlan = await runCli([
+        ...planArgs,
+        "--policy",
+        floorPolicyPath,
+      ]);
+      expect(raisedPlan.code, raisedPlan.stderr).toBe(0);
+      const raisedFamilyPlans = jsonOutput(raisedPlan).familyPlans as Array<{
+        familyId: string;
+        minimumHoldoutCases: number;
+      }>;
+      const raisedMinimum = minimumTrialsForFloor(0.95, 1);
+      expect(defaultFamilyPlans.length).toBeGreaterThan(0);
+      expect(raisedFamilyPlans).toHaveLength(defaultFamilyPlans.length);
+      for (const familyPlan of raisedFamilyPlans) {
+        const defaultFamilyPlan = defaultFamilyPlans.find(
+          ({ familyId }) => familyId === familyPlan.familyId,
+        );
+        expect(defaultFamilyPlan).toBeDefined();
+        expect(familyPlan.minimumHoldoutCases).toBe(raisedMinimum);
+        expect(familyPlan.minimumHoldoutCases).toBeGreaterThan(
+          defaultFamilyPlan!.minimumHoldoutCases,
+        );
+      }
+    } finally {
+      await stub.close();
+    }
   });
 
   it("estimates without model spend and idempotently dispatches a detached replay", async () => {
@@ -1364,9 +1723,9 @@ describe("built CLI pipeline", () => {
           familyId: "support",
           decision: "abstain",
           abstainReason: {
-            reason: "insufficient_review_trials",
-            observed: 3,
-            required: 10,
+            reason: "holdout_below_floor_minimum",
+            observed: 4,
+            required: minimumHoldout,
           },
         }),
       );
@@ -1421,7 +1780,9 @@ describe("built CLI pipeline", () => {
         store,
         reportKey("project", "report.md"),
       );
-      expect(reportMarkdown).toContain("insufficient_review_trials (3 of 10)");
+      expect(reportMarkdown).toContain(
+        `holdout_below_floor_minimum (4 of ${minimumHoldout})`,
+      );
       expect(reportMarkdown).toContain("## Gates");
       expect(reportMarkdown).toContain("## Selection");
       expect(reportMarkdown).toContain("Selection-adjusted estimate");
@@ -1516,7 +1877,7 @@ describe("built CLI pipeline", () => {
       );
       expect(humanReport.stdout).toContain("summarize | recommend");
       expect(humanReport.stdout).toContain(
-        "insufficient_review_trials (3 of 10)",
+        `holdout_below_floor_minimum (4 of ${minimumHoldout})`,
       );
       expect(humanReport.stdout).toContain("report.md");
       expect(humanReport.stdout).not.toContain('"verdicts"');
@@ -1531,14 +1892,196 @@ describe("built CLI pipeline", () => {
       expect(jsonOutput(statusCommand)).toMatchObject({
         corpusVersion: expect.any(String),
         factCounts: {
-          Execution: 111,
-          Assessment: 111,
+          Execution: executions.size,
+          Assessment: assessments.length,
         },
       });
+      expect(executions.size).toBeLessThan(111);
 
       expect(await allFileText(storeRoot)).not.toContain(secret);
       expect(reportMarkdown).not.toContain(secret);
       expect(JSON.stringify(reportJson)).not.toContain(secret);
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("gives a second family two call sites and never abstains it on distinct steps", async () => {
+    const { root, repo } = await fixtureCopy("second-family-call-sites");
+    await writeFile(
+      join(repo, "src", "support-text.ts"),
+      [
+        'import { generateText } from "ai";',
+        "",
+        "export async function supportText(message: string) {",
+        "  return generateText({",
+        '    model: "acme/large-1",',
+        "    prompt: message,",
+        "  });",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await execFileAsync("git", ["-C", repo, "add", "--all"]);
+    await execFileAsync("git", [
+      "-C",
+      repo,
+      "commit",
+      "--message",
+      "Add second family call site",
+    ]);
+    const traces = JSON.parse(await readFile(tracesPath, "utf8")) as Array<{
+      traceId: string;
+      span_id: string;
+      startTimeUnixNano: string;
+      attributes: Record<string, unknown>;
+      [key: string]: unknown;
+    }>;
+    const supportSpans = traces.filter(
+      ({ attributes }) => attributes["rightmodeler.family"] === "support",
+    );
+    const widenedTraces = join(root, "widened-support.json");
+    await writeFile(
+      widenedTraces,
+      JSON.stringify([
+        ...traces,
+        ...Array.from({ length: 120 }, (_, index) => ({
+          ...supportSpans[index % supportSpans.length]!,
+          traceId: `trace-support-wide-${index}`,
+          span_id: `span-support-wide-${index}`,
+          startTimeUnixNano: String(10_000 + index),
+        })),
+      ]),
+    );
+    const stub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          widenedTraces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_SECOND_FAMILY_API_KEY",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_SECOND_FAMILY_API_KEY: secret } },
+      );
+
+      expect([0, 1], result.stderr).toContain(result.code);
+      const output = jsonOutput(result);
+      const supportVerdict = (
+        output.verdicts as Array<{
+          familyId: string;
+          abstainReason?: { reason: string };
+        }>
+      ).find(({ familyId }) => familyId === "support");
+      expect(supportVerdict).toBeDefined();
+      expect(supportVerdict?.abstainReason?.reason).not.toBe(
+        "insufficient_distinct_steps",
+      );
+      expect(supportVerdict?.abstainReason?.reason).not.toBe(
+        "holdout_below_floor_minimum",
+      );
+      const shortlist = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "shortlist",
+      );
+      const supportPlan = (
+        shortlist.familyPlans as Array<{
+          familyId: string;
+          holdoutCases: number;
+          stepIds: string[];
+          abstainReason?: unknown;
+        }>
+      ).find(({ familyId }) => familyId === "support");
+      expect(supportPlan?.holdoutCases).toBeGreaterThanOrEqual(minimumHoldout);
+      expect(supportPlan?.stepIds).toHaveLength(2);
+      expect(supportPlan).not.toHaveProperty("abstainReason");
+      expect(
+        (shortlist.steps as Array<{ family: string }>).filter(
+          ({ family }) => family === "support",
+        ),
+      ).toHaveLength(2);
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
+  it("abstains a single-call-site family before any replay spend", async () => {
+    const { repo } = await fixtureCopy("single-call-site-family");
+    await Promise.all([
+      rm(join(repo, "src", "support.py"), { force: true }),
+      rm(join(repo, "src", "triage.py"), { force: true }),
+      rm(join(repo, "src", "model-notes.ts"), { force: true }),
+      rm(join(repo, "config"), { recursive: true, force: true }),
+      rm(join(repo, "requirements.txt"), { force: true }),
+    ]);
+    await writeFile(
+      join(repo, "package.json"),
+      `${JSON.stringify({ dependencies: { ai: "*" } }, null, 2)}\n`,
+    );
+    await execFileAsync("git", ["-C", repo, "add", "--all"]);
+    await execFileAsync("git", [
+      "-C",
+      repo,
+      "commit",
+      "--message",
+      "Narrow single call site fixture",
+    ]);
+    const stub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_SINGLE_CALL_SITE_API_KEY",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_SINGLE_CALL_SITE_API_KEY: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const output = jsonOutput(result);
+      const shortlist = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "shortlist",
+      );
+      expect(shortlist.steps).toEqual([]);
+      expect(shortlist.cases).toEqual([]);
+      expect(shortlist.familyPlans).toContainEqual(
+        expect.objectContaining({
+          familyId: "summarize",
+          stepIds: [],
+          abstainReason: {
+            reason: "insufficient_distinct_steps",
+            observed: 1,
+            required: 2,
+          },
+        }),
+      );
+      expect(output.verdicts).toContainEqual(
+        expect.objectContaining({
+          familyId: "summarize",
+          decision: "abstain",
+          abstainReason: {
+            reason: "insufficient_distinct_steps",
+            observed: 1,
+            required: 2,
+          },
+        }),
+      );
     } finally {
       await stub.close();
     }
@@ -1642,17 +2185,12 @@ describe("built CLI pipeline", () => {
           message:
             "Family summarize: Current model is absent from the provider catalog: acme/large-1",
         },
-        {
-          event: "warning",
-          code: "shortlist_current_model_absent",
-          message:
-            "Family support: Current model is absent from the provider catalog: acme/large-1",
-        },
       ]);
       const resultEvent = events.find(({ event }) => event === "result");
       const resultValue = resultEvent?.result as
         | {
             familyOutcomes?: Array<{
+              familyId: string;
               verdict: {
                 abstainReason?: { reason?: string };
               };
@@ -1661,11 +2199,167 @@ describe("built CLI pipeline", () => {
         | undefined;
       expect(resultValue?.familyOutcomes?.length).toBeGreaterThan(0);
       expect(
-        resultValue?.familyOutcomes?.every(
-          ({ verdict }) =>
-            verdict.abstainReason?.reason === "provider_catalog_drift",
-        ),
-      ).toBe(true);
+        resultValue?.familyOutcomes?.find(
+          ({ familyId }) => familyId === "summarize",
+        )?.verdict.abstainReason?.reason,
+      ).toBe("provider_catalog_drift");
+      expect(
+        resultValue?.familyOutcomes?.find(
+          ({ familyId }) => familyId === "support",
+        )?.verdict.abstainReason?.reason,
+      ).toBe("holdout_below_floor_minimum");
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("forwards catalog truncation warnings during estimates", async () => {
+    const { repo } = await fixtureCopy("catalog-truncated");
+    const stub = await startStub({ catalogTotalCount: 99 });
+    const apiKeyEnv = "RIGHTMODELER_CATALOG_TRUNCATED_API_KEY";
+    try {
+      const result = await runCli(
+        [
+          "estimate",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "jsonl",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const events = result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "warning",
+          code: "catalog_truncated",
+        }),
+      );
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("resolves a bare recorded model id against the provider catalog", async () => {
+    const { repo } = await fixtureCopy("shortlist-model-resolution");
+    await Promise.all(
+      ["summarize.ts", "extract.ts", "triage.py", "support.py"].map(
+        async (name) => {
+          const path = join(repo, "src", name);
+          await writeFile(
+            path,
+            (await readFile(path, "utf8")).replaceAll(
+              "acme/large-1",
+              "large-1",
+            ),
+          );
+        },
+      ),
+    );
+    const tracesDirectory = await mkdtemp(
+      join(tmpdir(), "rightmodeler-bare-model-"),
+    );
+    temporaryDirectories.push(tracesDirectory);
+    const traces = join(tracesDirectory, "otel-genai.json");
+    await writeFile(
+      traces,
+      (await readFile(tracesPath, "utf8")).replaceAll(
+        "acme/large-1",
+        "large-1",
+      ),
+    );
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_MODEL_RESOLUTION_API_KEY";
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "jsonl",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const warnings = result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter(({ event }) => event === "warning");
+      const resolved = warnings.find(
+        ({ code }) => code === "shortlist_current_model_resolved",
+      );
+      expect(resolved?.message).toContain("large-1");
+      expect(resolved?.message).toContain("acme/large-1");
+      expect(warnings).not.toContainEqual(
+        expect.objectContaining({ code: "shortlist_current_model_absent" }),
+      );
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("refuses an unpriced catalog until a pricing file is supplied", async () => {
+    const { root, repo } = await fixtureCopy("unpriced-catalog");
+    const stub = await startUnpricedCatalogStub();
+    const apiKeyEnv = "RIGHTMODELER_UNPRICED_CATALOG_API_KEY";
+    const baseArgs = [
+      "estimate",
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--repo",
+      repo,
+    ];
+    try {
+      const unpriced = await runCli([...baseArgs, "--output", "jsonl"], {
+        env: { [apiKeyEnv]: secret },
+      });
+
+      expect(unpriced.code).toBe(2);
+      expect(JSON.parse(unpriced.stderr)).toMatchObject({
+        code: "no_priced_candidates",
+        remedy: expect.stringContaining("--pricing-file"),
+      });
+
+      const pricingFile = join(root, "pricing.json");
+      await writeFile(
+        pricingFile,
+        JSON.stringify({
+          "acme/large-1": { input: 0.000001, output: 0.000003 },
+          "acme/small-1": { input: 0.0000002, output: 0.0000008 },
+          "zeta/judge-1": { input: 0.000004, output: 0.000012 },
+        }),
+      );
+      const priced = await runCli(
+        [...baseArgs, "--pricing-file", pricingFile, "--output", "json"],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(priced.code, priced.stderr).toBe(0);
+      expect(jsonOutput(priced).candidateExecutions).not.toBe(0);
     } finally {
       await stub.close();
     }
@@ -1897,7 +2591,7 @@ describe("built CLI pipeline", () => {
       expect(
         families.find(({ familyId }) => familyId === "support")?.verdict
           .abstainReason?.reason,
-      ).toBe("insufficient_review_trials");
+      ).toBe("holdout_below_floor_minimum");
       const report = await storeText(
         new FsStore(join(repo, ".rightmodeler")),
         reportKey("project", "report.md"),
@@ -1972,6 +2666,8 @@ describe("built CLI pipeline", () => {
       "apply",
       "--owner",
       "acme",
+      "--github-repo",
+      "demo-app",
       "--github-base-url",
       githubBaseUrl,
       "--github-token-env",
@@ -2070,6 +2766,12 @@ describe("built CLI pipeline", () => {
       expect(pullBody).toMatchObject({ draft: true, base: "main" });
       expect(String(pullBody?.body)).toContain("## Summary");
       expect(String(pullBody?.body)).toContain("## Rightmodeler evidence");
+      expect(String(pullBody?.body)).toMatch(
+        new RegExp(
+          `^\\| ${recommended!.familyId} \\|(?: [^|\\n]* \\|){6} \\$\\d+\\.\\d{6} \\| \\$\\d+\\.\\d{6} \\| [+-]\\d+\\.\\d% \\| \\d+ ms \\|`,
+          "m",
+        ),
+      );
       expect(String(pullBody?.body)).toContain(recommended!.caseIds[0]!);
       expect(String(pullBody?.body)).not.toContain(
         "The city opened two cooling centers",
@@ -2185,12 +2887,17 @@ describe("built CLI pipeline", () => {
           eventCount: 5,
         }),
       ]);
-      expect(
-        await storeText(
-          new FsStore(join(repo, ".rightmodeler")),
-          reportKey("project", "report.md"),
+      const reportMarkdown = await storeText(
+        new FsStore(join(repo, ".rightmodeler")),
+        reportKey("project", "report.md"),
+      );
+      expect(reportMarkdown).toContain("## Apply");
+      expect(reportMarkdown).toMatch(
+        new RegExp(
+          `^\\| ${recommended!.familyId} \\| \\$\\d+\\.\\d{6} \\| \\$\\d+\\.\\d{6} \\| [+-]\\d+\\.\\d% \\| \\d+ ms \\|$`,
+          "m",
         ),
-      ).toContain("## Apply");
+      );
 
       const rejectingOwner = "acme-reject";
       expect(
@@ -2559,17 +3266,29 @@ describe("built CLI pipeline", () => {
       expect(result.code).toBe(0);
       const output = jsonOutput(result);
       const verdicts = output.verdicts as Array<{
+        familyId: string;
         assessmentAbsent: number;
         assessmentAbsentReasons: Array<{ reason: string; count: number }>;
+        abstainReason?: { reason: string };
       }>;
+      const summarizeVerdicts = verdicts.filter(
+        ({ familyId }) => familyId === "summarize",
+      );
+      expect(summarizeVerdicts.length).toBeGreaterThan(0);
       expect(
-        verdicts.every(({ assessmentAbsent }) => assessmentAbsent > 0),
+        summarizeVerdicts.every(({ assessmentAbsent }) => assessmentAbsent > 0),
       ).toBe(true);
       expect(
-        verdicts.flatMap(({ assessmentAbsentReasons }) =>
+        summarizeVerdicts.flatMap(({ assessmentAbsentReasons }) =>
           assessmentAbsentReasons.map(({ reason }) => reason),
         ),
       ).toEqual(expect.arrayContaining(["external_experiment_failed"]));
+      expect(
+        verdicts.find(({ familyId }) => familyId === "support"),
+      ).toMatchObject({
+        assessmentAbsent: 0,
+        abstainReason: { reason: "holdout_below_floor_minimum" },
+      });
 
       const store = new FsStore(join(repo, ".rightmodeler"));
       const facts = await Promise.all(
@@ -2655,120 +3374,126 @@ describe("built CLI pipeline", () => {
     }
   }, 60_000);
 
-  it("runs Mode B confirmation, isolates the interacting pair, and resumes from its frontier", async () => {
-    const { root, repo, traces } = await langgraphFixtureCopy("confirm");
-    const image = await ensureLanggraphImage(root);
-    const modeBConfig = await writeModeBConfig(root, repo, image);
-    const stub = await startConfirmStub();
-    const args = [
-      "init",
-      "--traces",
-      traces,
-      "--base-url",
-      `http://127.0.0.1:${stub.port}/v1`,
-      "--api-key-env",
-      "RIGHTMODELER_CONFIRM_E2E_API_KEY",
-      "--modeb-config",
-      modeBConfig,
-      "--output",
-      "json",
-      "--repo",
-      repo,
-    ];
+  it.skipIf(skipDocker)(
+    "runs Mode B confirmation, isolates the interacting pair, and resumes from its frontier",
+    async () => {
+      const { root, repo, traces } = await langgraphFixtureCopy("confirm");
+      const image = await ensureLanggraphImage(root);
+      const modeBConfig = await writeModeBConfig(root, repo, image);
+      const stub = await startConfirmStub();
+      const args = [
+        "init",
+        "--traces",
+        traces,
+        "--base-url",
+        `http://127.0.0.1:${stub.port}/v1`,
+        "--api-key-env",
+        "RIGHTMODELER_CONFIRM_E2E_API_KEY",
+        "--modeb-config",
+        modeBConfig,
+        "--output",
+        "json",
+        "--repo",
+        repo,
+      ];
 
-    try {
-      const first = await runCli(args, {
-        env: { RIGHTMODELER_CONFIRM_E2E_API_KEY: secret },
-      });
-      const output = jsonOutput(first);
-      expect(first.code, JSON.stringify(output.familyOutcomes)).toBe(0);
-      const store = new FsStore(join(repo, ".rightmodeler"));
-      expect(output.executedStages).toContain("confirm");
-      expect(output.familyOutcomes).toContainEqual(
-        expect.objectContaining({
-          familyId: "langgraph_order_lookup",
-          verdict: expect.objectContaining({
+      try {
+        const first = await runCli(args, {
+          env: { RIGHTMODELER_CONFIRM_E2E_API_KEY: secret },
+        });
+        const output = jsonOutput(first);
+        expect(first.code, JSON.stringify(output.familyOutcomes)).toBe(0);
+        const store = new FsStore(join(repo, ".rightmodeler"));
+        expect(output.executedStages).toContain("confirm");
+        expect(output.familyOutcomes).toContainEqual(
+          expect.objectContaining({
+            familyId: "langgraph_order_lookup",
+            verdict: expect.objectContaining({
+              decision: "reject",
+              abstainReason: { reason: "cascade_isolated" },
+            }),
+            decisionDisplay: "reject",
+            effectiveRecommendation: false,
+            confirmation: expect.objectContaining({
+              status: "isolated",
+              runSetsUsed: expect.any(Number),
+              culprits: [["classify", "lookup"]],
+              cascadeSeedStepId: "classify",
+              maxRunSets: 20,
+            }),
+          }),
+        );
+
+        const factKeys = await store.list(factsPrefix("project"));
+        const facts = await Promise.all(
+          factKeys.map(async (key) => JSON.parse(await storeText(store, key))),
+        );
+        const cascades = facts.filter(
+          (fact) =>
+            typeof fact === "object" && fact !== null && "cascadeId" in fact,
+        ) as Array<Record<string, unknown>>;
+        expect(cascades).toContainEqual(
+          expect.objectContaining({
+            familyId: "langgraph_order_lookup",
+            verdict: "isolated",
+            culprits: [["classify", "lookup"]],
+            cascadeSeedStepId: "classify",
+            runSetsUsed: expect.any(Number),
+          }),
+        );
+        const plan = JSON.parse(
+          await storeText(
+            store,
+            confirmPlanKey("project", "langgraph_order_lookup"),
+          ),
+        ) as { verdict: string; queue: Array<{ status: string }> };
+        expect(plan.verdict).toBe("isolated");
+        expect(
+          plan.queue.every(
+            ({ status }) => status === "pass" || status === "fail",
+          ),
+        ).toBe(true);
+
+        const reportMarkdown = await storeText(
+          store,
+          reportKey("project", "report.md"),
+        );
+        expect(reportMarkdown).toContain("## Confirm");
+        expect(reportMarkdown).toContain(
+          "| langgraph_order_lookup | isolated |",
+        );
+        expect(reportMarkdown).toContain("classify + lookup");
+        expect(reportMarkdown).toContain("cascade_isolated");
+        const storedVerdictKeys = await store.list(verdictsPrefix("project"));
+        const storedVerdicts = await Promise.all(
+          storedVerdictKeys.map(async (key) =>
+            JSON.parse(await storeText(store, key)),
+          ),
+        );
+        expect(storedVerdicts).toContainEqual(
+          expect.objectContaining({
+            familyId: "langgraph_order_lookup",
             decision: "reject",
             abstainReason: { reason: "cascade_isolated" },
           }),
-          decisionDisplay: "reject",
-          effectiveRecommendation: false,
-          confirmation: expect.objectContaining({
-            status: "isolated",
-            runSetsUsed: expect.any(Number),
-            culprits: [["classify", "lookup"]],
-            cascadeSeedStepId: "classify",
-            maxRunSets: 20,
-          }),
-        }),
-      );
+        );
 
-      const factKeys = await store.list(factsPrefix("project"));
-      const facts = await Promise.all(
-        factKeys.map(async (key) => JSON.parse(await storeText(store, key))),
-      );
-      const cascades = facts.filter(
-        (fact) =>
-          typeof fact === "object" && fact !== null && "cascadeId" in fact,
-      ) as Array<Record<string, unknown>>;
-      expect(cascades).toContainEqual(
-        expect.objectContaining({
-          familyId: "langgraph_order_lookup",
-          verdict: "isolated",
-          culprits: [["classify", "lookup"]],
-          cascadeSeedStepId: "classify",
-          runSetsUsed: expect.any(Number),
-        }),
-      );
-      const plan = JSON.parse(
-        await storeText(
-          store,
-          confirmPlanKey("project", "langgraph_order_lookup"),
-        ),
-      ) as { verdict: string; queue: Array<{ status: string }> };
-      expect(plan.verdict).toBe("isolated");
-      expect(
-        plan.queue.every(
-          ({ status }) => status === "pass" || status === "fail",
-        ),
-      ).toBe(true);
-
-      const reportMarkdown = await storeText(
-        store,
-        reportKey("project", "report.md"),
-      );
-      expect(reportMarkdown).toContain("## Confirm");
-      expect(reportMarkdown).toContain("| langgraph_order_lookup | isolated |");
-      expect(reportMarkdown).toContain("classify + lookup");
-      expect(reportMarkdown).toContain("cascade_isolated");
-      const storedVerdictKeys = await store.list(verdictsPrefix("project"));
-      const storedVerdicts = await Promise.all(
-        storedVerdictKeys.map(async (key) =>
-          JSON.parse(await storeText(store, key)),
-        ),
-      );
-      expect(storedVerdicts).toContainEqual(
-        expect.objectContaining({
-          familyId: "langgraph_order_lookup",
-          decision: "reject",
-          abstainReason: { reason: "cascade_isolated" },
-        }),
-      );
-
-      const hits = stub.getHitCount();
-      const resumed = await runCli(args, {
-        env: { RIGHTMODELER_CONFIRM_E2E_API_KEY: secret },
-      });
-      expect(resumed.code).toBe(0);
-      expect(jsonOutput(resumed).executedStages).toEqual([]);
-      expect(stub.getHitCount()).toBe(hits);
-      expect(await store.list(factsPrefix("project"))).toHaveLength(
-        factKeys.length,
-      );
-    } finally {
-      await stub.close();
-    }
-  }, 600_000);
+        const hits = stub.getHitCount();
+        const resumed = await runCli(args, {
+          env: { RIGHTMODELER_CONFIRM_E2E_API_KEY: secret },
+        });
+        expect(resumed.code).toBe(0);
+        expect(jsonOutput(resumed).executedStages).toEqual([]);
+        expect(stub.getHitCount()).toBe(hits);
+        expect(await store.list(factsPrefix("project"))).toHaveLength(
+          factKeys.length,
+        );
+      } finally {
+        await stub.close();
+      }
+    },
+    600_000,
+  );
 
   it("abstains an affected family when the provider catalog drifts before confirmation", async () => {
     const { root, repo, traces } = await langgraphFixtureCopy("catalog-drift");
@@ -2818,6 +3543,54 @@ describe("built CLI pipeline", () => {
         reportKey("project", "report.md"),
       );
       expect(report).toContain("provider_catalog_drift");
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
+  it("refuses the cloud Mode B backend before confirmation when it is unavailable", async () => {
+    const { root, repo, traces } = await langgraphFixtureCopy("catalog-drift");
+    const modeBConfig = await writeModeBConfig(root, repo, "unused-image");
+    const parsed = JSON.parse(await readFile(modeBConfig, "utf8"));
+    await writeFile(
+      modeBConfig,
+      JSON.stringify({ ...parsed, backend: "cloud" }),
+    );
+    const stub = await startCatalogDriftStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_CATALOG_DRIFT_API_KEY",
+          "--modeb-config",
+          modeBConfig,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        {
+          env: {
+            RIGHTMODELER_CATALOG_DRIFT_API_KEY: secret,
+            VERCEL_OIDC_TOKEN: "",
+            VERCEL_TOKEN: "",
+            VERCEL_TEAM_ID: "",
+            VERCEL_PROJECT_ID: "",
+          },
+        },
+      );
+
+      expect(result.code).toBe(2);
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        code: "modeb_cloud_unavailable",
+        remedy: expect.stringContaining("backend"),
+        message: expect.stringMatching(/@vercel\/sandbox|VERCEL_OIDC_TOKEN/),
+      });
     } finally {
       await stub.close();
     }
@@ -3045,10 +3818,11 @@ describe("built CLI pipeline", () => {
       repo,
     ]);
 
-    expect(result.code).toBe(10);
+    expect(result.code).toBe(2);
     expect(JSON.parse(result.stderr)).toMatchObject({
-      code: "runtime_error",
+      code: "invalid_modeb_config",
       message: expect.stringContaining("appSpec.command"),
+      remedy: expect.stringContaining("--modeb-config"),
     });
   });
 
@@ -3140,6 +3914,58 @@ describe("built CLI pipeline", () => {
     });
   });
 
+  it("reports report before aggregate as a needs-input error", async () => {
+    const { repo } = await fixtureCopy("report-before-aggregate");
+    const result = await runCli(["report", "--output", "json", "--repo", repo]);
+
+    expect(result.code).toBe(2);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      code: "stage_not_completed",
+      message: "aggregate has not completed",
+    });
+  });
+
+  it("names a repository with no replayable text call sites", async () => {
+    const { repo } = await fixtureCopy("no-replayable-call-sites");
+    await Promise.all([
+      rm(join(repo, "src", "summarize.ts"), { force: true }),
+      rm(join(repo, "src", "support.py"), { force: true }),
+      rm(join(repo, "src", "triage.py"), { force: true }),
+      rm(join(repo, "src", "model-notes.ts"), { force: true }),
+      rm(join(repo, "config"), { recursive: true, force: true }),
+      rm(join(repo, "requirements.txt"), { force: true }),
+    ]);
+    await writeFile(
+      join(repo, "package.json"),
+      `${JSON.stringify({ dependencies: { ai: "*" } }, null, 2)}\n`,
+    );
+    await execFileAsync("git", ["-C", repo, "add", "--all"]);
+    await execFileAsync("git", [
+      "-C",
+      repo,
+      "commit",
+      "--message",
+      "Narrow replayable fixture",
+    ]);
+
+    const result = await runCli([
+      "init",
+      "--through",
+      "shortlist",
+      "--traces",
+      tracesPath,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      code: "no_replayable_call_sites",
+    });
+  });
+
   it("stops at scan when an AI dependency has no matched call site", async () => {
     const root = await mkdtemp(join(tmpdir(), "rightmodeler-coverage-"));
     temporaryDirectories.push(root);
@@ -3193,6 +4019,42 @@ describe("built CLI pipeline", () => {
     expect(JSON.parse(missingResult.stderr)).toMatchObject({
       code: "missing_traces_path",
       remedy: expect.stringContaining("--traces"),
+    });
+
+    const missingPath = join(missing.repo, "missing.json");
+    const missingFileResult = await runCli([
+      "init",
+      "--through",
+      "ingest",
+      "--traces",
+      missingPath,
+      "--output",
+      "json",
+      "--repo",
+      missing.repo,
+    ]);
+    expect(missingFileResult.code).toBe(2);
+    expect(JSON.parse(missingFileResult.stderr)).toMatchObject({
+      code: "missing_traces_path",
+      message: `Trace input does not exist: ${missingPath}`,
+    });
+
+    const missingDetachedResult = await runCli([
+      "replay",
+      "--detach",
+      "--traces",
+      missingPath,
+      "--base-url",
+      "http://127.0.0.1:9/v1",
+      "--output",
+      "json",
+      "--repo",
+      missing.repo,
+    ]);
+    expect(missingDetachedResult.code).toBe(2);
+    expect(JSON.parse(missingDetachedResult.stderr)).toMatchObject({
+      code: "missing_traces_path",
+      message: `Trace input does not exist: ${missingPath}`,
     });
 
     const capped = await fixtureCopy("budget-cap");

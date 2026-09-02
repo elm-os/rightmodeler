@@ -1,11 +1,25 @@
-import { chmod, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createMatcherRegistry, scan } from "./index.js";
+import {
+  createMatcherRegistry,
+  scan,
+  scanRepository,
+  type CandidateMatch,
+  type Matcher,
+} from "./index.js";
 
 const demoApp = fileURLToPath(
   new URL("../../../fixtures/demo-app", import.meta.url),
@@ -139,5 +153,147 @@ describe("scan", () => {
     await chmod(binaryPath, 0o000);
 
     expect(scan(root, createMatcherRegistry(), "demo-project")).toEqual([]);
+  });
+
+  it("skips build output, virtual environments, vendored trees and the store", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-scanner-ignore-"));
+    temporaryDirectories.push(root);
+    const paths = [
+      "src/app.ts",
+      ".next/server/chunks/app.js",
+      "vendor/sdk/index.js",
+      "venv/lib/python3.12/site-packages/litellm/main.py",
+      ".rightmodeler/config/models.json",
+    ];
+    await Promise.all(
+      paths.map((path) => mkdir(join(root, path, ".."), { recursive: true })),
+    );
+    await Promise.all([
+      writeFile(
+        join(root, "src/app.ts"),
+        'generateText({ model: "acme/large-1", prompt })',
+      ),
+      writeFile(
+        join(root, ".next/server/chunks/app.js"),
+        'generateText({ model: "acme/large-1", prompt })',
+      ),
+      writeFile(
+        join(root, "vendor/sdk/index.js"),
+        'generateText({ model: "acme/large-1", prompt })',
+      ),
+      writeFile(
+        join(root, "venv/lib/python3.12/site-packages/litellm/main.py"),
+        'import litellm\nlitellm.completion(model="acme/large-1", messages=[])',
+      ),
+      writeFile(
+        join(root, ".rightmodeler/config/models.json"),
+        '{"ai":{"primary":{"model":"acme/large-1"}}}',
+      ),
+    ]);
+
+    expect(
+      scan(root, createMatcherRegistry(), "p").map(
+        ({ callSite }) => callSite.path,
+      ),
+    ).toEqual(["src/app.ts"]);
+  });
+
+  it("keeps scanning when a matcher throws and reports the skipped file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-scanner-skip-"));
+    temporaryDirectories.push(root);
+    await mkdir(join(root, "src"));
+    await Promise.all([
+      writeFile(
+        join(root, "src/a.ts"),
+        'explode();\ngenerateText({ model: "acme/large-1", prompt })',
+      ),
+      writeFile(
+        join(root, "src/b.ts"),
+        'generateText({ model: "acme/large-1", prompt })',
+      ),
+    ]);
+    const plugin: Matcher = {
+      slug: "plugin-explode",
+      description: "Exploding plugin",
+      noiseTier: "normal",
+      filePatterns: ["**/*.ts"],
+      examples: ["pluginCall()"],
+      match(content): CandidateMatch[] {
+        if (content.includes("explode")) throw new Error("boom");
+        if (content !== "pluginCall()") return [];
+        return [
+          {
+            slug: this.slug,
+            label: "plugin",
+            snippet: content,
+            enclosingSymbolPath: "<module>",
+            normalizedCallShape: {
+              callee: "pluginCall",
+              argumentKeys: [],
+              enclosing: "<module>",
+            },
+            needsTools: false,
+            needsStructuredOutput: false,
+            line: 1,
+          },
+        ];
+      },
+    };
+
+    const result = scanRepository(root, createMatcherRegistry([plugin]), "p");
+
+    expect(result.records.map(({ callSite }) => callSite.path)).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+    ]);
+    expect(result.skipped).toEqual([
+      {
+        path: "src/a.ts",
+        matcherSlug: "plugin-explode",
+        reason: "boom",
+      },
+    ]);
+  });
+
+  it("masks each file once and hands the masked text to every matcher", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-scanner-mask-"));
+    temporaryDirectories.push(root);
+    await mkdir(join(root, "src"));
+    await writeFile(
+      join(root, "src/a.ts"),
+      "// generateText(\nconst x = pluginCall();\n",
+    );
+    let suppliedMask: string | undefined;
+    const plugin: Matcher = {
+      slug: "plugin-mask",
+      description: "Masked text plugin",
+      noiseTier: "normal",
+      filePatterns: ["**/*.ts"],
+      examples: ["pluginCall()"],
+      match(content, _path, searchable): CandidateMatch[] {
+        suppliedMask = searchable;
+        if (content !== "pluginCall()") return [];
+        return [
+          {
+            slug: this.slug,
+            label: "plugin",
+            snippet: content,
+            enclosingSymbolPath: "<module>",
+            normalizedCallShape: {
+              callee: "pluginCall",
+              argumentKeys: [],
+              enclosing: "<module>",
+            },
+            needsTools: false,
+            needsStructuredOutput: false,
+            line: 1,
+          },
+        ];
+      },
+    };
+
+    scan(root, createMatcherRegistry([plugin]), "p");
+
+    expect(suppliedMask).toBe("                \nconst x = pluginCall();\n");
   });
 });

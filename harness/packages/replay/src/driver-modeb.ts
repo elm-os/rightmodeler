@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import {
   executionSchema,
   factKey,
+  isRecord,
+  nonemptyString,
   requestAttemptSchema,
   spendEventSchema,
   type Execution,
@@ -13,6 +15,7 @@ import {
   type Store,
 } from "@rightmodeler/core";
 import {
+  detectDockerAvailability,
   SCRATCH_CONTAINER_PATH,
   type DockerCollectResult,
   type DockerExecutor,
@@ -45,6 +48,10 @@ const CASE_CONTAINER_PATH = `${SCRATCH_CONTAINER_PATH}/driver/case.json`;
 const CONFIG_CONTAINER_PATH = `${SCRATCH_CONTAINER_PATH}/driver/config.json`;
 const PROXY_PORT = 8787;
 const DEFAULT_TIMEOUT_MS = 60_000;
+const EXIT_POLL_INTERVAL_MS = 500;
+const EXIT_GRACE_MS = 10_000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+const LEASE_BYTES_PER_TOKEN = 4;
 const BUDGET_HEARTBEAT_INTERVAL_MS = 30_000;
 const COLLECTION_NAMESPACES = ["driver", "workload", "proxy"] as const;
 const STREAM_OUTCOMES = new Set([
@@ -53,6 +60,10 @@ const STREAM_OUTCOMES = new Set([
   "client_cancelled",
   "truncated",
 ]);
+const liveContainers = new Set<{
+  executor: ModeBExecutor;
+  handle: string;
+}>();
 
 export interface ModeBCase extends RecordedCase {
   readonly input: JsonValue;
@@ -74,24 +85,42 @@ export interface ModeBEgress extends EgressListenerOptions {
   readonly catalog: readonly ModelCatalogEntry[];
 }
 
+export type ModeBExecutor = Omit<DockerExecutor, "reapOrphans"> & {
+  reapOrphans?: DockerExecutor["reapOrphans"];
+};
+
 export interface ReplayModeBInput {
   readonly stepRecords: readonly ReplayStep[];
   readonly cases: readonly ModeBCase[];
   readonly swapPolicy: ModeBSwapPolicy;
-  readonly executor: DockerExecutor;
+  readonly executor: ModeBExecutor;
+  readonly backend?: "docker" | "cloud";
   readonly egress: ModeBEgress;
   readonly store: Store;
   readonly budget: Budget;
   readonly image: string;
   readonly appSpec: ModeBAppSpec;
   readonly concurrency: number;
+  readonly warning?: (code: string, message: string) => void;
 }
+
+export interface ModeBInfrastructureBlock {
+  kind: "infrastructure";
+  reason: "docker-unavailable" | "egress-unavailable" | "launch-failed";
+  stepId: string;
+  caseId: string;
+  candidateId: string;
+  message: string;
+}
+
+export type ModeBBlockedCell = BlockedCell | ModeBInfrastructureBlock;
 
 export interface ReplayModeBResult {
   completed: number;
   skipped: number;
-  blocked: BlockedCell[];
+  blocked: ModeBBlockedCell[];
   rejectedRows: number;
+  lostReasons: Record<string, number>;
   executions: Execution[];
 }
 
@@ -123,6 +152,7 @@ interface ValidAttemptRow {
   upstreamStatus: number | null;
   upstreamSource: "provider" | "egress" | null;
   costUsd: number;
+  latencyMs?: number;
 }
 
 interface ValidReservationRow {
@@ -160,6 +190,7 @@ interface CollectedInspection {
   reservations: ValidReservationRow[];
   blockedRows: number;
   lostRows: number;
+  lostReasons: Record<string, number>;
   checkpointRows: number;
   terminalGroup: number | null;
   terminalEnvelope: TerminalEnvelope | null;
@@ -172,19 +203,12 @@ interface ContainerResult {
   inspection: CollectedInspection;
   status: DockerStatus | null;
   lifecycleFailed: boolean;
+  launchError?: string;
 }
 
 interface ReservationWaiter {
   promise: Promise<void>;
   resolve(): void;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function nonemptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
 }
 
 function nonnegativeInteger(value: unknown): value is number {
@@ -338,6 +362,29 @@ function expectedModel(step: ReplayStep, policy: ModeBSwapPolicy): string {
   return model;
 }
 
+export function modeBCaseWorstCaseUsd(
+  recordedCase: RecordedCase,
+  stepRecords: readonly ReplayStep[],
+  policy: ModeBSwapPolicy,
+  catalog: readonly ModelCatalogEntry[],
+): number {
+  const table = pricingTable(catalog);
+  return stepRecords.reduce((total, step) => {
+    const pricing = table[expectedModel(step, policy)];
+    if (pricing === undefined) {
+      throw new Error(
+        `Pricing is unavailable for model: ${expectedModel(step, policy)}`,
+      );
+    }
+    return (
+      total +
+      recordedCase.contextTokens * LEASE_BYTES_PER_TOKEN * pricing.input +
+      Math.max(recordedCase.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS) *
+        pricing.output
+    );
+  }, 0);
+}
+
 function validatePricing(
   steps: readonly ReplayStep[],
   policy: ModeBSwapPolicy,
@@ -362,33 +409,18 @@ function createWaiter(): ReservationWaiter {
 async function reserveCase(
   input: ReplayModeBInput,
   activeRefunds: Set<Promise<void>>,
-): Promise<BudgetReservation | null> {
+  worstCaseUsd: number,
+): Promise<BudgetReservation | BudgetRefusalError> {
   for (;;) {
-    const state = await input.budget.state();
-    const availableUsd =
-      state.authorizedTotalUsd === undefined
-        ? 0
-        : Math.max(
-            0,
-            state.authorizedTotalUsd - state.spentUsd - state.reservedUsd,
-          );
-    if (
-      state.authorizedTotalUsd !== undefined &&
-      availableUsd === 0 &&
-      activeRefunds.size > 0
-    ) {
-      await Promise.race(activeRefunds);
-      continue;
-    }
     try {
       return await input.budget.reserveExecution({
         contextTokens: 1,
         maxOutputTokens: 0,
-        pricing: { input: availableUsd, output: 0 },
+        pricing: { input: worstCaseUsd, output: 0 },
       });
     } catch (error) {
       if (!(error instanceof BudgetRefusalError)) throw error;
-      if (!error.causedByReservations || activeRefunds.size === 0) return null;
+      if (!error.causedByReservations || activeRefunds.size === 0) return error;
       await Promise.race(activeRefunds);
     }
   }
@@ -439,7 +471,7 @@ async function prepareScratch(
 
 function launchCase(
   input: ReplayModeBInput,
-  listener: EgressListener,
+  listener: EgressListener | null,
   cell: ModeBCell,
   executionId: string,
   scratchHostPath: string,
@@ -464,10 +496,15 @@ function launchCase(
       RM_SCRATCH: SCRATCH_CONTAINER_PATH,
       RM_PROXY_HOST: "127.0.0.1",
       RM_PROXY_PORT: String(PROXY_PORT),
-      RM_EGRESS_URL: `http://host.docker.internal:${listener.port}`,
+      RM_EGRESS_URL:
+        listener === null
+          ? input.egress.providerBaseUrl
+          : `http://host.docker.internal:${listener.port}`,
       RM_SWAP_POLICY: JSON.stringify(policy),
       RM_PRICING_TABLE: JSON.stringify(table),
+      RM_DEFAULT_MAX_OUTPUT_TOKENS: String(DEFAULT_MAX_OUTPUT_TOKENS),
       RM_BUDGET_LEASE: JSON.stringify({ maxUsd: leaseUsd }),
+      RM_DEADLINE_MS: String(input.appSpec.timeoutMs ?? DEFAULT_TIMEOUT_MS),
       ...(resume ? { RM_RESUME: "1" } : {}),
     },
     mounts: [
@@ -484,12 +521,16 @@ function launchCase(
     ],
     scratchHostPath,
     timeoutMs: input.appSpec.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    hostPorts: [
-      {
-        containerHost: "host.docker.internal",
-        note: `Mode B egress on host port ${listener.port}`,
-      },
-    ],
+    ...(listener === null
+      ? {}
+      : {
+          hostPorts: [
+            {
+              containerHost: "host.docker.internal" as const,
+              note: `Mode B egress on host port ${listener.port}`,
+            },
+          ],
+        }),
     labels: {
       "com.rightmodeler.run": input.budget.runId,
       "com.rightmodeler.case": cell.recordedCase.caseId,
@@ -499,13 +540,22 @@ function launchCase(
 }
 
 async function waitForExit(
-  executor: DockerExecutor,
+  executor: ModeBExecutor,
   handle: string,
+  timeoutMs: number,
 ): Promise<DockerStatus> {
+  const deadline = Date.now() + timeoutMs + EXIT_GRACE_MS;
   for (;;) {
     const status = await executor.status(handle);
     if (status.state === "exited") return status;
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Container ${handle} did not exit within ${timeoutMs + EXIT_GRACE_MS} ms`,
+      );
+    }
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, EXIT_POLL_INTERVAL_MS),
+    );
   }
 }
 
@@ -715,6 +765,7 @@ function parseAttempt(
     upstreamStatus,
     upstreamSource,
     costUsd,
+    latencyMs: Date.parse(row.endedAt) - Date.parse(row.startedAt),
   };
 }
 
@@ -939,6 +990,7 @@ function inspectCollection(
   const attemptIds = new Set<string>();
   let blockedRows = 0;
   let lostRows = 0;
+  const lostReasons: Record<string, number> = {};
   let rejectedRows = collected.skipped.length + checkpoints.rejectedRows;
   const collectionFailed = collected.skipped.some(
     ({ namespace, path }) =>
@@ -1034,6 +1086,7 @@ function inspectCollection(
         if (
           !validLostRow(value, input, cell, executionId, steps, checkpoints) ||
           !nonemptyString(value.attemptId) ||
+          !nonemptyString(value.rejectionReason) ||
           attemptIds.has(value.attemptId)
         ) {
           rejectedRows += 1;
@@ -1041,6 +1094,8 @@ function inspectCollection(
         }
         attemptIds.add(value.attemptId);
         lostRows += 1;
+        lostReasons[value.rejectionReason] =
+          (lostReasons[value.rejectionReason] ?? 0) + 1;
         continue;
       }
       rejectedRows += 1;
@@ -1060,6 +1115,7 @@ function inspectCollection(
     reservations,
     blockedRows,
     lostRows,
+    lostReasons,
     checkpointRows: checkpoints.count,
     terminalGroup: checkpoints.terminalGroup,
     terminalEnvelope: envelope,
@@ -1075,6 +1131,7 @@ function failedInspection(): CollectedInspection {
     reservations: [],
     blockedRows: 0,
     lostRows: 0,
+    lostReasons: {},
     checkpointRows: 0,
     terminalGroup: null,
     terminalEnvelope: null,
@@ -1108,7 +1165,7 @@ function shouldResume(
 
 async function runContainer(
   input: ReplayModeBInput,
-  listener: EgressListener,
+  listener: EgressListener | null,
   cell: ModeBCell,
   executionId: string,
   scratchHostPath: string,
@@ -1132,13 +1189,16 @@ async function runContainer(
         leaseUsd,
         resume,
       );
-    } catch {
+    } catch (error) {
       return {
         inspection: failedInspection(),
         status: null,
         lifecycleFailed: true,
+        launchError: error instanceof Error ? error.message : String(error),
       };
     }
+    const liveContainer = { executor: input.executor, handle };
+    liveContainers.add(liveContainer);
 
     let status: DockerStatus | null = null;
     let statusFailed = false;
@@ -1146,7 +1206,11 @@ async function runContainer(
     let destroyFailed = false;
     try {
       try {
-        status = await waitForExit(input.executor, handle);
+        status = await waitForExit(
+          input.executor,
+          handle,
+          input.appSpec.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        );
       } catch {
         statusFailed = true;
       }
@@ -1172,6 +1236,8 @@ async function runContainer(
         await input.executor.destroy(handle);
       } catch {
         destroyFailed = true;
+      } finally {
+        liveContainers.delete(liveContainer);
       }
     }
 
@@ -1306,6 +1372,9 @@ async function writeAttemptFacts(
         usage: attempt.usage,
         costUsd: attempt.costUsd,
         costIsEstimate: true,
+        ...(attempt.latencyMs === undefined
+          ? {}
+          : { latencyMs: attempt.latencyMs }),
       }),
     );
     if (existing !== null) continue;
@@ -1373,6 +1442,7 @@ export async function replayModeB(
   input: ReplayModeBInput,
 ): Promise<ReplayModeBResult> {
   validateInput(input);
+  const backend = input.backend ?? "docker";
   const steps = stepMap(input.stepRecords);
   const policy = normalizedSwapPolicy(input.swapPolicy, steps);
   const cells = cellsFor(input, steps, policy);
@@ -1386,30 +1456,82 @@ export async function replayModeB(
     skipped: cells.length - pending.length,
     blocked: [],
     rejectedRows: 0,
+    lostReasons: {},
     executions: [],
   };
   if (pending.length === 0) return result;
 
+  const timeoutMs = input.appSpec.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (backend === "docker") {
+    const docker = await detectDockerAvailability();
+    if (!docker.available) {
+      for (const cell of pending) {
+        result.blocked.push({
+          kind: "infrastructure",
+          reason: "docker-unavailable",
+          stepId: cell.executionStep.stepId,
+          caseId: cell.recordedCase.caseId,
+          candidateId: cell.candidateId,
+          message: docker.message,
+        });
+      }
+      return result;
+    }
+    await input.executor.reapOrphans?.({
+      olderThanMs: timeoutMs + EXIT_GRACE_MS,
+    });
+  }
+
   const table = pricingTable(input.egress.catalog);
   validatePricing(input.stepRecords, policy, table);
-  const workerLimit =
-    (await input.budget.state()).authorizedTotalUsd === undefined
-      ? input.concurrency
-      : 1;
+  const workerLimit = Math.min(input.concurrency, pending.length);
+  const budgetState = await input.budget.state();
+  if (budgetState.authorizedTotalUsd !== undefined) {
+    const largestUsd = Math.max(
+      ...pending.map((cell) =>
+        modeBCaseWorstCaseUsd(
+          cell.recordedCase,
+          input.stepRecords,
+          policy,
+          input.egress.catalog,
+        ),
+      ),
+    );
+    const availableUsd = Math.max(
+      0,
+      budgetState.authorizedTotalUsd -
+        budgetState.spentUsd -
+        budgetState.reservedUsd,
+    );
+    const admitted =
+      largestUsd === 0 ? workerLimit : Math.floor(availableUsd / largestUsd);
+    if (admitted < workerLimit) {
+      input.warning?.(
+        "modeb_concurrency_capped",
+        `The cost cap admits ${admitted} concurrent Mode B case(s) of up to $${largestUsd.toFixed(4)} each; ${workerLimit} were requested. Raise the cap to run wider.`,
+      );
+    }
+  }
   const activeRefunds = new Set<Promise<void>>();
   let scratchRoot: string | null = null;
   let listener: EgressListener | null = null;
   let nextCell = 0;
 
   async function runCell(cell: ModeBCell): Promise<void> {
-    const reservation = await reserveCase(input, activeRefunds);
-    if (reservation === null) {
+    const worstCaseUsd = modeBCaseWorstCaseUsd(
+      cell.recordedCase,
+      input.stepRecords,
+      policy,
+      input.egress.catalog,
+    );
+    const reservation = await reserveCase(input, activeRefunds, worstCaseUsd);
+    if (reservation instanceof BudgetRefusalError) {
       result.blocked.push({
         kind: "budget",
         stepId: cell.executionStep.stepId,
         caseId: cell.recordedCase.caseId,
         candidateId: cell.candidateId,
-        message: "Budget cap cannot cover this Mode B case",
+        message: reservation.message,
       });
       return;
     }
@@ -1429,7 +1551,7 @@ export async function replayModeB(
     }, BUDGET_HEARTBEAT_INTERVAL_MS);
     const executionId = randomUUID();
     try {
-      if (scratchRoot === null || listener === null) {
+      if (scratchRoot === null) {
         throw new Error("Mode B runtime is not initialized");
       }
       const scratchHostPath = await prepareScratch(
@@ -1453,8 +1575,26 @@ export async function replayModeB(
         leaseUsd,
         steps,
       );
+      if (container.launchError !== undefined) {
+        result.blocked.push({
+          kind: "infrastructure",
+          reason: "launch-failed",
+          stepId: cell.executionStep.stepId,
+          caseId: cell.recordedCase.caseId,
+          candidateId: cell.candidateId,
+          message: container.launchError,
+        });
+        return;
+      }
       const inspection = container.inspection;
       result.rejectedRows += inspection.rejectedRows;
+      for (const [reason, count] of Object.entries(inspection.lostReasons)) {
+        result.lostReasons[reason] = (result.lostReasons[reason] ?? 0) + count;
+      }
+      if (container.lifecycleFailed) {
+        result.lostReasons.container_lifecycle =
+          (result.lostReasons.container_lifecycle ?? 0) + 1;
+      }
       actualCostUsd = await writeAttemptFacts(
         input,
         cell,
@@ -1596,52 +1736,52 @@ export async function replayModeB(
   }
 
   try {
-    listener = await startEgressListener({
-      providerBaseUrl: input.egress.providerBaseUrl,
-      apiKeyEnv: input.egress.apiKeyEnv,
-      hostname: input.egress.hostname,
-      port: input.egress.port,
-    });
+    listener =
+      backend === "cloud"
+        ? null
+        : await startEgressListener({
+            providerBaseUrl: input.egress.providerBaseUrl,
+            apiKeyEnv: input.egress.apiKeyEnv,
+            hostname: input.egress.hostname,
+            port: input.egress.port,
+          });
     scratchRoot = await mkdtemp(
       join(dirname(resolve(input.appSpec.mountPath)), ".rightmodeler-modeb-"),
     );
-  } catch {
+  } catch (error) {
     if (listener !== null) await listener.close().catch(() => undefined);
+    const message = error instanceof Error ? error.message : String(error);
     for (const cell of pending) {
-      const executionId = randomUUID();
-      const execution = executionFor(
-        cell,
-        executionId,
-        "failure",
-        null,
-        "lost",
-      );
-      await writeReplayFact(
-        input.store,
-        input.budget.projectId,
-        executionId,
-        execution,
-      );
-      result.executions.push(execution);
-      result.completed += 1;
+      result.blocked.push({
+        kind: "infrastructure",
+        reason: "egress-unavailable",
+        stepId: cell.executionStep.stepId,
+        caseId: cell.recordedCase.caseId,
+        candidateId: cell.candidateId,
+        message,
+      });
     }
-    result.executions.sort((left, right) =>
-      left.caseId.localeCompare(right.caseId),
-    );
     return result;
   }
 
   let workerFailure: unknown;
-  try {
-    const settled = await Promise.allSettled(
-      Array.from({ length: Math.min(workerLimit, pending.length) }, () =>
-        worker(),
+  const onInterrupt = () => {
+    void Promise.allSettled(
+      [...liveContainers].map(({ executor, handle }) =>
+        executor.destroy(handle),
       ),
+    ).then(() => process.kill(process.pid, "SIGINT"));
+  };
+  try {
+    process.once("SIGINT", onInterrupt);
+    const settled = await Promise.allSettled(
+      Array.from({ length: workerLimit }, () => worker()),
     );
     workerFailure = settled.find(
       (entry): entry is PromiseRejectedResult => entry.status === "rejected",
     )?.reason;
   } finally {
+    process.off("SIGINT", onInterrupt);
     try {
       if (scratchRoot !== null) {
         await rm(scratchRoot, { recursive: true, force: true });

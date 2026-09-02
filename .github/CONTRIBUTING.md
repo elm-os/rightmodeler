@@ -10,6 +10,12 @@ By contributing you agree that your contributions are licensed under the
 
 - Node.js 24+
 - `pnpm`, installed standalone
+- Docker, with the daemon running. `pnpm check` runs the Mode B replay,
+  executor, and CLI end-to-end suites in containers. The first run builds the
+  `rightmodeler-modeb-langgraph:<digest>` fixture image from
+  `harness/fixtures/langgraph-app/requirements.txt` (a `node:24-bookworm-slim`
+  base plus `apt-get` and `pip` over the network, a few minutes, once). Later
+  runs reuse the cached image until `requirements.txt` changes.
 
 ## Setup
 
@@ -68,6 +74,12 @@ pnpm --filter ./skills/rightmodeler run check
 ```
 
 Use `pnpm` for repository and package lifecycle commands.
+
+Without Docker, `pnpm check` fails in `@rightmodeler/executor`,
+`@rightmodeler/replay`, and `@rightmodeler/cli` with a `docker` spawn error.
+To run everything else, set `RIGHTMODELER_SKIP_DOCKER=1`; each skipped suite
+prints a `SKIPPED: RIGHTMODELER_SKIP_DOCKER=1` banner. A push still needs the
+full `pnpm check` with Docker, which is what CI runs.
 
 ## Validating a skill change
 

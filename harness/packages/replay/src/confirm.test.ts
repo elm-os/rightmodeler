@@ -1,9 +1,6 @@
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import {
   cascadeFindingSchema,
@@ -20,7 +17,7 @@ import {
   createDockerExecutor,
   type DockerExecutor,
 } from "@rightmodeler/executor";
-import { ReleaseGatePolicy } from "@rightmodeler/kernel";
+import { ReleaseGatePolicy, type JudgeChatResult } from "@rightmodeler/kernel";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { createBudget } from "./budget.js";
@@ -38,10 +35,10 @@ import type {
 import { writeReplayFact } from "./driver.js";
 import { createProvider, type ModelCatalogEntry } from "./provider.js";
 import type { ReplayStep } from "./shortlist.js";
+import { ensureModeBImage } from "./test-utils/modeb-image.js";
 
 const temporaryDirectories: string[] = [];
 const projectId = "confirm-test";
-const execFileAsync = promisify(execFile);
 const testTimeoutMs = 240_000;
 const fixturePath = join(
   import.meta.dirname,
@@ -52,6 +49,10 @@ const stubModuleUrl = new URL(
   import.meta.url,
 ).href;
 const apiKeyEnv = "CONFIRM_MODEB_TEST_API_KEY";
+const skipDocker = process.env.RIGHTMODELER_SKIP_DOCKER === "1";
+if (skipDocker) {
+  console.warn("[replay confirm] SKIPPED: RIGHTMODELER_SKIP_DOCKER=1");
+}
 const currentModels: Readonly<Record<string, string>> = {
   classify: "acme/large-1",
   lookup: "acme/max-1",
@@ -109,45 +110,7 @@ interface StubProviderModule {
 let image: string;
 
 beforeAll(async () => {
-  await execFileAsync("docker", ["version"], { encoding: "utf8" });
-  const requirements = await readFile(join(fixturePath, "requirements.txt"));
-  const digest = createHash("sha256")
-    .update(requirements)
-    .digest("hex")
-    .slice(0, 12);
-  image = `rightmodeler-modeb-langgraph:${digest}`;
-  try {
-    await execFileAsync("docker", ["image", "inspect", image], {
-      encoding: "utf8",
-    });
-    return;
-  } catch {
-    // Build the pinned fixture runtime once when it is not cached locally.
-  }
-  const buildRoot = await mkdtemp(
-    join(tmpdir(), "rightmodeler-confirm-image-"),
-  );
-  try {
-    const dockerfile = join(buildRoot, "Dockerfile");
-    await writeFile(
-      dockerfile,
-      [
-        "FROM node:24-bookworm-slim",
-        "RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip && rm -rf /var/lib/apt/lists/*",
-        "COPY requirements.txt /tmp/requirements.txt",
-        "RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt",
-        "",
-      ].join("\n"),
-      "utf8",
-    );
-    await execFileAsync(
-      "docker",
-      ["build", "--tag", image, "--file", dockerfile, fixturePath],
-      { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
-    );
-  } finally {
-    await rm(buildRoot, { recursive: true, force: true });
-  }
+  image = await ensureModeBImage(fixturePath);
 }, testTimeoutMs);
 
 afterAll(() => {
@@ -220,11 +183,22 @@ function judgeChat() {
       candidate === "accepted" || candidate.startsWith("Deterministic reply ")
         ? "equivalent"
         : "divergent";
-    return JSON.stringify({
-      verdict,
-      score: verdict === "equivalent" ? 1 : 0,
-      justification: "deterministic confirmation judge",
-    });
+    return judgeReply(
+      JSON.stringify({
+        verdict,
+        score: verdict === "equivalent" ? 1 : 0,
+        justification: "deterministic confirmation judge",
+      }),
+    );
+  };
+}
+
+function judgeReply(content: string): JudgeChatResult {
+  return {
+    content,
+    costUsd: 0.000001,
+    costIsEstimate: true,
+    usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
 
@@ -295,6 +269,7 @@ function fakeRunner(
         skipped: 0,
         blocked: [],
         rejectedRows: 0,
+        lostReasons: {},
         executions,
       };
     },
@@ -524,7 +499,7 @@ async function realModeBContext(
   };
 }
 
-describe("confirmSwapSet", () => {
+describe.skipIf(skipDocker)("confirmSwapSet", () => {
   it("confirms a passing full swap set in exactly one run set", async () => {
     const runner = fakeRunner(() => false);
     const context = await testContext(runner);
@@ -692,15 +667,13 @@ describe("confirmSwapSet", () => {
             ...context.input.modeB,
             judge: {
               chat: async (request) =>
-                (
-                  await provider.chat({
-                    model: request.model,
-                    messages: request.messages,
-                    temperature: request.temperature,
-                    maxOutputTokens: 256,
-                    responseFormat: request.responseFormat as JsonValue,
-                  })
-                ).content,
+                provider.chat({
+                  model: request.model,
+                  messages: request.messages,
+                  temperature: request.temperature,
+                  maxOutputTokens: 256,
+                  responseFormat: request.responseFormat as JsonValue,
+                }),
               judgeModel: "zeta/judge-1",
               supportsStructuredOutput: true,
               providerId: provider.providerId,
@@ -778,6 +751,56 @@ describe("confirmSwapSet", () => {
     },
     testTimeoutMs,
   );
+
+  it("re-judges a case whose confirm judge failed on the next run instead of freezing the loss", async () => {
+    const runner = fakeRunner(() => false);
+    const context = await testContext(runner);
+    const delegate = judgeChat();
+    let invocation = 0;
+    const chat: ConfirmModeB["judge"]["chat"] = async (request) => {
+      invocation += 1;
+      if (invocation === 1) throw new Error("transient judge outage");
+      return delegate(request);
+    };
+    const input: ConfirmSwapSetInput = {
+      ...context.input,
+      modeB: {
+        ...context.input.modeB,
+        judge: { ...context.input.modeB.judge, chat },
+      },
+    };
+
+    const first = await confirmSwapSet(input);
+    const fullSet = (await readPlan(context.store)).queue.find(
+      ({ members }) => members.length === 3,
+    );
+
+    expect(first).toMatchObject({ verdict: "inconclusive", runSetsUsed: 1 });
+    expect(fullSet).toMatchObject({
+      members: ["classify", "lookup", "answer"],
+      status: "pending",
+    });
+
+    const second = await confirmSwapSet(input);
+    const assessments = (await facts(context.store)).filter(
+      (fact) => "assessmentId" in fact,
+    );
+
+    expect(second).toMatchObject({ verdict: "confirmed", runSetsUsed: 1 });
+    expect(runner.calls()).toBe(1);
+    expect(assessments).toHaveLength(17);
+  });
+
+  it("writes the swap set candidate on the cascade finding", async () => {
+    const runner = fakeRunner(() => false);
+    const context = await testContext(runner);
+
+    await confirmSwapSet(context.input);
+
+    expect(await cascadeFindings(context.store)).toMatchObject([
+      { verdict: "confirmed", candidateId: "acme/small-1" },
+    ]);
+  });
 
   it("names the next required run-set cap and leaves a resumable frontier", async () => {
     const runner = fakeRunner(pairFailure);

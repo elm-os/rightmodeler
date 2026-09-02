@@ -21,6 +21,7 @@ export interface ApplySwapsOptions {
   readonly repo: string;
   readonly store?: string;
   readonly owner: string;
+  readonly githubRepo?: string;
   readonly githubBaseUrl: string;
   readonly githubTokenEnv: string;
   readonly dryRun?: boolean;
@@ -39,7 +40,7 @@ export function applySwaps(
       tokenEnv: options.githubTokenEnv,
     }),
     owner: options.owner,
-    githubRepo: basename(resolve(options.repo)),
+    githubRepo: options.githubRepo ?? basename(resolve(options.repo)),
     dryRun: options.dryRun ?? false,
   });
 }

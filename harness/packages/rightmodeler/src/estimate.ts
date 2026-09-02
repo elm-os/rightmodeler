@@ -1,4 +1,9 @@
-import type { ModelCatalogEntry, StepShortlist } from "@rightmodeler/replay";
+import { compareText } from "@rightmodeler/core";
+import type {
+  ModelCatalogEntry,
+  ModelPricing,
+  StepShortlist,
+} from "@rightmodeler/replay";
 
 export interface ReplayCostStep {
   readonly family: string;
@@ -16,6 +21,8 @@ export interface ReplayCostEstimate {
   readonly projectedCostUsd: number;
   readonly shortlistCostUsd: number;
   readonly holdoutCostUsd: number;
+  readonly judgeCostUsd: number;
+  readonly judgeCalls: number;
   readonly candidateExecutions: number;
   readonly corpusCases: number;
   readonly shortlistCases: number;
@@ -25,6 +32,7 @@ export interface ReplayCostEstimate {
   readonly shortlist: readonly {
     readonly stepId: string;
     readonly candidateIds: readonly string[];
+    readonly resolvedCurrentModelId?: string;
   }[];
 }
 
@@ -32,6 +40,13 @@ export function estimateReplayCost(input: {
   readonly steps: readonly ReplayCostStep[];
   readonly cases: readonly ReplayCostCase[];
   readonly candidates: readonly StepShortlist[];
+  readonly judge:
+    | {
+        readonly modelId: string;
+        readonly pricing: ModelPricing;
+        readonly maxOutputTokens: number;
+      }
+    | undefined;
 }): ReplayCostEstimate {
   const stepsById = new Map(input.steps.map((step) => [step.stepId, step]));
   const candidatesByStep = new Map(
@@ -42,6 +57,7 @@ export function estimateReplayCost(input: {
   );
   let shortlistCostUsd = 0;
   let shortlistExecutions = 0;
+  let judgeCostUsd = 0;
 
   for (const replayCase of input.cases) {
     requireStep(stepsById, replayCase.stepId);
@@ -49,6 +65,9 @@ export function estimateReplayCost(input: {
     for (const candidate of candidatesByStep.get(replayCase.stepId) ?? []) {
       shortlistCostUsd += reservationCost(replayCase, candidate);
       shortlistExecutions += 1;
+      if (input.judge !== undefined) {
+        judgeCostUsd += 2 * judgeCallCost(replayCase, input.judge);
+      }
     }
   }
 
@@ -71,10 +90,16 @@ export function estimateReplayCost(input: {
       ),
     ].sort(compareText);
     let maximumFamily:
-      { readonly cost: number; readonly executions: number } | undefined;
+      | {
+          readonly cost: number;
+          readonly executions: number;
+          readonly judgeCost: number;
+        }
+      | undefined;
     for (const candidateId of candidateIds) {
       let candidateCost = 0;
       let candidateExecutions = 0;
+      let candidateJudgeCost = 0;
       for (const replayCase of input.cases) {
         if (
           replayCase.corpusSplit !== "holdout" ||
@@ -88,22 +113,34 @@ export function estimateReplayCost(input: {
         if (candidate === undefined) continue;
         candidateCost += reservationCost(replayCase, candidate);
         candidateExecutions += 1;
+        if (input.judge !== undefined) {
+          candidateJudgeCost += 2 * judgeCallCost(replayCase, input.judge);
+        }
       }
       if (maximumFamily === undefined || candidateCost > maximumFamily.cost) {
         maximumFamily = {
           cost: candidateCost,
           executions: candidateExecutions,
+          judgeCost: candidateJudgeCost,
         };
       }
     }
     holdoutCostUsd += maximumFamily?.cost ?? 0;
     holdoutExecutions += maximumFamily?.executions ?? 0;
+    judgeCostUsd += maximumFamily?.judgeCost ?? 0;
   }
 
+  const judgeCalls =
+    input.judge === undefined
+      ? 0
+      : 2 * (shortlistExecutions + holdoutExecutions);
+
   return {
-    projectedCostUsd: shortlistCostUsd + holdoutCostUsd,
+    projectedCostUsd: shortlistCostUsd + holdoutCostUsd + judgeCostUsd,
     shortlistCostUsd,
     holdoutCostUsd,
+    judgeCostUsd,
+    judgeCalls,
     candidateExecutions: shortlistExecutions + holdoutExecutions,
     corpusCases: input.cases.length,
     shortlistCases: input.cases.filter(
@@ -113,16 +150,33 @@ export function estimateReplayCost(input: {
       ({ corpusSplit }) => corpusSplit === "holdout",
     ).length,
     basis:
-      "Worst-case candidate reservation from corpus token bounds and current provider catalog pricing; holdout uses the most expensive possible family winner.",
+      "Worst-case candidate reservation from corpus token bounds and current provider catalog pricing; holdout uses the most expensive possible family winner. Judge calls are priced at two calls per replayed cell.",
     exclusions: [
-      "Built-in judge calls, whose current pipeline records no priced usage.",
       "External evaluator charges, which are not present in the provider catalog.",
     ],
-    shortlist: input.candidates.map(({ stepId, candidates }) => ({
-      stepId,
-      candidateIds: candidates.map(({ id }) => id),
-    })),
+    shortlist: input.candidates.map(
+      ({ stepId, candidates, resolvedCurrentModelId }) => ({
+        stepId,
+        candidateIds: candidates.map(({ id }) => id),
+        ...(resolvedCurrentModelId === undefined
+          ? {}
+          : { resolvedCurrentModelId }),
+      }),
+    ),
   };
+}
+
+function judgeCallCost(
+  replayCase: ReplayCostCase,
+  judge: {
+    readonly pricing: ModelPricing;
+    readonly maxOutputTokens: number;
+  },
+): number {
+  return (
+    replayCase.contextTokens * judge.pricing.input +
+    judge.maxOutputTokens * judge.pricing.output
+  );
 }
 
 function reservationCost(
@@ -147,8 +201,4 @@ function requireStep(
     throw new Error(`Replay cost case references an unknown step: ${stepId}`);
   }
   return step;
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

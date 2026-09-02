@@ -2,39 +2,24 @@ import {
   normalizedRunSchema,
   type NormalizedRun,
   type NormalizedStep,
+  type NormalizedUsage,
 } from "../normalized-run.js";
 import {
   TraceAdaptError,
   isRecord,
   jsonValue,
   optionalString,
+  optionalTokenCount,
   recordList,
   requiredString,
   sampleRecords,
   strictRuns,
-  tokenCount,
   type DroppedTraceRecord,
   type NamedTraceAdapter,
   type TraceAdaptResult,
 } from "./shared.js";
 
 const format = "claude-code";
-const metadataTypes = new Set([
-  "agent-name",
-  "ai-title",
-  "attachment",
-  "file-history-delta",
-  "file-history-snapshot",
-  "frame-link",
-  "last-prompt",
-  "mode",
-  "permission-mode",
-  "pr-link",
-  "queue-operation",
-  "result",
-  "started",
-  "system",
-]);
 
 function confidence(sample: unknown): number {
   const records = sampleRecords(sample).filter(isRecord);
@@ -95,6 +80,39 @@ function trajectoryId(
   return optionalString(users.at(-1)?.uuid) ?? group.sessionId;
 }
 
+function claudeUsage(
+  usage: unknown,
+  label: string,
+): NormalizedUsage | undefined {
+  if (!isRecord(usage)) return undefined;
+  const input = optionalTokenCount(
+    usage.input_tokens,
+    `${label} input usage`,
+    format,
+  );
+  const output = optionalTokenCount(
+    usage.output_tokens,
+    `${label} output usage`,
+    format,
+  );
+  if (input === undefined || output === undefined) return undefined;
+  return {
+    inputTokens:
+      input +
+      (optionalTokenCount(
+        usage.cache_read_input_tokens,
+        `${label} cache read usage`,
+        format,
+      ) ?? 0) +
+      (optionalTokenCount(
+        usage.cache_creation_input_tokens,
+        `${label} cache creation usage`,
+        format,
+      ) ?? 0),
+    outputTokens: output,
+  };
+}
+
 function adaptWithReport(records: unknown): TraceAdaptResult {
   const source = recordList(records, format, "Claude Code transcript");
   const droppedRecords: DroppedTraceRecord[] = [];
@@ -116,7 +134,6 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
     }
     const uuid = optionalString(candidate.uuid);
     if (uuid !== undefined) recordsByUuid.set(uuid, candidate);
-    if (metadataTypes.has(type)) continue;
     if (type === "user") {
       if (
         optionalString(candidate.sessionId) === undefined ||
@@ -131,13 +148,7 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
       }
       continue;
     }
-    if (type !== "assistant") {
-      droppedRecords.push({
-        recordIndex,
-        reason: `unsupported Claude Code record type ${type}`,
-      });
-      continue;
-    }
+    if (type !== "assistant") continue;
 
     try {
       const sessionId = requiredString(
@@ -166,21 +177,7 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
         `Claude Code record ${recordIndex + 1} message.model`,
         format,
       );
-      if (!isRecord(message.usage)) {
-        throw new Error(
-          "Claude Code assistant message usage must be an object",
-        );
-      }
-      tokenCount(
-        message.usage.input_tokens,
-        `Claude Code record ${recordIndex + 1} input usage`,
-        format,
-      );
-      tokenCount(
-        message.usage.output_tokens,
-        `Claude Code record ${recordIndex + 1} output usage`,
-        format,
-      );
+      claudeUsage(message.usage, `Claude Code record ${recordIndex + 1}`);
       const key = `${sessionId}:${messageId}`;
       const group = groups.get(key);
       if (group !== undefined) {
@@ -216,12 +213,12 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
   >();
   for (const group of groups.values()) {
     const content: unknown[] = [];
-    let finalUsage: Record<string, unknown> = {};
+    let finalUsage: unknown;
     let order = Number.MAX_SAFE_INTEGER;
     for (const { record, recordIndex } of group.rows) {
       const message = record.message as Record<string, unknown>;
       content.push(...(message.content as unknown[]));
-      finalUsage = message.usage as Record<string, unknown>;
+      finalUsage = message.usage;
       order = Math.min(order, recordIndex);
     }
     const inputs = ancestorUsers(
@@ -237,6 +234,10 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
           )
         : [];
     });
+    const usage = claudeUsage(
+      finalUsage,
+      `Claude Code message ${group.messageId}`,
+    );
     const step: NormalizedStep = {
       stepIndex: 0,
       model: group.model,
@@ -256,18 +257,7 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
         `Claude Code message ${group.messageId} output`,
         format,
       ),
-      usage: {
-        inputTokens: tokenCount(
-          finalUsage.input_tokens,
-          `Claude Code message ${group.messageId} input usage`,
-          format,
-        ),
-        outputTokens: tokenCount(
-          finalUsage.output_tokens,
-          `Claude Code message ${group.messageId} output usage`,
-          format,
-        ),
-      },
+      ...(usage === undefined ? {} : { usage }),
       trajectoryId: trajectoryId(group, recordsByUuid),
       ...(group.timestamp === undefined ? {} : { timestamp: group.timestamp }),
     };

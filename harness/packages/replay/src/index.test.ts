@@ -3,25 +3,35 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  budgetKey,
   completeRun,
   createRun,
   factSchema,
   factsPrefix,
   FsStore,
+  runKey,
   type Fact,
   type JsonValue,
+  type Store,
 } from "@rightmodeler/core";
-import { aggregate, type JudgeChat } from "@rightmodeler/kernel";
+import {
+  aggregate,
+  type JudgeChat,
+  type JudgeChatResult,
+} from "@rightmodeler/kernel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AdaptiveLimiter,
   BlockedError,
   BudgetRefusalError,
   DEFAULT_RESERVATION_STALENESS_WINDOW_MS,
   createBudget,
   createProvider,
+  ProviderRequestError,
   replayModeA,
   shortlist,
+  type Budget,
   type ModelCatalogEntry,
   type ProviderClient,
   type RecordedCase,
@@ -39,6 +49,7 @@ interface StubProvider {
 interface StubProviderModule {
   startStubProvider(options: {
     port: number;
+    catalogPageSize?: number;
     malformedJudgeModels?: string[];
   }): Promise<StubProvider>;
 }
@@ -61,7 +72,7 @@ const runId = "run-1";
 const fakeKey = "fake-provider-key-never-persist";
 
 async function startStub(
-  options: { malformedJudgeModels?: string[] } = {},
+  options: { catalogPageSize?: number; malformedJudgeModels?: string[] } = {},
 ): Promise<StubProvider> {
   const fixture = (await import(stubModuleUrl)) as StubProviderModule;
   return fixture.startStubProvider({ port: 0, ...options });
@@ -105,11 +116,22 @@ function judge(counter?: { calls: number }): JudgeChat {
   return async (request) => {
     if (counter !== undefined) counter.calls += 1;
     expect(request.temperature).toBe(0);
-    return JSON.stringify({
-      verdict: "equivalent",
-      score: 1,
-      justification: "Equivalent fixture outputs.",
-    });
+    return judgeReply(
+      JSON.stringify({
+        verdict: "equivalent",
+        score: 1,
+        justification: "Equivalent fixture outputs.",
+      }),
+    );
+  };
+}
+
+function judgeReply(content: string): JudgeChatResult {
+  return {
+    content,
+    costUsd: 0.000001,
+    costIsEstimate: true,
+    usage: { inputTokens: 1, outputTokens: 1 },
   };
 }
 
@@ -125,6 +147,43 @@ async function readFacts(store: FsStore): Promise<Fact[]> {
     }),
   );
 }
+
+function countingStore(inner: Store, key: string): Store & { reads(): number } {
+  let readCount = 0;
+  return {
+    async get(candidateKey) {
+      if (candidateKey === key) readCount += 1;
+      return inner.get(candidateKey);
+    },
+    list: (prefix) => inner.list(prefix),
+    putImmutable: (candidateKey, body) =>
+      inner.putImmutable(candidateKey, body),
+    compareAndSwap: (candidateKey, expectedVersion, body, fenceToken) =>
+      inner.compareAndSwap(candidateKey, expectedVersion, body, fenceToken),
+    reads: () => readCount,
+  };
+}
+
+describe("adaptive limiter", () => {
+  it("halves once per back-off epoch and never below the floor", async () => {
+    const limiter = new AdaptiveLimiter(16);
+    const storm = (size: number) =>
+      Promise.all(
+        Array.from({ length: size }, () =>
+          limiter.run(async (ticket) => {
+            limiter.rateLimited(ticket);
+          }),
+        ),
+      );
+
+    await storm(16);
+    expect(limiter.currentCap).toBe(8);
+    await storm(8);
+    expect(limiter.currentCap).toBe(4);
+    await storm(4);
+    expect(limiter.currentCap).toBe(4);
+  });
+});
 
 describe("provider client", () => {
   let stub: StubProvider;
@@ -151,10 +210,14 @@ describe("provider client", () => {
     expect(catalog[0]).toEqual({
       id: "acme/small-1",
       family: "acme",
-      contextLength: 0,
+      contextLength: 128_000,
       pricing: { input: 0.0000002, output: 0.0000008 },
       supportsTools: false,
       supportsStructuredOutput: false,
+      releasedAt: null,
+      maxOutputTokens: 16_384,
+      outputModalities: [],
+      requiresReasoning: false,
     });
 
     const response = await provider.chat({
@@ -171,6 +234,21 @@ describe("provider client", () => {
       response.usage.inputTokens * 0.0000002 + 12 * 0.0000008,
     );
     expect(response.costIsEstimate).toBe(true);
+  });
+
+  it("walks a paginated stub catalog", async () => {
+    await stub.close();
+    stub = await startStub({ catalogPageSize: 4 });
+    const provider = createProvider({
+      providerId: "stub-provider",
+      baseUrl: baseUrl(stub),
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    });
+
+    const catalog = await provider.listModels();
+
+    expect(catalog).toHaveLength(6);
+    expect(catalog.at(-1)?.id).toBe("yotta/judge-2");
   });
 
   it("reads the API key at call time", async () => {
@@ -216,19 +294,41 @@ describe("AI Gateway catalog", () => {
 
   async function listFixtureModels(
     fixtureBody?: string,
+    options: {
+      modelInfoBody?: string;
+      modelInfoStatus?: number;
+      warning?: (code: string, message: string) => void;
+    } = {},
   ): Promise<ModelCatalogEntry[]> {
     const body = fixtureBody ?? (await readFile(aiGatewayFixtureUrl, "utf8"));
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(body, {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) =>
+        new Response(
+          String(input).endsWith("/models")
+            ? body
+            : (options.modelInfoBody ?? JSON.stringify({ data: [] })),
+          {
+            status: String(input).endsWith("/models")
+              ? 200
+              : (options.modelInfoStatus ?? 200),
+            headers: { "content-type": "application/json" },
+          },
+        ),
     );
     return createProvider({
       providerId: "vercel-ai-gateway",
       baseUrl: "https://catalog.example/v1",
       apiKeyEnv: "REPLAY_TEST_API_KEY",
+      ...(options.warning === undefined ? {} : { warning: options.warning }),
     }).listModels();
+  }
+
+  async function fixtureWithoutPricing(): Promise<string> {
+    const fixture = JSON.parse(await readFile(aiGatewayFixtureUrl, "utf8")) as {
+      data: Array<Record<string, unknown>>;
+    };
+    for (const model of fixture.data) delete model.pricing;
+    return JSON.stringify(fixture);
   }
 
   it("normalizes string pricing, context, and capabilities while excluding embeddings", async () => {
@@ -242,6 +342,10 @@ describe("AI Gateway catalog", () => {
       pricing: { input: 0.0000025, output: 0.00001 },
       supportsTools: true,
       supportsStructuredOutput: false,
+      releasedAt: null,
+      maxOutputTokens: 16_384,
+      outputModalities: [],
+      requiresReasoning: false,
     });
     expect(catalog.find(({ id }) => id === "sakana/namazu")).toMatchObject({
       supportsTools: true,
@@ -253,6 +357,157 @@ describe("AI Gateway catalog", () => {
     expect(
       catalog.some(({ id }) => id === "alibaba/qwen3-embedding-0.6b"),
     ).toBe(false);
+  });
+
+  it("normalizes AI Gateway output ceilings", async () => {
+    const catalog = await listFixtureModels();
+
+    expect(
+      catalog.find(({ id }) => id === "meta/llama-3.3-70b")?.maxOutputTokens,
+    ).toBe(8_192);
+    expect(
+      catalog.find(({ id }) => id === "sakana/namazu")?.maxOutputTokens,
+    ).toBe(256_000);
+  });
+
+  it("normalizes OpenRouter release, output, modality, and reasoning fields", async () => {
+    const [model] = await listFixtureModels(
+      JSON.stringify({
+        data: [
+          {
+            id: "openai/example",
+            created: 1_788_285_838,
+            context_length: 200_000,
+            pricing: { prompt: "0.000001", completion: "0.000002" },
+            top_provider: { max_completion_tokens: 128_000 },
+            architecture: { output_modalities: ["text"] },
+            reasoning: { mandatory: true },
+          },
+        ],
+      }),
+    );
+
+    expect(model).toMatchObject({
+      releasedAt: 1_788_285_838,
+      maxOutputTokens: 128_000,
+      outputModalities: ["text"],
+      requiresReasoning: true,
+    });
+  });
+
+  it("marks variable-priced router models as unpriceable", async () => {
+    const catalog = await listFixtureModels(
+      JSON.stringify({
+        data: [
+          {
+            id: "openai/example",
+            pricing: { prompt: "0.000001", completion: "0.000002" },
+          },
+          {
+            id: "openrouter/auto",
+            pricing: { prompt: "-1", completion: "-1" },
+          },
+        ],
+      }),
+    );
+
+    expect(catalog).toHaveLength(2);
+    expect(
+      catalog.find(({ id }) => id === "openrouter/auto")?.pricing,
+    ).toBeNull();
+  });
+
+  it("applies pricing overrides without fetching another endpoint", async () => {
+    const body = await fixtureWithoutPricing();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const catalog = await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://catalog.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      pricingOverrides: {
+        "openai/gpt-4o": {
+          input: 0.001,
+          output: 0.002,
+          maxOutputTokens: 32_768,
+        },
+      },
+    }).listModels();
+
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o")).toMatchObject({
+      pricing: { input: 0.001, output: 0.002 },
+      maxOutputTokens: 32_768,
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
+  it("fills an unpriced catalog from LiteLLM model info", async () => {
+    const catalog = await listFixtureModels(await fixtureWithoutPricing(), {
+      modelInfoBody: JSON.stringify({
+        data: [
+          {
+            model_name: "openai/gpt-4o",
+            model_info: {
+              input_cost_per_token: 0.000001,
+              output_cost_per_token: 0.000002,
+              max_output_tokens: 32_768,
+            },
+          },
+          {
+            model_name: "meta/llama-3.3-70b",
+            model_info: {
+              input_cost_per_token: 0.0000003,
+              output_cost_per_token: 0.0000004,
+              max_tokens: 12_345,
+            },
+          },
+        ],
+      }),
+    });
+
+    expect(
+      catalog
+        .filter(({ pricing }) => pricing !== null)
+        .map(({ id }) => id)
+        .sort(),
+    ).toEqual(["meta/llama-3.3-70b", "openai/gpt-4o"]);
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o")).toMatchObject({
+      pricing: { input: 0.000001, output: 0.000002 },
+      maxOutputTokens: 32_768,
+    });
+    expect(catalog.find(({ id }) => id === "meta/llama-3.3-70b")).toMatchObject(
+      {
+        pricing: { input: 0.0000003, output: 0.0000004 },
+        maxOutputTokens: 12_345,
+      },
+    );
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(
+      2,
+      "https://catalog.example/model/info",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("warns when LiteLLM model info is unavailable", async () => {
+    const warning = vi.fn();
+    const catalog = await listFixtureModels(await fixtureWithoutPricing(), {
+      modelInfoStatus: 401,
+      warning,
+    });
+
+    expect(catalog.every(({ pricing }) => pricing === null)).toBe(true);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(warning).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledWith(
+      "catalog_pricing_unavailable",
+      expect.stringContaining("vercel-ai-gateway"),
+    );
   });
 
   it("marks non-numeric string pricing as unavailable", async () => {
@@ -290,6 +545,98 @@ describe("AI Gateway catalog", () => {
         bodyExcerpt: '{"credential":"[redacted]',
       },
     });
+  });
+
+  it("warns when total_count exceeds the collected entries", async () => {
+    const fixture = JSON.parse(await readFile(aiGatewayFixtureUrl, "utf8")) as {
+      data: unknown[];
+    };
+    const warning = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [fixture.data[0]],
+          total_count: 3,
+          links: { next: null },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://catalog.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      warning,
+    }).listModels();
+
+    expect(warning).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledWith(
+      "catalog_truncated",
+      expect.stringContaining("1 of 3"),
+    );
+  });
+
+  it("stops after twenty pages", async () => {
+    const fixture = JSON.parse(await readFile(aiGatewayFixtureUrl, "utf8")) as {
+      data: unknown[];
+    };
+    const warning = vi.fn();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [fixture.data[0]],
+            links: { next: "/v1/models?offset=1" },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+
+    await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://catalog.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      warning,
+    }).listModels();
+
+    expect(fetchMock).toHaveBeenCalledTimes(20);
+    expect(warning).toHaveBeenCalledOnce();
+  });
+
+  it("never follows a next link to another origin", async () => {
+    const fixture = JSON.parse(await readFile(aiGatewayFixtureUrl, "utf8")) as {
+      data: unknown[];
+    };
+    const warning = vi.fn();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [fixture.data[0]],
+          links: { next: "https://elsewhere.example/v1/models" },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://catalog.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      warning,
+    }).listModels();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledOnce();
   });
 
   it("shortlists cheaper tool-capable chat models for a GPT-4o incumbent", async () => {
@@ -362,7 +709,32 @@ describe("AI Gateway chat", () => {
       usage: { inputTokens: 10, outputTokens: 3 },
       costUsd: 0.0000033,
       costIsEstimate: false,
+      finishReason: "stop",
+      providerResponseId: "gen_01KZYSK582PZST0T79EP0DJ1FJ",
     });
+  });
+
+  it("falls back to the response id without a generation id", async () => {
+    const fixture = JSON.parse(
+      await readFile(aiGatewayChatFixtureUrl, "utf8"),
+    ) as { generationId?: string };
+    delete fixture.generationId;
+
+    const response = await chatFromFixture(JSON.stringify(fixture));
+
+    expect(response.providerResponseId).toBe("chatcmpl-SANITIZED");
+  });
+
+  it("carries finish_reason onto the response", async () => {
+    const fixtureBody = await readFile(aiGatewayChatFixtureUrl, "utf8");
+    const response = await chatFromFixture(
+      fixtureBody.replace(
+        '"finish_reason": "stop"',
+        '"finish_reason": "length"',
+      ),
+    );
+
+    expect(response.finishReason).toBe("length");
   });
 
   it("uses upstream inference cost when BYOK market cost is absent", async () => {
@@ -445,7 +817,286 @@ describe("AI Gateway chat", () => {
     });
   });
 
-  it.each([429, 500])(
+  it("retries a 200 body whose first choice finished with error", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const chatBody = await readFile(aiGatewayChatFixtureUrl, "utf8");
+    const fixture = JSON.parse(chatBody) as {
+      choices: Array<{
+        finish_reason: string;
+        message: { content: string };
+      }>;
+    };
+    fixture.choices[0]!.finish_reason = "error";
+    fixture.choices[0]!.message.content = "partial";
+    const onAttempt = vi.fn();
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(fixture), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": "0",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(chatBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    const response = await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    expect(response.content).toBe("Ok!");
+    expect(onAttempt).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        outcome: "provider_error",
+        errorDetail: {
+          status: 200,
+          bodyExcerpt: expect.stringContaining("partial"),
+        },
+      }),
+    );
+  });
+
+  it("gives up after five error bodies", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const onAttempt = vi.fn();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({
+              id: "gen-1",
+              error: { code: 502, message: "upstream failed" },
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json",
+                "retry-after": "0",
+              },
+            },
+          ),
+      );
+    const response = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    await expect(response).rejects.toMatchObject({
+      name: "BlockedError",
+      kind: "rate-limit",
+    });
+    expect(onAttempt).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("retries a thrown connection error with backoff", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const chatBody = await readFile(aiGatewayChatFixtureUrl, "utf8");
+    const onAttempt = vi.fn();
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(
+        new Response(chatBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    const response = await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    expect(response.content).toBe("Ok!");
+    expect(onAttempt).toHaveBeenCalledTimes(2);
+    expect(onAttempt).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        outcome: "provider_error",
+        errorDetail: { status: null, bodyExcerpt: "fetch failed" },
+      }),
+    );
+  });
+
+  it("gives up after five connection failures", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const onAttempt = vi.fn();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockRejectedValue(new TypeError("fetch failed"));
+    const response = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    await expect(response).rejects.toBeInstanceOf(ProviderRequestError);
+    await expect(response).rejects.toThrow("fetch failed");
+    expect(onAttempt).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([
+    [401, "credentials"],
+    [403, "credentials"],
+    [402, "credits"],
+  ] as const)("blocks once on HTTP %s", async (status, kind) => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const onAttempt = vi.fn();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("denied", { status }));
+    const response = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    await expect(response).rejects.toMatchObject({
+      name: "BlockedError",
+      kind,
+      providerId: "vercel-ai-gateway",
+      errorDetail: { status, bodyExcerpt: "denied" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it("sheds load on a 5xx storm", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockImplementation(
+        async () =>
+          new Response("", {
+            status: 500,
+            headers: { "retry-after": "0" },
+          }),
+      );
+    const provider = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    });
+
+    await expect(
+      provider.chat({
+        model: "openai/gpt-4o-mini",
+        messages: [{ role: "user", content: "Say okay." }],
+      }),
+    ).rejects.toMatchObject({
+      name: "BlockedError",
+      kind: "rate-limit",
+      observedCeiling: 2,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("keeps a 429 storm above the serial floor", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockImplementation(
+        async () =>
+          new Response("", {
+            status: 429,
+            headers: { "retry-after": "0" },
+          }),
+      );
+    const provider = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    });
+
+    await expect(
+      provider.chat({
+        model: "openai/gpt-4o-mini",
+        messages: [{ role: "user", content: "Say okay." }],
+      }),
+    ).rejects.toMatchObject({
+      name: "BlockedError",
+      kind: "rate-limit",
+      observedCeiling: 2,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([408, 409, 429, 500])(
     "retries a malformed HTTP %s body by status",
     async (status) => {
       const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
@@ -599,6 +1250,77 @@ describe("budget reservation", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("keeps spend when its reservation was reclaimed before the refund", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-13T12:00:00.000Z"));
+    try {
+      const budget = createBudget({
+        store,
+        projectId,
+        runId,
+        authorizedTotalUsd: 0.01,
+      });
+      const reservation = await budget.reserveExecution({
+        contextTokens: 1,
+        maxOutputTokens: 0,
+        pricing: { input: 0.01, output: 0 },
+      });
+
+      vi.advanceTimersByTime(DEFAULT_RESERVATION_STALENESS_WINDOW_MS + 1);
+      const resumedBudget = createBudget({
+        store,
+        projectId,
+        runId,
+        authorizedTotalUsd: 0.01,
+      });
+      expect(await resumedBudget.state()).toMatchObject({
+        spentUsd: 0,
+        reservedUsd: 0,
+      });
+
+      await reservation.refund(0.004);
+      expect(await budget.state()).toMatchObject({
+        spentUsd: 0.004,
+        reservedUsd: 0,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads the owner run once per prune and never on heartbeat or refund", async () => {
+    const counting = countingStore(store, runKey(projectId, runId));
+    const budget = createBudget({
+      store: counting,
+      projectId,
+      runId,
+      authorizedTotalUsd: 1,
+    });
+    await budget.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 0,
+      pricing: { input: 0.001, output: 0 },
+    });
+    await budget.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 0,
+      pricing: { input: 0.001, output: 0 },
+    });
+
+    const readsBeforeThird = counting.reads();
+    const third = await budget.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 0,
+      pricing: { input: 0.001, output: 0 },
+    });
+    expect(counting.reads() - readsBeforeThird).toBe(1);
+
+    const readsBeforeMaintenance = counting.reads();
+    await third.heartbeat();
+    await third.refund(0);
+    expect(counting.reads() - readsBeforeMaintenance).toBe(0);
   });
 
   it("reclaims a reservation when its owning run is terminal", async () => {
@@ -771,6 +1493,96 @@ describe("shortlist", () => {
     expect(result[0]).toMatchObject({
       candidates: [],
       abstention: { kind: "current-model-absent" },
+    });
+  });
+
+  it("resolves a bare recorded model id to one gateway slug", () => {
+    const result = shortlist(
+      [step({ currentModel: "gpt-4o" })],
+      [
+        { ...catalog[0]!, id: "openai/gpt-4o", family: "openai" },
+        { ...catalog[1]!, id: "openai/gpt-4o-mini", family: "openai" },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      resolvedCurrentModelId: "openai/gpt-4o",
+      candidates: [{ id: "openai/gpt-4o-mini" }],
+    });
+  });
+
+  it("abstains when a bare recorded model id matches more than one slug", () => {
+    const result = shortlist(
+      [step({ currentModel: "gpt-4o" })],
+      [
+        { ...catalog[0]!, id: "openai/gpt-4o", family: "openai" },
+        { ...catalog[0]!, id: "azure/gpt-4o", family: "azure" },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      candidates: [],
+      droppedByOutputCeiling: 0,
+      abstention: {
+        kind: "current-model-ambiguous",
+        message:
+          "Recorded model gpt-4o matches more than one catalog model: azure/gpt-4o, openai/gpt-4o",
+      },
+    });
+  });
+
+  it("drops candidates below the recorded output ceiling", () => {
+    const result = shortlist(
+      [
+        step({
+          currentModel: "openai/gpt-4o",
+          recordedMaxOutputTokens: 16_384,
+        }),
+      ],
+      [
+        {
+          ...catalog[0]!,
+          id: "openai/gpt-4o",
+          family: "openai",
+          maxOutputTokens: 16_384,
+        },
+        {
+          ...catalog[1]!,
+          id: "meta/llama-3.3-70b",
+          family: "meta",
+          maxOutputTokens: 8_192,
+        },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      candidates: [],
+      droppedByOutputCeiling: 1,
+    });
+  });
+
+  it("names an all-null pricing catalog", () => {
+    const result = shortlist(
+      [step({ currentModel: "openai/gpt-4o" })],
+      [
+        {
+          ...catalog[0]!,
+          id: "openai/gpt-4o",
+          family: "openai",
+          pricing: null,
+        },
+        {
+          ...catalog[1]!,
+          id: "meta/llama-3.3-70b",
+          family: "meta",
+          pricing: null,
+        },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      candidates: [],
+      abstention: { kind: "no-priced-candidates" },
     });
   });
 
@@ -947,6 +1759,7 @@ describe("Mode A replay", () => {
           candidates: [candidate],
           droppedByTop: 0,
           droppedFreeModels: 0,
+          droppedByOutputCeiling: 0,
         },
       ],
       provider,
@@ -962,15 +1775,13 @@ describe("Mode A replay", () => {
   }
 
   const providerJudge: JudgeChat = async (request) =>
-    (
-      await provider.chat({
-        model: request.model,
-        messages: request.messages,
-        temperature: request.temperature,
-        maxOutputTokens: 256,
-        responseFormat: request.responseFormat as JsonValue,
-      })
-    ).content;
+    provider.chat({
+      model: request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      maxOutputTokens: 256,
+      responseFormat: request.responseFormat as JsonValue,
+    });
 
   it("records two attempts but one terminal execution after a one-time 429", async () => {
     const result = await run([
@@ -1003,20 +1814,86 @@ describe("Mode A replay", () => {
     expect(spend.filter((event) => event.actor === "judge")).toHaveLength(2);
     expect(
       spend
+        .filter((event) => event.actor === "judge")
+        .reduce((total, event) => total + event.costUsd, 0),
+    ).toBeGreaterThan(0);
+    expect(
+      spend
         .filter((event) => event.actor === "replay-driver")
         .reduce((total, event) => total + event.costUsd, 0),
     ).toBeGreaterThan(0);
+  });
+
+  it("retries a 200 body carrying an error and scores only the retried completion", async () => {
+    const result = await run([
+      recordedCase({
+        headers: { "x-stub-error-body-once": "error-body-case" },
+      }),
+    ]);
+    const facts = await readFacts(store);
+    const attempts = facts.filter((fact) => "attemptId" in fact);
+    const executions = facts.filter(
+      (fact) => "executionId" in fact && "caseId" in fact,
+    );
+    const providerError = attempts.find(
+      (attempt) => attempt.streamOutcome === "provider_error",
+    );
+
+    expect(result.blocked).toEqual([]);
+    expect(attempts.map((attempt) => attempt.streamOutcome).sort()).toEqual([
+      "completed",
+      "provider_error",
+    ]);
+    expect(providerError).toMatchObject({
+      errorDetail: {
+        status: 200,
+        bodyExcerpt: expect.stringContaining("after generation started"),
+      },
+    });
+    expect(executions).toHaveLength(1);
+    expect(executions[0]).toMatchObject({ terminalOutcome: "success" });
+  });
+
+  it("persists the provider response id and finish reason on the attempt fact", async () => {
+    await run([recordedCase()]);
+    const facts = await readFacts(store);
+    const completedAttempt = facts.find(
+      (fact) => "attemptId" in fact && fact.streamOutcome === "completed",
+    );
+
+    expect(completedAttempt).toMatchObject({
+      providerResponseId: expect.stringMatching(/^stub-/),
+      finishReason: "stop",
+    });
+  });
+
+  it("stamps every completed attempt with a measured latency", async () => {
+    await run([recordedCase()]);
+    const facts = await readFacts(store);
+    const latencies = facts.flatMap((fact) =>
+      "attemptId" in fact && fact.streamOutcome === "completed"
+        ? [fact.latencyMs]
+        : [],
+    );
+
+    expect(latencies.length).toBeGreaterThan(0);
+    for (const latencyMs of latencies) {
+      expect(typeof latencyMs).toBe("number");
+      expect(latencyMs).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it("uses kernel judge provenance and records position-swap evidence", async () => {
     const requests: Parameters<JudgeChat>[0][] = [];
     await run([recordedCase()], async (request) => {
       requests.push(request);
-      return JSON.stringify({
-        verdict: "equivalent",
-        score: 1,
-        justification: "Equivalent fixture outputs.",
-      });
+      return judgeReply(
+        JSON.stringify({
+          verdict: "equivalent",
+          score: 1,
+          justification: "Equivalent fixture outputs.",
+        }),
+      );
     });
     const facts = await readFacts(store);
     const assessment = facts.find((fact) => "assessmentId" in fact);
@@ -1070,6 +1947,35 @@ describe("Mode A replay", () => {
         },
       },
     });
+  });
+
+  it("judges executions concurrently", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const slowJudge: JudgeChat = async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      inFlight -= 1;
+      return judgeReply(
+        JSON.stringify({
+          verdict: "equivalent",
+          score: 1,
+          justification: "Equivalent fixture outputs.",
+        }),
+      );
+    };
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index + 1}`,
+        trajectoryId: `trajectory-${index + 1}`,
+      }),
+    );
+
+    const result = await run(cases, slowJudge, 4);
+
+    expect(result.completed).toBe(4);
+    expect(maxInFlight).toBeGreaterThan(2);
   });
 
   it("switches after three malformed assessments and rejudges only affected cells", async () => {
@@ -1129,9 +2035,9 @@ describe("Mode A replay", () => {
     expect(
       requests.filter(({ model }) => model === "acme/small-1"),
     ).toHaveLength(4);
-    expect(
-      requests.filter(({ model }) => model === "zeta/judge-1"),
-    ).toHaveLength(3);
+    expect([6, 8]).toContain(
+      requests.filter(({ model }) => model === "zeta/judge-1").length,
+    );
     expect(
       requests.filter(({ model }) => model === "yotta/judge-2"),
     ).toHaveLength(8);
@@ -1170,13 +2076,15 @@ describe("Mode A replay", () => {
           if (failure === "provider_error") {
             throw new Error("Terminal provider failure");
           }
-          return '{"verdict":';
+          return judgeReply('{"verdict":');
         }
-        return JSON.stringify({
-          verdict: "equivalent",
-          score: 1,
-          justification: "Equivalent fixture outputs.",
-        });
+        return judgeReply(
+          JSON.stringify({
+            verdict: "equivalent",
+            score: 1,
+            justification: "Equivalent fixture outputs.",
+          }),
+        );
       },
       4,
       "zeta/judge-1",
@@ -1201,27 +2109,18 @@ describe("Mode A replay", () => {
         .filter((fact) => "assessmentId" in fact)
         .every((fact) => fact.evaluatorId === "yotta/judge-2"),
     ).toBe(true);
-    expect(
-      judgeModels.filter((model) => model === "zeta/judge-1"),
-    ).toHaveLength(3);
+    expect([6, 8]).toContain(
+      judgeModels.filter((model) => model === "zeta/judge-1").length,
+    );
     expect(
       judgeModels.filter((model) => model === "yotta/judge-2"),
     ).toHaveLength(8);
     expect(warning).toHaveBeenCalledOnce();
   });
 
-  it("tries at most two systematically malformed judges", async () => {
-    await stub.close();
-    stub = await startStub({
-      malformedJudgeModels: ["zeta/judge-1", "yotta/judge-2"],
-    });
-    provider = createProvider({
-      providerId: "stub-provider",
-      baseUrl: baseUrl(stub),
-      apiKeyEnv: "REPLAY_TEST_API_KEY",
-      maxConcurrency: 4,
-    });
+  it("tries at most four systematically malformed judges", async () => {
     const warning = vi.fn();
+    const judgeModels: string[] = [];
     const cases = Array.from({ length: 4 }, (_, index) =>
       recordedCase({
         caseId: `case-${index}`,
@@ -1231,7 +2130,10 @@ describe("Mode A replay", () => {
 
     const result = await run(
       cases,
-      providerJudge,
+      async (request) => {
+        judgeModels.push(request.model);
+        return judgeReply('{"verdict":');
+      },
       4,
       "zeta/judge-1",
       [
@@ -1244,33 +2146,52 @@ describe("Mode A replay", () => {
           supportsStructuredOutput: false,
         },
         {
-          judgeModel: "unused/judge-3",
+          judgeModel: "xray/judge-3",
+          supportsStructuredOutput: false,
+        },
+        {
+          judgeModel: "whiskey/judge-4",
+          supportsStructuredOutput: false,
+        },
+        {
+          judgeModel: "unused/judge-5",
           supportsStructuredOutput: false,
         },
       ],
       warning,
     );
     const facts = await readFacts(store);
-    const requests = stub.getRequests();
 
     expect(result).toMatchObject({ completed: 4, blocked: [] });
     expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(0);
     expect(
       facts.filter((fact) => "executionId" in fact && "caseId" in fact),
     ).toHaveLength(4);
-    expect(
-      requests.filter(({ model }) => model === "acme/small-1"),
-    ).toHaveLength(4);
-    expect(
-      requests.filter(({ model }) => model === "zeta/judge-1"),
-    ).toHaveLength(3);
-    expect(
-      requests.filter(({ model }) => model === "yotta/judge-2"),
-    ).toHaveLength(3);
-    expect(requests.some(({ model }) => model === "unused/judge-3")).toBe(
-      false,
+    expect([6, 8]).toContain(
+      judgeModels.filter((model) => model === "zeta/judge-1").length,
     );
-    expect(warning).toHaveBeenCalledTimes(2);
+    expect([6, 8]).toContain(
+      judgeModels.filter((model) => model === "yotta/judge-2").length,
+    );
+    expect([6, 8]).toContain(
+      judgeModels.filter((model) => model === "xray/judge-3").length,
+    );
+    expect([6, 8]).toContain(
+      judgeModels.filter((model) => model === "whiskey/judge-4").length,
+    );
+    expect(judgeModels).not.toContain("unused/judge-5");
+    expect(Array.from(new Set(judgeModels))).toEqual([
+      "zeta/judge-1",
+      "yotta/judge-2",
+      "xray/judge-3",
+      "whiskey/judge-4",
+    ]);
+    expect(warning).toHaveBeenCalledTimes(4);
+    expect(warning).toHaveBeenNthCalledWith(
+      4,
+      "judge_unusable",
+      "Judge whiskey/judge-4 is unusable after three consecutive terminal failures; no eligible fallback judge remains.",
+    );
   });
 
   it("bounds judge failure forensics to 300 characters", async () => {
@@ -1546,7 +2467,11 @@ describe("Mode A replay", () => {
       providerId: delegate.providerId,
       listModels: () => delegate.listModels(),
       chat: async () => {
-        throw new BlockedError(429, 2);
+        throw new BlockedError({
+          kind: "rate-limit",
+          status: 429,
+          observedCeiling: 2,
+        });
       },
     };
 
@@ -1558,6 +2483,229 @@ describe("Mode A replay", () => {
         observedCeiling: 2,
       }),
     ]);
+  });
+
+  it("heartbeats the reservation while a cell is in flight", async () => {
+    vi.useFakeTimers();
+    const candidate: ModelCatalogEntry = {
+      id: "vendor/candidate",
+      family: "vendor",
+      contextLength: 100,
+      pricing: { input: 0.006, output: 0.004 },
+      supportsTools: false,
+      supportsStructuredOutput: false,
+    };
+    const inner = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 1,
+    });
+    let heartbeats = 0;
+    const budget: Budget = {
+      ...inner,
+      reserveExecution: async (request) => {
+        const reservation = await inner.reserveExecution(request);
+        return {
+          ...reservation,
+          heartbeat: async () => {
+            heartbeats += 1;
+            await reservation.heartbeat();
+          },
+        };
+      },
+    };
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    const gatedProvider: ProviderClient = {
+      providerId: "gated-provider",
+      listModels: async () => [candidate],
+      chat: async (request) => {
+        resolveStarted();
+        await gate;
+        const response = {
+          content: "candidate output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          costUsd: 0.001,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+
+    try {
+      const running = replayModeA({
+        steps: [step()],
+        cases: [recordedCase({ contextTokens: 1, maxOutputTokens: 1 })],
+        candidates: [
+          {
+            stepId: "step-1",
+            candidates: [candidate],
+            droppedByTop: 0,
+            droppedFreeModels: 0,
+            droppedByOutputCeiling: 0,
+          },
+        ],
+        provider: gatedProvider,
+        store,
+        budget,
+        concurrency: 1,
+      });
+      await started;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(heartbeats).toBeGreaterThanOrEqual(1);
+      releaseGate();
+      await expect(running).resolves.toMatchObject({ completed: 1 });
+      expect(await inner.state()).toMatchObject({ reservedUsd: 0 });
+    } finally {
+      releaseGate();
+      vi.useRealTimers();
+    }
+  });
+
+  it("backs off instead of spinning while a predecessor's reservation holds the cap", async () => {
+    const predecessorBudget = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.01,
+    });
+    const predecessor = await predecessorBudget.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 0,
+      pricing: { input: 0.01, output: 0 },
+    });
+    const counting = countingStore(store, budgetKey(projectId, runId));
+    const budget = createBudget({
+      store: counting,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.01,
+    });
+    const candidate: ModelCatalogEntry = {
+      id: "vendor/candidate",
+      family: "vendor",
+      contextLength: 100,
+      pricing: { input: 0.006, output: 0.004 },
+      supportsTools: false,
+      supportsStructuredOutput: false,
+    };
+    const immediateProvider: ProviderClient = {
+      providerId: "immediate-provider",
+      listModels: async () => [candidate],
+      chat: async (request) => {
+        const response = {
+          content: "candidate output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          costUsd: 0.001,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+    const running = replayModeA({
+      steps: [step()],
+      cases: [recordedCase({ contextTokens: 1, maxOutputTokens: 1 })],
+      candidates: [
+        {
+          stepId: "step-1",
+          candidates: [candidate],
+          droppedByTop: 0,
+          droppedFreeModels: 0,
+          droppedByOutputCeiling: 0,
+        },
+      ],
+      provider: immediateProvider,
+      store: counting,
+      budget,
+      concurrency: 1,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const readsWhileBlocked = counting.reads();
+    await predecessor.refund(0);
+    await expect(running).resolves.toMatchObject({ completed: 1, blocked: [] });
+    expect(readsWhileBlocked).toBeLessThanOrEqual(12);
+  });
+
+  it("settles in-flight workers and stops idle workers before rethrowing a worker failure", async () => {
+    const candidate: ModelCatalogEntry = {
+      id: "vendor/candidate",
+      family: "vendor",
+      contextLength: 100,
+      pricing: { input: 0.006, output: 0.004 },
+      supportsTools: false,
+      supportsStructuredOutput: false,
+    };
+    let providerCalls = 0;
+    const settlingProvider: ProviderClient = {
+      providerId: "settling-provider",
+      listModels: async () => [candidate],
+      chat: async (request) => {
+        providerCalls += 1;
+        if (request.messages.at(-1)?.content === "boom") {
+          throw new Error("store exploded");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const response = {
+          content: "candidate output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          costUsd: 0.001,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+    const budget = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 1,
+    });
+    const cases = ["boom", "slow-1", "slow-2", "slow-3"].map((content, index) =>
+      recordedCase({
+        caseId: `case-${index + 1}`,
+        trajectoryId: `trajectory-${index + 1}`,
+        contextTokens: 1,
+        maxOutputTokens: 1,
+        messages: [{ role: "user", content }],
+      }),
+    );
+
+    await expect(
+      replayModeA({
+        steps: [step()],
+        cases,
+        candidates: [
+          {
+            stepId: "step-1",
+            candidates: [candidate],
+            droppedByTop: 0,
+            droppedFreeModels: 0,
+            droppedByOutputCeiling: 0,
+          },
+        ],
+        provider: settlingProvider,
+        store,
+        budget,
+        concurrency: 2,
+      }),
+    ).rejects.toThrow("store exploded");
+    const executions = (await readFacts(store)).filter(
+      (fact) => "caseId" in fact && "terminalOutcome" in fact,
+    );
+
+    expect(providerCalls).toBe(2);
+    expect(executions).toHaveLength(1);
   });
 
   it("waits for a refund before retrying reservation-limited concurrency", async () => {
@@ -1612,6 +2760,7 @@ describe("Mode A replay", () => {
           candidates: [candidate],
           droppedByTop: 0,
           droppedFreeModels: 0,
+          droppedByOutputCeiling: 0,
         },
       ],
       provider: delayedProvider,
@@ -1631,7 +2780,7 @@ describe("Mode A replay", () => {
 
     expect(result).toMatchObject({ completed: 2, blocked: [] });
     expect(await budget.state()).toMatchObject({
-      spentUsd: 0.002,
+      spentUsd: 0.002004,
       reservedUsd: 0,
     });
   });
@@ -1790,6 +2939,7 @@ describe("Mode A replay", () => {
           candidates: [candidate],
           droppedByTop: 0,
           droppedFreeModels: 0,
+          droppedByOutputCeiling: 0,
         },
       ],
       provider,
@@ -1811,6 +2961,30 @@ describe("Mode A replay", () => {
     expect(
       facts.some((fact) => "actor" in fact && fact.actor === "judge"),
     ).toBe(false);
+  });
+
+  it("re-judges an execution whose judge failed on a later run", async () => {
+    const first = await run(
+      [recordedCase()],
+      async () => {
+        throw new Error("judge offline");
+      },
+      1,
+    );
+    expect(first.completed).toBe(1);
+    expect(
+      (await readFacts(store)).some((fact) => "assessmentId" in fact),
+    ).toBe(false);
+    const hitsAfterFirstRun = stub.getHitCount();
+
+    const second = await run([recordedCase()]);
+    const assessments = (await readFacts(store)).filter(
+      (fact) => "assessmentId" in fact,
+    );
+
+    expect(second).toMatchObject({ completed: 0, skipped: 1 });
+    expect(stub.getHitCount()).toBe(hitsAfterFirstRun);
+    expect(assessments).toHaveLength(1);
   });
 
   it("resumes without new provider calls or facts", async () => {

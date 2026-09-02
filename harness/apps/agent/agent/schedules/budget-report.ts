@@ -4,6 +4,7 @@ import { runCli } from "../lib/cli.js";
 import { readAgentSpendSummary } from "../lib/persistence.js";
 import {
   handOffSchedule,
+  scheduleCliTimeoutMs,
   scheduleGitHubTarget,
   scheduleHarnessInput,
 } from "../lib/schedules.js";
@@ -15,7 +16,7 @@ export default defineSchedule({
     const target = scheduleGitHubTarget("budget-report");
     if (input === undefined || target === undefined) return;
     const [harness, agentSpend] = await Promise.all([
-      runCli("status", [], input),
+      runCli("status", [], { ...input, timeoutMs: scheduleCliTimeoutMs }),
       readAgentSpendSummary(),
     ]);
     handOffSchedule(

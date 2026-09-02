@@ -2,6 +2,7 @@ export {
   compileDeclarativeMatchers,
   declarativeMatcherSpecsSchema,
   declarativeMatcherSpecSchema,
+  loadDeclarativeMatchers,
 } from "./declarative-matcher.js";
 export type {
   DeclarativeMatcher,
@@ -22,6 +23,7 @@ export type {
   DetectedLanguage,
   DetectedTech,
 } from "./detect-tech.js";
+export { IGNORED_DIRECTORIES } from "./ignored-directories.js";
 export { MatcherRegistry } from "./matcher-registry.js";
 export { builtinMatchers } from "./matchers/builtins.js";
 export { AMBIGUOUS_MODEL_ID_REASON, reconcile } from "./reconcile.js";
@@ -32,7 +34,8 @@ export type {
   ReconciliationResult,
   ReconciliationStatus,
 } from "./reconcile.js";
-export { scan } from "./scan.js";
+export { scan, scanRepository } from "./scan.js";
+export type { ScanResult, ScanSkip } from "./scan.js";
 export type {
   CandidateMatch,
   Matcher,

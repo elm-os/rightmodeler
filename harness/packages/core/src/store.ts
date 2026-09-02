@@ -4,10 +4,11 @@ import {
   mkdir,
   readFile,
   readdir,
+  stat,
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, posix, relative, sep, win32 } from "node:path";
+import { join, posix, relative, sep, win32 } from "node:path";
 
 export type Bytes = Uint8Array;
 export type Version = number;
@@ -39,10 +40,12 @@ interface Envelope {
 
 const metadataDirectory = ".rightmodeler-store";
 const entriesDirectory = "entries";
-const temporaryDirectory = "temporary";
+const stagedFilePattern = /^staged-([1-9]\d*)-/;
+const stagedWriteTimeoutMs = 300_000;
 const lockDirectory = ".rightmodeler-store.lock";
 const reservedStoreSegments = new Set([metadataDirectory, lockDirectory]);
 const versionFilePattern = /^v([1-9]\d*)\.json$/;
+const listConcurrency = 16;
 
 function isMissing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -126,7 +129,10 @@ export class FsStore implements Store {
   async list(prefix: string): Promise<string[]> {
     assertStoreKey(prefix, true);
     const keys: string[] = [];
-    await this.walkEntries(this.entriesRoot(), keys);
+    await this.walkEntries(
+      this.entryDirectory(prefix.slice(0, prefix.lastIndexOf("/") + 1)),
+      keys,
+    );
     return keys.filter((key) => key.startsWith(prefix)).sort();
   }
 
@@ -137,11 +143,14 @@ export class FsStore implements Store {
       fenceToken: 0,
       bodyBase64: Buffer.from(body).toString("base64"),
     };
-    if (
-      await this.writeAtomic(this.versionPath(key, 1), encodeEnvelope(envelope))
-    ) {
-      return;
+    const staged = await this.stage(key, 1, encodeEnvelope(envelope));
+    let committed: boolean;
+    try {
+      committed = await this.commit(staged, this.versionPath(key, 1));
+    } finally {
+      await this.discard(staged);
     }
+    if (committed) return;
 
     const existing = await this.get(key);
     if (
@@ -162,23 +171,33 @@ export class FsStore implements Store {
     fenceToken: FenceToken,
   ): Promise<boolean> {
     assertStoreKey(key, false);
-    const current = await this.readCurrent(key);
-    const currentVersion = current?.version ?? 0;
-    const currentFenceToken = current?.fenceToken ?? 0;
-    if (currentVersion !== expectedVersion || fenceToken < currentFenceToken) {
-      return false;
-    }
-
-    const nextVersion = currentVersion + 1;
     const envelope: Envelope = {
-      version: nextVersion,
+      version: expectedVersion + 1,
       fenceToken,
       bodyBase64: Buffer.from(body).toString("base64"),
     };
-    const committed = await this.writeAtomic(
-      this.versionPath(key, nextVersion),
+    const staged = await this.stage(
+      key,
+      expectedVersion + 1,
       encodeEnvelope(envelope),
     );
+    let nextVersion = 0;
+    let committed = false;
+    try {
+      const current = await this.readCurrent(key);
+      const currentVersion = current?.version ?? 0;
+      const currentFenceToken = current?.fenceToken ?? 0;
+      if (
+        currentVersion !== expectedVersion ||
+        fenceToken < currentFenceToken
+      ) {
+        return false;
+      }
+      nextVersion = currentVersion + 1;
+      committed = await this.commit(staged, this.versionPath(key, nextVersion));
+    } finally {
+      await this.discard(staged);
+    }
     if (!committed) return false;
     await this.pruneOldVersions(key, nextVersion);
     return true;
@@ -234,30 +253,33 @@ export class FsStore implements Store {
     return envelope;
   }
 
-  private async writeAtomic(file: string, body: Bytes): Promise<boolean> {
-    await mkdir(dirname(file), { recursive: true });
-    const temporaryRoot = join(
-      this.root,
-      metadataDirectory,
-      temporaryDirectory,
-    );
-    await mkdir(temporaryRoot, { recursive: true });
-    const temporary = join(temporaryRoot, randomUUID());
+  private async stage(
+    key: string,
+    targetVersion: Version,
+    body: Bytes,
+  ): Promise<string> {
+    const directory = this.entryDirectory(key);
+    await mkdir(directory, { recursive: true });
+    const staged = join(directory, `staged-${targetVersion}-${randomUUID()}`);
+    await writeFile(staged, body, { flag: "wx" });
+    return staged;
+  }
+
+  private async commit(staged: string, file: string): Promise<boolean> {
     try {
-      await writeFile(temporary, body, { flag: "wx" });
-      try {
-        await link(temporary, file);
-        return true;
-      } catch (error) {
-        if (isAlreadyPresent(error)) return false;
-        throw error;
-      }
-    } finally {
-      try {
-        await unlink(temporary);
-      } catch (error) {
-        if (!isMissing(error)) throw error;
-      }
+      await link(staged, file);
+      return true;
+    } catch (error) {
+      if (isAlreadyPresent(error)) return false;
+      throw error;
+    }
+  }
+
+  private async discard(staged: string): Promise<void> {
+    try {
+      await unlink(staged);
+    } catch (error) {
+      if (!isMissing(error)) throw error;
     }
   }
 
@@ -268,10 +290,28 @@ export class FsStore implements Store {
     const directory = this.entryDirectory(key);
     try {
       const names = await readdir(directory);
+      const targets = await Promise.all(
+        names.map(async (name) => {
+          const match = stagedFilePattern.exec(name);
+          if (match === null) return Number.POSITIVE_INFINITY;
+          const info = await stat(join(directory, name)).catch(() => null);
+          if (
+            info === null ||
+            Date.now() - info.mtimeMs >= stagedWriteTimeoutMs
+          ) {
+            return Number.POSITIVE_INFINITY;
+          }
+          return Number(match[1]);
+        }),
+      );
+      const retainFrom = targets.reduce(
+        (lowest, target) => Math.min(lowest, target),
+        latestVersion - 1,
+      );
       await Promise.all(
         names.map(async (name) => {
           const match = versionFilePattern.exec(name);
-          if (match === null || Number(match[1]) >= latestVersion - 1) return;
+          if (match === null || Number(match[1]) >= retainFrom) return;
           await unlink(join(directory, name)).catch(() => undefined);
         }),
       );
@@ -294,14 +334,15 @@ export class FsStore implements Store {
         (entry) => entry.isFile() && versionFilePattern.test(entry.name),
       )
     ) {
-      const key = relative(this.entriesRoot(), directory).split(sep).join("/");
-      await this.readCurrent(key);
-      keys.push(key);
+      keys.push(relative(this.entriesRoot(), directory).split(sep).join("/"));
     }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        await this.walkEntries(join(directory, entry.name), keys);
-      }
+    const children = entries.filter((entry) => entry.isDirectory());
+    for (let index = 0; index < children.length; index += listConcurrency) {
+      await Promise.all(
+        children
+          .slice(index, index + listConcurrency)
+          .map((entry) => this.walkEntries(join(directory, entry.name), keys)),
+      );
     }
   }
 }

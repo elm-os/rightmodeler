@@ -1,8 +1,7 @@
-import type { StepRecord } from "@rightmodeler/core";
+import { compareText, type StepRecord } from "@rightmodeler/core";
 import type { FamilyVerdict } from "@rightmodeler/kernel";
 
 import type { OwnerResolution, RankedOwner } from "./owners.js";
-import { compareText } from "./shared.js";
 
 export interface FamilyBlastRadius {
   readonly familyId: string;

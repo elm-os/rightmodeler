@@ -1,0 +1,6 @@
+[project]
+name = "agentchat-demo"
+dependencies = [
+    "autogen-agentchat>=0.4",
+    "autogen-ext[openai]>=0.4",
+]

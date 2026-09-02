@@ -55,7 +55,10 @@ interface RuntimeOptions {
   scratch: string;
   egressUrl: string;
   swapPolicy?: Record<string, string>;
-  pricingTable?: Record<string, { input: number; output: number }>;
+  pricingTable?: Record<
+    string,
+    { input: number; output: number; maxOutputTokens?: number }
+  >;
   maxUsd?: number;
   streamIdleTimeoutMs?: number;
   streamHardDeadlineMs?: number;
@@ -130,6 +133,7 @@ function runtimeEnv(options: RuntimeOptions): NodeJS.ProcessEnv {
         "acme/large-1": { input: 0.000001, output: 0.000003 },
       },
     ),
+    RM_DEFAULT_MAX_OUTPUT_TOKENS: "1234",
     RM_BUDGET_LEASE: JSON.stringify({ maxUsd: options.maxUsd ?? 1 }),
     ...(options.streamIdleTimeoutMs === undefined
       ? {}
@@ -545,6 +549,152 @@ describe("Mode B proxy and host egress", () => {
         costIsEstimate: attempts[0]?.costIsEstimate,
       }),
     ).toBeDefined();
+  });
+
+  it("asks streams for usage and meters the trailing chunk, else charges the reservation", async () => {
+    process.env[apiKeyEnv] = credential;
+    const scratch = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-usage-"));
+    scratchDirectories.push(scratch);
+    const receivedBodies: Record<string, unknown>[] = [];
+    const provider = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.once("end", () => {
+        receivedBodies.push(
+          JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<
+            string,
+            unknown
+          >,
+        );
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.write(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "first" }, finish_reason: null }] })}\n\n`,
+        );
+        response.write(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "second" }, finish_reason: "stop" }] })}\n\n`,
+        );
+        if (request.headers["x-test-omit-usage"] === undefined) {
+          response.write(
+            `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 9, completion_tokens: 12 } })}\n\n`,
+          );
+        }
+        response.end("data: [DONE]\n\n");
+      });
+    });
+    servers.push(provider);
+    await new Promise<void>((resolve, reject) => {
+      provider.once("error", reject);
+      provider.listen(0, "127.0.0.1", resolve);
+    });
+    const address = provider.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("Usage provider did not bind a TCP address");
+    }
+    const egress = await startEgressListener({
+      providerBaseUrl: `http://127.0.0.1:${address.port}`,
+      apiKeyEnv,
+    });
+    egressListeners.push(egress);
+    const runtime = await startRuntime(
+      runtimeEnv({ scratch, egressUrl: egress.url }),
+      await createRuntimeBundle(),
+    );
+    const body = chatBody({ stream: true, stream_options: { keep: 1 } });
+
+    const metered = await callProxy(
+      runtime,
+      "step-usage",
+      "logical-usage",
+      body,
+    );
+    expect(metered.status).toBe(200);
+    await metered.arrayBuffer();
+    const estimated = await callProxy(
+      runtime,
+      "step-usage",
+      "logical-estimate",
+      body,
+      { "x-test-omit-usage": "1" },
+    );
+    expect(estimated.status).toBe(200);
+    await estimated.arrayBuffer();
+
+    expect(receivedBodies.map((value) => value.stream_options)).toEqual([
+      { keep: 1, include_usage: true },
+      { keep: 1, include_usage: true },
+    ]);
+    const attempts = await attemptsUntil(spoolPath(scratch), 2);
+    expect(attempts[0]).toMatchObject({
+      usage: { inputTokens: 9, outputTokens: 12, totalTokens: 21 },
+      costIsEstimate: false,
+    });
+    expect(Number(attempts[0]?.costUsd)).toBeCloseTo(
+      9 * 0.000001 + 12 * 0.000003,
+    );
+    expect(attempts[1]).toMatchObject({
+      usage: null,
+      costIsEstimate: true,
+    });
+    expect(attempts[1]?.costUsd).toBe(attempts[1]?.reservedUsd);
+  });
+
+  it("accepts max_completion_tokens, derives a ceiling, and prefers the catalog maximum", async () => {
+    const pair = await startPair({
+      pricingTable: {
+        "acme/large-1": { input: 0.000001, output: 0.000003 },
+        "acme/lite-1": {
+          input: 0.0000001,
+          output: 0.0000004,
+          maxOutputTokens: 777,
+        },
+      },
+      swapPolicy: { "step-lite": "acme/lite-1" },
+    });
+    const completionLimit = await callProxy(
+      pair.runtime,
+      "step-limit",
+      "logical-completion-limit",
+      chatBody({ max_tokens: undefined, max_completion_tokens: 48 }),
+    );
+    expect(completionLimit.status).toBe(200);
+    await completionLimit.arrayBuffer();
+    const limitlessBody = chatBody({ max_tokens: undefined });
+    const defaultLimit = await callProxy(
+      pair.runtime,
+      "step-default",
+      "logical-default",
+      limitlessBody,
+    );
+    expect(defaultLimit.status).toBe(200);
+    await defaultLimit.arrayBuffer();
+    const catalogLimit = await callProxy(
+      pair.runtime,
+      "step-lite",
+      "logical-catalog",
+      limitlessBody,
+    );
+    expect(catalogLimit.status).toBe(200);
+    await catalogLimit.arrayBuffer();
+
+    const attempts = await attemptsUntil(spoolPath(pair.scratch), 3);
+    expect(attempts.map((attempt) => attempt.maxOutputTokens)).toEqual([
+      48, 1234, 777,
+    ]);
+
+    const invalid = await callProxy(
+      pair.runtime,
+      "step-invalid",
+      "logical-invalid",
+      chatBody({ max_tokens: -1 }),
+    );
+    expect(invalid.status).toBe(400);
+    await invalid.arrayBuffer();
+    expect(await readRows(spoolPath(pair.scratch))).toContainEqual(
+      expect.objectContaining({
+        kind: "lost",
+        rejectionReason: "invalid_request",
+      }),
+    );
   });
 
   it("loads the production-relative transport classifier", async () => {

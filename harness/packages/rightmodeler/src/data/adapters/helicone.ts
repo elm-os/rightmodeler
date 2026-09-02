@@ -3,9 +3,9 @@ import {
   jsonEncodedValue,
   jsonValue,
   optionalString,
+  optionalUsage,
   requiredString,
   sampleRecords,
-  tokenCount,
 } from "./shared.js";
 import { createRowAdapter } from "./row-adapter.js";
 
@@ -73,6 +73,12 @@ export const heliconeAdapter = createRowAdapter({
     const trajectoryId =
       optionalString(properties["Helicone-Session-Id"]) ?? requestId;
     const timestamp = optionalString(record.request_created_at);
+    const usage = optionalUsage(
+      record.prompt_tokens,
+      record.completion_tokens,
+      `Helicone record ${recordIndex + 1}`,
+      format,
+    );
     return [
       {
         traceId: trajectoryId,
@@ -92,18 +98,7 @@ export const heliconeAdapter = createRowAdapter({
             `Helicone record ${recordIndex + 1} response`,
             format,
           ),
-          usage: {
-            inputTokens: tokenCount(
-              record.prompt_tokens,
-              `Helicone record ${recordIndex + 1} prompt usage`,
-              format,
-            ),
-            outputTokens: tokenCount(
-              record.completion_tokens,
-              `Helicone record ${recordIndex + 1} completion usage`,
-              format,
-            ),
-          },
+          ...(usage === undefined ? {} : { usage }),
           trajectoryId,
           ...(timestamp === undefined ? {} : { timestamp }),
         },

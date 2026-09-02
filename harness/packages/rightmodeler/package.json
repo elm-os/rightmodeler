@@ -7,9 +7,15 @@
   "bin": {
     "rightmodeler": "./dist-bundle/cli.js"
   },
-  "exports": "./dist-bundle/cli.js",
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist-bundle/cli.js"
+    }
+  },
   "files": [
     "dist-bundle",
+    "dist",
     "docs"
   ],
   "engines": {
@@ -28,6 +34,7 @@
     "check": "tsc --noEmit && vitest run"
   },
   "devDependencies": {
+    "@repo/contracts": "workspace:*",
     "@rightmodeler/core": "workspace:*",
     "@rightmodeler/kernel": "workspace:*",
     "@rightmodeler/replay": "workspace:*",
