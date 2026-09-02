@@ -91,14 +91,21 @@ describe("builtin matcher examples", () => {
     ).toEqual([]);
   });
 
-  it("records a model identifier only from a quoted literal", () => {
+  it("records quoted literals and bare identifier references only", () => {
     const generateText = builtinMatchers.find(
       ({ slug }) => slug === "js-ai-sdk-generate-text",
     )!;
-    const openai = builtinMatchers.find(
-      ({ slug }) => slug === "py-openai-chat-completions",
-    )!;
 
+    expect(
+      generateText
+        .match('generateText({ model: "acme/large-1", prompt })', "src/a.ts")
+        .map(({ modelId }) => modelId),
+    ).toEqual(["acme/large-1"]);
+    expect(
+      generateText
+        .match("generateText({ model: SUMMARY_MODEL, prompt })", "src/a.ts")
+        .map(({ modelId }) => modelId),
+    ).toEqual(["SUMMARY_MODEL"]);
     expect(
       generateText
         .match("generateText({ model: process.env.MODEL, prompt })", "src/a.ts")
@@ -107,6 +114,14 @@ describe("builtin matcher examples", () => {
     expect(
       generateText
         .match("generateText({ model: settings.model, prompt })", "src/a.ts")
+        .map(({ modelId }) => modelId),
+    ).toEqual([undefined]);
+    expect(
+      generateText
+        .match(
+          'generateText({ model: os.environ["MODEL"], prompt })',
+          "src/a.ts",
+        )
         .map(({ modelId }) => modelId),
     ).toEqual([undefined]);
     expect(
@@ -125,14 +140,6 @@ describe("builtin matcher examples", () => {
         )
         .map(({ modelId }) => modelId),
     ).toEqual(["acme/large-1"]);
-    expect(
-      openai
-        .match(
-          "client.chat.completions.create(model=MODEL, messages=[])",
-          "src/a.py",
-        )
-        .map(({ modelId }) => modelId),
-    ).toEqual([undefined]);
   });
 
   it("searches the supplied masked text instead of re-masking", () => {

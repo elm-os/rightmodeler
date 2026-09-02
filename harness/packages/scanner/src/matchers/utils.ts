@@ -200,10 +200,15 @@ export function argumentKeys(callText: string): string[] {
 
 export function extractModelId(text: string): string | undefined {
   const model =
-    /\b(?:model|model_name)\s*[:=]\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?["']([A-Za-z0-9][A-Za-z0-9._:/-]*)["']/i.exec(
+    /\b(?:model|model_name)\s*[:=]\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?["']([A-Za-z0-9](?:[A-Za-z0-9._:/-]|\\\/)*)["']/i.exec(
       text,
     );
-  if (model !== null) return model[1];
+  if (model !== null) return model[1]!.replaceAll("\\/", "/");
+  const reference =
+    /\b(?:model|model_name)\s*[:=]\s*([A-Za-z_$][\w$]*)(?![\w$])(?!\s*[.(\[])/i.exec(
+      text,
+    );
+  if (reference !== null) return reference[1];
   return /\b[A-Z][A-Z0-9_]*MODEL(?:_ID|_NAME)?\s*=\s*["']?([^\s"']+)/.exec(
     text,
   )?.[1];
