@@ -1,6 +1,6 @@
 # Getting started
 
-Rightmodeler analyzes recorded model calls, replays them against cheaper candidates, evaluates the outputs, and writes a recommendation report. The intended public package name is `rightmodeler`.
+Rightmodeler analyzes recorded model calls, replays them against cheaper candidates, evaluates the outputs, and writes a recommendation report. Published on npm as `rightmodeler`.
 
 ## Requirements
 
@@ -106,7 +106,7 @@ Without usable pricing from the catalog, LiteLLM `/model/info`, or a pricing
 file, the run refuses with `no_priced_candidates` instead of reporting zero
 cost.
 
-The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md` and `.rightmodeler/project/reports/report.json`.
+The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md`. The JSON report is kept inside the versioned store and is never written as a plain file, so read the final `result` event from `--output json` or `--output jsonl` for the machine-readable outcome.
 
 Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), and the [exit-code convention](exit-codes.md) before automating a full run.
 

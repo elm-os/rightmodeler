@@ -82,6 +82,10 @@ reason later in the list.
 
 The exported `EVIDENCE_EXCLUSION_REASONS` values name malformed or absent execution evidence:
 
+- `attribution_ambiguous`: the execution's attempt attribution is ambiguous, so its outcome
+  cannot be assigned to one logical call.
+- `attribution_lost`: no attempt could be attributed to the execution, so there is no request
+  evidence behind its outcome.
 - `assessment_evidence_missing`: an attributable non-judge execution has no assessment and no
   more specific named absence.
 - `judge_evidence_incomplete`: judge evidence is absent or its assessment lacks the required

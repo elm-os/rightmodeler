@@ -4,7 +4,10 @@ End-to-end plan for the rightmodeler harness and the agent that operates it.
 
 For the technical design, see [Architecture.md](Architecture.md).
 
-## 1. Why
+## 1. Why (history)
+
+This section records why the rewrite happened. It is history and is not maintained against the
+current tree.
 
 `rightmodeler` began as a skill plus roughly 12,000 lines of Python across two engines that
 could not reach each other in production.
@@ -20,7 +23,7 @@ is the single clearest signal that the packaging boundary needs to be rebuilt ra
 patched.
 
 Beyond it, the tool has no durable record model, no crash resume, no fanout, no continuous
-integration (`.github/workflows/` does not exist), no export targets, no plugin surface, no
+integration, no export targets, no plugin surface, no
 onboarding, no scheduling, and no evals of itself. It also cannot say anything at all about a
 repository until the user instruments their application and waits for representative traffic.
 
@@ -53,20 +56,22 @@ inline there so the reasoning is not lost and the original mistakes are not rein
 
 ```
 harness/
-  docs/           plan.md, Architecture.md, integrations/*.md
+  docs/           plan.md, Architecture.md, parity.md
+  fixtures/       recorded inputs and reference repositories
   packages/
     core/         Store (compare-and-swap plus fencing), typed facts, keys, locks,
                   run lifecycle, plugin and config contracts
     scanner/      call-site matchers, tech detection, declarative compiler, reconciliation
     kernel/       evaluators, judge, statistics, scorecards, release gates
     replay/       case driver, correlation injection, egress proxy, Mode A and Mode B
-    processor/    agent adapters, prompt assembly, reconciliation, enrichment
     executor/     container and cloud-sandbox fanout (local is Mode A only)
     rightmodeler/ the CLI (npx rightmodeler)
-    parity/       differential TypeScript versus Python suite (temporary)
   apps/
     agent/        the agent application
 ```
+
+Parity lives in `harness/docs/parity.md` and
+`harness/packages/rightmodeler/src/parity.test.ts`, not in a package.
 
 The root `pnpm-workspace.yaml` gains `harness/packages/*` and `harness/apps/*`.
 `packages/contracts` is extended and versioned, not forked. It remains the one schema boundary.
@@ -83,6 +88,8 @@ a phase that opens a real pull request to precede the phase that creates the sui
 catch a wrong one.
 
 ## 5. Phase A: one narrow path, end to end
+
+**Status:** complete. Behaviour classifications are recorded in [parity.md](parity.md).
 
 Core, then a minimal but complete vertical slice. One framework, one provider, one evaluator,
 one executor.
@@ -116,6 +123,8 @@ each minimum rather than only its value.
 
 ## 6. Phase B: the dangerous core
 
+**Status:** complete. Behaviour classifications are recorded in [parity.md](parity.md).
+
 1. Correlation injection in the case driver.
 2. The egress proxy with per-provider stream state machines.
 3. The container executor.
@@ -136,6 +145,8 @@ fault-injecting fake servers covering randomized chunk boundaries, internal retr
 cancellations, concurrent identical calls, and truncated usage reporting.
 
 ## 7. Phase C: one pull request, safely
+
+**Status:** complete. Behaviour classifications are recorded in [parity.md](parity.md).
 
 1. `enrich`: owner resolution and blast radius.
 2. The diff linter.
@@ -158,6 +169,8 @@ are both handled. Merge ends the watch and does not re-open it.
 
 ## 8. Phase D: breadth
 
+**Status:** complete. Behaviour classifications are recorded in [parity.md](parity.md).
+
 Everything the product needs to be broadly useful, now that the core is proven.
 
 - Remaining matchers, driven by real repositories rather than a target count.
@@ -178,6 +191,8 @@ documentation link resolving. That last test exists specifically because the ori
 this project fixes is a packaging defect.
 
 ## 9. Phase E: cutover
+
+**Status:** complete. Behaviour classifications are recorded in [parity.md](parity.md).
 
 Port the remainder of the kernel and retire the Python engines in one commit.
 
@@ -239,7 +254,7 @@ invalidates caches and evidence.
   artifact needs a schema, a stable identifier, `additionalProperties: false`, and both a valid
   and an invalid fixture, or the contract check fails.
 - `skills/rightmodeler` is the canonical skill source. `.agents/skills/` and `.claude/skills/`
-  are generated install targets and are overwritten.
+  are install targets written by `npx skills add` and are gitignored.
 - MIT licensed throughout. No em dashes in copy. No co-author trailers or generated-with
   footers on commits and pull requests.
 - Node 24 is a hard requirement of the agent framework.
@@ -249,7 +264,9 @@ invalidates caches and evidence.
 - Secure local Mode B needs a host gateway implementation, because the container backend honors
   only allow-all or deny-all and therefore cannot provide domain allowlists or firewall
   credential transforms. If that gateway is not built, Mode B is documented as available only on
-  firewall-capable backends, and refuses elsewhere rather than degrading.
+  firewall-capable backends, and refuses elsewhere rather than degrading. The firewall-capable
+  cloud backend now ships behind `"backend": "cloud"`, so Mode B is available on it and the
+  container backend remains the local, unfiltered path.
 - The model swap uses driver-injected correlation plus an egress proxy. The authored per-repository
   adapter remains the escape hatch for pipelines the proxy cannot reach. Per-language runtime
   shims are dropped.

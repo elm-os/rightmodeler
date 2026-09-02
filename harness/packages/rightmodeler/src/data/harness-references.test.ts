@@ -1,6 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 
-import { ABSTAIN_REASONS } from "@rightmodeler/kernel";
+import {
+  ABSTAIN_REASONS,
+  EVIDENCE_EXCLUSION_REASONS,
+} from "@rightmodeler/kernel";
 import { describe, expect, it } from "vitest";
 
 const harnessesUrl = new URL(
@@ -82,5 +85,25 @@ describe("evidence skill reference", () => {
     for (const reason of ABSTAIN_REASONS) {
       expect(markdown, reason).toContain(`\`${reason}\``);
     }
+  });
+
+  it("names every evidence exclusion reason exported by the kernel", async () => {
+    const markdown = await readFile(evidenceUrl, "utf8");
+
+    for (const reason of EVIDENCE_EXCLUSION_REASONS) {
+      expect(markdown, reason).toContain(`\`${reason}\``);
+    }
+  });
+});
+
+describe("skill runbook", () => {
+  it("routes the runbook to the shipped reference files", async () => {
+    const markdown = await readFile(
+      new URL("../../../../../skills/rightmodeler/SKILL.md", import.meta.url),
+      "utf8",
+    );
+
+    expect(markdown).toContain("reference/harnesses/index.md");
+    expect(markdown).toContain("reference/evidence.md");
   });
 });

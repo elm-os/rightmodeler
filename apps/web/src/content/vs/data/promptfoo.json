@@ -14,7 +14,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Not rivals for the same job. You hire promptfoo to test what you are about to ship: you author the prompts, cases, and assertions, and its CI gate fails the build when a pass rate drops. You hire rightmodeler to audit what you already shipped: the CLI reruns each step of your recorded traces on cheaper candidates and scores every proposed swap against the output you accepted, step by step. Red teaming (generating adversarial attacks against your app) is entirely promptfoo's turf, and there is no shipped integration between the two; the handoff is manual, and it works."
+      "body": "Not rivals for the same job. You hire promptfoo to test what you are about to ship: you author the prompts, cases, and assertions, and its CI gate fails the build when a pass rate drops. You hire rightmodeler to audit what you already shipped: the CLI reruns each step of your recorded traces on cheaper candidates and scores every proposed swap against the output you accepted, step by step. Red teaming (generating adversarial attacks against your app) is entirely promptfoo's turf. promptfoo ships as a rightmodeler evaluator provider, selected with `--evaluator promptfoo` and configured with `--evaluator-command` and `--evaluator-config`; it is not a trace source or replay provider, and the model-change handoff remains manual."
     },
     {
       "type": "fork",
@@ -51,7 +51,7 @@
           "Keep the suite. The audit does not touch it, replace it, or sit in your request path.",
           "Candidates are shortlisted from the active provider's live catalog, not a hand-picked list, replayed at temperature 0 against your real steps, and judged by a neutral third-family judge (a judge model from a family neither the current model nor the candidate belongs to), with deterministic checks preferred before any LLM judge.",
           "Each verdict carries reference agreement (how often the candidate matched the output you accepted), a quality floor (a configurable minimum that agreement must clear), sample size, and abstentions. Multi-step work replays end to end, so cascade risk (a cheaper step's output quietly breaking the step after it) surfaces before you swap.",
-          "When you approve a swap, the new model ID goes into promptfooconfig.yaml by hand, and your CI gate keeps the decision honest from then on. That handoff is manual today; there is no shipped integration."
+          "When you approve a swap, the new model ID goes into promptfooconfig.yaml by hand, and your CI gate keeps the decision honest from then on. promptfoo ships as an evaluator provider selected with `--evaluator promptfoo` and configured with `--evaluator-command` and `--evaluator-config`; it is not a trace source or replay provider, so the model-change handoff remains manual."
         ]
       }
     },
@@ -127,7 +127,7 @@
         },
         {
           "q": "Is there an integration between rightmodeler and promptfoo?",
-          "a": "No shipped integration exists: promptfoo is not a trace source rightmodeler reads and not a replay provider it runs through. The handoff today is manual. Once you approve a swap, the new model ID goes into promptfooconfig.yaml by hand, and the audited step's accepted outputs can become assertions your CI gate enforces on every future change. The harness is designed to plug into the eval framework you already run, but that contract is planned, not shipped."
+          "a": "promptfoo ships as a rightmodeler evaluator provider, selected with `--evaluator promptfoo` and configured with `--evaluator-command` and `--evaluator-config`. It is not a trace source rightmodeler reads or a replay provider it runs through, so the handoff remains manual. Once you approve a swap, the new model ID goes into promptfooconfig.yaml by hand, and the audited step's accepted outputs can become assertions your CI gate enforces on every future change."
         },
         {
           "q": "Can promptfoo compare models the way rightmodeler does?",

@@ -23,6 +23,16 @@ to restart.
 
 The installed CLI ships its own documentation; section 3 shows how to read it.
 
+## 0. Reference files
+
+- `reference/harnesses/index.md`: read before preparing a Mode B run. It routes by framework
+  shape to one file per pipeline: where the model id is bound, whether correlation headers are
+  forwarded, whether a base-URL override is honoured and which variable carries it, how to mock
+  side-effecting tools, the entry point, and how to detect downstream coupling.
+- `reference/evidence.md`: read before presenting the result in section 8. It defines the
+  evidence ladder, the minimums, every abstention reason, every evidence exclusion reason, the
+  release gate ids, and judge selection.
+
 ## 1. Establish scope and goal
 
 Ask only for inputs that are not already known:
@@ -105,6 +115,14 @@ judge cell then runs to completion, which is the right choice when completeness 
 evidence quality matter more than cost. Set a cap only when the operator wants a hard
 stop; a capped run halts at the boundary with a named remedy and resumes after the cap
 is raised.
+
+Use `--policy <path>` for release policy JSON covering the quality floor, shortlist size, and
+model allow and deny lists; `--pricing-file <path>` for per-token pricing when a catalog
+publishes none; `--max-concurrency <n>` for the maximum concurrent provider requests;
+`--matchers <path>` for a declarative matcher definitions JSON file; and
+`--modeb-config <path>` to select the container image, app spec, step map, and `backend`,
+`docker` by default or `cloud` for a remote sandbox. For a Mode B run, read
+`reference/harnesses/index.md` first and follow the file it routes to.
 
 ```bash
 TRACES=/absolute/path/to/traces.json
@@ -204,7 +222,8 @@ before resuming. Do not reinterpret it as a recommendation or abstention.
 ## 8. Present the result
 
 For exit 0 or 1, read the final result event and present one row per entry in
-`familyOutcomes`. Include:
+`familyOutcomes`. Read `reference/evidence.md` for what each abstention reason and gate id means
+before summarizing. Include:
 
 - Family identifier.
 - Decision and whether it is an effective recommendation.
@@ -213,12 +232,9 @@ For exit 0 or 1, read the final result event and present one row per entry in
 - Confirmation status and any blocker.
 - Abstention reason, if present.
 
-Also report `reportPath`. A complete run normally writes:
-
-```text
-.rightmodeler/project/reports/report.md
-.rightmodeler/project/reports/report.json
-```
+Also report `reportPath`. A complete run writes `.rightmodeler/project/reports/report.md`. The
+JSON report is kept inside the versioned store rather than written as a plain file, so take the
+machine-readable outcome from the final `result` event rather than from a path.
 
 Treat family verdicts as the decision unit. Do not promote a single successful case
 into a family recommendation. Exit 0 can still contain useful rejects and
