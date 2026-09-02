@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
 import {
   access,
+  mkdir,
   mkdtemp,
   readFile,
   readdir,
   rm,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -190,6 +192,129 @@ describe("FsStore", () => {
     await expect(store.get(key)).resolves.toMatchObject({
       version: 4,
       fenceToken: 3,
+    });
+  });
+
+  it("reports no win for a writer whose target version was recycled while it was stalled", async () => {
+    const actual =
+      await vi.importActual<typeof import("node:fs/promises")>(
+        "node:fs/promises",
+      );
+    const store = await makeStore();
+    const key = "project/budget/run.json";
+    const counter = (value: number): Buffer => Buffer.from(String(value));
+    await store.compareAndSwap(key, 0, counter(0), 0);
+
+    let release = (): void => {};
+    let parked = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const stalledRead = new Promise<void>((resolve) => {
+      parked = resolve;
+    });
+    vi.mocked(readFile).mockImplementationOnce(async (file) => {
+      const raw = await actual.readFile(String(file), "utf8");
+      parked();
+      await gate;
+      return raw;
+    });
+
+    const stalled = new FsStore(store.root).compareAndSwap(
+      key,
+      1,
+      counter(99),
+      0,
+    );
+    await stalledRead;
+    const wins: boolean[] = [];
+    for (let version = 1; version <= 3; version += 1) {
+      wins.push(
+        await new FsStore(store.root).compareAndSwap(
+          key,
+          version,
+          counter(version),
+          0,
+        ),
+      );
+    }
+    release();
+    wins.push(await stalled);
+
+    const reportedWins = wins.filter(Boolean).length;
+    const finalCounter = Number(
+      Buffer.from((await store.get(key))!.body).toString("utf8"),
+    );
+    expect(finalCounter).toBe(reportedWins);
+    expect(wins[3]).toBe(false);
+  });
+
+  it("ignores a staged write abandoned by a crashed writer", async () => {
+    const store = await makeStore();
+    const key = "project/steps/abandoned.json";
+    await store.putImmutable(key, Buffer.from("initial"));
+    const directory = join(
+      store.root,
+      ".rightmodeler-store",
+      "entries",
+      ...key.split("/"),
+    );
+    const abandoned = join(directory, "staged-2-abandoned");
+    await writeFile(abandoned, "");
+    const stale = new Date(Date.now() - 600_000);
+    await utimes(abandoned, stale, stale);
+
+    for (let version = 1; version < 4; version += 1) {
+      await store.compareAndSwap(
+        key,
+        version,
+        Buffer.from(`version-${version + 1}`),
+        version,
+      );
+    }
+
+    expect((await readdir(directory)).sort()).toEqual([
+      "staged-2-abandoned",
+      "v3.json",
+      "v4.json",
+    ]);
+  });
+
+  it("reads a store written by the previous build and appends to it", async () => {
+    const store = await makeStore();
+    const key = "project/steps/legacy.json";
+    const directory = join(
+      store.root,
+      ".rightmodeler-store",
+      "entries",
+      ...key.split("/"),
+    );
+    await mkdir(directory, { recursive: true });
+    const legacy = (version: number, body: string): string =>
+      `${JSON.stringify({
+        version,
+        fenceToken: 1,
+        bodyBase64: Buffer.from(body).toString("base64"),
+      })}\n`;
+    await writeFile(join(directory, "v1.json"), legacy(1, "old-one"));
+    await writeFile(join(directory, "v2.json"), legacy(2, "old-two"));
+
+    await expect(store.get(key)).resolves.toMatchObject({
+      version: 2,
+      fenceToken: 1,
+    });
+    await expect(store.list("project/steps/")).resolves.toEqual([key]);
+    await expect(
+      store.compareAndSwap(key, 2, Buffer.from("next"), 1),
+    ).resolves.toBe(true);
+
+    expect((await readdir(directory)).sort()).toEqual(["v2.json", "v3.json"]);
+    expect(
+      JSON.parse(await readFile(join(directory, "v3.json"), "utf8")) as unknown,
+    ).toEqual({
+      version: 3,
+      fenceToken: 1,
+      bodyBase64: Buffer.from("next").toString("base64"),
     });
   });
 
