@@ -5,7 +5,7 @@ import { samplePath } from "./path-pattern.js";
 
 describe("builtin matcher examples", () => {
   it("discovers every named builtin matcher", () => {
-    expect(builtinMatchers).toHaveLength(28);
+    expect(builtinMatchers).toHaveLength(30);
   });
 
   for (const matcher of builtinMatchers) {
@@ -64,6 +64,91 @@ describe("builtin matcher examples", () => {
     ).toEqual([]);
   });
 
+  it("stops a single-line string mask at the end of its line", () => {
+    const matcher = builtinMatchers.find(
+      ({ slug }) => slug === "js-ai-sdk-generate-text",
+    )!;
+
+    const matches = matcher.match(
+      'const quote = /"/g;\nexport async function run() {\n  return generateText({ model: "acme/large-1", prompt });\n}\n',
+      "src/run.ts",
+    );
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.modelId).toBe("acme/large-1");
+  });
+
+  it("keeps masking a template literal across lines", () => {
+    const matcher = builtinMatchers.find(
+      ({ slug }) => slug === "js-ai-sdk-generate-text",
+    )!;
+
+    expect(
+      matcher.match(
+        'const doc = `\ngenerateText({ model: "x" })\n`;',
+        "src/notes.ts",
+      ),
+    ).toEqual([]);
+  });
+
+  it("records a model identifier only from a quoted literal", () => {
+    const generateText = builtinMatchers.find(
+      ({ slug }) => slug === "js-ai-sdk-generate-text",
+    )!;
+    const openai = builtinMatchers.find(
+      ({ slug }) => slug === "py-openai-chat-completions",
+    )!;
+
+    expect(
+      generateText
+        .match("generateText({ model: process.env.MODEL, prompt })", "src/a.ts")
+        .map(({ modelId }) => modelId),
+    ).toEqual([undefined]);
+    expect(
+      generateText
+        .match("generateText({ model: settings.model, prompt })", "src/a.ts")
+        .map(({ modelId }) => modelId),
+    ).toEqual([undefined]);
+    expect(
+      generateText
+        .match(
+          'generateText({ model: myProvider.languageModel("x"), prompt })',
+          "src/a.ts",
+        )
+        .map(({ modelId }) => modelId),
+    ).toEqual([undefined]);
+    expect(
+      generateText
+        .match(
+          'generateText({ model: openai("acme/large-1"), prompt })',
+          "src/a.ts",
+        )
+        .map(({ modelId }) => modelId),
+    ).toEqual(["acme/large-1"]);
+    expect(
+      openai
+        .match(
+          "client.chat.completions.create(model=MODEL, messages=[])",
+          "src/a.py",
+        )
+        .map(({ modelId }) => modelId),
+    ).toEqual([undefined]);
+  });
+
+  it("searches the supplied masked text instead of re-masking", () => {
+    const matcher = builtinMatchers.find(
+      ({ slug }) => slug === "js-ai-sdk-generate-text",
+    )!;
+
+    expect(
+      matcher.match(
+        'generateText({ model: "acme/large-1" })',
+        "src/a.ts",
+        " ".repeat(39),
+      ),
+    ).toEqual([]);
+  });
+
   it("keeps provider-prefixed and generic environment keys disjoint", () => {
     const provider = builtinMatchers.find(
       ({ slug }) => slug === "cfg-model-env-var",
@@ -105,5 +190,27 @@ describe("builtin matcher examples", () => {
         "app/services/chat.rb",
       ),
     ).toEqual([]);
+  });
+
+  it("returns no candidates for JSON it cannot parse and reads a byte order mark", () => {
+    const matcher = builtinMatchers.find(
+      ({ slug }) => slug === "cfg-json-model-key",
+    )!;
+
+    expect(
+      matcher.match('// generated\n{"ai":{"model":"x"}}', "config/app.json"),
+    ).toEqual([]);
+    expect(
+      matcher.match(
+        '\uFEFF{"ai":{"primary":{"model":"acme/large-1"}}}',
+        "config/app.json",
+      ),
+    ).toHaveLength(1);
+    expect(
+      matcher.match(
+        '\uFEFF{"ai":{"primary":{"model":"acme/large-1"}}}',
+        "config/app.json",
+      )[0]?.modelId,
+    ).toBe("acme/large-1");
   });
 });

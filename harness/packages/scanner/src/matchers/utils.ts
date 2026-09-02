@@ -37,6 +37,12 @@ function maskNonCode(content: string, includeHashComments: boolean): string {
           break;
         }
         const stringCharacter = content[index]!;
+        if (
+          stringCharacter === "\n" &&
+          character !== "`" &&
+          delimiterLength === 1
+        )
+          break;
         masked += stringCharacter === "\n" ? "\n" : " ";
         index += 1;
         if (stringCharacter === "\\" && index < content.length) {
@@ -80,6 +86,13 @@ function maskNonCode(content: string, includeHashComments: boolean): string {
     index += 1;
   }
   return masked;
+}
+
+export function maskSource(content: string, filePath: string): string {
+  return maskNonCode(
+    content,
+    filePath.endsWith(".py") || filePath.endsWith(".rb"),
+  );
 }
 
 export function enclosingSymbol(content: string, position: number): string {
@@ -187,7 +200,7 @@ export function argumentKeys(callText: string): string[] {
 
 export function extractModelId(text: string): string | undefined {
   const model =
-    /\b(?:model|model_name)\s*[:=]\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?["']?([A-Za-z0-9][A-Za-z0-9._:/-]*)["']?/i.exec(
+    /\b(?:model|model_name)\s*[:=]\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?["']([A-Za-z0-9][A-Za-z0-9._:/-]*)["']/i.exec(
       text,
     );
   if (model !== null) return model[1];
@@ -238,17 +251,13 @@ export function createCallMatcher(options: CallMatcherOptions): Matcher {
     noiseTier: options.noiseTier,
     filePatterns: options.filePatterns,
     examples: options.examples,
-    match(content, filePath) {
+    match(content, filePath, searchable = maskSource(content, filePath)) {
       if (
         options.fileAnchor !== undefined &&
         !options.fileAnchor.test(content)
       ) {
         return [];
       }
-      const searchable = maskNonCode(
-        content,
-        filePath.endsWith(".py") || filePath.endsWith(".rb"),
-      );
       const flags = options.pattern.flags.replaceAll("g", "");
       const pattern = new RegExp(options.pattern.source, `${flags}g`);
       const matches: CandidateMatch[] = [];
