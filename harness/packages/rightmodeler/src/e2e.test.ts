@@ -20,6 +20,7 @@ import { promisify } from "node:util";
 
 import {
   FsStore,
+  computeRunSpecDigest,
   confirmPlanKey,
   factKey,
   factsPrefix,
@@ -115,6 +116,7 @@ interface StubProvider {
   port: number;
   close(): Promise<void>;
   getHitCount(): number;
+  getMaxInFlight(): number;
 }
 
 interface StubProviderModule {
@@ -473,6 +475,7 @@ async function startCatalogDriftStub(): Promise<StubProvider> {
   return {
     port: address.port,
     getHitCount: () => hitCount,
+    getMaxInFlight: () => upstream.getMaxInFlight(),
     close: async () => {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -608,6 +611,7 @@ async function startConfirmStub(): Promise<StubProvider> {
   return {
     port: address.port,
     getHitCount: () => hitCount + upstream.getHitCount(),
+    getMaxInFlight: () => upstream.getMaxInFlight(),
     close: async () => {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -826,6 +830,76 @@ describe("built CLI pipeline", () => {
     60_000,
   );
 
+  it("ingests a trace directory like the equivalent single file", async () => {
+    const records = JSON.parse(await readFile(tracesPath, "utf8")) as unknown[];
+    const tracesDirectory = await mkdtemp(
+      join(tmpdir(), "rightmodeler-trace-directory-"),
+    );
+    temporaryDirectories.push(tracesDirectory);
+    await Promise.all([
+      writeFile(
+        join(tracesDirectory, "a.json"),
+        JSON.stringify(records.slice(0, 40)),
+      ),
+      writeFile(
+        join(tracesDirectory, "b.json"),
+        JSON.stringify(records.slice(40)),
+      ),
+    ]);
+    const { repo: directoryRepo } = await fixtureCopy("trace-directory");
+    const { repo: singleRepo } = await fixtureCopy("trace-single-file");
+
+    const directoryResult = await runCli([
+      "init",
+      "--through",
+      "ingest",
+      "--traces",
+      tracesDirectory,
+      "--output",
+      "json",
+      "--repo",
+      directoryRepo,
+    ]);
+    const singleResult = await runCli([
+      "init",
+      "--through",
+      "ingest",
+      "--traces",
+      tracesPath,
+      "--output",
+      "json",
+      "--repo",
+      singleRepo,
+    ]);
+
+    expect(directoryResult.code, directoryResult.stderr).toBe(0);
+    expect(singleResult.code, singleResult.stderr).toBe(0);
+    expect(jsonOutput(directoryResult).executedStages).toContain("ingest");
+    expect(jsonOutput(singleResult).executedStages).toContain("ingest");
+    const directoryRuns = (
+      await readStageArtifact(join(directoryRepo, ".rightmodeler"), "ingest")
+    ).runs;
+    const singleRuns = (
+      await readStageArtifact(join(singleRepo, ".rightmodeler"), "ingest")
+    ).runs;
+    expect(directoryRuns).toEqual(singleRuns);
+    expect(directoryRuns).toBeInstanceOf(Array);
+    expect((directoryRuns as unknown[]).length).toBeGreaterThan(1);
+
+    const store = new FsStore(join(singleRepo, ".rightmodeler"));
+    const state = JSON.parse(
+      await storeText(store, setupStateKey("project")),
+    ) as { stages: Record<string, { inputDigest: string }> };
+    expect(state.stages.ingest!.inputDigest).toBe(
+      computeRunSpecDigest({
+        stage: "ingest",
+        traceSha256: createHash("sha256")
+          .update(await readFile(tracesPath))
+          .digest("hex"),
+      }),
+    );
+  });
+
   it("exports applySwaps from the bundled programmatic entry", async () => {
     const cli = (await import(pathToFileURL(cliPath).href)) as {
       applySwaps?: unknown;
@@ -902,6 +976,8 @@ describe("built CLI pipeline", () => {
       `http://127.0.0.1:${stub.port}/v1`,
       "--api-key-env",
       apiKeyEnv,
+      "--max-concurrency",
+      "1",
       "--output",
       "json",
       "--repo",
@@ -947,6 +1023,7 @@ describe("built CLI pipeline", () => {
       ).toBe(true);
       expect(unusableNotes).toHaveLength(1);
 
+      expect(stub.getMaxInFlight()).toBe(1);
       const hitsAfterFirstRun = stub.getHitCount();
       const resumed = await runCli(args, { env: { [apiKeyEnv]: secret } });
       expect(resumed.code, resumed.stderr).toBe(0);

@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { Writable, type Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
-import { Command, CommanderError, Option } from "commander";
+import { Argument, Command, CommanderError, Option } from "commander";
 
 import {
   PIPELINE_STAGES,
@@ -18,6 +18,7 @@ import {
   listWatchablePullRequests,
   planPipeline,
   readActiveDetachedReplay,
+  readIngestResumption,
   readReport,
   readRunStatus,
   readStatus,
@@ -59,6 +60,7 @@ import {
   type RollbackSwapsOptions,
 } from "./rollback.js";
 import { version } from "./version.js";
+import { docNames, readDoc } from "./cli-docs.js";
 
 interface GlobalOptions {
   repo: string;
@@ -68,6 +70,7 @@ interface GlobalOptions {
 
 interface PipelineCommandOptions {
   traces?: string;
+  matchers?: string;
   baseUrl?: string;
   apiKeyEnv?: string;
   evaluator?: "braintrust" | "langfuse" | "langsmith" | "promptfoo";
@@ -81,6 +84,7 @@ interface PipelineCommandOptions {
   evaluatorGateMetric?: string;
   evaluatorGateThreshold?: string;
   maxCostUsd?: string;
+  maxConcurrency?: string;
   includeFree?: boolean;
   modebConfig?: string;
   through?: PipelineStage;
@@ -206,8 +210,8 @@ export function createProgram(
     command: Command,
     action: (reporter: Reporter, global: GlobalOptions) => Promise<number>,
   ): void => {
-    command.action(async (_options: unknown, invoked: Command) => {
-      const global = invoked.optsWithGlobals<GlobalOptions>();
+    command.action(async () => {
+      const global = command.optsWithGlobals<GlobalOptions>();
       const reporter = new Reporter(global.output, io);
       try {
         code = await action(reporter, global);
@@ -622,6 +626,18 @@ export function createProgram(
     return 0;
   });
 
+  const docs = program
+    .command("docs")
+    .description("print documentation packaged with this CLI")
+    .addArgument(
+      new Argument("[name]", "packaged document name").choices(docNames()),
+    );
+  run(docs, async (reporter) => {
+    const name = docs.processedArgs[0] as string | undefined;
+    reporter.result(name === undefined ? { docs: docNames() } : readDoc(name));
+    return 0;
+  });
+
   return {
     program,
     exitCode: () => code,
@@ -631,7 +647,8 @@ export function createProgram(
 
 function addPipelineOptions(command: Command, provider: boolean): Command {
   command
-    .option("--traces <path>", "trace input file")
+    .option("--traces <path>", "trace input file or directory")
+    .option("--matchers <path>", "declarative matcher definitions JSON file")
     .option(
       "--include-free",
       "include zero-priced models in candidate shortlists",
@@ -651,6 +668,7 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         "--max-cost-usd <amount>",
         "optional hard spend cap in USD; omit to run uncapped so every case and judge cell completes",
       )
+      .option("--max-concurrency <n>", "maximum concurrent provider requests")
       .addOption(
         new Option(
           "--evaluator <provider>",
@@ -739,6 +757,16 @@ function pipelineOptions(
   ) {
     throw invalidOption("--max-cost-usd must be a non-negative number");
   }
+  const maxConcurrency =
+    local.maxConcurrency === undefined
+      ? undefined
+      : Number(local.maxConcurrency);
+  if (
+    maxConcurrency !== undefined &&
+    (!Number.isSafeInteger(maxConcurrency) || maxConcurrency < 1)
+  ) {
+    throw invalidOption("--max-concurrency must be a positive integer");
+  }
   const evaluatorGateThreshold =
     local.evaluatorGateThreshold === undefined
       ? undefined
@@ -771,9 +799,11 @@ function pipelineOptions(
     repo: global.repo,
     store: global.store,
     traces: local.traces,
+    matchersPath: local.matchers,
     baseUrl: local.baseUrl,
     apiKeyEnv: local.apiKeyEnv,
     maxCostUsd,
+    maxConcurrency,
     includeFreeModels: local.includeFree,
     ...(local.evaluator === undefined
       ? {}
@@ -805,6 +835,15 @@ async function guidedPipelineOptions(
     runtime.stdin.isTTY === true &&
     runtime.stdout.isTTY === true;
   if (local.traces !== undefined || local.plan || local.through === "scan") {
+    return { options, candidates: [], interactive };
+  }
+  const resumption = await readIngestResumption(options);
+  if (resumption.resumable) {
+    if (global.output === "human" && resumption.tracePath !== undefined) {
+      reporter.io.stdout(
+        `Resuming the ingested trace: ${resumption.tracePath}\n`,
+      );
+    }
     return { options, candidates: [], interactive };
   }
   const candidates = await discoverTraces({
@@ -1130,9 +1169,15 @@ async function startDetachedReplay(
     "--modeb-config",
     local.modebConfig === undefined ? undefined : resolve(local.modebConfig),
   );
+  appendCliOption(
+    args,
+    "--matchers",
+    local.matchers === undefined ? undefined : resolve(local.matchers),
+  );
   appendCliOption(args, "--base-url", local.baseUrl);
   appendCliOption(args, "--api-key-env", local.apiKeyEnv);
   appendCliOption(args, "--max-cost-usd", local.maxCostUsd);
+  appendCliOption(args, "--max-concurrency", local.maxConcurrency);
   if (local.includeFree) args.push("--include-free");
   appendCliOption(args, "--approved-run", local.approvedRun);
   appendCliOption(args, "--evaluator", local.evaluator);

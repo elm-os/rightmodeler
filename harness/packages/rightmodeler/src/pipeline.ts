@@ -83,8 +83,10 @@ import {
   detectTech,
   evaluateCoverage,
   IGNORED_DIRECTORIES,
+  loadDeclarativeMatchers,
   reconcile,
   scan,
+  type DeclarativeMatcher,
 } from "@rightmodeler/scanner";
 import { z } from "zod";
 
@@ -498,10 +500,13 @@ interface PipelineContext {
   baseUrl?: string;
   apiKeyEnv: string;
   maxCostUsd?: number;
+  maxConcurrency?: number;
   includeFreeModels: boolean;
   evaluator?: ResolvedEvaluatorConfig;
   modeBConfig?: ModeBConfig;
   modeBConfigPath?: string;
+  matchers?: readonly DeclarativeMatcher[];
+  matchersPath?: string;
   existingRunId?: string;
   approvedRunSpecDigest?: string;
   reporter: Reporter;
@@ -514,9 +519,11 @@ export interface PipelineOptions {
   baseUrl?: string;
   apiKeyEnv?: string;
   maxCostUsd?: number;
+  maxConcurrency?: number;
   includeFreeModels?: boolean;
   evaluator?: EvaluatorConfig;
   modeBConfigPath?: string;
+  matchersPath?: string;
   approvedRunSpecDigest?: string;
   through?: PipelineStage;
   plan?: boolean;
@@ -689,6 +696,27 @@ export async function planPipeline(
   return { stages: result };
 }
 
+export async function readIngestResumption(options: PipelineOptions): Promise<{
+  readonly resumable: boolean;
+  readonly tracePath?: string;
+}> {
+  const context = createContext(options);
+  const checkpoint = (await readSetupState(context.store, context.projectId))
+    .stages.ingest;
+  if (
+    checkpoint === undefined ||
+    !(await checkpointOutputExists(context, "ingest", checkpoint))
+  ) {
+    return { resumable: false };
+  }
+  return {
+    resumable: true,
+    ...(checkpoint.traceSource === undefined
+      ? {}
+      : { tracePath: checkpoint.traceSource }),
+  };
+}
+
 export async function runPipeline(
   options: PipelineOptions,
 ): Promise<PipelineResult> {
@@ -759,6 +787,9 @@ export async function runPipeline(
         inputDigest: digest,
         outputKey,
         completedAt: new Date().toISOString(),
+        ...(stage === "ingest" && context.traces !== undefined
+          ? { traceSource: context.traces }
+          : {}),
       });
       executedStages.push(stage);
       context.reporter.event({ event: "stage_completed", stage });
@@ -805,6 +836,7 @@ export async function estimateReplay(
     providerId: "configured-provider",
     baseUrl: context.baseUrl,
     apiKeyEnv: context.apiKeyEnv,
+    maxConcurrency: context.maxConcurrency,
   });
   const catalog =
     context.existingRunId === undefined
@@ -838,7 +870,9 @@ export async function claimDetachedReplay(
       ? state.stages.ingest?.inputDigest
       : digest({
           stage: "ingest",
-          traceSha256: sha256(await readTraceInput(context.traces)),
+          traceSha256: sha256(
+            Buffer.concat([...(await readTraceInput(context.traces))]),
+          ),
         });
   if (traceIdentity === undefined) {
     throw new ProtocolError({
@@ -854,6 +888,7 @@ export async function claimDetachedReplay(
       providerId: "configured-provider",
       baseUrl: context.baseUrl,
       apiKeyEnv: context.apiKeyEnv,
+      maxConcurrency: context.maxConcurrency,
     }).listModels()
   ).sort((left, right) => compareText(left.id, right.id));
   const targetPhase = options.through ?? "replay";
@@ -1607,6 +1642,7 @@ function createContext(options: PipelineOptions): PipelineContext {
     baseUrl: options.baseUrl,
     apiKeyEnv: options.apiKeyEnv ?? API_KEY_ENV_DEFAULT,
     maxCostUsd: options.maxCostUsd,
+    maxConcurrency: options.maxConcurrency,
     includeFreeModels: options.includeFreeModels ?? false,
     ...(options.evaluator === undefined
       ? {}
@@ -1616,6 +1652,12 @@ function createContext(options: PipelineOptions): PipelineContext {
       : {
           modeBConfigPath,
           modeBConfig: readModeBConfig(modeBConfigPath),
+        }),
+    ...(options.matchersPath === undefined
+      ? {}
+      : {
+          matchersPath: resolve(options.matchersPath),
+          matchers: loadMatchers(resolve(options.matchersPath)),
         }),
     ...(options.existingRunId === undefined
       ? {}
@@ -1674,6 +1716,25 @@ function readModeBConfig(path: string): ModeBConfig {
   };
 }
 
+function loadMatchers(path: string): readonly DeclarativeMatcher[] {
+  let compilation;
+  try {
+    compilation = loadDeclarativeMatchers(path);
+  } catch (error) {
+    throw invalidMatchersFile(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  if (compilation.rejections.length > 0) {
+    throw invalidMatchersFile(
+      compilation.rejections
+        .map(({ slug, code, message }) => `${slug}: ${code}: ${message}`)
+        .join("; "),
+    );
+  }
+  return compilation.matchers;
+}
+
 function evaluatorPlan(context: PipelineContext): JsonValue {
   return context.evaluator === undefined
     ? { evaluatorKind: "judge", gateMetric: "replacement-quality" }
@@ -1696,13 +1757,21 @@ async function inputDigest(
   state: SetupState,
 ): Promise<string | undefined> {
   if (stage === "scan") {
-    return repositoryDigest(context.repo, context.storeRoot);
+    const repository = await repositoryDigest(context.repo, context.storeRoot);
+    if (context.matchersPath === undefined) return repository;
+    return digest({
+      stage,
+      repository,
+      matchers: sha256(await readFile(context.matchersPath)),
+    });
   }
   if (stage === "ingest") {
     if (context.traces === undefined) return state.stages.ingest?.inputDigest;
     return digest({
       stage,
-      traceSha256: sha256(await readTraceInput(context.traces)),
+      traceSha256: sha256(
+        Buffer.concat([...(await readTraceInput(context.traces))]),
+      ),
     });
   }
 
@@ -1860,6 +1929,36 @@ function missingTracesPath(): ProtocolError {
   });
 }
 
+function missingTraceInput(path: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "missing_traces_path",
+    message: `Trace input does not exist: ${path}`,
+    remedy:
+      "Pass --traces <path> pointing to an existing trace file or directory.",
+  });
+}
+
+function emptyTracesDirectory(path: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "empty_traces_directory",
+    message: `Trace input directory has no .json or .jsonl files: ${path}`,
+    remedy:
+      "Point --traces at a directory containing trace files, or at a single trace file.",
+  });
+}
+
+function mixedTraceFormats(names: string[]): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "mixed_trace_formats",
+    message: `Trace input directory mixes formats: ${names.sort().join(", ")}`,
+    remedy:
+      "Split the directory so every file is the same trace format, or pass one file with --traces.",
+  });
+}
+
 function noReplayableCallSites(): ProtocolError {
   return new ProtocolError({
     exitCode: 2,
@@ -1879,6 +1978,16 @@ function invalidModeBConfig(message: string): ProtocolError {
   });
 }
 
+function invalidMatchersFile(message: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "invalid_matchers_file",
+    message: `Invalid --matchers file: ${message}`,
+    remedy:
+      "Fix the listed matcher definitions and rerun; each needs slug, description, noiseTier, filePatterns, patterns, examples, and closesSurfaceIds.",
+  });
+}
+
 function stageNotCompleted(
   stage: PipelineStage,
   message = `${stage} has not completed`,
@@ -1891,18 +2000,25 @@ function stageNotCompleted(
   });
 }
 
-async function readTraceInput(path: string): Promise<Buffer> {
+async function readTraceInput(path: string): Promise<readonly Buffer[]> {
+  let metadata;
   try {
-    return await readFile(path);
+    metadata = await stat(path);
   } catch (error) {
     if (!isMissing(error)) throw error;
-    throw new ProtocolError({
-      exitCode: 2,
-      code: "missing_traces_path",
-      message: `Trace input does not exist: ${path}`,
-      remedy: "Pass --traces <path> pointing to an existing trace file.",
-    });
+    throw missingTraceInput(path);
   }
+  if (!metadata.isDirectory()) return [await readFile(path)];
+  const names = (await readdir(path, { withFileTypes: true }))
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl")),
+    )
+    .map(({ name }) => name)
+    .sort();
+  if (names.length === 0) throw emptyTracesDirectory(path);
+  return Promise.all(names.map((name) => readFile(join(path, name))));
 }
 
 async function executeStage(
@@ -1944,7 +2060,7 @@ async function executeScan(
   const revision = await repositoryRevision(context.repo);
   const records = scan(
     context.repo,
-    createMatcherRegistry(),
+    createMatcherRegistry(context.matchers ?? []),
     context.projectId,
   );
   const coverage = evaluateCoverage({
@@ -1965,7 +2081,8 @@ async function executeScan(
       exitCode: 2,
       code: "coverage_gate_failed",
       message: `Scanner coverage gate failed: ${failures}`,
-      remedy: "Add matcher coverage for the listed AI dependency surfaces.",
+      remedy:
+        "Add matcher coverage for the listed AI dependency surfaces, or pass --matchers <file> with declarative matchers that close them.",
     });
   }
   for (const record of records) {
@@ -1993,9 +2110,14 @@ async function executeIngest(
   if (tracePath === undefined) {
     throw missingTracesPath();
   }
-  const text = await readFile(tracePath, "utf8");
-  const adapter = detectFormat(text, traceAdapters);
-  const runs = adapter.adapt(parseTraceRecords(text));
+  const texts = (await readTraceInput(tracePath)).map((body) =>
+    body.toString("utf8"),
+  );
+  const detected = texts.map((text) => detectFormat(text, traceAdapters));
+  const names = [...new Set(detected.map(({ name }) => name))];
+  if (names.length > 1) throw mixedTraceFormats(names);
+  const adapter = detected[0]!;
+  const runs = adapter.adapt(texts.flatMap((text) => parseTraceRecords(text)));
   const key = artifactKey(context, "ingest", inputDigestValue);
   await putImmutableJson(context.store, key, {
     format: adapter.name,
@@ -2553,6 +2675,7 @@ async function executeReplay(
     providerId: "configured-provider",
     baseUrl: context.baseUrl,
     apiKeyEnv: context.apiKeyEnv,
+    maxConcurrency: context.maxConcurrency,
   });
   const catalog =
     context.existingRunId === undefined
@@ -2701,7 +2824,7 @@ async function executeReplay(
         ...(judge === undefined ? {} : { judge }),
         store: context.store,
         budget,
-        concurrency: 4,
+        concurrency: context.maxConcurrency ?? 4,
       });
       const budgetBlock = result.blocked.find(({ kind }) => kind === "budget");
       if (budgetBlock !== undefined) {
@@ -3193,6 +3316,7 @@ async function executeConfirm(
       providerId: "configured-provider",
       baseUrl: context.baseUrl,
       apiKeyEnv: context.apiKeyEnv,
+      maxConcurrency: context.maxConcurrency,
     });
     const catalog = await provider.listModels();
     const configuredRecords = configuredStepRecords(config, reconciled.records);

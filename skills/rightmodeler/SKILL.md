@@ -21,17 +21,7 @@ the target repository unless `--store` overrides that location. Re-run the same
 command after satisfying a named input or budget boundary. Do not delete the store
 to restart.
 
-Read the documentation shipped with the installed CLI before driving it:
-
-- `harness/packages/rightmodeler/docs/getting-started.md`
-- `harness/packages/rightmodeler/docs/commands.md`
-- `harness/packages/rightmodeler/docs/exit-codes.md`
-- `harness/packages/rightmodeler/docs/evaluators.md`
-- `harness/packages/rightmodeler/docs/modeb.md`
-
-In an installed dependency, the same files are under
-`node_modules/rightmodeler/docs/`. The shipped docs describe the version that
-is actually installed and take precedence over this runbook if versions differ.
+The installed CLI ships its own documentation; section 3 shows how to read it.
 
 ## 1. Establish scope and goal
 
@@ -82,10 +72,15 @@ fi
 
 "${RIGHTMODELER[@]}" --help
 "${RIGHTMODELER[@]}" init --help
+"${RIGHTMODELER[@]}" docs
+# Replace <name> with getting-started, commands, exit-codes, evaluators, or modeb.
+"${RIGHTMODELER[@]}" docs <name>
 ```
 
 Both help commands must exit 0. If either exits 10 or greater, stop and report the
 installation or command-line failure. There is no fallback engine.
+The shipped docs describe the version actually installed and take precedence over
+this runbook if versions differ.
 
 ## 4. Preview the plan
 
@@ -170,8 +165,7 @@ same command so stale or incomplete work resumes at the first boundary.
 
 ## 6. Interpret pipeline exit codes
 
-Use the pipeline contract from
-`harness/packages/rightmodeler/docs/exit-codes.md`:
+Use the pipeline contract from `rightmodeler docs exit-codes`:
 
 - `0`: success with no actionable recommendation. Successful planning and partial
   `--through` runs also return 0.

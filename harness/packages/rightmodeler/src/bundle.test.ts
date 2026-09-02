@@ -132,7 +132,7 @@ describe("packed CLI bundle", () => {
     expect(await realpath(installedBinary)).toBe(
       await realpath(join(installedRoot, "dist-bundle/cli.js")),
     );
-    await assertPackedDocumentation(installedRoot);
+    await assertPackedDocumentation(installedRoot, installedBinary, project);
     await Promise.all(
       [
         "dist-bundle/proxy/container-supervisor.mjs",
@@ -267,7 +267,11 @@ function runInstalled(
   });
 }
 
-async function assertPackedDocumentation(installedRoot: string): Promise<void> {
+async function assertPackedDocumentation(
+  installedRoot: string,
+  binary: string,
+  cwd: string,
+): Promise<void> {
   // Packed docs must read offline, so every link is relative and resolves to a file in
   // the tarball. The one absolute link allowed is the manifest's own homepage: a single
   // canonical pointer back to the site, not a doc cross-reference. Taking it from the
@@ -311,6 +315,20 @@ async function assertPackedDocumentation(installedRoot: string): Promise<void> {
         `${relative(installedRoot, markdownPath)}: ${link}`,
       ).toBe(true);
     }
+  }
+
+  for (const name of [
+    "commands",
+    "evaluators",
+    "exit-codes",
+    "getting-started",
+    "modeb",
+  ]) {
+    expect(await runInstalled(binary, ["docs", name], cwd)).toEqual({
+      code: 0,
+      stderr: "",
+      stdout: `${await readFile(join(installedRoot, "docs", `${name}.md`), "utf8")}\n`,
+    });
   }
 }
 

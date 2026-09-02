@@ -1,4 +1,11 @@
-import { copyFile, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
@@ -200,6 +207,30 @@ describe("CLI trace guidance wiring", () => {
     expect(await executeCli(["estimate", "--help"], captured.io)).toBe(0);
     expect(captured.stdout()).toContain("--yes");
   });
+
+  it("resumes the ingested trace before discovery", async () => {
+    const { repo, homeDir, older } = await fixture();
+    const first = captureIo();
+
+    expect(
+      await executeCli(
+        ["init", "--through", "ingest", "--traces", older, "--repo", repo],
+        first.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(0);
+
+    const resumed = captureIo();
+    expect(
+      await executeCli(
+        ["init", "--yes", "--through", "ingest", "--repo", repo],
+        resumed.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(0);
+    expect(resumed.stdout()).toContain(`Resuming the ingested trace: ${older}`);
+    expect(resumed.stdout()).not.toContain("Using trace file:");
+  });
 });
 
 describe("CLI exit codes", () => {
@@ -243,9 +274,189 @@ describe("CLI exit codes", () => {
       });
     }
   });
+
+  it("prints packaged documentation and rejects unknown names", async () => {
+    const list = captureIo();
+    expect(await executeCli(["docs"], list.io)).toBe(0);
+    expect(list.stdout()).toContain("getting-started");
+
+    const document = captureIo();
+    expect(await executeCli(["docs", "exit-codes"], document.io)).toBe(0);
+    expect(document.stdout()).toContain("# Exit codes");
+
+    const unknown = captureIo();
+    expect(await executeCli(["docs", "nope"], unknown.io)).toBe(10);
+    expect(unknown.stderr()).toContain("Allowed choices are");
+  });
 });
 
 describe("CLI needs-input errors", () => {
+  it("rejects a non-positive provider concurrency", async () => {
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        ["--output", "json", "init", "--max-concurrency", "0"],
+        captured.io,
+      ),
+    ).toBe(2);
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "invalid_option",
+      message: "--max-concurrency must be a positive integer",
+    });
+  });
+
+  it("accepts valid declarative matchers", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const matchers = join(root, "matchers.json");
+    await writeFile(
+      matchers,
+      JSON.stringify([
+        {
+          slug: "custom-model-call",
+          description: "Custom model call",
+          noiseTier: "normal",
+          filePatterns: ["**/*.ts"],
+          patterns: [
+            {
+              regex: { source: "customCall\\s*\\(", flags: "i" },
+              label: "custom call",
+            },
+          ],
+          examples: ["customCall(input)"],
+          closesSurfaceIds: ["custom-framework"],
+        },
+      ]),
+    );
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "--output",
+          "json",
+          "init",
+          "--through",
+          "scan",
+          "--matchers",
+          matchers,
+          "--repo",
+          repo,
+        ],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(0);
+    expect(JSON.parse(captured.stdout()).executedStages).toContain("scan");
+  });
+
+  it("rejects invalid declarative matcher flags", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const matchers = join(root, "matchers.json");
+    await writeFile(
+      matchers,
+      JSON.stringify([
+        {
+          slug: "custom-model-call",
+          description: "Custom model call",
+          noiseTier: "normal",
+          filePatterns: ["**/*.ts"],
+          patterns: [
+            {
+              regex: { source: "customCall\\s*\\(", flags: "g" },
+              label: "custom call",
+            },
+          ],
+          examples: ["customCall(input)"],
+          closesSurfaceIds: ["custom-framework"],
+        },
+      ]),
+    );
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "--output",
+          "json",
+          "init",
+          "--through",
+          "scan",
+          "--matchers",
+          matchers,
+          "--repo",
+          repo,
+        ],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(2);
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "invalid_matchers_file",
+      message: expect.stringContaining("INVALID_FLAGS"),
+    });
+  });
+
+  it("rejects a directory containing mixed trace formats", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const traces = join(root, "mixed-traces");
+    await mkdir(traces);
+    await Promise.all([
+      copyFile(validTracePath, join(traces, "a.json")),
+      writeFile(join(traces, "b.jsonl"), `${emptyCodexSession}\n`),
+    ]);
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "--output",
+          "json",
+          "init",
+          "--through",
+          "ingest",
+          "--traces",
+          traces,
+          "--repo",
+          repo,
+        ],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(2);
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "mixed_trace_formats",
+    });
+  });
+
+  it("rejects an empty trace directory", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const traces = join(root, "empty-traces");
+    await mkdir(traces);
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "--output",
+          "json",
+          "init",
+          "--through",
+          "ingest",
+          "--traces",
+          traces,
+          "--repo",
+          repo,
+        ],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(2);
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "empty_traces_directory",
+    });
+  });
+
   it("reports missing drift traces as a needs-input error", async () => {
     const { repo, homeDir } = await fixture();
     const captured = captureIo();

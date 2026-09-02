@@ -6,6 +6,7 @@ const checkpointSchema = z.strictObject({
   inputDigest: z.string().min(1),
   outputKey: z.string().min(1),
   completedAt: z.string().min(1),
+  traceSource: z.string().min(1).optional(),
 });
 
 const setupStateSchema = z.strictObject({

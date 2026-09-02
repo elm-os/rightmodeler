@@ -89,8 +89,15 @@ export async function startStubProvider({
     includeFreeModel ? [...models, freeModel] : models
   ).filter(({ id }) => !omittedCatalogModels.has(id));
   let hitCount = 0;
+  let inFlight = 0;
+  let maxInFlight = 0;
   const requests = [];
   const server = createServer(async (request, response) => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    response.once("close", () => {
+      inFlight -= 1;
+    });
     const url = new URL(request.url, "http://127.0.0.1");
     if (request.method === "GET" && url.pathname === "/v1/models") {
       const offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10);
@@ -486,6 +493,7 @@ export async function startStubProvider({
   return {
     port: address.port,
     getHitCount: () => hitCount,
+    getMaxInFlight: () => maxInFlight,
     getRequests: () => requests.map((request) => structuredClone(request)),
     close: () =>
       new Promise((resolve, reject) =>

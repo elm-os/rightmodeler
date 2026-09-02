@@ -6,6 +6,7 @@ import { traceAdapters } from "./adapters.js";
 import { detectFormat, isRecord, type TraceFormat } from "./adapters/shared.js";
 
 const MAX_FILES = 50;
+const MAX_CODEX_EXAMINED = 300;
 const MAX_READ_BYTES = 64 * 1024;
 const MAX_SAMPLE_RECORDS = 20;
 const SOURCE_BUDGETS = { local: 20, claude: 15, codex: 15 } as const;
@@ -46,9 +47,6 @@ export async function discoverTraces(
   for (const candidate of candidates.slice(0, MAX_FILES)) {
     try {
       const head = await detectionHead(candidate.path, candidate.size);
-      if (candidate.source === "codex" && codexSessionCwd(head.text) !== repo) {
-        continue;
-      }
       const adapter = detectFormat(head.text, traceAdapters);
       discovered.push({
         path: candidate.path,
@@ -108,7 +106,7 @@ async function candidateFiles(
     },
     {
       source: "codex" as const,
-      files: await statCandidates(codexPaths, "codex", false),
+      files: await codexCandidates(codexPaths, repo),
     },
   ];
   const selected: CandidateFile[] = [];
@@ -127,6 +125,36 @@ async function candidateFiles(
     offsets.set(source.source, offset + extra.length);
   }
   return selected.map((file, sourceOrder) => ({ ...file, sourceOrder }));
+}
+
+async function codexCandidates(
+  paths: readonly string[],
+  repo: string,
+): Promise<CandidateFile[]> {
+  const files: CandidateFile[] = [];
+  let examined = 0;
+  for (const path of paths) {
+    if (
+      files.length >= SOURCE_BUDGETS.codex ||
+      examined >= MAX_CODEX_EXAMINED
+    ) {
+      break;
+    }
+    examined += 1;
+    try {
+      const metadata = await stat(path);
+      const head = await detectionHead(path, metadata.size);
+      if (codexSessionCwd(head.text) !== repo) continue;
+      files.push({
+        path,
+        source: "codex",
+        sourceOrder: 0,
+        size: metadata.size,
+        modifiedAtMs: metadata.mtimeMs,
+      });
+    } catch {}
+  }
+  return files;
 }
 
 async function statCandidates(

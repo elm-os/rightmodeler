@@ -40,6 +40,8 @@ npx rightmodeler init --plan --output json --repo /path/to/repository
 npx rightmodeler init --through corpus --traces /path/to/traces.json --output json --repo /path/to/repository
 ```
 
+`--traces` accepts a single file or a directory. A directory is read non-recursively as its `.json` and `.jsonl` files in name order; every file must use the same trace format.
+
 ## Run the complete pipeline
 
 ```sh
@@ -63,3 +65,5 @@ model catalog before paid model calls begin.
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md` and `.rightmodeler/project/reports/report.json`.
 
 Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), and the [exit-code convention](exit-codes.md) before automating a full run.
+
+Run `rightmodeler docs <name>` to print any of these documents from the installed package.

@@ -34,8 +34,11 @@ Use `--output json` for one result object or `--output jsonl` for stage events f
 ## Error codes
 
 - `usage_error` (exit `10`): the command line is invalid; `message` carries the parser text.
-- `missing_traces_path` (exit `2`): pass `--traces <path>` pointing to an existing trace file.
+- `missing_traces_path` (exit `2`): pass `--traces <path>` pointing to an existing trace file or directory.
+- `empty_traces_directory` (exit `2`): point `--traces` at a directory containing `.json` or `.jsonl` trace files, or at a single trace file.
+- `mixed_trace_formats` (exit `2`): split the directory so every file uses the same trace format, or pass one file with `--traces`.
 - `invalid_option` (exit `2`): correct the option and rerun; use `rightmodeler <command> --help` for accepted values.
 - `invalid_modeb_config` (exit `2`): fix the named field in the `--modeb-config` file and rerun.
+- `invalid_matchers_file` (exit `2`): fix the listed matcher definitions in the `--matchers` file and rerun.
 - `no_replayable_call_sites` (exit `2`): point `--repo` at a service with plain text completions, or add a matcher for a text call site, then rerun.
 - `stage_not_completed` (exit `2`): run `rightmodeler init --through <stage>` first, then rerun the command.
