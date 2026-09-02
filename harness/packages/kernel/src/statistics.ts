@@ -51,6 +51,21 @@ export function wilson(
   return wilsonForPoint(passes / n, n, confidence, comparisons);
 }
 
+export function minimumTrialsForFloor(
+  floor: number,
+  comparisons: number,
+  confidence = 0.95,
+): number {
+  if (!Number.isFinite(floor) || floor <= 0 || floor >= 1) {
+    throw new RangeError("floor must be between 0 and 1");
+  }
+  let trials = 1;
+  while (wilson(trials, trials, { confidence, comparisons }).lower < floor) {
+    trials += 1;
+  }
+  return trials;
+}
+
 function wilsonForPoint(
   point: number,
   n: number,

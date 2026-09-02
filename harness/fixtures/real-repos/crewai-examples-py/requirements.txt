@@ -1,0 +1,2 @@
+crewai>=1
+crewai-tools>=1

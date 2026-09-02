@@ -9,6 +9,8 @@ interface CliRunOptions {
   repo: string;
   store?: string;
   acceptedExitCodes?: readonly number[];
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 interface CapturedProcess {
@@ -20,18 +22,18 @@ interface CapturedProcess {
 
 const require = createRequire(import.meta.url);
 
-export function rightmodelerCliPath(): string {
+function rightmodelerCliPath(): string {
   return require.resolve("@rightmodeler/cli");
 }
 
-export function cliEnvironment(): NodeJS.ProcessEnv {
+function cliEnvironment(): NodeJS.ProcessEnv {
   const environment = { ...process.env };
   delete environment.FORCE_COLOR;
   delete environment.NO_COLOR;
   return environment;
 }
 
-export function cliArguments(
+function cliArguments(
   command: string,
   commandArguments: readonly string[],
   options: Pick<CliRunOptions, "repo" | "store">,
@@ -59,6 +61,8 @@ export async function runCli(
     process.execPath,
     cliArguments(command, commandArguments, options),
     resolve(options.repo),
+    command,
+    options,
   );
   const acceptedExitCodes = options.acceptedExitCodes ?? [0];
   if (
@@ -78,19 +82,38 @@ async function captureProcess(
   executable: string,
   args: readonly string[],
   cwd: string,
+  command: string,
+  options: CliRunOptions,
 ): Promise<CapturedProcess> {
+  const signals = [
+    ...(options.signal === undefined ? [] : [options.signal]),
+    ...(options.timeoutMs === undefined
+      ? []
+      : [AbortSignal.timeout(options.timeoutMs)]),
+  ];
+  const signal = signals.length === 0 ? undefined : AbortSignal.any(signals);
   return new Promise((resolveProcess, rejectProcess) => {
     const child = spawn(executable, args, {
       cwd,
       env: cliEnvironment(),
       stdio: ["ignore", "pipe", "pipe"],
+      ...(signal === undefined ? {} : { signal }),
     });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
 
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.once("error", rejectProcess);
+    child.once("error", (error: Error) =>
+      rejectProcess(
+        signal?.aborted === true
+          ? new Error(
+              `rightmodeler ${command} was stopped: ${String(signal.reason)}`,
+              { cause: error },
+            )
+          : error,
+      ),
+    );
     child.once("close", (code, signal) => {
       resolveProcess({
         code,

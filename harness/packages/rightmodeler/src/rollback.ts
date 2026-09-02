@@ -1,13 +1,11 @@
-import { randomUUID } from "node:crypto";
-import { basename, join, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 
 import {
-  canonicalJson,
+  appendLifecycleEvent,
   computeRunSpecDigest,
-  factKey,
   FsStore,
   jsonValueSchema,
-  lifecycleEventSchema,
+  lifecycleDetail,
   type JsonValue,
   type LifecycleEvent,
   type Store,
@@ -27,9 +25,13 @@ import {
   createGithubClient,
   type GithubClient,
   type GithubFileContent,
-  type GithubRef,
-  GithubHttpError,
 } from "./github/index.js";
+import {
+  optionalFile,
+  optionalRef,
+  restoreBranch,
+} from "./github/branch-ops.js";
+import { resolveStoreRoot } from "./state.js";
 
 const projectId = "project";
 
@@ -67,6 +69,7 @@ export interface RollbackSwapsOptions {
   readonly repo: string;
   readonly store?: string;
   readonly owner: string;
+  readonly githubRepo?: string;
   readonly githubBaseUrl: string;
   readonly githubTokenEnv: string;
   readonly prNumber: number;
@@ -117,32 +120,6 @@ function refusal(
   };
 }
 
-async function appendLifecycleEvent(
-  store: Store,
-  event: Omit<LifecycleEvent, "eventId" | "createdAt">,
-): Promise<void> {
-  const value = lifecycleEventSchema.parse({
-    ...event,
-    eventId: randomUUID(),
-    createdAt: new Date().toISOString(),
-  });
-  await store.putImmutable(
-    factKey(projectId, value.eventId),
-    Buffer.from(canonicalJson(value), "utf8"),
-  );
-}
-
-function detailRecord(event: LifecycleEvent): Record<string, JsonValue> {
-  if (
-    typeof event.detail !== "object" ||
-    event.detail === null ||
-    Array.isArray(event.detail)
-  ) {
-    return {};
-  }
-  return event.detail;
-}
-
 function originalApplyEvent(
   events: readonly LifecycleEvent[],
   repository: string,
@@ -169,7 +146,7 @@ function existingRollback(
         event.runSpecDigest === runSpecDigest &&
         event.kind === "pr_opened" &&
         event.prNumber !== null &&
-        detailRecord(event).operation === "rollback",
+        lifecycleDetail(event).operation === "rollback",
     );
 }
 
@@ -183,7 +160,7 @@ function existingRollbackStart(
       (event) =>
         event.runSpecDigest === runSpecDigest &&
         event.kind === "apply_started" &&
-        detailRecord(event).operation === "rollback",
+        lifecycleDetail(event).operation === "rollback",
     );
 }
 
@@ -220,34 +197,6 @@ function rollbackBody(originalPrNumber: number, evidenceId: string): string {
     `Evidence: \`${evidenceId}\``,
     "",
   ].join("\n");
-}
-
-async function optionalRef(
-  githubClient: GithubClient,
-  input: Parameters<GithubClient["getRef"]>[0],
-): Promise<GithubRef | undefined> {
-  try {
-    return await githubClient.getRef(input);
-  } catch (error) {
-    if (error instanceof GithubHttpError && error.status === 404) {
-      return undefined;
-    }
-    throw error;
-  }
-}
-
-async function optionalFile(
-  githubClient: GithubClient,
-  input: Parameters<GithubClient["getFileContent"]>[0],
-): Promise<GithubFileContent | undefined> {
-  try {
-    return await githubClient.getFileContent(input);
-  } catch (error) {
-    if (error instanceof GithubHttpError && error.status === 404) {
-      return undefined;
-    }
-    throw error;
-  }
 }
 
 async function snapshotsAtRef({
@@ -364,76 +313,6 @@ async function resumeUpdates({
   return { updates, mismatches };
 }
 
-async function restoreRollbackBranch({
-  githubClient,
-  owner,
-  repo,
-  branch,
-  title,
-  snapshots,
-  failedDigests,
-}: {
-  readonly githubClient: GithubClient;
-  readonly owner: string;
-  readonly repo: string;
-  readonly branch: string;
-  readonly title: string;
-  readonly snapshots: readonly RollbackSnapshot[];
-  readonly failedDigests: FileDigestMap;
-}): Promise<void> {
-  const branchRef = await optionalRef(githubClient, {
-    owner,
-    repo,
-    ref: `heads/${branch}`,
-  });
-  if (branchRef === undefined) return;
-
-  const currentFiles = new Map<string, GithubFileContent | undefined>();
-  for (const snapshot of snapshots) {
-    const current = await optionalFile(githubClient, {
-      owner,
-      repo,
-      path: snapshot.path,
-      ref: branchRef.sha,
-    });
-    currentFiles.set(snapshot.path, current);
-    failedDigests[snapshot.path] =
-      current === undefined ? null : digestFileContent(current.contentBytes);
-  }
-  for (const snapshot of snapshots) {
-    const current = currentFiles.get(snapshot.path);
-    if (current?.content === snapshot.current.content) continue;
-    await githubClient.createOrUpdateFile({
-      owner,
-      repo,
-      path: snapshot.path,
-      message: `Restore after failed ${title}`,
-      content: snapshot.current.content,
-      branch,
-      ...(current === undefined ? {} : { sha: current.sha }),
-    });
-  }
-  for (const snapshot of snapshots) {
-    const restored = await optionalFile(githubClient, {
-      owner,
-      repo,
-      path: snapshot.path,
-      ref: branch,
-    });
-    if (
-      restored === undefined ||
-      digestFileContent(restored.contentBytes) !==
-        digestFileContent(snapshot.current.contentBytes)
-    ) {
-      throw new RollbackServiceError(
-        "rollback_restore_failed",
-        `Rollback failure did not restore ${snapshot.path} to the base state.`,
-        { path: snapshot.path },
-      );
-    }
-  }
-}
-
 export async function rollbackPreparedSwaps({
   store,
   githubClient,
@@ -457,7 +336,7 @@ export async function rollbackPreparedSwaps({
     );
   }
 
-  if (!("remediation" in detailRecord(originalEvent))) {
+  if (!("remediation" in lifecycleDetail(originalEvent))) {
     return refusal(
       "missing_remediation_evidence",
       `Pull request ${prNumber} has no recorded remediation evidence.`,
@@ -485,7 +364,7 @@ export async function rollbackPreparedSwaps({
     priorRollback?.prNumber !== null &&
     priorRollback?.prNumber !== undefined
   ) {
-    const detail = detailRecord(priorRollback);
+    const detail = lifecycleDetail(priorRollback);
     return {
       status: "existing",
       originalPrNumber: prNumber,
@@ -555,7 +434,7 @@ export async function rollbackPreparedSwaps({
   }
   if (rollbackRef !== undefined) {
     const recordedBaseRevision =
-      started === undefined ? undefined : detailRecord(started).baseRevision;
+      started === undefined ? undefined : lifecycleDetail(started).baseRevision;
     if (typeof recordedBaseRevision !== "string") {
       return refusal(
         "rollback_branch_unowned",
@@ -642,7 +521,7 @@ export async function rollbackPreparedSwaps({
     runSpecDigest,
   };
   if (started === undefined) {
-    await appendLifecycleEvent(store, {
+    await appendLifecycleEvent(store, projectId, {
       ...lifecycle,
       prNumber: null,
       kind: "apply_started",
@@ -738,7 +617,7 @@ export async function rollbackPreparedSwaps({
         base: originalPull.base.ref,
         draft: true,
       }));
-    await appendLifecycleEvent(store, {
+    await appendLifecycleEvent(store, projectId, {
       ...lifecycle,
       prNumber: pullRequest.number,
       kind: "pr_opened",
@@ -771,14 +650,24 @@ export async function rollbackPreparedSwaps({
     let restoreFailure: unknown;
     if (ownsBranch) {
       try {
-        await restoreRollbackBranch({
+        await restoreBranch({
           githubClient,
           owner,
           repo,
           branch,
           title,
-          snapshots: baseState.snapshots,
+          files: baseState.snapshots.map(({ path, current }) => ({
+            path,
+            content: current.content,
+            contentBytes: current.contentBytes,
+          })),
           failedDigests,
+          unrestored: (path) =>
+            new RollbackServiceError(
+              "rollback_restore_failed",
+              `Rollback failure did not restore ${path} to the base state.`,
+              { path },
+            ),
         });
       } catch (caught) {
         restoreFailure = caught;
@@ -796,7 +685,7 @@ export async function rollbackPreparedSwaps({
       postApplyDigests: failedDigests,
       restored: ownsBranch && restoreFailure === undefined,
     });
-    await appendLifecycleEvent(store, {
+    await appendLifecycleEvent(store, projectId, {
       ...lifecycle,
       prNumber: null,
       kind: "apply_started",
@@ -831,15 +720,13 @@ export function rollbackSwaps(
 ): Promise<RollbackResult> {
   const repoDir = resolve(options.repo);
   return rollbackPreparedSwaps({
-    store: new FsStore(
-      resolve(options.store ?? join(repoDir, ".rightmodeler")),
-    ),
+    store: new FsStore(resolveStoreRoot(repoDir, options.store)),
     githubClient: createGithubClient({
       baseUrl: options.githubBaseUrl,
       tokenEnv: options.githubTokenEnv,
     }),
     owner: options.owner,
-    repo: basename(repoDir),
+    repo: options.githubRepo ?? basename(repoDir),
     prNumber: options.prNumber,
   });
 }

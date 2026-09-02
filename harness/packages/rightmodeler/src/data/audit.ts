@@ -55,7 +55,7 @@ export interface ReferenceCeiling {
   readonly verifiedCuratedReferences: number;
 }
 
-export class AuditError extends Error {
+class AuditError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "AuditError";

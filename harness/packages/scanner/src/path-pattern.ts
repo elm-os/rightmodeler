@@ -2,7 +2,7 @@ function escapeRegex(character: string): string {
   return /[\\^$.*+?()[\]{}|]/.test(character) ? `\\${character}` : character;
 }
 
-export function globToRegExp(glob: string): RegExp {
+function globToRegExp(glob: string): RegExp {
   let source = "^";
   for (let index = 0; index < glob.length; index += 1) {
     const character = glob[index]!;

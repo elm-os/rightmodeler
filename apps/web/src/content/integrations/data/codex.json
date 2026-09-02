@@ -39,11 +39,11 @@
       },
       {
         "comment": "# preview the pipeline against a rollout, without spending",
-        "command": "npx rightmodeler init --plan --traces ~/.codex/sessions/2026/08/14/rollout-*.jsonl --repo ."
+        "command": "npx rightmodeler init --plan --traces ~/.codex/sessions/2026/08/14 --repo ."
       },
       {
         "comment": "# then run it against your replay endpoint",
-        "command": "npx rightmodeler init --traces ~/.codex/sessions/2026/08/14/rollout-*.jsonl --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+        "command": "npx rightmodeler init --traces ~/.codex/sessions/2026/08/14 --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
       }
     ]
   },

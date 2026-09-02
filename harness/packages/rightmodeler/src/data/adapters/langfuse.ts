@@ -3,9 +3,9 @@ import {
   jsonEncodedValue,
   jsonValue,
   optionalString,
+  optionalUsage,
   requiredString,
   sampleRecords,
-  tokenCount,
 } from "./shared.js";
 import { createRowAdapter } from "./row-adapter.js";
 
@@ -67,6 +67,12 @@ export const langfuseAdapter = createRowAdapter({
       ? record.tool_calls.map(jsonEncodedValue)
       : [];
     const usage = isRecord(record.usage_details) ? record.usage_details : {};
+    const stepUsage = optionalUsage(
+      usage.input,
+      usage.output,
+      `Langfuse record ${recordIndex + 1}`,
+      format,
+    );
     const step = {
       stepIndex: 0,
       model,
@@ -76,18 +82,7 @@ export const langfuseAdapter = createRowAdapter({
         `Langfuse record ${recordIndex + 1} output`,
         format,
       ),
-      usage: {
-        inputTokens: tokenCount(
-          usage.input,
-          `Langfuse record ${recordIndex + 1} input usage`,
-          format,
-        ),
-        outputTokens: tokenCount(
-          usage.output,
-          `Langfuse record ${recordIndex + 1} output usage`,
-          format,
-        ),
-      },
+      ...(stepUsage === undefined ? {} : { usage: stepUsage }),
       trajectoryId:
         optionalString(record.session_id) ??
         requiredString(

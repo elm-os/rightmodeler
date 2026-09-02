@@ -30,6 +30,11 @@ const heartbeat = setInterval(
   500,
 );
 heartbeat.unref();
+const deadlineMs = Number(process.env.RM_DEADLINE_MS ?? 0);
+let active = null;
+if (deadlineMs > 0) {
+  setTimeout(() => active?.kill("SIGKILL"), deadlineMs).unref();
+}
 
 function start(command, stdoutPath, stderrPath, flags = "w") {
   const stdout = createWriteStream(stdoutPath, { flags });
@@ -38,6 +43,7 @@ function start(command, stdoutPath, stderrPath, flags = "w") {
     cwd: APP_ROOT,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  active = child;
   child.stdout.pipe(stdout);
   child.stderr.pipe(stderr);
   const closed = new Promise((resolve, reject) => {

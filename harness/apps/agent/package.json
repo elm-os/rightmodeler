@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "info": "eve info",
     "eval:list": "eve eval --list",
-    "eval": "GITHUB_TOKEN=fixture-github-token RIGHTMODELER_AGENT_EVAL=1 RIGHTMODELER_AGENT_FIXTURE_API_KEY=fixture-api-key eve eval --strict --skip-report",
+    "eval": "GITHUB_TOKEN=fixture-github-token RIGHTMODELER_AGENT_EVAL=1 RIGHTMODELER_AGENT_FIXTURE_API_KEY=fixture-api-key GITHUB_WEBHOOK_SECRET=fixture-webhook-secret eve eval --strict --skip-report",
     "check": "pnpm run typecheck && eve info --json && pnpm run eval"
   },
   "type": "module",

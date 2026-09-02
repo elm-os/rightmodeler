@@ -21,6 +21,7 @@ import {
   readActiveDetachedReplay,
   readRunStatus,
   readStatus,
+  releasePolicy,
   runPipeline,
 } from "./pipeline.js";
 import { Reporter } from "./protocol.js";
@@ -74,7 +75,7 @@ describe("pull request watches", () => {
         evidence: {
           revision: "abc123",
           corpusVersionId: "corpus-1",
-          gatePolicyVersion: "phase-a-v2",
+          gatePolicyVersion: releasePolicy(undefined).gate.gatePolicyVersion,
         },
         runSpecDigest: `run-${prNumber}`,
         createdAt: new Date(prNumber * 1_000).toISOString(),
@@ -116,7 +117,13 @@ describe("detached replay progress", () => {
       const repo = await makeGitFixture(root, demoAppPath, "demo-app");
       const store = join(root, "store");
       const traces = join(root, "traces.jsonl");
-      await writeFile(traces, await readFile(tracesPath));
+      await writeFile(
+        traces,
+        (await readFile(tracesPath, "utf8")).replace(
+          /"gen_ai\.usage\.output_tokens": \d+/gu,
+          '"gen_ai.usage.output_tokens": 512',
+        ),
+      );
       const reporter = new Reporter("json", {
         stdout: () => undefined,
         stderr: () => undefined,
@@ -223,7 +230,12 @@ describe("detached replay progress", () => {
         const shortlistEntry = await stored.get(shortlistKeys.at(-1)!);
         const shortlist = JSON.parse(
           Buffer.from(shortlistEntry!.body).toString("utf8"),
-        ) as { steps: Array<{ observedContextTokens: number }> };
+        ) as {
+          steps: Array<{
+            observedContextTokens: number;
+            recordedMaxOutputTokens?: number;
+          }>;
+        };
         expect(
           shortlist.steps.every(({ observedContextTokens }) =>
             Number.isSafeInteger(observedContextTokens),
@@ -232,6 +244,11 @@ describe("detached replay progress", () => {
         expect(
           shortlist.steps.every(
             ({ observedContextTokens }) => observedContextTokens > 0,
+          ),
+        ).toBe(true);
+        expect(
+          shortlist.steps.every(
+            ({ recordedMaxOutputTokens }) => recordedMaxOutputTokens === 512,
           ),
         ).toBe(true);
         await expect(

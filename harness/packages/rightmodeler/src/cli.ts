@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { Writable, type Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
-import { Command, CommanderError, Option } from "commander";
+import { Argument, Command, CommanderError, Option } from "commander";
 
 import {
   PIPELINE_STAGES,
@@ -18,6 +18,7 @@ import {
   listWatchablePullRequests,
   planPipeline,
   readActiveDetachedReplay,
+  readIngestResumption,
   readReport,
   readRunStatus,
   readStatus,
@@ -59,6 +60,7 @@ import {
   type RollbackSwapsOptions,
 } from "./rollback.js";
 import { version } from "./version.js";
+import { docNames, readDoc } from "./cli-docs.js";
 
 interface GlobalOptions {
   repo: string;
@@ -68,6 +70,7 @@ interface GlobalOptions {
 
 interface PipelineCommandOptions {
   traces?: string;
+  matchers?: string;
   baseUrl?: string;
   apiKeyEnv?: string;
   evaluator?: "braintrust" | "langfuse" | "langsmith" | "promptfoo";
@@ -81,6 +84,9 @@ interface PipelineCommandOptions {
   evaluatorGateMetric?: string;
   evaluatorGateThreshold?: string;
   maxCostUsd?: string;
+  maxConcurrency?: string;
+  pricingFile?: string;
+  policy?: string;
   includeFree?: boolean;
   modebConfig?: string;
   through?: PipelineStage;
@@ -113,6 +119,7 @@ interface ExportCommandOptions {
 
 interface ApplyCommandOptions {
   owner: string;
+  githubRepo?: string;
   githubBaseUrl: string;
   githubTokenEnv: string;
   dryRun?: boolean;
@@ -120,6 +127,7 @@ interface ApplyCommandOptions {
 
 interface RollbackCommandOptions {
   owner: string;
+  githubRepo?: string;
   pr: string;
   githubBaseUrl: string;
   githubTokenEnv: string;
@@ -154,6 +162,7 @@ interface StatusCommandOptions {
 export interface ProgramHandle {
   program: Command;
   exitCode(): number;
+  usageOutput(): string;
 }
 
 interface CliRuntime {
@@ -177,12 +186,13 @@ export function createProgram(
   runtime: CliRuntime = processRuntime,
 ): ProgramHandle {
   let code = 0;
+  let usageOutput = "";
   const program = new Command()
     .name("rightmodeler")
     .description("Find and prove safe model substitutions.")
     .addHelpText(
       "after",
-      "\nExit codes are command-specific: apply and rollback use 0 success, 1 refused, >=10 runtime error; drift uses 0 success, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
+      "\nExit codes are command-specific: apply and rollback use 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
     )
     .version(version)
     .option("--repo <dir>", "repository to analyze", process.cwd())
@@ -195,15 +205,17 @@ export function createProgram(
     .exitOverride()
     .configureOutput({
       writeOut: (text) => io.stdout(text),
-      writeErr: (text) => io.stderr(text),
+      writeErr: (text) => {
+        usageOutput += text;
+      },
     });
 
   const run = (
     command: Command,
     action: (reporter: Reporter, global: GlobalOptions) => Promise<number>,
   ): void => {
-    command.action(async (_options: unknown, invoked: Command) => {
-      const global = invoked.optsWithGlobals<GlobalOptions>();
+    command.action(async () => {
+      const global = command.optsWithGlobals<GlobalOptions>();
       const reporter = new Reporter(global.output, io);
       try {
         code = await action(reporter, global);
@@ -232,7 +244,7 @@ export function createProgram(
       async (options) =>
         local.plan
           ? {
-              stages: await planPipeline(options),
+              ...(await planPipeline(options)),
               executedStages: [],
               verdicts: [],
               recommendationExists: false,
@@ -454,6 +466,10 @@ export function createProgram(
     .command("apply")
     .description("open a draft pull request for proven model swaps")
     .requiredOption("--owner <owner>", "GitHub repository owner")
+    .option(
+      "--github-repo <repo>",
+      "GitHub repository name (default: the repository directory name)",
+    )
     .requiredOption("--github-base-url <url>", "GitHub API base URL")
     .requiredOption(
       "--github-token-env <name>",
@@ -466,6 +482,9 @@ export function createProgram(
       repo: global.repo,
       store: global.store,
       owner: local.owner,
+      ...(local.githubRepo === undefined
+        ? {}
+        : { githubRepo: local.githubRepo }),
       githubBaseUrl: local.githubBaseUrl,
       githubTokenEnv: local.githubTokenEnv,
       dryRun: local.dryRun ?? false,
@@ -478,6 +497,10 @@ export function createProgram(
     .command("rollback")
     .description("open a draft pull request restoring a prior model swap")
     .requiredOption("--owner <owner>", "GitHub repository owner")
+    .option(
+      "--github-repo <repo>",
+      "GitHub repository name (default: the repository directory name)",
+    )
     .requiredOption("--pr <number>", "merged pull request number")
     .requiredOption("--github-base-url <url>", "GitHub API base URL")
     .requiredOption(
@@ -494,6 +517,9 @@ export function createProgram(
       repo: global.repo,
       store: global.store,
       owner: local.owner,
+      ...(local.githubRepo === undefined
+        ? {}
+        : { githubRepo: local.githubRepo }),
       githubBaseUrl: local.githubBaseUrl,
       githubTokenEnv: local.githubTokenEnv,
       prNumber,
@@ -509,7 +535,12 @@ export function createProgram(
   run(drift, async (reporter, global) => {
     const traces = drift.opts<DriftCommandOptions>().traces;
     if (traces === undefined) {
-      throw new Error("--traces is required");
+      throw new ProtocolError({
+        exitCode: 2,
+        code: "missing_traces_path",
+        message: "--traces is required",
+        remedy: "Pass --traces <path> with the new trace batch.",
+      });
     }
     const result = await runDrift({
       repo: global.repo,
@@ -613,12 +644,29 @@ export function createProgram(
     return 0;
   });
 
-  return { program, exitCode: () => code };
+  const docs = program
+    .command("docs")
+    .description("print documentation packaged with this CLI")
+    .addArgument(
+      new Argument("[name]", "packaged document name").choices(docNames()),
+    );
+  run(docs, async (reporter) => {
+    const name = docs.processedArgs[0] as string | undefined;
+    reporter.result(name === undefined ? { docs: docNames() } : readDoc(name));
+    return 0;
+  });
+
+  return {
+    program,
+    exitCode: () => code,
+    usageOutput: () => usageOutput,
+  };
 }
 
 function addPipelineOptions(command: Command, provider: boolean): Command {
   command
-    .option("--traces <path>", "trace input file")
+    .option("--traces <path>", "trace input file or directory")
+    .option("--matchers <path>", "declarative matcher definitions JSON file")
     .option(
       "--include-free",
       "include zero-priced models in candidate shortlists",
@@ -637,6 +685,15 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
       .option(
         "--max-cost-usd <amount>",
         "optional hard spend cap in USD; omit to run uncapped so every case and judge cell completes",
+      )
+      .option("--max-concurrency <n>", "maximum concurrent provider requests")
+      .option(
+        "--pricing-file <path>",
+        "JSON map from model id to per-token input and output USD, for catalogs without pricing",
+      )
+      .option(
+        "--policy <path>",
+        "release policy JSON file: quality floor, shortlist size, model allow and deny lists",
       )
       .addOption(
         new Option(
@@ -697,6 +754,16 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
   return command;
 }
 
+function invalidOption(message: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "invalid_option",
+    message,
+    remedy:
+      "Correct the option and rerun; run rightmodeler <command> --help for accepted values.",
+  });
+}
+
 function pipelineOptions(
   global: GlobalOptions,
   local: PipelineCommandOptions,
@@ -706,7 +773,7 @@ function pipelineOptions(
     local.approvedRun !== undefined &&
     !/^[0-9a-f]{64}$/u.test(local.approvedRun)
   ) {
-    throw new Error("--approved-run must be a SHA-256 run-spec digest");
+    throw invalidOption("--approved-run must be a SHA-256 run-spec digest");
   }
   const maxCostUsd =
     local.maxCostUsd === undefined ? undefined : Number(local.maxCostUsd);
@@ -714,7 +781,17 @@ function pipelineOptions(
     maxCostUsd !== undefined &&
     (!Number.isFinite(maxCostUsd) || maxCostUsd < 0)
   ) {
-    throw new Error("--max-cost-usd must be a non-negative number");
+    throw invalidOption("--max-cost-usd must be a non-negative number");
+  }
+  const maxConcurrency =
+    local.maxConcurrency === undefined
+      ? undefined
+      : Number(local.maxConcurrency);
+  if (
+    maxConcurrency !== undefined &&
+    (!Number.isSafeInteger(maxConcurrency) || maxConcurrency < 1)
+  ) {
+    throw invalidOption("--max-concurrency must be a positive integer");
   }
   const evaluatorGateThreshold =
     local.evaluatorGateThreshold === undefined
@@ -724,7 +801,7 @@ function pipelineOptions(
     evaluatorGateThreshold !== undefined &&
     !Number.isFinite(evaluatorGateThreshold)
   ) {
-    throw new Error("--evaluator-gate-threshold must be a finite number");
+    throw invalidOption("--evaluator-gate-threshold must be a finite number");
   }
   const hasEvaluatorCompanion =
     local.evaluatorBaseUrl !== undefined ||
@@ -737,10 +814,10 @@ function pipelineOptions(
     local.evaluatorGateMetric !== undefined ||
     evaluatorGateThreshold !== undefined;
   if (local.evaluator === undefined && hasEvaluatorCompanion) {
-    throw new Error("Evaluator options require --evaluator <provider>");
+    throw invalidOption("Evaluator options require --evaluator <provider>");
   }
   if (local.evaluator !== undefined && local.evaluatorScorer === undefined) {
-    throw new Error(
+    throw invalidOption(
       `At least one --evaluator-scorer is required with --evaluator ${local.evaluator}`,
     );
   }
@@ -748,9 +825,13 @@ function pipelineOptions(
     repo: global.repo,
     store: global.store,
     traces: local.traces,
+    matchersPath: local.matchers,
     baseUrl: local.baseUrl,
     apiKeyEnv: local.apiKeyEnv,
     maxCostUsd,
+    maxConcurrency,
+    pricingFilePath: local.pricingFile,
+    policyFilePath: local.policy,
     includeFreeModels: local.includeFree,
     ...(local.evaluator === undefined
       ? {}
@@ -782,6 +863,15 @@ async function guidedPipelineOptions(
     runtime.stdin.isTTY === true &&
     runtime.stdout.isTTY === true;
   if (local.traces !== undefined || local.plan || local.through === "scan") {
+    return { options, candidates: [], interactive };
+  }
+  const resumption = await readIngestResumption(options);
+  if (resumption.resumable) {
+    if (global.output === "human" && resumption.tracePath !== undefined) {
+      reporter.io.stdout(
+        `Resuming the ingested trace: ${resumption.tracePath}\n`,
+      );
+    }
     return { options, candidates: [], interactive };
   }
   const candidates = await discoverTraces({
@@ -914,20 +1004,22 @@ function evaluatorConfig(
     ...(gateThreshold === undefined ? {} : { gateThreshold }),
   };
   if (provider !== "langfuse" && local.evaluatorPublicKeyEnv !== undefined) {
-    throw new Error("--evaluator-public-key-env requires --evaluator langfuse");
+    throw invalidOption(
+      "--evaluator-public-key-env requires --evaluator langfuse",
+    );
   }
   if (
     provider !== "promptfoo" &&
     (local.evaluatorCommand !== undefined ||
       local.evaluatorConfig !== undefined)
   ) {
-    throw new Error(
+    throw invalidOption(
       "--evaluator-command and --evaluator-config require --evaluator promptfoo",
     );
   }
   if (provider === "braintrust") {
     if (local.evaluatorProjectId === undefined) {
-      throw new Error(
+      throw invalidOption(
         "--evaluator-project-id is required with --evaluator braintrust",
       );
     }
@@ -941,7 +1033,7 @@ function evaluatorConfig(
   }
   if (provider === "langsmith") {
     if (local.evaluatorProjectId === undefined) {
-      throw new Error(
+      throw invalidOption(
         "--evaluator-project-id must name the dataset used with --evaluator langsmith",
       );
     }
@@ -955,7 +1047,7 @@ function evaluatorConfig(
   }
   if (provider === "langfuse") {
     if (local.evaluatorProjectId !== undefined) {
-      throw new Error(
+      throw invalidOption(
         "--evaluator-project-id is not used with --evaluator langfuse",
       );
     }
@@ -973,12 +1065,12 @@ function evaluatorConfig(
     local.evaluatorProjectId !== undefined ||
     local.evaluatorPublicKeyEnv !== undefined
   ) {
-    throw new Error(
+    throw invalidOption(
       "API and project options are not used with --evaluator promptfoo",
     );
   }
   if (local.evaluatorConfig === undefined) {
-    throw new Error(
+    throw invalidOption(
       "--evaluator-config is required with --evaluator promptfoo",
     );
   }
@@ -1002,7 +1094,7 @@ function parseCorpusSource(value: string): {
     dataset.length === 0 ||
     !["braintrust", "langsmith", "langfuse"].includes(provider)
   ) {
-    throw new Error(
+    throw invalidOption(
       "--from must be braintrust:<dataset>, langsmith:<dataset>, or langfuse:<dataset>",
     );
   }
@@ -1017,7 +1109,7 @@ function corpusImportConfig(
   local: CorpusImportOptions,
 ) {
   if (source.provider !== "langfuse" && local.publicKeyEnv !== undefined) {
-    throw new Error(
+    throw invalidOption(
       "--public-key-env is only used with --from langfuse:<dataset>",
     );
   }
@@ -1046,10 +1138,10 @@ function corpusImportConfig(
 function resultSinkConfig(local: ExportCommandOptions) {
   if (local.to === "braintrust") {
     if (local.projectId === undefined) {
-      throw new Error("--project-id is required with --to braintrust");
+      throw invalidOption("--project-id is required with --to braintrust");
     }
     if (local.datasetId !== undefined || local.publicKeyEnv !== undefined) {
-      throw new Error(
+      throw invalidOption(
         "--dataset-id and --public-key-env are only used with --to langfuse",
       );
     }
@@ -1061,10 +1153,10 @@ function resultSinkConfig(local: ExportCommandOptions) {
     } as const;
   }
   if (local.datasetId === undefined) {
-    throw new Error("--dataset-id is required with --to langfuse");
+    throw invalidOption("--dataset-id is required with --to langfuse");
   }
   if (local.projectId !== undefined) {
-    throw new Error("--project-id is only used with --to braintrust");
+    throw invalidOption("--project-id is only used with --to braintrust");
   }
   return {
     provider: local.to,
@@ -1077,6 +1169,98 @@ function resultSinkConfig(local: ExportCommandOptions) {
 
 function collectOption(value: string, previous?: string[]): string[] {
   return [...(previous ?? []), value];
+}
+
+const PIPELINE_ARG_OPTIONS = [
+  { flag: "--traces", key: "traces", kind: "path" },
+  { flag: "--matchers", key: "matchers", kind: "path" },
+  { flag: "--modeb-config", key: "modebConfig", kind: "path" },
+  { flag: "--base-url", key: "baseUrl", kind: "value" },
+  { flag: "--api-key-env", key: "apiKeyEnv", kind: "value" },
+  { flag: "--max-cost-usd", key: "maxCostUsd", kind: "value" },
+  { flag: "--max-concurrency", key: "maxConcurrency", kind: "value" },
+  { flag: "--pricing-file", key: "pricingFile", kind: "path" },
+  { flag: "--policy", key: "policy", kind: "path" },
+  { flag: "--include-free", key: "includeFree", kind: "flag" },
+  { flag: "--approved-run", key: "approvedRun", kind: "value" },
+  { flag: "--evaluator", key: "evaluator", kind: "value" },
+  {
+    flag: "--evaluator-base-url",
+    key: "evaluatorBaseUrl",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-api-key-env",
+    key: "evaluatorApiKeyEnv",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-public-key-env",
+    key: "evaluatorPublicKeyEnv",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-project-id",
+    key: "evaluatorProjectId",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-command",
+    key: "evaluatorCommand",
+    kind: "command",
+  },
+  {
+    flag: "--evaluator-config",
+    key: "evaluatorConfig",
+    kind: "path",
+  },
+  {
+    flag: "--evaluator-scorer",
+    key: "evaluatorScorer",
+    kind: "repeated",
+  },
+  {
+    flag: "--evaluator-gate-metric",
+    key: "evaluatorGateMetric",
+    kind: "value",
+  },
+  {
+    flag: "--evaluator-gate-threshold",
+    key: "evaluatorGateThreshold",
+    kind: "value",
+  },
+] as const satisfies readonly {
+  flag: string;
+  key: keyof PipelineCommandOptions;
+  kind: "value" | "path" | "command" | "flag" | "repeated";
+}[];
+
+export function pipelineArgv(options: PipelineCommandOptions): string[] {
+  const args: string[] = [];
+  for (const { flag, key, kind } of PIPELINE_ARG_OPTIONS) {
+    const value = options[key];
+    if (kind === "flag") {
+      if (value === true) args.push(flag);
+      continue;
+    }
+    if (kind === "repeated") {
+      for (const item of (value as string[] | undefined) ?? []) {
+        appendCliOption(args, flag, item);
+      }
+      continue;
+    }
+    if (typeof value !== "string") continue;
+    appendCliOption(
+      args,
+      flag,
+      kind === "path"
+        ? resolve(value)
+        : kind === "command"
+          ? detachedCommand(value)
+          : value,
+    );
+  }
+  return args;
 }
 
 async function startDetachedReplay(
@@ -1094,52 +1278,7 @@ async function startDetachedReplay(
   if (global.store !== undefined) {
     args.push("--store", resolve(global.store));
   }
-  args.push("replay");
-  appendCliOption(
-    args,
-    "--traces",
-    local.traces === undefined ? undefined : resolve(local.traces),
-  );
-  appendCliOption(
-    args,
-    "--modeb-config",
-    local.modebConfig === undefined ? undefined : resolve(local.modebConfig),
-  );
-  appendCliOption(args, "--base-url", local.baseUrl);
-  appendCliOption(args, "--api-key-env", local.apiKeyEnv);
-  appendCliOption(args, "--max-cost-usd", local.maxCostUsd);
-  if (local.includeFree) args.push("--include-free");
-  appendCliOption(args, "--approved-run", local.approvedRun);
-  appendCliOption(args, "--evaluator", local.evaluator);
-  appendCliOption(args, "--evaluator-base-url", local.evaluatorBaseUrl);
-  appendCliOption(args, "--evaluator-api-key-env", local.evaluatorApiKeyEnv);
-  appendCliOption(
-    args,
-    "--evaluator-public-key-env",
-    local.evaluatorPublicKeyEnv,
-  );
-  appendCliOption(args, "--evaluator-project-id", local.evaluatorProjectId);
-  appendCliOption(
-    args,
-    "--evaluator-command",
-    detachedCommand(local.evaluatorCommand),
-  );
-  appendCliOption(
-    args,
-    "--evaluator-config",
-    local.evaluatorConfig === undefined
-      ? undefined
-      : resolve(local.evaluatorConfig),
-  );
-  for (const scorer of local.evaluatorScorer ?? []) {
-    appendCliOption(args, "--evaluator-scorer", scorer);
-  }
-  appendCliOption(args, "--evaluator-gate-metric", local.evaluatorGateMetric);
-  appendCliOption(
-    args,
-    "--evaluator-gate-threshold",
-    local.evaluatorGateThreshold,
-  );
+  args.push("replay", ...pipelineArgv(local));
   appendCliOption(args, "--internal-run-id", runId);
 
   await new Promise<void>((resolveSpawn, rejectSpawn) => {
@@ -1185,16 +1324,24 @@ export async function executeCli(
     await handle.program.parseAsync([...argv], { from: "user" });
     return handle.exitCode();
   } catch (error) {
-    if (error instanceof CommanderError) {
-      if (error.code === "commander.helpDisplayed") return 0;
-      return error.exitCode >= 10 ? error.exitCode : 10;
-    }
     const outputIndex = argv.indexOf("--output");
     const mode = argv[outputIndex + 1];
     const reporter = new Reporter(
       mode === "json" || mode === "jsonl" ? mode : "human",
       io,
     );
+    if (error instanceof CommanderError) {
+      if (error.exitCode === 0) return 0;
+      const usage = handle.usageOutput();
+      if (reporter.mode === "human") {
+        io.stderr(usage);
+      } else {
+        io.stderr(
+          `${JSON.stringify({ code: "usage_error", message: usage.trim(), remedy: "Run rightmodeler --help (or <command> --help) for valid commands and options." })}\n`,
+        );
+      }
+      return error.exitCode >= 10 ? error.exitCode : 10;
+    }
     return reporter.error(error);
   }
 }
@@ -1221,6 +1368,7 @@ export type {
   ApproveDriftProposalOptions,
   ApplySwapsOptions,
   ApplySwapsResult,
+  PipelineCommandOptions,
   PublishDriftProposalOptions,
   RollbackResult,
   RollbackSwapsOptions,

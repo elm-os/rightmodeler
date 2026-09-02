@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { compareText } from "@rightmodeler/core";
+
 import {
   type EvaluatorKindVerdict,
   type FamilyVerdict,
@@ -131,6 +133,7 @@ export function selectWinner(
     candidates.length,
   );
   const selected =
+    verdicts.holdout.decision === "recommend" &&
     evaluateGates([verdicts.holdout], policy).every((gate) => gate.pass) &&
     selectionAdjustedEstimate.lower >= policy.qualityFloor;
 
@@ -312,10 +315,6 @@ function sameStrings(
     left.length === right.length &&
     left.every((value, index) => value === right[index])
   );
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function stableSeed(value: string): number {

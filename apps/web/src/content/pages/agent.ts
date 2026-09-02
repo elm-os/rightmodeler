@@ -49,7 +49,7 @@ Watch, replay, judge, open the PR. Continuous, and always inside your guardrails
 
 ### Watch
 
-Every release, every provider, tracked live. Candidates get flagged per step the moment they ship.
+A weekly schedule rechecks the provider catalog and recalculates the shortlist, so a newly listed or repriced model gets flagged per step.
 
 ### Replay
 

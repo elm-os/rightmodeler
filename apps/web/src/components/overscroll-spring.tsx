@@ -18,8 +18,8 @@
 // never touching or blocking page scroll.
 
 import { useEffect, useRef, useState } from "react";
-import { useReducedMotion } from "motion/react";
 import { DiaGradient } from "@/components/dia-gradient";
+import { usePrefersReducedMotion } from "@/components/use-prefers-reduced-motion";
 
 const DESKTOP_BREAKPOINT = "(min-width: 640px)";
 const TRAVEL_FRACTION = 0.62; // reveal maxes at this fraction of the viewport height…
@@ -29,7 +29,7 @@ const PULL = { k: 210, c: 30 }; // ζ ≈ 1.04 — hugs the finger, no wobble
 const RELEASE = { k: 220, c: 30 }; // ζ ≈ 1.0 — crisp but softened for the large travel, so it eases home instead of slamming
 
 export function OverscrollSpring() {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const [enabled, setEnabled] = useState(false);
 

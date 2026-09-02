@@ -34,6 +34,16 @@ interface FixtureCase {
   trajectoryIds: string[];
   usage: Array<{ inputTokens: number; outputTokens: number }>;
   malformedRecord: unknown;
+  withoutUsage(record: Record<string, unknown>): Record<string, unknown> | null;
+}
+
+function without(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): Record<string, unknown> {
+  const copy = { ...record };
+  for (const key of keys) delete copy[key];
+  return copy;
 }
 
 const fixtures: FixtureCase[] = [
@@ -56,6 +66,14 @@ const fixtures: FixtureCase[] = [
         "gen_ai.output.messages": [],
       },
     },
+    withoutUsage: (record) => ({
+      ...record,
+      attributes: without(
+        record.attributes as Record<string, unknown>,
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens",
+      ),
+    }),
   },
   {
     format: "openai-jsonl",
@@ -70,6 +88,10 @@ const fixtures: FixtureCase[] = [
       messages: [],
       response: { choices: [] },
     },
+    withoutUsage: (record) => ({
+      ...without(record, "usage"),
+      response: without(record.response as Record<string, unknown>, "usage"),
+    }),
   },
   {
     format: "langfuse",
@@ -91,6 +113,7 @@ const fixtures: FixtureCase[] = [
       output: "{}",
       usage_details: {},
     },
+    withoutUsage: (record) => without(record, "usage_details"),
   },
   {
     format: "braintrust",
@@ -114,6 +137,7 @@ const fixtures: FixtureCase[] = [
       metadata: {},
       metrics: {},
     },
+    withoutUsage: (record) => without(record, "metrics"),
   },
   {
     format: "langsmith",
@@ -136,6 +160,8 @@ const fixtures: FixtureCase[] = [
       outputs: {},
       extra: { metadata: {} },
     },
+    withoutUsage: (record) =>
+      without(record, "prompt_tokens", "completion_tokens"),
   },
   {
     format: "openinference",
@@ -173,6 +199,17 @@ const fixtures: FixtureCase[] = [
         },
       ],
     },
+    withoutUsage: (record) =>
+      JSON.parse(JSON.stringify(record), (key, value: unknown) =>
+        key === "attributes" && Array.isArray(value)
+          ? value.filter(
+              (attribute) =>
+                !String((attribute as Record<string, unknown>).key).startsWith(
+                  "llm.token_count.",
+                ),
+            )
+          : value,
+      ) as Record<string, unknown>,
   },
   {
     format: "helicone",
@@ -193,6 +230,8 @@ const fixtures: FixtureCase[] = [
       prompt_tokens: 1,
       completion_tokens: 1,
     },
+    withoutUsage: (record) =>
+      without(record, "prompt_tokens", "completion_tokens"),
   },
   {
     format: "weave",
@@ -215,17 +254,18 @@ const fixtures: FixtureCase[] = [
       output: {},
       summary: {},
     },
+    withoutUsage: (record) => without(record, "summary"),
   },
   {
     format: "claude-code",
     filename: "claude-code.jsonl",
     adapter: claudeCodeAdapter,
     traceId: "cc-session-1",
-    model: "acme/large-1",
+    model: "claude-sonnet-4-5-20250929",
     trajectoryIds: ["cc-prompt-1", "cc-prompt-1"],
     usage: [
-      { inputTokens: 34, outputTokens: 12 },
-      { inputTokens: 20, outputTokens: 9 },
+      { inputTokens: 20403, outputTokens: 12 },
+      { inputTokens: 20525, outputTokens: 9 },
     ],
     malformedRecord: {
       type: "assistant",
@@ -234,17 +274,27 @@ const fixtures: FixtureCase[] = [
       sessionId: "cc-session-1",
       message: { id: "cc-message-bad", content: [], usage: {} },
     },
+    withoutUsage: (record) =>
+      record.type === "assistant"
+        ? {
+            ...record,
+            message: without(
+              record.message as Record<string, unknown>,
+              "usage",
+            ),
+          }
+        : record,
   },
   {
     format: "codex",
     filename: "codex.jsonl",
     adapter: codexAdapter,
     traceId: "cx-session-1",
-    model: "acme/large-1",
+    model: "gpt-5.1-codex",
     trajectoryIds: ["cx-turn-1", "cx-turn-2"],
     usage: [
-      { inputTokens: 36, outputTokens: 14 },
-      { inputTokens: 22, outputTokens: 9 },
+      { inputTokens: 19256, outputTokens: 527 },
+      { inputTokens: 21954, outputTokens: 563 },
     ],
     malformedRecord: {
       timestamp: "2026-08-01T12:00:02.000Z",
@@ -255,6 +305,12 @@ const fixtures: FixtureCase[] = [
         content: "not-an-array",
         internal_chat_message_metadata_passthrough: { turn_id: "cx-turn-2" },
       },
+    },
+    withoutUsage: (record) => {
+      const payload = record.payload as Record<string, unknown>;
+      return record.type === "event_msg" && payload.type === "token_count"
+        ? null
+        : record;
     },
   },
 ];
@@ -286,6 +342,39 @@ describe("trace adapter conformance", () => {
     }
   });
 
+  it("otel-genai accepts an OTLP resourceSpans export", async () => {
+    const text = await fixtureText("otel-genai-otlp.jsonl");
+
+    expect(otelGenAiAdapter.detect(text)).toBeGreaterThanOrEqual(0.7);
+    for (const adapter of traceAdapters) {
+      if (adapter === otelGenAiAdapter) continue;
+      expect(adapter.detect(text), adapter.name).toBeLessThan(0.6);
+    }
+    expect(detectFormat(text, traceAdapters)).toBe(otelGenAiAdapter);
+
+    const result = adaptWithReport(otelGenAiAdapter, parseTraceRecords(text));
+    const run = result.runs[0];
+
+    expect(result.droppedRecords).toEqual([]);
+    expect(result.runs).toHaveLength(1);
+    expect(run?.traceId).toBe("4bf92f3577b34da6a3ce929d0e0e4736");
+    expect(run?.steps.map(({ usage }) => usage)).toEqual([
+      { inputTokens: 40, outputTokens: 11 },
+      { inputTokens: 23, outputTokens: 9 },
+    ]);
+    expect(run?.steps[0]?.systemPrompt).toBe("Help the customer.");
+    expect(run?.steps[0]?.messages[0]).toMatchObject({ role: "user" });
+    expect(JSON.stringify(result.runs)).toContain("lookup_order");
+
+    const scrubbed = scrubRuns(result.runs);
+    expect(
+      scrubbed.redactions.filter(({ kind }) => kind === "email"),
+    ).toHaveLength(1);
+    expect(
+      scrubbed.redactions.filter(({ kind }) => kind === "phone"),
+    ).toHaveLength(1);
+  });
+
   it.each(fixtures)(
     "$format maps grouping, model, usage, and tool metadata",
     async (fixture) => {
@@ -305,6 +394,26 @@ describe("trace adapter conformance", () => {
       );
       expect(run?.steps.map(({ usage }) => usage)).toEqual(fixture.usage);
       expect(JSON.stringify(result.runs)).toContain("lookup_order");
+    },
+  );
+
+  it.each(fixtures)(
+    "$format leaves usage absent when the source carries no token counts",
+    async (fixture) => {
+      const records = parseTraceRecords(await fixtureText(fixture.filename));
+      const stripped = records.flatMap((record) => {
+        const result = fixture.withoutUsage(record as Record<string, unknown>);
+        return result === null ? [] : [result];
+      });
+      const result = adaptWithReport(fixture.adapter, stripped);
+      const run = result.runs.find(
+        ({ traceId }) => traceId === fixture.traceId,
+      );
+
+      expect(result.droppedRecords).toEqual([]);
+      expect(run?.steps.map(({ usage }) => usage)).toEqual(
+        fixture.trajectoryIds.map(() => undefined),
+      );
     },
   );
 
@@ -376,5 +485,32 @@ describe("trace adapter conformance", () => {
 
     expect(runs).toHaveLength(1);
     expect(runs[0]?.steps[0]?.family).toBeUndefined();
+  });
+
+  it("reads provider-shaped usage keys in a Weave summary", () => {
+    const runs = weaveAdapter.adapt([
+      {
+        id: "wv-provider-usage",
+        trace_id: "wv-trace-provider-usage",
+        op_name: "chat",
+        parent_id: null,
+        started_at: "2026-08-01T12:00:00.000Z",
+        inputs: {
+          model: "acme/large-1",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        output: "Hi",
+        summary: {
+          usage: {
+            "acme/large-1": { input_tokens: 5, output_tokens: 2 },
+          },
+        },
+      },
+    ]);
+
+    expect(runs[0]?.steps[0]?.usage).toEqual({
+      inputTokens: 5,
+      outputTokens: 2,
+    });
   });
 });

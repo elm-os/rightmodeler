@@ -57,6 +57,9 @@ export const requestAttemptSchema = z
       })
       .readonly()
       .optional(),
+    providerResponseId: requiredStringSchema.optional(),
+    finishReason: requiredStringSchema.optional(),
+    latencyMs: z.number().nonnegative().optional(),
   })
   .readonly();
 export type RequestAttempt = z.infer<typeof requestAttemptSchema>;
@@ -104,6 +107,7 @@ export const cascadeFindingSchema = z
     cascadeSeedStepId: requiredStringSchema.nullable(),
     uncertainStepIds: z.array(requiredStringSchema),
     runSetsUsed: z.number().int().nonnegative(),
+    candidateId: requiredStringSchema.optional(),
     createdAt: z.string().datetime(),
   })
   .readonly();
