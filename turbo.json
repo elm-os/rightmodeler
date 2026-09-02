@@ -10,7 +10,8 @@
         "!.next/cache/**",
         "!.next/dev/**",
         "build/**",
-        "dist/**"
+        "dist/**",
+        "dist-bundle/**"
       ]
     },
     "lint": {
@@ -20,18 +21,20 @@
       "cache": false
     },
     "check": {
-      "dependsOn": ["build", "^build", "^check"]
+      "dependsOn": ["build", "^build", "^check"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/harness/fixtures/**"]
     },
     "@rightmodeler/cli#check": {
       "dependsOn": ["build", "^build", "^check"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/harness/docs/parity.md",
-        "$TURBO_ROOT$/harness/fixtures/canonicalization/**"
+        "$TURBO_ROOT$/harness/fixtures/**",
+        "$TURBO_ROOT$/skills/rightmodeler/**"
       ]
     },
     "check-types": {
-      "dependsOn": ["^check-types"]
+      "dependsOn": ["^build"]
     },
     "dev": {
       "cache": false,

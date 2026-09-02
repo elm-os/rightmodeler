@@ -42,6 +42,7 @@ import {
 } from "./driver-modeb.js";
 import type { ModelCatalogEntry } from "./provider.js";
 import type { ReplayStep } from "./shortlist.js";
+import { ensureModeBImage } from "./test-utils/modeb-image.js";
 
 interface StubProvider {
   port: number;
@@ -106,6 +107,10 @@ const testTimeoutMs = 240_000;
 const projectId = "modeb-test";
 const apiKeyEnv = "REPLAY_MODEB_TEST_API_KEY";
 const credential = "modeb-host-credential-never-persist";
+const skipDocker = process.env.RIGHTMODELER_SKIP_DOCKER === "1";
+if (skipDocker) {
+  console.warn("[replay mode b] SKIPPED: RIGHTMODELER_SKIP_DOCKER=1");
+}
 const fixturePath = join(
   import.meta.dirname,
   "../../../fixtures/langgraph-app",
@@ -149,43 +154,7 @@ const catalog: ModelCatalogEntry[] = [
 let image: string;
 
 beforeAll(async () => {
-  await execFileAsync("docker", ["version"], { encoding: "utf8" });
-  const requirements = await readFile(join(fixturePath, "requirements.txt"));
-  const digest = createHash("sha256")
-    .update(requirements)
-    .digest("hex")
-    .slice(0, 12);
-  image = `rightmodeler-modeb-langgraph:${digest}`;
-  try {
-    await execFileAsync("docker", ["image", "inspect", image], {
-      encoding: "utf8",
-    });
-    return;
-  } catch {
-    // Build the pinned fixture runtime once when it is not already cached locally.
-  }
-  const buildRoot = await mkdtemp(join(tmpdir(), "rightmodeler-modeb-image-"));
-  const dockerfile = join(buildRoot, "Dockerfile");
-  await writeFile(
-    dockerfile,
-    [
-      "FROM node:24-bookworm-slim",
-      "RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip && rm -rf /var/lib/apt/lists/*",
-      "COPY requirements.txt /tmp/requirements.txt",
-      "RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt",
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-  try {
-    await execFileAsync(
-      "docker",
-      ["build", "--tag", image, "--file", dockerfile, fixturePath],
-      { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
-    );
-  } finally {
-    await rm(buildRoot, { recursive: true, force: true });
-  }
+  image = await ensureModeBImage(fixturePath);
 }, testTimeoutMs);
 
 afterAll(() => {
@@ -575,7 +544,7 @@ function collectionText(
     : Buffer.from(contents).toString("utf8");
 }
 
-describe("Mode B replay", () => {
+describe.skipIf(skipDocker)("Mode B replay", () => {
   it(
     "replays three recorded LangGraph cases with correlated, priced host-side facts",
     async () => {
@@ -1429,7 +1398,7 @@ describe("Mode B replay", () => {
         concurrency: 1,
         executor: tracked.executor,
       });
-      context.input = { ...context.input, appSpec: appSpec(60_000) };
+      context.input = { ...context.input, appSpec: appSpec(10_000) };
       try {
         const result = await replayModeB(context.input);
         const facts = parsedFacts(await readFacts(context.store));

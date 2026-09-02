@@ -27,6 +27,10 @@ const activeContainers: Array<{
 }> = [];
 const temporaryDirectories: string[] = [];
 const activeServers: Server[] = [];
+const skipDocker = process.env.RIGHTMODELER_SKIP_DOCKER === "1";
+if (skipDocker) {
+  console.warn("[docker executor] SKIPPED: RIGHTMODELER_SKIP_DOCKER=1");
+}
 
 async function docker(args: string[]): Promise<string> {
   const result = await execFileAsync("docker", args, {
@@ -88,7 +92,7 @@ afterEach(async () => {
   }
 });
 
-describe("docker executor", () => {
+describe.skipIf(skipDocker)("docker executor", () => {
   it(
     "launches with env and collects exactly the requested namespaces",
     async () => {

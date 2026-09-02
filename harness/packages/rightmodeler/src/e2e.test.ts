@@ -71,6 +71,12 @@ const githubStubModuleUrl = new URL(
 const temporaryDirectories: string[] = [];
 const secret = "phase-a-api-key-must-not-persist";
 const execFileAsync = promisify(execFile);
+const skipDocker = process.env.RIGHTMODELER_SKIP_DOCKER === "1";
+if (skipDocker) {
+  console.warn(
+    "[cli e2e] SKIPPED Mode B confirmation: RIGHTMODELER_SKIP_DOCKER=1",
+  );
+}
 
 describe("machine error protocol", () => {
   it("preserves a named code from a typed service error", () => {
@@ -2655,120 +2661,126 @@ describe("built CLI pipeline", () => {
     }
   }, 60_000);
 
-  it("runs Mode B confirmation, isolates the interacting pair, and resumes from its frontier", async () => {
-    const { root, repo, traces } = await langgraphFixtureCopy("confirm");
-    const image = await ensureLanggraphImage(root);
-    const modeBConfig = await writeModeBConfig(root, repo, image);
-    const stub = await startConfirmStub();
-    const args = [
-      "init",
-      "--traces",
-      traces,
-      "--base-url",
-      `http://127.0.0.1:${stub.port}/v1`,
-      "--api-key-env",
-      "RIGHTMODELER_CONFIRM_E2E_API_KEY",
-      "--modeb-config",
-      modeBConfig,
-      "--output",
-      "json",
-      "--repo",
-      repo,
-    ];
+  it.skipIf(skipDocker)(
+    "runs Mode B confirmation, isolates the interacting pair, and resumes from its frontier",
+    async () => {
+      const { root, repo, traces } = await langgraphFixtureCopy("confirm");
+      const image = await ensureLanggraphImage(root);
+      const modeBConfig = await writeModeBConfig(root, repo, image);
+      const stub = await startConfirmStub();
+      const args = [
+        "init",
+        "--traces",
+        traces,
+        "--base-url",
+        `http://127.0.0.1:${stub.port}/v1`,
+        "--api-key-env",
+        "RIGHTMODELER_CONFIRM_E2E_API_KEY",
+        "--modeb-config",
+        modeBConfig,
+        "--output",
+        "json",
+        "--repo",
+        repo,
+      ];
 
-    try {
-      const first = await runCli(args, {
-        env: { RIGHTMODELER_CONFIRM_E2E_API_KEY: secret },
-      });
-      const output = jsonOutput(first);
-      expect(first.code, JSON.stringify(output.familyOutcomes)).toBe(0);
-      const store = new FsStore(join(repo, ".rightmodeler"));
-      expect(output.executedStages).toContain("confirm");
-      expect(output.familyOutcomes).toContainEqual(
-        expect.objectContaining({
-          familyId: "langgraph_order_lookup",
-          verdict: expect.objectContaining({
+      try {
+        const first = await runCli(args, {
+          env: { RIGHTMODELER_CONFIRM_E2E_API_KEY: secret },
+        });
+        const output = jsonOutput(first);
+        expect(first.code, JSON.stringify(output.familyOutcomes)).toBe(0);
+        const store = new FsStore(join(repo, ".rightmodeler"));
+        expect(output.executedStages).toContain("confirm");
+        expect(output.familyOutcomes).toContainEqual(
+          expect.objectContaining({
+            familyId: "langgraph_order_lookup",
+            verdict: expect.objectContaining({
+              decision: "reject",
+              abstainReason: { reason: "cascade_isolated" },
+            }),
+            decisionDisplay: "reject",
+            effectiveRecommendation: false,
+            confirmation: expect.objectContaining({
+              status: "isolated",
+              runSetsUsed: expect.any(Number),
+              culprits: [["classify", "lookup"]],
+              cascadeSeedStepId: "classify",
+              maxRunSets: 20,
+            }),
+          }),
+        );
+
+        const factKeys = await store.list(factsPrefix("project"));
+        const facts = await Promise.all(
+          factKeys.map(async (key) => JSON.parse(await storeText(store, key))),
+        );
+        const cascades = facts.filter(
+          (fact) =>
+            typeof fact === "object" && fact !== null && "cascadeId" in fact,
+        ) as Array<Record<string, unknown>>;
+        expect(cascades).toContainEqual(
+          expect.objectContaining({
+            familyId: "langgraph_order_lookup",
+            verdict: "isolated",
+            culprits: [["classify", "lookup"]],
+            cascadeSeedStepId: "classify",
+            runSetsUsed: expect.any(Number),
+          }),
+        );
+        const plan = JSON.parse(
+          await storeText(
+            store,
+            confirmPlanKey("project", "langgraph_order_lookup"),
+          ),
+        ) as { verdict: string; queue: Array<{ status: string }> };
+        expect(plan.verdict).toBe("isolated");
+        expect(
+          plan.queue.every(
+            ({ status }) => status === "pass" || status === "fail",
+          ),
+        ).toBe(true);
+
+        const reportMarkdown = await storeText(
+          store,
+          reportKey("project", "report.md"),
+        );
+        expect(reportMarkdown).toContain("## Confirm");
+        expect(reportMarkdown).toContain(
+          "| langgraph_order_lookup | isolated |",
+        );
+        expect(reportMarkdown).toContain("classify + lookup");
+        expect(reportMarkdown).toContain("cascade_isolated");
+        const storedVerdictKeys = await store.list(verdictsPrefix("project"));
+        const storedVerdicts = await Promise.all(
+          storedVerdictKeys.map(async (key) =>
+            JSON.parse(await storeText(store, key)),
+          ),
+        );
+        expect(storedVerdicts).toContainEqual(
+          expect.objectContaining({
+            familyId: "langgraph_order_lookup",
             decision: "reject",
             abstainReason: { reason: "cascade_isolated" },
           }),
-          decisionDisplay: "reject",
-          effectiveRecommendation: false,
-          confirmation: expect.objectContaining({
-            status: "isolated",
-            runSetsUsed: expect.any(Number),
-            culprits: [["classify", "lookup"]],
-            cascadeSeedStepId: "classify",
-            maxRunSets: 20,
-          }),
-        }),
-      );
+        );
 
-      const factKeys = await store.list(factsPrefix("project"));
-      const facts = await Promise.all(
-        factKeys.map(async (key) => JSON.parse(await storeText(store, key))),
-      );
-      const cascades = facts.filter(
-        (fact) =>
-          typeof fact === "object" && fact !== null && "cascadeId" in fact,
-      ) as Array<Record<string, unknown>>;
-      expect(cascades).toContainEqual(
-        expect.objectContaining({
-          familyId: "langgraph_order_lookup",
-          verdict: "isolated",
-          culprits: [["classify", "lookup"]],
-          cascadeSeedStepId: "classify",
-          runSetsUsed: expect.any(Number),
-        }),
-      );
-      const plan = JSON.parse(
-        await storeText(
-          store,
-          confirmPlanKey("project", "langgraph_order_lookup"),
-        ),
-      ) as { verdict: string; queue: Array<{ status: string }> };
-      expect(plan.verdict).toBe("isolated");
-      expect(
-        plan.queue.every(
-          ({ status }) => status === "pass" || status === "fail",
-        ),
-      ).toBe(true);
-
-      const reportMarkdown = await storeText(
-        store,
-        reportKey("project", "report.md"),
-      );
-      expect(reportMarkdown).toContain("## Confirm");
-      expect(reportMarkdown).toContain("| langgraph_order_lookup | isolated |");
-      expect(reportMarkdown).toContain("classify + lookup");
-      expect(reportMarkdown).toContain("cascade_isolated");
-      const storedVerdictKeys = await store.list(verdictsPrefix("project"));
-      const storedVerdicts = await Promise.all(
-        storedVerdictKeys.map(async (key) =>
-          JSON.parse(await storeText(store, key)),
-        ),
-      );
-      expect(storedVerdicts).toContainEqual(
-        expect.objectContaining({
-          familyId: "langgraph_order_lookup",
-          decision: "reject",
-          abstainReason: { reason: "cascade_isolated" },
-        }),
-      );
-
-      const hits = stub.getHitCount();
-      const resumed = await runCli(args, {
-        env: { RIGHTMODELER_CONFIRM_E2E_API_KEY: secret },
-      });
-      expect(resumed.code).toBe(0);
-      expect(jsonOutput(resumed).executedStages).toEqual([]);
-      expect(stub.getHitCount()).toBe(hits);
-      expect(await store.list(factsPrefix("project"))).toHaveLength(
-        factKeys.length,
-      );
-    } finally {
-      await stub.close();
-    }
-  }, 600_000);
+        const hits = stub.getHitCount();
+        const resumed = await runCli(args, {
+          env: { RIGHTMODELER_CONFIRM_E2E_API_KEY: secret },
+        });
+        expect(resumed.code).toBe(0);
+        expect(jsonOutput(resumed).executedStages).toEqual([]);
+        expect(stub.getHitCount()).toBe(hits);
+        expect(await store.list(factsPrefix("project"))).toHaveLength(
+          factKeys.length,
+        );
+      } finally {
+        await stub.close();
+      }
+    },
+    600_000,
+  );
 
   it("abstains an affected family when the provider catalog drifts before confirmation", async () => {
     const { root, repo, traces } = await langgraphFixtureCopy("catalog-drift");

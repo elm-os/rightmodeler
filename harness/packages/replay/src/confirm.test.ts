@@ -1,9 +1,6 @@
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import {
   cascadeFindingSchema,
@@ -38,10 +35,10 @@ import type {
 import { writeReplayFact } from "./driver.js";
 import { createProvider, type ModelCatalogEntry } from "./provider.js";
 import type { ReplayStep } from "./shortlist.js";
+import { ensureModeBImage } from "./test-utils/modeb-image.js";
 
 const temporaryDirectories: string[] = [];
 const projectId = "confirm-test";
-const execFileAsync = promisify(execFile);
 const testTimeoutMs = 240_000;
 const fixturePath = join(
   import.meta.dirname,
@@ -52,6 +49,10 @@ const stubModuleUrl = new URL(
   import.meta.url,
 ).href;
 const apiKeyEnv = "CONFIRM_MODEB_TEST_API_KEY";
+const skipDocker = process.env.RIGHTMODELER_SKIP_DOCKER === "1";
+if (skipDocker) {
+  console.warn("[replay confirm] SKIPPED: RIGHTMODELER_SKIP_DOCKER=1");
+}
 const currentModels: Readonly<Record<string, string>> = {
   classify: "acme/large-1",
   lookup: "acme/max-1",
@@ -109,45 +110,7 @@ interface StubProviderModule {
 let image: string;
 
 beforeAll(async () => {
-  await execFileAsync("docker", ["version"], { encoding: "utf8" });
-  const requirements = await readFile(join(fixturePath, "requirements.txt"));
-  const digest = createHash("sha256")
-    .update(requirements)
-    .digest("hex")
-    .slice(0, 12);
-  image = `rightmodeler-modeb-langgraph:${digest}`;
-  try {
-    await execFileAsync("docker", ["image", "inspect", image], {
-      encoding: "utf8",
-    });
-    return;
-  } catch {
-    // Build the pinned fixture runtime once when it is not cached locally.
-  }
-  const buildRoot = await mkdtemp(
-    join(tmpdir(), "rightmodeler-confirm-image-"),
-  );
-  try {
-    const dockerfile = join(buildRoot, "Dockerfile");
-    await writeFile(
-      dockerfile,
-      [
-        "FROM node:24-bookworm-slim",
-        "RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip && rm -rf /var/lib/apt/lists/*",
-        "COPY requirements.txt /tmp/requirements.txt",
-        "RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt",
-        "",
-      ].join("\n"),
-      "utf8",
-    );
-    await execFileAsync(
-      "docker",
-      ["build", "--tag", image, "--file", dockerfile, fixturePath],
-      { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
-    );
-  } finally {
-    await rm(buildRoot, { recursive: true, force: true });
-  }
+  image = await ensureModeBImage(fixturePath);
 }, testTimeoutMs);
 
 afterAll(() => {
@@ -524,7 +487,7 @@ async function realModeBContext(
   };
 }
 
-describe("confirmSwapSet", () => {
+describe.skipIf(skipDocker)("confirmSwapSet", () => {
   it("confirms a passing full swap set in exactly one run set", async () => {
     const runner = fakeRunner(() => false);
     const context = await testContext(runner);
