@@ -50,6 +50,10 @@ const bundleRuntimePlugin = {
   },
 };
 
+const manifest = JSON.parse(
+  await readFile(resolve(packageRoot, "package.json"), "utf8"),
+);
+
 await rm(stagingRoot, { recursive: true, force: true });
 await mkdir(stagingRoot, { recursive: true });
 
@@ -62,6 +66,9 @@ await build({
   target: "node24",
   packages: "bundle",
   plugins: [bundleRuntimePlugin],
+  define: {
+    __RIGHTMODELER_VERSION__: JSON.stringify(manifest.version),
+  },
   banner: {
     js: [
       'import { createRequire as __createRequire } from "node:module";',
@@ -114,9 +121,7 @@ for (const path of existingFiles) {
 }
 await rm(stagingRoot, { recursive: true, force: true });
 
-const publishManifest = JSON.parse(
-  await readFile(resolve(packageRoot, "package.json"), "utf8"),
-);
+const publishManifest = manifest;
 // The workspace name stays @rightmodeler/cli (a package named rightmodeler would collide with
 // the repo root); the public npm name is the bare, npx-friendly one the runbook falls back to.
 publishManifest.name = "rightmodeler";

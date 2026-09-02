@@ -154,6 +154,7 @@ interface StatusCommandOptions {
 export interface ProgramHandle {
   program: Command;
   exitCode(): number;
+  usageOutput(): string;
 }
 
 interface CliRuntime {
@@ -177,12 +178,13 @@ export function createProgram(
   runtime: CliRuntime = processRuntime,
 ): ProgramHandle {
   let code = 0;
+  let usageOutput = "";
   const program = new Command()
     .name("rightmodeler")
     .description("Find and prove safe model substitutions.")
     .addHelpText(
       "after",
-      "\nExit codes are command-specific: apply and rollback use 0 success, 1 refused, >=10 runtime error; drift uses 0 success, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
+      "\nExit codes are command-specific: apply and rollback use 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
     )
     .version(version)
     .option("--repo <dir>", "repository to analyze", process.cwd())
@@ -195,7 +197,9 @@ export function createProgram(
     .exitOverride()
     .configureOutput({
       writeOut: (text) => io.stdout(text),
-      writeErr: (text) => io.stderr(text),
+      writeErr: (text) => {
+        usageOutput += text;
+      },
     });
 
   const run = (
@@ -232,7 +236,7 @@ export function createProgram(
       async (options) =>
         local.plan
           ? {
-              stages: await planPipeline(options),
+              ...(await planPipeline(options)),
               executedStages: [],
               verdicts: [],
               recommendationExists: false,
@@ -509,7 +513,12 @@ export function createProgram(
   run(drift, async (reporter, global) => {
     const traces = drift.opts<DriftCommandOptions>().traces;
     if (traces === undefined) {
-      throw new Error("--traces is required");
+      throw new ProtocolError({
+        exitCode: 2,
+        code: "missing_traces_path",
+        message: "--traces is required",
+        remedy: "Pass --traces <path> with the new trace batch.",
+      });
     }
     const result = await runDrift({
       repo: global.repo,
@@ -613,7 +622,11 @@ export function createProgram(
     return 0;
   });
 
-  return { program, exitCode: () => code };
+  return {
+    program,
+    exitCode: () => code,
+    usageOutput: () => usageOutput,
+  };
 }
 
 function addPipelineOptions(command: Command, provider: boolean): Command {
@@ -697,6 +710,16 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
   return command;
 }
 
+function invalidOption(message: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "invalid_option",
+    message,
+    remedy:
+      "Correct the option and rerun; run rightmodeler <command> --help for accepted values.",
+  });
+}
+
 function pipelineOptions(
   global: GlobalOptions,
   local: PipelineCommandOptions,
@@ -706,7 +729,7 @@ function pipelineOptions(
     local.approvedRun !== undefined &&
     !/^[0-9a-f]{64}$/u.test(local.approvedRun)
   ) {
-    throw new Error("--approved-run must be a SHA-256 run-spec digest");
+    throw invalidOption("--approved-run must be a SHA-256 run-spec digest");
   }
   const maxCostUsd =
     local.maxCostUsd === undefined ? undefined : Number(local.maxCostUsd);
@@ -714,7 +737,7 @@ function pipelineOptions(
     maxCostUsd !== undefined &&
     (!Number.isFinite(maxCostUsd) || maxCostUsd < 0)
   ) {
-    throw new Error("--max-cost-usd must be a non-negative number");
+    throw invalidOption("--max-cost-usd must be a non-negative number");
   }
   const evaluatorGateThreshold =
     local.evaluatorGateThreshold === undefined
@@ -724,7 +747,7 @@ function pipelineOptions(
     evaluatorGateThreshold !== undefined &&
     !Number.isFinite(evaluatorGateThreshold)
   ) {
-    throw new Error("--evaluator-gate-threshold must be a finite number");
+    throw invalidOption("--evaluator-gate-threshold must be a finite number");
   }
   const hasEvaluatorCompanion =
     local.evaluatorBaseUrl !== undefined ||
@@ -737,10 +760,10 @@ function pipelineOptions(
     local.evaluatorGateMetric !== undefined ||
     evaluatorGateThreshold !== undefined;
   if (local.evaluator === undefined && hasEvaluatorCompanion) {
-    throw new Error("Evaluator options require --evaluator <provider>");
+    throw invalidOption("Evaluator options require --evaluator <provider>");
   }
   if (local.evaluator !== undefined && local.evaluatorScorer === undefined) {
-    throw new Error(
+    throw invalidOption(
       `At least one --evaluator-scorer is required with --evaluator ${local.evaluator}`,
     );
   }
@@ -914,20 +937,22 @@ function evaluatorConfig(
     ...(gateThreshold === undefined ? {} : { gateThreshold }),
   };
   if (provider !== "langfuse" && local.evaluatorPublicKeyEnv !== undefined) {
-    throw new Error("--evaluator-public-key-env requires --evaluator langfuse");
+    throw invalidOption(
+      "--evaluator-public-key-env requires --evaluator langfuse",
+    );
   }
   if (
     provider !== "promptfoo" &&
     (local.evaluatorCommand !== undefined ||
       local.evaluatorConfig !== undefined)
   ) {
-    throw new Error(
+    throw invalidOption(
       "--evaluator-command and --evaluator-config require --evaluator promptfoo",
     );
   }
   if (provider === "braintrust") {
     if (local.evaluatorProjectId === undefined) {
-      throw new Error(
+      throw invalidOption(
         "--evaluator-project-id is required with --evaluator braintrust",
       );
     }
@@ -941,7 +966,7 @@ function evaluatorConfig(
   }
   if (provider === "langsmith") {
     if (local.evaluatorProjectId === undefined) {
-      throw new Error(
+      throw invalidOption(
         "--evaluator-project-id must name the dataset used with --evaluator langsmith",
       );
     }
@@ -955,7 +980,7 @@ function evaluatorConfig(
   }
   if (provider === "langfuse") {
     if (local.evaluatorProjectId !== undefined) {
-      throw new Error(
+      throw invalidOption(
         "--evaluator-project-id is not used with --evaluator langfuse",
       );
     }
@@ -973,12 +998,12 @@ function evaluatorConfig(
     local.evaluatorProjectId !== undefined ||
     local.evaluatorPublicKeyEnv !== undefined
   ) {
-    throw new Error(
+    throw invalidOption(
       "API and project options are not used with --evaluator promptfoo",
     );
   }
   if (local.evaluatorConfig === undefined) {
-    throw new Error(
+    throw invalidOption(
       "--evaluator-config is required with --evaluator promptfoo",
     );
   }
@@ -1002,7 +1027,7 @@ function parseCorpusSource(value: string): {
     dataset.length === 0 ||
     !["braintrust", "langsmith", "langfuse"].includes(provider)
   ) {
-    throw new Error(
+    throw invalidOption(
       "--from must be braintrust:<dataset>, langsmith:<dataset>, or langfuse:<dataset>",
     );
   }
@@ -1017,7 +1042,7 @@ function corpusImportConfig(
   local: CorpusImportOptions,
 ) {
   if (source.provider !== "langfuse" && local.publicKeyEnv !== undefined) {
-    throw new Error(
+    throw invalidOption(
       "--public-key-env is only used with --from langfuse:<dataset>",
     );
   }
@@ -1046,10 +1071,10 @@ function corpusImportConfig(
 function resultSinkConfig(local: ExportCommandOptions) {
   if (local.to === "braintrust") {
     if (local.projectId === undefined) {
-      throw new Error("--project-id is required with --to braintrust");
+      throw invalidOption("--project-id is required with --to braintrust");
     }
     if (local.datasetId !== undefined || local.publicKeyEnv !== undefined) {
-      throw new Error(
+      throw invalidOption(
         "--dataset-id and --public-key-env are only used with --to langfuse",
       );
     }
@@ -1061,10 +1086,10 @@ function resultSinkConfig(local: ExportCommandOptions) {
     } as const;
   }
   if (local.datasetId === undefined) {
-    throw new Error("--dataset-id is required with --to langfuse");
+    throw invalidOption("--dataset-id is required with --to langfuse");
   }
   if (local.projectId !== undefined) {
-    throw new Error("--project-id is only used with --to braintrust");
+    throw invalidOption("--project-id is only used with --to braintrust");
   }
   return {
     provider: local.to,
@@ -1185,16 +1210,24 @@ export async function executeCli(
     await handle.program.parseAsync([...argv], { from: "user" });
     return handle.exitCode();
   } catch (error) {
-    if (error instanceof CommanderError) {
-      if (error.code === "commander.helpDisplayed") return 0;
-      return error.exitCode >= 10 ? error.exitCode : 10;
-    }
     const outputIndex = argv.indexOf("--output");
     const mode = argv[outputIndex + 1];
     const reporter = new Reporter(
       mode === "json" || mode === "jsonl" ? mode : "human",
       io,
     );
+    if (error instanceof CommanderError) {
+      if (error.exitCode === 0) return 0;
+      const usage = handle.usageOutput();
+      if (reporter.mode === "human") {
+        io.stderr(usage);
+      } else {
+        io.stderr(
+          `${JSON.stringify({ code: "usage_error", message: usage.trim(), remedy: "Run rightmodeler --help (or <command> --help) for valid commands and options." })}\n`,
+        );
+      }
+      return error.exitCode >= 10 ? error.exitCode : 10;
+    }
     return reporter.error(error);
   }
 }

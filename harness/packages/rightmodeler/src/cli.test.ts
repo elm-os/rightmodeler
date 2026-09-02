@@ -201,3 +201,86 @@ describe("CLI trace guidance wiring", () => {
     expect(captured.stdout()).toContain("--yes");
   });
 });
+
+describe("CLI exit codes", () => {
+  it("exits 0 for --version and help <command>", async () => {
+    const versionOutput = captureIo();
+
+    expect(await executeCli(["--version"], versionOutput.io)).toBe(0);
+    expect(versionOutput.stdout()).toMatch(/^\d+\.\d+\.\d+/u);
+    expect(versionOutput.stderr()).toBe("");
+
+    const helpOutput = captureIo();
+
+    expect(await executeCli(["help", "init"], helpOutput.io)).toBe(0);
+    expect(helpOutput.stdout()).toContain("Usage: rightmodeler init");
+    expect(helpOutput.stderr()).toBe("");
+  });
+
+  it("reports usage errors in the selected output mode", async () => {
+    const humanOutput = captureIo();
+
+    expect(await executeCli(["init", "--bogus"], humanOutput.io)).toBe(10);
+    expect(humanOutput.stdout()).toBe("");
+    expect(humanOutput.stderr()).toContain("unknown option '--bogus'");
+
+    for (const mode of ["json", "jsonl"] as const) {
+      const machineOutput = captureIo();
+
+      expect(
+        await executeCli(
+          ["--output", mode, "init", "--through", "nope"],
+          machineOutput.io,
+        ),
+      ).toBe(10);
+      expect(machineOutput.stdout()).toBe("");
+      const lines = machineOutput.stderr().trimEnd().split("\n");
+      expect(lines).toHaveLength(1);
+      expect(JSON.parse(lines[0]!)).toEqual({
+        code: "usage_error",
+        message: expect.stringContaining("'nope' is invalid"),
+        remedy: expect.stringContaining("--help"),
+      });
+    }
+  });
+});
+
+describe("CLI needs-input errors", () => {
+  it("reports missing drift traces as a needs-input error", async () => {
+    const { repo, homeDir } = await fixture();
+    const captured = captureIo();
+    const nonTerminal = runtime(homeDir, "", undefined).runtime;
+
+    expect(
+      await executeCli(
+        ["--output", "json", "drift", "--repo", repo],
+        captured.io,
+        nonTerminal,
+      ),
+    ).toBe(2);
+    expect(captured.stdout()).toBe("");
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "missing_traces_path",
+      message: "--traces is required",
+    });
+  });
+
+  it("reports invalid evaluator options as a needs-input error", async () => {
+    const { repo, homeDir } = await fixture();
+    const captured = captureIo();
+    const nonTerminal = runtime(homeDir, "", undefined).runtime;
+
+    expect(
+      await executeCli(
+        ["--output", "json", "init", "--evaluator-scorer", "x", "--repo", repo],
+        captured.io,
+        nonTerminal,
+      ),
+    ).toBe(2);
+    expect(captured.stdout()).toBe("");
+    expect(JSON.parse(captured.stderr())).toMatchObject({
+      code: "invalid_option",
+      message: "Evaluator options require --evaluator <provider>",
+    });
+  });
+});

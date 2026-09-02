@@ -27,6 +27,7 @@ export const ABSTAIN_REASONS = [
   "insufficient_review_trials",
   "insufficient_distinct_steps",
   "insufficient_distinct_trajectories",
+  "holdout_below_floor_minimum",
   "missing_deterministic_evidence",
   "required_abstention",
   "incomplete_evidence_coverage",

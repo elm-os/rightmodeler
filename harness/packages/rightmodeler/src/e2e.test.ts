@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
 import { createServer } from "node:http";
 import {
   chmod,
@@ -29,7 +30,11 @@ import {
   verdictKey,
   verdictsPrefix,
 } from "@rightmodeler/core";
-import { judgeExecution, type JudgeChat } from "@rightmodeler/kernel";
+import {
+  judgeExecution,
+  minimumTrialsForFloor,
+  type JudgeChat,
+} from "@rightmodeler/kernel";
 import { createProvider } from "@rightmodeler/replay";
 import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
 import { afterAll, describe, expect, it } from "vitest";
@@ -41,6 +46,12 @@ const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const demoAppPath = fileURLToPath(
   new URL("../../../fixtures/demo-app", import.meta.url),
 );
+const traceFixturesDir = fileURLToPath(
+  new URL("../../../fixtures/traces/", import.meta.url),
+);
+const traceFixtures = readdirSync(traceFixturesDir)
+  .filter((name) => /\.(json|jsonl)$/u.test(name))
+  .sort();
 const langgraphAppPath = fileURLToPath(
   new URL("../../../fixtures/langgraph-app", import.meta.url),
 );
@@ -70,6 +81,7 @@ const githubStubModuleUrl = new URL(
 ).href;
 const temporaryDirectories: string[] = [];
 const secret = "phase-a-api-key-must-not-persist";
+const minimumHoldout = minimumTrialsForFloor(0.85, 1);
 const execFileAsync = promisify(execFile);
 const skipDocker = process.env.RIGHTMODELER_SKIP_DOCKER === "1";
 if (skipDocker) {
@@ -671,6 +683,24 @@ async function rewriteStageArtifact(
   ).toBe(true);
 }
 
+async function readStageArtifact(
+  storeRoot: string,
+  stage: string,
+): Promise<Record<string, unknown>> {
+  const store = new FsStore(storeRoot);
+  const state = JSON.parse(
+    await storeText(store, setupStateKey("project")),
+  ) as {
+    stages: Record<string, { outputKey: string }>;
+  };
+  const outputKey = state.stages[stage]?.outputKey;
+  expect(outputKey).toEqual(expect.any(String));
+  return JSON.parse(await storeText(store, outputKey!)) as Record<
+    string,
+    unknown
+  >;
+}
+
 function topologyRecord(
   stepId: string,
   path: string,
@@ -763,6 +793,39 @@ describe("section 18 autonomy boundary", () => {
 });
 
 describe("built CLI pipeline", () => {
+  it.each(traceFixtures)(
+    "runs %s through corpus",
+    async (name) => {
+      const { repo } = await fixtureCopy(`corpus-${name}`);
+      const result = await runCli([
+        "init",
+        "--through",
+        "corpus",
+        "--traces",
+        join(traceFixturesDir, name),
+        "--output",
+        "json",
+        "--repo",
+        repo,
+      ]);
+
+      expect(result.code, result.stderr).toBe(0);
+      expect(jsonOutput(result).executedStages).toEqual([
+        "scan",
+        "ingest",
+        "reconcile",
+        "scrub",
+        "corpus",
+      ]);
+      const corpus = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "corpus",
+      );
+      expect(corpus.caseCount).toBeGreaterThan(0);
+    },
+    60_000,
+  );
+
   it("exports applySwaps from the bundled programmatic entry", async () => {
     const cli = (await import(pathToFileURL(cliPath).href)) as {
       applySwaps?: unknown;
@@ -1053,6 +1116,47 @@ describe("built CLI pipeline", () => {
         ({ state }) => state === "complete",
       ),
     ).toBe(true);
+
+    await writeFile(join(repo, ".git", "info", "exclude"), "generated/\n", {
+      flag: "a",
+    });
+    await mkdir(join(repo, "generated"), { recursive: true });
+    await writeFile(join(repo, "generated", "bundle.js"), "generated\n");
+
+    const third = await runCli(throughCorpus, { cwd: unrelatedCwd });
+    expect(third.code).toBe(0);
+    expect(jsonOutput(third).executedStages).toEqual([]);
+    expect(
+      (jsonOutput(third).stages as Array<{ state: string }>).every(
+        ({ state }) => state === "complete",
+      ),
+    ).toBe(true);
+
+    const familyPlan = await runCli(
+      ["init", "--plan", "--output", "json", "--repo", repo],
+      { cwd: unrelatedCwd },
+    );
+    expect(familyPlan.code).toBe(0);
+    expect(jsonOutput(familyPlan).familyPlans).toEqual([
+      expect.objectContaining({
+        familyId: "summarize",
+        cases: 70,
+        holdoutCases: 35,
+        minimumHoldoutCases: minimumHoldout,
+        stepIds: [expect.any(String), expect.any(String)],
+      }),
+      expect.objectContaining({
+        familyId: "support",
+        cases: 7,
+        holdoutCases: 4,
+        stepIds: [],
+        abstainReason: {
+          reason: "holdout_below_floor_minimum",
+          observed: 4,
+          required: minimumHoldout,
+        },
+      }),
+    ]);
   });
 
   it("estimates without model spend and idempotently dispatches a detached replay", async () => {
@@ -1370,9 +1474,9 @@ describe("built CLI pipeline", () => {
           familyId: "support",
           decision: "abstain",
           abstainReason: {
-            reason: "insufficient_review_trials",
-            observed: 3,
-            required: 10,
+            reason: "holdout_below_floor_minimum",
+            observed: 4,
+            required: minimumHoldout,
           },
         }),
       );
@@ -1427,7 +1531,9 @@ describe("built CLI pipeline", () => {
         store,
         reportKey("project", "report.md"),
       );
-      expect(reportMarkdown).toContain("insufficient_review_trials (3 of 10)");
+      expect(reportMarkdown).toContain(
+        `holdout_below_floor_minimum (4 of ${minimumHoldout})`,
+      );
       expect(reportMarkdown).toContain("## Gates");
       expect(reportMarkdown).toContain("## Selection");
       expect(reportMarkdown).toContain("Selection-adjusted estimate");
@@ -1522,7 +1628,7 @@ describe("built CLI pipeline", () => {
       );
       expect(humanReport.stdout).toContain("summarize | recommend");
       expect(humanReport.stdout).toContain(
-        "insufficient_review_trials (3 of 10)",
+        `holdout_below_floor_minimum (4 of ${minimumHoldout})`,
       );
       expect(humanReport.stdout).toContain("report.md");
       expect(humanReport.stdout).not.toContain('"verdicts"');
@@ -1537,14 +1643,196 @@ describe("built CLI pipeline", () => {
       expect(jsonOutput(statusCommand)).toMatchObject({
         corpusVersion: expect.any(String),
         factCounts: {
-          Execution: 111,
-          Assessment: 111,
+          Execution: executions.size,
+          Assessment: assessments.length,
         },
       });
+      expect(executions.size).toBeLessThan(111);
 
       expect(await allFileText(storeRoot)).not.toContain(secret);
       expect(reportMarkdown).not.toContain(secret);
       expect(JSON.stringify(reportJson)).not.toContain(secret);
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("gives a second family two call sites and never abstains it on distinct steps", async () => {
+    const { root, repo } = await fixtureCopy("second-family-call-sites");
+    await writeFile(
+      join(repo, "src", "support-text.ts"),
+      [
+        'import { generateText } from "ai";',
+        "",
+        "export async function supportText(message: string) {",
+        "  return generateText({",
+        '    model: "acme/large-1",',
+        "    prompt: message,",
+        "  });",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await execFileAsync("git", ["-C", repo, "add", "--all"]);
+    await execFileAsync("git", [
+      "-C",
+      repo,
+      "commit",
+      "--message",
+      "Add second family call site",
+    ]);
+    const traces = JSON.parse(await readFile(tracesPath, "utf8")) as Array<{
+      traceId: string;
+      span_id: string;
+      startTimeUnixNano: string;
+      attributes: Record<string, unknown>;
+      [key: string]: unknown;
+    }>;
+    const supportSpans = traces.filter(
+      ({ attributes }) => attributes["rightmodeler.family"] === "support",
+    );
+    const widenedTraces = join(root, "widened-support.json");
+    await writeFile(
+      widenedTraces,
+      JSON.stringify([
+        ...traces,
+        ...Array.from({ length: 120 }, (_, index) => ({
+          ...supportSpans[index % supportSpans.length]!,
+          traceId: `trace-support-wide-${index}`,
+          span_id: `span-support-wide-${index}`,
+          startTimeUnixNano: String(10_000 + index),
+        })),
+      ]),
+    );
+    const stub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          widenedTraces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_SECOND_FAMILY_API_KEY",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_SECOND_FAMILY_API_KEY: secret } },
+      );
+
+      expect([0, 1], result.stderr).toContain(result.code);
+      const output = jsonOutput(result);
+      const supportVerdict = (
+        output.verdicts as Array<{
+          familyId: string;
+          abstainReason?: { reason: string };
+        }>
+      ).find(({ familyId }) => familyId === "support");
+      expect(supportVerdict).toBeDefined();
+      expect(supportVerdict?.abstainReason?.reason).not.toBe(
+        "insufficient_distinct_steps",
+      );
+      expect(supportVerdict?.abstainReason?.reason).not.toBe(
+        "holdout_below_floor_minimum",
+      );
+      const shortlist = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "shortlist",
+      );
+      const supportPlan = (
+        shortlist.familyPlans as Array<{
+          familyId: string;
+          holdoutCases: number;
+          stepIds: string[];
+          abstainReason?: unknown;
+        }>
+      ).find(({ familyId }) => familyId === "support");
+      expect(supportPlan?.holdoutCases).toBeGreaterThanOrEqual(minimumHoldout);
+      expect(supportPlan?.stepIds).toHaveLength(2);
+      expect(supportPlan).not.toHaveProperty("abstainReason");
+      expect(
+        (shortlist.steps as Array<{ family: string }>).filter(
+          ({ family }) => family === "support",
+        ),
+      ).toHaveLength(2);
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
+  it("abstains a single-call-site family before any replay spend", async () => {
+    const { repo } = await fixtureCopy("single-call-site-family");
+    await Promise.all([
+      rm(join(repo, "src", "support.py"), { force: true }),
+      rm(join(repo, "src", "triage.py"), { force: true }),
+      rm(join(repo, "src", "model-notes.ts"), { force: true }),
+      rm(join(repo, "config"), { recursive: true, force: true }),
+      rm(join(repo, "requirements.txt"), { force: true }),
+    ]);
+    await writeFile(
+      join(repo, "package.json"),
+      `${JSON.stringify({ dependencies: { ai: "*" } }, null, 2)}\n`,
+    );
+    await execFileAsync("git", ["-C", repo, "add", "--all"]);
+    await execFileAsync("git", [
+      "-C",
+      repo,
+      "commit",
+      "--message",
+      "Narrow single call site fixture",
+    ]);
+    const stub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_SINGLE_CALL_SITE_API_KEY",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_SINGLE_CALL_SITE_API_KEY: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const output = jsonOutput(result);
+      const shortlist = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "shortlist",
+      );
+      expect(shortlist.steps).toEqual([]);
+      expect(shortlist.cases).toEqual([]);
+      expect(shortlist.familyPlans).toContainEqual(
+        expect.objectContaining({
+          familyId: "summarize",
+          stepIds: [],
+          abstainReason: {
+            reason: "insufficient_distinct_steps",
+            observed: 1,
+            required: 2,
+          },
+        }),
+      );
+      expect(output.verdicts).toContainEqual(
+        expect.objectContaining({
+          familyId: "summarize",
+          decision: "abstain",
+          abstainReason: {
+            reason: "insufficient_distinct_steps",
+            observed: 1,
+            required: 2,
+          },
+        }),
+      );
     } finally {
       await stub.close();
     }
@@ -1648,17 +1936,12 @@ describe("built CLI pipeline", () => {
           message:
             "Family summarize: Current model is absent from the provider catalog: acme/large-1",
         },
-        {
-          event: "warning",
-          code: "shortlist_current_model_absent",
-          message:
-            "Family support: Current model is absent from the provider catalog: acme/large-1",
-        },
       ]);
       const resultEvent = events.find(({ event }) => event === "result");
       const resultValue = resultEvent?.result as
         | {
             familyOutcomes?: Array<{
+              familyId: string;
               verdict: {
                 abstainReason?: { reason?: string };
               };
@@ -1667,11 +1950,15 @@ describe("built CLI pipeline", () => {
         | undefined;
       expect(resultValue?.familyOutcomes?.length).toBeGreaterThan(0);
       expect(
-        resultValue?.familyOutcomes?.every(
-          ({ verdict }) =>
-            verdict.abstainReason?.reason === "provider_catalog_drift",
-        ),
-      ).toBe(true);
+        resultValue?.familyOutcomes?.find(
+          ({ familyId }) => familyId === "summarize",
+        )?.verdict.abstainReason?.reason,
+      ).toBe("provider_catalog_drift");
+      expect(
+        resultValue?.familyOutcomes?.find(
+          ({ familyId }) => familyId === "support",
+        )?.verdict.abstainReason?.reason,
+      ).toBe("holdout_below_floor_minimum");
     } finally {
       await stub.close();
     }
@@ -1903,7 +2190,7 @@ describe("built CLI pipeline", () => {
       expect(
         families.find(({ familyId }) => familyId === "support")?.verdict
           .abstainReason?.reason,
-      ).toBe("insufficient_review_trials");
+      ).toBe("holdout_below_floor_minimum");
       const report = await storeText(
         new FsStore(join(repo, ".rightmodeler")),
         reportKey("project", "report.md"),
@@ -2565,17 +2852,29 @@ describe("built CLI pipeline", () => {
       expect(result.code).toBe(0);
       const output = jsonOutput(result);
       const verdicts = output.verdicts as Array<{
+        familyId: string;
         assessmentAbsent: number;
         assessmentAbsentReasons: Array<{ reason: string; count: number }>;
+        abstainReason?: { reason: string };
       }>;
+      const summarizeVerdicts = verdicts.filter(
+        ({ familyId }) => familyId === "summarize",
+      );
+      expect(summarizeVerdicts.length).toBeGreaterThan(0);
       expect(
-        verdicts.every(({ assessmentAbsent }) => assessmentAbsent > 0),
+        summarizeVerdicts.every(({ assessmentAbsent }) => assessmentAbsent > 0),
       ).toBe(true);
       expect(
-        verdicts.flatMap(({ assessmentAbsentReasons }) =>
+        summarizeVerdicts.flatMap(({ assessmentAbsentReasons }) =>
           assessmentAbsentReasons.map(({ reason }) => reason),
         ),
       ).toEqual(expect.arrayContaining(["external_experiment_failed"]));
+      expect(
+        verdicts.find(({ familyId }) => familyId === "support"),
+      ).toMatchObject({
+        assessmentAbsent: 0,
+        abstainReason: { reason: "holdout_below_floor_minimum" },
+      });
 
       const store = new FsStore(join(repo, ".rightmodeler"));
       const facts = await Promise.all(
@@ -3057,10 +3356,11 @@ describe("built CLI pipeline", () => {
       repo,
     ]);
 
-    expect(result.code).toBe(10);
+    expect(result.code).toBe(2);
     expect(JSON.parse(result.stderr)).toMatchObject({
-      code: "runtime_error",
+      code: "invalid_modeb_config",
       message: expect.stringContaining("appSpec.command"),
+      remedy: expect.stringContaining("--modeb-config"),
     });
   });
 
@@ -3152,6 +3452,58 @@ describe("built CLI pipeline", () => {
     });
   });
 
+  it("reports report before aggregate as a needs-input error", async () => {
+    const { repo } = await fixtureCopy("report-before-aggregate");
+    const result = await runCli(["report", "--output", "json", "--repo", repo]);
+
+    expect(result.code).toBe(2);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      code: "stage_not_completed",
+      message: "aggregate has not completed",
+    });
+  });
+
+  it("names a repository with no replayable text call sites", async () => {
+    const { repo } = await fixtureCopy("no-replayable-call-sites");
+    await Promise.all([
+      rm(join(repo, "src", "summarize.ts"), { force: true }),
+      rm(join(repo, "src", "support.py"), { force: true }),
+      rm(join(repo, "src", "triage.py"), { force: true }),
+      rm(join(repo, "src", "model-notes.ts"), { force: true }),
+      rm(join(repo, "config"), { recursive: true, force: true }),
+      rm(join(repo, "requirements.txt"), { force: true }),
+    ]);
+    await writeFile(
+      join(repo, "package.json"),
+      `${JSON.stringify({ dependencies: { ai: "*" } }, null, 2)}\n`,
+    );
+    await execFileAsync("git", ["-C", repo, "add", "--all"]);
+    await execFileAsync("git", [
+      "-C",
+      repo,
+      "commit",
+      "--message",
+      "Narrow replayable fixture",
+    ]);
+
+    const result = await runCli([
+      "init",
+      "--through",
+      "shortlist",
+      "--traces",
+      tracesPath,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      code: "no_replayable_call_sites",
+    });
+  });
+
   it("stops at scan when an AI dependency has no matched call site", async () => {
     const root = await mkdtemp(join(tmpdir(), "rightmodeler-coverage-"));
     temporaryDirectories.push(root);
@@ -3205,6 +3557,42 @@ describe("built CLI pipeline", () => {
     expect(JSON.parse(missingResult.stderr)).toMatchObject({
       code: "missing_traces_path",
       remedy: expect.stringContaining("--traces"),
+    });
+
+    const missingPath = join(missing.repo, "missing.json");
+    const missingFileResult = await runCli([
+      "init",
+      "--through",
+      "ingest",
+      "--traces",
+      missingPath,
+      "--output",
+      "json",
+      "--repo",
+      missing.repo,
+    ]);
+    expect(missingFileResult.code).toBe(2);
+    expect(JSON.parse(missingFileResult.stderr)).toMatchObject({
+      code: "missing_traces_path",
+      message: `Trace input does not exist: ${missingPath}`,
+    });
+
+    const missingDetachedResult = await runCli([
+      "replay",
+      "--detach",
+      "--traces",
+      missingPath,
+      "--base-url",
+      "http://127.0.0.1:9/v1",
+      "--output",
+      "json",
+      "--repo",
+      missing.repo,
+    ]);
+    expect(missingDetachedResult.code).toBe(2);
+    expect(JSON.parse(missingDetachedResult.stderr)).toMatchObject({
+      code: "missing_traces_path",
+      message: `Trace input does not exist: ${missingPath}`,
     });
 
     const capped = await fixtureCopy("budget-cap");
