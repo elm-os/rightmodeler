@@ -7,8 +7,13 @@ export const replayStatusTool = defineTool({
   description:
     "Read one persisted replay run once, including progress and terminality. This tool never sleeps or polls internally.",
   inputSchema: replayStatusInputSchema,
-  async execute(input) {
-    return (await runCli("status", ["--run", input.runId], input)).result;
+  async execute(input, ctx) {
+    return (
+      await runCli("status", ["--run", input.runId], {
+        ...input,
+        signal: ctx.abortSignal,
+      })
+    ).result;
   },
 });
 

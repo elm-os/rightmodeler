@@ -6,9 +6,9 @@ export const harnessInputSchema = z.strictObject({
 });
 
 export const replayStartInputSchema = harnessInputSchema.extend({
-  traces: z.string().min(1),
+  traces: z.string().min(1).optional(),
   modeBConfig: z.string().min(1).optional(),
-  baseUrl: z.string().url(),
+  baseUrl: z.string().url().optional(),
   apiKeyEnv: z
     .string()
     .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u)
@@ -35,10 +35,19 @@ export const replayStatusInputSchema = harnessInputSchema.extend({
 });
 
 export const openSwapPrInputSchema = harnessInputSchema.extend({
-  owner: z.string().min(1),
-  githubBaseUrl: z.string().url(),
-  githubTokenEnv: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/u),
+  owner: z.string().min(1).optional(),
+  githubBaseUrl: z.string().url().optional(),
+  githubTokenEnv: z
+    .string()
+    .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u)
+    .optional(),
   dryRun: z.boolean().optional(),
 });
 
-export type ReplayStartInput = z.infer<typeof replayStartInputSchema>;
+export type ReplayStartToolInput = z.infer<typeof replayStartInputSchema>;
+export type OpenSwapPrToolInput = z.infer<typeof openSwapPrInputSchema>;
+
+export interface ReplayStartInput extends ReplayStartToolInput {
+  readonly traces: string;
+  readonly baseUrl: string;
+}
