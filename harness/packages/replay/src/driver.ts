@@ -4,11 +4,11 @@ import {
   assessmentSchema,
   executionSchema,
   factKey,
-  factsPrefix,
   factSchema,
   mintAssessmentId,
   mintAttemptId,
   mintExecutionId,
+  readLedger,
   requestAttemptSchema,
   spendEventSchema,
   type Fact,
@@ -145,39 +145,32 @@ async function replayFactState(
     { executionId: string; candidateOutput: string }
   >;
 }> {
+  const ledger = await readLedger(store, projectId);
   const completed = new Set<string>();
   const unusableJudges = new Set<string>();
-  const executions: Execution[] = [];
-  const assessed = new Set<string>();
-  for (const key of await store.list(factsPrefix(projectId))) {
-    const entry = await store.get(key);
-    if (entry === null) throw new Error(`Listed fact is missing: ${key}`);
-    const fact = factSchema.parse(
-      JSON.parse(Buffer.from(entry.body).toString("utf8")),
+  const executions: readonly Execution[] = ledger.executions;
+  const assessed = new Set(
+    ledger.assessments.map(({ executionId }) => executionId),
+  );
+  for (const execution of executions) {
+    completed.add(
+      replayCorrelationKey(
+        execution.evidenceQuestionId,
+        execution.caseId,
+        execution.candidateId,
+      ),
     );
-    const execution = executionSchema.safeParse(fact);
-    if (execution.success) {
-      executions.push(execution.data);
-      completed.add(
-        replayCorrelationKey(
-          execution.data.evidenceQuestionId,
-          execution.data.caseId,
-          execution.data.candidateId,
-        ),
-      );
-    }
-    const assessment = assessmentSchema.safeParse(fact);
-    if (assessment.success) assessed.add(assessment.data.executionId);
+  }
+  for (const spend of ledger.spendEvents) {
     if (
-      "actor" in fact &&
-      fact.actor === "judge" &&
-      typeof fact.reconcilableTo === "object" &&
-      fact.reconcilableTo !== null &&
-      !Array.isArray(fact.reconcilableTo) &&
-      fact.reconcilableTo.judgeStatus === "unusable" &&
-      typeof fact.reconcilableTo.judgeModel === "string"
+      spend.actor === "judge" &&
+      typeof spend.reconcilableTo === "object" &&
+      spend.reconcilableTo !== null &&
+      !Array.isArray(spend.reconcilableTo) &&
+      spend.reconcilableTo.judgeStatus === "unusable" &&
+      typeof spend.reconcilableTo.judgeModel === "string"
     ) {
-      unusableJudges.add(fact.reconcilableTo.judgeModel);
+      unusableJudges.add(spend.reconcilableTo.judgeModel);
     }
   }
   const unassessed = new Map<

@@ -10,39 +10,33 @@ import {
   assessmentSchema,
   callSiteInventoryKey,
   canonicalJson,
-  cascadeFindingSchema,
   completeRun,
   computeRunSpecDigest,
   createRun,
-  executionSchema,
   factKey,
-  factSchema,
-  factsPrefix,
   failRun,
   FsStore,
   jsonValueSchema,
-  lifecycleEventSchema,
   mintAssessmentId,
+  readLedger,
   reportKey,
-  requestAttemptSchema,
   runKey,
   runMetaSchema,
   runsPrefix,
   setupPrefix,
-  spendEventSchema,
   stepKey,
   stepRecordSchema,
   stepsPrefix,
   verdictKey,
   verdictsPrefix,
   type Assessment,
-  type CascadeFinding,
   type Execution,
-  type Fact,
   type JsonValue,
+  type Ledger,
   type LifecycleEvent,
   type RequestAttempt,
   type RunMeta,
+  type SpendEvent,
   type StepRecord,
   type Store,
 } from "@rightmodeler/core";
@@ -449,6 +443,13 @@ const aggregateOutputSchema = z.strictObject({
 const confirmOutputSchema = aggregateOutputSchema.extend({
   confirmedFamilies: z.number().int().nonnegative(),
 });
+const setupArtifactSchemas = {
+  scan: scanOutputSchema,
+  reconcile: reconcileOutputSchema,
+  shortlist: replayPlanSchema,
+  aggregate: aggregateOutputSchema,
+  confirm: confirmOutputSchema,
+} as const;
 const auditWorksheetSchema = z.strictObject({
   seed: z.number().int(),
   populationSize: z.number().int().nonnegative(),
@@ -491,6 +492,12 @@ const importedReferenceCorpusSchema = z.strictObject({
   ),
 });
 
+interface PipelineCache {
+  repositoryFiles?: Promise<Array<{ absolute: string; path: string }>>;
+  repositoryDigest?: Promise<string>;
+  setupArtifacts: Map<string, Promise<unknown[]>>;
+}
+
 interface PipelineContext {
   repo: string;
   storeRoot: string;
@@ -510,6 +517,7 @@ interface PipelineContext {
   existingRunId?: string;
   approvedRunSpecDigest?: string;
   reporter: Reporter;
+  cache: PipelineCache;
 }
 
 export interface PipelineOptions {
@@ -648,6 +656,13 @@ export async function planPipeline(
   options: PipelineOptions,
 ): Promise<Pick<PipelineResult, "stages" | "familyPlans">> {
   const context = createContext(options);
+  return planStages(context, options);
+}
+
+async function planStages(
+  context: PipelineContext,
+  options: PipelineOptions,
+): Promise<Pick<PipelineResult, "stages" | "familyPlans">> {
   const stages = stagesThrough(options.through);
   const state = await readSetupState(context.store, context.projectId);
   const result: StagePlanEntry[] = [];
@@ -727,7 +742,7 @@ export async function runPipeline(
       context.projectId,
     );
     return {
-      ...(await planPipeline(options)),
+      ...(await planStages(context, options)),
       executedStages: [],
       verdicts,
       recommendationExists: false,
@@ -808,7 +823,7 @@ export async function runPipeline(
       ? undefined
       : await loadDecisionOutput(context);
   return {
-    stages: (await planPipeline(options)).stages,
+    stages: (await planStages(context, options)).stages,
     executedStages,
     verdicts,
     ...(decisionOutput === undefined
@@ -899,7 +914,7 @@ export async function claimDetachedReplay(
     version: 1,
     type: "replay",
     targetPhase,
-    repository: await repositoryDigest(context.repo, context.storeRoot),
+    repository: await contextRepositoryDigest(context),
     traces: traceIdentity,
     reproofRequests: jsonValue(
       await readReproofRequests(context.store, context.projectId),
@@ -1229,13 +1244,9 @@ export async function listWatchablePullRequests(options: {
   readonly store?: string;
 }): Promise<WatchablePullRequest[]> {
   const context = createHeadlessContext(options);
-  const events = (await readFacts(context.store, context.projectId)).flatMap(
-    (fact): LifecycleEvent[] => {
-      const parsed = lifecycleEventSchema.safeParse(fact);
-      return parsed.success && parsed.data.prNumber !== null
-        ? [parsed.data]
-        : [];
-    },
+  const ledger = await readPipelineLedger(context);
+  const events = ledger.lifecycleEvents.filter(
+    ({ prNumber }) => prNumber !== null,
   );
   const numbers = [
     ...new Set(
@@ -1257,15 +1268,9 @@ export async function listApprovedSwapSets(options: {
   readonly store?: string;
 }): Promise<ApprovedSwapSet[]> {
   const context = createHeadlessContext(options);
-  const merged = (await readFacts(context.store, context.projectId)).flatMap(
-    (fact): LifecycleEvent[] => {
-      const parsed = lifecycleEventSchema.safeParse(fact);
-      return parsed.success &&
-        parsed.data.kind === "pr_merged" &&
-        parsed.data.prNumber !== null
-        ? [parsed.data]
-        : [];
-    },
+  const ledger = await readPipelineLedger(context);
+  const merged = ledger.lifecycleEvents.filter(
+    ({ kind, prNumber }) => kind === "pr_merged" && prNumber !== null,
   );
   const result: ApprovedSwapSet[] = [];
   for (const event of merged) {
@@ -1306,18 +1311,19 @@ async function recoverApprovedSwapSet(
   context: PipelineContext,
   event: LifecycleEvent & { readonly prNumber: number },
 ): Promise<ApprovedSwapSet> {
-  const [scans, reconciliations, plans, aggregates, confirmations] =
-    await Promise.all([
-      readSetupArtifacts(context, "scan", scanOutputSchema),
-      readSetupArtifacts(context, "reconcile", reconcileOutputSchema),
-      readSetupArtifacts(context, "shortlist", replayPlanSchema),
-      readSetupArtifacts(context, "aggregate", aggregateOutputSchema),
-      readSetupArtifacts(context, "confirm", confirmOutputSchema),
-    ]);
-  const mappings = new Map<string, ApprovedSwap[]>();
-  for (const scanOutput of scans.filter(
+  const scans = (await readSetupArtifacts(context, "scan")).filter(
     ({ revision }) => revision === event.evidence.revision,
-  )) {
+  );
+  const [reconciliations, plans, aggregates, confirmations] = await Promise.all(
+    [
+      readSetupArtifacts(context, "reconcile"),
+      readSetupArtifacts(context, "shortlist"),
+      readSetupArtifacts(context, "aggregate"),
+      readSetupArtifacts(context, "confirm"),
+    ],
+  );
+  const mappings = new Map<string, ApprovedSwap[]>();
+  for (const scanOutput of scans) {
     const scanStepIds = new Set(scanOutput.records.map(({ stepId }) => stepId));
     for (const reconciliation of reconciliations.filter(({ records }) =>
       records.every(({ stepId }) => scanStepIds.has(stepId)),
@@ -1410,18 +1416,32 @@ function canonicalApprovedSwaps(
   );
 }
 
-async function readSetupArtifacts<T>(
+type SetupArtifactStage = keyof typeof setupArtifactSchemas;
+type SetupArtifact<Stage extends SetupArtifactStage> = z.infer<
+  (typeof setupArtifactSchemas)[Stage]
+>;
+
+async function readSetupArtifacts<Stage extends SetupArtifactStage>(
   context: PipelineContext,
-  stage: PipelineStage,
-  schema: z.ZodType<T>,
-): Promise<T[]> {
-  const prefix = `${setupPrefix(context.projectId)}${stage}-`;
-  const values: T[] = [];
-  for (const key of await context.store.list(prefix)) {
-    if (!key.endsWith(".json")) continue;
-    values.push(schema.parse(await readJson(context.store, key)));
-  }
-  return values;
+  stage: Stage,
+): Promise<SetupArtifact<Stage>[]> {
+  const cached = context.cache.setupArtifacts.get(stage) as
+    Promise<SetupArtifact<Stage>[]> | undefined;
+  if (cached !== undefined) return cached;
+  const schema = setupArtifactSchemas[stage] as unknown as z.ZodType<
+    SetupArtifact<Stage>
+  >;
+  const promise = (async () => {
+    const prefix = `${setupPrefix(context.projectId)}${stage}-`;
+    const values: SetupArtifact<Stage>[] = [];
+    for (const key of await context.store.list(prefix)) {
+      if (!key.endsWith(".json")) continue;
+      values.push(schema.parse(await readJson(context.store, key)));
+    }
+    return values;
+  })();
+  context.cache.setupArtifacts.set(stage, promise);
+  return promise;
 }
 
 export async function runCorpusImport(options: {
@@ -1454,21 +1474,15 @@ export async function runResultExport(options: {
   readonly config: ResultSinkConfig;
 }): Promise<ResultExportReceipt> {
   const context = createHeadlessContext(options);
-  const facts = await readFacts(context.store, context.projectId);
-  const executions = facts.flatMap((fact): Execution[] => {
-    const parsed = executionSchema.safeParse(fact);
-    return parsed.success ? [parsed.data] : [];
-  });
+  const ledger = await readPipelineLedger(context);
+  const executions = ledger.executions;
   if (executions.length === 0) {
     throw stageNotCompleted(
       "replay",
       "No execution trials are available to export",
     );
   }
-  const assessments = facts.flatMap((fact): Assessment[] => {
-    const parsed = assessmentSchema.safeParse(fact);
-    return parsed.success ? [parsed.data] : [];
-  });
+  const assessments = ledger.assessments;
   const verdicts = await readCurrentVerdicts(context.store, context.projectId);
   const exportDigest = digest({
     provider: options.config.provider,
@@ -1666,6 +1680,7 @@ function createContext(options: PipelineOptions): PipelineContext {
       ? {}
       : { approvedRunSpecDigest: options.approvedRunSpecDigest }),
     reporter: options.reporter,
+    cache: { setupArtifacts: new Map() },
   };
 }
 
@@ -1751,13 +1766,23 @@ function stagesThrough(through?: PipelineStage): PipelineStage[] {
   return PIPELINE_STAGES.slice(0, PIPELINE_STAGES.indexOf(through) + 1);
 }
 
+async function scanArtifactDigest(
+  context: PipelineContext,
+  state: SetupState,
+): Promise<string> {
+  const checkpoint = state.stages.scan;
+  if (checkpoint === undefined) return "missing";
+  const entry = await context.store.get(checkpoint.outputKey);
+  return entry === null ? "missing" : sha256(entry.body);
+}
+
 async function inputDigest(
   stage: PipelineStage,
   context: PipelineContext,
   state: SetupState,
 ): Promise<string | undefined> {
   if (stage === "scan") {
-    const repository = await repositoryDigest(context.repo, context.storeRoot);
+    const repository = await contextRepositoryDigest(context);
     if (context.matchersPath === undefined) return repository;
     return digest({
       stage,
@@ -1780,7 +1805,7 @@ async function inputDigest(
   if (upstream === undefined) return undefined;
   const extra: Record<string, JsonValue> = {};
   if (stage === "reconcile") {
-    extra.scan = state.stages.scan?.inputDigest ?? "missing";
+    extra.scan = await scanArtifactDigest(context, state);
     if (context.modeBConfig !== undefined) {
       extra.stepMap = context.modeBConfig.stepMap;
     }
@@ -2048,8 +2073,10 @@ async function executeStage(
       return executeAggregate(context, inputDigestValue);
     case "confirm":
       return executeConfirm(context, inputDigestValue, runId);
-    case "report":
-      return executeReport(context, inputDigestValue);
+    case "report": {
+      const ledger = await readPipelineLedger(context);
+      return executeReport(context, inputDigestValue, ledger);
+    }
   }
 }
 
@@ -2065,7 +2092,7 @@ async function executeScan(
   );
   const coverage = evaluateCoverage({
     stepRecords: records,
-    fileUniverse: (await repositoryFiles(context.repo, context.storeRoot)).map(
+    fileUniverse: (await contextRepositoryFiles(context)).map(
       ({ path }) => path,
     ),
     detectedTech: detectTech(context.repo),
@@ -2880,9 +2907,11 @@ async function executeReplay(
   };
 
   await runCells("shortlist", candidates);
+  const ledger = await readPipelineLedger(context);
   const shortlistVerdicts = aggregate(
     await materializeAggregationFacts(
       context,
+      ledger,
       plan,
       candidates,
       evaluation(),
@@ -2952,17 +2981,18 @@ async function executeAggregate(
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
   const ceilings = await loadReferenceCeilings(context, plan);
-  const facts = await readFacts(context.store, context.projectId);
+  const ledger = await readPipelineLedger(context);
   const allVerdicts = aggregate(
     await materializeAggregationFacts(
       context,
+      ledger,
       plan,
       replay.candidates,
       replay.evaluation,
       ceilings,
     ),
     aggregateOptions(),
-    cascadeFindings(facts),
+    ledger.cascadeFindings,
   );
   const families = buildFamilyOutcomes(
     plan,
@@ -3517,18 +3547,19 @@ async function executeConfirm(
     }
   }
 
-  const facts = await readFacts(context.store, context.projectId);
+  const ledger = await readPipelineLedger(context);
   const ceilings = await loadReferenceCeilings(context, plan);
   const allVerdicts = aggregate(
     await materializeAggregationFacts(
       context,
+      ledger,
       plan,
       replay.candidates,
       replay.evaluation,
       ceilings,
     ),
     aggregateOptions(),
-    cascadeFindings(facts),
+    ledger.cascadeFindings,
   );
   const families = buildFamilyOutcomes(
     plan,
@@ -3744,13 +3775,6 @@ function firstJsonTextOrUndefined(value: JsonValue): string | undefined {
     .find((item) => item !== undefined);
 }
 
-function cascadeFindings(facts: readonly Fact[]): CascadeFinding[] {
-  return facts.flatMap((fact) => {
-    const parsed = cascadeFindingSchema.safeParse(fact);
-    return parsed.success ? [parsed.data] : [];
-  });
-}
-
 async function assessExternalExecutions(input: {
   context: PipelineContext;
   plan: z.infer<typeof replayPlanSchema>;
@@ -3763,29 +3787,24 @@ async function assessExternalExecutions(input: {
   if (config === undefined) {
     throw new Error("External evaluator configuration is unavailable");
   }
-  const facts = await readFacts(input.context.store, input.context.projectId);
+  const ledger = await readPipelineLedger(input.context);
   const assessedGateExecutions = new Set(
-    facts.flatMap((fact) => {
-      const parsed = assessmentSchema.safeParse(fact);
-      return parsed.success &&
-        parsed.data.evaluatorId === input.evaluator.id &&
-        parsed.data.metricName === config.gateMetric
-        ? [parsed.data.executionId]
-        : [];
-    }),
+    ledger.assessments.flatMap((assessment) =>
+      assessment.evaluatorId === input.evaluator.id &&
+      assessment.metricName === config.gateMetric
+        ? [assessment.executionId]
+        : [],
+    ),
   );
-  const executions = facts.flatMap((fact) => {
-    const parsed = executionSchema.safeParse(fact);
-    return parsed.success &&
-      parsed.data.corpusSplit === input.split &&
-      parsed.data.terminalOutcome === "success" &&
-      parsed.data.attribution === "ok" &&
-      input.stepIds.has(parsed.data.stepId) &&
-      input.candidateIds.has(parsed.data.candidateId) &&
-      !assessedGateExecutions.has(parsed.data.executionId)
-      ? [parsed.data]
-      : [];
-  });
+  const executions = ledger.executions.filter(
+    (execution) =>
+      execution.corpusSplit === input.split &&
+      execution.terminalOutcome === "success" &&
+      execution.attribution === "ok" &&
+      input.stepIds.has(execution.stepId) &&
+      input.candidateIds.has(execution.candidateId) &&
+      !assessedGateExecutions.has(execution.executionId),
+  );
   if (executions.length === 0) return [];
 
   const recordedCases = new Map(
@@ -3833,12 +3852,11 @@ async function assessExternalExecutions(input: {
     results.map((result) => [result.caseId, result]),
   );
   const existingMetrics = new Set(
-    facts.flatMap((fact) => {
-      const parsed = assessmentSchema.safeParse(fact);
-      return parsed.success && parsed.data.evaluatorId === input.evaluator.id
-        ? [`${parsed.data.executionId}\0${parsed.data.metricName}`]
-        : [];
-    }),
+    ledger.assessments.flatMap((assessment) =>
+      assessment.evaluatorId === input.evaluator.id
+        ? [`${assessment.executionId}\0${assessment.metricName}`]
+        : [],
+    ),
   );
   for (const result of results) {
     await persistEvaluatorMetrics(
@@ -3925,29 +3943,23 @@ async function persistEvaluatorMetrics(
 
 async function materializeAggregationFacts(
   context: PipelineContext,
+  ledger: Ledger,
   plan: z.infer<typeof replayPlanSchema>,
   candidates: z.infer<typeof replayOutputSchema>["candidates"],
   evaluation: z.infer<typeof replayOutputSchema>["evaluation"],
   ceilings: readonly ReferenceCeiling[],
 ): Promise<AggregationFact[]> {
-  const facts = await readFacts(context.store, context.projectId);
   const evidenceQuestionIds = new Set(
     plan.steps.map(({ evidenceQuestionId }) => evidenceQuestionId),
   );
-  const executions = facts.flatMap((fact) => {
-    const parsed = executionSchema.safeParse(fact);
-    return parsed.success &&
-      evidenceQuestionIds.has(parsed.data.evidenceQuestionId)
-      ? [parsed.data]
-      : [];
-  });
+  const executions = ledger.executions.filter((execution) =>
+    evidenceQuestionIds.has(execution.evidenceQuestionId),
+  );
   const assessments = new Map<string, Assessment[]>();
-  for (const fact of facts) {
-    const parsed = assessmentSchema.safeParse(fact);
-    if (!parsed.success) continue;
-    const current = assessments.get(parsed.data.executionId) ?? [];
-    current.push(parsed.data);
-    assessments.set(parsed.data.executionId, current);
+  for (const assessment of ledger.assessments) {
+    const current = assessments.get(assessment.executionId) ?? [];
+    current.push(assessment);
+    assessments.set(assessment.executionId, current);
   }
   const assessmentAbsences = new Map(
     evaluation.assessmentAbsences.map(({ executionId, reason }) => [
@@ -4137,8 +4149,9 @@ function reportPath(context: PipelineContext): string {
 async function executeReport(
   context: PipelineContext,
   inputDigestValue: string,
+  ledger: Ledger,
 ): Promise<string> {
-  const report = await buildReport(context);
+  const report = await buildReport(context, ledger);
   const jsonKey = reportKey(context.projectId, "report.json");
   const markdownKey = reportKey(context.projectId, "report.md");
   const markdown = renderReport(report);
@@ -4327,6 +4340,24 @@ function sha256(value: Uint8Array | string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function contextRepositoryFiles(
+  context: PipelineContext,
+): Promise<Array<{ absolute: string; path: string }>> {
+  context.cache.repositoryFiles ??= repositoryFiles(
+    context.repo,
+    context.storeRoot,
+  );
+  return context.cache.repositoryFiles;
+}
+
+function contextRepositoryDigest(context: PipelineContext): Promise<string> {
+  context.cache.repositoryDigest ??= repositoryDigest(
+    context.repo,
+    context.storeRoot,
+  );
+  return context.cache.repositoryDigest;
+}
+
 async function repositoryFiles(
   repo: string,
   storeRoot: string,
@@ -4388,14 +4419,22 @@ async function repositoryDigest(
   repo: string,
   storeRoot: string,
 ): Promise<string> {
+  const revision = await repositoryRevision(repo);
+  const fileDigests: Array<{ path: string; sha256: string }> = [];
+  const files = await repositoryFiles(repo, storeRoot);
+  for (let index = 0; index < files.length; index += 16) {
+    fileDigests.push(
+      ...(await Promise.all(
+        files.slice(index, index + 16).map(async (file) => ({
+          path: file.path,
+          sha256: sha256(await readFile(file.absolute)),
+        })),
+      )),
+    );
+  }
   return digest({
-    revision: await repositoryRevision(repo),
-    files: await Promise.all(
-      (await repositoryFiles(repo, storeRoot)).map(async (file) => ({
-        path: file.path,
-        sha256: sha256(await readFile(file.absolute)),
-      })),
-    ),
+    revision,
+    files: fileDigests,
   });
 }
 
@@ -4676,35 +4715,23 @@ function blockedFamilyDiagnosis(
   };
 }
 
-function spendSummary(facts: readonly Fact[]): ReportData["spend"] {
-  const spends = facts.flatMap((fact) => {
-    const parsed = spendEventSchema.safeParse(fact);
-    return parsed.success ? [parsed.data] : [];
-  });
+function spendSummary(spendEvents: readonly SpendEvent[]): ReportData["spend"] {
   const byActor: Record<string, { events: number; costUsd: number }> = {};
-  for (const spend of spends) {
+  for (const spend of spendEvents) {
     const actor = byActor[spend.actor] ?? { events: 0, costUsd: 0 };
     actor.events += 1;
     actor.costUsd += spend.costUsd;
     byActor[spend.actor] = actor;
   }
   return {
-    events: spends.length,
-    totalCostUsd: spends.reduce((total, spend) => total + spend.costUsd, 0),
+    events: spendEvents.length,
+    totalCostUsd: spendEvents.reduce(
+      (total, spend) => total + spend.costUsd,
+      0,
+    ),
     byActor,
   };
 }
-
-const lifecycleKindOrder: Record<LifecycleEvent["kind"], number> = {
-  apply_started: 0,
-  pr_opened: 1,
-  review_requested: 2,
-  comment_posted: 3,
-  reproof_started: 4,
-  pr_closed_rejected: 5,
-  pr_merged: 6,
-  watch_ended: 7,
-};
 
 function lifecycleReport(
   events: readonly LifecycleEvent[],
@@ -4718,12 +4745,7 @@ function lifecycleReport(
   }
   return [...grouped.entries()]
     .map(([runSpecDigest, group]) => {
-      const ordered = [...group].sort(
-        (left, right) =>
-          compareText(left.createdAt, right.createdAt) ||
-          lifecycleKindOrder[left.kind] - lifecycleKindOrder[right.kind] ||
-          compareText(left.eventId, right.eventId),
-      );
+      const ordered = group;
       const latest = ordered[ordered.length - 1]!;
       const prNumber = [...ordered]
         .reverse()
@@ -4749,7 +4771,7 @@ function lifecycleReport(
 }
 
 function candidateErrorReport(
-  facts: readonly Fact[],
+  ledger: Ledger,
   plan: z.infer<typeof replayPlanSchema>,
   replay: z.infer<typeof replayOutputSchema>,
 ): ReportData["candidateErrors"] {
@@ -4762,25 +4784,21 @@ function candidateErrorReport(
     ),
   );
   const executions = new Map(
-    facts.flatMap((fact): Array<[string, Execution]> => {
-      const parsed = executionSchema.safeParse(fact);
-      return parsed.success &&
-        evidenceQuestionIds.has(parsed.data.evidenceQuestionId) &&
-        candidateIds.has(parsed.data.candidateId)
-        ? [[parsed.data.executionId, parsed.data]]
-        : [];
-    }),
+    ledger.executions.flatMap((execution): Array<[string, Execution]> =>
+      evidenceQuestionIds.has(execution.evidenceQuestionId) &&
+      candidateIds.has(execution.candidateId)
+        ? [[execution.executionId, execution]]
+        : [],
+    ),
   );
   const callsByCandidate = new Map<string, Map<string, RequestAttempt[]>>();
-  for (const fact of facts) {
-    const parsed = requestAttemptSchema.safeParse(fact);
-    if (!parsed.success) continue;
-    const execution = executions.get(parsed.data.executionId);
+  for (const attempt of ledger.requestAttempts) {
+    const execution = executions.get(attempt.executionId);
     if (execution === undefined) continue;
     const calls = callsByCandidate.get(execution.candidateId) ?? new Map();
-    calls.set(parsed.data.logicalCallId, [
-      ...(calls.get(parsed.data.logicalCallId) ?? []),
-      parsed.data,
+    calls.set(attempt.logicalCallId, [
+      ...(calls.get(attempt.logicalCallId) ?? []),
+      attempt,
     ]);
     callsByCandidate.set(execution.candidateId, calls);
   }
@@ -4813,27 +4831,22 @@ function candidateErrorReport(
     .sort((left, right) => compareText(left.candidateId, right.candidateId));
 }
 
-async function buildReport(context: PipelineContext): Promise<ReportData> {
+async function buildReport(
+  context: PipelineContext,
+  ledger: Ledger,
+): Promise<ReportData> {
   const decisionOutput = await loadDecisionOutput(context);
   const verdicts = decisionOutput.families.map(({ verdict }) => verdict);
-  const facts = await readFacts(context.store, context.projectId);
-  const assessments = facts.flatMap((fact) => {
-    const parsed = assessmentSchema.safeParse(fact);
-    return parsed.success ? [parsed.data] : [];
-  });
-  const consistency = assessments.flatMap((assessment) => {
+  const consistency = ledger.assessments.flatMap((assessment) => {
     const metadata = judgeMetadata(assessment);
     return metadata === undefined ? [] : [metadata.orderConsistent];
-  });
-  const lifecycle = facts.flatMap((fact) => {
-    const parsed = lifecycleEventSchema.safeParse(fact);
-    return parsed.success ? [parsed.data] : [];
   });
   const corpus = await loadCorpusSummary(context);
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
   const aggregationFacts = await materializeAggregationFacts(
     context,
+    ledger,
     plan,
     replay.candidates,
     replay.evaluation,
@@ -4858,7 +4871,7 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
           ? 0
           : consistency.filter((value) => !value).length / consistency.length,
     },
-    spend: spendSummary(facts),
+    spend: spendSummary(ledger.spendEvents),
     stratumWeights: { basis: "corpus_only", weights: corpus.strata },
     caps: [
       { name: "top-N shortlist", value: plan.top },
@@ -4890,12 +4903,12 @@ async function buildReport(context: PipelineContext): Promise<ReportData> {
             ],
       ),
     ],
-    candidateErrors: candidateErrorReport(facts, plan, replay),
+    candidateErrors: candidateErrorReport(ledger, plan, replay),
     blockedFamilies: decisionOutput.families.flatMap((family) => {
       const blocked = blockedFamilyDiagnosis(family, aggregationFacts);
       return blocked === undefined ? [] : [blocked];
     }),
-    apply: lifecycleReport(lifecycle),
+    apply: lifecycleReport(ledger.lifecycleEvents),
   };
 }
 
@@ -5062,13 +5075,15 @@ function formatRate(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-async function readFacts(store: Store, projectId: string): Promise<Fact[]> {
-  const facts: Fact[] = [];
-  for (const key of await store.list(factsPrefix(projectId))) {
-    const value = await readJson(store, key);
-    facts.push(factSchema.parse(value));
+async function readPipelineLedger(context: PipelineContext): Promise<Ledger> {
+  const ledger = await readLedger(context.store, context.projectId);
+  if (ledger.droppedRows > 0) {
+    context.reporter.warning(
+      "facts_dropped",
+      `Skipped ${ledger.droppedRows} unreadable fact records while reading the ledger.`,
+    );
   }
-  return facts;
+  return ledger;
 }
 
 function isFamilyVerdict(value: unknown): value is FamilyVerdict {
@@ -5206,6 +5221,7 @@ export async function readReport(options: {
   if (aggregateCheckpoint === undefined) {
     throw stageNotCompleted("aggregate");
   }
+  const ledger = await readPipelineLedger(context);
   await executeReport(
     context,
     digest({
@@ -5213,8 +5229,9 @@ export async function readReport(options: {
       upstream:
         state.stages.confirm?.inputDigest ?? aggregateCheckpoint.inputDigest,
     }),
+    ledger,
   );
-  const report = await buildReport(context);
+  const report = await buildReport(context, ledger);
   const decisionOutput = await loadDecisionOutput(context);
   return {
     report,
@@ -5241,28 +5258,15 @@ export async function readStatus(options: {
     const record = stepRecordSchema.parse(await readJson(context.store, key));
     stepCounts[record.status] = (stepCounts[record.status] ?? 0) + 1;
   }
+  const ledger = await readPipelineLedger(context);
   const factCounts: Record<string, number> = {
-    Execution: 0,
-    RequestAttempt: 0,
-    Assessment: 0,
-    SpendEvent: 0,
-    CascadeFinding: 0,
-    LifecycleEvent: 0,
+    Execution: ledger.executions.length,
+    RequestAttempt: ledger.requestAttempts.length,
+    Assessment: ledger.assessments.length,
+    SpendEvent: ledger.spendEvents.length,
+    CascadeFinding: ledger.cascadeFindings.length,
+    LifecycleEvent: ledger.lifecycleEvents.length,
   };
-  const facts = await readFacts(context.store, context.projectId);
-  for (const fact of facts) {
-    if (executionSchema.safeParse(fact).success) factCounts.Execution += 1;
-    else if (requestAttemptSchema.safeParse(fact).success)
-      factCounts.RequestAttempt += 1;
-    else if (assessmentSchema.safeParse(fact).success)
-      factCounts.Assessment += 1;
-    else if (spendEventSchema.safeParse(fact).success)
-      factCounts.SpendEvent += 1;
-    else if (cascadeFindingSchema.safeParse(fact).success)
-      factCounts.CascadeFinding += 1;
-    else if (lifecycleEventSchema.safeParse(fact).success)
-      factCounts.LifecycleEvent += 1;
-  }
   const corpus = await maybeLoadCorpus(context);
   const runs: RunMeta[] = [];
   const prefix = runsPrefix(context.projectId);
@@ -5276,7 +5280,8 @@ export async function readStatus(options: {
   return {
     stepsByStatus: stepCounts,
     factCounts,
-    spend: spendSummary(facts),
+    droppedFacts: ledger.droppedRows,
+    spend: spendSummary(ledger.spendEvents),
     corpusVersion: corpus?.corpusVersionId ?? null,
     lastRun: runs[0] ?? null,
   };

@@ -25,7 +25,7 @@ import type { ApplyVerdict } from "../apply/index.js";
 import { assertContractArtifact } from "../contract-validation.js";
 import type { CapturedConventions } from "../enrich/index.js";
 import { createGithubClient, type GithubClient } from "../github/index.js";
-import { derivePrState } from "./aggregate.js";
+import { derivePrState, readPrLifecycleEvents } from "./aggregate.js";
 import { watchOnce } from "./watch.js";
 
 const stubModuleUrl = new URL(
@@ -857,7 +857,9 @@ describe("watchOnce", () => {
     const hitCount = harness.stub.getHits().length;
     expect((await watchOnce(watchInput(harness))).status).toBe("quiet");
     expect(harness.stub.getHits()).toHaveLength(hitCount);
-    expect((await derivePrState(watchInput(harness))).phase).toBe("ended");
+    expect(
+      derivePrState(await readPrLifecycleEvents(watchInput(harness))).phase,
+    ).toBe("ended");
   });
 
   it("records a human close as a terminal rejection", async () => {

@@ -5,9 +5,7 @@ import {
   cascadeFindingSchema,
   confirmPlanKey,
   computeRunSpecDigest,
-  executionSchema,
-  factSchema,
-  factsPrefix,
+  readLedger,
   spendEventSchema,
   type Assessment,
   type CascadeFinding,
@@ -513,26 +511,13 @@ function candidateId(policy: ModeBSwapPolicy): string {
 }
 
 async function readFacts(store: Store, projectId: string): Promise<FactsIndex> {
-  const executions: Execution[] = [];
-  const assessments: Assessment[] = [];
-  const spendEvents: SpendEvent[] = [];
-  const cascadeFindings: CascadeFinding[] = [];
-  for (const key of await store.list(factsPrefix(projectId))) {
-    const entry = await store.get(key);
-    if (entry === null) throw new Error(`Listed fact is missing: ${key}`);
-    const fact = factSchema.parse(
-      JSON.parse(Buffer.from(entry.body).toString("utf8")) as unknown,
-    );
-    const execution = executionSchema.safeParse(fact);
-    if (execution.success) executions.push(execution.data);
-    const assessment = assessmentSchema.safeParse(fact);
-    if (assessment.success) assessments.push(assessment.data);
-    const spendEvent = spendEventSchema.safeParse(fact);
-    if (spendEvent.success) spendEvents.push(spendEvent.data);
-    const cascadeFinding = cascadeFindingSchema.safeParse(fact);
-    if (cascadeFinding.success) cascadeFindings.push(cascadeFinding.data);
-  }
-  return { executions, assessments, spendEvents, cascadeFindings };
+  const ledger = await readLedger(store, projectId);
+  return {
+    executions: ledger.executions,
+    assessments: ledger.assessments,
+    spendEvents: ledger.spendEvents,
+    cascadeFindings: ledger.cascadeFindings,
+  };
 }
 
 function expectedExecutions(

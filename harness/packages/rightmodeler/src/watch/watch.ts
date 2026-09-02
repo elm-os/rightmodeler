@@ -503,8 +503,8 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
   const actions: WatchAction[] = [];
   const observedIssueComments: GithubIssueComment[] = [];
   try {
-    let state = await derivePrState(input);
     let events = await readPrLifecycleEvents(input);
+    let state = derivePrState(events);
     const context = lifecycleContext(
       events,
       `${input.owner}/${input.repo}`,
