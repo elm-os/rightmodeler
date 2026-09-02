@@ -258,6 +258,7 @@ function fakeRunner(
         skipped: 0,
         blocked: [],
         rejectedRows: 0,
+        lostReasons: {},
         executions,
       };
     },

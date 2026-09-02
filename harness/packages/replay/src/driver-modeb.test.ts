@@ -36,6 +36,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createBudget } from "./budget.js";
 import {
+  modeBCaseWorstCaseUsd,
   replayModeB,
   type ModeBCase,
   type ReplayModeBInput,
@@ -86,6 +87,7 @@ interface InstrumentedExecutor {
   handles: string[];
   destroyed: string[];
   credentialFound(): boolean;
+  peakRunning(): number;
 }
 
 interface SpendMetadata {
@@ -335,6 +337,8 @@ async function createContext(
     concurrency?: number;
     stub?: StubProvider;
     uncapped?: boolean;
+    capUsd?: number;
+    warning?: (code: string, message: string) => void;
   } = {},
 ): Promise<TestContext> {
   const root = await mkdtemp(join(tmpdir(), "rightmodeler-modeb-test-"));
@@ -351,7 +355,7 @@ async function createContext(
     projectId,
     runId: `run-${randomUUID()}`,
     // The spend cap is optional product-wide; uncapped contexts pin the no-cap lease path.
-    ...(options.uncapped ? {} : { authorizedTotalUsd: 1 }),
+    ...(options.uncapped ? {} : { authorizedTotalUsd: options.capUsd ?? 1 }),
   });
   const input: ReplayModeBInput = {
     stepRecords: steps(),
@@ -369,6 +373,7 @@ async function createContext(
     image,
     appSpec: appSpec(),
     concurrency: options.concurrency ?? 3,
+    ...(options.warning === undefined ? {} : { warning: options.warning }),
   };
   return {
     root,
@@ -434,6 +439,8 @@ function instrumentExecutor(base: DockerExecutor): InstrumentedExecutor {
   const handles: string[] = [];
   const destroyed: string[] = [];
   let foundCredential = false;
+  let running = 0;
+  let peak = 0;
   return {
     launches,
     launchErrors,
@@ -442,6 +449,7 @@ function instrumentExecutor(base: DockerExecutor): InstrumentedExecutor {
     handles,
     destroyed,
     credentialFound: () => foundCredential,
+    peakRunning: () => peak,
     executor: {
       async launch(spec) {
         launches.push(spec);
@@ -449,6 +457,8 @@ function instrumentExecutor(base: DockerExecutor): InstrumentedExecutor {
         try {
           const handle = await base.launch(spec);
           handles.push(handle);
+          running += 1;
+          peak = Math.max(peak, running);
           return handle;
         } catch (error) {
           launchErrors.push(error);
@@ -470,6 +480,7 @@ function instrumentExecutor(base: DockerExecutor): InstrumentedExecutor {
       async destroy(handle) {
         await base.destroy(handle);
         destroyed.push(handle);
+        running -= 1;
       },
       reapOrphans: (options) => base.reapOrphans(options),
     },
@@ -780,6 +791,12 @@ describe.skipIf(skipDocker)("Mode B replay", () => {
     "charges the full lease and records a reconcilable failure when fact persistence throws",
     async () => {
       const [recordedCase] = await recordedCases();
+      const worst = modeBCaseWorstCaseUsd(
+        recordedCase!,
+        steps(),
+        { lookup: "acme/small-1" },
+        catalog,
+      );
       const context = await createContext([recordedCase!], { concurrency: 1 });
       let injected = false;
       const failingStore: Store = {
@@ -817,7 +834,7 @@ describe.skipIf(skipDocker)("Mode B replay", () => {
         expect(facts.spend).toEqual([
           expect.objectContaining({
             actor: "replay-driver",
-            costUsd: 1,
+            costUsd: expect.closeTo(worst, 9),
             reconcilableTo: expect.objectContaining({
               caseId: recordedCase!.caseId,
               failure: "mode_b_case_failed",
@@ -828,11 +845,67 @@ describe.skipIf(skipDocker)("Mode B replay", () => {
           }),
         ]);
         expect(await budget.state()).toMatchObject({
-          spentUsd: 1,
+          spentUsd: expect.closeTo(worst, 9),
           reservedUsd: 0,
         });
       } finally {
         await context.close();
+      }
+    },
+    testTimeoutMs,
+  );
+
+  it(
+    "leases a per-case worst case, runs capped cases wide, and warns when the cap admits fewer workers",
+    async () => {
+      const cases = await recordedCases();
+      const policy = { lookup: "acme/small-1" };
+      const worst = modeBCaseWorstCaseUsd(cases[0]!, steps(), policy, catalog);
+      const contextTokens = cases[0]!.contextTokens;
+      expect(worst).toBeCloseTo(
+        2 * (contextTokens * 4 * 0.000001 + 4096 * 0.000003) +
+          (contextTokens * 4 * 0.0000002 + 4096 * 0.0000008),
+      );
+
+      const warnings: Array<[string, string]> = [];
+      const wideBase = createDockerExecutor({
+        maxBytesPerNamespace: 16 * 1024 * 1024,
+      });
+      const wideTracked = instrumentExecutor(wideBase);
+      const wideContext = await createContext(cases, {
+        concurrency: 3,
+        executor: wideTracked.executor,
+        warning: (code, message) => warnings.push([code, message]),
+      });
+      try {
+        const result = await replayModeB(wideContext.input);
+        expect(result).toMatchObject({ completed: 3, blocked: [] });
+        expect(warnings).toEqual([]);
+        expect(wideTracked.peakRunning()).toBeGreaterThanOrEqual(2);
+      } finally {
+        await wideContext.close();
+      }
+
+      const tightWarnings: Array<[string, string]> = [];
+      const serialBase = createDockerExecutor({
+        maxBytesPerNamespace: 16 * 1024 * 1024,
+      });
+      const serialTracked = instrumentExecutor(serialBase);
+      const serialContext = await createContext(cases.slice(0, 2), {
+        capUsd: worst * 1.5,
+        concurrency: 2,
+        executor: serialTracked.executor,
+        warning: (code, message) => tightWarnings.push([code, message]),
+      });
+      try {
+        const result = await replayModeB(serialContext.input);
+        expect(result).toMatchObject({ completed: 2, blocked: [] });
+        expect(serialTracked.peakRunning()).toBe(1);
+        expect(tightWarnings).toEqual([
+          ["modeb_concurrency_capped", expect.stringContaining("admits 1")],
+        ]);
+      } finally {
+        await serialContext.close();
       }
     },
     testTimeoutMs,
@@ -1091,6 +1164,7 @@ describe.skipIf(skipDocker)("Mode B replay", () => {
         const result = await replayModeB(context.input);
         const facts = parsedFacts(await readFacts(context.store));
         expect(result).toMatchObject({ completed: 1, blocked: [] });
+        expect(result.lostReasons).toEqual({ missing_correlation: 1 });
         expect(facts.executions).toEqual([
           expect.objectContaining({
             terminalOutcome: "failure",
@@ -1458,7 +1532,85 @@ describe.skipIf(skipDocker)("Mode B replay", () => {
   );
 
   it(
-    "records every pending case as lost when host egress cannot start",
+    "ends the workload from inside the container when the host deadline is late",
+    async () => {
+      const [recordedCase] = await recordedCases();
+      const stalledCase = {
+        ...recordedCase!,
+        headers: { "x-fault-stall": "120000" },
+      };
+      const base = createDockerExecutor({
+        maxBytesPerNamespace: 16 * 1024 * 1024,
+      });
+      const tracked = instrumentExecutor(base);
+      const executor: DockerExecutor = {
+        ...tracked.executor,
+        launch: (spec) =>
+          tracked.executor.launch({ ...spec, timeoutMs: 60_000 }),
+      };
+      const context = await createContext([stalledCase], {
+        concurrency: 1,
+        executor,
+      });
+      context.input = { ...context.input, appSpec: appSpec(5_000) };
+      try {
+        const result = await replayModeB(context.input);
+        expect(result.completed).toBe(1);
+        expect(result.executions).toEqual([
+          expect.objectContaining({ attribution: "lost" }),
+        ]);
+        expect(tracked.statuses.every(({ status }) => !status.timedOut)).toBe(
+          true,
+        );
+        expect(
+          collectionText(tracked.collections, "driver/status.json"),
+        ).toContain('"signal":"SIGKILL"');
+      } finally {
+        await context.close();
+      }
+    },
+    testTimeoutMs,
+  );
+
+  it(
+    "force-destroys a container whose status never reports exit",
+    async () => {
+      const [recordedCase] = await recordedCases();
+      const base = createDockerExecutor({
+        maxBytesPerNamespace: 16 * 1024 * 1024,
+      });
+      const tracked = instrumentExecutor(base);
+      const executor: DockerExecutor = {
+        ...tracked.executor,
+        status: async (handle) => ({
+          ...(await tracked.executor.status(handle)),
+          state: "running" as const,
+        }),
+      };
+      const context = await createContext([recordedCase!], {
+        concurrency: 1,
+        executor,
+      });
+      context.input = { ...context.input, appSpec: appSpec(2_000) };
+      try {
+        const result = await replayModeB(context.input);
+        expect(result.completed).toBe(1);
+        expect(result.executions).toEqual([
+          expect.objectContaining({ attribution: "lost" }),
+        ]);
+        expect(result.lostReasons).toEqual({ container_lifecycle: 1 });
+        expect(tracked.destroyed).toEqual(
+          expect.arrayContaining(tracked.handles),
+        );
+      } finally {
+        await context.close();
+      }
+    },
+    testTimeoutMs,
+  );
+
+  it(
+    "blocks every pending case when host egress cannot start",
     async () => {
       const cases = (await recordedCases()).slice(0, 2);
       const base = createDockerExecutor({
@@ -1479,18 +1631,123 @@ describe.skipIf(skipDocker)("Mode B replay", () => {
       try {
         const result = await replayModeB(context.input);
         const facts = parsedFacts(await readFacts(context.store));
-        expect(result).toMatchObject({ completed: 2, blocked: [] });
-        expect(result.executions).toHaveLength(2);
-        expect(
-          result.executions.every(
-            ({ terminalOutcome, attribution }) =>
-              terminalOutcome === "failure" && attribution === "lost",
-          ),
-        ).toBe(true);
-        expect(facts.executions).toHaveLength(2);
+        expect(result.completed).toBe(0);
+        expect(result.blocked).toEqual([
+          expect.objectContaining({
+            kind: "infrastructure",
+            reason: "egress-unavailable",
+          }),
+          expect.objectContaining({
+            kind: "infrastructure",
+            reason: "egress-unavailable",
+          }),
+        ]);
+        expect(result.executions).toEqual([]);
+        expect(facts.executions).toEqual([]);
         expect(facts.attempts).toEqual([]);
         expect(facts.spend).toEqual([]);
         expect(tracked.launches).toEqual([]);
+      } finally {
+        await context.close();
+      }
+    },
+    testTimeoutMs,
+  );
+
+  it(
+    "blocks every pending case when Docker is unavailable",
+    async () => {
+      const cases = (await recordedCases()).slice(0, 2);
+      const base = createDockerExecutor({
+        maxBytesPerNamespace: 16 * 1024 * 1024,
+      });
+      const tracked = instrumentExecutor(base);
+      const context = await createContext(cases, {
+        concurrency: 2,
+        executor: tracked.executor,
+      });
+      const emptyPath = await mkdtemp(
+        join(tmpdir(), "rightmodeler-no-docker-"),
+      );
+      const previousPath = process.env.PATH;
+      try {
+        const result = await (async () => {
+          try {
+            process.env.PATH = emptyPath;
+            return await replayModeB(context.input);
+          } finally {
+            if (previousPath === undefined) delete process.env.PATH;
+            else process.env.PATH = previousPath;
+            await rm(emptyPath, { recursive: true, force: true });
+          }
+        })();
+        const facts = parsedFacts(await readFacts(context.store));
+        expect(result.completed).toBe(0);
+        expect(result.blocked).toEqual([
+          expect.objectContaining({
+            kind: "infrastructure",
+            reason: "docker-unavailable",
+          }),
+          expect.objectContaining({
+            kind: "infrastructure",
+            reason: "docker-unavailable",
+          }),
+        ]);
+        expect(result.executions).toEqual([]);
+        expect(facts.executions).toEqual([]);
+        expect(facts.attempts).toEqual([]);
+        expect(facts.spend).toEqual([]);
+        expect(tracked.launches).toEqual([]);
+      } finally {
+        await context.close();
+      }
+    },
+    testTimeoutMs,
+  );
+
+  it(
+    "blocks a case whose container fails to launch and retries it on rerun",
+    async () => {
+      const cases = (await recordedCases()).slice(0, 2);
+      const base = createDockerExecutor({
+        maxBytesPerNamespace: 16 * 1024 * 1024,
+      });
+      const tracked = instrumentExecutor(base);
+      let failLaunch = true;
+      const executor: DockerExecutor = {
+        ...tracked.executor,
+        async launch(spec) {
+          if (failLaunch) {
+            failLaunch = false;
+            throw new Error("injected launch failure");
+          }
+          return tracked.executor.launch(spec);
+        },
+      };
+      const context = await createContext(cases, {
+        concurrency: 1,
+        executor,
+      });
+      try {
+        const first = await replayModeB(context.input);
+        const firstFacts = parsedFacts(await readFacts(context.store));
+        expect(first.completed).toBe(1);
+        expect(first.blocked).toEqual([
+          expect.objectContaining({
+            kind: "infrastructure",
+            reason: "launch-failed",
+            message: expect.stringContaining("injected launch failure"),
+          }),
+        ]);
+        expect(first.executions).toHaveLength(1);
+        expect(firstFacts.executions).toHaveLength(1);
+
+        const second = await replayModeB(context.input);
+        expect(second).toMatchObject({
+          completed: 1,
+          skipped: 1,
+          blocked: [],
+        });
       } finally {
         await context.close();
       }

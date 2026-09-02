@@ -87,6 +87,14 @@ export interface DockerExecutor {
   reapOrphans(options: { readonly olderThanMs: number }): Promise<void>;
 }
 
+export type DockerAvailability =
+  | { readonly available: true }
+  | {
+      readonly available: false;
+      readonly reason: "cli-unavailable" | "daemon-unavailable";
+      readonly message: string;
+    };
+
 interface ContainerInspect {
   readonly createdAt: string;
   readonly state: {
@@ -134,6 +142,22 @@ async function runDocker(args: readonly string[]): Promise<string> {
     maxBuffer: dockerOutputLimit,
   });
   return result.stdout.trim();
+}
+
+export async function detectDockerAvailability(): Promise<DockerAvailability> {
+  try {
+    await runDocker(["version", "--format", "{{.Server.Version}}"]);
+    return { available: true };
+  } catch (error) {
+    const missingCli = isRecord(error) && error.code === "ENOENT";
+    return {
+      available: false,
+      reason: missingCli ? "cli-unavailable" : "daemon-unavailable",
+      message: missingCli
+        ? "Docker CLI was not found on PATH"
+        : `Docker daemon is not reachable: ${failureDetail(error)}`,
+    };
+  }
 }
 
 function parseContainerInspect(output: string): ContainerInspect {
@@ -348,13 +372,18 @@ export function createDockerExecutor(
 
   async function killAtTimeout(handle: DockerHandle): Promise<void> {
     timedOut.add(handle);
-    try {
-      await runDocker(["kill", handle]);
-    } catch (error) {
-      if (isMissingContainer(error) || isStoppedContainer(error)) return;
-    } finally {
-      timeoutMonitors.delete(handle);
+    timeoutMonitors.delete(handle);
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await runDocker(["kill", handle]);
+        return;
+      } catch (error) {
+        if (isMissingContainer(error) || isStoppedContainer(error)) return;
+        if (attempt === 3) break;
+        await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+      }
     }
+    await runDocker(["rm", "--force", handle]).catch(() => undefined);
   }
 
   async function destroyContainer(handle: DockerHandle): Promise<void> {
@@ -511,16 +540,30 @@ export function createDockerExecutor(
         `label=${executorLabel}=1`,
       ]);
       const handles = output.length === 0 ? [] : output.split("\n");
+      let firstFailure: unknown;
       for (const handle of handles) {
-        const inspected = await inspectContainer(handle);
+        let inspected: ContainerInspect;
+        try {
+          inspected = await inspectContainer(handle);
+        } catch (error) {
+          if (!isMissingContainer(error)) firstFailure ??= error;
+          continue;
+        }
         if (
           (inspected.state.status === "running" ||
             inspected.state.status === "exited") &&
           Date.now() - Date.parse(inspected.createdAt) >= olderThanMs
         ) {
-          await destroyContainer(handle);
+          try {
+            await destroyContainer(handle);
+          } catch (error) {
+            if (!isMissingContainer(error) && !isStoppedContainer(error)) {
+              firstFailure ??= error;
+            }
+          }
         }
       }
+      if (firstFailure !== undefined) throw firstFailure;
     },
   };
 }
