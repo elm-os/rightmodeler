@@ -39,6 +39,10 @@ import {
 } from "./provider.js";
 import type { ReplayStep, StepShortlist } from "./shortlist.js";
 
+const BUDGET_HEARTBEAT_INTERVAL_MS = 30_000;
+const RESERVATION_RETRY_CAP_MS = 1_000;
+const JUDGE_CONCURRENCY = 8;
+
 export interface RecordedCase {
   caseId: string;
   stepId: string;
@@ -101,7 +105,6 @@ interface ReplayCell {
 interface JudgeCell {
   readonly cell: ReplayCell;
   readonly executionId: string;
-  readonly execution: Execution;
   readonly candidateOutput: string;
   readonly recordAttempt: (
     attempt: ProviderAttempt,
@@ -137,9 +140,15 @@ async function replayFactState(
 ): Promise<{
   readonly completed: Set<string>;
   readonly unusableJudges: Set<string>;
+  readonly unassessed: Map<
+    string,
+    { executionId: string; candidateOutput: string }
+  >;
 }> {
   const completed = new Set<string>();
   const unusableJudges = new Set<string>();
+  const executions: Execution[] = [];
+  const assessed = new Set<string>();
   for (const key of await store.list(factsPrefix(projectId))) {
     const entry = await store.get(key);
     if (entry === null) throw new Error(`Listed fact is missing: ${key}`);
@@ -148,6 +157,7 @@ async function replayFactState(
     );
     const execution = executionSchema.safeParse(fact);
     if (execution.success) {
+      executions.push(execution.data);
       completed.add(
         replayCorrelationKey(
           execution.data.evidenceQuestionId,
@@ -156,6 +166,8 @@ async function replayFactState(
         ),
       );
     }
+    const assessment = assessmentSchema.safeParse(fact);
+    if (assessment.success) assessed.add(assessment.data.executionId);
     if (
       "actor" in fact &&
       fact.actor === "judge" &&
@@ -168,7 +180,31 @@ async function replayFactState(
       unusableJudges.add(fact.reconcilableTo.judgeModel);
     }
   }
-  return { completed, unusableJudges };
+  const unassessed = new Map<
+    string,
+    { executionId: string; candidateOutput: string }
+  >();
+  for (const execution of executions) {
+    if (
+      execution.attribution === "ok" &&
+      execution.terminalOutcome === "success" &&
+      typeof execution.finalOutput === "string" &&
+      !assessed.has(execution.executionId)
+    ) {
+      unassessed.set(
+        replayCorrelationKey(
+          execution.evidenceQuestionId,
+          execution.caseId,
+          execution.candidateId,
+        ),
+        {
+          executionId: execution.executionId,
+          candidateOutput: execution.finalOutput,
+        },
+      );
+    }
+  }
+  return { completed, unusableJudges, unassessed };
 }
 
 export async function terminalReplayCells(
@@ -280,6 +316,7 @@ export async function replayModeA(
   const result: ReplayModeAResult = { completed: 0, skipped: 0, blocked: [] };
   const activeRefunds = new Set<Promise<void>>();
   let nextCell = 0;
+  let failure: unknown;
   const judges = input.judge?.rankedModels.slice(0, 2) ?? [];
   if (input.judge !== undefined && judges.length === 0) {
     throw new Error("At least one ranked judge model is required");
@@ -292,17 +329,9 @@ export async function replayModeA(
     firstUsableJudge === -1 ? judges.length : firstUsableJudge;
   let consecutiveJudgeFailures = 0;
   let judgeFailurePending: JudgeCell[] = [];
-  let judgeQueue = Promise.resolve();
-
-  async function completeWithoutAssessment(job: JudgeCell): Promise<void> {
-    await writeReplayFact(
-      input.store,
-      input.budget.projectId,
-      job.executionId,
-      job.execution,
-    );
-    result.completed += 1;
-  }
+  const judgeQueue: JudgeCell[] = [];
+  const judgeJobs = new Set<Promise<void>>();
+  let judgeSwitchTrigger: JudgeCell | null = null;
 
   async function completeWithAssessment(
     job: JudgeCell,
@@ -330,7 +359,6 @@ export async function replayModeA(
         },
       }),
     );
-    await completeWithoutAssessment(job);
   }
 
   async function recordJudgeFailure(
@@ -462,31 +490,12 @@ export async function replayModeA(
     }
   }
 
-  async function flushJudgeFailurePending(): Promise<void> {
-    const pending = judgeFailurePending;
-    judgeFailurePending = [];
-    consecutiveJudgeFailures = 0;
-    for (const job of pending) await completeWithoutAssessment(job);
-  }
-
-  async function processJudgeCell(job: JudgeCell): Promise<void> {
-    const judge = judges[activeJudgeIndex];
-    if (judge === undefined) {
-      await completeWithoutAssessment(job);
-      return;
-    }
-    const outcome = await attemptJudge(job, judge);
-    if (outcome.status === "success") {
-      await flushJudgeFailurePending();
-      await completeWithAssessment(job, outcome.assessment);
-      return;
-    }
-
-    judgeFailurePending.push(job);
-    consecutiveJudgeFailures += 1;
-    if (consecutiveJudgeFailures < 3) return;
-
-    const nextJudge = judges[activeJudgeIndex + 1];
+  async function recordUnusableJudge(
+    judge: (typeof judges)[number],
+    nextJudge: (typeof judges)[number] | undefined,
+    trigger: JudgeCell,
+    consecutiveAssessments: number,
+  ): Promise<void> {
     input.judge!.warning?.(
       "judge_unusable",
       nextJudge === undefined
@@ -500,87 +509,76 @@ export async function replayModeA(
       noteId,
       spendEventSchema.parse({
         actor: "judge",
-        phase: job.cell.step.selectionStage ?? job.cell.step.corpusSplit,
+        phase:
+          trigger.cell.step.selectionStage ?? trigger.cell.step.corpusSplit,
         costUsd: 0,
         provider: input.provider.providerId,
         reconcilableTo: {
           judgeModel: judge.judgeModel,
           judgeStatus: "unusable",
           note: "three_consecutive_terminal_failures",
-          consecutiveAssessments: consecutiveJudgeFailures,
+          consecutiveAssessments,
         },
       }),
     );
-
-    const affected = judgeFailurePending;
-    judgeFailurePending = [];
-    consecutiveJudgeFailures = 0;
-    activeJudgeIndex += 1;
-    for (const pending of affected) await processJudgeCell(pending);
   }
 
-  async function scheduleJudgeCell(job: JudgeCell): Promise<void> {
-    const scheduled = judgeQueue.then(() => processJudgeCell(job));
-    judgeQueue = scheduled.catch(() => undefined);
-    await scheduled;
-  }
-
-  async function runCell(cell: ReplayCell): Promise<void> {
-    const key = replayCorrelationKey(
-      cell.step.evidenceQuestionId,
-      cell.recordedCase.caseId,
-      cell.candidate.id,
-    );
-    if (existing.has(key)) {
-      result.skipped += 1;
+  async function processJudgeCell(job: JudgeCell): Promise<void> {
+    const judge = judges[activeJudgeIndex];
+    if (judge === undefined) return;
+    const outcome = await attemptJudge(job, judge);
+    if (outcome.status === "success") {
+      if (judgeSwitchTrigger === null) {
+        judgeFailurePending = [];
+        consecutiveJudgeFailures = 0;
+      }
+      await completeWithAssessment(job, outcome.assessment);
       return;
     }
+    judgeFailurePending.push(job);
+    if (judgeSwitchTrigger !== null) return;
+    consecutiveJudgeFailures += 1;
+    if (consecutiveJudgeFailures >= 3) judgeSwitchTrigger = job;
+  }
 
-    if (cell.candidate.pricing === null) {
-      throw new ProviderConfigurationError(
-        `Candidate has no pricing: ${cell.candidate.id}`,
+  function startJudgeJob(work: () => Promise<void>): void {
+    const job: Promise<void> = work()
+      .catch((error: unknown) => {
+        failure ??= error;
+      })
+      .then(() => {
+        judgeJobs.delete(job);
+        pumpJudges();
+      });
+    judgeJobs.add(job);
+  }
+
+  function pumpJudges(): void {
+    if (failure !== undefined) return;
+    if (judgeSwitchTrigger !== null) {
+      if (judgeJobs.size > 0) return;
+      const trigger = judgeSwitchTrigger;
+      const judge = judges[activeJudgeIndex]!;
+      const nextJudge = judges[activeJudgeIndex + 1];
+      const consecutiveAssessments = consecutiveJudgeFailures;
+      judgeSwitchTrigger = null;
+      activeJudgeIndex += 1;
+      judgeQueue.unshift(...judgeFailurePending);
+      judgeFailurePending = [];
+      consecutiveJudgeFailures = 0;
+      startJudgeJob(() =>
+        recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments),
       );
+      return;
     }
-    let reservation: BudgetReservation;
-    for (;;) {
-      try {
-        reservation = await input.budget.reserveExecution({
-          contextTokens: cell.recordedCase.contextTokens,
-          maxOutputTokens: cell.recordedCase.maxOutputTokens,
-          pricing: cell.candidate.pricing,
-        });
-        break;
-      } catch (error) {
-        if (error instanceof BudgetRefusalError && error.causedByReservations) {
-          const refunds = [...activeRefunds];
-          if (refunds.length > 0) {
-            await Promise.race(refunds);
-          } else {
-            await new Promise<void>((resolve) => setTimeout(resolve, 0));
-          }
-          continue;
-        }
-        if (error instanceof BudgetRefusalError) {
-          result.blocked.push({
-            stepId: cell.step.stepId,
-            caseId: cell.recordedCase.caseId,
-            candidateId: cell.candidate.id,
-            kind: "budget",
-            message: error.message,
-          });
-          return;
-        }
-        throw error;
-      }
+    while (judgeJobs.size < JUDGE_CONCURRENCY) {
+      const job = judgeQueue.shift();
+      if (job === undefined) return;
+      startJudgeJob(() => processJudgeCell(job));
     }
+  }
 
-    let resolveRefund = (): void => undefined;
-    const refundComplete = new Promise<void>((resolve) => {
-      resolveRefund = resolve;
-    });
-    activeRefunds.add(refundComplete);
-
-    const executionId = mintExecutionId();
+  function attemptRecorder(cell: ReplayCell, executionId: string) {
     const logicalCallId = randomUUID();
     let actualCostUsd = 0;
     async function recordAttempt(
@@ -632,6 +630,88 @@ export async function replayModeA(
         }),
       );
     }
+    return { recordAttempt, actualCost: () => actualCostUsd };
+  }
+
+  async function runCell(cell: ReplayCell): Promise<void> {
+    const key = replayCorrelationKey(
+      cell.step.evidenceQuestionId,
+      cell.recordedCase.caseId,
+      cell.candidate.id,
+    );
+    if (existing.has(key)) {
+      result.skipped += 1;
+      const pending = replayState.unassessed.get(key);
+      if (pending !== undefined && input.judge !== undefined) {
+        judgeQueue.push({
+          cell,
+          executionId: pending.executionId,
+          candidateOutput: pending.candidateOutput,
+          recordAttempt: attemptRecorder(cell, pending.executionId)
+            .recordAttempt,
+        });
+        pumpJudges();
+      }
+      return;
+    }
+
+    if (cell.candidate.pricing === null) {
+      throw new ProviderConfigurationError(
+        `Candidate has no pricing: ${cell.candidate.id}`,
+      );
+    }
+    let reservation: BudgetReservation;
+    let retryMs = 25;
+    for (;;) {
+      try {
+        reservation = await input.budget.reserveExecution({
+          contextTokens: cell.recordedCase.contextTokens,
+          maxOutputTokens: cell.recordedCase.maxOutputTokens,
+          pricing: cell.candidate.pricing,
+        });
+        break;
+      } catch (error) {
+        if (error instanceof BudgetRefusalError && error.causedByReservations) {
+          const refunds = [...activeRefunds];
+          if (refunds.length > 0) {
+            await Promise.race(refunds);
+          } else {
+            await new Promise<void>((resolve) => setTimeout(resolve, retryMs));
+            retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
+          }
+          continue;
+        }
+        if (error instanceof BudgetRefusalError) {
+          result.blocked.push({
+            stepId: cell.step.stepId,
+            caseId: cell.recordedCase.caseId,
+            candidateId: cell.candidate.id,
+            kind: "budget",
+            message: error.message,
+          });
+          return;
+        }
+        throw error;
+      }
+    }
+
+    let resolveRefund = (): void => undefined;
+    const refundComplete = new Promise<void>((resolve) => {
+      resolveRefund = resolve;
+    });
+    activeRefunds.add(refundComplete);
+    let heartbeatFailure: unknown;
+    let heartbeatWork: Promise<void> = Promise.resolve();
+    const heartbeatTimer = setInterval(() => {
+      heartbeatWork = heartbeatWork
+        .then(() => reservation.heartbeat())
+        .catch((error: unknown) => {
+          heartbeatFailure ??= error;
+        });
+    }, BUDGET_HEARTBEAT_INTERVAL_MS);
+
+    const executionId = mintExecutionId();
+    const recorder = attemptRecorder(cell, executionId);
     try {
       let response;
       try {
@@ -648,7 +728,7 @@ export async function replayModeA(
           toolChoice: cell.recordedCase.toolChoice,
           responseFormat: cell.recordedCase.responseFormat,
           headers: cell.recordedCase.headers,
-          onAttempt: recordAttempt,
+          onAttempt: recorder.recordAttempt,
         });
       } catch (error) {
         if (error instanceof ProviderConfigurationError) throw error;
@@ -690,6 +770,7 @@ export async function replayModeA(
         }
         throw error;
       }
+      if (heartbeatFailure !== undefined) throw heartbeatFailure;
 
       const silentFailure =
         response.content.trim().length === 0 &&
@@ -707,26 +788,26 @@ export async function replayModeA(
         finalOutput: response.content,
         attribution: silentFailure ? "silent-failure" : "ok",
       });
-      if (silentFailure || input.judge === undefined) {
-        await writeReplayFact(
-          input.store,
-          input.budget.projectId,
-          executionId,
-          execution,
-        );
-        result.completed += 1;
-        return;
-      }
-      await scheduleJudgeCell({
-        cell,
+      await writeReplayFact(
+        input.store,
+        input.budget.projectId,
         executionId,
         execution,
+      );
+      result.completed += 1;
+      if (silentFailure || input.judge === undefined) return;
+      judgeQueue.push({
+        cell,
+        executionId,
         candidateOutput: response.content,
-        recordAttempt,
+        recordAttempt: recorder.recordAttempt,
       });
+      pumpJudges();
     } finally {
       try {
-        await reservation.refund(actualCostUsd);
+        clearInterval(heartbeatTimer);
+        await heartbeatWork;
+        await reservation.refund(recorder.actualCost());
       } finally {
         activeRefunds.delete(refundComplete);
         resolveRefund();
@@ -735,12 +816,17 @@ export async function replayModeA(
   }
 
   async function worker(): Promise<void> {
-    for (;;) {
+    while (failure === undefined) {
       const index = nextCell;
       nextCell += 1;
       const cell = cells[index];
       if (cell === undefined) return;
-      await runCell(cell);
+      try {
+        await runCell(cell);
+      } catch (error) {
+        failure ??= error;
+        return;
+      }
     }
   }
 
@@ -750,7 +836,7 @@ export async function replayModeA(
       () => worker(),
     ),
   );
-  await judgeQueue;
-  await flushJudgeFailurePending();
+  while (judgeJobs.size > 0) await Promise.all(judgeJobs);
+  if (failure !== undefined) throw failure;
   return result;
 }

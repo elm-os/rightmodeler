@@ -185,24 +185,30 @@ export async function judgeExecution(input: {
   readonly reference: string;
   readonly candidate: string;
 }): Promise<JudgeAssessment> {
-  const first = await judgeOnce(
-    input.chat,
-    input.judgeModel,
-    input.task,
-    input.reference,
-    input.candidate,
-    ["REFERENCE", "CANDIDATE"],
-    input.supportsStructuredOutput,
-  );
-  const second = await judgeOnce(
-    input.chat,
-    input.judgeModel,
-    input.task,
-    input.candidate,
-    input.reference,
-    ["CANDIDATE", "REFERENCE"],
-    input.supportsStructuredOutput,
-  );
+  const [firstOutcome, secondOutcome] = await Promise.allSettled([
+    judgeOnce(
+      input.chat,
+      input.judgeModel,
+      input.task,
+      input.reference,
+      input.candidate,
+      ["REFERENCE", "CANDIDATE"],
+      input.supportsStructuredOutput,
+    ),
+    judgeOnce(
+      input.chat,
+      input.judgeModel,
+      input.task,
+      input.candidate,
+      input.reference,
+      ["CANDIDATE", "REFERENCE"],
+      input.supportsStructuredOutput,
+    ),
+  ]);
+  if (firstOutcome.status === "rejected") throw firstOutcome.reason;
+  if (secondOutcome.status === "rejected") throw secondOutcome.reason;
+  const first = firstOutcome.value;
+  const second = secondOutcome.value;
   const orderConsistent = first.verdict === second.verdict;
   const score =
     (VERDICT_SCORES[first.verdict] + VERDICT_SCORES[second.verdict]) / 2;

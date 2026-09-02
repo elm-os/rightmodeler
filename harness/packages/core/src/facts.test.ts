@@ -236,6 +236,19 @@ describe("fact schemas", () => {
     ).toBe(false);
   });
 
+  it("accepts an optional candidate id on cascade findings", () => {
+    expect(
+      cascadeFindingSchema.parse({
+        ...cascadeFinding,
+        candidateId: "acme/small-1",
+      }),
+    ).toMatchObject({ candidateId: "acme/small-1" });
+    expect(
+      cascadeFindingSchema.safeParse({ ...cascadeFinding, candidateId: "" })
+        .success,
+    ).toBe(false);
+  });
+
   it("rejects provider error excerpts over 500 characters", () => {
     expect(
       requestAttemptSchema.safeParse({

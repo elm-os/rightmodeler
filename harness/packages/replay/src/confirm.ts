@@ -563,32 +563,12 @@ function deterministicFactId(
   return `${kind}-${computeRunSpecDigest([kind, ...parts])}`;
 }
 
-function hasJudgeEvidenceFailure(
-  spendEvents: readonly SpendEvent[],
-  executionId: string,
-  key: string,
-): boolean {
-  return spendEvents.some((event) => {
-    if (event.actor !== "judge" || event.phase !== "confirm") return false;
-    if (!isRecord(event.reconcilableTo)) return false;
-    return (
-      event.reconcilableTo.executionId === executionId &&
-      event.reconcilableTo.subsetKey === key &&
-      event.reconcilableTo.assessmentAbsentReason ===
-        "judge_evidence_incomplete" &&
-      (event.reconcilableTo.judgeFailureKind === "response_malformed" ||
-        event.reconcilableTo.judgeFailureKind === "provider_error")
-    );
-  });
-}
-
 async function assessExecution(
   input: ConfirmSwapSetInput,
   recordedCase: ModeBCase,
   execution: Execution,
   key: string,
   existing: readonly Assessment[],
-  spendEvents: readonly SpendEvent[],
 ): Promise<Assessment | "ambiguous" | "judge_evidence_incomplete"> {
   const matches = existing.filter(
     (assessment) =>
@@ -597,9 +577,6 @@ async function assessExecution(
   );
   if (matches.length > 1) return "ambiguous";
   if (matches[0] !== undefined) return matches[0];
-  if (hasJudgeEvidenceFailure(spendEvents, execution.executionId, key)) {
-    return "judge_evidence_incomplete";
-  }
 
   let invocation = 0;
   let judgeFailureKind: "response_malformed" | "provider_error" =
@@ -740,6 +717,7 @@ async function outcomeFromFacts(
   if (executions.size < input.cases.length) return "incomplete";
 
   let ambiguous = false;
+  let incomplete = false;
   const observations: Array<{
     trajectoryId: string;
     passed: boolean;
@@ -772,15 +750,10 @@ async function outcomeFromFacts(
       execution,
       key,
       facts.assessments,
-      facts.spendEvents,
     );
     if (assessment === "ambiguous") ambiguous = true;
-    else if (assessment === "judge_evidence_incomplete") {
-      observations.push({
-        trajectoryId: execution.trajectoryId,
-        passed: false,
-      });
-    } else {
+    else if (assessment === "judge_evidence_incomplete") incomplete = true;
+    else {
       observations.push({
         trajectoryId: execution.trajectoryId,
         passed: assessment.passed,
@@ -788,6 +761,7 @@ async function outcomeFromFacts(
     }
   }
   if (ambiguous) return "ambiguous";
+  if (incomplete) return "incomplete";
   const bound = evaluatorWorstCaseBound(observations, `${questionId}\0judge`);
   return bound < input.policy.qualityFloor ? "fail" : "pass";
 }
@@ -982,6 +956,10 @@ export async function confirmSwapSet(
   const existingFinding = (
     await readFacts(input.store, input.budget.modeB.projectId)
   ).cascadeFindings.find((finding) => finding.cascadeId === cascadeId);
+  const swapCandidate = input.swapSet[0]!.candidateModel;
+  const sharedCandidate = input.swapSet.every(
+    (swap) => swap.candidateModel === swapCandidate,
+  );
   if (existingFinding === undefined) {
     await writeReplayFact(
       input.store,
@@ -997,6 +975,7 @@ export async function confirmSwapSet(
         cascadeSeedStepId: cascadeSeed ?? null,
         uncertainStepIds,
         runSetsUsed: result.runSetsUsed,
+        ...(sharedCandidate ? { candidateId: swapCandidate } : {}),
         createdAt: new Date().toISOString(),
       }),
     );

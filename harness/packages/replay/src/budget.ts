@@ -181,7 +181,7 @@ export function createBudget(options: CreateBudgetOptions): Budget {
   }
   const key = budgetKey(options.projectId, options.runId);
 
-  async function load() {
+  async function load(prune: boolean) {
     for (;;) {
       const entry = await options.store.get(key);
       if (entry === null) {
@@ -199,23 +199,41 @@ export function createBudget(options: CreateBudgetOptions): Budget {
         ...decode(entry.body),
         authorizedTotalUsd: options.authorizedTotalUsd,
       };
+      if (!prune) {
+        return {
+          ledger,
+          version: entry.version,
+          fenceToken: entry.fenceToken,
+        };
+      }
+      const owners = new Map<string, Promise<boolean>>();
+      const ownerTerminal = (runId: string): Promise<boolean> => {
+        let known = owners.get(runId);
+        if (known === undefined) {
+          known = options.store
+            .get(runKey(options.projectId, runId))
+            .then(
+              (owner) =>
+                owner !== null &&
+                runMetaSchema.parse(
+                  JSON.parse(
+                    Buffer.from(owner.body).toString("utf8"),
+                  ) as unknown,
+                ).status !== "running",
+            );
+          owners.set(runId, known);
+        }
+        return known;
+      };
       const reservations: Record<string, ReservationLedgerEntry> = {};
       let expired = false;
       for (const [reservationId, reservation] of Object.entries(
         ledger.reservations,
       )) {
-        const owner = await options.store.get(
-          runKey(options.projectId, reservation.runId),
-        );
-        const ownerTerminal =
-          owner !== null &&
-          runMetaSchema.parse(
-            JSON.parse(Buffer.from(owner.body).toString("utf8")) as unknown,
-          ).status !== "running";
         const stale =
           Date.now() - Date.parse(reservation.heartbeatAt) >
           reservationStalenessWindowMs;
-        if (ownerTerminal || stale) {
+        if (stale || (await ownerTerminal(reservation.runId))) {
           expired = true;
         } else {
           reservations[reservationId] = reservation;
@@ -251,7 +269,7 @@ export function createBudget(options: CreateBudgetOptions): Budget {
     const reservationId = randomUUID();
 
     for (;;) {
-      const current = await load();
+      const current = await load(true);
       const requiredCapUsd = current.ledger.spentUsd + worstCaseUsd;
       const capacityRequiredUsd =
         requiredCapUsd + reservedTotal(current.ledger);
@@ -290,7 +308,7 @@ export function createBudget(options: CreateBudgetOptions): Budget {
         async heartbeat(): Promise<void> {
           if (refunded) return;
           for (;;) {
-            const latest = await load();
+            const latest = await load(false);
             const reservation = latest.ledger.reservations[reservationId];
             if (reservation === undefined) {
               throw new Error("Budget reservation is no longer active");
@@ -318,8 +336,11 @@ export function createBudget(options: CreateBudgetOptions): Budget {
           assertAmount(actualCostUsd, "actualCostUsd");
           if (refunded) return;
           for (;;) {
-            const latest = await load();
-            if (latest.ledger.reservations[reservationId] === undefined) {
+            const latest = await load(false);
+            if (
+              latest.ledger.reservations[reservationId] === undefined &&
+              actualCostUsd === 0
+            ) {
               refunded = true;
               return;
             }
@@ -347,7 +368,7 @@ export function createBudget(options: CreateBudgetOptions): Budget {
   }
 
   async function state(): Promise<BudgetState> {
-    const { ledger } = await load();
+    const { ledger } = await load(true);
     return {
       authorizedTotalUsd: ledger.authorizedTotalUsd,
       spentUsd: ledger.spentUsd,

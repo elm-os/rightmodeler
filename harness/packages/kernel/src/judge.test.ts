@@ -163,6 +163,40 @@ describe("pickJudge", () => {
 });
 
 describe("judgeExecution", () => {
+  it("issues both position-swapped calls before either resolves", async () => {
+    let calls = 0;
+    let resolveBothStarted!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      resolveBothStarted = resolve;
+    });
+    const result = await judgeExecution({
+      chat: async () => {
+        calls += 1;
+        if (calls === 2) resolveBothStarted();
+        let rejectAfterTimer!: ReturnType<typeof setTimeout>;
+        const rejectAfter = new Promise<never>((_, reject) => {
+          rejectAfterTimer = setTimeout(
+            () => reject(new Error("Judge calls did not overlap")),
+            200,
+          );
+        });
+        try {
+          await Promise.race([bothStarted, rejectAfter]);
+        } finally {
+          clearTimeout(rejectAfterTimer);
+        }
+        return response("equivalent", 1, "ok");
+      },
+      judgeModel: "neutral/judge",
+      supportsStructuredOutput: true,
+      task: "task",
+      reference: "reference",
+      candidate: "candidate",
+    });
+
+    expect(result.passed).toBe(true);
+  });
+
   it("makes two position-swapped temperature-zero calls and hedges disagreement", async () => {
     const requests: JudgeChatRequest[] = [];
     const outputs = [

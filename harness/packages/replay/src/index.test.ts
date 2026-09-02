@@ -3,13 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  budgetKey,
   completeRun,
   createRun,
   factSchema,
   factsPrefix,
   FsStore,
+  runKey,
   type Fact,
   type JsonValue,
+  type Store,
 } from "@rightmodeler/core";
 import { aggregate, type JudgeChat } from "@rightmodeler/kernel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,6 +27,7 @@ import {
   ProviderRequestError,
   replayModeA,
   shortlist,
+  type Budget,
   type ModelCatalogEntry,
   type ProviderClient,
   type RecordedCase,
@@ -127,6 +131,22 @@ async function readFacts(store: FsStore): Promise<Fact[]> {
       );
     }),
   );
+}
+
+function countingStore(inner: Store, key: string): Store & { reads(): number } {
+  let readCount = 0;
+  return {
+    async get(candidateKey) {
+      if (candidateKey === key) readCount += 1;
+      return inner.get(candidateKey);
+    },
+    list: (prefix) => inner.list(prefix),
+    putImmutable: (candidateKey, body) =>
+      inner.putImmutable(candidateKey, body),
+    compareAndSwap: (candidateKey, expectedVersion, body, fenceToken) =>
+      inner.compareAndSwap(candidateKey, expectedVersion, body, fenceToken),
+    reads: () => readCount,
+  };
 }
 
 describe("adaptive limiter", () => {
@@ -1036,6 +1056,77 @@ describe("budget reservation", () => {
     }
   });
 
+  it("keeps spend when its reservation was reclaimed before the refund", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-13T12:00:00.000Z"));
+    try {
+      const budget = createBudget({
+        store,
+        projectId,
+        runId,
+        authorizedTotalUsd: 0.01,
+      });
+      const reservation = await budget.reserveExecution({
+        contextTokens: 1,
+        maxOutputTokens: 0,
+        pricing: { input: 0.01, output: 0 },
+      });
+
+      vi.advanceTimersByTime(DEFAULT_RESERVATION_STALENESS_WINDOW_MS + 1);
+      const resumedBudget = createBudget({
+        store,
+        projectId,
+        runId,
+        authorizedTotalUsd: 0.01,
+      });
+      expect(await resumedBudget.state()).toMatchObject({
+        spentUsd: 0,
+        reservedUsd: 0,
+      });
+
+      await reservation.refund(0.004);
+      expect(await budget.state()).toMatchObject({
+        spentUsd: 0.004,
+        reservedUsd: 0,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads the owner run once per prune and never on heartbeat or refund", async () => {
+    const counting = countingStore(store, runKey(projectId, runId));
+    const budget = createBudget({
+      store: counting,
+      projectId,
+      runId,
+      authorizedTotalUsd: 1,
+    });
+    await budget.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 0,
+      pricing: { input: 0.001, output: 0 },
+    });
+    await budget.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 0,
+      pricing: { input: 0.001, output: 0 },
+    });
+
+    const readsBeforeThird = counting.reads();
+    const third = await budget.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 0,
+      pricing: { input: 0.001, output: 0 },
+    });
+    expect(counting.reads() - readsBeforeThird).toBe(1);
+
+    const readsBeforeMaintenance = counting.reads();
+    await third.heartbeat();
+    await third.refund(0);
+    expect(counting.reads() - readsBeforeMaintenance).toBe(0);
+  });
+
   it("reclaims a reservation when its owning run is terminal", async () => {
     await createRun(store, {
       projectId,
@@ -1550,6 +1641,33 @@ describe("Mode A replay", () => {
     });
   });
 
+  it("judges executions concurrently", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const slowJudge: JudgeChat = async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      inFlight -= 1;
+      return JSON.stringify({
+        verdict: "equivalent",
+        score: 1,
+        justification: "Equivalent fixture outputs.",
+      });
+    };
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index + 1}`,
+        trajectoryId: `trajectory-${index + 1}`,
+      }),
+    );
+
+    const result = await run(cases, slowJudge, 4);
+
+    expect(result.completed).toBe(4);
+    expect(maxInFlight).toBeGreaterThan(2);
+  });
+
   it("switches after three malformed assessments and rejudges only affected cells", async () => {
     await stub.close();
     stub = await startStub({
@@ -1607,9 +1725,9 @@ describe("Mode A replay", () => {
     expect(
       requests.filter(({ model }) => model === "acme/small-1"),
     ).toHaveLength(4);
-    expect(
-      requests.filter(({ model }) => model === "zeta/judge-1"),
-    ).toHaveLength(3);
+    expect([6, 8]).toContain(
+      requests.filter(({ model }) => model === "zeta/judge-1").length,
+    );
     expect(
       requests.filter(({ model }) => model === "yotta/judge-2"),
     ).toHaveLength(8);
@@ -1679,9 +1797,9 @@ describe("Mode A replay", () => {
         .filter((fact) => "assessmentId" in fact)
         .every((fact) => fact.evaluatorId === "yotta/judge-2"),
     ).toBe(true);
-    expect(
-      judgeModels.filter((model) => model === "zeta/judge-1"),
-    ).toHaveLength(3);
+    expect([6, 8]).toContain(
+      judgeModels.filter((model) => model === "zeta/judge-1").length,
+    );
     expect(
       judgeModels.filter((model) => model === "yotta/judge-2"),
     ).toHaveLength(8);
@@ -1739,12 +1857,12 @@ describe("Mode A replay", () => {
     expect(
       requests.filter(({ model }) => model === "acme/small-1"),
     ).toHaveLength(4);
-    expect(
-      requests.filter(({ model }) => model === "zeta/judge-1"),
-    ).toHaveLength(3);
-    expect(
-      requests.filter(({ model }) => model === "yotta/judge-2"),
-    ).toHaveLength(3);
+    expect([6, 8]).toContain(
+      requests.filter(({ model }) => model === "zeta/judge-1").length,
+    );
+    expect([6, 8]).toContain(
+      requests.filter(({ model }) => model === "yotta/judge-2").length,
+    );
     expect(requests.some(({ model }) => model === "unused/judge-3")).toBe(
       false,
     );
@@ -2042,6 +2160,226 @@ describe("Mode A replay", () => {
     ]);
   });
 
+  it("heartbeats the reservation while a cell is in flight", async () => {
+    vi.useFakeTimers();
+    const candidate: ModelCatalogEntry = {
+      id: "vendor/candidate",
+      family: "vendor",
+      contextLength: 100,
+      pricing: { input: 0.006, output: 0.004 },
+      supportsTools: false,
+      supportsStructuredOutput: false,
+    };
+    const inner = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 1,
+    });
+    let heartbeats = 0;
+    const budget: Budget = {
+      ...inner,
+      reserveExecution: async (request) => {
+        const reservation = await inner.reserveExecution(request);
+        return {
+          ...reservation,
+          heartbeat: async () => {
+            heartbeats += 1;
+            await reservation.heartbeat();
+          },
+        };
+      },
+    };
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    const gatedProvider: ProviderClient = {
+      providerId: "gated-provider",
+      listModels: async () => [candidate],
+      chat: async (request) => {
+        resolveStarted();
+        await gate;
+        const response = {
+          content: "candidate output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          costUsd: 0.001,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+
+    try {
+      const running = replayModeA({
+        steps: [step()],
+        cases: [recordedCase({ contextTokens: 1, maxOutputTokens: 1 })],
+        candidates: [
+          {
+            stepId: "step-1",
+            candidates: [candidate],
+            droppedByTop: 0,
+            droppedFreeModels: 0,
+          },
+        ],
+        provider: gatedProvider,
+        store,
+        budget,
+        concurrency: 1,
+      });
+      await started;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(heartbeats).toBeGreaterThanOrEqual(1);
+      releaseGate();
+      await expect(running).resolves.toMatchObject({ completed: 1 });
+      expect(await inner.state()).toMatchObject({ reservedUsd: 0 });
+    } finally {
+      releaseGate();
+      vi.useRealTimers();
+    }
+  });
+
+  it("backs off instead of spinning while a predecessor's reservation holds the cap", async () => {
+    const predecessorBudget = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.01,
+    });
+    const predecessor = await predecessorBudget.reserveExecution({
+      contextTokens: 1,
+      maxOutputTokens: 0,
+      pricing: { input: 0.01, output: 0 },
+    });
+    const counting = countingStore(store, budgetKey(projectId, runId));
+    const budget = createBudget({
+      store: counting,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.01,
+    });
+    const candidate: ModelCatalogEntry = {
+      id: "vendor/candidate",
+      family: "vendor",
+      contextLength: 100,
+      pricing: { input: 0.006, output: 0.004 },
+      supportsTools: false,
+      supportsStructuredOutput: false,
+    };
+    const immediateProvider: ProviderClient = {
+      providerId: "immediate-provider",
+      listModels: async () => [candidate],
+      chat: async (request) => {
+        const response = {
+          content: "candidate output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          costUsd: 0.001,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+    const running = replayModeA({
+      steps: [step()],
+      cases: [recordedCase({ contextTokens: 1, maxOutputTokens: 1 })],
+      candidates: [
+        {
+          stepId: "step-1",
+          candidates: [candidate],
+          droppedByTop: 0,
+          droppedFreeModels: 0,
+        },
+      ],
+      provider: immediateProvider,
+      store: counting,
+      budget,
+      concurrency: 1,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const readsWhileBlocked = counting.reads();
+    await predecessor.refund(0);
+    await expect(running).resolves.toMatchObject({ completed: 1, blocked: [] });
+    expect(readsWhileBlocked).toBeLessThanOrEqual(12);
+  });
+
+  it("settles in-flight workers and stops idle workers before rethrowing a worker failure", async () => {
+    const candidate: ModelCatalogEntry = {
+      id: "vendor/candidate",
+      family: "vendor",
+      contextLength: 100,
+      pricing: { input: 0.006, output: 0.004 },
+      supportsTools: false,
+      supportsStructuredOutput: false,
+    };
+    let providerCalls = 0;
+    const settlingProvider: ProviderClient = {
+      providerId: "settling-provider",
+      listModels: async () => [candidate],
+      chat: async (request) => {
+        providerCalls += 1;
+        if (request.messages.at(-1)?.content === "boom") {
+          throw new Error("store exploded");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const response = {
+          content: "candidate output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          costUsd: 0.001,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+    const budget = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 1,
+    });
+    const cases = ["boom", "slow-1", "slow-2", "slow-3"].map((content, index) =>
+      recordedCase({
+        caseId: `case-${index + 1}`,
+        trajectoryId: `trajectory-${index + 1}`,
+        contextTokens: 1,
+        maxOutputTokens: 1,
+        messages: [{ role: "user", content }],
+      }),
+    );
+
+    await expect(
+      replayModeA({
+        steps: [step()],
+        cases,
+        candidates: [
+          {
+            stepId: "step-1",
+            candidates: [candidate],
+            droppedByTop: 0,
+            droppedFreeModels: 0,
+          },
+        ],
+        provider: settlingProvider,
+        store,
+        budget,
+        concurrency: 2,
+      }),
+    ).rejects.toThrow("store exploded");
+    const executions = (await readFacts(store)).filter(
+      (fact) => "caseId" in fact && "terminalOutcome" in fact,
+    );
+
+    expect(providerCalls).toBe(2);
+    expect(executions).toHaveLength(1);
+  });
+
   it("waits for a refund before retrying reservation-limited concurrency", async () => {
     const candidate: ModelCatalogEntry = {
       id: "vendor/candidate",
@@ -2293,6 +2631,30 @@ describe("Mode A replay", () => {
     expect(
       facts.some((fact) => "actor" in fact && fact.actor === "judge"),
     ).toBe(false);
+  });
+
+  it("re-judges an execution whose judge failed on a later run", async () => {
+    const first = await run(
+      [recordedCase()],
+      async () => {
+        throw new Error("judge offline");
+      },
+      1,
+    );
+    expect(first.completed).toBe(1);
+    expect(
+      (await readFacts(store)).some((fact) => "assessmentId" in fact),
+    ).toBe(false);
+    const hitsAfterFirstRun = stub.getHitCount();
+
+    const second = await run([recordedCase()]);
+    const assessments = (await readFacts(store)).filter(
+      (fact) => "assessmentId" in fact,
+    );
+
+    expect(second).toMatchObject({ completed: 0, skipped: 1 });
+    expect(stub.getHitCount()).toBe(hitsAfterFirstRun);
+    expect(assessments).toHaveLength(1);
   });
 
   it("resumes without new provider calls or facts", async () => {

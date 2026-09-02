@@ -742,6 +742,56 @@ describe.skipIf(skipDocker)("confirmSwapSet", () => {
     testTimeoutMs,
   );
 
+  it("re-judges a case whose confirm judge failed on the next run instead of freezing the loss", async () => {
+    const runner = fakeRunner(() => false);
+    const context = await testContext(runner);
+    const delegate = judgeChat();
+    let invocation = 0;
+    const chat: ConfirmModeB["judge"]["chat"] = async (request) => {
+      invocation += 1;
+      if (invocation === 1) throw new Error("transient judge outage");
+      return delegate(request);
+    };
+    const input: ConfirmSwapSetInput = {
+      ...context.input,
+      modeB: {
+        ...context.input.modeB,
+        judge: { ...context.input.modeB.judge, chat },
+      },
+    };
+
+    const first = await confirmSwapSet(input);
+    const fullSet = (await readPlan(context.store)).queue.find(
+      ({ members }) => members.length === 3,
+    );
+
+    expect(first).toMatchObject({ verdict: "inconclusive", runSetsUsed: 1 });
+    expect(fullSet).toMatchObject({
+      members: ["classify", "lookup", "answer"],
+      status: "pending",
+    });
+
+    const second = await confirmSwapSet(input);
+    const assessments = (await facts(context.store)).filter(
+      (fact) => "assessmentId" in fact,
+    );
+
+    expect(second).toMatchObject({ verdict: "confirmed", runSetsUsed: 1 });
+    expect(runner.calls()).toBe(1);
+    expect(assessments).toHaveLength(17);
+  });
+
+  it("writes the swap set candidate on the cascade finding", async () => {
+    const runner = fakeRunner(() => false);
+    const context = await testContext(runner);
+
+    await confirmSwapSet(context.input);
+
+    expect(await cascadeFindings(context.store)).toMatchObject([
+      { verdict: "confirmed", candidateId: "acme/small-1" },
+    ]);
+  });
+
   it("names the next required run-set cap and leaves a resumable frontier", async () => {
     const runner = fakeRunner(pairFailure);
     const context = await testContext(runner, 1);
