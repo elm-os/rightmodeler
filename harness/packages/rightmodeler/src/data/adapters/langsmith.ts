@@ -2,9 +2,9 @@ import {
   isRecord,
   jsonValue,
   optionalString,
+  optionalUsage,
   requiredString,
   sampleRecords,
-  tokenCount,
 } from "./shared.js";
 import { createRowAdapter } from "./row-adapter.js";
 
@@ -57,6 +57,12 @@ export const langsmithAdapter = createRowAdapter({
       ? inputs.messages
       : [inputs];
     const timestamp = optionalString(record.start_time);
+    const usage = optionalUsage(
+      record.prompt_tokens,
+      record.completion_tokens,
+      `LangSmith record ${recordIndex + 1}`,
+      format,
+    );
     return [
       {
         traceId,
@@ -76,18 +82,7 @@ export const langsmithAdapter = createRowAdapter({
             `LangSmith record ${recordIndex + 1} outputs`,
             format,
           ),
-          usage: {
-            inputTokens: tokenCount(
-              record.prompt_tokens,
-              `LangSmith record ${recordIndex + 1} prompt usage`,
-              format,
-            ),
-            outputTokens: tokenCount(
-              record.completion_tokens,
-              `LangSmith record ${recordIndex + 1} completion usage`,
-              format,
-            ),
-          },
+          ...(usage === undefined ? {} : { usage }),
           trajectoryId:
             optionalString(
               metadata.thread_id ??

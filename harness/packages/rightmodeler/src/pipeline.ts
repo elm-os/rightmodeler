@@ -2236,6 +2236,7 @@ function replayUsageByCase(
   const usage = new Map<string, { inputTokens: number }>();
   for (const run of runs) {
     for (const step of run.steps) {
+      if (step.usage === undefined) continue;
       const key = `${step.trajectoryId}\0${step.stepIndex}`;
       const existing = usage.get(key);
       if (
@@ -2253,7 +2254,7 @@ function requireReplayUsage(
   usage: ReadonlyMap<string, { readonly inputTokens: number }>,
   corpusCase: Corpus["cases"][number],
 ): { readonly inputTokens: number } {
-  if (corpusCase.observation !== undefined) {
+  if (corpusCase.observation?.usage !== undefined) {
     return { inputTokens: corpusCase.observation.usage.inputTokens };
   }
   const value = usage.get(
@@ -3430,6 +3431,18 @@ function confirmationCases(
     if (input === undefined || referenceOutput === undefined) {
       return undefined;
     }
+    const contextTokens = run.steps.flatMap(({ usage }) =>
+      usage === undefined ? [] : [usage.inputTokens],
+    );
+    if (contextTokens.length === 0) {
+      throw new ProtocolError({
+        exitCode: 2,
+        code: "active_corpus_usage_unavailable",
+        message: `Trajectory ${run.traceId} has no recorded token usage`,
+        remedy:
+          "Publish a corpus version built from traces that include token usage.",
+      });
+    }
     cases.push({
       caseId: `confirm-${run.traceId}`,
       stepId: targetStepId,
@@ -3440,9 +3453,7 @@ function confirmationCases(
         ? {}
         : { system: first.systemPrompt }),
       messages: chatMessages(first.messages),
-      contextTokens: Math.max(
-        ...run.steps.map(({ usage }) => usage.inputTokens),
-      ),
+      contextTokens: Math.max(...contextTokens),
       maxOutputTokens: 256,
       referenceOutput,
       input,

@@ -126,7 +126,7 @@ describe("pipeline active corpus resolution", () => {
     expect(resolved.cases.map(({ content }) => content.model)).toEqual([
       "acme/small-1",
     ]);
-    expect(resolved.cases[0]?.observation?.usage.inputTokens).toBe(12);
+    expect(resolved.cases[0]?.observation?.usage?.inputTokens).toBe(12);
     expect(checkpointed.corpusVersionId).toBe(parent.corpusVersionId);
     expect(checkpointed.cases.map(({ caseId }) => caseId)).toEqual(
       parent.cases.map(({ caseId }) => caseId),

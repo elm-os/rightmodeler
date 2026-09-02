@@ -65,10 +65,12 @@ const corpusCaseContentSchema = z.strictObject({
 });
 const corpusCaseObservationSchema = z.strictObject({
   traceId: z.string().min(1).optional(),
-  usage: z.strictObject({
-    inputTokens: z.number().int().nonnegative(),
-    outputTokens: z.number().int().nonnegative(),
-  }),
+  usage: z
+    .strictObject({
+      inputTokens: z.number().int().nonnegative(),
+      outputTokens: z.number().int().nonnegative(),
+    })
+    .optional(),
   timestamp: z.string().min(1).optional(),
   costUsd: z.number().nonnegative().optional(),
   durationMs: z.number().nonnegative().optional(),

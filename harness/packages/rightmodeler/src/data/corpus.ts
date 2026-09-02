@@ -21,7 +21,7 @@ export interface CorpusCaseContent {
 
 export interface CorpusCaseObservation {
   traceId?: string;
-  usage: { inputTokens: number; outputTokens: number };
+  usage?: { inputTokens: number; outputTokens: number };
   timestamp?: string;
   costUsd?: number;
   durationMs?: number;
@@ -92,7 +92,7 @@ function caseObservation(
 ): CorpusCaseObservation {
   return {
     traceId,
-    usage: { ...step.usage },
+    ...(step.usage === undefined ? {} : { usage: { ...step.usage } }),
     toolCalls: toolCalls(step.output),
     ...(step.timestamp === undefined ? {} : { timestamp: step.timestamp }),
     ...(step.costUsd === undefined ? {} : { costUsd: step.costUsd }),
@@ -125,7 +125,9 @@ function caseObservationJson(observation: CorpusCaseObservation): JsonValue {
     ...(observation.traceId === undefined
       ? {}
       : { traceId: observation.traceId }),
-    usage: { ...observation.usage },
+    ...(observation.usage === undefined
+      ? {}
+      : { usage: { ...observation.usage } }),
     toolCalls: [...observation.toolCalls],
     ...(observation.timestamp === undefined
       ? {}

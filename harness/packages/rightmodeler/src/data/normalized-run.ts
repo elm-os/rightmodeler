@@ -11,7 +11,7 @@ export const normalizedStepSchema = z.strictObject({
   systemPrompt: z.string().optional(),
   messages: z.array(z.json()),
   output: z.json(),
-  usage: normalizedUsageSchema,
+  usage: normalizedUsageSchema.optional(),
   family: z.string().min(1).optional(),
   trajectoryId: z.string().min(1),
   timestamp: z.string().min(1).optional(),
