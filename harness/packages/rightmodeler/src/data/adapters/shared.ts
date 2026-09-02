@@ -53,7 +53,7 @@ export class TraceAdaptError extends Error {
   }
 }
 
-export class TraceRecordsDroppedError extends TraceAdaptError {
+class TraceRecordsDroppedError extends TraceAdaptError {
   readonly result: TraceAdaptResult;
 
   constructor(format: TraceFormat, result: TraceAdaptResult) {
@@ -359,7 +359,7 @@ export function jsonValue(
   return parsed;
 }
 
-export function normalizedJsonValue(value: unknown): JsonValue | undefined {
+function normalizedJsonValue(value: unknown): JsonValue | undefined {
   if (
     value === null ||
     typeof value === "string" ||

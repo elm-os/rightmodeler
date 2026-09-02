@@ -189,6 +189,9 @@ importers:
 
   harness/packages/rightmodeler:
     devDependencies:
+      '@repo/contracts':
+        specifier: workspace:*
+        version: link:../../../packages/contracts
       '@rightmodeler/core':
         specifier: workspace:*
         version: link:../core
@@ -7356,7 +7359,7 @@ snapshots:
       esbuild: 0.28.2
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
-      postcss: 8.5.16
+      postcss: 8.5.23
       rollup: 4.62.4
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -7371,7 +7374,7 @@ snapshots:
       esbuild: 0.28.2
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
-      postcss: 8.5.16
+      postcss: 8.5.23
       rollup: 4.62.4
       tinyglobby: 0.2.17
     optionalDependencies:

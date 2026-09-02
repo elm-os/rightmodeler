@@ -198,7 +198,7 @@ export function argumentKeys(callText: string): string[] {
   return [...new Set(keys)].sort();
 }
 
-export function extractModelId(text: string): string | undefined {
+function extractModelId(text: string): string | undefined {
   const model =
     /\b(?:model|model_name)\s*[:=]\s*(?:[A-Za-z_$][\w$]*\s*\(\s*)?["']([A-Za-z0-9](?:[A-Za-z0-9._:/-]|\\\/)*)["']/i.exec(
       text,

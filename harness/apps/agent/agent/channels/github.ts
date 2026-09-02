@@ -20,7 +20,7 @@ const watchedPullRequestActions = new Set([
 ]);
 const githubCommentBodyMaxLength = 65_536;
 
-export function isTrustedGitHubComment(comment: GitHubComment): boolean {
+function isTrustedGitHubComment(comment: GitHubComment): boolean {
   const association = comment.raw.author_association;
   return (
     typeof association === "string" && trustedAssociations.has(association)

@@ -135,6 +135,7 @@ describe("packed CLI bundle", () => {
     await assertPackedDocumentation(installedRoot, installedBinary, project);
     await Promise.all(
       [
+        "dist/cli.d.ts",
         "dist-bundle/proxy/container-supervisor.mjs",
         "dist-bundle/proxy/headers.js",
         "dist-bundle/proxy/proxy-runtime.mjs",
@@ -144,9 +145,14 @@ describe("packed CLI bundle", () => {
 
     const installedPackage = JSON.parse(
       await readFile(join(installedRoot, "package.json"), "utf8"),
-    ) as { dependencies?: unknown; engines?: { node?: string } };
+    ) as {
+      dependencies?: unknown;
+      engines?: { node?: string };
+      exports?: { "."?: { types?: string } };
+    };
     expect(installedPackage.dependencies).toBeUndefined();
     expect(installedPackage.engines?.node).toBe(">=24");
+    expect(installedPackage.exports?.["."]?.types).toBe("./dist/cli.d.ts");
 
     const help = await runInstalled(installedBinary, ["--help"], project);
     expect(help).toMatchObject({ code: 0, stderr: "" });

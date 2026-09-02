@@ -1,6 +1,6 @@
 import { computeRunSpecDigest, type JsonValue } from "@rightmodeler/core";
 
-export const ISSUE_CLASSES = [
+const ISSUE_CLASSES = [
   "ingestion",
   "evaluator",
   "replay",
@@ -11,7 +11,7 @@ export const ISSUE_CLASSES = [
 
 export type IssueClass = (typeof ISSUE_CLASSES)[number];
 
-export const ISSUE_ACTIONS = {
+const ISSUE_ACTIONS = {
   ingestion: "fix-ingestion",
   evaluator: "fix-evaluator",
   replay: "fix-replay",

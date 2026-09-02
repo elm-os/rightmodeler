@@ -22,18 +22,18 @@ interface CapturedProcess {
 
 const require = createRequire(import.meta.url);
 
-export function rightmodelerCliPath(): string {
+function rightmodelerCliPath(): string {
   return require.resolve("@rightmodeler/cli");
 }
 
-export function cliEnvironment(): NodeJS.ProcessEnv {
+function cliEnvironment(): NodeJS.ProcessEnv {
   const environment = { ...process.env };
   delete environment.FORCE_COLOR;
   delete environment.NO_COLOR;
   return environment;
 }
 
-export function cliArguments(
+function cliArguments(
   command: string,
   commandArguments: readonly string[],
   options: Pick<CliRunOptions, "repo" | "store">,

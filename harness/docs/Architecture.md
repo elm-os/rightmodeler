@@ -500,8 +500,8 @@ resolve it, which is the same principle expressed for a context with no human. A
 that every ambiguity path ends in a question or a named abstention.
 
 **Simplicity first.** An authored adapter has one required export and a size budget. A generated
-matcher is data, not code. No configuration key ships without a consumer, enforced by an
-unreferenced-export check and a schema test.
+matcher is data, not code. No configuration key ships without a consumer, enforced by
+`scripts/unreferenced-exports.mjs` in the root check and a schema test.
 
 **Surgical changes.** A swap pull request changes model identifiers and nothing else. A diff
 linter runs before the pull request opens and rejects any hunk touching anything but a model

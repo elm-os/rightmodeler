@@ -54,7 +54,7 @@ async function findCodeowners(repoDir: string): Promise<string | null> {
   return null;
 }
 
-export function parseCodeowners(content: string): readonly CodeownersRule[] {
+function parseCodeowners(content: string): readonly CodeownersRule[] {
   const rules: CodeownersRule[] = [];
   for (const line of content.split(/\r?\n/)) {
     const rule = line.split("#")[0]!.trim();

@@ -108,6 +108,22 @@ async function listFiles(root) {
     .map((entry) => relative(root, join(entry.parentPath, entry.name)));
 }
 
+async function copyDeclarations(from, to) {
+  for (const entry of await readdir(from, { withFileTypes: true })) {
+    if (entry.name === "publish") continue;
+    const source = join(from, entry.name);
+    if (entry.isDirectory()) {
+      await copyDeclarations(source, join(to, entry.name));
+    } else if (
+      entry.name.endsWith(".d.ts") &&
+      !entry.name.endsWith(".test.d.ts")
+    ) {
+      await mkdir(to, { recursive: true });
+      await cp(source, join(to, entry.name));
+    }
+  }
+}
+
 const stagedFiles = await listFiles(stagingRoot);
 const existingFiles = await listFiles(bundleRoot).catch(() => []);
 for (const path of stagedFiles) {
@@ -133,6 +149,7 @@ await rm(publishRoot, { recursive: true, force: true });
 await mkdir(publishRoot, { recursive: true });
 await Promise.all([
   cp(bundleRoot, resolve(publishRoot, "dist-bundle"), { recursive: true }),
+  copyDeclarations(resolve(packageRoot, "dist"), resolve(publishRoot, "dist")),
   cp(resolve(packageRoot, "docs"), resolve(publishRoot, "docs"), {
     recursive: true,
   }),
@@ -143,3 +160,7 @@ await Promise.all([
     `${JSON.stringify(publishManifest, null, 2)}\n`,
   ),
 ]);
+
+await readFile(resolve(publishRoot, "dist/cli.d.ts")).catch(() => {
+  throw new Error("dist/cli.d.ts is missing; run tsc before bundling");
+});

@@ -52,7 +52,7 @@ export interface Corpus {
   strata: StratumWeight[];
 }
 
-export class CorpusError extends Error {
+class CorpusError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "CorpusError";

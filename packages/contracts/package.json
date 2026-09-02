@@ -4,7 +4,8 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    "./schemas/*": "./schemas/*"
+    "./schemas/*": "./schemas/*",
+    "./fixtures/*": "./fixtures/*"
   },
   "scripts": {
     "check": "node scripts/check.mjs"

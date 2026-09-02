@@ -2,22 +2,17 @@ import { z } from "zod";
 
 import type { FenceToken, Store, StoreEntry, Version } from "./store.js";
 
-export const replayModeSchema = z.enum(["single_shot", "e2e"]);
+const replayModeSchema = z.enum(["single_shot", "e2e"]);
 export type ReplayMode = z.infer<typeof replayModeSchema>;
 
-export const prefixProvenanceSchema = z.enum([
+const prefixProvenanceSchema = z.enum([
   "external",
   "model_authored",
   "unknown",
 ]);
 export type PrefixProvenance = z.infer<typeof prefixProvenanceSchema>;
 
-export const stepStatusSchema = z.enum([
-  "pending",
-  "replaying",
-  "replayed",
-  "error",
-]);
+const stepStatusSchema = z.enum(["pending", "replaying", "replayed", "error"]);
 export type StepStatus = z.infer<typeof stepStatusSchema>;
 
 export const stepRecordSchema = z.strictObject({

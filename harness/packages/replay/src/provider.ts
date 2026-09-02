@@ -112,7 +112,7 @@ export class BlockedError extends Error {
 
 export class ProviderRequestError extends Error {}
 
-export class ProviderHttpError extends ProviderRequestError {
+class ProviderHttpError extends ProviderRequestError {
   readonly status: number;
 
   constructor(status: number, body: string) {

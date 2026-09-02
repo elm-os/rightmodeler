@@ -4,7 +4,7 @@ import {
   type JsonValue,
 } from "@rightmodeler/core";
 
-export const DRIFT_SIGNALS = [
+const DRIFT_SIGNALS = [
   "input",
   "tool",
   "evaluator",

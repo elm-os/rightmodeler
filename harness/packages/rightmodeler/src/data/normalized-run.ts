@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-export const normalizedUsageSchema = z.strictObject({
+const normalizedUsageSchema = z.strictObject({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
 });
 
-export const normalizedStepSchema = z.strictObject({
+const normalizedStepSchema = z.strictObject({
   stepIndex: z.number().int().nonnegative(),
   model: z.string().min(1),
   systemPrompt: z.string().optional(),

@@ -3,11 +3,11 @@ import {
   type ErrorObject,
   type ValidateFunction,
 } from "ajv/dist/2020.js";
-import benchmarkCasesSchema from "../../../../packages/contracts/schemas/benchmark-cases.schema.json" with { type: "json" };
-import corpusDriftProposalSchema from "../../../../packages/contracts/schemas/corpus-drift-proposal.schema.json" with { type: "json" };
-import corpusManifestSchema from "../../../../packages/contracts/schemas/corpus-manifest.schema.json" with { type: "json" };
-import remediationEvidenceSchema from "../../../../packages/contracts/schemas/remediation-evidence.schema.json" with { type: "json" };
-import remediationLifecycleSchema from "../../../../packages/contracts/schemas/remediation-lifecycle.schema.json" with { type: "json" };
+import benchmarkCasesSchema from "@repo/contracts/schemas/benchmark-cases.schema.json" with { type: "json" };
+import corpusDriftProposalSchema from "@repo/contracts/schemas/corpus-drift-proposal.schema.json" with { type: "json" };
+import corpusManifestSchema from "@repo/contracts/schemas/corpus-manifest.schema.json" with { type: "json" };
+import remediationEvidenceSchema from "@repo/contracts/schemas/remediation-evidence.schema.json" with { type: "json" };
+import remediationLifecycleSchema from "@repo/contracts/schemas/remediation-lifecycle.schema.json" with { type: "json" };
 
 import { canonicalJson, jsonValueSchema, type Store } from "@rightmodeler/core";
 
@@ -26,7 +26,7 @@ const refusalCodes = {
   "remediation-lifecycle": "invalid_remediation_lifecycle",
 } as const satisfies Record<ContractArtifactName, string>;
 
-export class ContractArtifactValidationError extends Error {
+class ContractArtifactValidationError extends Error {
   readonly code: (typeof refusalCodes)[ContractArtifactName];
 
   constructor(name: ContractArtifactName, errors: readonly ErrorObject[]) {

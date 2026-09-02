@@ -71,7 +71,7 @@ const remediationLifecycleEventBodySchema = z.strictObject({
   restored: z.boolean(),
 });
 
-export const remediationLifecycleEventSchema =
+const remediationLifecycleEventSchema =
   remediationLifecycleEventBodySchema.extend({
     event_id: contentDigestSchema,
   });
