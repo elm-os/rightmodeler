@@ -251,7 +251,9 @@ function releaseDate(value: unknown): number | null {
 function price(value: unknown, label: string): number | null {
   if (value === undefined || value === null || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(value);
-  if (Number.isNaN(parsed)) return null;
+  if (Number.isNaN(parsed) || (Number.isFinite(parsed) && parsed < 0)) {
+    return null;
+  }
   return nonnegativeNumber(parsed, label);
 }
 

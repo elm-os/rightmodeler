@@ -395,6 +395,28 @@ describe("AI Gateway catalog", () => {
     });
   });
 
+  it("marks variable-priced router models as unpriceable", async () => {
+    const catalog = await listFixtureModels(
+      JSON.stringify({
+        data: [
+          {
+            id: "openai/example",
+            pricing: { prompt: "0.000001", completion: "0.000002" },
+          },
+          {
+            id: "openrouter/auto",
+            pricing: { prompt: "-1", completion: "-1" },
+          },
+        ],
+      }),
+    );
+
+    expect(catalog).toHaveLength(2);
+    expect(
+      catalog.find(({ id }) => id === "openrouter/auto")?.pricing,
+    ).toBeNull();
+  });
+
   it("applies pricing overrides without fetching another endpoint", async () => {
     const body = await fixtureWithoutPricing();
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
