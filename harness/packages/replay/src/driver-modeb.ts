@@ -145,6 +145,7 @@ interface ValidAttemptRow {
   upstreamStatus: number | null;
   upstreamSource: "provider" | "egress" | null;
   costUsd: number;
+  latencyMs?: number;
 }
 
 interface ValidReservationRow {
@@ -758,6 +759,7 @@ function parseAttempt(
     upstreamStatus,
     upstreamSource,
     costUsd,
+    latencyMs: Date.parse(row.endedAt) - Date.parse(row.startedAt),
   };
 }
 
@@ -1364,6 +1366,9 @@ async function writeAttemptFacts(
         usage: attempt.usage,
         costUsd: attempt.costUsd,
         costIsEstimate: true,
+        ...(attempt.latencyMs === undefined
+          ? {}
+          : { latencyMs: attempt.latencyMs }),
       }),
     );
     if (existing !== null) continue;

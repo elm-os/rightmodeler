@@ -609,6 +609,9 @@ export async function replayModeA(
           ...(attempt.finishReason === undefined
             ? {}
             : { finishReason: attempt.finishReason }),
+          ...(attempt.latencyMs === undefined
+            ? {}
+            : { latencyMs: attempt.latencyMs }),
         }),
       );
       const spendId = randomUUID();

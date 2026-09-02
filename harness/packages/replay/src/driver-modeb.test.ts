@@ -777,6 +777,11 @@ describe.skipIf(skipDocker)("Mode B replay", () => {
         expect(
           facts.attempts.map(({ streamOutcome }) => streamOutcome).sort(),
         ).toEqual(["completed", "completed", "completed", "provider_error"]);
+        expect(
+          facts.attempts.filter(
+            ({ latencyMs }) => typeof latencyMs === "number",
+          ),
+        ).toHaveLength(4);
         expect((await context.input.budget.state()).spentUsd).toBeCloseTo(
           facts.attempts.reduce((sum, attempt) => sum + attempt.costUsd, 0),
         );

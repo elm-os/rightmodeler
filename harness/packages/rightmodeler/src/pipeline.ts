@@ -332,6 +332,13 @@ const replayOutputSchema = z.strictObject({
       droppedFreeModels: z.number().int().nonnegative(),
       droppedByOutputCeiling: z.number().int().nonnegative().default(0),
       resolvedCurrentModelId: z.string().min(1).optional(),
+      currentPricing: z
+        .strictObject({
+          input: z.number().nonnegative(),
+          output: z.number().nonnegative(),
+        })
+        .nullable()
+        .optional(),
       abstention: z
         .strictObject({
           kind: z.enum([
@@ -1635,14 +1642,25 @@ async function prepareApply(context: PipelineContext): Promise<{
   readonly verdicts: readonly ApplyVerdict[];
   readonly conventions: CapturedConventions;
 }> {
-  const [scanOutput, decisionOutput, plan, reconciled, corpus] =
-    await Promise.all([
-      loadScan(context),
-      loadDecisionOutput(context),
-      loadReplayPlan(context),
-      loadReconcile(context),
-      loadCorpusSummary(context),
-    ]);
+  const [
+    scanOutput,
+    decisionOutput,
+    plan,
+    reconciled,
+    corpus,
+    ledger,
+    replay,
+    replayedCorpus,
+  ] = await Promise.all([
+    loadScan(context),
+    loadDecisionOutput(context),
+    loadReplayPlan(context),
+    loadReconcile(context),
+    loadCorpusSummary(context),
+    readPipelineLedger(context),
+    loadReplayOutput(context),
+    resolveCheckpointedPipelineCorpus(context),
+  ]);
   const familyByStep = new Map(
     plan.steps.map(({ stepId, family }) => [stepId, family] as const),
   );
@@ -1655,6 +1673,16 @@ async function prepareApply(context: PipelineContext): Promise<{
     filePaths: records.map(({ callSite }) => callSite.path),
   });
   const families = decisionOutput.families;
+  const receipts = familyReceipts(
+    ledger,
+    plan,
+    replay,
+    replayedCorpus,
+    families.map(({ verdict }) => verdict),
+  );
+  const receiptByFamily = new Map(
+    receipts.map((receipt) => [receipt.familyId, receipt]),
+  );
   const radii = blastRadius({
     stepRecords: records,
     verdicts: families.map(({ verdict }) => ({
@@ -1710,6 +1738,12 @@ async function prepareApply(context: PipelineContext): Promise<{
               },
             ]),
       ],
+      receipts: receiptByFamily.get(family.familyId) ?? {
+        winnerCostPerCaseUsd: null,
+        incumbentCostPerCaseUsd: null,
+        costDeltaPct: null,
+        winnerLatencyP50Ms: null,
+      },
     };
   });
   return {
@@ -2940,6 +2974,17 @@ async function executeReplay(
       resolvedCurrentModelId,
     ]),
   );
+  const currentPricingByStepId = new Map(
+    plan.steps.map((step) => {
+      const resolution = resolveCurrentModel(catalog, step.currentModel);
+      return [
+        step.stepId,
+        resolution.kind === "exact" || resolution.kind === "resolved"
+          ? resolution.model.pricing
+          : undefined,
+      ] as const;
+    }),
+  );
   let externalEvaluator: EvaluatorProvider | undefined;
   if (context.evaluator !== undefined) {
     const configured = createEvaluator(context.evaluator);
@@ -3135,7 +3180,13 @@ async function executeReplay(
   await putImmutableJson(context.store, key, {
     completed,
     skipped,
-    candidates,
+    candidates: candidates.map((assignment) => {
+      const pricing = currentPricingByStepId.get(assignment.stepId);
+      return {
+        ...assignment,
+        ...(pricing === undefined ? {} : { currentPricing: pricing }),
+      };
+    }),
     evaluation: evaluation(),
     familyBlocks: [...blockedCellsByFamily.entries()]
       .sort(([left], [right]) => compareText(left, right))
@@ -4817,6 +4868,7 @@ interface ReportData {
     calls: number;
     sampleExcerpt: string;
   }>;
+  receipts: FamilyReceipt[];
   blockedFamilies: Array<{
     familyId: string;
     diagnosis: Diagnosis;
@@ -4982,6 +5034,118 @@ function lifecycleReport(
     );
 }
 
+interface FamilyReceipt {
+  familyId: string;
+  winnerCostPerCaseUsd: number | null;
+  incumbentCostPerCaseUsd: number | null;
+  costDeltaPct: number | null;
+  winnerLatencyP50Ms: number | null;
+}
+
+export function familyReceipts(
+  ledger: Ledger,
+  plan: z.infer<typeof replayPlanSchema>,
+  replay: z.infer<typeof replayOutputSchema>,
+  corpus: Corpus,
+  verdicts: readonly FamilyVerdict[],
+): FamilyReceipt[] {
+  const pricingByStepId = new Map(
+    replay.candidates.map(({ stepId, currentPricing }) => [
+      stepId,
+      currentPricing,
+    ]),
+  );
+  const usageByCaseId = new Map(
+    corpus.cases.map((corpusCase) => [
+      corpusCase.caseId,
+      corpusCase.observation?.usage,
+    ]),
+  );
+  const attemptsByExecutionId = new Map<string, RequestAttempt[]>();
+  for (const attempt of ledger.requestAttempts) {
+    attemptsByExecutionId.set(attempt.executionId, [
+      ...(attemptsByExecutionId.get(attempt.executionId) ?? []),
+      attempt,
+    ]);
+  }
+
+  return verdicts.map((verdict) => {
+    const familyStepIds = new Set(
+      plan.steps
+        .filter(({ family }) => family === verdict.familyId)
+        .map(({ stepId }) => stepId),
+    );
+    const winnerExecutions = ledger.executions
+      .filter(
+        (execution) =>
+          familyStepIds.has(execution.stepId) &&
+          execution.candidateId === verdict.candidateId &&
+          execution.terminalOutcome === "success" &&
+          execution.attribution === "ok" &&
+          (execution.selectionStage === "shortlist" ||
+            execution.selectionStage === "holdout"),
+      )
+      .sort((left, right) => compareText(left.executionId, right.executionId));
+    const winnerCostPerCaseUsd =
+      winnerExecutions.length === 0
+        ? null
+        : winnerExecutions.reduce(
+            (total, execution) =>
+              total +
+              (attemptsByExecutionId.get(execution.executionId) ?? []).reduce(
+                (executionTotal, attempt) => executionTotal + attempt.costUsd,
+                0,
+              ),
+            0,
+          ) / winnerExecutions.length;
+    let incumbentTotal = 0;
+    let hasIncumbentCost = winnerExecutions.length > 0;
+    for (const execution of winnerExecutions) {
+      const usage = usageByCaseId.get(execution.caseId);
+      const pricing = pricingByStepId.get(execution.stepId);
+      if (usage === undefined || pricing === undefined || pricing === null) {
+        hasIncumbentCost = false;
+        break;
+      }
+      incumbentTotal +=
+        usage.inputTokens * pricing.input + usage.outputTokens * pricing.output;
+    }
+    const incumbentCostPerCaseUsd = hasIncumbentCost
+      ? incumbentTotal / winnerExecutions.length
+      : null;
+    const costDeltaPct =
+      winnerCostPerCaseUsd === null ||
+      incumbentCostPerCaseUsd === null ||
+      incumbentCostPerCaseUsd === 0
+        ? null
+        : ((winnerCostPerCaseUsd - incumbentCostPerCaseUsd) /
+            incumbentCostPerCaseUsd) *
+          100;
+    const latencies = winnerExecutions
+      .flatMap((execution) =>
+        (attemptsByExecutionId.get(execution.executionId) ?? []).flatMap(
+          ({ latencyMs }) => (latencyMs === undefined ? [] : [latencyMs]),
+        ),
+      )
+      .sort((left, right) => left - right);
+    const middle = Math.floor(latencies.length / 2);
+    const winnerLatencyP50Ms =
+      latencies.length === 0
+        ? null
+        : latencies.length % 2 === 1
+          ? latencies[middle]!
+          : (latencies[middle - 1]! + latencies[middle]!) / 2;
+
+    return {
+      familyId: verdict.familyId,
+      winnerCostPerCaseUsd,
+      incumbentCostPerCaseUsd,
+      costDeltaPct,
+      winnerLatencyP50Ms,
+    };
+  });
+}
+
 function candidateErrorReport(
   ledger: Ledger,
   plan: z.infer<typeof replayPlanSchema>,
@@ -5056,6 +5220,7 @@ async function buildReport(
   const corpus = await loadCorpusSummary(context);
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
+  const replayedCorpus = await resolveCheckpointedPipelineCorpus(context);
   const aggregationFacts = await materializeAggregationFacts(
     context,
     ledger,
@@ -5116,6 +5281,7 @@ async function buildReport(
       ),
     ],
     candidateErrors: candidateErrorReport(ledger, plan, replay),
+    receipts: familyReceipts(ledger, plan, replay, replayedCorpus, verdicts),
     blockedFamilies: decisionOutput.families.flatMap((family) => {
       const blocked = blockedFamilyDiagnosis(family, aggregationFacts);
       return blocked === undefined ? [] : [blocked];
@@ -5228,6 +5394,15 @@ function renderReport(report: ReportData): string {
     "",
     `${report.judgeDisagreement.disagreements}/${report.judgeDisagreement.assessments} (${formatRate(report.judgeDisagreement.rate)})`,
     "",
+    "## Cost and latency receipts",
+    "",
+    "| Family | Incumbent $/case | Winner $/case | Delta | p50 latency |",
+    "| --- | --- | --- | --- | --- |",
+    ...report.receipts.map(
+      (receipt) =>
+        `| ${receipt.familyId} | ${formatUsdPerCase(receipt.incumbentCostPerCaseUsd)} | ${formatUsdPerCase(receipt.winnerCostPerCaseUsd)} | ${formatDeltaPct(receipt.costDeltaPct)} | ${formatLatencyMs(receipt.winnerLatencyP50Ms)} |`,
+    ),
+    "",
     "## Spend",
     "",
     `Total: $${report.spend.totalCostUsd.toFixed(8)} across ${report.spend.events} events.`,
@@ -5285,6 +5460,20 @@ function formatNumber(value: number): string {
 
 function formatRate(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatUsdPerCase(value: number | null): string {
+  return value === null ? "n/a" : `$${value.toFixed(6)}`;
+}
+
+function formatDeltaPct(value: number | null): string {
+  return value === null
+    ? "n/a"
+    : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function formatLatencyMs(value: number | null): string {
+  return value === null ? "n/a" : `${Math.round(value)} ms`;
 }
 
 async function readPipelineLedger(context: PipelineContext): Promise<Ledger> {

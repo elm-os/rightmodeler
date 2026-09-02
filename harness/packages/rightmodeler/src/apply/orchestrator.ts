@@ -63,6 +63,12 @@ export interface ApplyVerdict {
   readonly swaps: readonly SwapRequest[];
   readonly blastRadius: FamilyBlastRadius;
   readonly caps: readonly ApplyCap[];
+  readonly receipts: {
+    readonly winnerCostPerCaseUsd: number | null;
+    readonly incumbentCostPerCaseUsd: number | null;
+    readonly costDeltaPct: number | null;
+    readonly winnerLatencyP50Ms: number | null;
+  };
 }
 
 export type ApplyRefusalCode =
@@ -218,6 +224,20 @@ function percent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function formatUsdPerCase(value: number | null): string {
+  return value === null ? "n/a" : `$${value.toFixed(6)}`;
+}
+
+function formatDeltaPct(value: number | null): string {
+  return value === null
+    ? "n/a"
+    : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function formatLatencyMs(value: number | null): string {
+  return value === null ? "n/a" : `${Math.round(value)} ms`;
+}
+
 function escapeCell(value: string): string {
   return value.replaceAll("|", "\\|").replaceAll("\n", " ");
 }
@@ -230,7 +250,10 @@ interface EvidenceRow {
   readonly worstCaseBound: string;
   readonly from: string;
   readonly to: string;
-  readonly candidatePrice: string;
+  readonly incumbentCostPerCase: string;
+  readonly winnerCostPerCase: string;
+  readonly delta: string;
+  readonly p50Latency: string;
   readonly caps: string;
   readonly caseIds: string;
 }
@@ -243,7 +266,10 @@ const evidenceColumns = [
   ["Worst-case bound", "worstCaseBound"],
   ["From", "from"],
   ["To", "to"],
-  ["Candidate price", "candidatePrice"],
+  ["Incumbent $/case", "incumbentCostPerCase"],
+  ["Winner $/case", "winnerCostPerCase"],
+  ["Delta", "delta"],
+  ["p50 latency", "p50Latency"],
   ["Caps", "caps"],
   ["Case IDs", "caseIds"],
 ] as const satisfies readonly (readonly [string, keyof EvidenceRow])[];
@@ -253,6 +279,7 @@ function evidenceRow({
   cascadeStatus,
   caps,
   swaps,
+  receipts,
 }: ApplyVerdict): EvidenceRow {
   const evaluators = verdict.evaluatorKinds
     .map(({ evaluatorKind }) => evaluatorKind)
@@ -281,7 +308,10 @@ function evidenceRow({
     worstCaseBound: percent(verdict.worstCaseBound),
     from: `\`${escapeCell(swaps[0]!.fromModel)}\``,
     to: `\`${escapeCell(swaps[0]!.toModel)}\``,
-    candidatePrice: `$${verdict.candidateCostUsd.toFixed(8)}`,
+    incumbentCostPerCase: formatUsdPerCase(receipts.incumbentCostPerCaseUsd),
+    winnerCostPerCase: formatUsdPerCase(receipts.winnerCostPerCaseUsd),
+    delta: formatDeltaPct(receipts.costDeltaPct),
+    p50Latency: formatLatencyMs(receipts.winnerLatencyP50Ms),
     caps: escapeCell(renderedCaps || "none"),
     caseIds: renderedCaseIds.join(", "),
   };
@@ -305,7 +335,7 @@ function evidenceBody(
       return `| ${evidenceColumns.map(([, field]) => row[field]).join(" | ")} |`;
     }),
     "",
-    "Candidate price is the blended per-token price, weighted three parts input to one part output.",
+    "Costs are dollars per replayed case. `n/a` means the number is not in the store: the replayed case carries no recorded token usage, the catalog publishes no price for the incumbent model, or no attempt recorded a duration.",
     "Case IDs are SHA-256 digests of the replayed case, not file paths.",
     "",
   ].join("\n");

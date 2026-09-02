@@ -51,6 +51,7 @@ export interface ProviderErrorDetail {
 export interface ProviderAttempt extends ChatResponse {
   outcome: "completed" | "provider_error";
   errorDetail?: ProviderErrorDetail;
+  latencyMs?: number;
 }
 
 export interface ProviderClient {
@@ -214,6 +215,7 @@ interface PhysicalResponse {
   response: Response;
   text: string;
   apiKey: string;
+  latencyMs: number;
 }
 
 const retryAttempts = 5;
@@ -298,7 +300,10 @@ function isRetryable(status: number): boolean {
   return status === 408 || status === 409 || status === 429 || status >= 500;
 }
 
-function rejectedAttempt(errorDetail: ProviderErrorDetail): ProviderAttempt {
+function rejectedAttempt(
+  errorDetail: ProviderErrorDetail,
+  latencyMs?: number,
+): ProviderAttempt {
   return {
     outcome: "provider_error",
     content: "",
@@ -306,6 +311,7 @@ function rejectedAttempt(errorDetail: ProviderErrorDetail): ProviderAttempt {
     costUsd: 0,
     costIsEstimate: true,
     errorDetail,
+    ...(latencyMs === undefined ? {} : { latencyMs }),
   };
 }
 
@@ -459,17 +465,19 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
     const headers = new Headers(init.headers);
     headers.set("authorization", `Bearer ${key}`);
     return limiter.run(async (ticket) => {
+      const startedAt = performance.now();
       try {
         const response = await fetch(url, {
           ...init,
           headers,
         });
         const text = await response.text();
+        const latencyMs = Math.round(performance.now() - startedAt);
         if (response.status === 429 || response.status >= 500)
           limiter.rateLimited(ticket);
         else if (response.ok) limiter.succeeded();
         else limiter.failed();
-        return { response, text, apiKey: key };
+        return { response, text, apiKey: key, latencyMs };
       } catch (error) {
         limiter.failed();
         throw new ProviderRequestError(
@@ -514,7 +522,9 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         status,
         bodyExcerpt: errorExcerpt(result.text, result.apiKey),
       };
-      await hooks.onRejectedAttempt?.(rejectedAttempt(errorDetail));
+      await hooks.onRejectedAttempt?.(
+        rejectedAttempt(errorDetail, result.latencyMs),
+      );
       if (status === 401 || status === 403) {
         throw new BlockedError({
           kind: "credentials",
@@ -731,6 +741,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
       response,
       text,
       apiKey: requestKey,
+      latencyMs,
     } = await withRetries(
       `${baseUrl}/chat/completions`,
       {
@@ -859,13 +870,18 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         costUsd: 0,
         costIsEstimate: true,
         errorDetail,
+        latencyMs,
       });
       throw new ProviderResponseError(
         `Invalid chat response: ${redact(message, requestKey)}`,
         errorDetail,
       );
     }
-    await request.onAttempt?.({ outcome: "completed", ...normalized });
+    await request.onAttempt?.({
+      outcome: "completed",
+      ...normalized,
+      latencyMs,
+    });
     return normalized;
   }
 

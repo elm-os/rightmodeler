@@ -2659,6 +2659,12 @@ describe("built CLI pipeline", () => {
       expect(pullBody).toMatchObject({ draft: true, base: "main" });
       expect(String(pullBody?.body)).toContain("## Summary");
       expect(String(pullBody?.body)).toContain("## Rightmodeler evidence");
+      expect(String(pullBody?.body)).toMatch(
+        new RegExp(
+          `^\\| ${recommended!.familyId} \\|(?: [^|\\n]* \\|){6} \\$\\d+\\.\\d{6} \\| \\$\\d+\\.\\d{6} \\| [+-]\\d+\\.\\d% \\| \\d+ ms \\|`,
+          "m",
+        ),
+      );
       expect(String(pullBody?.body)).toContain(recommended!.caseIds[0]!);
       expect(String(pullBody?.body)).not.toContain(
         "The city opened two cooling centers",
@@ -2774,12 +2780,17 @@ describe("built CLI pipeline", () => {
           eventCount: 5,
         }),
       ]);
-      expect(
-        await storeText(
-          new FsStore(join(repo, ".rightmodeler")),
-          reportKey("project", "report.md"),
+      const reportMarkdown = await storeText(
+        new FsStore(join(repo, ".rightmodeler")),
+        reportKey("project", "report.md"),
+      );
+      expect(reportMarkdown).toContain("## Apply");
+      expect(reportMarkdown).toMatch(
+        new RegExp(
+          `^\\| ${recommended!.familyId} \\| \\$\\d+\\.\\d{6} \\| \\$\\d+\\.\\d{6} \\| [+-]\\d+\\.\\d% \\| \\d+ ms \\|$`,
+          "m",
         ),
-      ).toContain("## Apply");
+      );
 
       const rejectingOwner = "acme-reject";
       expect(

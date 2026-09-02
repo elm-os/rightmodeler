@@ -236,6 +236,18 @@ describe("fact schemas", () => {
     ).toBe(false);
   });
 
+  it("accepts an optional attempt latency and rejects a negative one", () => {
+    expect(
+      requestAttemptSchema.parse({ ...requestAttempt, latencyMs: 1234 })
+        .latencyMs,
+    ).toBe(1234);
+    expect(requestAttemptSchema.safeParse(requestAttempt).success).toBe(true);
+    expect(
+      requestAttemptSchema.safeParse({ ...requestAttempt, latencyMs: -1 })
+        .success,
+    ).toBe(false);
+  });
+
   it("accepts an optional candidate id on cascade findings", () => {
     expect(
       cascadeFindingSchema.parse({

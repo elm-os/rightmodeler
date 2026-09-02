@@ -198,6 +198,12 @@ function applyVerdict(revision: string): ApplyVerdict {
       owners: [{ handle: "@owner", source: "codeowners" }],
     },
     caps: [{ name: "replay sample size", value: 2 }],
+    receipts: {
+      winnerCostPerCaseUsd: 0.000_12,
+      incumbentCostPerCaseUsd: 0.000_3,
+      costDeltaPct: -60,
+      winnerLatencyP50Ms: 820,
+    },
   };
 }
 

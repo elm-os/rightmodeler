@@ -308,6 +308,12 @@ function applyVerdict(
       { name: "top-N shortlist", value: 3 },
       { name: "confirm max run sets", value: 8 },
     ],
+    receipts: {
+      winnerCostPerCaseUsd: 0.000_12,
+      incumbentCostPerCaseUsd: 0.000_3,
+      costDeltaPct: -60,
+      winnerLatencyP50Ms: 820,
+    },
   };
 }
 
@@ -1246,7 +1252,7 @@ describe("applySwaps", () => {
     expect(pull.body).not.toContain(caseContentMarker);
   });
 
-  it("includes the candidate price and case ID explanation in the pull request body", async () => {
+  it("includes the case ID explanation and candidate model in the pull request body", async () => {
     const harness = await createHarness();
     const applied = requireApplied(
       await runApply(harness, [applyVerdict(harness)]),
@@ -1257,8 +1263,47 @@ describe("applySwaps", () => {
     });
 
     expect(pull.body).toContain("Case IDs are SHA-256 digests");
-    expect(pull.body).toContain("| $0.00100000 |");
     expect(pull.body).toContain("`acme/small-1`");
+  });
+
+  it("includes cost and latency receipts in the pull request body", async () => {
+    const harness = await createHarness();
+    const applied = requireApplied(
+      await runApply(harness, [applyVerdict(harness)]),
+    );
+    const pull = await harness.githubClient.getPullRequest({
+      ...repository,
+      pullNumber: applied.prNumber,
+    });
+
+    expect(pull.body).toContain(
+      "Incumbent $/case | Winner $/case | Delta | p50 latency",
+    );
+    expect(pull.body).toContain("$0.000300");
+    expect(pull.body).toContain("$0.000120");
+    expect(pull.body).toContain("-60.0%");
+    expect(pull.body).toContain("820 ms");
+    expect(pull.body).toContain("no attempt recorded a duration");
+  });
+
+  it("renders unavailable cost and latency receipts as n/a", async () => {
+    const harness = await createHarness();
+    const verdict = {
+      ...applyVerdict(harness),
+      receipts: {
+        winnerCostPerCaseUsd: null,
+        incumbentCostPerCaseUsd: null,
+        costDeltaPct: null,
+        winnerLatencyP50Ms: null,
+      },
+    };
+    const applied = requireApplied(await runApply(harness, [verdict]));
+    const pull = await harness.githubClient.getPullRequest({
+      ...repository,
+      pullNumber: applied.prNumber,
+    });
+
+    expect(pull.body).toContain("| n/a | n/a | n/a | n/a |");
   });
 
   it("restores the exact pre-apply branch state, records apply_failed, and resumes", async () => {

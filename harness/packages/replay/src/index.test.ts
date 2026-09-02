@@ -1845,6 +1845,22 @@ describe("Mode A replay", () => {
     });
   });
 
+  it("stamps every completed attempt with a measured latency", async () => {
+    await run([recordedCase()]);
+    const facts = await readFacts(store);
+    const latencies = facts.flatMap((fact) =>
+      "attemptId" in fact && fact.streamOutcome === "completed"
+        ? [fact.latencyMs]
+        : [],
+    );
+
+    expect(latencies.length).toBeGreaterThan(0);
+    for (const latencyMs of latencies) {
+      expect(typeof latencyMs).toBe("number");
+      expect(latencyMs).toBeGreaterThanOrEqual(0);
+    }
+  });
+
   it("uses kernel judge provenance and records position-swap evidence", async () => {
     const requests: Parameters<JudgeChat>[0][] = [];
     await run([recordedCase()], async (request) => {
