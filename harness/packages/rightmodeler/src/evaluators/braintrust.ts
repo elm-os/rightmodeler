@@ -271,19 +271,26 @@ export function createBraintrustEvaluator(
   };
 }
 
+export const EVALUATOR_POLL_BUDGET_MS = 5 * 60_000;
+const initialPollDelayMs = 250;
+const maxPollDelayMs = 10_000;
+
 export async function pollEvaluator(
   evaluator: EvaluatorProvider,
   providerRunId: string,
 ): Promise<EvaluatorPollingResult> {
-  const delays = [0, 25, 50, 100, 200, 400] as const;
-  for (const delay of delays) {
-    if (delay > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
-    }
+  const startedAt = Date.now();
+  let delay = initialPollDelayMs;
+  for (;;) {
     const status = await evaluator.status(providerRunId);
     if (status === "complete" || status === "failed") return status;
+    const remaining = EVALUATOR_POLL_BUDGET_MS - (Date.now() - startedAt);
+    if (remaining <= 0) return "polling_exhausted";
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, Math.min(delay, remaining)),
+    );
+    delay = Math.min(delay * 2, maxPollDelayMs);
   }
-  return "polling_exhausted";
 }
 
 export async function preferEvaluatorWhenReachable(

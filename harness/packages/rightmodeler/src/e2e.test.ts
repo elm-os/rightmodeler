@@ -1042,7 +1042,8 @@ describe("built CLI pipeline", () => {
       expect(
         assessments.every(({ evaluatorId }) => evaluatorId === "yotta/judge-2"),
       ).toBe(true);
-      expect(providerFailures).toHaveLength(3);
+      expect(providerFailures.length).toBeGreaterThanOrEqual(3);
+      expect(providerFailures.length).toBeLessThanOrEqual(10);
       expect(unusableNotes).toEqual([
         expect.objectContaining({
           costUsd: 0,

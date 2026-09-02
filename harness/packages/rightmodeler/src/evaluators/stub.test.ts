@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const stubModuleUrl = new URL(
   "../../../../fixtures/eval-stub/server.mjs",
@@ -15,6 +15,7 @@ interface StubModule {
   startEvalStub(options: {
     port: number;
     pendingPolls?: number;
+    pendingMs?: number;
     fail?: boolean;
     omitCaseId?: string;
     reflectAuthError?: boolean;
@@ -30,6 +31,7 @@ interface EventResult {
 
 async function startStub(options: {
   pendingPolls?: number;
+  pendingMs?: number;
   fail?: boolean;
   omitCaseId?: string;
   reflectAuthError?: boolean;
@@ -172,6 +174,23 @@ describe("evaluator fixture", () => {
         body: { error: "project_id is required." },
       });
     } finally {
+      await stub.close();
+    }
+  });
+
+  it("keeps results pending for the configured time", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const stub = await startStub({ pendingPolls: 0, pendingMs: 60_000 });
+    const baseUrl = `http://127.0.0.1:${stub.port}`;
+    try {
+      const experimentId = await launch(baseUrl, "timed");
+      const pending = await fetchEvents(baseUrl, experimentId);
+      expect(pending.every(({ scores }) => scores === undefined)).toBe(true);
+      vi.setSystemTime(Date.now() + 60_000);
+      const scored = await fetchEvents(baseUrl, experimentId);
+      expect(scored[0]?.scores?.output_similarity).toBe(1);
+    } finally {
+      vi.useRealTimers();
       await stub.close();
     }
   });
