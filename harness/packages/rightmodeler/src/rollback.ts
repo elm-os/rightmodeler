@@ -67,6 +67,7 @@ export interface RollbackSwapsOptions {
   readonly repo: string;
   readonly store?: string;
   readonly owner: string;
+  readonly githubRepo?: string;
   readonly githubBaseUrl: string;
   readonly githubTokenEnv: string;
   readonly prNumber: number;
@@ -839,7 +840,7 @@ export function rollbackSwaps(
       tokenEnv: options.githubTokenEnv,
     }),
     owner: options.owner,
-    repo: basename(repoDir),
+    repo: options.githubRepo ?? basename(repoDir),
     prNumber: options.prNumber,
   });
 }

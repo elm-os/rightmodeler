@@ -72,11 +72,11 @@ export type ApplyRefusalCode =
   | "previously_rejected"
   | "stale_evidence"
   | "detached_head"
+  | "dirty_worktree"
   | "stale_location"
   | "diff_lint_failed"
   | "formatter_blocked"
   | "host_conventions_unreadable"
-  | "no_requestable_reviewers"
   | "invalid_repository_revision"
   | "apply_branch_unowned"
   | "apply_branch_scope_mismatch"
@@ -222,6 +222,71 @@ function escapeCell(value: string): string {
   return value.replaceAll("|", "\\|").replaceAll("\n", " ");
 }
 
+interface EvidenceRow {
+  readonly family: string;
+  readonly decision: string;
+  readonly evaluatorKinds: string;
+  readonly cascade: string;
+  readonly worstCaseBound: string;
+  readonly from: string;
+  readonly to: string;
+  readonly candidatePrice: string;
+  readonly caps: string;
+  readonly caseIds: string;
+}
+
+const evidenceColumns = [
+  ["Family", "family"],
+  ["Decision", "decision"],
+  ["Evaluator kinds", "evaluatorKinds"],
+  ["Cascade", "cascade"],
+  ["Worst-case bound", "worstCaseBound"],
+  ["From", "from"],
+  ["To", "to"],
+  ["Candidate price", "candidatePrice"],
+  ["Caps", "caps"],
+  ["Case IDs", "caseIds"],
+] as const satisfies readonly (readonly [string, keyof EvidenceRow])[];
+
+function evidenceRow({
+  verdict,
+  cascadeStatus,
+  caps,
+  swaps,
+}: ApplyVerdict): EvidenceRow {
+  const evaluators = verdict.evaluatorKinds
+    .map(({ evaluatorKind }) => evaluatorKind)
+    .join(", ");
+  const renderedCaps = caps
+    .map(({ name, value }) => `${name}: ${value}`)
+    .join("; ");
+  const caseIds = verdict.caseIds.filter((caseId) =>
+    caseIdPattern.test(caseId),
+  );
+  const renderedCaseIds = caseIds.slice(0, 5).map((caseId) => `\`${caseId}\``);
+  if (caseIds.length > 5) {
+    renderedCaseIds.push(`and ${caseIds.length - 5} more`);
+  }
+  const invalidCaseIds = verdict.caseIds.length - caseIds.length;
+  if (invalidCaseIds > 0) {
+    renderedCaseIds.push(
+      `${invalidCaseIds} invalid case ID${invalidCaseIds === 1 ? "" : "s"} omitted`,
+    );
+  }
+  return {
+    family: escapeCell(verdict.familyId),
+    decision: verdict.decision,
+    evaluatorKinds: escapeCell(evaluators),
+    cascade: cascadeStatus,
+    worstCaseBound: percent(verdict.worstCaseBound),
+    from: `\`${escapeCell(swaps[0]!.fromModel)}\``,
+    to: `\`${escapeCell(swaps[0]!.toModel)}\``,
+    candidatePrice: `$${verdict.candidateCostUsd.toFixed(8)}`,
+    caps: escapeCell(renderedCaps || "none"),
+    caseIds: renderedCaseIds.join(", "),
+  };
+}
+
 function evidenceBody(
   conventions: CapturedConventions,
   verdicts: readonly ApplyVerdict[],
@@ -233,32 +298,15 @@ function evidenceBody(
     `Revision: \`${evidence.revision}\``,
     `Corpus version: \`${evidence.corpusVersionId}\``,
     "",
-    "| Family | Decision | Evaluator kinds | Cascade | Worst-case bound | Caps | Case IDs |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
-    ...verdicts.map(({ verdict, cascadeStatus, caps }) => {
-      const evaluators = verdict.evaluatorKinds
-        .map(({ evaluatorKind }) => evaluatorKind)
-        .join(", ");
-      const renderedCaps = caps
-        .map(({ name, value }) => `${name}: ${value}`)
-        .join("; ");
-      const caseIds = verdict.caseIds.filter((caseId) =>
-        caseIdPattern.test(caseId),
-      );
-      const renderedCaseIds = caseIds
-        .slice(0, 5)
-        .map((caseId) => `\`${caseId}\``);
-      if (caseIds.length > 5) {
-        renderedCaseIds.push(`and ${caseIds.length - 5} more`);
-      }
-      const invalidCaseIds = verdict.caseIds.length - caseIds.length;
-      if (invalidCaseIds > 0) {
-        renderedCaseIds.push(
-          `${invalidCaseIds} invalid case ID${invalidCaseIds === 1 ? "" : "s"} omitted`,
-        );
-      }
-      return `| ${escapeCell(verdict.familyId)} | ${verdict.decision} | ${escapeCell(evaluators)} | ${cascadeStatus} | ${percent(verdict.worstCaseBound)} | ${escapeCell(renderedCaps || "none")} | ${renderedCaseIds.join(", ")} |`;
+    `| ${evidenceColumns.map(([heading]) => heading).join(" | ")} |`,
+    `| ${evidenceColumns.map(() => "---").join(" | ")} |`,
+    ...verdicts.map((entry) => {
+      const row = evidenceRow(entry);
+      return `| ${evidenceColumns.map(([, field]) => row[field]).join(" | ")} |`;
     }),
+    "",
+    "Candidate price is the blended per-token price, weighted three parts input to one part output.",
+    "Case IDs are SHA-256 digests of the replayed case, not file paths.",
     "",
   ].join("\n");
   const template = conventions.prTemplate?.trimEnd();
@@ -267,24 +315,50 @@ function evidenceBody(
     : `${template}\n\n${table}`;
 }
 
-function reviewersFor(verdicts: readonly ApplyVerdict[]): ReviewerSet {
-  const handles = [
-    ...new Set(
-      verdicts.flatMap(({ blastRadius }) =>
-        blastRadius.owners.map(({ handle }) => handle),
-      ),
-    ),
-  ].sort(compareText);
+async function reviewersFor(
+  githubClient: GithubClient,
+  owner: string,
+  repo: string,
+  verdicts: readonly ApplyVerdict[],
+): Promise<ReviewerSet & { readonly unresolvedOwners: number }> {
+  const owners = [
+    ...new Map(
+      verdicts
+        .flatMap(({ blastRadius }) => blastRadius.owners)
+        .map((rankedOwner) => [rankedOwner.handle, rankedOwner] as const),
+    ).values(),
+  ].sort((left, right) => compareText(left.handle, right.handle));
   const selected: ReviewIdentity[] = [];
-  for (const handle of handles) {
-    if (!handle.startsWith("@")) continue;
-    const identity = handle.slice(1);
-    const slash = identity.indexOf("/");
-    selected.push(
-      slash === -1
-        ? { kind: "user", value: identity }
-        : { kind: "team", value: identity.slice(slash + 1) },
-    );
+  let unresolvedOwners = 0;
+  for (const { handle, source } of owners) {
+    if (handle.startsWith("@")) {
+      const identity = handle.slice(1);
+      const slash = identity.indexOf("/");
+      selected.push(
+        slash === -1
+          ? { kind: "user", value: identity }
+          : { kind: "team", value: identity.slice(slash + 1) },
+      );
+      continue;
+    }
+    const noreply =
+      /^(?:\d+\+)?([A-Za-z0-9-]+)@users\.noreply\.github\.com$/.exec(handle);
+    if (noreply !== null) {
+      selected.push({ kind: "user", value: noreply[1]! });
+      continue;
+    }
+    if (source === "blame") {
+      const login = await githubClient.findCommitAuthorLogin({
+        owner,
+        repo,
+        email: handle,
+      });
+      if (login !== null) {
+        selected.push({ kind: "user", value: login });
+        continue;
+      }
+    }
+    unresolvedOwners += 1;
   }
   const unique = [
     ...new Map(
@@ -301,6 +375,7 @@ function reviewersFor(verdicts: readonly ApplyVerdict[]): ReviewerSet {
     teamReviewers: unique
       .flatMap(({ kind, value }) => (kind === "team" ? [value] : []))
       .slice(0, reviewerLimit),
+    unresolvedOwners,
   };
 }
 
@@ -311,10 +386,36 @@ async function gitOutput(repoDir: string, args: readonly string[]) {
   return stdout.trim();
 }
 
-function blobSha(content: string): string {
-  return createHash("sha1")
-    .update(`blob ${Buffer.byteLength(content)}\0${content}`)
-    .digest("hex");
+async function dirtySwapPaths(
+  repoDir: string,
+  paths: readonly string[],
+): Promise<string[]> {
+  const dirty: string[] = [];
+  for (const path of paths) {
+    try {
+      await execFileAsync(
+        "git",
+        ["-C", repoDir, "diff", "--quiet", "HEAD", "--", path],
+        { encoding: "utf8" },
+      );
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === 1
+      ) {
+        dirty.push(path);
+        continue;
+      }
+      throw error;
+    }
+  }
+  return dirty;
+}
+
+function committedBlobSha(repoDir: string, path: string): Promise<string> {
+  return gitOutput(repoDir, ["rev-parse", `HEAD:${path}`]);
 }
 
 function lifecycleDetail(event: LifecycleEvent): Record<string, JsonValue> {
@@ -595,7 +696,6 @@ function existingPullRequest(
       prNumber: number;
       branch?: string;
       title?: string;
-      reviewerSet?: ReviewerSet;
     }
   | { status: "rejected"; prNumber: number; detail: JsonValue }
   | null {
@@ -635,13 +735,11 @@ function existingPullRequest(
         `Merged run ${runSpecDigest} has no complete pr_opened lifecycle fact`,
       );
     }
-    const reviewerSet = recordedReviewers(matching, terminal.prNumber);
     return {
       status: "existing",
       prNumber: terminal.prNumber,
       branch: detail.branch,
       title: detail.title,
-      ...(reviewerSet === null ? {} : { reviewerSet }),
     };
   }
   const opened = [...matching]
@@ -675,6 +773,90 @@ async function appendLifecycleEvent(
     factKey(projectId, value.eventId),
     Buffer.from(canonicalJson(value), "utf8"),
   );
+}
+
+async function ensureReviewRequested({
+  githubClient,
+  store,
+  lifecycle,
+  owner,
+  repo,
+  events,
+  prNumber,
+  reviewerSet,
+}: {
+  readonly githubClient: GithubClient;
+  readonly store: Store;
+  readonly lifecycle: Pick<
+    LifecycleEvent,
+    "repo" | "familyIds" | "evidence" | "runSpecDigest"
+  >;
+  readonly owner: string;
+  readonly repo: string;
+  readonly events: readonly LifecycleEvent[];
+  readonly prNumber: number;
+  readonly reviewerSet: ReviewerSet & { readonly unresolvedOwners: number };
+}): Promise<ReviewerSet> {
+  const recorded = recordedReviewers(events, prNumber);
+  if (recorded !== null) return recorded;
+
+  const author = await githubClient.getAuthenticatedUserLogin();
+  let reviewers = reviewerSet.reviewers.filter(
+    (reviewer) => reviewer.toLowerCase() !== author.toLowerCase(),
+  );
+  let teamReviewers = reviewerSet.teamReviewers;
+  if (reviewers.length > 0 || teamReviewers.length > 0) {
+    try {
+      await githubClient.requestReviewers({
+        owner,
+        repo,
+        pullNumber: prNumber,
+        reviewers,
+        teamReviewers,
+      });
+    } catch (error) {
+      if (!(error instanceof GithubHttpError) || error.status !== 422) {
+        throw error;
+      }
+      const granted: string[] = [];
+      let teamReviewersGranted = false;
+      for (const reviewer of reviewers) {
+        try {
+          await githubClient.requestReviewers({
+            owner,
+            repo,
+            pullNumber: prNumber,
+            reviewers: [reviewer],
+            teamReviewers,
+          });
+          granted.push(reviewer);
+          teamReviewersGranted = true;
+        } catch (reviewerError) {
+          if (
+            !(reviewerError instanceof GithubHttpError) ||
+            reviewerError.status !== 422
+          ) {
+            throw reviewerError;
+          }
+        }
+      }
+      reviewers = granted;
+      if (!teamReviewersGranted) teamReviewers = [];
+    }
+  }
+  const requested = reviewers.length > 0 || teamReviewers.length > 0;
+  await appendLifecycleEvent(store, {
+    ...lifecycle,
+    prNumber,
+    kind: "review_requested",
+    detail: {
+      reviewers: [...reviewers],
+      teamReviewers: [...teamReviewers],
+      unresolvedOwners: reviewerSet.unresolvedOwners,
+      ...(requested ? {} : { reason: "no_requestable_reviewers" }),
+    },
+  });
+  return { reviewers, teamReviewers };
 }
 
 function lintRefusal(violations: readonly DiffViolation[]): ApplyResult {
@@ -779,9 +961,19 @@ export async function applySwaps({
     corpusVersionId: evidence.corpusVersionId,
   });
   const familyIds = selected.map(({ verdict }) => verdict.familyId);
+  const lifecycle = {
+    repo: repository,
+    familyIds,
+    evidence: {
+      revision: evidence.revision,
+      corpusVersionId: evidence.corpusVersionId,
+      gatePolicyVersion,
+    },
+    runSpecDigest,
+  } as const;
   const branch = branchName(conventions, familyIds, runSpecDigest);
   const title = changeTitle(conventions, familyIds);
-  const reviewerSet = reviewersFor(selected);
+  const reviewerSet = await reviewersFor(githubClient, owner, repo, selected);
   const lifecycleEvents = await readRemediationLifecycleEvents(
     store,
     projectId,
@@ -795,13 +987,23 @@ export async function applySwaps({
     );
   }
   if (existing !== null) {
+    const requestedReviewers = await ensureReviewRequested({
+      githubClient,
+      store,
+      lifecycle,
+      owner,
+      repo,
+      events: lifecycleEvents,
+      prNumber: existing.prNumber,
+      reviewerSet,
+    });
     return {
       status: "existing",
       runSpecDigest,
       prNumber: existing.prNumber,
       branch: existing.branch ?? branch,
       title: existing.title ?? title,
-      ...(existing.reviewerSet ?? reviewerSet),
+      ...requestedReviewers,
     };
   }
 
@@ -838,6 +1040,17 @@ export async function applySwaps({
   }
 
   const swaps = selected.flatMap(({ swaps }) => swaps);
+  const swapPaths = [
+    ...new Set(swaps.map(({ stepRecord }) => stepRecord.callSite.path)),
+  ].sort(compareText);
+  const dirty = await dirtySwapPaths(repoDir, swapPaths);
+  if (dirty.length > 0) {
+    return refusal(
+      "dirty_worktree",
+      "At least one file the swap touches has uncommitted changes; commit or stash them before applying.",
+      { paths: dirty },
+    );
+  }
   const staleDigests = await staleDigestPaths(repoDir, swaps);
   if (staleDigests.length > 0) {
     return refusal(
@@ -876,16 +1089,6 @@ export async function applySwaps({
   const finalLint = lintSwapDiff({ files: lintFiles(formatted.files) });
   if (!finalLint.pass) return lintRefusal(finalLint.violations);
 
-  if (
-    reviewerSet.reviewers.length === 0 &&
-    reviewerSet.teamReviewers.length === 0
-  ) {
-    return refusal(
-      "no_requestable_reviewers",
-      "No enriched owner can be requested through the GitHub review API.",
-    );
-  }
-
   if (dryRun) {
     return {
       status: "dry_run",
@@ -893,7 +1096,8 @@ export async function applySwaps({
       branch,
       title,
       files: formatted.files.map(({ path }) => path),
-      ...reviewerSet,
+      reviewers: reviewerSet.reviewers,
+      teamReviewers: reviewerSet.teamReviewers,
     };
   }
 
@@ -902,16 +1106,6 @@ export async function applySwaps({
     repositoryRevision: evidence.revision,
     files: formatted.files,
   });
-  const lifecycle = {
-    repo: repository,
-    familyIds,
-    evidence: {
-      revision: evidence.revision,
-      corpusVersionId: evidence.corpusVersionId,
-      gatePolicyVersion,
-    },
-    runSpecDigest,
-  } as const;
   const sortedFiles = [...formatted.files].sort((left, right) =>
     compareText(left.path, right.path),
   );
@@ -987,7 +1181,12 @@ export async function applySwaps({
     }
     const updates =
       resumedUpdates ??
-      sortedFiles.map((file) => ({ file, sha: blobSha(file.before) }));
+      (await Promise.all(
+        sortedFiles.map(async (file) => ({
+          file,
+          sha: await committedBlobSha(repoDir, file.path),
+        })),
+      ));
     for (const { file, sha } of updates) {
       await githubClient.createOrUpdateFile({
         owner,
@@ -1093,21 +1292,15 @@ export async function applySwaps({
     detail: { operation: "apply", branch, title, remediation },
   });
 
-  await githubClient.requestReviewers({
+  const requestedReviewers = await ensureReviewRequested({
+    githubClient,
+    store,
+    lifecycle,
     owner,
     repo,
-    pullNumber: pullRequest.number,
-    reviewers: reviewerSet.reviewers,
-    teamReviewers: reviewerSet.teamReviewers,
-  });
-  await appendLifecycleEvent(store, {
-    ...lifecycle,
+    events: lifecycleEvents,
     prNumber: pullRequest.number,
-    kind: "review_requested",
-    detail: {
-      reviewers: [...reviewerSet.reviewers],
-      teamReviewers: [...reviewerSet.teamReviewers],
-    },
+    reviewerSet,
   });
 
   return {
@@ -1116,6 +1309,6 @@ export async function applySwaps({
     prNumber: pullRequest.number,
     branch,
     title,
-    ...reviewerSet,
+    ...requestedReviewers,
   };
 }

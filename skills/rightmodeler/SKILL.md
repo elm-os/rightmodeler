@@ -239,6 +239,7 @@ GITHUB_TOKEN_ENV=GITHUB_TOKEN
 
 "${RIGHTMODELER[@]}" apply \
   --owner "$GITHUB_OWNER" \
+  --github-repo "$GITHUB_REPO" \
   --github-base-url "$GITHUB_API_URL" \
   --github-token-env "$GITHUB_TOKEN_ENV" \
   --dry-run \

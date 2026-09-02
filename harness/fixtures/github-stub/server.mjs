@@ -50,6 +50,9 @@ function user(login) {
 export async function startGithubStub({
   port,
   token = "github-stub-token",
+  tokenLogin = "rightmodeler-bot",
+  transientFailures = 0,
+  rejectReviewRequestFor = undefined,
   rateLimit,
   reflectAuthError = false,
   malformedResponsePath,
@@ -66,6 +69,7 @@ export async function startGithubStub({
   let nextCheckRun = 1;
   let clockTick = 0;
   let reflected = false;
+  let transientFailuresRemaining = transientFailures;
   const rate = rateLimit === undefined ? undefined : { ...rateLimit };
 
   function now() {
@@ -239,6 +243,8 @@ export async function startGithubStub({
       reviewComments: new Map(),
       issueComments: new Map(),
       checkRuns: new Map(),
+      commitStatuses: new Map(),
+      commitAuthors: new Map(),
       nextPull: 1,
     };
     const files = flattenTree(body.tree ?? {});
@@ -382,6 +388,38 @@ export async function startGithubStub({
       return true;
     }
 
+    if (pathname === "/__test/commit-statuses") {
+      const sha = resolveCommit(repo, body.ref);
+      if (sha === undefined || !Array.isArray(body.statuses)) {
+        json(response, 422, {
+          message: "A valid ref and statuses array are required",
+        });
+        return true;
+      }
+      const statuses = body.statuses.map((status) => ({
+        id: nextCheckRun++,
+        context: status.context,
+        state: status.state,
+        created_at: now(),
+        updated_at: now(),
+      }));
+      const combined =
+        body.append === true
+          ? [...(repo.commitStatuses.get(sha) ?? []), ...statuses]
+          : statuses;
+      repo.commitStatuses.set(sha, combined);
+      json(response, 200, combined);
+      return true;
+    }
+
+    if (pathname === "/__test/commit-authors") {
+      for (const [email, login] of Object.entries(body.authors ?? {})) {
+        repo.commitAuthors.set(email, login);
+      }
+      json(response, 200, Object.fromEntries(repo.commitAuthors));
+      return true;
+    }
+
     if (pathname === "/__test/check-run-conclusions") {
       const sha = resolveCommit(repo, body.ref);
       if (sha === undefined || !Array.isArray(body.runs)) {
@@ -504,6 +542,17 @@ export async function startGithubStub({
         { message: "API rate limit exceeded" },
         headers,
       );
+      return;
+    }
+
+    if (transientFailuresRemaining > 0) {
+      transientFailuresRemaining -= 1;
+      json(response, 503, { message: "Service unavailable" });
+      return;
+    }
+
+    if (url.pathname === "/user" && request.method === "GET") {
+      json(response, 200, user(tokenLogin));
       return;
     }
 
@@ -714,6 +763,15 @@ export async function startGithubStub({
         json(response, 404, { message: "Pull request not found" });
         return;
       }
+      if (
+        rejectReviewRequestFor !== undefined &&
+        (body.reviewers ?? []).includes(rejectReviewRequestFor)
+      ) {
+        json(response, 422, {
+          message: "Review cannot be requested from pull request author.",
+        });
+        return;
+      }
       pull.reviewers = [
         ...new Set([...pull.reviewers, ...(body.reviewers ?? [])]),
       ];
@@ -750,7 +808,7 @@ export async function startGithubStub({
       const createdAt = now();
       const comment = {
         id: nextComment++,
-        user: user("rightmodeler-bot"),
+        user: user(tokenLogin),
         body: body.body,
         created_at: createdAt,
         updated_at: createdAt,
@@ -779,6 +837,50 @@ export async function startGithubStub({
         json(response, 200, pullResponse(repo, pull));
         return;
       }
+    }
+
+    const combinedStatusMatch = /^\/commits\/(.+)\/status$/.exec(path);
+    if (request.method === "GET" && combinedStatusMatch !== null) {
+      const sha = resolveCommit(
+        repo,
+        decodeURIComponent(combinedStatusMatch[1]),
+      );
+      if (sha === undefined) {
+        json(response, 404, { message: "Commit not found" });
+      } else {
+        const statuses = repo.commitStatuses.get(sha) ?? [];
+        const state = statuses.some(({ state }) =>
+          ["failure", "error"].includes(state),
+        )
+          ? "failure"
+          : statuses.some(({ state }) => state === "pending")
+            ? "pending"
+            : "success";
+        json(response, 200, {
+          state,
+          sha,
+          total_count: statuses.length,
+          statuses,
+        });
+      }
+      return;
+    }
+
+    if (request.method === "GET" && path === "/commits") {
+      const login = repo.commitAuthors.get(url.searchParams.get("author"));
+      json(
+        response,
+        200,
+        login === undefined
+          ? []
+          : [
+              {
+                sha: repo.refs.get(fullRef(repo.defaultBranch)),
+                author: { login },
+              },
+            ],
+      );
+      return;
     }
 
     const checksMatch = /^\/commits\/(.+)\/check-runs$/.exec(path);

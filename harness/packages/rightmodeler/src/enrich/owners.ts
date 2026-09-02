@@ -32,9 +32,9 @@ interface CompiledCodeownersRule extends CodeownersRule {
   readonly matcher: RegExp;
 }
 
-interface BlameCommitter {
+interface BlameAuthor {
   lines: number;
-  latestCommitterTime: number;
+  latestAuthorTime: number;
 }
 
 function repositoryPath(repoDir: string, filePath: string): string {
@@ -123,35 +123,48 @@ function matchingRule(
   return matched;
 }
 
-function blameCommitters(output: string): readonly RankedOwner[] {
-  const committers = new Map<string, BlameCommitter>();
-  let email: string | null = null;
+function blameAuthors(output: string): readonly RankedOwner[] {
+  const authors = new Map<string, BlameAuthor>();
+  let authorEmail: string | null = null;
+  let authorTime = 0;
+  let committerEmail: string | null = null;
   let committerTime = 0;
 
   for (const line of output.split(/\r?\n/)) {
-    if (line.startsWith("committer-mail ")) {
-      email = line.slice("committer-mail ".length).replace(/^<|>$/g, "");
+    if (line.startsWith("author-mail ")) {
+      authorEmail = line.slice("author-mail ".length).replace(/^<|>$/g, "");
+    } else if (line.startsWith("author-time ")) {
+      authorTime = Number.parseInt(line.slice("author-time ".length), 10) || 0;
+    } else if (line.startsWith("committer-mail ")) {
+      committerEmail = line
+        .slice("committer-mail ".length)
+        .replace(/^<|>$/g, "");
     } else if (line.startsWith("committer-time ")) {
       committerTime =
         Number.parseInt(line.slice("committer-time ".length), 10) || 0;
-    } else if (line.startsWith("\t") && email !== null) {
-      const committer = committers.get(email) ?? {
-        lines: 0,
-        latestCommitterTime: 0,
-      };
-      committer.lines += 1;
-      committer.latestCommitterTime = Math.max(
-        committer.latestCommitterTime,
-        committerTime,
-      );
-      committers.set(email, committer);
+    } else if (line.startsWith("\t")) {
+      const email = authorEmail ?? committerEmail;
+      const time = authorTime || committerTime;
+      if (email !== null) {
+        const author = authors.get(email) ?? {
+          lines: 0,
+          latestAuthorTime: 0,
+        };
+        author.lines += 1;
+        author.latestAuthorTime = Math.max(author.latestAuthorTime, time);
+        authors.set(email, author);
+      }
+      authorEmail = null;
+      authorTime = 0;
+      committerEmail = null;
+      committerTime = 0;
     }
   }
 
-  return [...committers.entries()]
+  return [...authors.entries()]
     .sort(
       ([leftEmail, left], [rightEmail, right]) =>
-        right.latestCommitterTime - left.latestCommitterTime ||
+        right.latestAuthorTime - left.latestAuthorTime ||
         right.lines - left.lines ||
         compareText(leftEmail, rightEmail),
     )
@@ -169,7 +182,7 @@ async function ownersFromBlame(
       ["-C", repoDir, "blame", "--line-porcelain", "--", filePath],
       { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
     );
-    return blameCommitters(stdout);
+    return blameAuthors(stdout);
   } catch {
     return [];
   }

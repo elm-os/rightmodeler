@@ -22,12 +22,18 @@ import {
 import { z } from "zod";
 
 import type { ApplyVerdict } from "../apply/index.js";
+import {
+  digestFileContent,
+  remediationFromLifecycleDetail,
+} from "../apply/remediation.js";
 import type { CapturedConventions } from "../enrich/index.js";
-import type {
-  GithubClient,
-  GithubIssueComment,
-  GithubReview,
-  GithubReviewComment,
+import {
+  GithubContentRefusalError,
+  GithubHttpError,
+  type GithubClient,
+  type GithubIssueComment,
+  type GithubReview,
+  type GithubReviewComment,
 } from "../github/index.js";
 import { putContractArtifact } from "../contract-validation.js";
 import {
@@ -43,6 +49,7 @@ import {
 } from "./lock.js";
 
 const caseIdPattern = /^[0-9a-f]{64}$/;
+const commentMarkerPrefix = "<!-- rightmodeler-watch:";
 const storedVerdictSchema = z.looseObject({
   familyId: z.string(),
   reproof_requested: z.boolean().optional(),
@@ -56,6 +63,7 @@ const ciFailureDetailSchema = z.looseObject({
       id: z.number(),
       name: z.string(),
       completedAt: z.string(),
+      source: z.enum(["check_run", "commit_status"]).optional(),
     }),
   ),
 });
@@ -64,6 +72,7 @@ interface CiCheckFact {
   readonly id: number;
   readonly name: string;
   readonly completedAt: string | null;
+  readonly source?: "check_run" | "commit_status";
 }
 
 export type WatchActionType =
@@ -247,6 +256,7 @@ function questions(
   reviewComments: readonly GithubReviewComment[],
   issueComments: readonly GithubIssueComment[],
   prNumber: number,
+  postedCommentIds: ReadonlySet<number>,
 ): Question[] {
   return [
     ...reviews
@@ -278,10 +288,12 @@ function questions(
     })),
   ]
     .filter(
-      ({ body, user }) =>
+      ({ body, user, source, id }) =>
         body.trim() !== "" &&
         user !== "rightmodeler-bot" &&
-        !user.endsWith("[bot]"),
+        !user.endsWith("[bot]") &&
+        !body.includes(commentMarkerPrefix) &&
+        !(source === "issue_comment" && postedCommentIds.has(id)),
     )
     .sort(
       (left, right) =>
@@ -379,29 +391,27 @@ function ciEventKey(
   return `ci:${prNumber}:${headSha}:${checks}`;
 }
 
-function checkIdentity(check: {
-  readonly id: number;
-  readonly completedAt: string | null;
-}): string {
-  return `${check.id}:${check.completedAt ?? ""}`;
+function checkIdentity(check: { readonly id: number }): string {
+  return String(check.id);
 }
 
-function previousFailingCheckObservations(
+function previousFailingCheckIds(
   events: readonly LifecycleEvent[],
   headSha: string,
-): Map<string, number> {
-  const identities = new Map<string, number>();
+): Map<string, Set<number>> {
+  const ids = new Map<string, Set<number>>();
   for (const event of events) {
     const detail = ciFailureDetailSchema.safeParse(event.detail);
     if (!detail.success || detail.data.headSha !== headSha) {
       continue;
     }
     for (const check of detail.data.failingChecks) {
-      const identity = `${check.id}:${check.completedAt}`;
-      identities.set(identity, (identities.get(identity) ?? 0) + 1);
+      const checkIds = ids.get(check.name) ?? new Set<number>();
+      checkIds.add(check.id);
+      ids.set(check.name, checkIds);
     }
   }
-  return identities;
+  return ids;
 }
 
 function latestCiFailureDetail(
@@ -421,12 +431,16 @@ function ciSnapshot(
 ): DiagnosisSnapshot {
   const facts = {
     gates: [{ id: "repo-ci", status }],
-    cases: checks.map(({ id }) => ({
+    cases: checks.map(({ id, source }) => ({
       caseId: `check-run-${id}`,
       pipelineFamily: "repo-fix",
       terminalVerdict: status,
       failureCode: null,
-      evidenceRefs: [`github-check-run:${id}`],
+      evidenceRefs: [
+        source === "commit_status"
+          ? `github-commit-status:${id}`
+          : `github-check-run:${id}`,
+      ],
     })),
     replayObserved: false,
   } as const;
@@ -465,7 +479,11 @@ function ciValidation(
     status,
     commands: [...new Set(checks.map(({ name }) => name))].sort(compareText),
     evidence_refs: checks
-      .map(({ id }) => `github-check-run:${id}`)
+      .map(({ id, source }) =>
+        source === "commit_status"
+          ? `github-commit-status:${id}`
+          : `github-check-run:${id}`,
+      )
       .sort(compareText),
   };
 }
@@ -485,7 +503,44 @@ function action(type: WatchActionType, detail: JsonValue): WatchAction {
 
 function commentMarker(handledEventKey: string): string {
   const digest = createHash("sha256").update(handledEventKey).digest("hex");
-  return `<!-- rightmodeler-watch:${digest} -->`;
+  return `${commentMarkerPrefix}${digest} -->`;
+}
+
+async function changedPreApplyDigests(
+  input: WatchOnceInput,
+  baseSha: string,
+  preApplyDigests: Readonly<Record<string, string | null>>,
+) {
+  const changed: Array<{
+    path: string;
+    expected: string;
+    actual: string | null;
+  }> = [];
+  const entries = Object.entries(preApplyDigests).sort(([left], [right]) =>
+    compareText(left, right),
+  );
+  for (const [path, expected] of entries) {
+    if (expected === null) continue;
+    let actual: string | null = null;
+    try {
+      const file = await input.githubClient.getFileContent({
+        owner: input.owner,
+        repo: input.repo,
+        path,
+        ref: baseSha,
+      });
+      actual = digestFileContent(file.contentBytes);
+    } catch (error) {
+      if (!(
+        (error instanceof GithubHttpError && error.status === 404) ||
+        error instanceof GithubContentRefusalError
+      )) {
+        throw error;
+      }
+    }
+    if (actual !== expected) changed.push({ path, expected, actual });
+  }
+  return changed;
 }
 
 export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
@@ -625,44 +680,61 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
     }
     await verifyStoredVerdicts(input.store, prVerdicts);
 
-    const [reviews, reviewComments, issueComments, checkRuns, base] =
-      await Promise.all([
-        input.githubClient.listReviews({
-          owner: input.owner,
-          repo: input.repo,
-          pullNumber: input.prNumber,
-        }),
-        input.githubClient.listReviewComments({
-          owner: input.owner,
-          repo: input.repo,
-          pullNumber: input.prNumber,
-        }),
-        input.githubClient.listIssueComments({
-          owner: input.owner,
-          repo: input.repo,
-          issueNumber: input.prNumber,
-        }),
-        input.githubClient.listCheckRunsForRef({
-          owner: input.owner,
-          repo: input.repo,
-          ref: pull.head.sha,
-        }),
-        input.githubClient.getRef({
-          owner: input.owner,
-          repo: input.repo,
-          ref: `heads/${pull.base.ref}`,
-        }),
-      ]);
+    const [
+      reviews,
+      reviewComments,
+      issueComments,
+      checkRuns,
+      base,
+      combinedStatus,
+    ] = await Promise.all([
+      input.githubClient.listReviews({
+        owner: input.owner,
+        repo: input.repo,
+        pullNumber: input.prNumber,
+      }),
+      input.githubClient.listReviewComments({
+        owner: input.owner,
+        repo: input.repo,
+        pullNumber: input.prNumber,
+      }),
+      input.githubClient.listIssueComments({
+        owner: input.owner,
+        repo: input.repo,
+        issueNumber: input.prNumber,
+      }),
+      input.githubClient.listCheckRunsForRef({
+        owner: input.owner,
+        repo: input.repo,
+        ref: pull.head.sha,
+      }),
+      input.githubClient.getRef({
+        owner: input.owner,
+        repo: input.repo,
+        ref: `heads/${pull.base.ref}`,
+      }),
+      input.githubClient.getCombinedStatusForRef({
+        owner: input.owner,
+        repo: input.repo,
+        ref: pull.head.sha,
+      }),
+    ]);
     await renew();
 
     observedIssueComments.push(...issueComments);
     const handled = new Set(state.handledEventKeys);
+    const postedCommentIds = new Set(
+      events
+        .map(({ detail }) => detailRecord(detail)?.postedCommentId)
+        .filter((id): id is number => typeof id === "number"),
+    );
 
     for (const question of questions(
       reviews,
       reviewComments,
       issueComments,
       input.prNumber,
+      postedCommentIds,
     )) {
       const key = question.eventKey;
       if (handled.has(key)) continue;
@@ -742,54 +814,98 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
     }
 
     if (base.sha !== context.evidence.revision) {
-      const key = `base:${input.prNumber}:${base.sha}`;
-      if (!handled.has(key)) {
-        await renew();
-        await markForReproof(input.store, prVerdicts, key);
-        const familyIds = prVerdicts.map(({ verdict }) => verdict.familyId);
-        const postedCommentId = await comment(
-          key,
-          `The base branch advanced from ${context.evidence.revision} to ${base.sha}. Evidence for ${familyIds.join(", ")} is being re-proven before the pull request changes.`,
-        );
-        const event = await record("reproof_started", {
-          handledEventKey: key,
-          reason: "base_branch_advanced",
-          evidenceRevision: context.evidence.revision,
-          baseRevision: base.sha,
-          familyIds,
-          reproof_requested: true,
-          postedCommentId,
-        });
-        handled.add(key);
-        state = {
-          ...state,
-          phase: "reproving",
-          lastEventId: event.eventId,
-          handledEventKeys: handled,
-        };
-        actions.push(
-          action("reproof_requested", {
+      const opened = events.find(({ kind }) => kind === "pr_opened");
+      let preApplyDigests: Readonly<Record<string, string | null>> | undefined;
+      try {
+        preApplyDigests =
+          opened === undefined
+            ? undefined
+            : remediationFromLifecycleDetail(opened.detail).pre_apply_digests;
+      } catch {
+        preApplyDigests = undefined;
+      }
+      const changed =
+        preApplyDigests === undefined
+          ? undefined
+          : await changedPreApplyDigests(input, base.sha, preApplyDigests);
+      if (changed === undefined || changed.length > 0) {
+        const key =
+          changed === undefined
+            ? `base:${input.prNumber}:${base.sha}`
+            : `base:${input.prNumber}:${createHash("sha256")
+                .update(canonicalJson(jsonValueSchema.parse(changed)))
+                .digest("hex")}`;
+        if (!handled.has(key)) {
+          await renew();
+          await markForReproof(input.store, prVerdicts, key);
+          const familyIds = prVerdicts.map(({ verdict }) => verdict.familyId);
+          const changedPaths = changed?.map(({ path }) => path) ?? [];
+          const postedCommentId = await comment(
+            key,
+            `The base branch advanced from ${context.evidence.revision} to ${base.sha}. Swapped files changed: ${changedPaths.join(", ") || "unknown"}. Evidence for ${familyIds.join(", ")} is being re-proven before the pull request changes.`,
+          );
+          const event = await record("reproof_started", {
+            handledEventKey: key,
             reason: "base_branch_advanced",
-            familyIds,
+            evidenceRevision: context.evidence.revision,
             baseRevision: base.sha,
-          }),
-        );
+            familyIds,
+            reproof_requested: true,
+            postedCommentId,
+            changedFiles: changed?.map(({ path }) => path) ?? null,
+          });
+          handled.add(key);
+          state = {
+            ...state,
+            phase: "reproving",
+            lastEventId: event.eventId,
+            handledEventKeys: handled,
+          };
+          actions.push(
+            action("reproof_requested", {
+              reason: "base_branch_advanced",
+              familyIds,
+              baseRevision: base.sha,
+            }),
+          );
+        }
       }
     }
 
-    const relevantChecks = checkRuns.checkRuns
+    const relevantChecks = [
+      ...checkRuns.checkRuns
+        .filter((c) => c.headSha === pull.head.sha && c.status === "completed")
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          completedAt: c.completedAt,
+          conclusion: c.conclusion,
+          source: "check_run" as const,
+        })),
+      ...(combinedStatus.sha === pull.head.sha
+        ? combinedStatus.statuses
+            .filter(({ state }) => state !== "pending")
+            .map((s) => ({
+              id: s.id,
+              name: s.context,
+              completedAt: s.updatedAt,
+              conclusion: s.state === "success" ? "success" : "failure",
+              source: "commit_status" as const,
+            }))
+        : []),
+    ]
       .filter(
-        (check) =>
-          check.headSha === pull.head.sha &&
-          check.status === "completed" &&
-          /(lint|test|build)/i.test(check.name),
+        ({ conclusion }) =>
+          conclusion !== null &&
+          conclusion !== "neutral" &&
+          conclusion !== "skipped",
       )
       .sort(
         (left, right) =>
           compareText(left.name, right.name) || left.id - right.id,
       );
     const failingChecks = relevantChecks.filter(
-      ({ conclusion }) => conclusion === "failure",
+      ({ conclusion }) => conclusion !== "success",
     );
     if (failingChecks.length > 0) {
       const failingNames = [...new Set(failingChecks.map(({ name }) => name))];
@@ -804,12 +920,9 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
         })),
         replayObserved: false,
       });
-      const priorChecks = previousFailingCheckObservations(
-        events,
-        pull.head.sha,
-      );
-      const persistent = failingChecks.filter(
-        (check) => (priorChecks.get(checkIdentity(check)) ?? 0) >= 1,
+      const priorIds = previousFailingCheckIds(events, pull.head.sha);
+      const persistent = failingChecks.filter((check) =>
+        [...(priorIds.get(check.name) ?? [])].some((id) => id !== check.id),
       );
       const key = ciEventKey(
         input.prNumber,
@@ -817,47 +930,52 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
         failingChecks.map(checkIdentity),
       );
       if (persistent.length === 0) {
-        const remediationEvidence = diagnoseRemediationEvidence({
-          baseline: ciSnapshot(pull.head.sha, failingChecks, "fail"),
-          proposal: ciProposedChange(prVerdicts, input.prNumber),
-          validation: ciValidation(failingChecks, "failed"),
-        });
-        const remediationEvidenceKey = await writeRemediationEvidence(
-          input.store,
-          remediationEvidence,
-        );
-        const postedCommentId = await comment(
-          key,
-          `Diagnosis: ${diagnosis.issueClass} (${diagnosis.nextAction}). The following relevant checks failed on ${pull.head.sha}: ${failingNames.join(", ")}. The watch will confirm the failure on the next pass before closing the pull request.`,
-        );
-        const event = await record("comment_posted", {
-          handledEventKey: key,
-          category: "ci_failure",
-          issueClass: diagnosis.issueClass,
-          nextAction: diagnosis.nextAction,
-          failurePass: 1,
-          headSha: pull.head.sha,
-          checkNames: failingNames,
-          failingChecks: failingChecks.map(({ id, name, completedAt }) => ({
-            id,
-            name,
-            completedAt: completedAt ?? "",
-          })),
-          remediationEvidenceId: remediationEvidence.evidence_id,
-          remediationEvidenceKey,
-          postedCommentId,
-        });
-        state = { ...state, lastEventId: event.eventId };
-        actions.push(
-          action("ci_failure_observed", {
-            failurePass: 1,
-            checkNames: failingNames,
+        if (!handled.has(key)) {
+          const remediationEvidence = diagnoseRemediationEvidence({
+            baseline: ciSnapshot(pull.head.sha, failingChecks, "fail"),
+            proposal: ciProposedChange(prVerdicts, input.prNumber),
+            validation: ciValidation(failingChecks, "failed"),
+          });
+          const remediationEvidenceKey = await writeRemediationEvidence(
+            input.store,
+            remediationEvidence,
+          );
+          const postedCommentId = await comment(
+            key,
+            `Diagnosis: ${diagnosis.issueClass} (${diagnosis.nextAction}). The following relevant checks failed on ${pull.head.sha}: ${failingNames.join(", ")}. The watch will confirm the failure on the next pass before closing the pull request.`,
+          );
+          const event = await record("comment_posted", {
+            handledEventKey: key,
+            category: "ci_failure",
             issueClass: diagnosis.issueClass,
             nextAction: diagnosis.nextAction,
+            failurePass: 1,
+            headSha: pull.head.sha,
+            checkNames: failingNames,
+            failingChecks: failingChecks.map(
+              ({ id, name, completedAt, source }) => ({
+                id,
+                name,
+                completedAt: completedAt ?? "",
+                source,
+              }),
+            ),
             remediationEvidenceId: remediationEvidence.evidence_id,
             remediationEvidenceKey,
-          }),
-        );
+            postedCommentId,
+          });
+          state = { ...state, lastEventId: event.eventId };
+          actions.push(
+            action("ci_failure_observed", {
+              failurePass: 1,
+              checkNames: failingNames,
+              issueClass: diagnosis.issueClass,
+              nextAction: diagnosis.nextAction,
+              remediationEvidenceId: remediationEvidence.evidence_id,
+              remediationEvidenceKey,
+            }),
+          );
+        }
       } else {
         const persistentNames = [
           ...new Set(persistent.map(({ name }) => name)),
@@ -878,11 +996,14 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
           failurePass: 2,
           headSha: pull.head.sha,
           checkNames: persistentNames,
-          failingChecks: persistent.map(({ id, name, completedAt }) => ({
-            id,
-            name,
-            completedAt: completedAt ?? "",
-          })),
+          failingChecks: persistent.map(
+            ({ id, name, completedAt, source }) => ({
+              id,
+              name,
+              completedAt: completedAt ?? "",
+              source,
+            }),
+          ),
         });
         actions.push(
           action("pr_closed_rejected", {
@@ -913,7 +1034,12 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
         passingChecks.length === baselineCheckNames.length
       ) {
         const baselineChecks = baselineDetail.failingChecks.map(
-          ({ id, name, completedAt }) => ({ id, name, completedAt }),
+          ({ id, name, completedAt, source }) => ({
+            id,
+            name,
+            completedAt,
+            source,
+          }),
         );
         await writeRemediationEvidence(
           input.store,

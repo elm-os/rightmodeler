@@ -431,6 +431,8 @@ open a draft pull request for proven model swaps
 
 Options:
   --owner <owner>            GitHub repository owner
+  --github-repo <repo>       GitHub repository name (default: the repository
+                             directory name)
   --github-base-url <url>    GitHub API base URL
   --github-token-env <name>  environment variable containing the GitHub token
   --dry-run                  run all machine gates without writing GitHub state
@@ -446,6 +448,8 @@ open a draft pull request restoring a prior model swap
 
 Options:
   --owner <owner>            GitHub repository owner
+  --github-repo <repo>       GitHub repository name (default: the repository
+                             directory name)
   --pr <number>              merged pull request number
   --github-base-url <url>    GitHub API base URL
   --github-token-env <name>  environment variable containing the GitHub token

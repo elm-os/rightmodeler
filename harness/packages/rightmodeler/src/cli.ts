@@ -118,6 +118,7 @@ interface ExportCommandOptions {
 
 interface ApplyCommandOptions {
   owner: string;
+  githubRepo?: string;
   githubBaseUrl: string;
   githubTokenEnv: string;
   dryRun?: boolean;
@@ -125,6 +126,7 @@ interface ApplyCommandOptions {
 
 interface RollbackCommandOptions {
   owner: string;
+  githubRepo?: string;
   pr: string;
   githubBaseUrl: string;
   githubTokenEnv: string;
@@ -463,6 +465,10 @@ export function createProgram(
     .command("apply")
     .description("open a draft pull request for proven model swaps")
     .requiredOption("--owner <owner>", "GitHub repository owner")
+    .option(
+      "--github-repo <repo>",
+      "GitHub repository name (default: the repository directory name)",
+    )
     .requiredOption("--github-base-url <url>", "GitHub API base URL")
     .requiredOption(
       "--github-token-env <name>",
@@ -475,6 +481,9 @@ export function createProgram(
       repo: global.repo,
       store: global.store,
       owner: local.owner,
+      ...(local.githubRepo === undefined
+        ? {}
+        : { githubRepo: local.githubRepo }),
       githubBaseUrl: local.githubBaseUrl,
       githubTokenEnv: local.githubTokenEnv,
       dryRun: local.dryRun ?? false,
@@ -487,6 +496,10 @@ export function createProgram(
     .command("rollback")
     .description("open a draft pull request restoring a prior model swap")
     .requiredOption("--owner <owner>", "GitHub repository owner")
+    .option(
+      "--github-repo <repo>",
+      "GitHub repository name (default: the repository directory name)",
+    )
     .requiredOption("--pr <number>", "merged pull request number")
     .requiredOption("--github-base-url <url>", "GitHub API base URL")
     .requiredOption(
@@ -503,6 +516,9 @@ export function createProgram(
       repo: global.repo,
       store: global.store,
       owner: local.owner,
+      ...(local.githubRepo === undefined
+        ? {}
+        : { githubRepo: local.githubRepo }),
       githubBaseUrl: local.githubBaseUrl,
       githubTokenEnv: local.githubTokenEnv,
       prNumber,

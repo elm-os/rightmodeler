@@ -2559,6 +2559,8 @@ describe("built CLI pipeline", () => {
       "apply",
       "--owner",
       "acme",
+      "--github-repo",
+      "demo-app",
       "--github-base-url",
       githubBaseUrl,
       "--github-token-env",

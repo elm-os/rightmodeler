@@ -96,6 +96,8 @@ interface StubModule {
   startGithubStub(options: {
     readonly port: number;
     readonly token?: string;
+    readonly tokenLogin?: string;
+    readonly rejectReviewRequestFor?: string;
   }): Promise<StubServer>;
 }
 
@@ -150,9 +152,20 @@ async function control<T>(
   return (await response.json()) as T;
 }
 
-async function startStub(): Promise<StubServer> {
+async function startStub({
+  tokenLogin,
+  rejectReviewRequestFor,
+}: {
+  tokenLogin?: string;
+  rejectReviewRequestFor?: string;
+} = {}): Promise<StubServer> {
   const module = (await import(stubModuleUrl)) as StubModule;
-  const stub = await module.startGithubStub({ port: 0, token });
+  const stub = await module.startGithubStub({
+    port: 0,
+    token,
+    tokenLogin,
+    rejectReviewRequestFor,
+  });
   openStubs.push(stub);
   return stub;
 }
@@ -298,7 +311,13 @@ function applyVerdict(
   };
 }
 
-async function createHarness(): Promise<TestHarness> {
+async function createHarness({
+  tokenLogin,
+  rejectReviewRequestFor,
+}: {
+  tokenLogin?: string;
+  rejectReviewRequestFor?: string;
+} = {}): Promise<TestHarness> {
   const root = await mkdtemp(join(tmpdir(), "rightmodeler-apply-"));
   temporaryDirectories.push(root);
   const repoDir = join(root, "repo");
@@ -350,7 +369,7 @@ async function createHarness(): Promise<TestHarness> {
   if (blast === undefined) throw new Error("Fixture blast radius is empty");
 
   process.env[tokenEnv] = token;
-  const stub = await startStub();
+  const stub = await startStub({ tokenLogin, rejectReviewRequestFor });
   await control(stub, "/__test/seed", {
     ...repository,
     defaultBranch: "main",
@@ -557,6 +576,10 @@ describe("applySwaps", () => {
     expect(pull.body).not.toContain(caseContentMarker);
     expect(pull.body).toContain("1 invalid case ID omitted");
 
+    const committedSha = await git(harness.repoDir, [
+      "rev-parse",
+      `HEAD:${sourcePath}`,
+    ]);
     expect(
       harness.stub
         .getHits()
@@ -568,6 +591,7 @@ describe("applySwaps", () => {
         body: expect.objectContaining({
           message: applied.title,
           branch: applied.branch,
+          sha: committedSha,
         }),
       }),
     ]);
@@ -728,7 +752,7 @@ describe("applySwaps", () => {
     expect(githubWrites(harness.stub)).toEqual([]);
   });
 
-  it("refuses a swap with no requestable owners", async () => {
+  it("opens the draft pull request without reviewers when no owner resolves", async () => {
     const harness = await createHarness();
     const input = applyVerdict(harness);
     const withoutOwners: ApplyVerdict = {
@@ -736,12 +760,155 @@ describe("applySwaps", () => {
       blastRadius: { ...input.blastRadius, owners: [] },
     };
 
-    const refused = requireRefused(await runApply(harness, [withoutOwners]));
+    const applied = requireApplied(await runApply(harness, [withoutOwners]));
 
-    expect(refused.reasons.map(({ code }) => code)).toEqual([
-      "no_requestable_reviewers",
-    ]);
-    expect(githubWrites(harness.stub)).toEqual([]);
+    expect(applied.reviewers).toEqual([]);
+    expect(applied.teamReviewers).toEqual([]);
+    expect(await lifecycleEvents(harness.store)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "review_requested",
+          detail: expect.objectContaining({
+            reviewers: [],
+            teamReviewers: [],
+            unresolvedOwners: 0,
+            reason: "no_requestable_reviewers",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("turns a blame noreply email into a login without an API call", async () => {
+    const harness = await createHarness();
+    const input = applyVerdict(harness);
+    const withNoreplyOwner: ApplyVerdict = {
+      ...input,
+      blastRadius: {
+        ...input.blastRadius,
+        owners: [
+          {
+            handle: "12345+octo-dev@users.noreply.github.com",
+            source: "blame",
+          },
+        ],
+      },
+    };
+
+    const applied = requireApplied(await runApply(harness, [withNoreplyOwner]));
+
+    expect(applied.reviewers).toEqual(["octo-dev"]);
+    expect(
+      harness.stub
+        .getHits()
+        .filter(
+          ({ method, path }) =>
+            method === "GET" && path === `/repos/${owner}/${repo}/commits`,
+        ),
+    ).toEqual([]);
+  });
+
+  it("resolves a plain blame email through the commits API and drops the unresolvable", async () => {
+    const harness = await createHarness();
+    await control(harness.stub, "/__test/commit-authors", {
+      ...repository,
+      authors: { "resolved@example.com": "octocat" },
+    });
+    const input = applyVerdict(harness);
+    const withBlameOwners: ApplyVerdict = {
+      ...input,
+      blastRadius: {
+        ...input.blastRadius,
+        owners: [
+          { handle: "resolved@example.com", source: "blame" },
+          { handle: "missing@example.com", source: "blame" },
+        ],
+      },
+    };
+
+    const applied = requireApplied(await runApply(harness, [withBlameOwners]));
+
+    expect(applied.reviewers).toEqual(["octocat"]);
+    const requested = (await lifecycleEvents(harness.store)).find(
+      ({ kind }) => kind === "review_requested",
+    );
+    expect(requested?.detail).toMatchObject({
+      reviewers: ["octocat"],
+      teamReviewers: [],
+      unresolvedOwners: 1,
+    });
+    expect(JSON.stringify(requested?.detail)).not.toContain("@example.com");
+  });
+
+  it("never requests the pull request author", async () => {
+    const harness = await createHarness({ tokenLogin: "delta" });
+
+    const applied = requireApplied(
+      await runApply(harness, [applyVerdict(harness)]),
+    );
+
+    expect(applied.reviewers).toEqual(["alpha", "bravo", "charlie", "echo"]);
+    const requested = (await lifecycleEvents(harness.store)).find(
+      ({ kind }) => kind === "review_requested",
+    );
+    expect(requested?.detail).toMatchObject({
+      reviewers: ["alpha", "bravo", "charlie", "echo"],
+    });
+    const request = harness.stub
+      .getHits()
+      .find(
+        ({ method, path }) =>
+          method === "POST" &&
+          path ===
+            `/repos/${owner}/${repo}/pulls/${applied.prNumber}/requested_reviewers`,
+      );
+    expect(request?.body).toMatchObject({
+      reviewers: ["alpha", "bravo", "charlie", "echo"],
+    });
+  });
+
+  it("drops only the reviewer GitHub rejects with 422", async () => {
+    const harness = await createHarness({ rejectReviewRequestFor: "delta" });
+
+    const applied = requireApplied(
+      await runApply(harness, [applyVerdict(harness)]),
+    );
+
+    expect(applied.reviewers).toEqual(["alpha", "bravo", "charlie", "echo"]);
+    const requested = (await lifecycleEvents(harness.store)).find(
+      ({ kind }) => kind === "review_requested",
+    );
+    expect(requested?.detail).toMatchObject({
+      reviewers: ["alpha", "bravo", "charlie", "echo"],
+    });
+  });
+
+  it("does not record teams when every reviewer retry is rejected", async () => {
+    const harness = await createHarness({ rejectReviewRequestFor: "delta" });
+    const input = applyVerdict(harness);
+    const rejectedOwners: ApplyVerdict = {
+      ...input,
+      blastRadius: {
+        ...input.blastRadius,
+        owners: [
+          { handle: "@acme/platform", source: "codeowners" },
+          { handle: "@delta", source: "codeowners" },
+        ],
+      },
+    };
+
+    const applied = requireApplied(await runApply(harness, [rejectedOwners]));
+
+    expect(applied.reviewers).toEqual([]);
+    expect(applied.teamReviewers).toEqual([]);
+    const requested = (await lifecycleEvents(harness.store)).find(
+      ({ kind }) => kind === "review_requested",
+    );
+    expect(requested?.detail).toMatchObject({
+      reviewers: [],
+      teamReviewers: [],
+      reason: "no_requestable_reviewers",
+    });
   });
 
   it("refuses gate (c) when local HEAD moved beyond the evidence revision", async () => {
@@ -802,16 +969,13 @@ describe("applySwaps", () => {
     expect(githubWrites(harness.stub)).toEqual([]);
   });
 
-  it("refuses gate (d) when an adjacent on-disk edit changed the scan-time digest", async () => {
+  it("refuses gate (d) when the scan-time digest is stale", async () => {
     const harness = await createHarness();
-    const file = join(harness.repoDir, sourcePath);
-    await writeFile(
-      file,
-      `const adjacentEdit = true;\n${await readFile(file, "utf8")}`,
-    );
 
     const refused = requireRefused(
-      await runApply(harness, [applyVerdict(harness)]),
+      await runApply(harness, [
+        applyVerdict(harness, { contentHash: "0".repeat(64) }),
+      ]),
     );
 
     expect(refused.reasons).toEqual([
@@ -820,6 +984,22 @@ describe("applySwaps", () => {
         detail: { paths: [sourcePath] },
       }),
     ]);
+    expect(githubWrites(harness.stub)).toEqual([]);
+  });
+
+  it("refuses an uncommitted change to a swap file before GitHub writes", async () => {
+    const harness = await createHarness();
+    const file = join(harness.repoDir, sourcePath);
+    await writeFile(
+      file,
+      `${await readFile(file, "utf8")}\nconst dirty = true;\n`,
+    );
+
+    const refused = requireRefused(
+      await runApply(harness, [applyVerdict(harness)]),
+    );
+
+    expect(refused.reasons.map(({ code }) => code)).toEqual(["dirty_worktree"]);
     expect(githubWrites(harness.stub)).toEqual([]);
   });
 
@@ -886,12 +1066,30 @@ describe("applySwaps", () => {
     const file = join(harness.repoDir, sourcePath);
     const content = `const adjacent={value:1}\n${await readFile(file, "utf8")}`;
     await writeFile(file, content);
+    await git(harness.repoDir, ["add", "--", sourcePath]);
+    await git(harness.repoDir, [
+      "-c",
+      "user.name=Fixture Author",
+      "-c",
+      "user.email=fixture@example.com",
+      "commit",
+      "-m",
+      "test: seed formatter conflict",
+    ]);
+    const head = await git(harness.repoDir, ["rev-parse", "HEAD"]);
+    await control(harness.stub, "/__test/seed", {
+      ...repository,
+      defaultBranch: "main",
+      sha: head,
+      tree: { src: { "summarize.ts": content } },
+    });
+    const input = applyVerdict(harness, {
+      contentHash: createHash("sha256").update(content).digest("hex"),
+    });
 
     const refused = requireRefused(
       await runApply(harness, [
-        applyVerdict(harness, {
-          contentHash: createHash("sha256").update(content).digest("hex"),
-        }),
+        { ...input, evidence: { ...input.evidence, revision: head } },
       ]),
     );
 
@@ -912,7 +1110,13 @@ describe("applySwaps", () => {
     const harness = await createHarness();
     const input = applyVerdict(harness);
     const first = requireApplied(await runApply(harness, [input]));
-    const hitsAfterFirstApply = harness.stub.getHits().length;
+    const writesAfterFirstApply = githubWrites(harness.stub).length;
+    const authorLookupsAfterFirstApply = harness.stub
+      .getHits()
+      .filter(
+        ({ method, path }) =>
+          method === "GET" && path === `/repos/${owner}/${repo}/commits`,
+      ).length;
 
     const second = await runApply(harness, [input]);
 
@@ -924,8 +1128,54 @@ describe("applySwaps", () => {
       title: first.title,
     });
     expect(pullCreationHits(harness.stub)).toHaveLength(1);
-    expect(harness.stub.getHits()).toHaveLength(hitsAfterFirstApply);
+    expect(githubWrites(harness.stub)).toHaveLength(writesAfterFirstApply);
+    expect(
+      harness.stub
+        .getHits()
+        .filter(
+          ({ method, path }) =>
+            method === "GET" && path === `/repos/${owner}/${repo}/commits`,
+        ),
+    ).toHaveLength(authorLookupsAfterFirstApply + 1);
     expect(await lifecycleEvents(harness.store)).toHaveLength(3);
+  });
+
+  it("requests reviewers on a rerun when the first attempt left no fact", async () => {
+    const harness = await createHarness();
+    const input = applyVerdict(harness);
+    const first = requireApplied(await runApply(harness, [input]));
+    const requestPath = `/repos/${owner}/${repo}/pulls/${first.prNumber}/requested_reviewers`;
+    const requests = () =>
+      harness.stub
+        .getHits()
+        .filter(
+          ({ method, path }) => method === "POST" && path === requestPath,
+        );
+
+    await expect(runApply(harness, [input])).resolves.toMatchObject({
+      status: "existing",
+    });
+    expect(requests()).toHaveLength(1);
+    const recorded = (await lifecycleEvents(harness.store)).find(
+      ({ kind }) => kind === "review_requested",
+    );
+    if (recorded === undefined) {
+      throw new Error("Missing review_requested fact");
+    }
+    await rm(
+      join(
+        harness.store.root,
+        ".rightmodeler-store",
+        "entries",
+        factKey("project", recorded.eventId),
+      ),
+      { recursive: true, force: true },
+    );
+
+    await expect(runApply(harness, [input])).resolves.toMatchObject({
+      status: "existing",
+    });
+    expect(requests()).toHaveLength(2);
   });
 
   it("refuses a directly reapplied swap after its pull request was rejected", async () => {
@@ -994,6 +1244,21 @@ describe("applySwaps", () => {
     expect(pull.body).toContain("and 2 more");
     expect(pull.body).toContain("1 invalid case ID omitted");
     expect(pull.body).not.toContain(caseContentMarker);
+  });
+
+  it("includes the candidate price and case ID explanation in the pull request body", async () => {
+    const harness = await createHarness();
+    const applied = requireApplied(
+      await runApply(harness, [applyVerdict(harness)]),
+    );
+    const pull = await harness.githubClient.getPullRequest({
+      ...repository,
+      pullNumber: applied.prNumber,
+    });
+
+    expect(pull.body).toContain("Case IDs are SHA-256 digests");
+    expect(pull.body).toContain("| $0.00100000 |");
+    expect(pull.body).toContain("`acme/small-1`");
   });
 
   it("restores the exact pre-apply branch state, records apply_failed, and resumes", async () => {
@@ -1340,6 +1605,10 @@ describe("applySwaps", () => {
         .filter(({ path }) => !path.startsWith("/__test/"))
         .map(({ method, path }) => ({ method, path })),
     ).toEqual([
+      {
+        method: "GET",
+        path: `/repos/${owner}/${repo}/commits`,
+      },
       {
         method: "GET",
         path: `/repos/${owner}/${repo}/git/ref/heads/main`,
