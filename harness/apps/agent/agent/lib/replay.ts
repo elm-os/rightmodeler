@@ -16,6 +16,7 @@ export function replayCliArguments(input: ReplayStartInput): string[] {
         ? undefined
         : String(input.maxConcurrency),
     pricingFile: input.pricingFile,
+    policy: input.policy,
     includeFree: input.includeFree,
     approvedRun: input.approvedRun,
     evaluator: input.evaluator?.provider,

@@ -86,6 +86,7 @@ interface PipelineCommandOptions {
   maxCostUsd?: string;
   maxConcurrency?: string;
   pricingFile?: string;
+  policy?: string;
   includeFree?: boolean;
   modebConfig?: string;
   through?: PipelineStage;
@@ -690,6 +691,10 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         "--pricing-file <path>",
         "JSON map from model id to per-token input and output USD, for catalogs without pricing",
       )
+      .option(
+        "--policy <path>",
+        "release policy JSON file: quality floor, shortlist size, model allow and deny lists",
+      )
       .addOption(
         new Option(
           "--evaluator <provider>",
@@ -826,6 +831,7 @@ function pipelineOptions(
     maxCostUsd,
     maxConcurrency,
     pricingFilePath: local.pricingFile,
+    policyFilePath: local.policy,
     includeFreeModels: local.includeFree,
     ...(local.evaluator === undefined
       ? {}
@@ -1174,6 +1180,7 @@ const PIPELINE_ARG_OPTIONS = [
   { flag: "--max-cost-usd", key: "maxCostUsd", kind: "value" },
   { flag: "--max-concurrency", key: "maxConcurrency", kind: "value" },
   { flag: "--pricing-file", key: "pricingFile", kind: "path" },
+  { flag: "--policy", key: "policy", kind: "path" },
   { flag: "--include-free", key: "includeFree", kind: "flag" },
   { flag: "--approved-run", key: "approvedRun", kind: "value" },
   { flag: "--evaluator", key: "evaluator", kind: "value" },

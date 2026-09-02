@@ -89,6 +89,11 @@ const cases = [
     expected: ["shortlist"],
   },
   {
+    name: "the release policy changes",
+    mutation: "policy-file",
+    expected: ["shortlist"],
+  },
+  {
     name: "an approved run digest is missing",
     mutation: "missing-approved-run",
     expected: ["shortlist"],
@@ -240,6 +245,11 @@ describe("pipeline staleness", { timeout: 120_000 }, () => {
     }
     if (mutation === "include-free-models") {
       overrides = { includeFreeModels: true };
+    }
+    if (mutation === "policy-file") {
+      const policyFilePath = join(root, "policy.json");
+      await writeFile(policyFilePath, JSON.stringify({ shortlistTop: 5 }));
+      overrides = { policyFilePath };
     }
     if (mutation === "missing-approved-run") {
       const reporter = new Reporter("json", {

@@ -11,6 +11,7 @@ import {
   callSiteInventoryKey,
   canonicalJson,
   completeRun,
+  computeEvidenceQuestionId,
   computeRunSpecDigest,
   createRun,
   factKey,
@@ -188,19 +189,12 @@ const PROJECT_ID = "project";
 const ACTIVE_CORPUS_KEY = `${PROJECT_ID}/corpus/active.json`;
 const CORPUS_SEED = 42;
 const AUDIT_SAMPLE_LIMIT = 20;
-const SHORTLIST_TOP = 3;
+const DEFAULT_SHORTLIST_TOP = 3;
+const DEFAULT_QUALITY_FLOOR = 0.85;
 const AVAILABILITY_FLOOR = 0.7;
-const GATE_POLICY_VERSION = "phase-a-v2";
+const GATE_POLICY_BASE_VERSION = "phase-a-v3";
+const REPLAY_PROMPT_REVISION = "replay-prompt-v1";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
-const RELEASE_GATE_POLICY = new ReleaseGatePolicy({
-  gatePolicyVersion: GATE_POLICY_VERSION,
-  qualityFloor: 0.85,
-  availabilityFloor: AVAILABILITY_FLOOR,
-});
-const MINIMUM_HOLDOUT_CASES = minimumTrialsForFloor(
-  RELEASE_GATE_POLICY.qualityFloor,
-  1,
-);
 
 function auditResultKey(projectId: string): string {
   return `${setupPrefix(projectId)}audit-result.json`;
@@ -294,6 +288,8 @@ const familyPlanSchema = z.strictObject({
 const replayPlanSchema = z.strictObject({
   top: z.number().int().positive(),
   includeFreeModels: z.boolean(),
+  allowModels: z.array(z.string().min(1)).default([]),
+  denyModels: z.array(z.string().min(1)).default([]),
   sampleSizes: z.record(z.string(), z.number().int().positive()),
   familyPlans: z.array(familyPlanSchema).default([]),
   steps: z.array(replayPlanStepSchema),
@@ -545,6 +541,8 @@ interface PipelineContext {
   modeBConfigPath?: string;
   pricingOverrides?: z.infer<typeof pricingFileSchema>;
   pricingFilePath?: string;
+  policyFilePath?: string;
+  release: ReleasePolicyResolution;
   matchers?: readonly DeclarativeMatcher[];
   matchersPath?: string;
   existingRunId?: string;
@@ -565,6 +563,7 @@ export interface PipelineOptions {
   evaluator?: EvaluatorConfig;
   modeBConfigPath?: string;
   pricingFilePath?: string;
+  policyFilePath?: string;
   matchersPath?: string;
   approvedRunSpecDigest?: string;
   through?: PipelineStage;
@@ -580,6 +579,7 @@ export interface StagePlanEntry {
 
 export interface PipelineResult {
   stages: StagePlanEntry[];
+  policy?: EffectiveReleasePolicy;
   familyPlans?: FamilyPlan[];
   executedStages: PipelineStage[];
   verdicts: FamilyVerdict[];
@@ -697,12 +697,18 @@ const pricingFileSchema = z.record(
     maxOutputTokens: z.number().int().positive().optional(),
   }),
 );
+const releasePolicyFileSchema = z.strictObject({
+  qualityFloor: z.number().gt(0.8).lt(1).optional(),
+  shortlistTop: z.number().int().positive().optional(),
+  allowModels: z.array(z.string().min(1)).optional(),
+  denyModels: z.array(z.string().min(1)).optional(),
+});
 
 export type ModeBConfig = z.infer<typeof modeBConfigSchema>;
 
 export async function planPipeline(
   options: PipelineOptions,
-): Promise<Pick<PipelineResult, "stages" | "familyPlans">> {
+): Promise<Pick<PipelineResult, "stages" | "familyPlans" | "policy">> {
   const context = createContext(options);
   return planStages(context, options);
 }
@@ -710,7 +716,7 @@ export async function planPipeline(
 async function planStages(
   context: PipelineContext,
   options: PipelineOptions,
-): Promise<Pick<PipelineResult, "stages" | "familyPlans">> {
+): Promise<Pick<PipelineResult, "stages" | "familyPlans" | "policy">> {
   const stages = stagesThrough(options.through);
   const state = await readSetupState(context.store, context.projectId);
   const result: StagePlanEntry[] = [];
@@ -753,10 +759,11 @@ async function planStages(
         : await approvedSwapSetByDigest(context, context.approvedRunSpecDigest);
     return {
       stages: result,
+      policy: context.release.effective,
       familyPlans: await planFamilies(context, corpus, records, approved),
     };
   }
-  return { stages: result };
+  return { stages: result, policy: context.release.effective };
 }
 
 export async function readIngestResumption(options: PipelineOptions): Promise<{
@@ -889,7 +896,7 @@ export async function runPipeline(
 
 export async function estimateReplay(
   options: PipelineOptions,
-): Promise<ReplayCostEstimate> {
+): Promise<ReplayCostEstimate & { readonly policy: EffectiveReleasePolicy }> {
   const context = createContext(options);
   if (context.baseUrl === undefined) {
     throw missingProviderConfiguration();
@@ -967,12 +974,15 @@ export async function estimateReplay(
             ),
           };
         })();
-  return estimateReplayCost({
-    steps: plan.steps,
-    cases: plan.cases,
-    candidates,
-    judge,
-  });
+  return {
+    ...estimateReplayCost({
+      steps: plan.steps,
+      cases: plan.cases,
+      candidates,
+      judge,
+    }),
+    policy: context.release.effective,
+  };
 }
 
 export async function claimDetachedReplay(
@@ -1783,6 +1793,10 @@ function createContext(options: PipelineOptions): PipelineContext {
     options.pricingFilePath === undefined
       ? undefined
       : resolve(options.pricingFilePath);
+  const policyFilePath =
+    options.policyFilePath === undefined
+      ? undefined
+      : resolve(options.policyFilePath);
   return {
     repo,
     storeRoot,
@@ -1794,6 +1808,9 @@ function createContext(options: PipelineOptions): PipelineContext {
     maxCostUsd: options.maxCostUsd,
     maxConcurrency: options.maxConcurrency,
     includeFreeModels: options.includeFreeModels ?? false,
+    release: releasePolicy(
+      policyFilePath === undefined ? undefined : readPolicyFile(policyFilePath),
+    ),
     ...(options.evaluator === undefined
       ? {}
       : { evaluator: resolveEvaluatorConfig(options.evaluator) }),
@@ -1809,6 +1826,7 @@ function createContext(options: PipelineOptions): PipelineContext {
           pricingFilePath,
           pricingOverrides: readPricingFile(pricingFilePath),
         }),
+    ...(policyFilePath === undefined ? {} : { policyFilePath }),
     ...(options.matchersPath === undefined
       ? {}
       : {
@@ -1891,6 +1909,88 @@ function readPricingFile(path: string): z.infer<typeof pricingFileSchema> {
     );
   }
   return parsed.data;
+}
+
+function readPolicyFile(path: string): z.infer<typeof releasePolicyFileSchema> {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch (error) {
+    throw invalidPolicyFile(
+      `Invalid --policy: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const parsed = releasePolicyFileSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]!;
+    const field = issue.path.length === 0 ? "policy" : issue.path.join(".");
+    throw invalidPolicyFile(
+      `Invalid --policy field ${field}: ${issue.message}`,
+    );
+  }
+  return parsed.data;
+}
+
+export interface EffectiveReleasePolicy {
+  readonly qualityFloor: number;
+  readonly shortlistTop: number;
+  readonly allowModels: readonly string[];
+  readonly denyModels: readonly string[];
+}
+
+export interface ReleasePolicyResolution {
+  readonly effective: EffectiveReleasePolicy;
+  readonly gate: ReleaseGatePolicy;
+  readonly minimumHoldoutCases: number;
+}
+
+export function releasePolicy(
+  file: z.infer<typeof releasePolicyFileSchema> | undefined,
+): ReleasePolicyResolution {
+  const effective: EffectiveReleasePolicy = {
+    qualityFloor: file?.qualityFloor ?? DEFAULT_QUALITY_FLOOR,
+    shortlistTop: file?.shortlistTop ?? DEFAULT_SHORTLIST_TOP,
+    allowModels: [...new Set(file?.allowModels ?? [])].sort(compareText),
+    denyModels: [...new Set(file?.denyModels ?? [])].sort(compareText),
+  };
+  const digest = computeRunSpecDigest(
+    jsonValue({ base: GATE_POLICY_BASE_VERSION, policy: effective }),
+  );
+  return {
+    effective,
+    gate: new ReleaseGatePolicy({
+      gatePolicyVersion: `${GATE_POLICY_BASE_VERSION}-${digest.slice(0, 12)}`,
+      qualityFloor: effective.qualityFloor,
+      availabilityFloor: AVAILABILITY_FLOOR,
+    }),
+    minimumHoldoutCases: minimumTrialsForFloor(effective.qualityFloor, 1),
+  };
+}
+
+export function evidenceQuestionIdentity(input: {
+  readonly corpusVersionId: string;
+  readonly gatePolicyVersion: string;
+  readonly evaluatorPlan: JsonValue;
+  readonly family: string;
+  readonly stepIds: readonly string[];
+  readonly reproofRequestIds: readonly string[];
+}): string {
+  return computeEvidenceQuestionId({
+    corpusVersionId: input.corpusVersionId,
+    promptRevision: REPLAY_PROMPT_REVISION,
+    gatePolicyVersion: input.gatePolicyVersion,
+    stepFingerprint: computeRunSpecDigest(
+      jsonValue({
+        family: input.family,
+        stepIds: [...input.stepIds],
+        ...(input.reproofRequestIds.length === 0
+          ? {}
+          : { reproofRequestIds: [...input.reproofRequestIds] }),
+      }),
+    ),
+    evaluatorPlan: input.evaluatorPlan,
+    replayMode: "single_shot",
+  });
 }
 
 function loadMatchers(path: string): readonly DeclarativeMatcher[] {
@@ -1982,10 +2082,10 @@ async function inputDigest(
   }
   if (stage === "audit-sample") extra.limit = AUDIT_SAMPLE_LIMIT;
   if (stage === "shortlist") {
-    extra.top = SHORTLIST_TOP;
+    extra.policy = jsonValue({ ...context.release.effective });
     extra.includeFreeModels = context.includeFreeModels;
     extra.stepsPerFamily = MIN_DISTINCT_STEPS;
-    extra.minimumHoldoutCases = MINIMUM_HOLDOUT_CASES;
+    extra.minimumHoldoutCases = context.release.minimumHoldoutCases;
   }
   if (stage === "shortlist") {
     extra.approvedRunSpecDigest = context.approvedRunSpecDigest ?? null;
@@ -2039,9 +2139,9 @@ async function inputDigest(
     }
   }
   if (stage === "aggregate") {
-    extra.gatePolicyVersion = GATE_POLICY_VERSION;
-    extra.qualityFloor = RELEASE_GATE_POLICY.qualityFloor;
-    extra.availabilityFloor = RELEASE_GATE_POLICY.availabilityFloor;
+    extra.gatePolicyVersion = context.release.gate.gatePolicyVersion;
+    extra.qualityFloor = context.release.gate.qualityFloor;
+    extra.availabilityFloor = context.release.gate.availabilityFloor;
     extra.referenceCeilings = jsonValue(
       await loadReferenceCeilings(context, await loadReplayPlan(context)),
     );
@@ -2172,6 +2272,16 @@ function invalidPricingFile(message: string): ProtocolError {
     message,
     remedy:
       'Use a JSON object mapping each model id to { "input": <non-negative USD per token>, "output": <non-negative USD per token>, "maxOutputTokens": <optional positive integer> }.',
+  });
+}
+
+function invalidPolicyFile(message: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "invalid_policy_file",
+    message,
+    remedy:
+      "Use a JSON object with optional qualityFloor (greater than 0.8, less than 1), shortlistTop (positive integer), allowModels and denyModels (arrays of model ids).",
   });
 }
 
@@ -2539,11 +2649,11 @@ async function planFamilies(
     const abstainReason: FamilyPlan["abstainReason"] =
       approved !== undefined
         ? undefined
-        : holdoutCases < MINIMUM_HOLDOUT_CASES
+        : holdoutCases < context.release.minimumHoldoutCases
           ? {
               reason: "holdout_below_floor_minimum",
               observed: holdoutCases,
-              required: MINIMUM_HOLDOUT_CASES,
+              required: context.release.minimumHoldoutCases,
             }
           : assignedRecords.length < MIN_DISTINCT_STEPS
             ? {
@@ -2558,23 +2668,20 @@ async function planFamilies(
         : [];
     stepIds.forEach((stepId) => unusedSteps.delete(stepId));
     const reproofRequestIds = reproofRequests.get(family) ?? [];
-    const evidenceQuestionId = computeRunSpecDigest(
-      jsonValue({
-        corpusVersionId: corpus.corpusVersionId,
-        family,
-        stepIds,
-        gatePolicyVersion: GATE_POLICY_VERSION,
-        evaluatorPlan: evaluatorPlan(context),
-        replayMode: "single_shot",
-        ...(reproofRequestIds.length === 0 ? {} : { reproofRequestIds }),
-      }),
-    );
+    const evidenceQuestionId = evidenceQuestionIdentity({
+      corpusVersionId: corpus.corpusVersionId,
+      gatePolicyVersion: context.release.gate.gatePolicyVersion,
+      evaluatorPlan: evaluatorPlan(context),
+      family,
+      stepIds,
+      reproofRequestIds,
+    });
     return {
       familyId: family,
       evidenceQuestionId,
       cases: familyCases.length,
       holdoutCases,
-      minimumHoldoutCases: MINIMUM_HOLDOUT_CASES,
+      minimumHoldoutCases: context.release.minimumHoldoutCases,
       stepIds,
       ...(abstainReason === undefined ? {} : { abstainReason }),
     };
@@ -2676,8 +2783,10 @@ async function executeShortlist(
 
   const key = artifactKey(context, "shortlist", inputDigestValue);
   await putImmutableJson(context.store, key, {
-    top: SHORTLIST_TOP,
+    top: context.release.effective.shortlistTop,
     includeFreeModels: context.includeFreeModels,
+    allowModels: [...context.release.effective.allowModels],
+    denyModels: [...context.release.effective.denyModels],
     sampleSizes,
     familyPlans,
     steps,
@@ -2781,7 +2890,12 @@ function replayCandidates(
         ? { ...model, contextLength: Number.MAX_SAFE_INTEGER }
         : model,
     ),
-    { top: plan.top, includeFreeModels: plan.includeFreeModels },
+    {
+      top: plan.top,
+      includeFreeModels: plan.includeFreeModels,
+      ...(plan.allowModels.length === 0 ? {} : { allow: plan.allowModels }),
+      deny: plan.denyModels,
+    },
   ).map((assignment) => ({
     ...assignment,
     candidates: assignment.candidates.map(({ id }) => catalogById.get(id)!),
@@ -3139,7 +3253,7 @@ async function executeReplay(
       evaluation(),
       ceilings,
     ),
-    aggregateOptions(),
+    aggregateOptions(context.release.gate),
   ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
   const shortlistSelections = new Map(
     Object.keys(plan.sampleSizes).map((family) => {
@@ -3156,7 +3270,7 @@ async function executeReplay(
           ? noShortlistSelection()
           : selectWinner(
               verdictsByCandidate(familyVerdicts),
-              RELEASE_GATE_POLICY,
+              context.release.gate,
             ),
       ];
     }),
@@ -3219,7 +3333,7 @@ async function executeAggregate(
       replay.evaluation,
       ceilings,
     ),
-    aggregateOptions(),
+    aggregateOptions(context.release.gate),
     ledger.cascadeFindings,
   );
   const families = buildFamilyOutcomes(
@@ -3228,6 +3342,7 @@ async function executeAggregate(
     replay.candidates,
     replay.familyBlocks,
     ceilings,
+    context.release.gate,
   );
   await writeFamilyVerdicts(context, families);
   const key = artifactKey(context, "aggregate", inputDigestValue);
@@ -3241,6 +3356,7 @@ function buildFamilyOutcomes(
   candidates: z.infer<typeof replayOutputSchema>["candidates"],
   familyBlocks: z.infer<typeof replayOutputSchema>["familyBlocks"],
   ceilings: readonly ReferenceCeiling[],
+  policy: ReleaseGatePolicy,
 ): FamilyOutcome[] {
   const families: FamilyOutcome[] = [];
   for (const familyId of Object.keys(plan.sampleSizes).sort(compareText)) {
@@ -3293,14 +3409,12 @@ function buildFamilyOutcomes(
           ) ?? expectedCandidates[0],
           abstainReason,
           referenceCeiling,
+          policy,
         ),
       );
       continue;
     }
-    const selection = selectWinner(
-      verdictsByCandidate(familyVerdicts),
-      RELEASE_GATE_POLICY,
-    );
+    const selection = selectWinner(verdictsByCandidate(familyVerdicts), policy);
     const verdict = effectiveVerdict(familyVerdicts, selection);
     if (verdict === undefined) {
       families.push(
@@ -3314,11 +3428,12 @@ function buildFamilyOutcomes(
             required: Math.max(expectedCandidates.length, 1),
           },
           referenceCeiling,
+          policy,
         ),
       );
       continue;
     }
-    const gates = evaluateGates([verdict], RELEASE_GATE_POLICY);
+    const gates = evaluateGates([verdict], policy);
     const effectiveRecommendation =
       verdict.decision === "recommend" &&
       selection.status === "selected" &&
@@ -3407,6 +3522,7 @@ function blockedFamilyOutcome(
   candidate: ModelCatalogEntry | undefined,
   abstainReason: AbstainReasonDetails,
   referenceCeiling: ReferenceCeiling,
+  policy: ReleaseGatePolicy,
 ): FamilyOutcome {
   const evidenceQuestionId =
     plan.steps.find((step) => step.family === familyId)?.evidenceQuestionId ??
@@ -3423,7 +3539,7 @@ function blockedFamilyOutcome(
     candidateFamily: candidate?.family ?? "unknown",
     caseIds: [],
     candidateCostUsd: candidate === undefined ? 0 : blendedPrice(candidate),
-    gatePolicyVersion: GATE_POLICY_VERSION,
+    gatePolicyVersion: policy.gatePolicyVersion,
     referenceCeilingMultiplier: referenceCeiling.multiplier,
     evaluatorKinds: [],
     weakestEvaluatorKind: "none",
@@ -3454,7 +3570,7 @@ function blockedFamilyOutcome(
     verdict,
     referenceCeiling,
     selection: noShortlistSelection(),
-    gates: evaluateGates([verdict], RELEASE_GATE_POLICY),
+    gates: evaluateGates([verdict], policy),
     decisionDisplay: "abstain",
     effectiveRecommendation: false,
   };
@@ -3463,6 +3579,7 @@ function blockedFamilyOutcome(
 function withFamilyAbstention(
   family: FamilyOutcome,
   abstainReason: AbstainReasonDetails,
+  policy: ReleaseGatePolicy,
 ): FamilyOutcome {
   const verdict: FamilyVerdict = {
     ...family.verdict,
@@ -3472,7 +3589,7 @@ function withFamilyAbstention(
   return {
     ...family,
     verdict,
-    gates: evaluateGates([verdict], RELEASE_GATE_POLICY),
+    gates: evaluateGates([verdict], policy),
     decisionDisplay: "abstain",
     effectiveRecommendation: false,
   };
@@ -3749,7 +3866,7 @@ async function executeConfirm(
         },
         store: context.store,
         budget: { modeB: budget, maxRunSets },
-        policy: RELEASE_GATE_POLICY,
+        policy: context.release.gate,
       });
       confirmedFamilies += 1;
       const lostReasonEntries = Object.entries(result.lostReasons).sort(
@@ -3797,7 +3914,7 @@ async function executeConfirm(
       replay.evaluation,
       ceilings,
     ),
-    aggregateOptions(),
+    aggregateOptions(context.release.gate),
     ledger.cascadeFindings,
   );
   const families = buildFamilyOutcomes(
@@ -3806,13 +3923,14 @@ async function executeConfirm(
     replay.candidates,
     replay.familyBlocks,
     ceilings,
+    context.release.gate,
   ).map((family) => {
     const confirmation = confirmations.get(family.familyId);
     if (confirmation !== undefined) {
       const abstainReason = confirmationAbstentions.get(family.familyId);
       if (abstainReason !== undefined) {
         return {
-          ...withFamilyAbstention(family, abstainReason),
+          ...withFamilyAbstention(family, abstainReason, context.release.gate),
           confirmation,
         };
       }
@@ -4281,7 +4399,7 @@ async function materializeAggregationFacts(
               )!,
             }
           : {}),
-        gatePolicyVersion: GATE_POLICY_VERSION,
+        gatePolicyVersion: context.release.gate.gatePolicyVersion,
         familyId: family,
         candidateFamily: selected.family,
         evaluatorKind: evaluation.evaluatorKind,
@@ -4305,11 +4423,11 @@ async function materializeAggregationFacts(
   });
 }
 
-function aggregateOptions() {
+function aggregateOptions(policy: ReleaseGatePolicy) {
   return {
-    gatePolicyVersion: RELEASE_GATE_POLICY.gatePolicyVersion,
-    qualityFloor: RELEASE_GATE_POLICY.qualityFloor,
-    availabilityFloor: RELEASE_GATE_POLICY.availabilityFloor,
+    gatePolicyVersion: policy.gatePolicyVersion,
+    qualityFloor: policy.qualityFloor,
+    availabilityFloor: policy.availabilityFloor,
   };
 }
 
@@ -5044,7 +5162,7 @@ interface FamilyReceipt {
 
 export function familyReceipts(
   ledger: Ledger,
-  plan: z.infer<typeof replayPlanSchema>,
+  plan: z.input<typeof replayPlanSchema>,
   replay: z.infer<typeof replayOutputSchema>,
   corpus: Corpus,
   verdicts: readonly FamilyVerdict[],

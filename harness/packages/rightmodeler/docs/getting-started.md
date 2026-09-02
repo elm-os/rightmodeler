@@ -62,6 +62,21 @@ npx rightmodeler estimate --traces /path/to/traces.json --base-url https://provi
 Estimate projects candidate replay spend from recorded token usage and the current
 model catalog before paid model calls begin.
 
+## Release policy
+
+`--policy <path>` is accepted by `init`, `estimate`, `replay`, and `confirm`. The JSON object can set the quality floor, shortlist size, and model allow and deny lists:
+
+```json
+{
+  "qualityFloor": 0.9,
+  "shortlistTop": 5,
+  "allowModels": ["acme/small-1"],
+  "denyModels": ["acme/large-1"]
+}
+```
+
+`qualityFloor` must be greater than 0.8 and less than 1, and `shortlistTop` must be a positive integer. Changing the policy changes the stamped gate policy version, so shortlist and replay run again instead of pooling evidence gathered under the old policy.
+
 ## Catalogs without pricing
 
 Rightmodeler reads per-token pricing from the model catalog. When every catalog

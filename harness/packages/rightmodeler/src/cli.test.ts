@@ -133,6 +133,7 @@ describe("pipelineArgv", () => {
       maxCostUsd: "1.25",
       maxConcurrency: "3",
       pricingFile: "./pricing.json",
+      policy: "./policy.json",
       includeFree: true,
       approvedRun,
       evaluator: "promptfoo",
@@ -164,6 +165,8 @@ describe("pipelineArgv", () => {
       "3",
       "--pricing-file",
       resolve("./pricing.json"),
+      "--policy",
+      resolve("./policy.json"),
       "--include-free",
       "--approved-run",
       approvedRun,
@@ -198,6 +201,24 @@ describe("pipelineArgv", () => {
 });
 
 describe("CLI trace guidance wiring", () => {
+  it("reports an invalid release policy before trace guidance", async () => {
+    const { repo, homeDir } = await fixture();
+    const policyRoot = await mkdtemp(join(tmpdir(), "rightmodeler-policy-"));
+    temporaryDirectories.push(policyRoot);
+    const policyPath = join(policyRoot, "policy.json");
+    await writeFile(policyPath, JSON.stringify({ qualityFloor: 0.5 }));
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        ["estimate", "--policy", policyPath, "--repo", repo],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(2);
+    expect(captured.stderr()).toContain("Invalid --policy field qualityFloor");
+  });
+
   it("prompts through injected IO in a TTY and uses the selected candidate", async () => {
     const { repo, homeDir, older } = await fixture();
     const captured = captureIo();
@@ -286,6 +307,13 @@ describe("CLI trace guidance wiring", () => {
 
     expect(await executeCli(["estimate", "--help"], captured.io)).toBe(0);
     expect(captured.stdout()).toContain("--yes");
+  });
+
+  it("registers --policy on init", async () => {
+    const captured = captureIo();
+
+    expect(await executeCli(["init", "--help"], captured.io)).toBe(0);
+    expect(captured.stdout()).toContain("--policy <path>");
   });
 
   it("resumes the ingested trace before discovery", async () => {

@@ -40,6 +40,7 @@ Use `--output json` for one result object or `--output jsonl` for stage events f
 - `invalid_option` (exit `2`): correct the option and rerun; use `rightmodeler <command> --help` for accepted values.
 - `invalid_modeb_config` (exit `2`): fix the named field in the `--modeb-config` file and rerun.
 - `invalid_pricing_file` (exit `2`): fix `--pricing-file` to map each model id to non-negative `input` and `output` USD per token and, optionally, a positive integer `maxOutputTokens`, then rerun.
+- `invalid_policy_file` (exit `2`): fix the named field in the `--policy` file and rerun; `qualityFloor` must be greater than 0.8 and less than 1, `shortlistTop` a positive integer, `allowModels` and `denyModels` arrays of model ids.
 - `invalid_matchers_file` (exit `2`): fix the listed matcher definitions in the `--matchers` file and rerun.
 - `no_replayable_call_sites` (exit `2`): point `--repo` at a service with plain text completions, or add a matcher for a text call site, then rerun.
 - `no_priced_candidates` (exit `2`): point `--base-url` at a catalog that publishes per-token pricing, expose priced LiteLLM `GET /model/info`, or pass `--pricing-file <path>`, then rerun.

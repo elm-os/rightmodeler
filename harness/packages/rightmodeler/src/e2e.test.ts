@@ -1301,6 +1301,113 @@ describe("built CLI pipeline", () => {
     ]);
   });
 
+  it("applies release policy filters and quality floor through the built CLI", async () => {
+    const { root, repo } = await fixtureCopy("release-policy");
+    const store = join(root, "store");
+    const denyPolicyPath = join(root, "deny-policy.json");
+    const allowPolicyPath = join(root, "allow-policy.json");
+    const floorPolicyPath = join(root, "floor-policy.json");
+    const deniedModelId = "acme/lite-1";
+    const allowedModelId = "acme/small-1";
+    await Promise.all([
+      writeFile(
+        denyPolicyPath,
+        JSON.stringify({ denyModels: [deniedModelId] }),
+      ),
+      writeFile(
+        allowPolicyPath,
+        JSON.stringify({ allowModels: [allowedModelId] }),
+      ),
+      writeFile(floorPolicyPath, JSON.stringify({ qualityFloor: 0.95 })),
+    ]);
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_POLICY_E2E_API_KEY";
+    const common = ["--repo", repo, "--store", store, "--output", "json"];
+    const estimateOptions = [
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+    ];
+
+    try {
+      const denied = await runCli(
+        [...common, "estimate", ...estimateOptions, "--policy", denyPolicyPath],
+        { env: { [apiKeyEnv]: secret } },
+      );
+      expect(denied.code, denied.stderr).toBe(0);
+      const deniedOutput = jsonOutput(denied);
+      const deniedShortlist = deniedOutput.shortlist as Array<{
+        candidateIds: string[];
+      }>;
+      expect(
+        deniedShortlist.some(({ candidateIds }) => candidateIds.length > 0),
+      ).toBe(true);
+      expect(
+        deniedShortlist.every(
+          ({ candidateIds }) => !candidateIds.includes(deniedModelId),
+        ),
+      ).toBe(true);
+      expect(deniedOutput.policy).toMatchObject({
+        denyModels: [deniedModelId],
+      });
+
+      const allowed = await runCli(
+        [
+          ...common,
+          "estimate",
+          ...estimateOptions,
+          "--policy",
+          allowPolicyPath,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+      expect(allowed.code, allowed.stderr).toBe(0);
+      const allowedShortlist = (
+        jsonOutput(allowed).shortlist as Array<{ candidateIds: string[] }>
+      ).filter(({ candidateIds }) => candidateIds.length > 0);
+      expect(allowedShortlist.length).toBeGreaterThan(0);
+      for (const { candidateIds } of allowedShortlist) {
+        expect(candidateIds).toEqual([allowedModelId]);
+      }
+
+      const planArgs = [...common, "init", "--plan", "--traces", tracesPath];
+      const defaultPlan = await runCli(planArgs);
+      expect(defaultPlan.code, defaultPlan.stderr).toBe(0);
+      const defaultFamilyPlans = jsonOutput(defaultPlan).familyPlans as Array<{
+        familyId: string;
+        minimumHoldoutCases: number;
+      }>;
+      const raisedPlan = await runCli([
+        ...planArgs,
+        "--policy",
+        floorPolicyPath,
+      ]);
+      expect(raisedPlan.code, raisedPlan.stderr).toBe(0);
+      const raisedFamilyPlans = jsonOutput(raisedPlan).familyPlans as Array<{
+        familyId: string;
+        minimumHoldoutCases: number;
+      }>;
+      const raisedMinimum = minimumTrialsForFloor(0.95, 1);
+      expect(defaultFamilyPlans.length).toBeGreaterThan(0);
+      expect(raisedFamilyPlans).toHaveLength(defaultFamilyPlans.length);
+      for (const familyPlan of raisedFamilyPlans) {
+        const defaultFamilyPlan = defaultFamilyPlans.find(
+          ({ familyId }) => familyId === familyPlan.familyId,
+        );
+        expect(defaultFamilyPlan).toBeDefined();
+        expect(familyPlan.minimumHoldoutCases).toBe(raisedMinimum);
+        expect(familyPlan.minimumHoldoutCases).toBeGreaterThan(
+          defaultFamilyPlan!.minimumHoldoutCases,
+        );
+      }
+    } finally {
+      await stub.close();
+    }
+  });
+
   it("estimates without model spend and idempotently dispatches a detached replay", async () => {
     const { root, repo } = await fixtureCopy("detached-replay");
     const store = join(root, "store");

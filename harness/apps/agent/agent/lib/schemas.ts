@@ -17,6 +17,7 @@ export const replayStartInputSchema = harnessInputSchema.extend({
   maxCostUsd: z.number().positive().optional(),
   maxConcurrency: z.number().int().positive().optional(),
   pricingFile: z.string().min(1).optional(),
+  policy: z.string().min(1).optional(),
   includeFree: z.boolean().optional(),
   approvedRun: z
     .string()

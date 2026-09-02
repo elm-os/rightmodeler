@@ -21,6 +21,7 @@ import {
   readActiveDetachedReplay,
   readRunStatus,
   readStatus,
+  releasePolicy,
   runPipeline,
 } from "./pipeline.js";
 import { Reporter } from "./protocol.js";
@@ -74,7 +75,7 @@ describe("pull request watches", () => {
         evidence: {
           revision: "abc123",
           corpusVersionId: "corpus-1",
-          gatePolicyVersion: "phase-a-v2",
+          gatePolicyVersion: releasePolicy(undefined).gate.gatePolicyVersion,
         },
         runSpecDigest: `run-${prNumber}`,
         createdAt: new Date(prNumber * 1_000).toISOString(),
