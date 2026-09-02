@@ -5,51 +5,54 @@ import { pathToFileURL } from "node:url";
 const models = [
   {
     id: "acme/small-1",
-    object: "model",
-    capabilities: { chat: true, tools: true },
-    pricing: { input_per_token: 0.0000002, output_per_token: 0.0000008 },
+    context_length: 128_000,
+    pricing: { prompt: "0.0000002", completion: "0.0000008" },
+    top_provider: { context_length: 128_000, max_completion_tokens: 16_384 },
+    supported_parameters: ["max_tokens", "temperature"],
   },
   {
     id: "acme/lite-1",
-    object: "model",
-    capabilities: { chat: true, tools: false },
-    pricing: { input_per_token: 0.0000001, output_per_token: 0.0000004 },
+    context_length: 128_000,
+    pricing: { prompt: "0.0000001", completion: "0.0000004" },
+    top_provider: { context_length: 128_000, max_completion_tokens: 4_096 },
+    supported_parameters: ["max_tokens", "temperature"],
   },
   {
     id: "acme/large-1",
-    object: "model",
-    capabilities: { chat: true, tools: true },
-    pricing: { input_per_token: 0.000001, output_per_token: 0.000003 },
+    context_length: 128_000,
+    pricing: { prompt: "0.000001", completion: "0.000003" },
+    top_provider: { context_length: 128_000, max_completion_tokens: 16_384 },
+    supported_parameters: ["max_tokens", "temperature"],
   },
   {
     id: "acme/max-1",
-    object: "model",
-    capabilities: { chat: true, tools: true },
-    pricing: { input_per_token: 0.000002, output_per_token: 0.000006 },
+    context_length: 128_000,
+    pricing: { prompt: "0.000002", completion: "0.000006" },
+    top_provider: { context_length: 128_000, max_completion_tokens: 16_384 },
+    supported_parameters: ["max_tokens", "temperature"],
   },
   {
     id: "zeta/judge-1",
-    object: "model",
-    capabilities: { chat: true, tools: false },
     context_length: 128_000,
+    pricing: { prompt: "0.000004", completion: "0.000012" },
+    top_provider: { context_length: 128_000, max_completion_tokens: 16_384 },
     supported_parameters: ["structured_outputs"],
-    pricing: { input_per_token: 0.000004, output_per_token: 0.000012 },
   },
   {
     id: "yotta/judge-2",
-    object: "model",
-    capabilities: { chat: true, tools: false },
     context_length: 64_000,
+    pricing: { prompt: "0.000002", completion: "0.000006" },
+    top_provider: { context_length: 64_000, max_completion_tokens: 16_384 },
     supported_parameters: [],
-    pricing: { input_per_token: 0.000002, output_per_token: 0.000006 },
   },
 ];
 
 const freeModel = {
   id: "acme/free-1",
-  object: "model",
-  capabilities: { chat: true, tools: false },
-  pricing: { input_per_token: 0, output_per_token: 0 },
+  context_length: 128_000,
+  pricing: { prompt: "0", completion: "0" },
+  top_provider: { context_length: 128_000, max_completion_tokens: 16_384 },
+  supported_parameters: ["max_tokens", "temperature"],
 };
 
 function json(response, status, body, headers = {}) {
@@ -68,6 +71,7 @@ async function readJson(request) {
 
 export async function startStubProvider({
   port,
+  catalogPageSize,
   errorModels = [],
   includeFreeModel = false,
   malformedJudgeModels = [],
@@ -75,6 +79,7 @@ export async function startStubProvider({
   rateLimitedModels = [],
   rateLimitMessageIncludes,
 }) {
+  const errorBodyKeys = new Set();
   const rateLimitedKeys = new Set();
   const failingModels = new Set(errorModels);
   const malformedJudges = new Set(malformedJudgeModels);
@@ -86,8 +91,24 @@ export async function startStubProvider({
   let hitCount = 0;
   const requests = [];
   const server = createServer(async (request, response) => {
-    if (request.method === "GET" && request.url === "/v1/models") {
-      json(response, 200, { object: "list", data: catalogModels });
+    const url = new URL(request.url, "http://127.0.0.1");
+    if (request.method === "GET" && url.pathname === "/v1/models") {
+      const offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10);
+      const page =
+        catalogPageSize === undefined
+          ? catalogModels.slice(offset)
+          : catalogModels.slice(offset, offset + catalogPageSize);
+      json(response, 200, {
+        object: "list",
+        data: page,
+        total_count: catalogModels.length,
+        links: {
+          next:
+            offset + page.length < catalogModels.length
+              ? `/v1/models?offset=${offset + page.length}`
+              : null,
+        },
+      });
       return;
     }
 
@@ -278,6 +299,29 @@ export async function startStubProvider({
         .update(messageText)
         .digest("hex")
         .slice(0, 16);
+      const errorBodyKey = request.headers["x-stub-error-body-once"];
+      if (
+        typeof errorBodyKey === "string" &&
+        !errorBodyKeys.has(errorBodyKey)
+      ) {
+        errorBodyKeys.add(errorBodyKey);
+        json(
+          response,
+          200,
+          {
+            id: `stub-${digest}`,
+            object: "chat.completion",
+            model: body.model,
+            error: {
+              code: 502,
+              message: "Stub upstream failed after generation started.",
+              metadata: { error_type: "provider_error" },
+            },
+          },
+          { ...hitHeaders, "retry-after": "0" },
+        );
+        return;
+      }
       const promptTokens = Math.max(8, Math.ceil(messageText.length / 4));
       const empty = request.headers["x-stub-empty"] !== undefined;
       const completionTokens = empty ? 0 : 12;

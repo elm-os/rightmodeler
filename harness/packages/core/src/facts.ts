@@ -57,6 +57,8 @@ export const requestAttemptSchema = z
       })
       .readonly()
       .optional(),
+    providerResponseId: requiredStringSchema.optional(),
+    finishReason: requiredStringSchema.optional(),
   })
   .readonly();
 export type RequestAttempt = z.infer<typeof requestAttemptSchema>;

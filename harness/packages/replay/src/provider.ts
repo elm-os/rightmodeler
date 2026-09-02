@@ -47,6 +47,8 @@ export interface ChatResponse {
   };
   costUsd: number;
   costIsEstimate: boolean;
+  finishReason?: string;
+  providerResponseId?: string;
 }
 
 export interface ProviderErrorDetail {
@@ -70,32 +72,40 @@ export interface CreateProviderOptions {
   baseUrl: string;
   apiKeyEnv: string;
   maxConcurrency?: number;
+  warning?: (code: string, message: string) => void;
 }
 
+export type BlockedErrorInit =
+  | { kind: "rate-limit"; status: number; observedCeiling: number }
+  | {
+      kind: "provider" | "credentials" | "credits";
+      providerId: string;
+      errorDetail: ProviderErrorDetail;
+    };
+
 export class BlockedError extends Error {
-  readonly kind: "rate-limit" | "provider";
+  readonly kind: "rate-limit" | "provider" | "credentials" | "credits";
   readonly observedCeiling: number | null;
   readonly providerId: string | null;
   readonly errorDetail?: ProviderErrorDetail;
 
-  constructor(status: number, observedCeiling: number);
-  constructor(providerId: string, errorDetail: ProviderErrorDetail);
-  constructor(
-    statusOrProvider: number | string,
-    ceilingOrDetail: number | ProviderErrorDetail,
-  ) {
-    const rateLimited = typeof statusOrProvider === "number";
+  constructor(init: BlockedErrorInit) {
     super(
-      rateLimited
-        ? `Provider retries exhausted after HTTP ${statusOrProvider}; observed concurrency ceiling: ${ceilingOrDetail as number}`
-        : `Provider ${statusOrProvider} returned a malformed model catalog`,
+      init.kind === "rate-limit"
+        ? `Provider retries exhausted after HTTP ${init.status}; observed concurrency ceiling: ${init.observedCeiling}`
+        : init.kind === "provider"
+          ? `Provider ${init.providerId} returned a malformed model catalog`
+          : init.kind === "credentials"
+            ? `Provider ${init.providerId} rejected the API key with HTTP ${init.errorDetail.status}`
+            : `Provider ${init.providerId} reported insufficient credits (HTTP 402)`,
     );
     this.name = "BlockedError";
-    this.kind = rateLimited ? "rate-limit" : "provider";
-    this.observedCeiling = rateLimited ? (ceilingOrDetail as number) : null;
-    this.providerId = rateLimited ? null : statusOrProvider;
-    if (!rateLimited) {
-      this.errorDetail = ceilingOrDetail as ProviderErrorDetail;
+    this.kind = init.kind;
+    this.observedCeiling =
+      init.kind === "rate-limit" ? init.observedCeiling : null;
+    this.providerId = init.kind === "rate-limit" ? null : init.providerId;
+    if (init.kind !== "rate-limit") {
+      this.errorDetail = init.errorDetail;
     }
   }
 }
@@ -129,11 +139,14 @@ export class ProviderResponseError extends ProviderRequestError {
   }
 }
 
-class AdaptiveLimiter {
+export class AdaptiveLimiter {
   private readonly ceiling: number;
+  private readonly floor: number;
   private cap: number;
   private active = 0;
   private successStreak = 0;
+  private sequence = 0;
+  private epochStart = 0;
   private readonly waiters: Array<() => void> = [];
 
   constructor(ceiling: number) {
@@ -142,20 +155,23 @@ class AdaptiveLimiter {
     }
     this.ceiling = ceiling;
     this.cap = ceiling;
+    this.floor = Math.min(ceiling, Math.max(2, Math.floor(ceiling / 4)));
   }
 
-  async run<T>(operation: () => Promise<T>): Promise<T> {
-    await this.acquire();
+  async run<T>(operation: (ticket: number) => Promise<T>): Promise<T> {
+    const ticket = await this.acquire();
     try {
-      return await operation();
+      return await operation(ticket);
     } finally {
       this.active -= 1;
       this.drain();
     }
   }
 
-  rateLimited(): void {
-    this.cap = Math.max(1, Math.floor(this.cap / 2));
+  rateLimited(ticket: number): void {
+    if (ticket < this.epochStart) return;
+    this.epochStart = this.sequence;
+    this.cap = Math.max(this.floor, Math.floor(this.cap / 2));
     this.successStreak = 0;
   }
 
@@ -177,15 +193,15 @@ class AdaptiveLimiter {
     return this.cap;
   }
 
-  private acquire(): Promise<void> {
+  private acquire(): Promise<number> {
     if (this.active < this.cap) {
       this.active += 1;
-      return Promise.resolve();
+      return Promise.resolve(this.sequence++);
     }
     return new Promise((resolve) => {
       this.waiters.push(() => {
         this.active += 1;
-        resolve();
+        resolve(this.sequence++);
       });
     });
   }
@@ -201,6 +217,7 @@ class AdaptiveLimiter {
 
 interface PhysicalResponse {
   response: Response;
+  text: string;
   apiKey: string;
 }
 
@@ -256,6 +273,11 @@ function errorExcerpt(value: string, apiKey: string): string {
   return redact(value, apiKey).slice(0, 500);
 }
 
+function backoffDelay(attempt: number): number {
+  const backoff = 100 * 2 ** (attempt - 1);
+  return backoff + Math.random() * backoff * 0.25;
+}
+
 function retryDelay(response: Response, attempt: number): number {
   const retryAfter = response.headers.get("retry-after");
   if (retryAfter !== null) {
@@ -264,8 +286,7 @@ function retryDelay(response: Response, attempt: number): number {
     const date = Date.parse(retryAfter);
     if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
   }
-  const backoff = 100 * 2 ** (attempt - 1);
-  return backoff + Math.random() * backoff * 0.25;
+  return backoffDelay(attempt);
 }
 
 function sleep(milliseconds: number): Promise<void> {
@@ -273,7 +294,42 @@ function sleep(milliseconds: number): Promise<void> {
 }
 
 function isRetryable(status: number): boolean {
-  return status === 429 || status >= 500;
+  return status === 408 || status === 409 || status === 429 || status >= 500;
+}
+
+function rejectedAttempt(errorDetail: ProviderErrorDetail): ProviderAttempt {
+  return {
+    outcome: "provider_error",
+    content: "",
+    usage: { inputTokens: 0, outputTokens: 0 },
+    costUsd: 0,
+    costIsEstimate: true,
+    errorDetail,
+  };
+}
+
+function chatErrorBody(text: string): boolean {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return false;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const envelope = value as Record<string, unknown>;
+  if (envelope.error !== undefined && envelope.error !== null) return true;
+  if (!Array.isArray(envelope.choices) || envelope.choices.length === 0) {
+    return false;
+  }
+  const choice = envelope.choices[0];
+  return (
+    typeof choice === "object" &&
+    choice !== null &&
+    !Array.isArray(choice) &&
+    (choice as Record<string, unknown>).finish_reason === "error"
+  );
 }
 
 function normalizeModel(
@@ -314,13 +370,11 @@ function normalizeModel(
     contextLength,
     pricing: (() => {
       const input = price(
-        rawPricing.prompt ?? rawPricing.input_per_token ?? rawPricing.input,
+        rawPricing.prompt ?? rawPricing.input,
         `models[${index}].pricing.input`,
       );
       const output = price(
-        rawPricing.completion ??
-          rawPricing.output_per_token ??
-          rawPricing.output,
+        rawPricing.completion ?? rawPricing.output,
         `models[${index}].pricing.output`,
       );
       return input === null || output === null ? null : { input, output };
@@ -361,22 +415,24 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
   }
 
   async function physicalFetch(
-    path: string,
+    url: string,
     init: RequestInit,
   ): Promise<PhysicalResponse> {
     const key = apiKey();
     const headers = new Headers(init.headers);
     headers.set("authorization", `Bearer ${key}`);
-    return limiter.run(async () => {
+    return limiter.run(async (ticket) => {
       try {
-        const response = await fetch(`${baseUrl}${path}`, {
+        const response = await fetch(url, {
           ...init,
           headers,
         });
-        if (response.status === 429) limiter.rateLimited();
+        const text = await response.text();
+        if (response.status === 429 || response.status >= 500)
+          limiter.rateLimited(ticket);
         else if (response.ok) limiter.succeeded();
         else limiter.failed();
-        return { response, apiKey: key };
+        return { response, text, apiKey: key };
       } catch (error) {
         limiter.failed();
         throw new ProviderRequestError(
@@ -387,85 +443,141 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
   }
 
   async function withRetries(
-    path: string,
+    url: string,
     init: RequestInit,
-    onRejectedAttempt?: (attempt: ProviderAttempt) => void | Promise<void>,
+    hooks: {
+      onRejectedAttempt?: (attempt: ProviderAttempt) => void | Promise<void>;
+      errorBody?: (text: string) => boolean;
+    } = {},
   ): Promise<PhysicalResponse> {
     for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
       let result: PhysicalResponse;
       try {
-        result = await physicalFetch(path, init);
+        result = await physicalFetch(url, init);
       } catch (error) {
         if (error instanceof ProviderConfigurationError) throw error;
-        const bodyExcerpt = errorExcerpt(
-          error instanceof Error ? error.message : String(error),
-          apiKey(),
+        await hooks.onRejectedAttempt?.(
+          rejectedAttempt({
+            status: null,
+            bodyExcerpt: errorExcerpt(
+              error instanceof Error ? error.message : String(error),
+              apiKey(),
+            ),
+          }),
         );
-        await onRejectedAttempt?.({
-          outcome: "provider_error",
-          content: "",
-          usage: { inputTokens: 0, outputTokens: 0 },
-          costUsd: 0,
-          costIsEstimate: true,
-          errorDetail: { status: null, bodyExcerpt },
-        });
-        throw error;
+        if (attempt === retryAttempts) throw error;
+        await sleep(backoffDelay(attempt));
+        continue;
       }
-      if (result.response.ok) {
+      const status = result.response.status;
+      if (result.response.ok && hooks.errorBody?.(result.text) !== true) {
         return result;
       }
-
-      const bodyExcerpt = errorExcerpt(
-        await result.response.text(),
-        result.apiKey,
-      );
-
-      await onRejectedAttempt?.({
-        outcome: "provider_error",
-        content: "",
-        usage: { inputTokens: 0, outputTokens: 0 },
-        costUsd: 0,
-        costIsEstimate: true,
-        errorDetail: {
-          status: result.response.status,
-          bodyExcerpt,
-        },
-      });
-
-      if (isRetryable(result.response.status)) {
+      const errorDetail = {
+        status,
+        bodyExcerpt: errorExcerpt(result.text, result.apiKey),
+      };
+      await hooks.onRejectedAttempt?.(rejectedAttempt(errorDetail));
+      if (status === 401 || status === 403) {
+        throw new BlockedError({
+          kind: "credentials",
+          providerId: options.providerId,
+          errorDetail,
+        });
+      }
+      if (status === 402) {
+        throw new BlockedError({
+          kind: "credits",
+          providerId: options.providerId,
+          errorDetail,
+        });
+      }
+      if (result.response.ok || isRetryable(status)) {
         if (attempt === retryAttempts) {
-          throw new BlockedError(result.response.status, limiter.currentCap);
+          throw new BlockedError({
+            kind: "rate-limit",
+            status,
+            observedCeiling: limiter.currentCap,
+          });
         }
         await sleep(retryDelay(result.response, attempt));
         continue;
       }
 
-      throw new ProviderHttpError(result.response.status, bodyExcerpt);
+      throw new ProviderHttpError(status, errorDetail.bodyExcerpt);
     }
-    throw new BlockedError(429, limiter.currentCap);
+    throw new BlockedError({
+      kind: "rate-limit",
+      status: 429,
+      observedCeiling: limiter.currentCap,
+    });
   }
 
   async function fetchCatalog(): Promise<ModelCatalogEntry[]> {
-    const { response, apiKey: requestKey } = await withRetries("/models", {
-      method: "GET",
-    });
-    const responseText = await response.text();
-    try {
-      const value: unknown = JSON.parse(responseText);
-      const envelope = objectValue(value, "model catalog");
-      if (!Array.isArray(envelope.data)) {
-        throw new Error("model catalog data must be an array");
-      }
-      catalog = envelope.data
-        .map(normalizeModel)
-        .filter((model) => model !== null);
-      return catalog;
-    } catch (error) {
-      throw new BlockedError(options.providerId, {
-        status: response.status,
-        bodyExcerpt: errorExcerpt(responseText, requestKey),
+    const entries: ModelCatalogEntry[] = [];
+    let rawCount = 0;
+    let totalCount: number | undefined;
+    let truncated = false;
+    let next: string | undefined = `${baseUrl}/models`;
+    for (let page = 0; page < 20 && next !== undefined; page += 1) {
+      const {
+        response,
+        text,
+        apiKey: requestKey,
+      } = await withRetries(next, {
+        method: "GET",
       });
+      next = undefined;
+      try {
+        const value: unknown = JSON.parse(text);
+        const envelope = objectValue(value, "model catalog");
+        if (!Array.isArray(envelope.data)) {
+          throw new Error("model catalog data must be an array");
+        }
+        for (const entry of envelope.data) {
+          const model = normalizeModel(entry, rawCount);
+          rawCount += 1;
+          if (model !== null) entries.push(model);
+        }
+        if (
+          totalCount === undefined &&
+          typeof envelope.total_count === "number"
+        ) {
+          totalCount = envelope.total_count;
+        }
+        if (
+          typeof envelope.links === "object" &&
+          envelope.links !== null &&
+          !Array.isArray(envelope.links)
+        ) {
+          const links = envelope.links as Record<string, unknown>;
+          if (typeof links.next === "string" && links.next.length > 0) {
+            const resolved = new URL(links.next, `${baseUrl}/`);
+            if (resolved.origin === new URL(baseUrl).origin)
+              next = resolved.href;
+            else truncated = true;
+          }
+        }
+      } catch (error) {
+        throw new BlockedError({
+          kind: "provider",
+          providerId: options.providerId,
+          errorDetail: {
+            status: response.status,
+            bodyExcerpt: errorExcerpt(text, requestKey),
+          },
+        });
+      }
     }
+    if (next !== undefined) truncated = true;
+    if (truncated || (totalCount !== undefined && totalCount > rawCount)) {
+      options.warning?.(
+        "catalog_truncated",
+        `Provider ${options.providerId} catalog is truncated: collected ${rawCount} of ${totalCount ?? "an unknown number of"} models`,
+      );
+    }
+    catalog = entries;
+    return catalog;
   }
 
   function listModels(): Promise<ModelCatalogEntry[]> {
@@ -494,8 +606,12 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
       response_format: request.responseFormat,
       stream: false,
     };
-    const { response, apiKey: requestKey } = await withRetries(
-      "/chat/completions",
+    const {
+      response,
+      text,
+      apiKey: requestKey,
+    } = await withRetries(
+      `${baseUrl}/chat/completions`,
       {
         method: "POST",
         headers: {
@@ -504,19 +620,29 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         },
         body: JSON.stringify(body),
       },
-      request.onAttempt,
+      { onRejectedAttempt: request.onAttempt, errorBody: chatErrorBody },
     );
 
-    const responseText = await response.text();
     let normalized: ChatResponse;
     try {
-      const value: unknown = JSON.parse(responseText);
+      const value: unknown = JSON.parse(text);
       const envelope = objectValue(value, "chat response");
       if (!Array.isArray(envelope.choices) || envelope.choices.length === 0) {
         throw new Error("chat response choices must be a non-empty array");
       }
       const choice = objectValue(envelope.choices[0], "chat response choice");
       const message = objectValue(choice.message, "chat response message");
+      const finishReason =
+        typeof choice.finish_reason === "string"
+          ? choice.finish_reason
+          : undefined;
+      const providerResponseId =
+        typeof envelope.generationId === "string" &&
+        envelope.generationId.length > 0
+          ? envelope.generationId
+          : typeof envelope.id === "string" && envelope.id.length > 0
+            ? envelope.id
+            : undefined;
       if (typeof message.content !== "string" && message.content !== null) {
         throw new Error(
           "chat response message content must be a string or null",
@@ -596,12 +722,14 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         usage,
         costUsd,
         costIsEstimate,
+        ...(finishReason === undefined ? {} : { finishReason }),
+        ...(providerResponseId === undefined ? {} : { providerResponseId }),
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const errorDetail = {
         status: response.status,
-        bodyExcerpt: errorExcerpt(responseText, requestKey),
+        bodyExcerpt: errorExcerpt(text, requestKey),
       };
       await request.onAttempt?.({
         outcome: "provider_error",

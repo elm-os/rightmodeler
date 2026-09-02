@@ -604,6 +604,12 @@ export async function replayModeA(
           ...(attempt.errorDetail === undefined
             ? {}
             : { errorDetail: attempt.errorDetail }),
+          ...(attempt.providerResponseId === undefined
+            ? {}
+            : { providerResponseId: attempt.providerResponseId }),
+          ...(attempt.finishReason === undefined
+            ? {}
+            : { finishReason: attempt.finishReason }),
         }),
       );
       const spendId = randomUUID();

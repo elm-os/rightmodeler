@@ -15,11 +15,13 @@ import { aggregate, type JudgeChat } from "@rightmodeler/kernel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AdaptiveLimiter,
   BlockedError,
   BudgetRefusalError,
   DEFAULT_RESERVATION_STALENESS_WINDOW_MS,
   createBudget,
   createProvider,
+  ProviderRequestError,
   replayModeA,
   shortlist,
   type ModelCatalogEntry,
@@ -39,6 +41,7 @@ interface StubProvider {
 interface StubProviderModule {
   startStubProvider(options: {
     port: number;
+    catalogPageSize?: number;
     malformedJudgeModels?: string[];
   }): Promise<StubProvider>;
 }
@@ -61,7 +64,7 @@ const runId = "run-1";
 const fakeKey = "fake-provider-key-never-persist";
 
 async function startStub(
-  options: { malformedJudgeModels?: string[] } = {},
+  options: { catalogPageSize?: number; malformedJudgeModels?: string[] } = {},
 ): Promise<StubProvider> {
   const fixture = (await import(stubModuleUrl)) as StubProviderModule;
   return fixture.startStubProvider({ port: 0, ...options });
@@ -126,6 +129,27 @@ async function readFacts(store: FsStore): Promise<Fact[]> {
   );
 }
 
+describe("adaptive limiter", () => {
+  it("halves once per back-off epoch and never below the floor", async () => {
+    const limiter = new AdaptiveLimiter(16);
+    const storm = (size: number) =>
+      Promise.all(
+        Array.from({ length: size }, () =>
+          limiter.run(async (ticket) => {
+            limiter.rateLimited(ticket);
+          }),
+        ),
+      );
+
+    await storm(16);
+    expect(limiter.currentCap).toBe(8);
+    await storm(8);
+    expect(limiter.currentCap).toBe(4);
+    await storm(4);
+    expect(limiter.currentCap).toBe(4);
+  });
+});
+
 describe("provider client", () => {
   let stub: StubProvider;
 
@@ -151,7 +175,7 @@ describe("provider client", () => {
     expect(catalog[0]).toEqual({
       id: "acme/small-1",
       family: "acme",
-      contextLength: 0,
+      contextLength: 128_000,
       pricing: { input: 0.0000002, output: 0.0000008 },
       supportsTools: false,
       supportsStructuredOutput: false,
@@ -171,6 +195,21 @@ describe("provider client", () => {
       response.usage.inputTokens * 0.0000002 + 12 * 0.0000008,
     );
     expect(response.costIsEstimate).toBe(true);
+  });
+
+  it("walks a paginated stub catalog", async () => {
+    await stub.close();
+    stub = await startStub({ catalogPageSize: 4 });
+    const provider = createProvider({
+      providerId: "stub-provider",
+      baseUrl: baseUrl(stub),
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    });
+
+    const catalog = await provider.listModels();
+
+    expect(catalog).toHaveLength(6);
+    expect(catalog.at(-1)?.id).toBe("yotta/judge-2");
   });
 
   it("reads the API key at call time", async () => {
@@ -292,6 +331,98 @@ describe("AI Gateway catalog", () => {
     });
   });
 
+  it("warns when total_count exceeds the collected entries", async () => {
+    const fixture = JSON.parse(await readFile(aiGatewayFixtureUrl, "utf8")) as {
+      data: unknown[];
+    };
+    const warning = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [fixture.data[0]],
+          total_count: 3,
+          links: { next: null },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://catalog.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      warning,
+    }).listModels();
+
+    expect(warning).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledWith(
+      "catalog_truncated",
+      expect.stringContaining("1 of 3"),
+    );
+  });
+
+  it("stops after twenty pages", async () => {
+    const fixture = JSON.parse(await readFile(aiGatewayFixtureUrl, "utf8")) as {
+      data: unknown[];
+    };
+    const warning = vi.fn();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [fixture.data[0]],
+            links: { next: "/v1/models?offset=1" },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+
+    await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://catalog.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      warning,
+    }).listModels();
+
+    expect(fetchMock).toHaveBeenCalledTimes(20);
+    expect(warning).toHaveBeenCalledOnce();
+  });
+
+  it("never follows a next link to another origin", async () => {
+    const fixture = JSON.parse(await readFile(aiGatewayFixtureUrl, "utf8")) as {
+      data: unknown[];
+    };
+    const warning = vi.fn();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: [fixture.data[0]],
+          links: { next: "https://elsewhere.example/v1/models" },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://catalog.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      warning,
+    }).listModels();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledOnce();
+  });
+
   it("shortlists cheaper tool-capable chat models for a GPT-4o incumbent", async () => {
     const catalog = await listFixtureModels();
     const result = shortlist(
@@ -362,7 +493,32 @@ describe("AI Gateway chat", () => {
       usage: { inputTokens: 10, outputTokens: 3 },
       costUsd: 0.0000033,
       costIsEstimate: false,
+      finishReason: "stop",
+      providerResponseId: "gen_01KZYSK582PZST0T79EP0DJ1FJ",
     });
+  });
+
+  it("falls back to the response id without a generation id", async () => {
+    const fixture = JSON.parse(
+      await readFile(aiGatewayChatFixtureUrl, "utf8"),
+    ) as { generationId?: string };
+    delete fixture.generationId;
+
+    const response = await chatFromFixture(JSON.stringify(fixture));
+
+    expect(response.providerResponseId).toBe("chatcmpl-SANITIZED");
+  });
+
+  it("carries finish_reason onto the response", async () => {
+    const fixtureBody = await readFile(aiGatewayChatFixtureUrl, "utf8");
+    const response = await chatFromFixture(
+      fixtureBody.replace(
+        '"finish_reason": "stop"',
+        '"finish_reason": "length"',
+      ),
+    );
+
+    expect(response.finishReason).toBe("length");
   });
 
   it("uses upstream inference cost when BYOK market cost is absent", async () => {
@@ -445,7 +601,286 @@ describe("AI Gateway chat", () => {
     });
   });
 
-  it.each([429, 500])(
+  it("retries a 200 body whose first choice finished with error", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const chatBody = await readFile(aiGatewayChatFixtureUrl, "utf8");
+    const fixture = JSON.parse(chatBody) as {
+      choices: Array<{
+        finish_reason: string;
+        message: { content: string };
+      }>;
+    };
+    fixture.choices[0]!.finish_reason = "error";
+    fixture.choices[0]!.message.content = "partial";
+    const onAttempt = vi.fn();
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(fixture), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": "0",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(chatBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    const response = await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    expect(response.content).toBe("Ok!");
+    expect(onAttempt).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        outcome: "provider_error",
+        errorDetail: {
+          status: 200,
+          bodyExcerpt: expect.stringContaining("partial"),
+        },
+      }),
+    );
+  });
+
+  it("gives up after five error bodies", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const onAttempt = vi.fn();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({
+              id: "gen-1",
+              error: { code: 502, message: "upstream failed" },
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json",
+                "retry-after": "0",
+              },
+            },
+          ),
+      );
+    const response = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    await expect(response).rejects.toMatchObject({
+      name: "BlockedError",
+      kind: "rate-limit",
+    });
+    expect(onAttempt).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("retries a thrown connection error with backoff", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const chatBody = await readFile(aiGatewayChatFixtureUrl, "utf8");
+    const onAttempt = vi.fn();
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(
+        new Response(chatBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    const response = await createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    expect(response.content).toBe("Ok!");
+    expect(onAttempt).toHaveBeenCalledTimes(2);
+    expect(onAttempt).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        outcome: "provider_error",
+        errorDetail: { status: null, bodyExcerpt: "fetch failed" },
+      }),
+    );
+  });
+
+  it("gives up after five connection failures", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const onAttempt = vi.fn();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockRejectedValue(new TypeError("fetch failed"));
+    const response = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    await expect(response).rejects.toBeInstanceOf(ProviderRequestError);
+    await expect(response).rejects.toThrow("fetch failed");
+    expect(onAttempt).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([
+    [401, "credentials"],
+    [403, "credentials"],
+    [402, "credits"],
+  ] as const)("blocks once on HTTP %s", async (status, kind) => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const onAttempt = vi.fn();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("denied", { status }));
+    const response = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).chat({
+      model: "openai/gpt-4o-mini",
+      messages: [{ role: "user", content: "Say okay." }],
+      onAttempt,
+    });
+
+    await expect(response).rejects.toMatchObject({
+      name: "BlockedError",
+      kind,
+      providerId: "vercel-ai-gateway",
+      errorDetail: { status, bodyExcerpt: "denied" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it("sheds load on a 5xx storm", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockImplementation(
+        async () =>
+          new Response("", {
+            status: 500,
+            headers: { "retry-after": "0" },
+          }),
+      );
+    const provider = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    });
+
+    await expect(
+      provider.chat({
+        model: "openai/gpt-4o-mini",
+        messages: [{ role: "user", content: "Say okay." }],
+      }),
+    ).rejects.toMatchObject({
+      name: "BlockedError",
+      kind: "rate-limit",
+      observedCeiling: 2,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("keeps a 429 storm above the serial floor", async () => {
+    const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockImplementation(
+        async () =>
+          new Response("", {
+            status: 429,
+            headers: { "retry-after": "0" },
+          }),
+      );
+    const provider = createProvider({
+      providerId: "vercel-ai-gateway",
+      baseUrl: "https://chat.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    });
+
+    await expect(
+      provider.chat({
+        model: "openai/gpt-4o-mini",
+        messages: [{ role: "user", content: "Say okay." }],
+      }),
+    ).rejects.toMatchObject({
+      name: "BlockedError",
+      kind: "rate-limit",
+      observedCeiling: 2,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([408, 409, 429, 500])(
     "retries a malformed HTTP %s body by status",
     async (status) => {
       const catalogBody = await readFile(aiGatewayFixtureUrl, "utf8");
@@ -1008,6 +1443,49 @@ describe("Mode A replay", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("retries a 200 body carrying an error and scores only the retried completion", async () => {
+    const result = await run([
+      recordedCase({
+        headers: { "x-stub-error-body-once": "error-body-case" },
+      }),
+    ]);
+    const facts = await readFacts(store);
+    const attempts = facts.filter((fact) => "attemptId" in fact);
+    const executions = facts.filter(
+      (fact) => "executionId" in fact && "caseId" in fact,
+    );
+    const providerError = attempts.find(
+      (attempt) => attempt.streamOutcome === "provider_error",
+    );
+
+    expect(result.blocked).toEqual([]);
+    expect(attempts.map((attempt) => attempt.streamOutcome).sort()).toEqual([
+      "completed",
+      "provider_error",
+    ]);
+    expect(providerError).toMatchObject({
+      errorDetail: {
+        status: 200,
+        bodyExcerpt: expect.stringContaining("after generation started"),
+      },
+    });
+    expect(executions).toHaveLength(1);
+    expect(executions[0]).toMatchObject({ terminalOutcome: "success" });
+  });
+
+  it("persists the provider response id and finish reason on the attempt fact", async () => {
+    await run([recordedCase()]);
+    const facts = await readFacts(store);
+    const completedAttempt = facts.find(
+      (fact) => "attemptId" in fact && fact.streamOutcome === "completed",
+    );
+
+    expect(completedAttempt).toMatchObject({
+      providerResponseId: expect.stringMatching(/^stub-/),
+      finishReason: "stop",
+    });
+  });
+
   it("uses kernel judge provenance and records position-swap evidence", async () => {
     const requests: Parameters<JudgeChat>[0][] = [];
     await run([recordedCase()], async (request) => {
@@ -1546,7 +2024,11 @@ describe("Mode A replay", () => {
       providerId: delegate.providerId,
       listModels: () => delegate.listModels(),
       chat: async () => {
-        throw new BlockedError(429, 2);
+        throw new BlockedError({
+          kind: "rate-limit",
+          status: 429,
+          observedCeiling: 2,
+        });
       },
     };
 

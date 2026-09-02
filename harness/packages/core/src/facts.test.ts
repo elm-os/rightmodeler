@@ -217,6 +217,25 @@ describe("fact schemas", () => {
     });
   });
 
+  it("accepts an optional provider response id and finish reason", () => {
+    expect(
+      requestAttemptSchema.parse({
+        ...requestAttempt,
+        providerResponseId: "gen-1",
+        finishReason: "length",
+      }),
+    ).toMatchObject({
+      providerResponseId: "gen-1",
+      finishReason: "length",
+    });
+    expect(
+      requestAttemptSchema.safeParse({
+        ...requestAttempt,
+        providerResponseId: "",
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects provider error excerpts over 500 characters", () => {
     expect(
       requestAttemptSchema.safeParse({
