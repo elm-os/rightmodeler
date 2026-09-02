@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import {
   canonicalJson,
+  compareText,
   factSchema,
   factsPrefix,
   jsonValueSchema,
@@ -100,10 +101,6 @@ export function digestFileContent(content: string | Uint8Array): string {
 
 function sortedUnique(values: readonly string[]): string[] {
   return [...new Set(values)].sort();
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 export function isRepositoryRevision(value: string): boolean {

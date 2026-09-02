@@ -1,3 +1,4 @@
+import { compareText } from "@rightmodeler/core";
 import type {
   ModelCatalogEntry,
   ModelPricing,
@@ -200,8 +201,4 @@ function requireStep(
     throw new Error(`Replay cost case references an unknown step: ${stepId}`);
   }
   return step;
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

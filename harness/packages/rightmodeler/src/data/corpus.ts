@@ -1,6 +1,7 @@
 import {
   canonicalJson,
   caseKey,
+  compareText,
   computeRunSpecDigest,
   type JsonValue,
   type Store,
@@ -273,8 +274,4 @@ export async function writeCorpus(
     `${projectId}/corpus/corpus-${corpus.corpusVersionId}.json`,
     Buffer.from(canonicalJson(corpusManifest(corpus)), "utf8"),
   );
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

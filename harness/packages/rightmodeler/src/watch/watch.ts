@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import {
   canonicalJson,
+  compareText,
   computeRunSpecDigest,
   factKey,
   jsonValueSchema,
@@ -35,6 +36,7 @@ import {
   type GithubReview,
   type GithubReviewComment,
 } from "../github/index.js";
+import { escapeCell, percent } from "../report/format.js";
 import { putContractArtifact } from "../contract-validation.js";
 import {
   derivePrState,
@@ -131,10 +133,6 @@ interface Question {
   readonly createdAt: string;
 }
 
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
 function detailRecord(value: JsonValue): Record<string, JsonValue> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, JsonValue>)
@@ -192,14 +190,6 @@ async function appendLifecycleEvent(
     Buffer.from(canonicalJson(event), "utf8"),
   );
   return event;
-}
-
-function escapeCell(value: string): string {
-  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
-}
-
-function percent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
 }
 
 function evidenceReply(verdicts: readonly ApplyVerdict[]): string {

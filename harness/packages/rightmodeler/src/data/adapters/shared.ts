@@ -1,4 +1,6 @@
-import type { JsonValue } from "@rightmodeler/core";
+import { isRecord, type JsonValue } from "@rightmodeler/core";
+
+export { isRecord };
 
 import type { NormalizedRun, NormalizedUsage } from "../normalized-run.js";
 
@@ -91,10 +93,6 @@ export class FormatDetectionError extends Error {
 const minimumConfidence = 0.6;
 const detectionSampleSize = 20;
 const ambiguityMargin = 0.1;
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function otlpValue(value: unknown): unknown {
   if (!isRecord(value)) return undefined;

@@ -3,7 +3,9 @@ import { access, readFile } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
 
-import { codeownersPaths, compareText } from "./shared.js";
+import { compareText } from "@rightmodeler/core";
+
+import { codeownersPaths } from "./shared.js";
 
 const execFileAsync = promisify(execFile);
 const maximumBlameOwners = 3;

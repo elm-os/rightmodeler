@@ -1,5 +1,6 @@
 import {
   canonicalJson,
+  compareText,
   computeRunSpecDigest,
   type JsonValue,
 } from "@rightmodeler/core";
@@ -645,8 +646,4 @@ function cloneCorpusCase(
       ? {}
       : { labels: { ...corpusCase.labels } }),
   };
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

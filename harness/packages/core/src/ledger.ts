@@ -1,14 +1,20 @@
-import type {
-  Assessment,
-  CascadeFinding,
-  Execution,
-  LifecycleEvent,
-  RequestAttempt,
-  SpendEvent,
+import { randomUUID } from "node:crypto";
+
+import {
+  lifecycleEventSchema,
+  type Assessment,
+  type CascadeFinding,
+  type Execution,
+  type JsonValue,
+  type LifecycleEvent,
+  type RequestAttempt,
+  type SpendEvent,
 } from "./facts.js";
-import { factsPrefix } from "./keys.js";
+import { canonicalJson } from "./identity.js";
+import { factKey, factsPrefix } from "./keys.js";
 import { parseFacts } from "./salvage.js";
 import type { Store } from "./store.js";
+import { compareText } from "./text.js";
 
 export interface Ledger {
   readonly executions: readonly Execution[];
@@ -30,10 +36,6 @@ const lifecycleKindOrder: Record<LifecycleEvent["kind"], number> = {
   pr_merged: 6,
   watch_ended: 7,
 };
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
 
 export async function readLedger(
   store: Store,
@@ -87,4 +89,33 @@ export async function readLedger(
     lifecycleEvents,
     droppedRows,
   };
+}
+
+export async function appendLifecycleEvent(
+  store: Store,
+  projectId: string,
+  event: Omit<LifecycleEvent, "eventId" | "createdAt">,
+): Promise<void> {
+  const value = lifecycleEventSchema.parse({
+    ...event,
+    eventId: randomUUID(),
+    createdAt: new Date().toISOString(),
+  });
+  await store.putImmutable(
+    factKey(projectId, value.eventId),
+    Buffer.from(canonicalJson(value), "utf8"),
+  );
+}
+
+export function lifecycleDetail(
+  event: LifecycleEvent,
+): Record<string, JsonValue> {
+  if (
+    typeof event.detail !== "object" ||
+    event.detail === null ||
+    Array.isArray(event.detail)
+  ) {
+    return {};
+  }
+  return event.detail;
 }

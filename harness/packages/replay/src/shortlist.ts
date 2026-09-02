@@ -1,3 +1,4 @@
+import { blendedPrice } from "@rightmodeler/core";
 import type { ModelCatalogEntry } from "./provider.js";
 import type { CorpusSplit } from "@rightmodeler/kernel";
 
@@ -59,11 +60,6 @@ export function resolveCurrentModel(
   }
   if (matches.length > 1) return { kind: "ambiguous", matches };
   return { kind: "absent" };
-}
-
-function blendedPrice(model: ModelCatalogEntry): number | null {
-  if (model.pricing === null) return null;
-  return (3 * model.pricing.input + model.pricing.output) / 4;
 }
 
 export function shortlist(

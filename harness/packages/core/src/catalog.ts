@@ -15,3 +15,8 @@ export interface ModelCatalogEntry {
   outputModalities?: readonly string[];
   requiresReasoning?: boolean;
 }
+
+export function blendedPrice(model: ModelCatalogEntry): number | null {
+  if (model.pricing === null) return null;
+  return (3 * model.pricing.input + model.pricing.output) / 4;
+}

@@ -8,8 +8,10 @@ import { promisify } from "node:util";
 
 import {
   assessmentSchema,
+  blendedPrice,
   callSiteInventoryKey,
   canonicalJson,
+  compareText,
   completeRun,
   computeEvidenceQuestionId,
   computeRunSpecDigest,
@@ -146,9 +148,16 @@ import type {
 import type { GithubClient } from "./github/index.js";
 import { ProtocolError, Reporter } from "./protocol.js";
 import {
+  formatDeltaPct,
+  formatLatencyMs,
+  formatUsdPerCase,
+} from "./report/format.js";
+import {
+  putImmutableJson,
   putMutableJson,
   readJson,
   readSetupState,
+  resolveStoreRoot,
   writeCheckpoint,
   type Checkpoint,
   type SetupState,
@@ -1784,7 +1793,7 @@ function applyCascadeStatus(
 
 function createContext(options: PipelineOptions): PipelineContext {
   const repo = resolve(options.repo);
-  const storeRoot = resolve(options.store ?? join(repo, ".rightmodeler"));
+  const storeRoot = resolveStoreRoot(repo, options.store);
   const modeBConfigPath =
     options.modeBConfigPath === undefined
       ? undefined
@@ -3538,7 +3547,8 @@ function blockedFamilyOutcome(
     candidateId: candidate?.id ?? "unavailable",
     candidateFamily: candidate?.family ?? "unknown",
     caseIds: [],
-    candidateCostUsd: candidate === undefined ? 0 : blendedPrice(candidate),
+    candidateCostUsd:
+      candidate === undefined ? 0 : (blendedPrice(candidate) ?? 0),
     gatePolicyVersion: policy.gatePolicyVersion,
     referenceCeilingMultiplier: referenceCeiling.multiplier,
     evaluatorKinds: [],
@@ -4403,7 +4413,7 @@ async function materializeAggregationFacts(
         familyId: family,
         candidateFamily: selected.family,
         evaluatorKind: evaluation.evaluatorKind,
-        candidateCostUsd: blendedPrice(selected),
+        candidateCostUsd: blendedPrice(selected) ?? 0,
         referenceCeilingMultiplier: referenceCeilingFor(ceilings, family)
           .multiplier,
         unsafeSubstitution: false,
@@ -4517,10 +4527,6 @@ function modeBProviderBaseUrl(baseUrl: string): string {
     url.pathname = url.pathname.replace(/\/?v1\/?$/, "/");
   }
   return url.href.replace(/\/$/, "");
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function reportPath(context: PipelineContext): string {
@@ -4677,17 +4683,6 @@ function artifactKey(
   inputDigestValue: string,
 ): string {
   return `${setupPrefix(context.projectId)}${stage}-${inputDigestValue}.json`;
-}
-
-async function putImmutableJson(
-  store: Store,
-  key: string,
-  value: unknown,
-): Promise<void> {
-  await store.putImmutable(
-    key,
-    Buffer.from(canonicalJson(jsonValue(value)), "utf8"),
-  );
 }
 
 async function putMutableText(
@@ -4882,11 +4877,6 @@ function chatMessages(
     }
     return message;
   });
-}
-
-function blendedPrice(candidate: ModelCatalogEntry): number {
-  if (candidate.pricing === null) return 0;
-  return (3 * candidate.pricing.input + candidate.pricing.output) / 4;
 }
 
 function judgeMetadata(assessment: Assessment):
@@ -5578,20 +5568,6 @@ function formatNumber(value: number): string {
 
 function formatRate(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
-}
-
-function formatUsdPerCase(value: number | null): string {
-  return value === null ? "n/a" : `$${value.toFixed(6)}`;
-}
-
-function formatDeltaPct(value: number | null): string {
-  return value === null
-    ? "n/a"
-    : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
-
-function formatLatencyMs(value: number | null): string {
-  return value === null ? "n/a" : `${Math.round(value)} ms`;
 }
 
 async function readPipelineLedger(context: PipelineContext): Promise<Ledger> {

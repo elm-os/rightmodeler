@@ -1,4 +1,8 @@
-import { computeRunSpecDigest, type JsonValue } from "@rightmodeler/core";
+import {
+  compareText,
+  computeRunSpecDigest,
+  type JsonValue,
+} from "@rightmodeler/core";
 
 const ISSUE_CLASSES = [
   "ingestion",
@@ -491,8 +495,4 @@ function triggerCaseIds(
     return [];
   });
   return [...new Set(caseIds)].sort(compareText);
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

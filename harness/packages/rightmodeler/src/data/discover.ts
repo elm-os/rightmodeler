@@ -2,6 +2,8 @@ import { open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
+import { compareText } from "@rightmodeler/core";
+
 import { traceAdapters } from "./adapters.js";
 import { detectFormat, isRecord, type TraceFormat } from "./adapters/shared.js";
 
@@ -372,8 +374,4 @@ function approximateRecordCount(
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

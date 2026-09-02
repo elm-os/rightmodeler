@@ -4,9 +4,9 @@ import { dirname, join, resolve } from "node:path";
 import {
   canonicalJson,
   caseKey,
+  compareText,
   computeRunSpecDigest,
   FsStore,
-  jsonValueSchema,
   reportKey,
   type JsonValue,
   type Store,
@@ -47,7 +47,12 @@ import {
   assertContractArtifact,
   putContractArtifact,
 } from "./contract-validation.js";
-import { readJson, readSetupState } from "./state.js";
+import {
+  putImmutableJson,
+  readJson,
+  readSetupState,
+  resolveStoreRoot,
+} from "./state.js";
 
 const PROJECT_ID = "project";
 const ACTIVE_CORPUS_KEY = `${PROJECT_ID}/corpus/active.json`;
@@ -897,7 +902,7 @@ function context(options: { repo: string; store?: string }): {
   storeRoot: string;
 } {
   const repo = resolve(options.repo);
-  const storeRoot = resolve(options.store ?? join(repo, ".rightmodeler"));
+  const storeRoot = resolveStoreRoot(repo, options.store);
   return {
     store: new FsStore(storeRoot),
     storeRoot,
@@ -1060,21 +1065,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function putImmutableJson(
-  store: Store,
-  key: string,
-  value: unknown,
-): Promise<void> {
-  await store.putImmutable(
-    key,
-    Buffer.from(canonicalJson(jsonValueSchema.parse(value)), "utf8"),
-  );
-}
-
 function digestId(corpusVersionId: string): string {
   return `sha256:${corpusVersionIdSchema.parse(corpusVersionId)}`;
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

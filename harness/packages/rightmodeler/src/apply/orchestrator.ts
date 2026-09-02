@@ -1,15 +1,16 @@
 import { execFile } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
 import {
+  appendLifecycleEvent,
   canonicalJson,
+  compareText,
   computeRunSpecDigest,
-  factKey,
   jsonValueSchema,
-  lifecycleEventSchema,
+  lifecycleDetail,
   type JsonValue,
   type LifecycleEvent,
   type Store,
@@ -22,10 +23,21 @@ import type {
 } from "../enrich/index.js";
 import {
   type GithubClient,
-  type GithubFileContent,
   GithubHttpError,
   type GithubPullRequest,
 } from "../github/index.js";
+import {
+  optionalFile,
+  optionalRef,
+  restoreBranch,
+} from "../github/branch-ops.js";
+import {
+  escapeCell,
+  formatDeltaPct,
+  formatLatencyMs,
+  formatUsdPerCase,
+  percent,
+} from "../report/format.js";
 import { buildSwapDiff, type SwapDiffFile, type SwapRequest } from "./diff.js";
 import { lintSwapDiff, type DiffViolation } from "./difflint.js";
 import { formatWithHostFormatter, type FormatterBlocker } from "./format.js";
@@ -159,10 +171,6 @@ function refusal(
   };
 }
 
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
 function lintFiles(files: readonly SwapDiffFile[]) {
   return files.map((file) => ({
     path: file.path,
@@ -218,28 +226,6 @@ function changeTitle(
   return conventions.commitConvention.style === "conventional"
     ? `perf(models): swap ${families}`
     : `Swap ${families} models`;
-}
-
-function percent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
-function formatUsdPerCase(value: number | null): string {
-  return value === null ? "n/a" : `$${value.toFixed(6)}`;
-}
-
-function formatDeltaPct(value: number | null): string {
-  return value === null
-    ? "n/a"
-    : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
-
-function formatLatencyMs(value: number | null): string {
-  return value === null ? "n/a" : `${Math.round(value)} ms`;
-}
-
-function escapeCell(value: string): string {
-  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
 }
 
 interface EvidenceRow {
@@ -448,45 +434,6 @@ function committedBlobSha(repoDir: string, path: string): Promise<string> {
   return gitOutput(repoDir, ["rev-parse", `HEAD:${path}`]);
 }
 
-function lifecycleDetail(event: LifecycleEvent): Record<string, JsonValue> {
-  if (
-    typeof event.detail !== "object" ||
-    event.detail === null ||
-    Array.isArray(event.detail)
-  ) {
-    return {};
-  }
-  return event.detail;
-}
-
-async function optionalGithubFile(
-  githubClient: GithubClient,
-  input: Parameters<GithubClient["getFileContent"]>[0],
-): Promise<GithubFileContent | undefined> {
-  try {
-    return await githubClient.getFileContent(input);
-  } catch (error) {
-    if (error instanceof GithubHttpError && error.status === 404) {
-      return undefined;
-    }
-    throw error;
-  }
-}
-
-async function optionalBranchSha(
-  githubClient: GithubClient,
-  input: Parameters<GithubClient["getRef"]>[0],
-): Promise<string | undefined> {
-  try {
-    return (await githubClient.getRef(input)).sha;
-  } catch (error) {
-    if (error instanceof GithubHttpError && error.status === 404) {
-      return undefined;
-    }
-    throw error;
-  }
-}
-
 async function resumedApplyUpdates({
   githubClient,
   owner,
@@ -502,7 +449,7 @@ async function resumedApplyUpdates({
 }): Promise<ApplyBranchUpdate[]> {
   const updates: ApplyBranchUpdate[] = [];
   for (const file of files) {
-    const current = await optionalGithubFile(githubClient, {
+    const current = await optionalFile(githubClient, {
       owner,
       repo,
       path: file.path,
@@ -552,79 +499,6 @@ async function assertApplyBranchScope({
       `Existing apply branch changed files outside its declared scope: ${unexpected.join(", ")}`,
       { paths: unexpected },
     );
-  }
-}
-
-async function restoreApplyBranch({
-  githubClient,
-  owner,
-  repo,
-  branch,
-  title,
-  files,
-  failedDigests,
-}: {
-  readonly githubClient: GithubClient;
-  readonly owner: string;
-  readonly repo: string;
-  readonly branch: string;
-  readonly title: string;
-  readonly files: readonly {
-    readonly path: string;
-    readonly before: string;
-  }[];
-  readonly failedDigests: FileDigestMap;
-}): Promise<void> {
-  const branchSha = await optionalBranchSha(githubClient, {
-    owner,
-    repo,
-    ref: `heads/${branch}`,
-  });
-  if (branchSha === undefined) {
-    return;
-  }
-
-  const currentFiles = new Map<string, GithubFileContent | undefined>();
-  for (const file of files) {
-    const current = await optionalGithubFile(githubClient, {
-      owner,
-      repo,
-      path: file.path,
-      ref: branchSha,
-    });
-    currentFiles.set(file.path, current);
-    failedDigests[file.path] =
-      current === undefined ? null : digestFileContent(current.contentBytes);
-  }
-
-  for (const file of files) {
-    const current = currentFiles.get(file.path);
-    if (current?.content === file.before) continue;
-    await githubClient.createOrUpdateFile({
-      owner,
-      repo,
-      path: file.path,
-      message: `Restore after failed ${title}`,
-      content: file.before,
-      branch,
-      ...(current === undefined ? {} : { sha: current.sha }),
-    });
-  }
-
-  for (const file of files) {
-    const restored = await optionalGithubFile(githubClient, {
-      owner,
-      repo,
-      path: file.path,
-      ref: branch,
-    });
-    if (restored?.content !== file.before) {
-      throw new ApplyServiceError(
-        "apply_restore_failed",
-        `Apply failure did not restore ${file.path}`,
-        { path: file.path },
-      );
-    }
   }
 }
 
@@ -790,21 +664,6 @@ function existingPullRequest(
   };
 }
 
-async function appendLifecycleEvent(
-  store: Store,
-  event: Omit<LifecycleEvent, "eventId" | "createdAt">,
-): Promise<void> {
-  const value = lifecycleEventSchema.parse({
-    ...event,
-    eventId: randomUUID(),
-    createdAt: new Date().toISOString(),
-  });
-  await store.putImmutable(
-    factKey(projectId, value.eventId),
-    Buffer.from(canonicalJson(value), "utf8"),
-  );
-}
-
 async function ensureReviewRequested({
   githubClient,
   store,
@@ -875,7 +734,7 @@ async function ensureReviewRequested({
     }
   }
   const requested = reviewers.length > 0 || teamReviewers.length > 0;
-  await appendLifecycleEvent(store, {
+  await appendLifecycleEvent(store, projectId, {
     ...lifecycle,
     prNumber,
     kind: "review_requested",
@@ -1151,11 +1010,13 @@ export async function applySwaps({
     const mismatch = applyStartMismatch(started, remediation);
     if (mismatch !== null) return mismatch;
   }
-  const existingBranchSha = await optionalBranchSha(githubClient, {
-    owner,
-    repo,
-    ref: `heads/${branch}`,
-  });
+  const existingBranchSha = (
+    await optionalRef(githubClient, {
+      owner,
+      repo,
+      ref: `heads/${branch}`,
+    })
+  )?.sha;
   if (existingBranchSha !== undefined && started === undefined) {
     return refusal(
       "apply_branch_unowned",
@@ -1189,7 +1050,7 @@ export async function applySwaps({
     throw error;
   }
   if (started === undefined) {
-    await appendLifecycleEvent(store, {
+    await appendLifecycleEvent(store, projectId, {
       ...lifecycle,
       prNumber: null,
       kind: "apply_started",
@@ -1261,14 +1122,24 @@ export async function applySwaps({
     let restoreFailure: unknown;
     if (ownsBranch) {
       try {
-        await restoreApplyBranch({
+        await restoreBranch({
           githubClient,
           owner,
           repo,
           branch,
           title,
-          files: sortedFiles,
+          files: sortedFiles.map(({ path, before }) => ({
+            path,
+            content: before,
+            contentBytes: Buffer.from(before, "utf8"),
+          })),
           failedDigests,
+          unrestored: (path) =>
+            new ApplyServiceError(
+              "apply_restore_failed",
+              `Apply failure did not restore ${path}`,
+              { path },
+            ),
         });
       } catch (caught) {
         restoreFailure = caught;
@@ -1286,7 +1157,7 @@ export async function applySwaps({
       postApplyDigests: failedDigests,
       restored: ownsBranch && restoreFailure === undefined,
     });
-    await appendLifecycleEvent(store, {
+    await appendLifecycleEvent(store, projectId, {
       ...lifecycle,
       prNumber: null,
       kind: "apply_started",
@@ -1315,7 +1186,7 @@ export async function applySwaps({
       },
     );
   }
-  await appendLifecycleEvent(store, {
+  await appendLifecycleEvent(store, projectId, {
     ...lifecycle,
     prNumber: pullRequest.number,
     kind: "pr_opened",

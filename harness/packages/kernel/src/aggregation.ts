@@ -1,4 +1,9 @@
-import type { Assessment, CascadeFinding, Execution } from "@rightmodeler/core";
+import {
+  compareText,
+  type Assessment,
+  type CascadeFinding,
+  type Execution,
+} from "@rightmodeler/core";
 
 import {
   MIN_DISTINCT_STEPS,
@@ -1004,10 +1009,6 @@ function compareVerdicts(left: FamilyVerdict, right: FamilyVerdict): number {
     compareText(left.candidateId, right.candidateId) ||
     compareText(left.corpusSplit, right.corpusSplit)
   );
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function stableSeed(value: string): number {
