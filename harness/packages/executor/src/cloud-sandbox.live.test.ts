@@ -7,12 +7,19 @@ import {
   detectCloudAvailability,
 } from "./cloud-sandbox.js";
 
-const availability = await detectCloudAvailability();
+const liveRequested = process.env.RIGHTMODELER_LIVE_CLOUD === "1";
+const availability = liveRequested
+  ? await detectCloudAvailability()
+  : ({
+      available: false,
+      reason: "not-requested",
+      message: "set RIGHTMODELER_LIVE_CLOUD=1 to run live cloud tests",
+    } as const);
 const liveReason = availability.available
   ? "available"
   : `${availability.reason}: ${availability.message}`;
 if (!availability.available) {
-  console.warn(`[cloud sandbox live] SKIPPED — ${liveReason}`);
+  console.warn(`[cloud sandbox live] SKIPPED: ${liveReason}`);
 }
 
 const temporaryDirectories: string[] = [];
