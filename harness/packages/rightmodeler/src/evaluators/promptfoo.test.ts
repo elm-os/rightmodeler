@@ -386,6 +386,33 @@ describe("parsePromptfooResults on the captured promptfoo 0.123.1 file", () => {
       parse(captured, { scorers: ["output_similarity", "missing_metric"] }),
     ).toThrow(/missing_metric/u);
   });
+
+  it("leaves out a metric whose grader failed and names the case external_evaluator_error", () => {
+    const base = parse(captured);
+    const graderFailed = copy();
+    const first = row(graderFailed, 0);
+    first.failureReason = 1;
+    for (const component of first.gradingResult!.componentResults!) {
+      if (component.assertion?.metric === "output_similarity") {
+        Object.assign(component, {
+          pass: false,
+          score: 0,
+          metadata: { graderError: true },
+        });
+      }
+    }
+    first.gradingResult!.namedScores!.output_similarity = 0;
+
+    const run = parse(graderFailed);
+
+    expect(entry(run, "case-1")).toEqual({
+      caseId: "case-1",
+      testIdx: 0,
+      metrics: [metric(base, "case-1", "secondary_similarity")],
+      absentReason: "external_evaluator_error",
+    });
+    expect(run.cases.slice(1)).toEqual(base.cases.slice(1));
+  });
 });
 
 function projectRow(item: CapturedRow) {
@@ -551,12 +578,12 @@ describe("promptfoo invocation", () => {
     ]);
   });
 
-  it("fails with promptfoo's stderr when it exits 1 or writes no results file", async () => {
+  it("fails with promptfoo's output when it exits 1 or writes no results file", async () => {
     const provider = stubEvaluator(await assertionsCopy());
 
     vi.stubEnv("PROMPTFOO_STUB_FAULT", "exit-1");
     await expect(provider.launch(launchInput("Paris"))).rejects.toThrow(
-      /exited 1: .*stub fault/su,
+      /exited 1: stub fault\nstub trace$/u,
     );
 
     vi.stubEnv("PROMPTFOO_STUB_FAULT", "no-results");
@@ -646,6 +673,11 @@ describe("promptfoo invocation", () => {
       await stubEvaluator(
         assertionsPath,
         process.execPath,
+      ).detectAvailability(),
+    ).toBe(true);
+    expect(
+      await stubEvaluator(
+        join(tmpdir(), "rightmodeler-missing-assertions", "assertions.yaml"),
       ).detectAvailability(),
     ).toBe(true);
   });

@@ -126,7 +126,8 @@ async function run() {
   const fault = process.env.PROMPTFOO_STUB_FAULT;
   if (fault === "read-stdin") await text(process.stdin);
   if (fault === "exit-1") {
-    process.stderr.write("stub fault\n");
+    process.stdout.write("stub fault\n");
+    process.stderr.write("stub trace\n");
     process.exitCode = 1;
     return;
   }

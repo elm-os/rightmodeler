@@ -91,6 +91,10 @@ const promptfooResultsFileSchema = z.object({
               .array(
                 z.object({
                   pass: z.boolean(),
+                  metadata: z
+                    .object({ graderError: z.unknown().optional() })
+                    .nullable()
+                    .optional(),
                   assertion: z
                     .record(z.string(), jsonValueSchema)
                     .nullable()
@@ -157,12 +161,24 @@ export function parsePromptfooResults(input: {
     const namedScores = grading?.namedScores;
     if (namedScores === undefined) return [];
     graded.push(namedScores);
+    const graderFailed = input.scorers.filter((scorer) =>
+      (grading?.componentResults ?? []).some(
+        ({ assertion, metadata }) =>
+          assertion?.metric === scorer && metadata?.graderError === true,
+      ),
+    );
     const metrics = input.scorers.flatMap((scorer): EvaluatorMetric[] => {
       const score = namedScores[scorer];
       const components = (grading?.componentResults ?? []).filter(
         ({ assertion }) => assertion?.metric === scorer,
       );
-      if (score === undefined || components.length === 0) return [];
+      if (
+        score === undefined ||
+        components.length === 0 ||
+        graderFailed.includes(scorer)
+      ) {
+        return [];
+      }
       const digest = computeRunSpecDigest(
         components.map(({ assertion }) => assertion!),
       ).slice(0, 16);
@@ -175,7 +191,16 @@ export function parsePromptfooResults(input: {
         },
       ];
     });
-    return [{ caseId, testIdx, metrics }];
+    return [
+      {
+        caseId,
+        testIdx,
+        metrics,
+        ...(graderFailed.length === 0
+          ? {}
+          : { absentReason: "external_evaluator_error" as const }),
+      },
+    ];
   });
   const missing =
     graded.length === 0
@@ -240,8 +265,7 @@ export function createPromptfooEvaluator(
     id: "promptfoo",
     async detectAvailability(): Promise<boolean> {
       return (
-        (await runPromptfoo(command, ["--version"], dirname(assertionsPath)))
-          .code === 0
+        (await runPromptfoo(command, ["--version"], process.cwd())).code === 0
       );
     },
     async launch(input) {
@@ -271,7 +295,7 @@ export function createPromptfooEvaluator(
           ),
           "utf8",
         );
-        const { code, stderr } = await runPromptfoo(
+        const { code, output } = await runPromptfoo(
           command,
           [
             "eval",
@@ -285,10 +309,10 @@ export function createPromptfooEvaluator(
           ],
           cwd,
         );
-        const stderrTail = stderr.slice(-2048);
+        const outputTail = output.slice(-8192).trim();
         if (code !== 0 && code !== 100) {
           throw new Error(
-            `promptfoo eval exited ${String(code)}: ${stderrTail}`,
+            `promptfoo eval exited ${String(code)}: ${outputTail}`,
           );
         }
         let text: string;
@@ -297,7 +321,7 @@ export function createPromptfooEvaluator(
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
           throw new Error(
-            `promptfoo eval exited ${String(code)} without writing its results file: ${stderrTail}`,
+            `promptfoo eval exited ${String(code)} without writing its results file: ${outputTail}`,
           );
         }
         results.set(
@@ -359,7 +383,7 @@ async function runPromptfoo(
   command: string,
   args: readonly string[],
   cwd: string,
-): Promise<{ code: unknown; stderr: string }> {
+): Promise<{ code: unknown; output: string }> {
   const running = execFileAsync(command, [...args], {
     cwd,
     encoding: "utf8",
@@ -368,10 +392,17 @@ async function runPromptfoo(
   });
   running.child.stdin?.end();
   try {
-    const { stderr } = await running;
-    return { code: 0, stderr };
+    const { stdout, stderr } = await running;
+    return { code: 0, output: `${stdout}${stderr}` };
   } catch (error) {
-    const failed = error as { code?: unknown; stderr?: string };
-    return { code: failed.code, stderr: failed.stderr ?? "" };
+    const failed = error as {
+      code?: unknown;
+      stdout?: string;
+      stderr?: string;
+    };
+    return {
+      code: failed.code,
+      output: `${failed.stdout ?? ""}${failed.stderr ?? ""}`,
+    };
   }
 }
