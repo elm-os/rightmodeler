@@ -1,0 +1,7 @@
+[
+  { "output": "Paris", "tags": ["case-1"] },
+  { "output": "Parish", "tags": ["case-2"] },
+  { "output": "Paris\n", "tags": ["case-3"] },
+  { "output": "{{ 7 * 7 }}", "tags": ["case-4"] },
+  { "output": "file://rightmodeler-capture-missing.txt", "tags": ["case-5"] }
+]
