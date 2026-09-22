@@ -138,6 +138,8 @@ describe("packed CLI bundle", () => {
       join(project, "package.json"),
       `${JSON.stringify({ name: "installed-cli-test", private: true })}\n`,
     );
+    // `--omit=optional` alone still fetches the optional SDK's registry metadata, which retries
+    // for minutes without a network; `--offline` keeps this install hermetic.
     await execFileAsync(
       "npm",
       [
@@ -146,6 +148,7 @@ describe("packed CLI bundle", () => {
         "--no-audit",
         "--no-fund",
         "--package-lock=false",
+        "--offline",
         "--omit=optional",
         tarball,
       ],
