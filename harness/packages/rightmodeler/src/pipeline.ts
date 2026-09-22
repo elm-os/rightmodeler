@@ -1010,16 +1010,7 @@ export async function claimDetachedReplay(
     throw missingProviderConfiguration();
   }
   const state = await readSetupState(context.store, context.projectId);
-  const traceIdentity =
-    context.traces === undefined
-      ? state.stages.ingest?.inputDigest
-      : digest({
-          stage: "ingest",
-          traceSha256: sha256(
-            Buffer.concat([...(await readTraceInput(context.traces))]),
-          ),
-          reader: TRACE_READER_REVISION,
-        });
+  const traceIdentity = await inputDigest("ingest", context, state);
   if (traceIdentity === undefined) {
     throw new ProtocolError({
       exitCode: 2,
@@ -2462,15 +2453,15 @@ async function executeIngest(
     texts.flatMap((text) => parseTraceRecords(text)),
   );
   const runs = strictRuns(adapter.name, result);
+  const excluded = excludedStepsWarning(result);
+  if (excluded !== undefined) {
+    context.reporter.warning("trace_steps_excluded", excluded);
+  }
   if (runs.length === 0) {
     throw new TraceAdaptError(
       adapter.name,
       `The ${adapter.name} trace input contains no model calls that can be read`,
     );
-  }
-  const excluded = excludedStepsWarning(result);
-  if (excluded !== undefined) {
-    context.reporter.warning("trace_steps_excluded", excluded);
   }
   const key = artifactKey(context, "ingest", inputDigestValue);
   await putImmutableJson(context.store, key, {

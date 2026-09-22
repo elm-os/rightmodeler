@@ -43544,13 +43544,7 @@ async function claimDetachedReplay(options) {
     throw missingProviderConfiguration();
   }
   const state = await readSetupState(context2.store, context2.projectId);
-  const traceIdentity = context2.traces === void 0 ? state.stages.ingest?.inputDigest : digest({
-    stage: "ingest",
-    traceSha256: sha256(
-      Buffer.concat([...await readTraceInput(context2.traces)])
-    ),
-    reader: TRACE_READER_REVISION
-  });
+  const traceIdentity = await inputDigest("ingest", context2, state);
   if (traceIdentity === void 0) {
     throw new ProtocolError({
       exitCode: 2,
@@ -44674,15 +44668,15 @@ async function executeIngest(context2, inputDigestValue) {
     texts.flatMap((text) => parseTraceRecords(text))
   );
   const runs = strictRuns(adapter.name, result2);
+  const excluded = excludedStepsWarning(result2);
+  if (excluded !== void 0) {
+    context2.reporter.warning("trace_steps_excluded", excluded);
+  }
   if (runs.length === 0) {
     throw new TraceAdaptError(
       adapter.name,
       `The ${adapter.name} trace input contains no model calls that can be read`
     );
-  }
-  const excluded = excludedStepsWarning(result2);
-  if (excluded !== void 0) {
-    context2.reporter.warning("trace_steps_excluded", excluded);
   }
   const key = artifactKey(context2, "ingest", inputDigestValue);
   await putImmutableJson(context2.store, key, {
