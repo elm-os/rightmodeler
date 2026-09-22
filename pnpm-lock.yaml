@@ -143,8 +143,8 @@ importers:
         version: 3.2.7(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)
     optionalDependencies:
       '@vercel/sandbox':
-        specifier: ^3.0.0
-        version: 3.0.0
+        specifier: ^3.3.0
+        version: 3.3.0
 
   harness/packages/kernel:
     dependencies:
@@ -228,6 +228,10 @@ importers:
       zod:
         specifier: ^4
         version: 4.4.3
+    optionalDependencies:
+      '@vercel/sandbox':
+        specifier: ^3.3.0
+        version: 3.3.0
     publishDirectory: dist/publish
 
   harness/packages/scanner:
@@ -1845,8 +1849,8 @@ packages:
     resolution: {integrity: sha512-FGNvVZ5pgX9FaBqkPt6VkYFZ6bWAMDzYi7nxW+1Xt+Z4fn5PuTULVwsxjKc+0uKhysyWBQmvsmM50Oh6C2/oMA==}
     engines: {node: '>= 20'}
 
-  '@vercel/sandbox@3.0.0':
-    resolution: {integrity: sha512-1pF3id7LIG2GfjkEAZW+ZngMDdywJw7aFLOyIlry/lj8v3b4GMn3WCuBbvG4N4wTmYUfFzHaVHfdwVpqALEFkw==}
+  '@vercel/sandbox@3.3.0':
+    resolution: {integrity: sha512-TclqRD2joExyECTrrHsioi3Onw20X2YfpOYEzs3JpJUtAjOKYw2bMeXldKrUg+TB/TT7tPdDu8uKNxj9NE7QUg==}
 
   '@vgpu/adapter-mock@0.3.1':
     resolution: {integrity: sha512-uZxTFPHLYd1nOxGxluvni50tsjnUTQ2eOhjJ/YwWynO7k906AD0byJxN0V6BbYb1MK/xM/EF+/cA8tKCrvY0yA==}
@@ -2983,6 +2987,9 @@ packages:
 
   loupe@3.2.1:
     resolution: {integrity: sha512-CdzqowRJCeLU72bHvWqwRBBlLcMEtIvGrlvef74kMnV2AolS9Y8xUv1I0U/MNAWMhBlKIoyuEgoJ0t/bbwHbLQ==}
+
+  lru-cache@10.4.3:
+    resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
@@ -5139,13 +5146,14 @@ snapshots:
       '@vercel/cli-exec': 1.0.1
       jose: 5.10.0
 
-  '@vercel/sandbox@3.0.0':
+  '@vercel/sandbox@3.3.0':
     dependencies:
       '@vercel/oidc': 3.2.0
       '@workflow/serde': 4.1.0-beta.2
       async-retry: 1.3.3
       jose: 6.2.3
       jsonlines: 0.1.1
+      lru-cache: 10.4.3
       ms: 2.1.3
       picocolors: 1.1.1
       tar-stream: 3.1.7
@@ -6456,6 +6464,9 @@ snapshots:
       js-tokens: 4.0.0
 
   loupe@3.2.1: {}
+
+  lru-cache@10.4.3:
+    optional: true
 
   lru-cache@5.1.1:
     dependencies:

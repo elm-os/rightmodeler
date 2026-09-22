@@ -48,6 +48,9 @@
     "vitest": "^3",
     "zod": "^4"
   },
+  "optionalDependencies": {
+    "@vercel/sandbox": "^3.3.0"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -29,6 +29,9 @@ const stubModuleUrl = new URL(
   "../../../fixtures/stub-provider/server.mjs",
   import.meta.url,
 ).href;
+const executorManifestPath = fileURLToPath(
+  new URL("../../executor/package.json", import.meta.url),
+);
 const temporaryDirectories: string[] = [];
 const execFileAsync = promisify(execFile);
 
@@ -116,6 +119,7 @@ describe("packed CLI bundle", () => {
         "--no-audit",
         "--no-fund",
         "--package-lock=false",
+        "--omit=optional",
         tarball,
       ],
       {
@@ -147,10 +151,28 @@ describe("packed CLI bundle", () => {
       await readFile(join(installedRoot, "package.json"), "utf8"),
     ) as {
       dependencies?: unknown;
+      optionalDependencies?: unknown;
       engines?: { node?: string };
       exports?: { "."?: { types?: string } };
     };
     expect(installedPackage.dependencies).toBeUndefined();
+    const executorManifest = JSON.parse(
+      await readFile(executorManifestPath, "utf8"),
+    ) as { optionalDependencies: { "@vercel/sandbox": string } };
+    expect(installedPackage.optionalDependencies).toEqual({
+      "@vercel/sandbox":
+        executorManifest.optionalDependencies["@vercel/sandbox"],
+    });
+    const installedCli = await readFile(
+      join(installedRoot, "dist-bundle/cli.js"),
+      "utf8",
+    );
+    expect(
+      installedCli.match(/import\("@vercel\/sandbox"\)/g) ?? [],
+    ).toHaveLength(1);
+    await expect(
+      access(join(project, "node_modules/@vercel/sandbox")),
+    ).rejects.toThrow();
     expect(installedPackage.engines?.node).toBe(">=24");
     expect(installedPackage.exports?.["."]?.types).toBe("./dist/cli.d.ts");
 
