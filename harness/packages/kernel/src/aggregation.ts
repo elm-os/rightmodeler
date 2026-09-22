@@ -31,6 +31,7 @@ export const ABSTAIN_REASONS = [
   "excluded_fraction_exceeded",
   "insufficient_review_trials",
   "insufficient_distinct_steps",
+  "bound_call_sites_not_replayable",
   "insufficient_distinct_trajectories",
   "holdout_below_floor_minimum",
   "missing_deterministic_evidence",
@@ -76,6 +77,7 @@ export interface AggregationFact {
   readonly evaluatorKind: string;
   readonly candidateCostUsd: number;
   readonly referenceCeilingMultiplier: number;
+  readonly traceBoundCallSites?: number;
   readonly unsafeSubstitution: boolean;
   readonly evidenceCovered: boolean;
   readonly expectedEvaluatorAssignments: readonly {
@@ -271,6 +273,10 @@ function aggregateGroup(
 ): FamilyVerdict {
   const first = facts[0]!;
   assertConsistentGroup(facts, first);
+  const distinctStepFloor =
+    first.traceBoundCallSites === undefined
+      ? MIN_DISTINCT_STEPS
+      : Math.min(MIN_DISTINCT_STEPS, first.traceBoundCallSites);
 
   const included = facts.filter(
     (fact) =>
@@ -365,6 +371,7 @@ function aggregateGroup(
   ).length;
   const abstainReason = findAbstainReason({
     evaluatorKinds,
+    distinctStepFloor,
     availability,
     availabilityFloor,
     requiresDeterministicEvidence: facts.some(
@@ -583,6 +590,7 @@ function aggregateAvailability(
 
 function findAbstainReason(input: {
   readonly evaluatorKinds: readonly EvaluatorKindVerdict[];
+  readonly distinctStepFloor: number;
   readonly availability: AvailabilityVerdict;
   readonly availabilityFloor: number;
   readonly requiresDeterministicEvidence: boolean;
@@ -608,11 +616,11 @@ function findAbstainReason(input: {
   const distinctSteps = Math.min(
     ...input.evaluatorKinds.map((kind) => kind.nDistinctSteps),
   );
-  if (distinctSteps < MIN_DISTINCT_STEPS) {
+  if (distinctSteps < input.distinctStepFloor) {
     return abstention(
       "insufficient_distinct_steps",
       distinctSteps,
-      MIN_DISTINCT_STEPS,
+      input.distinctStepFloor,
     );
   }
   const distinctTrajectories = Math.min(
@@ -877,6 +885,13 @@ function validateFact(fact: AggregationFact): void {
     );
   }
   if (
+    fact.traceBoundCallSites !== undefined &&
+    (!Number.isSafeInteger(fact.traceBoundCallSites) ||
+      fact.traceBoundCallSites < 1)
+  ) {
+    throw new RangeError("traceBoundCallSites must be a positive safe integer");
+  }
+  if (
     fact.assessmentAbsentReason !== undefined &&
     fact.assessmentAbsentReason.length === 0
   ) {
@@ -957,6 +972,7 @@ function assertConsistentGroup(
       fact.candidateFamily !== first.candidateFamily ||
       fact.candidateCostUsd !== first.candidateCostUsd ||
       fact.referenceCeilingMultiplier !== first.referenceCeilingMultiplier ||
+      fact.traceBoundCallSites !== first.traceBoundCallSites ||
       !sameStrings(
         fact.expectedEvaluatorAssignments
           .map((assignment) =>

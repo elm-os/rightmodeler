@@ -129,6 +129,7 @@ import {
   pollEvaluator,
   preferEvaluatorWhenReachable,
 } from "./evaluators/braintrust.js";
+import { bindFamily, traceStepKey } from "./family-binding.js";
 import {
   importCorpus,
   writeImportedCorpus,
@@ -209,6 +210,8 @@ const DEFAULT_QUALITY_FLOOR = 0.85;
 const AVAILABILITY_FLOOR = 0.7;
 const GATE_POLICY_BASE_VERSION = "phase-a-v3";
 const REPLAY_PROMPT_REVISION = "replay-prompt-v1";
+const SCAN_REVISION = "scan-trace-key-v1";
+const TRACE_BINDING_REVISION = "trace-key-v1";
 const TRACE_READER_REVISION = "ai-sdk-dialects-v1";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 
@@ -233,6 +236,16 @@ const reconcileOutputSchema = z.strictObject({
   ambiguousCallSites: z.number().int().nonnegative(),
   unmatchedCallSites: z.number().int().nonnegative(),
   ambiguityReasons: z.array(z.string()),
+  traceStepBindings: z
+    .array(
+      z.strictObject({
+        traceId: z.string().min(1),
+        stepIndex: z.number().int().nonnegative(),
+        stepIds: z.array(z.string().min(1)),
+        via: z.enum(["trajectory_position", "trace_key", "model"]).optional(),
+      }),
+    )
+    .default([]),
 });
 const ingestOutputSchema = z.strictObject({
   format: z.enum(traceAdapters.map(({ name }) => name)),
@@ -293,6 +306,7 @@ const familyPlanSchema = z.strictObject({
   abstainReason: z
     .strictObject({
       reason: z.enum([
+        "bound_call_sites_not_replayable",
         "holdout_below_floor_minimum",
         "insufficient_distinct_steps",
       ]),
@@ -300,6 +314,8 @@ const familyPlanSchema = z.strictObject({
       required: z.number().int().nonnegative(),
     })
     .optional(),
+  binding: z.literal("trace_key").optional(),
+  leftOutCases: z.number().int().positive().optional(),
 });
 const replayPlanSchema = z.strictObject({
   top: z.number().int().positive(),
@@ -768,7 +784,7 @@ async function planStages(
     ) &&
     stages.includes("shortlist")
   ) {
-    const records = (await loadReconcile(context)).records;
+    const reconciled = await loadReconcile(context);
     const corpus = await resolveCheckpointedPipelineCorpus(context);
     const approved =
       context.approvedRunSpecDigest === undefined
@@ -777,7 +793,9 @@ async function planStages(
     return {
       stages: result,
       policy: context.release.effective,
-      familyPlans: await planFamilies(context, corpus, records, approved),
+      familyPlans: (
+        await planFamilies(context, corpus, reconciled, approved)
+      ).map(({ plan }) => plan),
     };
   }
   return { stages: result, policy: context.release.effective };
@@ -2056,12 +2074,13 @@ async function inputDigest(
   state: SetupState,
 ): Promise<string | undefined> {
   if (stage === "scan") {
-    const repository = await contextRepositoryDigest(context);
-    if (context.matchersPath === undefined) return repository;
     return digest({
       stage,
-      repository,
-      matchers: sha256(await readFile(context.matchersPath)),
+      repository: await contextRepositoryDigest(context),
+      scanner: SCAN_REVISION,
+      ...(context.matchersPath === undefined
+        ? {}
+        : { matchers: sha256(await readFile(context.matchersPath)) }),
     });
   }
   if (stage === "ingest") {
@@ -2081,6 +2100,7 @@ async function inputDigest(
   const extra: Record<string, JsonValue> = {};
   if (stage === "reconcile") {
     extra.scan = await scanArtifactDigest(context, state);
+    extra.binding = TRACE_BINDING_REVISION;
     if (context.modeBConfig !== undefined) {
       extra.stepMap = context.modeBConfig.stepMap;
     }
@@ -2508,8 +2528,12 @@ async function executeReconcile(
   )
     ? ingestOutput.runs
         .filter(({ steps }) => steps.length === records.length)
-        .flatMap(({ steps }) => steps)
-    : ingestOutput.runs.flatMap(({ steps }) => steps);
+        .flatMap(({ traceId, steps }) =>
+          steps.map((step) => ({ ...step, traceId })),
+        )
+    : ingestOutput.runs.flatMap(({ traceId, steps }) =>
+        steps.map((step) => ({ ...step, traceId })),
+      );
   const result = reconcile(normalizedSteps, records);
   const reconciledRecords = result.callSites.map(
     ({ stepRecord }) => stepRecord,
@@ -2541,6 +2565,19 @@ async function executeReconcile(
         ),
       ),
     ],
+    traceStepBindings: result.traceSteps.map(
+      ({ normalizedStep, status, stepId, candidateStepIds, via }) => ({
+        traceId: normalizedStep.traceId,
+        stepIndex: normalizedStep.stepIndex,
+        stepIds:
+          status === "matched"
+            ? [stepId!]
+            : status === "ambiguous"
+              ? [...candidateStepIds!]
+              : [],
+        ...(via === undefined ? {} : { via }),
+      }),
+    ),
   });
   return key;
 }
@@ -2620,17 +2657,34 @@ async function executeAuditSample(
 async function planFamilies(
   context: PipelineContext,
   corpus: Corpus,
-  records: readonly StepRecord[],
+  reconciled: z.infer<typeof reconcileOutputSchema>,
   approved: ApprovedSwapSet | undefined,
-): Promise<FamilyPlan[]> {
-  const replayableSteps = records.filter(
-    (record) =>
-      !record.capabilityRequirements.includes("tools") &&
-      !record.capabilityRequirements.includes("structured_output"),
-  );
+): Promise<
+  Array<{
+    plan: FamilyPlan;
+    caseSteps: ReadonlyMap<string, string>;
+    unreplayableCases: number;
+  }>
+> {
+  const { records } = reconciled;
+  const replayable = (record: StepRecord): boolean =>
+    !record.capabilityRequirements.includes("tools") &&
+    !record.capabilityRequirements.includes("structured_output");
+  const replayableSteps = records.filter(replayable);
   if (replayableSteps.length === 0) {
     throw noReplayableCallSites();
   }
+  const sites = records.map((record) => ({
+    stepId: record.stepId,
+    ...(record.traceKey === undefined ? {} : { traceKey: record.traceKey }),
+    replayable: replayable(record),
+  }));
+  const bindings = new Map(
+    reconciled.traceStepBindings.map(
+      ({ traceId, stepIndex, stepIds }) =>
+        [traceStepKey(traceId, stepIndex), stepIds] as const,
+    ),
+  );
 
   const families = [
     ...new Set(corpus.cases.map(({ content }) => content.family)),
@@ -2654,11 +2708,16 @@ async function planFamilies(
       ({ familyId, requestIds }) => [familyId, requestIds] as const,
     ),
   );
-  const unusedSteps = new Set(replayableSteps.map(({ stepId }) => stepId));
+  const unusedSteps = new Set(
+    replayableSteps
+      .filter(({ traceKey }) => traceKey === undefined)
+      .map(({ stepId }) => stepId),
+  );
   return families.map((family) => {
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family,
     );
+    const keyed = records.some(({ traceKey }) => traceKey === family);
     const unused = replayableSteps.filter((record) =>
       unusedSteps.has(record.stepId),
     );
@@ -2673,36 +2732,50 @@ async function planFamilies(
             ...preferred,
             ...unused.filter((record) => !preferred.includes(record)),
           ].slice(0, MIN_DISTINCT_STEPS)
-        : approvedRecords(approved, family, unused);
+        : approvedRecords(approved, family, keyed ? replayableSteps : unused);
     if (approved !== undefined && assignedRecords.length === 0) {
       throw new Error(
         `No distinct replayable call site remains for family ${family}`,
       );
     }
-    const holdoutCases = familyCases.filter(
-      ({ split }) => split === "holdout",
-    ).length;
+    const binding = bindFamily({
+      family,
+      cases: familyCases.map((corpusCase) => ({
+        caseId: corpusCase.caseId,
+        split: corpusCase.split,
+        traceId: corpusCase.observation?.traceId,
+        stepIndex: corpusCase.content.stepIndex,
+      })),
+      sites: approved === undefined ? sites : [],
+      pathOrder: assignedRecords.map(({ stepId }) => stepId),
+      bindings,
+    });
     const abstainReason: FamilyPlan["abstainReason"] =
       approved !== undefined
         ? undefined
-        : holdoutCases < context.release.minimumHoldoutCases
+        : binding.kind === "trace_key" && binding.caseSteps.size === 0
           ? {
-              reason: "holdout_below_floor_minimum",
-              observed: holdoutCases,
-              required: context.release.minimumHoldoutCases,
+              reason: "bound_call_sites_not_replayable",
+              observed: 0,
+              required: familyCases.length,
             }
-          : assignedRecords.length < MIN_DISTINCT_STEPS
+          : binding.holdoutCases < context.release.minimumHoldoutCases
             ? {
-                reason: "insufficient_distinct_steps",
-                observed: assignedRecords.length,
-                required: MIN_DISTINCT_STEPS,
+                reason: "holdout_below_floor_minimum",
+                observed: binding.holdoutCases,
+                required: context.release.minimumHoldoutCases,
               }
-            : undefined;
-    const stepIds =
-      abstainReason === undefined
-        ? assignedRecords.map(({ stepId }) => stepId)
-        : [];
-    stepIds.forEach((stepId) => unusedSteps.delete(stepId));
+            : binding.stepIds.length < binding.requiredDistinctSteps
+              ? {
+                  reason: "insufficient_distinct_steps",
+                  observed: binding.stepIds.length,
+                  required: binding.requiredDistinctSteps,
+                }
+              : undefined;
+    const stepIds = abstainReason === undefined ? [...binding.stepIds] : [];
+    if (binding.kind === "path_order") {
+      stepIds.forEach((stepId) => unusedSteps.delete(stepId));
+    }
     const reproofRequestIds = reproofRequests.get(family) ?? [];
     const evidenceQuestionId = evidenceQuestionIdentity({
       corpusVersionId: corpus.corpusVersionId,
@@ -2713,13 +2786,21 @@ async function planFamilies(
       reproofRequestIds,
     });
     return {
-      familyId: family,
-      evidenceQuestionId,
-      cases: familyCases.length,
-      holdoutCases,
-      minimumHoldoutCases: context.release.minimumHoldoutCases,
-      stepIds,
-      ...(abstainReason === undefined ? {} : { abstainReason }),
+      plan: {
+        familyId: family,
+        evidenceQuestionId,
+        cases: familyCases.length,
+        holdoutCases: binding.holdoutCases,
+        minimumHoldoutCases: context.release.minimumHoldoutCases,
+        stepIds,
+        ...(abstainReason === undefined ? {} : { abstainReason }),
+        ...(keyed ? { binding: "trace_key" as const } : {}),
+        ...(binding.unreplayableCases > 0
+          ? { leftOutCases: binding.unreplayableCases }
+          : {}),
+      },
+      caseSteps: binding.caseSteps,
+      unreplayableCases: binding.unreplayableCases,
     };
   });
 }
@@ -2728,23 +2809,31 @@ async function executeShortlist(
   context: PipelineContext,
   inputDigestValue: string,
 ): Promise<string> {
-  const records = (await loadReconcile(context)).records;
+  const reconciled = await loadReconcile(context);
+  const { records } = reconciled;
   const runs = (await loadScrub(context)).runs;
   const corpus = await resolveCheckpointedPipelineCorpus(context);
   const approved =
     context.approvedRunSpecDigest === undefined
       ? undefined
       : await approvedSwapSetByDigest(context, context.approvedRunSpecDigest);
-  const familyPlans = await planFamilies(context, corpus, records, approved);
+  const planned = await planFamilies(context, corpus, reconciled, approved);
+  const familyPlans = planned.map(({ plan }) => plan);
   const recordById = new Map(records.map((record) => [record.stepId, record]));
   const usageByCase = replayUsageByCase(runs);
   const steps: Array<Omit<ReplayStep, "corpusSplit"> & { family: string }> = [];
   const cases: Array<RecordedCase & { family: string }> = [];
   const sampleSizes: Record<string, number> = {};
-  for (const familyPlan of familyPlans) {
+  for (const { plan: familyPlan, caseSteps, unreplayableCases } of planned) {
     const { familyId: family, evidenceQuestionId, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
     if (stepIds.length === 0) continue;
+    if (unreplayableCases > 0) {
+      context.reporter.warning(
+        "family_cases_left_out",
+        `Family ${family}: ${unreplayableCases} of ${familyPlan.cases} traced cases came from a call site that needs tools or structured output, which replay cannot run, and were left out of the replay sample.`,
+      );
+    }
     const assignedRecords = stepIds.map((stepId) => recordById.get(stepId)!);
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family,
@@ -2756,8 +2845,10 @@ async function executeShortlist(
     for (const split of ["shortlist", "holdout"] as const) {
       familyCases
         .filter((corpusCase) => corpusCase.split === split)
-        .forEach((corpusCase, index) => {
-          const step = assignedRecords[index % assignedRecords.length]!;
+        .forEach((corpusCase) => {
+          const stepId = caseSteps.get(corpusCase.caseId);
+          if (stepId === undefined) return;
+          const step = recordById.get(stepId)!;
           const contextTokens = requireReplayUsage(
             usageByCase,
             corpusCase,
@@ -4394,6 +4485,11 @@ async function materializeAggregationFacts(
   const selectedByStep = new Map(
     candidates.map((item) => [item.stepId, item.candidates]),
   );
+  const traceBound = new Map(
+    plan.familyPlans
+      .filter(({ binding }) => binding === "trace_key")
+      .map(({ familyId, stepIds }) => [familyId, stepIds.length]),
+  );
   const expectedAssignments = (
     family: string,
     candidateId: string,
@@ -4465,6 +4561,9 @@ async function materializeAggregationFacts(
         candidateCostUsd: blendedPrice(selected) ?? 0,
         referenceCeilingMultiplier: referenceCeilingFor(ceilings, family)
           .multiplier,
+        ...(traceBound.get(family) === undefined
+          ? {}
+          : { traceBoundCallSites: traceBound.get(family)! }),
         unsafeSubstitution: false,
         evidenceCovered: true,
         expectedEvaluatorAssignments: expectedAssignments(

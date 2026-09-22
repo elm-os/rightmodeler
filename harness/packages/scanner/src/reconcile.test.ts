@@ -4,7 +4,11 @@ import type { StepRecord } from "@rightmodeler/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { AMBIGUOUS_MODEL_ID_REASON, reconcile } from "./index.js";
+import {
+  AMBIGUOUS_MODEL_ID_REASON,
+  AMBIGUOUS_TRACE_KEY_REASON,
+  reconcile,
+} from "./index.js";
 
 const fixtureSpanSchema = z.object({
   traceId: z.string(),
@@ -15,7 +19,11 @@ const fixtureSpanSchema = z.object({
   }),
 });
 
-function step(stepId: string, currentModel: string | null): StepRecord {
+function step(
+  stepId: string,
+  currentModel: string | null,
+  traceKey?: string,
+): StepRecord {
   return {
     stepId,
     callSite: { path: `src/${stepId}.ts`, line: 1, matcherSlug: "model-call" },
@@ -26,6 +34,7 @@ function step(stepId: string, currentModel: string | null): StepRecord {
     capabilityRequirements: [],
     evaluatorLadder: [],
     currentModel,
+    ...(traceKey === undefined ? {} : { traceKey }),
     observedCostUsd: 0,
     downstreamStepIds: [],
     candidates: [],
@@ -152,5 +161,122 @@ describe("trace-to-call-site reconciliation", () => {
         prefixProvenance: "model_authored",
       },
     ]);
+  });
+
+  it("joins by trace key when call sites share a model", () => {
+    const result = reconcile(
+      [
+        { model: "acme/shared", family: "summarize" },
+        { model: "acme/shared", family: "triage" },
+      ],
+      [
+        step("summarize", "acme/shared", "summarize"),
+        step("triage", "acme/shared", "triage"),
+      ],
+    );
+
+    expect(
+      result.traceSteps.map(({ status, stepId, via }) => ({
+        status,
+        stepId,
+        via,
+      })),
+    ).toEqual([
+      { status: "matched", stepId: "summarize", via: "trace_key" },
+      { status: "matched", stepId: "triage", via: "trace_key" },
+    ]);
+    expect(result.callSites.map(({ status }) => status)).toEqual([
+      "matched",
+      "matched",
+    ]);
+  });
+
+  it("narrows a shared trace key by model", () => {
+    const result = reconcile(
+      [{ model: "b", family: "summarize" }],
+      [step("first", "a", "summarize"), step("second", "b", "summarize")],
+    );
+
+    expect(result.traceSteps).toEqual([
+      expect.objectContaining({
+        status: "matched",
+        stepId: "second",
+        via: "trace_key",
+      }),
+    ]);
+  });
+
+  it("keeps a shared trace key ambiguous when the model does not separate them", () => {
+    const result = reconcile(
+      [{ model: "acme/shared", family: "summarize" }],
+      [
+        step("first", "acme/shared", "summarize"),
+        step("second", "acme/shared", "summarize"),
+      ],
+    );
+
+    expect(result.ambiguousTraceSteps).toEqual([
+      expect.objectContaining({
+        reason: AMBIGUOUS_TRACE_KEY_REASON,
+        candidateStepIds: ["first", "second"],
+        via: "trace_key",
+      }),
+    ]);
+    expect(
+      result.ambiguousCallSites.map(({ stepRecord, reason }) => ({
+        stepId: stepRecord.stepId,
+        reason,
+      })),
+    ).toEqual([
+      { stepId: "first", reason: AMBIGUOUS_TRACE_KEY_REASON },
+      { stepId: "second", reason: AMBIGUOUS_TRACE_KEY_REASON },
+    ]);
+  });
+
+  it("falls back to the model join for a family with no keyed call site", () => {
+    const result = reconcile(
+      [{ model: "acme/other", family: "unclassified" }],
+      [
+        step("summarize", "acme/shared", "summarize"),
+        step("other", "acme/other"),
+      ],
+    );
+
+    expect(result.traceSteps).toEqual([
+      expect.objectContaining({
+        status: "matched",
+        stepId: "other",
+        via: "model",
+      }),
+    ]);
+  });
+
+  it("enriches a call site bound by trace key from its own trajectories", () => {
+    const result = reconcile(
+      [
+        {
+          model: "acme/shared",
+          family: "summarize",
+          trajectoryId: "trace-1",
+          stepIndex: 0,
+        },
+        {
+          model: "acme/shared",
+          family: "triage",
+          trajectoryId: "trace-1",
+          stepIndex: 1,
+        },
+      ],
+      [
+        step("summarize", "acme/shared", "summarize"),
+        step("triage", "acme/shared", "triage"),
+      ],
+    );
+
+    expect(result.callSites[0]?.stepRecord).toMatchObject({
+      stepId: "summarize",
+      downstreamStepIds: ["triage"],
+      prefixProvenance: "external",
+    });
   });
 });

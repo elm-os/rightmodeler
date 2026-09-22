@@ -50,6 +50,7 @@ describe("aggregate", () => {
   it("exports orchestration evidence gaps as typed abstention reasons", () => {
     expect(ABSTAIN_REASONS).toEqual(
       expect.arrayContaining([
+        "bound_call_sites_not_replayable",
         "selection_candidate_verdict_missing",
         "selection_missing_shortlist_verdicts",
         "replay_operational_block",
@@ -465,6 +466,82 @@ describe("aggregate", () => {
         required: scenario.minimum,
       },
     });
+  });
+
+  it("recommends a family bound by trace key to one call site", () => {
+    const [verdict] = aggregate(
+      aggregationFacts(20, { stepId: "only-step", traceBoundCallSites: 1 }),
+      options,
+    );
+
+    expect(verdict).toMatchObject({ decision: "recommend" });
+    expect(verdict?.evaluatorKinds[0]?.nDistinctSteps).toBe(1);
+  });
+
+  it("still abstains an unbound single-step family on distinct steps", () => {
+    const [verdict] = aggregate(
+      aggregationFacts(20, { stepId: "only-step" }),
+      options,
+    );
+
+    expect(verdict).toMatchObject({
+      decision: "abstain",
+      abstainReason: {
+        reason: "insufficient_distinct_steps",
+        observed: 1,
+        required: 2,
+      },
+    });
+  });
+
+  it("caps the bound floor at two", () => {
+    const [verdict] = aggregate(
+      aggregationFacts(20, { stepId: "only-step", traceBoundCallSites: 3 }),
+      options,
+    );
+
+    expect(verdict).toMatchObject({
+      decision: "abstain",
+      abstainReason: {
+        reason: "insufficient_distinct_steps",
+        observed: 1,
+        required: 2,
+      },
+    });
+  });
+
+  it("requires two steps when two call sites are bound", () => {
+    const [verdict] = aggregate(
+      aggregationFacts(20, { stepId: "only-step", traceBoundCallSites: 2 }),
+      options,
+    );
+
+    expect(verdict).toMatchObject({
+      decision: "abstain",
+      abstainReason: {
+        reason: "insufficient_distinct_steps",
+        observed: 1,
+        required: 2,
+      },
+    });
+  });
+
+  it("rejects a non-positive bound call-site count", () => {
+    for (const traceBoundCallSites of [0, 1.5]) {
+      expect(() =>
+        aggregate(aggregationFacts(20, { traceBoundCallSites }), options),
+      ).toThrow(RangeError);
+    }
+  });
+
+  it("rejects mixed bound call-site counts in one evidence question", () => {
+    const facts = aggregationFacts(2, (index) => ({
+      traceBoundCallSites: index + 1,
+    }));
+
+    expect(() => aggregate(facts, options)).toThrow(
+      "inconsistent materialization",
+    );
   });
 
   it("abstains when a family requires deterministic evidence and has none", () => {
