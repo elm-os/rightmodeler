@@ -1,6 +1,8 @@
 {
   "slug": "helicone",
   "name": "Helicone",
+  "website": "https://www.helicone.ai",
+  "logo": "/integrations/logos/helicone.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "Helicone integration: replay requests on cheaper models",
@@ -27,7 +29,7 @@
     {
       "label": "04 · Report + apply",
       "title": "A report, then a pull request you review",
-      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else and cites case-id hashes rather than case content. watch reconciles that pull request against CI and review comments, and rollback restores the pre-apply files, refusing unless every restored digest matches what was recorded."
+      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else and cites case-id hashes rather than case content. watch reconciles that pull request against CI and review comments, and rollback restores the pre-apply files, refusing unless every restored digest matches what was recorded."
     }
   ],
   "setup": {

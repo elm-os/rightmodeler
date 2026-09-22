@@ -55,9 +55,17 @@ export type VsPageData = {
   slug: string;
   /** Display name, e.g. "OpenRouter". Feeds "rightmodeler vs <name>", hub cards, related links. */
   name: string;
+  /** The vendor's official site, linked from the hero and the Markdown twin. Must be https://. */
+  website: string;
+  /**
+   * Official mark shown on the hub card: a file under public/vs/logos or public/integrations/logos
+   * (reuse the integration's mark when one exists), e.g. "/integrations/logos/openrouter.svg".
+   */
+  logo: string;
   /**
    * Which hub band the page belongs to; presentation only.
-   * One of: "gateway" (The rails) | "evals" (The graders) | "router" (The routers).
+   * One of: "gateway" (The rails) | "evals" (The graders) | "router" (The routers) |
+   * "spend" (The meters) | "training" (The trainers) | "benchmarks" (The scorekeepers).
    */
   category: string;
   /**

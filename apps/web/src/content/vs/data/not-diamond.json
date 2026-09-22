@@ -1,6 +1,8 @@
 {
   "slug": "not-diamond",
   "name": "Not Diamond",
+  "website": "https://www.notdiamond.ai",
+  "logo": "/vs/logos/not-diamond.svg",
   "category": "router",
   "verdict": "competitor",
   "verdictLabel": "Different clock · prediction vs measurement",
@@ -9,7 +11,7 @@
   "h1": "rightmodeler vs Not Diamond",
   "lede": "Both refuse to be your gateway, from opposite ends. Not Diamond makes a live prediction and hands the call back to your provider; rightmodeler never sees a live request: it measures your accepted traces (the logged record of what your agent already did) offline and hands your team a per-step verdict to approve.",
   "integrationSlug": "",
-  "related": ["openrouter", "martian", "litellm"],
+  "related": ["openrouter", "martian", "litellm", "riften"],
   "cta": "github",
   "blocks": [
     {

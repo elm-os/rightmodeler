@@ -1,10 +1,12 @@
 {
   "slug": "claude-code",
   "name": "Claude Code",
+  "website": "https://claude.com/product/claude-code",
+  "logo": "/integrations/logos/claude-code.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "Claude Code integration: replay sessions on cheaper models",
-  "description": "Point rightmodeler at ~/.claude/projects: it replays every session turn through cheaper models and measures each against the output you accepted.",
+  "description": "Point rightmodeler at ~/.claude/projects: it reads your sessions as traces and measures cheaper models against the output you accepted, step by step.",
   "h1": "rightmodeler + Claude Code",
   "lede": "rightmodeler runs inside the tool that wrote the traces. Claude Code already keeps every session on disk, so the audit starts with no export step, no SDK, and no re-instrumentation.",
   "tldr": "Claude Code writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter recognizes the transcript by its type, sessionId, uuid, parentUuid, and message keys, joins the rows of one assistant message back together, walks parentUuid up to collect the user turns that prompted it, and folds each assistant message into a step with its own token usage. Those steps are then replayed against cheaper candidates and scored against the answer you accepted.",
@@ -27,7 +29,7 @@
     {
       "label": "04 · Report + apply",
       "title": "A per-step report, then a pull request",
-      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
+      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
@@ -98,6 +100,7 @@
   ],
   "limits": [
     "It reads the JSONL session logs already on disk; it does not watch live sessions, and it never changes which model Claude Code uses. Acting on the report stays your decision.",
+    "Replay needs plain-text model call sites in the repository it scans; session files are read as traces, and the audit is built for the model calls your own code makes.",
     "An assistant message has to carry a message id, a model, and a usage object. Rows missing any of those are dropped with a recorded reason rather than guessed at, and a message that changed model between rows is dropped too.",
     "Claude Code logs token counts, including cache reads and writes, but no dollar cost. Historical spend is not derived from them; candidate calls are priced from what your replay endpoint reports.",
     "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Coding sessions are dense, so a short session usually abstains for want of distinct trajectories rather than producing a thin recommendation.",

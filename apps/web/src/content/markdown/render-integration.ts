@@ -6,7 +6,18 @@ import type { IntegrationData } from "@/content/integrations/types";
 import { SKILL_COMMAND } from "@/lib/site";
 
 export function renderIntegrationMarkdown(data: IntegrationData): string {
-  const lines = [`# ${data.h1}`, "", data.lede, "", data.tldr, ""];
+  const lines = [
+    `# ${data.h1}`,
+    "",
+    data.lede,
+    "",
+    data.categoryLabel,
+    "",
+    `Official site: ${data.website}`,
+    "",
+    data.tldr,
+    "",
+  ];
 
   if (data.steps.length > 0) {
     lines.push(`## How it works with ${data.name}`, "");
