@@ -68,6 +68,7 @@ const promptfooCommandPath = fileURLToPath(
 const promptfooAssertionsPath = fileURLToPath(
   new URL("../../../fixtures/promptfoo-stub/assertions.yaml", import.meta.url),
 );
+const livePromptfoo = process.env.RIGHTMODELER_LIVE_PROMPTFOO;
 const stubModuleUrl = new URL(
   "../../../fixtures/stub-provider/server.mjs",
   import.meta.url,
@@ -3373,6 +3374,171 @@ describe("built CLI pipeline", () => {
       await modelStub.close();
     }
   }, 60_000);
+
+  it("records promptfoo grades of rewritten output as external_output_mismatch without an Assessment fact", async () => {
+    const { repo } = await fixtureCopy("promptfoo-output-mismatch");
+    const modelStub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "aggregate",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${modelStub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_API_KEY",
+          "--evaluator",
+          "promptfoo",
+          "--evaluator-command",
+          promptfooCommandPath,
+          "--evaluator-config",
+          promptfooAssertionsPath,
+          "--evaluator-scorer",
+          "output_similarity",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        {
+          env: {
+            RIGHTMODELER_E2E_API_KEY: secret,
+            PROMPTFOO_STUB_FAULT: "rewrite-output",
+          },
+        },
+      );
+      expect(result.code, result.stderr).toBe(0);
+      const verdicts = jsonOutput(result).verdicts as Array<{
+        familyId: string;
+        assessmentAbsent: number;
+        assessmentAbsentReasons: Array<{ reason: string; count: number }>;
+      }>;
+      const summarizeVerdicts = verdicts.filter(
+        ({ familyId }) => familyId === "summarize",
+      );
+      expect(summarizeVerdicts.length).toBeGreaterThan(0);
+      expect(
+        summarizeVerdicts.every(({ assessmentAbsent }) => assessmentAbsent > 0),
+      ).toBe(true);
+      expect(
+        summarizeVerdicts.flatMap(({ assessmentAbsentReasons }) =>
+          assessmentAbsentReasons.map(({ reason }) => reason),
+        ),
+      ).toEqual(expect.arrayContaining(["external_output_mismatch"]));
+
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const facts = await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      );
+      expect(
+        facts.some(
+          (fact) =>
+            typeof fact === "object" && fact !== null && "assessmentId" in fact,
+        ),
+      ).toBe(false);
+    } finally {
+      await modelStub.close();
+    }
+  }, 60_000);
+
+  it.skipIf(livePromptfoo === undefined)(
+    "grades replays with the real promptfoo CLI against the stub provider",
+    async () => {
+      const { root, repo } = await fixtureCopy("promptfoo-live");
+      const promptfooConfigDir = join(root, "promptfoo-config");
+      const version = (
+        await execFileAsync(livePromptfoo!, ["--version"], {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            PROMPTFOO_CONFIG_DIR: promptfooConfigDir,
+            PROMPTFOO_DISABLE_UPDATE: "true",
+          },
+        })
+      ).stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .at(-1)!;
+      const modelStub = await startStub();
+      try {
+        const result = await runCli(
+          [
+            "init",
+            "--through",
+            "aggregate",
+            "--traces",
+            tracesPath,
+            "--base-url",
+            `http://127.0.0.1:${modelStub.port}/v1`,
+            "--api-key-env",
+            "RIGHTMODELER_E2E_API_KEY",
+            "--evaluator",
+            "promptfoo",
+            "--evaluator-command",
+            livePromptfoo!,
+            "--evaluator-config",
+            promptfooAssertionsPath,
+            "--evaluator-scorer",
+            "output_similarity",
+            "--output",
+            "json",
+            "--repo",
+            repo,
+          ],
+          {
+            env: {
+              RIGHTMODELER_E2E_API_KEY: secret,
+              PROMPTFOO_CONFIG_DIR: promptfooConfigDir,
+              PROMPTFOO_FAILED_TEST_EXIT_CODE: "1",
+              PROMPTFOO_STRIP_RESPONSE_OUTPUT: "true",
+            },
+          },
+        );
+        expect(result.code, result.stderr).toBe(0);
+        const verdicts = jsonOutput(result).verdicts as Array<{
+          evaluatorKinds: Array<{ evaluatorKind: string }>;
+        }>;
+        expect(
+          verdicts.flatMap(({ evaluatorKinds }) =>
+            evaluatorKinds.map(({ evaluatorKind }) => evaluatorKind),
+          ),
+        ).toEqual(expect.arrayContaining(["promptfoo"]));
+
+        const store = new FsStore(join(repo, ".rightmodeler"));
+        const facts = (await Promise.all(
+          (await store.list(factsPrefix("project"))).map(async (key) =>
+            JSON.parse(await storeText(store, key)),
+          ),
+        )) as Array<Record<string, unknown>>;
+        const assessments = facts.filter(
+          (fact) =>
+            typeof fact.assessmentId === "string" &&
+            fact.evaluatorId === "promptfoo",
+        );
+        expect(assessments.length).toBeGreaterThan(0);
+        const rubricVersion = new RegExp(
+          `^promptfoo@${version.replaceAll(".", "\\.")}/output_similarity/[0-9a-f]{16}$`,
+          "u",
+        );
+        for (const assessment of assessments) {
+          expect(assessment.passed).toBe(false);
+          expect(assessment.rubricVersion).toMatch(rubricVersion);
+        }
+        expect(
+          facts.some((fact) => "actor" in fact && fact.actor === "judge"),
+        ).toBe(false);
+      } finally {
+        await modelStub.close();
+      }
+    },
+    120_000,
+  );
 
   it.skipIf(skipDocker)(
     "runs Mode B confirmation, isolates the interacting pair, and resumes from its frontier",

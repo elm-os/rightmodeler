@@ -6418,7 +6418,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve13.call(this, root, ref);
+      let _sch = resolve14.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -6445,7 +6445,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve13(root, ref) {
+    function resolve14(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -7076,55 +7076,55 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve13(baseURI, relativeURI, options) {
+    function resolve14(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative9, options, skipNormalization) {
+    function resolveComponent(base, relative10, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse3(serialize(base, options), options);
-        relative9 = parse3(serialize(relative9, options), options);
+        relative10 = parse3(serialize(relative10, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative9.scheme) {
-        target.scheme = relative9.scheme;
-        target.userinfo = relative9.userinfo;
-        target.host = relative9.host;
-        target.port = relative9.port;
-        target.path = removeDotSegments(relative9.path || "");
-        target.query = relative9.query;
+      if (!options.tolerant && relative10.scheme) {
+        target.scheme = relative10.scheme;
+        target.userinfo = relative10.userinfo;
+        target.host = relative10.host;
+        target.port = relative10.port;
+        target.path = removeDotSegments(relative10.path || "");
+        target.query = relative10.query;
       } else {
-        if (relative9.userinfo !== void 0 || relative9.host !== void 0 || relative9.port !== void 0) {
-          target.userinfo = relative9.userinfo;
-          target.host = relative9.host;
-          target.port = relative9.port;
-          target.path = removeDotSegments(relative9.path || "");
-          target.query = relative9.query;
+        if (relative10.userinfo !== void 0 || relative10.host !== void 0 || relative10.port !== void 0) {
+          target.userinfo = relative10.userinfo;
+          target.host = relative10.host;
+          target.port = relative10.port;
+          target.path = removeDotSegments(relative10.path || "");
+          target.query = relative10.query;
         } else {
-          if (!relative9.path) {
+          if (!relative10.path) {
             target.path = base.path;
-            if (relative9.query !== void 0) {
-              target.query = relative9.query;
+            if (relative10.query !== void 0) {
+              target.query = relative10.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative9.path[0] === "/") {
-              target.path = removeDotSegments(relative9.path);
+            if (relative10.path[0] === "/") {
+              target.path = removeDotSegments(relative10.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative9.path;
+                target.path = "/" + relative10.path;
               } else if (!base.path) {
-                target.path = relative9.path;
+                target.path = relative10.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative9.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative10.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative9.query;
+            target.query = relative10.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -7132,7 +7132,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative9.fragment;
+      target.fragment = relative10.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -7340,7 +7340,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve13,
+      resolve: resolve14,
       resolveComponent,
       equal,
       serialize,
@@ -10591,7 +10591,7 @@ var require__ = __commonJS({
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { resolve as resolve12 } from "node:path";
+import { resolve as resolve13 } from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
@@ -10618,7 +10618,7 @@ import { createHash as createHash11 } from "node:crypto";
 import { readFileSync as readFileSync6 } from "node:fs";
 import { mkdir as mkdir5, readFile as readFile10, readdir as readdir4, stat as stat2, writeFile as writeFile6 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
-import { dirname as dirname6, join as join15, relative as relative6, resolve as resolve7, sep as sep4 } from "node:path";
+import { dirname as dirname7, join as join15, relative as relative7, resolve as resolve8, sep as sep4 } from "node:path";
 import { promisify as promisify6 } from "node:util";
 
 // ../core/dist/catalog.js
@@ -28006,7 +28006,7 @@ function createDockerExecutor(options) {
           return;
         if (attempt === 3)
           break;
-        await new Promise((resolve13) => setTimeout(resolve13, 1e3));
+        await new Promise((resolve14) => setTimeout(resolve14, 1e3));
       }
     }
     await runDocker(["rm", "--force", handle]).catch(() => void 0);
@@ -28716,10 +28716,10 @@ var AdaptiveLimiter = class {
       this.active += 1;
       return Promise.resolve(this.sequence++);
     }
-    return new Promise((resolve13) => {
+    return new Promise((resolve14) => {
       this.waiters.push(() => {
         this.active += 1;
-        resolve13(this.sequence++);
+        resolve14(this.sequence++);
       });
     });
   }
@@ -28797,7 +28797,7 @@ function retryDelay(response, attempt) {
   return backoffDelay(attempt);
 }
 function sleep(milliseconds) {
-  return new Promise((resolve13) => setTimeout(resolve13, milliseconds));
+  return new Promise((resolve14) => setTimeout(resolve14, milliseconds));
 }
 function isRetryable(status) {
   return status === 408 || status === 409 || status === 429 || status >= 500;
@@ -29585,7 +29585,7 @@ async function replayModeA(input) {
           if (refunds.length > 0) {
             await Promise.race(refunds);
           } else {
-            await new Promise((resolve13) => setTimeout(resolve13, retryMs));
+            await new Promise((resolve14) => setTimeout(resolve14, retryMs));
             retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
           }
           continue;
@@ -29604,8 +29604,8 @@ async function replayModeA(input) {
       }
     }
     let resolveRefund = () => void 0;
-    const refundComplete = new Promise((resolve13) => {
-      resolveRefund = resolve13;
+    const refundComplete = new Promise((resolve14) => {
+      resolveRefund = resolve14;
     });
     activeRefunds.add(refundComplete);
     let heartbeatFailure;
@@ -29780,8 +29780,8 @@ function redactCredential(body, credential) {
   return Buffer.from(body.toString("utf8").split(credential).join("[REDACTED]"), "utf8");
 }
 function close(server) {
-  return new Promise((resolve13, reject) => {
-    server.close((error51) => error51 === void 0 ? resolve13() : reject(error51));
+  return new Promise((resolve14, reject) => {
+    server.close((error51) => error51 === void 0 ? resolve14() : reject(error51));
   });
 }
 async function startEgressListener(options) {
@@ -29849,9 +29849,9 @@ async function startEgressListener(options) {
     incoming.pipe(upstream);
   });
   const hostname5 = options.hostname ?? "0.0.0.0";
-  await new Promise((resolve13, reject) => {
+  await new Promise((resolve14, reject) => {
     server.once("error", reject);
-    server.listen(options.port ?? 0, hostname5, resolve13);
+    server.listen(options.port ?? 0, hostname5, resolve14);
   });
   const address = server.address();
   return {
@@ -30020,11 +30020,11 @@ function validatePricing(steps, policy, table) {
   }
 }
 function createWaiter() {
-  let resolve13 = () => void 0;
+  let resolve14 = () => void 0;
   const promise2 = new Promise((done) => {
-    resolve13 = done;
+    resolve14 = done;
   });
-  return { promise: promise2, resolve: resolve13 };
+  return { promise: promise2, resolve: resolve14 };
 }
 async function reserveCase(input, activeRefunds, worstCaseUsd) {
   for (; ; ) {
@@ -30129,7 +30129,7 @@ async function waitForExit(executor, handle, timeoutMs) {
     if (Date.now() >= deadline) {
       throw new Error(`Container ${handle} did not exit within ${timeoutMs + EXIT_GRACE_MS} ms`);
     }
-    await new Promise((resolve13) => setTimeout(resolve13, EXIT_POLL_INTERVAL_MS));
+    await new Promise((resolve14) => setTimeout(resolve14, EXIT_POLL_INTERVAL_MS));
   }
 }
 function textFiles(collected) {
@@ -35279,7 +35279,7 @@ function transientDelay(attempt) {
   return Math.random() * Math.min(maxRetryDelayMs, transientBaseDelayMs * 2 ** (attempt - 1));
 }
 function sleep2(milliseconds) {
-  return new Promise((resolve13) => setTimeout(resolve13, milliseconds));
+  return new Promise((resolve14) => setTimeout(resolve14, milliseconds));
 }
 function parseJson(text, label) {
   try {
@@ -37418,14 +37418,14 @@ function formatterCommand(repoDir, formatter) {
   return null;
 }
 function runFormatter(command, filePath, cwd, input) {
-  return new Promise((resolve13, reject) => {
+  return new Promise((resolve14, reject) => {
     const child = execFile2(
       command.executable,
       command.args(filePath),
       { cwd, encoding: "utf8" },
       (error51, stdout) => {
         if (error51 !== null) reject(error51);
-        else resolve13(command.stdin ? stdout : null);
+        else resolve14(command.stdin ? stdout : null);
       }
     );
     if (command.stdin) child.stdin?.end(input);
@@ -40059,7 +40059,7 @@ async function pollEvaluator(evaluator, providerRunId) {
     const remaining = EVALUATOR_POLL_BUDGET_MS - (Date.now() - startedAt);
     if (remaining <= 0) return "polling_exhausted";
     await new Promise(
-      (resolve13) => setTimeout(resolve13, Math.min(delay, remaining))
+      (resolve14) => setTimeout(resolve14, Math.min(delay, remaining))
     );
     delay = Math.min(delay * 2, maxPollDelayMs);
   }
@@ -40440,8 +40440,289 @@ function providerName(provider) {
   return provider === "langsmith" ? "LangSmith" : provider === "langfuse" ? "Langfuse" : "Braintrust";
 }
 
-// src/evaluators/langfuse.ts
+// src/evaluators/promptfoo.ts
+import { execFile as execFile6 } from "node:child_process";
 import { createHash as createHash6 } from "node:crypto";
+import { mkdtemp as mkdtemp3, readFile as readFile9, realpath as realpath3, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname as dirname6, join as join14, relative as relative6, resolve as resolve7 } from "node:path";
+import { promisify as promisify5 } from "node:util";
+var PROMPTFOO_VERIFIED_VERSION = "0.123.1";
+var PROMPTFOO_EVAL_FLAGS = [
+  "--no-write",
+  "--no-share",
+  "--no-table",
+  "--no-progress-bar"
+];
+var PROMPTFOO_ENV = {
+  PROMPTFOO_DISABLE_UPDATE: "true",
+  PROMPTFOO_DISABLE_VAR_EXPANSION: "true",
+  PROMPTFOO_FAILED_TEST_EXIT_CODE: "100",
+  PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: "false",
+  PROMPTFOO_STRIP_GRADING_RESULT: "false",
+  PROMPTFOO_STRIP_RESPONSE_OUTPUT: "false",
+  PROMPTFOO_STRIP_TEST_VARS: "false"
+};
+var execFileAsync5 = promisify5(execFile6);
+var promptfooMetadataSchema = external_exports.object({
+  promptfooVersion: external_exports.string().min(1)
+});
+var promptfooResultsFileSchema = external_exports.object({
+  evalId: external_exports.string().nullable(),
+  metadata: promptfooMetadataSchema,
+  results: external_exports.object({
+    version: external_exports.literal(3),
+    results: external_exports.array(
+      external_exports.object({
+        testIdx: external_exports.number().int().nonnegative(),
+        failureReason: external_exports.number().int(),
+        vars: external_exports.object({ tags: external_exports.string().optional() }),
+        response: external_exports.object({ output: external_exports.unknown() }).nullable().optional(),
+        gradingResult: external_exports.object({
+          namedScores: external_exports.record(external_exports.string(), external_exports.number()).optional(),
+          componentResults: external_exports.array(
+            external_exports.object({
+              pass: external_exports.boolean(),
+              assertion: external_exports.record(external_exports.string(), jsonValueSchema).nullable().optional()
+            })
+          ).optional()
+        }).nullable().optional()
+      })
+    )
+  })
+});
+function parsePromptfooResults(input) {
+  const file2 = parsePromptfooResultsFile(input.text);
+  const promptfooVersion = file2.metadata.promptfooVersion;
+  const rows = [...file2.results.results].sort(
+    (left, right) => left.testIdx - right.testIdx
+  );
+  const seen = /* @__PURE__ */ new Set();
+  for (const row of rows) {
+    if (row.testIdx >= input.sent.length || seen.has(row.testIdx) || row.vars.tags !== input.sent[row.testIdx].caseId) {
+      throw new Error(
+        `promptfoo's rows do not correspond one to one with the outputs sent (row testIdx ${row.testIdx}); a repeat setting in a promptfooconfig next to the assertions file is the usual cause.`
+      );
+    }
+    seen.add(row.testIdx);
+  }
+  const graded = [];
+  const cases = rows.flatMap((row) => {
+    const { caseId, output } = input.sent[row.testIdx];
+    const testIdx = row.testIdx;
+    if (row.failureReason !== 0 && row.failureReason !== 1) {
+      return [
+        {
+          caseId,
+          testIdx,
+          metrics: [],
+          absentReason: "external_evaluator_error"
+        }
+      ];
+    }
+    if (row.response?.output !== output.replace(/\n$/u, "")) {
+      return [
+        {
+          caseId,
+          testIdx,
+          metrics: [],
+          absentReason: "external_output_mismatch"
+        }
+      ];
+    }
+    const grading = row.gradingResult;
+    const namedScores = grading?.namedScores;
+    if (namedScores === void 0) return [];
+    graded.push(namedScores);
+    const metrics = input.scorers.flatMap((scorer) => {
+      const score = namedScores[scorer];
+      const components = (grading?.componentResults ?? []).filter(
+        ({ assertion }) => assertion?.metric === scorer
+      );
+      if (score === void 0 || components.length === 0) return [];
+      const digest2 = computeRunSpecDigest(
+        components.map(({ assertion }) => assertion)
+      ).slice(0, 16);
+      return [
+        {
+          metricName: scorer,
+          score,
+          passed: components.every(({ pass }) => pass),
+          rubricVersion: `promptfoo@${promptfooVersion}/${scorer}/${digest2}`
+        }
+      ];
+    });
+    return [{ caseId, testIdx, metrics }];
+  });
+  const missing = graded.length === 0 ? void 0 : input.scorers.find(
+    (scorer) => graded.every((namedScores) => namedScores[scorer] === void 0)
+  );
+  if (missing !== void 0) {
+    throw new Error(
+      `promptfoo assertions produce no "${missing}" metric; add metric: ${missing} to an assertion in the --evaluator-config file, or drop --evaluator-scorer ${missing}, then rerun.`
+    );
+  }
+  return { evalId: file2.evalId, promptfooVersion, cases };
+}
+function parsePromptfooResultsFile(text) {
+  let json3;
+  try {
+    json3 = JSON.parse(text);
+  } catch {
+    json3 = void 0;
+  }
+  const parsed2 = promptfooResultsFileSchema.safeParse(json3);
+  if (parsed2.success) return parsed2.data;
+  const stated = external_exports.object({ metadata: promptfooMetadataSchema }).safeParse(json3);
+  const found = stated.success ? stated.data.metadata.promptfooVersion : "(version not stated in the file)";
+  throw new Error(
+    `promptfoo ${found} wrote a results file rightmodeler cannot read: expected the promptfoo ${PROMPTFOO_VERIFIED_VERSION} layout, results.version 3 with one row per model output in results.results and the version in metadata.promptfooVersion. Install promptfoo ${PROMPTFOO_VERIFIED_VERSION} (npm install -g promptfoo@${PROMPTFOO_VERIFIED_VERSION}) or pass its executable with --evaluator-command, then rerun.`
+  );
+}
+function resolvePromptfooEvaluatorConfig(config2) {
+  return {
+    command: requireText(config2.command, "Promptfoo evaluator command"),
+    assertionsPath: requireText(
+      config2.assertionsPath,
+      "Promptfoo evaluator assertionsPath"
+    ),
+    ...resolveScoringConfig(config2)
+  };
+}
+function createPromptfooEvaluator(input) {
+  const config2 = resolvePromptfooEvaluatorConfig(input);
+  const command = /[\\/]/u.test(config2.command) ? resolve7(config2.command) : config2.command;
+  const assertionsPath = resolve7(config2.assertionsPath);
+  const results = /* @__PURE__ */ new Map();
+  return {
+    id: "promptfoo",
+    async detectAvailability() {
+      return (await runPromptfoo(command, ["--version"], dirname6(assertionsPath))).code === 0;
+    },
+    async launch(input2) {
+      const providerRunId = createHash6("sha256").update(
+        JSON.stringify({
+          experimentName: input2.experimentName,
+          caseIds: input2.cases.map(({ caseId }) => caseId)
+        })
+      ).digest("hex");
+      const sent = input2.cases.map(({ caseId, output }) => ({
+        caseId,
+        output: typeof output === "string" ? output : JSON.stringify(output)
+      }));
+      const cwd = await realpath3(dirname6(assertionsPath));
+      const directory = await realpath3(
+        await mkdtemp3(join14(tmpdir(), "rightmodeler-promptfoo-"))
+      );
+      const modelOutputsPath = join14(directory, "model-outputs.json");
+      const resultsPath = join14(directory, "results.json");
+      try {
+        await writeFile5(
+          modelOutputsPath,
+          JSON.stringify(
+            sent.map(({ caseId, output }) => ({ output, tags: [caseId] }))
+          ),
+          "utf8"
+        );
+        const { code, stderr } = await runPromptfoo(
+          command,
+          [
+            "eval",
+            "--assertions",
+            assertionsPath,
+            "--model-outputs",
+            relative6(cwd, modelOutputsPath),
+            "--output",
+            resultsPath,
+            ...PROMPTFOO_EVAL_FLAGS
+          ],
+          cwd
+        );
+        const stderrTail = stderr.slice(-2048);
+        if (code !== 0 && code !== 100) {
+          throw new Error(
+            `promptfoo eval exited ${String(code)}: ${stderrTail}`
+          );
+        }
+        let text;
+        try {
+          text = await readFile9(resultsPath, "utf8");
+        } catch (error51) {
+          if (error51.code !== "ENOENT") throw error51;
+          throw new Error(
+            `promptfoo eval exited ${String(code)} without writing its results file: ${stderrTail}`
+          );
+        }
+        results.set(
+          providerRunId,
+          parsePromptfooResults({ text, sent, scorers: config2.scorers })
+        );
+        return { providerRunId };
+      } finally {
+        await rm3(directory, { recursive: true, force: true });
+      }
+    },
+    async status(providerRunId) {
+      if (!results.has(providerRunId)) {
+        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
+      }
+      return "complete";
+    },
+    async collect(providerRunId) {
+      const run = results.get(providerRunId);
+      if (run === void 0) {
+        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
+      }
+      return run.cases.map(({ caseId, testIdx, metrics, absentReason }) => ({
+        caseId,
+        metrics,
+        ...absentReason === void 0 ? {} : { absentReason },
+        artifactRef: {
+          providerRunId,
+          evalId: run.evalId,
+          testIdx,
+          promptfooVersion: run.promptfooVersion
+        }
+      }));
+    }
+  };
+}
+async function readPromptfooConfigs(assertionsPath) {
+  const directory = dirname6(resolve7(assertionsPath));
+  const configs = await Promise.all(
+    ["yaml", "yml", "json", "cjs", "cts", "js", "mjs", "mts", "ts"].map(
+      async (extension) => {
+        const file2 = `promptfooconfig.${extension}`;
+        try {
+          return [{ file: file2, bytes: await readFile9(join14(directory, file2)) }];
+        } catch (error51) {
+          if (error51.code === "ENOENT") return [];
+          throw error51;
+        }
+      }
+    )
+  );
+  return configs.flat();
+}
+async function runPromptfoo(command, args, cwd) {
+  const running = execFileAsync5(command, [...args], {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, ...PROMPTFOO_ENV },
+    maxBuffer: 10 * 1024 * 1024
+  });
+  running.child.stdin?.end();
+  try {
+    const { stderr } = await running;
+    return { code: 0, stderr };
+  } catch (error51) {
+    const failed = error51;
+    return { code: failed.code, stderr: failed.stderr ?? "" };
+  }
+}
+
+// src/evaluators/langfuse.ts
+import { createHash as createHash7 } from "node:crypto";
 var healthSchema = external_exports.object({ status: external_exports.string().min(1) });
 var otelResponseSchema = external_exports.object({ partialSuccess: external_exports.unknown().optional() });
 var scoreSchema = external_exports.object({
@@ -40772,11 +41053,11 @@ function rubric2(score) {
   return rubricVersion === void 0 ? {} : { rubricVersion };
 }
 function hashHex(value) {
-  return createHash6("sha256").update(JSON.stringify(value)).digest("hex");
+  return createHash7("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 // src/evaluators/langsmith.ts
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 var sessionSchema = external_exports.object({ id: external_exports.string().min(1) });
 var feedbackEntrySchema = external_exports.object({
   score: external_exports.number().optional(),
@@ -41014,201 +41295,8 @@ function scorerRule(value) {
   return separator === -1 ? value : value.slice(separator + 1);
 }
 function stableUuid(value) {
-  const hex3 = createHash7("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32);
+  const hex3 = createHash8("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32);
   return `${hex3.slice(0, 8)}-${hex3.slice(8, 12)}-4${hex3.slice(13, 16)}-8${hex3.slice(17, 20)}-${hex3.slice(20)}`;
-}
-
-// src/evaluators/promptfoo.ts
-import { execFile as execFile6 } from "node:child_process";
-import { createHash as createHash8 } from "node:crypto";
-import { mkdtemp as mkdtemp3, readFile as readFile9, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join as join14 } from "node:path";
-import { promisify as promisify5 } from "node:util";
-var execFileAsync5 = promisify5(execFile6);
-var gradingResultSchema = external_exports.object({
-  pass: external_exports.boolean(),
-  score: external_exports.number(),
-  namedScores: external_exports.record(external_exports.string(), external_exports.number()).optional(),
-  metadata: external_exports.record(external_exports.string(), external_exports.unknown()).optional(),
-  componentResults: external_exports.array(
-    external_exports.object({
-      pass: external_exports.boolean(),
-      score: external_exports.number(),
-      metadata: external_exports.record(external_exports.string(), external_exports.unknown()).optional(),
-      assertion: external_exports.object({
-        metric: external_exports.string().min(1).optional(),
-        type: external_exports.string().min(1).optional()
-      }).optional()
-    })
-  ).optional()
-});
-var rowSchema = external_exports.object({
-  testIdx: external_exports.number().int().nonnegative(),
-  success: external_exports.boolean(),
-  score: external_exports.number(),
-  error: external_exports.string().optional(),
-  gradingResult: gradingResultSchema.nullable().optional()
-});
-var outputSchema = external_exports.object({
-  version: external_exports.literal(3),
-  evalId: external_exports.string().nullable().optional(),
-  results: external_exports.object({
-    outputs: external_exports.array(rowSchema)
-  })
-});
-function resolvePromptfooEvaluatorConfig(config2) {
-  return {
-    command: requireText(config2.command, "Promptfoo evaluator command"),
-    assertionsPath: requireText(
-      config2.assertionsPath,
-      "Promptfoo evaluator assertionsPath"
-    ),
-    ...resolveScoringConfig(config2)
-  };
-}
-function createPromptfooEvaluator(input) {
-  const config2 = resolvePromptfooEvaluatorConfig(input);
-  const results = /* @__PURE__ */ new Map();
-  return {
-    id: "promptfoo",
-    async detectAvailability() {
-      try {
-        await execFileAsync5(config2.command, ["--version"], {
-          encoding: "utf8",
-          maxBuffer: 1024 * 1024
-        });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async launch(input2) {
-      const providerRunId = createHash8("sha256").update(
-        JSON.stringify({
-          experimentName: input2.experimentName,
-          caseIds: input2.cases.map(({ caseId }) => caseId)
-        })
-      ).digest("hex");
-      const directory = await mkdtemp3(
-        join14(tmpdir(), "rightmodeler-promptfoo-")
-      );
-      const modelOutputsPath = join14(directory, "model-outputs.json");
-      const resultsPath = join14(directory, "results.json");
-      try {
-        await writeFile5(
-          modelOutputsPath,
-          JSON.stringify(
-            input2.cases.map((item) => ({
-              output: typeof item.output === "string" ? item.output : JSON.stringify(item.output),
-              tags: [item.caseId]
-            }))
-          ),
-          "utf8"
-        );
-        await execFileAsync5(
-          config2.command,
-          [
-            "eval",
-            "--assertions",
-            config2.assertionsPath,
-            "--model-outputs",
-            modelOutputsPath,
-            "--output",
-            resultsPath
-          ],
-          { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }
-        );
-        const parsed2 = outputSchema.parse(
-          JSON.parse(await readFile9(resultsPath, "utf8"))
-        );
-        const rows = parsed2.results.outputs;
-        if (rows.some(({ testIdx }) => testIdx >= input2.cases.length)) {
-          throw new Error(
-            "Promptfoo evaluator output contains an unknown test index"
-          );
-        }
-        results.set(providerRunId, {
-          evalId: parsed2.evalId ?? null,
-          rows,
-          caseIds: input2.cases.map(({ caseId }) => caseId)
-        });
-        return { providerRunId };
-      } finally {
-        await rm3(directory, { recursive: true, force: true });
-      }
-    },
-    async status(providerRunId) {
-      const run = results.get(providerRunId);
-      if (run === void 0) {
-        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
-      }
-      return run.rows.some(({ error: error51 }) => error51 !== void 0) ? "failed" : "complete";
-    },
-    async collect(providerRunId) {
-      const run = results.get(providerRunId);
-      if (run === void 0) {
-        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
-      }
-      return run.rows.flatMap((row) => {
-        if (row.error !== void 0 || row.gradingResult === null) return [];
-        const metrics = promptfooMetrics(row, config2.scorers);
-        return metrics.length === 0 ? [] : [
-          {
-            caseId: run.caseIds[row.testIdx],
-            metrics,
-            artifactRef: {
-              providerRunId,
-              evalId: run.evalId,
-              testIdx: row.testIdx
-            }
-          }
-        ];
-      });
-    }
-  };
-}
-function promptfooMetrics(row, scorers) {
-  const grading = row.gradingResult;
-  if (grading === void 0 || grading === null) return [];
-  if (grading.namedScores !== void 0) {
-    return scorers.flatMap((metricName) => {
-      const score = grading.namedScores?.[metricName];
-      if (score === void 0) return [];
-      const component = grading.componentResults?.find(
-        (item) => item.assertion?.metric === metricName
-      );
-      const rubricVersion2 = metadataString(
-        component?.metadata ?? grading.metadata,
-        "rubricVersion",
-        "rubric_version"
-      );
-      return [
-        {
-          metricName,
-          score,
-          passed: component?.pass ?? metadataBoolean(grading.metadata, `${metricName}_passed`),
-          ...rubricVersion2 === void 0 ? {} : { rubricVersion: rubricVersion2 }
-        }
-      ];
-    });
-  }
-  if (scorers.length !== 1) {
-    throw new Error("Promptfoo evaluator output omits configured named scores");
-  }
-  const rubricVersion = metadataString(
-    grading.metadata,
-    "rubricVersion",
-    "rubric_version"
-  );
-  return [
-    {
-      metricName: scorers[0],
-      score: grading.score,
-      passed: grading.pass,
-      ...rubricVersion === void 0 ? {} : { rubricVersion }
-    }
-  ];
 }
 
 // src/evaluators/registry.ts
@@ -43223,11 +43311,14 @@ async function evaluatorRunIdentity(context2) {
   if (context2.evaluator.provider !== "promptfoo") {
     return jsonValue2(context2.evaluator);
   }
+  const assertionsPath = resolve8(context2.evaluator.assertionsPath);
+  const promptfooConfigs = (await readPromptfooConfigs(assertionsPath)).map(
+    ({ file: file2, bytes }) => ({ file: file2, sha256: sha256(bytes) })
+  );
   return jsonValue2({
     ...context2.evaluator,
-    assertionsSha256: sha256(
-      await readFile10(resolve7(context2.evaluator.assertionsPath))
-    )
+    assertionsSha256: sha256(await readFile10(assertionsPath)),
+    ...promptfooConfigs.length === 0 ? {} : { promptfooConfigs }
   });
 }
 function processIsAlive(pid) {
@@ -43708,17 +43799,17 @@ function applyCascadeStatus(status) {
   return "blocked";
 }
 function createContext(options) {
-  const repo = resolve7(options.repo);
+  const repo = resolve8(options.repo);
   const storeRoot = resolveStoreRoot(repo, options.store);
-  const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve7(options.modeBConfigPath);
-  const pricingFilePath = options.pricingFilePath === void 0 ? void 0 : resolve7(options.pricingFilePath);
-  const policyFilePath = options.policyFilePath === void 0 ? void 0 : resolve7(options.policyFilePath);
+  const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve8(options.modeBConfigPath);
+  const pricingFilePath = options.pricingFilePath === void 0 ? void 0 : resolve8(options.pricingFilePath);
+  const policyFilePath = options.policyFilePath === void 0 ? void 0 : resolve8(options.policyFilePath);
   return {
     repo,
     storeRoot,
     store: new FsStore(storeRoot),
     projectId: PROJECT_ID2,
-    traces: options.traces === void 0 ? void 0 : resolve7(options.traces),
+    traces: options.traces === void 0 ? void 0 : resolve8(options.traces),
     baseUrl: options.baseUrl,
     apiKeyEnv: options.apiKeyEnv ?? API_KEY_ENV_DEFAULT,
     maxCostUsd: options.maxCostUsd,
@@ -43738,8 +43829,8 @@ function createContext(options) {
     },
     ...policyFilePath === void 0 ? {} : { policyFilePath },
     ...options.matchersPath === void 0 ? {} : {
-      matchersPath: resolve7(options.matchersPath),
-      matchers: loadMatchers(resolve7(options.matchersPath))
+      matchersPath: resolve8(options.matchersPath),
+      matchers: loadMatchers(resolve8(options.matchersPath))
     },
     ...options.existingRunId === void 0 ? {} : { existingRunId: options.existingRunId },
     ...options.approvedRunSpecDigest === void 0 ? {} : { approvedRunSpecDigest: options.approvedRunSpecDigest },
@@ -43783,7 +43874,7 @@ function readModeBConfig(path) {
     ...parsed2.data,
     appSpec: {
       ...parsed2.data.appSpec,
-      mountPath: resolve7(dirname6(path), parsed2.data.appSpec.mountPath)
+      mountPath: resolve8(dirname7(path), parsed2.data.appSpec.mountPath)
     }
   };
 }
@@ -45674,7 +45765,7 @@ async function assessExternalExecutions(input) {
     return [
       {
         executionId: execution.executionId,
-        reason: status === "failed" ? "external_experiment_failed" : result2 === void 0 ? "external_event_missing" : "external_gate_metric_missing"
+        reason: result2?.absentReason ?? (status === "failed" ? "external_experiment_failed" : result2 === void 0 ? "external_event_missing" : "external_gate_metric_missing")
       }
     ];
   });
@@ -45880,7 +45971,7 @@ async function executeReport(context2, inputDigestValue, ledger) {
   const markdown = renderReport(report);
   await putMutableJson(context2.store, jsonKey, jsonValue2(report));
   await putMutableText(context2.store, markdownKey, markdown);
-  await mkdir5(dirname6(reportPath(context2)), { recursive: true });
+  await mkdir5(dirname7(reportPath(context2)), { recursive: true });
   await writeFile6(reportPath(context2), markdown, "utf8");
   return jsonKey;
 }
@@ -46057,7 +46148,7 @@ async function walkFiles(repo) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) await visit(absolute);
       } else if (entry.isFile()) {
-        files.push(relative6(repo, absolute).split(sep4).join("/"));
+        files.push(relative7(repo, absolute).split(sep4).join("/"));
       }
     }
   }
@@ -46669,7 +46760,7 @@ async function runAuditTabulate(options) {
     })
   });
   const worksheet = options.worksheet ? auditWorksheetSchema.parse(
-    JSON.parse(await readFile10(resolve7(options.worksheet), "utf8"))
+    JSON.parse(await readFile10(resolve8(options.worksheet), "utf8"))
   ) : await loadCurrent(context2, "audit-sample", auditWorksheetSchema);
   const result2 = auditTabulate(worksheet);
   await putMutableJson(
@@ -46760,7 +46851,7 @@ async function maybeLoadCorpus(context2) {
 }
 
 // src/apply/index.ts
-import { basename as basename2, resolve as resolve8 } from "node:path";
+import { basename as basename2, resolve as resolve9 } from "node:path";
 function applySwaps2(options) {
   return runApply({
     repo: options.repo,
@@ -46770,23 +46861,23 @@ function applySwaps2(options) {
       tokenEnv: options.githubTokenEnv
     }),
     owner: options.owner,
-    githubRepo: options.githubRepo ?? basename2(resolve8(options.repo)),
+    githubRepo: options.githubRepo ?? basename2(resolve9(options.repo)),
     dryRun: options.dryRun ?? false
   });
 }
 
 // src/data/discover.ts
-import { open, readdir as readdir5, realpath as realpath3, stat as stat3 } from "node:fs/promises";
+import { open, readdir as readdir5, realpath as realpath4, stat as stat3 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute as isAbsolute2, join as join16, relative as relative7, resolve as resolve9 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join16, relative as relative8, resolve as resolve10 } from "node:path";
 var MAX_FILES = 50;
 var MAX_CODEX_EXAMINED = 300;
 var MAX_READ_BYTES = 64 * 1024;
 var MAX_SAMPLE_RECORDS = 20;
 var SOURCE_BUDGETS = { local: 20, claude: 15, codex: 15 };
 async function discoverTraces(options) {
-  const repo = resolve9(options.repo);
-  const homeDir = resolve9(options.homeDir ?? homedir());
+  const repo = resolve10(options.repo);
+  const homeDir = resolve10(options.homeDir ?? homedir());
   const candidates = await candidateFiles(repo, homeDir);
   const discovered = [];
   for (const candidate of candidates.slice(0, MAX_FILES)) {
@@ -46808,7 +46899,7 @@ async function discoverTraces(options) {
   ).map(({ sourceOrder: _sourceOrder, ...candidate }) => candidate);
 }
 function sanitizeClaudeProjectPath(repo) {
-  const absolute = resolve9(repo);
+  const absolute = resolve10(repo);
   const sanitized = absolute.replace(/[^a-zA-Z0-9]/g, "-");
   if (sanitized.length <= 200) return sanitized;
   let hash2 = 0;
@@ -46907,8 +46998,8 @@ async function statCandidates(paths, source, sortNewest) {
 async function localCandidatePaths(repo) {
   const tracesDirectory = join16(repo, "traces");
   const [realRepo, realTracesDirectory] = await Promise.all([
-    realpath3(repo).catch(() => void 0),
-    realpath3(tracesDirectory).catch(() => void 0)
+    realpath4(repo).catch(() => void 0),
+    realpath4(tracesDirectory).catch(() => void 0)
   ]);
   const nested = realRepo !== void 0 && realTracesDirectory !== void 0 && isWithin(realRepo, realTracesDirectory) ? (await jsonFiles(tracesDirectory, false)).sort(compareText) : [];
   const topLevel = (await jsonFiles(repo, false)).sort((left, right) => {
@@ -46937,7 +47028,7 @@ async function jsonFiles(root, recursive) {
   ).map((entry) => join16(entry.parentPath, entry.name));
 }
 function isWithin(root, path) {
-  const fromRoot = relative7(root, path);
+  const fromRoot = relative8(root, path);
   return fromRoot === "" || !fromRoot.startsWith("..") && !isAbsolute2(fromRoot);
 }
 async function detectionHead(path, fileSize) {
@@ -47020,7 +47111,7 @@ function codexSessionCwd(text) {
     if (line.trim() === "") continue;
     const record2 = parseWholeJson(line);
     if (isRecord(record2) && record2.type === "session_meta" && isRecord(record2.payload) && typeof record2.payload.cwd === "string") {
-      return resolve9(record2.payload.cwd);
+      return resolve10(record2.payload.cwd);
     }
   }
   return void 0;
@@ -47043,7 +47134,7 @@ function unique(values) {
 
 // src/guidance.ts
 import { createInterface } from "node:readline";
-import { isAbsolute as isAbsolute3, relative as relative8, resolve as resolve10 } from "node:path";
+import { isAbsolute as isAbsolute3, relative as relative9, resolve as resolve11 } from "node:path";
 async function promptForTracePath(options) {
   if (options.candidates.length === 0) {
     options.output.write(
@@ -47060,7 +47151,7 @@ async function promptForTracePath(options) {
       "Trace file path (leave empty to stop): "
     );
     const typed = asked2.answer.trim();
-    return asked2.cancelled || typed === "" ? void 0 : resolve10(options.repo, typed);
+    return asked2.cancelled || typed === "" ? void 0 : resolve11(options.repo, typed);
   }
   options.output.write("Found trace files:\n");
   const now = options.now ?? /* @__PURE__ */ new Date();
@@ -47095,7 +47186,7 @@ async function promptForTracePath(options) {
     const selected = options.candidates[Number(answer) - 1];
     if (selected !== void 0) return selected.path;
   }
-  return resolve10(options.repo, answer);
+  return resolve11(options.repo, answer);
 }
 async function promptForProviderBaseUrl(options) {
   options.output.write(
@@ -47157,11 +47248,11 @@ function formatName(format9) {
   return names[format9];
 }
 function shortPath(path, repo, homeDir) {
-  const fromRepo = relative8(resolve10(repo), path);
+  const fromRepo = relative9(resolve11(repo), path);
   if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute3(fromRepo)) {
     return `./${fromRepo}`;
   }
-  const fromHome = relative8(resolve10(homeDir), path);
+  const fromHome = relative9(resolve11(homeDir), path);
   if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute3(fromHome)) {
     return `~/${fromHome}`;
   }
@@ -47185,7 +47276,7 @@ function unit(label, value) {
 }
 
 // src/rollback.ts
-import { basename as basename3, resolve as resolve11 } from "node:path";
+import { basename as basename3, resolve as resolve12 } from "node:path";
 var projectId2 = "project";
 var RollbackServiceError = class extends Error {
   code;
@@ -47702,7 +47793,7 @@ async function rollbackPreparedSwaps({
   }
 }
 function rollbackSwaps(options) {
-  const repoDir = resolve11(options.repo);
+  const repoDir = resolve12(options.repo);
   return rollbackPreparedSwaps({
     store: new FsStore(resolveStoreRoot(repoDir, options.store)),
     githubClient: createGithubClient({
@@ -48237,7 +48328,7 @@ async function guidedPipelineOptions(global, local, reporter, runtime) {
   });
   const traces = local.yes ? candidates[0]?.path : interactive ? await promptForTracePath({
     candidates,
-    repo: resolve12(global.repo),
+    repo: resolve13(global.repo),
     homeDir: runtime.homeDir,
     now: runtime.now(),
     input: runtime.stdin,
@@ -48544,7 +48635,7 @@ function pipelineArgv(options) {
     appendCliOption(
       args,
       flag,
-      kind === "path" ? resolve12(value) : kind === "command" ? detachedCommand(value) : value
+      kind === "path" ? resolve13(value) : kind === "command" ? detachedCommand(value) : value
     );
   }
   return args;
@@ -48553,18 +48644,18 @@ async function startDetachedReplay(global, local, runId) {
   const args = [
     fileURLToPath2(import.meta.url),
     "--repo",
-    resolve12(global.repo),
+    resolve13(global.repo),
     "--output",
     "json"
   ];
   if (global.store !== void 0) {
-    args.push("--store", resolve12(global.store));
+    args.push("--store", resolve13(global.store));
   }
   args.push("replay", ...pipelineArgv(local));
   appendCliOption(args, "--internal-run-id", runId);
   await new Promise((resolveSpawn, rejectSpawn) => {
     const child = spawn(process.execPath, args, {
-      cwd: resolve12(global.repo),
+      cwd: resolve13(global.repo),
       detached: true,
       env: process.env,
       stdio: "ignore"
@@ -48578,7 +48669,7 @@ async function startDetachedReplay(global, local, runId) {
 }
 function detachedCommand(value) {
   if (value === void 0) return void 0;
-  return value.startsWith("./") || value.startsWith("../") || value.includes("/") || value.includes("\\") ? resolve12(value) : value;
+  return value.startsWith("./") || value.startsWith("../") || value.includes("/") || value.includes("\\") ? resolve13(value) : value;
 }
 function appendCliOption(args, flag, value) {
   if (value !== void 0) args.push(flag, value);

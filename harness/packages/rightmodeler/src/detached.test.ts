@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,6 +40,9 @@ const demoAppPath = fileURLToPath(
 );
 const tracesPath = fileURLToPath(
   new URL("../../../fixtures/traces/otel-genai.json", import.meta.url),
+);
+const promptfooAssertionsPath = fileURLToPath(
+  new URL("../../../fixtures/promptfoo-stub/assertions.yaml", import.meta.url),
 );
 const stubModuleUrl = new URL(
   "../../../fixtures/stub-provider/server.mjs",
@@ -262,6 +272,73 @@ describe("detached replay progress", () => {
         ).resolves.toMatchObject({
           runId: nextClaim.runId,
           status: "running",
+        });
+      } finally {
+        delete process.env[apiKeyEnv];
+        await stub.close();
+      }
+    },
+  );
+});
+
+describe("detached replay identity", () => {
+  it(
+    "keys a detached promptfoo replay to every promptfooconfig beside the assertions file",
+    { timeout: 30_000 },
+    async () => {
+      const root = await mkdtemp(
+        join(tmpdir(), "rightmodeler-detached-identity-"),
+      );
+      temporaryDirectories.push(root);
+      const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+      const store = join(root, "store");
+      const traces = join(root, "traces.json");
+      await copyFile(tracesPath, traces);
+      const assertionsPath = join(root, "assertions", "assertions.yaml");
+      await mkdir(join(root, "assertions"));
+      await copyFile(promptfooAssertionsPath, assertionsPath);
+      const configPath = join(root, "assertions", "promptfooconfig.yaml");
+      const reporter = new Reporter("json", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      });
+
+      const stubModule = (await import(stubModuleUrl)) as StubProviderModule;
+      const stub = await stubModule.startStubProvider({ port: 0 });
+      const apiKeyEnv = "RIGHTMODELER_DETACHED_IDENTITY_TEST_API_KEY";
+      process.env[apiKeyEnv] = "fixture-key";
+      const claim = () =>
+        claimDetachedReplay({
+          repo,
+          store,
+          traces,
+          baseUrl: `http://127.0.0.1:${stub.port}/v1`,
+          apiKeyEnv,
+          evaluator: {
+            provider: "promptfoo",
+            command: "promptfoo",
+            assertionsPath,
+            scorers: ["output_similarity"],
+          },
+          reporter,
+        });
+      try {
+        const first = await claim();
+
+        await writeFile(configPath, "description: first\n");
+        const second = await claim();
+        expect(second.runId).not.toBe(first.runId);
+        expect(second.deduplicated).toBe(false);
+
+        await writeFile(configPath, "description: second\n");
+        const third = await claim();
+        expect(third.runId).not.toBe(first.runId);
+        expect(third.runId).not.toBe(second.runId);
+
+        await rm(configPath);
+        await expect(claim()).resolves.toMatchObject({
+          runId: first.runId,
+          deduplicated: true,
         });
       } finally {
         delete process.env[apiKeyEnv];

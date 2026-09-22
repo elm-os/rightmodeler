@@ -131,6 +131,7 @@ import {
   writeImportedCorpus,
   type CorpusImportConfig,
 } from "./evaluators/corpus-import.js";
+import { readPromptfooConfigs } from "./evaluators/promptfoo.js";
 import {
   createEvaluator,
   resolveEvaluatorConfig,
@@ -1153,11 +1154,14 @@ async function evaluatorRunIdentity(
   if (context.evaluator.provider !== "promptfoo") {
     return jsonValue(context.evaluator);
   }
+  const assertionsPath = resolve(context.evaluator.assertionsPath);
+  const promptfooConfigs = (await readPromptfooConfigs(assertionsPath)).map(
+    ({ file, bytes }) => ({ file, sha256: sha256(bytes) }),
+  );
   return jsonValue({
     ...context.evaluator,
-    assertionsSha256: sha256(
-      await readFile(resolve(context.evaluator.assertionsPath)),
-    ),
+    assertionsSha256: sha256(await readFile(assertionsPath)),
+    ...(promptfooConfigs.length === 0 ? {} : { promptfooConfigs }),
   });
 }
 
@@ -4281,11 +4285,12 @@ async function assessExternalExecutions(input: {
       {
         executionId: execution.executionId,
         reason:
-          status === "failed"
+          result?.absentReason ??
+          (status === "failed"
             ? "external_experiment_failed"
             : result === undefined
               ? "external_event_missing"
-              : "external_gate_metric_missing",
+              : "external_gate_metric_missing"),
       },
     ];
   });
