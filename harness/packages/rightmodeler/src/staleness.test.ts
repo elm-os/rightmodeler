@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   appendFile,
   mkdir,
@@ -10,11 +11,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FsStore } from "@rightmodeler/core";
+import { FsStore, computeRunSpecDigest } from "@rightmodeler/core";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { runPipeline, type PipelineOptions } from "./pipeline.js";
 import { Reporter } from "./protocol.js";
+import { readSetupState, writeCheckpoint } from "./state.js";
 import { makeGitFixture } from "./test-utils/git-fixture.js";
 
 const demoAppPath = fileURLToPath(
@@ -264,5 +266,42 @@ describe("pipeline staleness", { timeout: 120_000 }, () => {
     }
 
     expect(await run(overrides)).toEqual(expected);
+  });
+
+  it("re-reads traces an older reader ingested", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-staleness-"));
+    temporaryDirectories.push(root);
+    const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+    const store = join(root, "store");
+    const traces = join(root, "traces.json");
+    const traceBytes = await readFile(traceFixturePath);
+    await writeFile(traces, traceBytes);
+    const ingest = async () =>
+      (
+        await runPipeline({
+          repo,
+          store,
+          traces,
+          through: "ingest",
+          reporter: new Reporter("json", {
+            stdout: () => undefined,
+            stderr: () => undefined,
+          }),
+        })
+      ).executedStages;
+
+    expect(await ingest()).toContain("ingest");
+    const fsStore = new FsStore(store);
+    const checkpoint = (await readSetupState(fsStore, "project")).stages
+      .ingest!;
+    await writeCheckpoint(fsStore, "project", "ingest", {
+      ...checkpoint,
+      inputDigest: computeRunSpecDigest({
+        stage: "ingest",
+        traceSha256: createHash("sha256").update(traceBytes).digest("hex"),
+      }),
+    });
+
+    expect(await ingest()).toContain("ingest");
   });
 });

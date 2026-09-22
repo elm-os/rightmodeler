@@ -881,13 +881,15 @@ describe("built CLI pipeline", () => {
       ]);
 
       expect(result.code, result.stderr).toBe(0);
-      expect(jsonOutput(result).executedStages).toEqual([
-        "scan",
-        "ingest",
-        "reconcile",
-        "scrub",
-        "corpus",
-      ]);
+      for (const line of result.stderr.split("\n")) {
+        if (line.trim() === "") continue;
+        expect(JSON.parse(line)).toMatchObject({
+          code: "trace_steps_excluded",
+        });
+      }
+      expect(
+        (JSON.parse(result.stdout) as Record<string, unknown>).executedStages,
+      ).toEqual(["scan", "ingest", "reconcile", "scrub", "corpus"]);
       const corpus = await readStageArtifact(
         join(repo, ".rightmodeler"),
         "corpus",
@@ -896,6 +898,32 @@ describe("built CLI pipeline", () => {
     },
     60_000,
   );
+
+  it("warns and keeps ingesting when a traced stream never finished", async () => {
+    const { repo } = await fixtureCopy("stream-incomplete");
+    const result = await runCli([
+      "init",
+      "--through",
+      "ingest",
+      "--traces",
+      join(traceFixturesDir, "ai-sdk-v7-legacy.jsonl"),
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    const warning = JSON.parse(result.stderr) as Record<string, unknown>;
+    expect(warning).toMatchObject({ code: "trace_steps_excluded" });
+    expect(warning.message).toContain("stream_incomplete");
+    expect(warning.message).toContain("1 traced model call");
+    const ingest = await readStageArtifact(
+      join(repo, ".rightmodeler"),
+      "ingest",
+    );
+    expect(ingest.runs).toHaveLength(144);
+  });
 
   it("ingests a trace directory like the equivalent single file", async () => {
     const records = JSON.parse(await readFile(tracesPath, "utf8")) as unknown[];
@@ -963,6 +991,7 @@ describe("built CLI pipeline", () => {
         traceSha256: createHash("sha256")
           .update(await readFile(tracesPath))
           .digest("hex"),
+        reader: "ai-sdk-dialects-v1",
       }),
     );
   });

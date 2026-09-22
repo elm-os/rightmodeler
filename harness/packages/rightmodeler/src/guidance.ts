@@ -135,6 +135,7 @@ function question(
 function formatName(format: TraceFormat): string {
   const names: Record<TraceFormat, string> = {
     "otel-genai": "OpenTelemetry GenAI export",
+    "ai-sdk": "AI SDK telemetry export",
     "openai-jsonl": "OpenAI log",
     langfuse: "Langfuse export",
     braintrust: "Braintrust export",

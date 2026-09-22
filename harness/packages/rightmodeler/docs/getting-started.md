@@ -9,8 +9,9 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 - Trace input in a supported format.
 - An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for bare OpenAI or another unpriced endpoint, pass `--pricing-file`.
 
-Supported trace sources are OTel GenAI, OpenAI JSONL, Langfuse, Braintrust,
-LangSmith, OpenInference, Helicone, W&B Weave, Claude Code, and Codex.
+Supported trace sources are OTel GenAI, AI SDK telemetry, OpenAI JSONL,
+Langfuse, Braintrust, LangSmith, OpenInference, Helicone, W&B Weave, Claude
+Code, and Codex.
 
 ## Start with automatic discovery
 
@@ -41,6 +42,17 @@ npx rightmodeler init --through corpus --traces /path/to/traces.json --output js
 ```
 
 `--traces` accepts a single file or a directory. A directory is read non-recursively as its `.json` and `.jsonl` files in name order; every file must use the same trace format.
+
+## AI SDK telemetry
+
+The AI SDK emits telemetry in two dialects, and Rightmodeler reads both:
+
+- The `ai.*` dialect comes from AI SDK 5 and 6 with `experimental_telemetry: { isEnabled: true }` on each call, and from AI SDK 7 with `registerTelemetry(new LegacyOpenTelemetry())`. The AI SDK reader reads it.
+- The GenAI semantic conventions dialect comes from AI SDK 7 with `registerTelemetry(new OpenTelemetry())`. The OTel GenAI reader reads it and treats the agent, step and tool spans as structure, so each model call counts once.
+
+`registerTelemetry` comes from `ai`; `LegacyOpenTelemetry` and `OpenTelemetry` come from `@ai-sdk/otel`. Register only one of them: an export that holds both dialects is ambiguous. Keep `recordInputs` and `recordOutputs` on, which is the default, because a model call without its prompt or output cannot become a corpus case. Set a string-literal `functionId` on every call (`telemetry: { functionId: "summarize" }` in AI SDK 7, `experimental_telemetry: { isEnabled: true, functionId: "summarize" }` before it); it becomes the call's family.
+
+Export the spans through the OpenTelemetry NodeSDK or `@vercel/otel` to an OTLP collector, and pass the collector's file exporter output with `--traces`. A model call that ended without a finish reason, because it was aborted or errored, is left out of the corpus with a `trace_steps_excluded` warning, and the rest of the input is read. Token usage from AI SDK 4 exports (`ai.usage.promptTokens`) is not read, so those calls carry no usage.
 
 ## Run the complete pipeline
 

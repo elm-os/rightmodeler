@@ -546,6 +546,7 @@ export function createProgram(
       repo: global.repo,
       store: global.store,
       traces,
+      warning: (code, message) => reporter.warning(code, message),
     });
     reporter.result(result);
     return 0;

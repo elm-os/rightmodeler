@@ -96,11 +96,14 @@ import {
   auditTabulate,
   buildCorpus,
   detectFormat,
+  excludedStepsWarning,
   FormatDetectionError,
   normalizedRunSchema,
   parseTraceRecords,
   referenceCeilings,
   scrubRuns,
+  strictRuns,
+  TraceAdaptError,
   traceAdapters,
   writeCorpus,
   type AuditResult,
@@ -206,6 +209,7 @@ const DEFAULT_QUALITY_FLOOR = 0.85;
 const AVAILABILITY_FLOOR = 0.7;
 const GATE_POLICY_BASE_VERSION = "phase-a-v3";
 const REPLAY_PROMPT_REVISION = "replay-prompt-v1";
+const TRACE_READER_REVISION = "ai-sdk-dialects-v1";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 
 function auditResultKey(projectId: string): string {
@@ -1014,6 +1018,7 @@ export async function claimDetachedReplay(
           traceSha256: sha256(
             Buffer.concat([...(await readTraceInput(context.traces))]),
           ),
+          reader: TRACE_READER_REVISION,
         });
   if (traceIdentity === undefined) {
     throw new ProtocolError({
@@ -2075,6 +2080,7 @@ async function inputDigest(
       traceSha256: sha256(
         Buffer.concat([...(await readTraceInput(context.traces))]),
       ),
+      reader: TRACE_READER_REVISION,
     });
   }
 
@@ -2452,7 +2458,20 @@ async function executeIngest(
   const names = [...new Set(detected.map(({ name }) => name))];
   if (names.length > 1) throw mixedTraceFormats(names);
   const adapter = detected[0]!;
-  const runs = adapter.adapt(texts.flatMap((text) => parseTraceRecords(text)));
+  const result = adapter.adaptWithReport(
+    texts.flatMap((text) => parseTraceRecords(text)),
+  );
+  const runs = strictRuns(adapter.name, result);
+  if (runs.length === 0) {
+    throw new TraceAdaptError(
+      adapter.name,
+      `The ${adapter.name} trace input contains no model calls that can be read`,
+    );
+  }
+  const excluded = excludedStepsWarning(result);
+  if (excluded !== undefined) {
+    context.reporter.warning("trace_steps_excluded", excluded);
+  }
   const key = artifactKey(context, "ingest", inputDigestValue);
   await putImmutableJson(context.store, key, {
     format: adapter.name,

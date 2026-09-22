@@ -509,7 +509,9 @@ which raises the reference correctness ceiling reported alongside every family v
 reviews.
 
 Ingest ships OTel GenAI and OpenAI JSONL first, because OTel GenAI is the vendor-neutral format
-that several platforms emit, and the rest follow behind the same contract.
+that several platforms emit, and the rest follow behind the same contract. The AI SDK's own `ai.*`
+span dialect has a dedicated reader, and its GenAI dialect is read by the OTel GenAI reader, which
+treats agent, step and tool spans as structure.
 
 ## 14. Skill packs
 
