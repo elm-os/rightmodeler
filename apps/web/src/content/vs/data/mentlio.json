@@ -1,0 +1,114 @@
+{
+  "slug": "mentlio",
+  "name": "Mentlio",
+  "website": "https://www.mentlio.com",
+  "logo": "/vs/logos/mentlio.png",
+  "category": "spend",
+  "verdict": "different-job",
+  "verdictLabel": "Different job · the AI bill vs one model decision",
+  "title": "rightmodeler vs Mentlio: team AI spend vs model choice",
+  "description": "Mentlio meters and trims what engineers spend on AI coding tools, live, on each device. rightmodeler measures which model each step of your own agent needs.",
+  "h1": "rightmodeler vs Mentlio",
+  "lede": "Mentlio runs an engineering AI-spend program: it meters coding tools on each developer's device, ties spend to shipped work, and trims waste as people work. rightmodeler makes one narrower decision, offline: which model each step of the agent your team ships should run.",
+  "integrationSlug": "",
+  "related": ["codag", "not-diamond", "vercel-ai-gateway"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Different jobs. You hire Mentlio to manage what engineering spends on AI coding tools: per its site, a desktop agent meters Claude Code, Codex, Cursor, and GitHub Copilot on each developer's machine, dashboards attribute spend to teams and workflows and tie it to shipped outcomes, and five token savers (Route, Lens, Quiet, Logs, Recall) cut waste while developers work. You hire rightmodeler, the MIT-licensed CLI, to make one specific decision about the AI product you build: which model each step should run. It replays your recorded traces through cheaper candidates offline, judges each against the output you accepted, and opens a draft pull request that changes only model identifiers, which a human reviews and merges. Mentlio's Route picks a model per prompt, live, inside developers' sessions; rightmodeler is never in a request path."
+    },
+    {
+      "type": "table",
+      "heading": "Same word, different bills",
+      "intro": "Both talk about AI spend and model choice. They point at different spend and decide at different times.",
+      "caption": "mentlio vs rightmodeler",
+      "leftLabel": "Mentlio",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "whose AI spend",
+          "theirs": "your engineers' coding tools: Claude Code, Codex, Cursor, GitHub Copilot",
+          "ours": "the model calls pinned in the code your team ships"
+        },
+        {
+          "dimension": "runs",
+          "theirs": "live, as a desktop agent on each developer's machine, with a hosted dashboard",
+          "ours": "offline, as a CLI you run on recorded traces"
+        },
+        {
+          "dimension": "model choice",
+          "theirs": "Route picks a cheaper capable model per prompt when the cache-aware saving is worth it",
+          "ours": "a recommendation per step, applied as a draft pull request a human merges"
+        },
+        {
+          "dimension": "what you read",
+          "theirs": "spend, savings, adoption, and delivery dashboards, plus Slack and Teams digests",
+          "ours": "a report per step: reference agreement, sample size, abstentions"
+        },
+        {
+          "dimension": "savings figures",
+          "theirs": "dashboard savings that Mentlio itself labels as modeled estimates",
+          "ours": "measured on your traces, no guarantee, abstentions included"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Pick by the question you are asking",
+      "intro": "Three situations, each with the honest call.",
+      "scenarios": [
+        {
+          "scenario": "Leadership wants to know what the company spends on Claude Code, Cursor, and Copilot, which teams drive it, and whether it shows up in shipped work.",
+          "winner": "theirs",
+          "why": "That is Mentlio's core: metering on each device across those tools, spend attributed to teams and workflows, delivery signals from GitHub with issue context from Jira or Linear, and digests in Slack or Teams. rightmodeler has no dashboard and no view of how engineers use coding assistants."
+        },
+        {
+          "scenario": "Your product's agent pins one frontier model on every step in code, and you want to know which steps can hold a cheaper one before anyone edits a model string.",
+          "winner": "ours",
+          "why": "rightmodeler replays each step's recorded inputs through cheaper candidates shortlisted from your provider's live catalog, judges them against the outputs you accepted, requires a winner to re-clear the quality floor on held-out cases, and abstains where the evidence is thin. The change arrives as a draft pull request that touches model identifiers only."
+        },
+        {
+          "scenario": "Your engineers live in AI coding tools, and the company also ships an AI feature of its own.",
+          "winner": "both",
+          "why": "Those are separate line items. Mentlio manages the coding-tool bill where developers work; rightmodeler audits the model choices inside the product you ship. Neither reads the other's data, and neither needs to."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Where the lines really fall",
+      "paragraphs": [
+        "Mentlio acts live and rightmodeler never does. Route scores each prompt on the developer's device and moves it to a cheaper capable model only when the cache-aware saving beats the value of the context already in the session, per its site. Lens, Logs, Recall, and Quiet trim what the agent reads and writes, and a manager can set a monthly usage limit. rightmodeler does none of that and cannot act inside a running session.",
+        "Both lean on replayed evidence, and Mentlio is candid about its numbers. As of 2026-09-22, its Terminal-Bench 2.1 write-up reports that Route retained 98.93% of Always Fable's solved-task rate at 24.90% lower average cost per task, and the same write-up calls this a replay benchmark rather than a production trial, adding that a rollout still needs shadow evaluation on the customer's own workload and a quality floor agreed in advance. Those are their figures, not ones we have reproduced.",
+        "Privacy is not the dividing line. Mentlio says raw prompts, model outputs, and source code stay on the device and its hosted dashboards receive derived metrics only, such as classifications, scores, token counts, and aggregate savings. rightmodeler has no server, account, or telemetry, but its replays do send each step's recorded inputs to the model provider you configure, under your own key. Choose on the job, not on privacy.",
+        "rightmodeler is narrower on purpose. It answers one question per step, with reference agreement, the sample size behind it, and an abstention wherever the evidence runs thin. A passing score means the candidate agreed with what you shipped, not that either answer was correct: the production result is the reference, not ground truth."
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace Mentlio?",
+          "a": "No. Mentlio manages what engineering spends on AI coding tools, with metering, dashboards, live savers, and delivery reporting. rightmodeler is an offline audit of the model calls in the product you build, and it hands you a pull request to review rather than a dashboard to watch."
+        },
+        {
+          "q": "Mentlio routes models too. Isn't that the same thing?",
+          "a": "Different clock and different target. Mentlio Route decides per prompt, live, inside developers' coding sessions. rightmodeler recommends a standing model for each step of your own agent, offline, from traces you already recorded, and nothing changes until a human merges the draft pull request."
+        },
+        {
+          "q": "Which one keeps my code more private?",
+          "a": "Neither wins outright. Per Mentlio, prompts, outputs, and source code stay on the developer's machine and its dashboards receive derived telemetry only. rightmodeler sends nothing to us, because there is no rightmodeler server, but a replay does send recorded step inputs to the model provider you configure, under your own key, the same shape of call your agent already makes."
+        },
+        {
+          "q": "Can rightmodeler read Mentlio's data?",
+          "a": "No. There is no Mentlio integration, and per Mentlio its dashboards hold derived metrics rather than the prompts and outputs an audit replays. rightmodeler reads traces from your own logging, such as OpenTelemetry GenAI exports, LangSmith or Langfuse exports, or Claude Code and Codex session logs."
+        },
+        {
+          "q": "Is Mentlio open source?",
+          "a": "Not as of 2026-09-22. Its GitHub organization lists no public repositories, and the product is a desktop app plus a hosted dashboard, with no public pricing on its site; it starts from a demo. The rightmodeler CLI is MIT licensed and free on npm and GitHub."
+        }
+      ]
+    }
+  ]
+}

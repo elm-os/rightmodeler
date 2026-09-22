@@ -1,0 +1,169 @@
+{
+  "slug": "modaic",
+  "name": "Modaic",
+  "website": "https://www.modaic.dev",
+  "logo": "/integrations/logos/modaic.png",
+  "category": "evals",
+  "verdict": "complement",
+  "verdictLabel": "Complement · calibrating judges vs deciding swaps",
+  "title": "rightmodeler vs Modaic: calibrate a judge, or use one",
+  "description": "Modaic calibrates and aligns the models that make judgment calls. rightmodeler uses a judge to decide which model each agent step needs, offline. They compose.",
+  "h1": "rightmodeler vs Modaic",
+  "lede": "Modaic works on the judge itself: typed decisions, confidence scores, and expert feedback that refines its instructions. rightmodeler puts a judgment to one use, deciding which model each step of your agent needs, measured offline against the outputs you accepted.",
+  "integrationSlug": "modaic",
+  "related": ["braintrust", "promptfoo", "langsmith"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Complements, doing different jobs. You hire Modaic to make judgment-heavy decisions consistent: per its site, you define a decision, Modaic surfaces the cases its model is unsure about, experts give feedback, and alignment refines the model, with a confidence score on each decision to decide which ones a person should review. You hire rightmodeler, the free MIT-licensed CLI, for a decision Modaic is not built to make: which model each step of your agent needs. It replays your recorded traces through cheaper candidates offline, grades each one against the output you accepted, and reports reference agreement, sample size, and abstentions; a swap reaches your code only as a draft pull request a human reviews. There is no Modaic integration today. One is planned against Modaic's hosted API, so that a judge you keep in your Modaic account can grade the replays, and it is waiting on Modaic confirming its canonical API; the integration page says exactly what exists and what does not."
+    },
+    {
+      "type": "positioning",
+      "left": {
+        "heading": "Modaic makes the judge trustworthy",
+        "items": [
+          "Per its docs, you ask typed questions (true or false, a choice among options, or a score on a scale) and get back typed answers with probabilities, plus a confidence value for choices and scores.",
+          "Confidence decides what reaches a person: the docs suggest choosing a threshold and sending decisions below it to a human reviewer.",
+          "Expert feedback becomes alignment. Annotated examples drive a run that rewrites the model's question instructions, not its weights, and commits a new version only when it beats the starting one.",
+          "Every model lives in a versioned repository, and a commit SHA pins an exact revision for reproducible decisions."
+        ]
+      },
+      "right": {
+        "heading": "rightmodeler decides which model each step needs",
+        "items": [
+          "It reads the traces your agent already recorded, and the output you accepted at each step becomes the reference.",
+          "It shortlists cheaper candidates from your provider's live catalog, replays each step through them, and grades every candidate against that reference.",
+          "Each verdict carries reference agreement, sample size, and abstentions. A winner must clear the quality floor again on held-out cases, and multi-step swaps are confirmed end to end before they are recommended.",
+          "rightmodeler apply opens a draft pull request that changes model identifiers and nothing else. A human reviews it and merges it; the CLI never does."
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "heading": "Same word, different jobs",
+      "intro": "Both talk about judges, confidence, and human review. What each one points them at is different.",
+      "caption": "modaic vs rightmodeler",
+      "leftLabel": "Modaic",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "the decision",
+          "theirs": "a judgment call you define: triage, moderation, an LLM judge's verdict",
+          "ours": "which model each step of your agent should run on"
+        },
+        {
+          "dimension": "runs",
+          "theirs": "through its decision API, live or in batch jobs, per its docs",
+          "ours": "offline, on recorded traces, never in your request path"
+        },
+        {
+          "dimension": "graded against",
+          "theirs": "ground truth your experts annotate over time",
+          "ours": "the output you already accepted at each step"
+        },
+        {
+          "dimension": "uncertainty",
+          "theirs": "a confidence value per decision, routed to people below your threshold",
+          "ours": "sample size and abstentions per step; thin evidence recommends nothing"
+        },
+        {
+          "dimension": "human in the loop",
+          "theirs": "experts label the cases the model is unsure about",
+          "ours": "a reviewer approves each swap as a draft pull request"
+        },
+        {
+          "dimension": "price",
+          "theirs": "plans from $0 a month with a $10 usage credit, Scale at $249 a month, as of 2026-09-22",
+          "ours": "free and MIT licensed; replays bill to your own provider key"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one do you hire?",
+      "intro": "Three situations, with the honest answer in each.",
+      "scenarios": [
+        {
+          "scenario": "Your trust and safety team reviews thousands of moderation calls a day and wants a model to take the clear ones, sending only the unsure cases to people.",
+          "winner": "theirs",
+          "why": "That is the loop Modaic describes: typed decisions with a confidence value, a threshold that routes the uncertain ones to a reviewer, and expert feedback that refines the model's instructions over time. rightmodeler makes no production decisions and routes nothing to anyone at runtime."
+        },
+        {
+          "scenario": "Your agent has run in production for months with one expensive model on every step, and you want to know which steps a cheaper model can hold.",
+          "winner": "ours",
+          "why": "Modaic's workflow starts from a decision you define, not from your agent's recorded steps. rightmodeler starts from the traces: it reruns each step on cheaper candidates, grades them against the answers you shipped, abstains where the evidence is thin, and, when you run apply, opens a draft pull request for your team to review."
+        },
+        {
+          "scenario": "Your team already writes its judgment calls as Modaic judges and wants the audit graded by one of them.",
+          "winner": "both",
+          "why": "Planned, not shipped. The integration is planned against Modaic's hosted API, so a judge you keep in your Modaic account would grade the replays. Until it exists, keep Modaic for the decisions it makes, and grade the audit with the built-in judge or with Braintrust, Langfuse, or LangSmith through --evaluator."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "Modaic works on a problem rightmodeler does not touch. Its stated aim is to make AI judgment \"auditable, calibrated, and trusted at scale\": confidence estimation, review of the uncertain cases, and alignment runs that only commit when they beat the baseline. Per its site it is SOC 2 Type II compliant and offers managed, VPC, or bring-your-own-cloud deployment. rightmodeler has none of that. It is a report you run on your own machine, with no server, no account with us, and no telemetry.",
+        "Where they meet is the judge. rightmodeler already grades replays with a built-in judge from a model family that neither compared model belongs to, or with an external evaluator you choose. A Modaic evaluator is planned against Modaic's hosted API with your own Modaic account, because Modaic's judges, confidence scores, and alignment run only on its service. Each graded case would go to Modaic without naming the candidate model, and a confidence number would never decide whether a candidate passes.",
+        "And the audit's own hedge, whichever judge grades it: a passing score means the candidate agreed with the output you shipped, not that either answer was correct. Where the evidence is thin, the audit abstains instead of guessing."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page uses",
+      "terms": [
+        {
+          "term": "LLM-as-judge",
+          "def": "A model that grades another model's output. Modaic works on making such a judge consistent and calibrated; rightmodeler uses one, from a family neither compared model belongs to, to grade agreement with the output you accepted.",
+          "slug": "llm-as-judge"
+        },
+        {
+          "term": "confidence score",
+          "def": "Modaic's per-decision estimate of how sure its model is. Its docs call it a ranking and thresholding signal, not a substitute for measuring agreement against labeled examples."
+        },
+        {
+          "term": "reference evidence",
+          "def": "Agreement between a candidate's answer and the output you already accepted for the same step. Evidence of agreement with shipped output, not proof of correctness.",
+          "slug": "reference-evidence"
+        },
+        {
+          "term": "quality floor",
+          "def": "The minimum agreement a candidate must clear before the audit recommends it. The winner has to clear it again on held-out cases.",
+          "slug": "quality-floor"
+        },
+        {
+          "term": "abstain",
+          "def": "What the audit does when a step's sample is too small or its evidence too mixed: it recommends nothing rather than guessing.",
+          "slug": "abstain"
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace Modaic?",
+          "a": "No. Modaic runs and calibrates the judgment calls your product makes, such as triage, moderation, or an LLM judge's verdict, and uses expert feedback to improve them. rightmodeler makes no production decisions. It is an offline audit that answers which model each step of your agent needs, and every swap it proposes waits for a human to review."
+        },
+        {
+          "q": "Does rightmodeler integrate with Modaic?",
+          "a": "Not today. There is no --evaluator modaic and no Modaic code in the CLI. An evaluator is planned against Modaic's hosted API, so a judge you keep in your Modaic account would grade rightmodeler's replays; building it is waiting on Modaic confirming its canonical API. The integration page lists what exists today and what the plan will guarantee."
+        },
+        {
+          "q": "Why Modaic's hosted API and not its open-source SDK?",
+          "a": "Because that is where Modaic's judging happens. Per its code, the open-source SDK requests Modaic's judge runs and confidence scores from Modaic's hosted service, and alignment runs only there; on its own, it is a DSPy program without those features. The trade is real: the integration will need a Modaic account and key, each graded case will go to Modaic's service, and Modaic's charges will sit outside rightmodeler's cost estimate and spend cap."
+        },
+        {
+          "q": "Can Modaic's confidence tell me a cheaper model is safe to swap in?",
+          "a": "Not on its own. Modaic's own docs describe confidence as most useful as a ranking and thresholding signal, not a substitute for measuring agreement against labeled examples. rightmodeler's evidence is agreement with the outputs you accepted, with the sample size and any abstentions attached to each step."
+        },
+        {
+          "q": "Is Modaic open source?",
+          "a": "Partly. As of 2026-09-22, its Python SDK is on GitHub under the MIT License with additional terms, which bar modifying it to change its default hub endpoint. The platform that serves decisions, confidence scores, and alignment is a hosted service, priced from $0 a month with a $10 usage credit on its entry plan."
+        }
+      ]
+    }
+  ]
+}
