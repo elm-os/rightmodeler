@@ -51,15 +51,15 @@ Run the audit: /how-it-works
 
 ### rightmodeler agent
 
-Open source now
+Self-host today
 
-The autopilot. A new model ships; your repo gets a pull request with the evidence attached. Migrations become code review.
+The autopilot. A new model ships; give the word and your repo gets a pull request with the evidence attached. Migrations become code review.
 
 Meet the agent: /agent
 
 ### Crucible
 
-Early access
+In development
 
 The instruments. Cost per layer, speed per step, failures as they happen, and a stack that stays right-sized.
 

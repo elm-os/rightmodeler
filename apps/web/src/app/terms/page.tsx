@@ -32,7 +32,7 @@ export default function TermsPage() {
       <section className="bg-parchment-white py-16 sm:py-20">
         <Prose>
           <p className="font-mono text-caption uppercase text-fog">
-            Last updated July 10, 2026
+            Last updated September 22, 2026
           </p>
 
           <Lead>
@@ -51,10 +51,10 @@ export default function TermsPage() {
           <P>
             The site describes the rightmodeler CLI, rightmodeler agent, and
             Crucible, and offers early-access waitlists and a feedback form.
-            Products described as coming soon or in early access are
-            pre-release: their features, availability, and pricing may change or
-            be withdrawn without notice, and joining a waitlist does not
-            guarantee access.
+            Products described as in development, coming soon, or in early
+            access are pre-release: their features, availability, and pricing
+            may change or be withdrawn without notice, and joining a waitlist
+            does not guarantee access.
           </P>
 
           <H2>The software</H2>
