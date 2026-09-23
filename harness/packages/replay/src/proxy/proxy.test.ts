@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 
 import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import { afterEach, describe, expect, it } from "vitest";
@@ -273,6 +274,68 @@ async function startPair(
   const scriptPath = await createRuntimeBundle();
   const runtime = await startRuntime(env, scriptPath);
   return { scratch, stub, egress, runtime, env, scriptPath };
+}
+
+interface DirectProvider {
+  origin: string;
+  requests: Array<{ url: string; acceptEncoding: string | undefined }>;
+}
+
+async function startDirectProvider(): Promise<DirectProvider> {
+  const requests: DirectProvider["requests"] = [];
+  const provider = createServer((request, response) => {
+    requests.push({
+      url: request.url ?? "",
+      acceptEncoding: request.headers["accept-encoding"],
+    });
+    request.resume();
+    request.once("end", () => {
+      const body = Buffer.from(
+        JSON.stringify({
+          id: "direct-1",
+          object: "chat.completion",
+          created: 1,
+          model: "acme/large-1",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "direct" },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 8, completion_tokens: 12, total_tokens: 20 },
+        }),
+      );
+      const gzip = /\bgzip\b/.test(request.headers["accept-encoding"] ?? "");
+      response.writeHead(200, {
+        "content-type": "application/json",
+        ...(gzip ? { "content-encoding": "gzip" } : {}),
+      });
+      response.end(gzip ? gzipSync(body) : body);
+    });
+  });
+  servers.push(provider);
+  await new Promise<void>((resolve, reject) => {
+    provider.once("error", reject);
+    provider.listen(0, "127.0.0.1", resolve);
+  });
+  const address = provider.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("Direct provider did not bind a TCP address");
+  }
+  return { origin: `http://127.0.0.1:${address.port}`, requests };
+}
+
+async function startRuntimeAt(
+  egressUrl: string,
+): Promise<{ runtime: Runtime; scratch: string }> {
+  const scratch = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-direct-"));
+  scratchDirectories.push(scratch);
+  const runtime = await startRuntime(
+    runtimeEnv({ scratch, egressUrl }),
+    await createRuntimeBundle(),
+  );
+  return { runtime, scratch };
 }
 
 function correlatedHeaders(stepId: string, logicalCallId: string) {
@@ -1170,6 +1233,77 @@ describe("Mode B proxy and host egress", () => {
 
     expect(response.status).toBe(200);
     expect(receivedPath).toBe("/provider-prefix/v1/chat/completions");
+  });
+
+  it("asks a provider it reaches directly for an uncompressed body and meters it", async () => {
+    const provider = await startDirectProvider();
+    const { runtime, scratch } = await startRuntimeAt(provider.origin);
+
+    const response = await callProxy(
+      runtime,
+      "step-direct",
+      "logical-direct",
+      chatBody(),
+      { "accept-encoding": "gzip, deflate, br" },
+    );
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+
+    expect(
+      provider.requests.map(({ acceptEncoding }) => acceptEncoding),
+    ).toEqual(["identity"]);
+    expect(await attemptsUntil(spoolPath(scratch), 1)).toEqual([
+      expect.objectContaining({
+        streamOutcome: "completed",
+        usage: { inputTokens: 8, outputTokens: 12, totalTokens: 20 },
+        costIsEstimate: false,
+      }),
+    ]);
+  });
+
+  it("attributes a direct answer to the provider and a host listener refusal to egress", async () => {
+    const provider = await startDirectProvider();
+    const direct = await startRuntimeAt(provider.origin);
+    await (
+      await callProxy(direct.runtime, "step-direct", "logical-direct")
+    ).arrayBuffer();
+    expect(await attemptsUntil(spoolPath(direct.scratch), 1)).toEqual([
+      expect.objectContaining({
+        upstreamStatus: 200,
+        upstreamSource: "provider",
+      }),
+    ]);
+
+    delete process.env[apiKeyEnv];
+    const egress = await startEgressListener({
+      providerBaseUrl: provider.origin,
+      apiKeyEnv,
+    });
+    egressListeners.push(egress);
+    const refused = await startRuntimeAt(egress.url);
+    await (
+      await callProxy(refused.runtime, "step-refused", "logical-refused")
+    ).arrayBuffer();
+    expect(await attemptsUntil(spoolPath(refused.scratch), 1)).toEqual([
+      expect.objectContaining({
+        upstreamStatus: 500,
+        upstreamSource: "egress",
+      }),
+    ]);
+    expect(provider.requests).toHaveLength(1);
+  });
+
+  it("keeps the provider base path when it forwards straight to the provider", async () => {
+    const provider = await startDirectProvider();
+    const { runtime } = await startRuntimeAt(
+      `${provider.origin}/provider-prefix`,
+    );
+    await (
+      await callProxy(runtime, "step-pathed", "logical-pathed")
+    ).arrayBuffer();
+    expect(provider.requests.map(({ url }) => url)).toEqual([
+      "/provider-prefix/v1/chat/completions",
+    ]);
   });
 
   it("injects credentials at forward time and redacts provider errors", async () => {
