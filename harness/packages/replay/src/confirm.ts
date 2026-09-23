@@ -41,9 +41,11 @@ import {
   type ReplayModeBResult,
 } from "./driver-modeb.js";
 import { writeReplayFact } from "./driver.js";
+import type { SubstitutedResponse } from "./provenance.js";
 import {
   estimateInputTokens,
   ProviderConfigurationError,
+  ProviderResponseError,
   type ModelPricing,
 } from "./provider.js";
 import type { ReplayStep } from "./shortlist.js";
@@ -128,6 +130,7 @@ export interface ConfirmSwapSetResult {
   readonly runSetsUsed: number;
   readonly log: readonly DeltaDebugLogEntry<string>[];
   readonly lostReasons: Readonly<Record<string, number>>;
+  readonly substituted: readonly SubstitutedResponse[];
   readonly infrastructureBlocks: readonly {
     readonly reason: string;
     readonly message: string;
@@ -600,6 +603,13 @@ async function assessExecution(
         judgeRefunds.add(refundComplete);
         try {
           judgeResponse = await input.modeB.judge.chat(request);
+          if (judgeResponse.substitution !== undefined) {
+            const { kind, evidence } = judgeResponse.substitution;
+            throw new ProviderResponseError(
+              `Judge response was substituted (${kind}): ${evidence}`,
+              { status: 200, bodyExcerpt: evidence },
+            );
+          }
           return judgeResponse;
         } catch (error) {
           if (error instanceof ProviderConfigurationError) throw error;
@@ -743,6 +753,10 @@ async function outcomeFromFacts(
   }> = [];
   for (const recordedCase of input.cases) {
     const execution = executions.get(recordedCase.caseId)!;
+    if (execution.attribution === "substituted") {
+      incomplete = true;
+      continue;
+    }
     if (
       execution.attribution === "lost" ||
       execution.attribution === "ambiguous"
@@ -831,6 +845,7 @@ export async function confirmSwapSet(
   const planKey = confirmPlanKey(input.budget.modeB.projectId, familyId);
   await ensurePlan(input.store, planKey, familyId, inputDigest);
   const lostReasons: Record<string, number> = {};
+  const substituted: SubstitutedResponse[] = [];
   const infrastructureBlocks: { reason: string; message: string }[] = [];
 
   const runSubset = async (
@@ -894,6 +909,7 @@ export async function confirmSwapSet(
     for (const [reason, count] of Object.entries(result.lostReasons)) {
       lostReasons[reason] = (lostReasons[reason] ?? 0) + count;
     }
+    substituted.push(...result.substituted);
     for (const block of result.blocked) {
       if (block.kind === "infrastructure") {
         infrastructureBlocks.push({
@@ -1022,6 +1038,7 @@ export async function confirmSwapSet(
     runSetsUsed: result.runSetsUsed,
     log: result.log,
     lostReasons,
+    substituted,
     infrastructureBlocks,
     ...(capped ? { requiredMaxRunSets: input.budget.maxRunSets + 1 } : {}),
   };

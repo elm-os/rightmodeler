@@ -302,6 +302,16 @@ Both are wrong.
 `logicalCallId` is assigned before entering the SDK. Every physical attempt receives its own
 `attemptId`. Every attempt is charged. Exactly one terminal execution is scored.
 
+### Which model answered
+
+A gateway can answer with another model, from a cache, or after changing the request. Every
+response's `model` is compared with the requested id (equal, a dropped gateway provider prefix,
+or an added dated snapshot), and gateway cache and request markers are read from the headers and
+body. A mismatch is recorded on the attempt as `servedModel` and `substitution`, the execution as
+`attribution: "substituted"`, and the kernel excludes it as `attribution_substituted`; a
+substituted judge response is a judge failure. Only swapped steps are checked in Mode B: the rest
+are the application's own environment.
+
 ### Fallbacks
 
 SDKs that pin their own base URL are detected during `scan`. The fallback is TLS interception

@@ -144,6 +144,7 @@ interface StubProviderModule {
     omitCatalogModels?: string[];
     rateLimitedModels?: string[];
     rateLimitMessageIncludes?: string;
+    servedModels?: Record<string, string>;
   }): Promise<StubProvider>;
 }
 
@@ -602,6 +603,7 @@ async function startStub(
     omitCatalogModels?: string[];
     rateLimitedModels?: string[];
     rateLimitMessageIncludes?: string;
+    servedModels?: Record<string, string>;
   } = {},
 ): Promise<StubProvider> {
   const module = (await import(stubModuleUrl)) as StubProviderModule;
@@ -3893,6 +3895,91 @@ describe("built CLI pipeline", () => {
       ).toBe(false);
     } finally {
       await Promise.all([modelStub.close(), evaluatorStub.close()]);
+    }
+  }, 60_000);
+
+  it("leaves candidates answered by another model out of the evidence as attribution_substituted", async () => {
+    const { repo } = await fixtureCopy("substituted-candidates");
+    const modelStub = await startStub({
+      servedModels: {
+        "acme/small-1": "acme/large-1",
+        "acme/lite-1": "acme/large-1",
+      },
+    });
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "aggregate",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${modelStub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_API_KEY",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_E2E_API_KEY: secret } },
+      );
+      expect(result.code, result.stderr).toBe(0);
+      const warnings = result.stderr
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line) as Record<string, string>);
+      const substitutedWarnings = warnings.filter(
+        ({ code }) => code === "replay_responses_substituted",
+      );
+      expect(substitutedWarnings).toHaveLength(1);
+      expect(substitutedWarnings[0]!.message).toContain("model ");
+      expect(substitutedWarnings[0]!.message).toContain("--store");
+
+      const verdicts = (JSON.parse(result.stdout) as Record<string, unknown>)
+        .verdicts as Array<{
+        familyId: string;
+        assessmentAbsentReasons: Array<{ reason: string; count: number }>;
+      }>;
+      expect(
+        verdicts
+          .filter(({ familyId }) => familyId === "summarize")
+          .flatMap(({ assessmentAbsentReasons }) =>
+            assessmentAbsentReasons.map(({ reason }) => reason),
+          ),
+      ).toContain("attribution_substituted");
+
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const facts = (await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      )) as Array<Record<string, unknown>>;
+      const substitutedExecutions = facts.filter(
+        (fact) =>
+          typeof fact.executionId === "string" &&
+          (fact.candidateId === "acme/small-1" ||
+            fact.candidateId === "acme/lite-1"),
+      );
+      expect(substitutedExecutions.length).toBeGreaterThan(0);
+      expect(
+        substitutedExecutions.every(
+          ({ attribution }) => attribution === "substituted",
+        ),
+      ).toBe(true);
+      const substitutedIds = new Set(
+        substitutedExecutions.map(({ executionId }) => executionId),
+      );
+      expect(
+        facts.some(
+          (fact) =>
+            typeof fact.assessmentId === "string" &&
+            substitutedIds.has(fact.executionId as string),
+        ),
+      ).toBe(false);
+    } finally {
+      await modelStub.close();
     }
   }, 60_000);
 

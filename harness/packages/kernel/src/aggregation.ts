@@ -24,6 +24,7 @@ export const EVIDENCE_EXCLUSION_REASONS = [
   "attribution_ambiguous",
   "attribution_lost",
   "judge_evidence_incomplete",
+  "attribution_substituted",
 ] as const;
 
 export const ABSTAIN_REASONS = [
@@ -927,7 +928,11 @@ function evidenceExclusionReason(fact: AggregationFact): string | undefined {
     return fact.assessmentAbsentReason;
   }
   const { attribution } = fact.execution;
-  if (attribution === "ambiguous" || attribution === "lost") {
+  if (
+    attribution === "ambiguous" ||
+    attribution === "lost" ||
+    attribution === "substituted"
+  ) {
     return `attribution_${attribution}`;
   }
   if (attribution !== "ok" || fact.requiredAbstention) {

@@ -21,8 +21,17 @@ export const attributionSchema = z.enum([
   "ambiguous",
   "lost",
   "silent-failure",
+  "substituted",
 ]);
 export type Attribution = z.infer<typeof attributionSchema>;
+
+export const substitutionSchema = z
+  .strictObject({
+    kind: z.enum(["model", "cache", "request"]),
+    evidence: z.string().min(1).max(200),
+  })
+  .readonly();
+export type Substitution = z.infer<typeof substitutionSchema>;
 
 export const executionSchema = z
   .strictObject({
@@ -60,6 +69,8 @@ export const requestAttemptSchema = z
     providerResponseId: requiredStringSchema.optional(),
     finishReason: requiredStringSchema.optional(),
     latencyMs: z.number().nonnegative().optional(),
+    servedModel: requiredStringSchema.optional(),
+    substitution: substitutionSchema.optional(),
   })
   .readonly();
 export type RequestAttempt = z.infer<typeof requestAttemptSchema>;

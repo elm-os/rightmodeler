@@ -2,7 +2,10 @@ import type {
   JsonValue,
   ModelCatalogEntry,
   ModelPricing,
+  Substitution,
 } from "@rightmodeler/core";
+
+import { responseSubstitution, servedModel } from "./provenance.js";
 
 export type { ModelCatalogEntry, ModelPricing };
 
@@ -41,6 +44,8 @@ export interface ChatResponse {
   costIsEstimate: boolean;
   finishReason?: string;
   providerResponseId?: string;
+  servedModel?: string;
+  substitution?: Substitution;
 }
 
 export interface ProviderErrorDetail {
@@ -853,6 +858,12 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
           usage.outputTokens * model.pricing.output;
         costIsEstimate = true;
       }
+      const served = servedModel(envelope);
+      const substitution = responseSubstitution({
+        requestedModel: request.model,
+        headers: response.headers,
+        body: envelope,
+      });
       normalized = {
         content,
         usage,
@@ -860,6 +871,8 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         costIsEstimate,
         ...(finishReason === undefined ? {} : { finishReason }),
         ...(providerResponseId === undefined ? {} : { providerResponseId }),
+        ...(served === undefined ? {} : { servedModel: served }),
+        ...(substitution === undefined ? {} : { substitution }),
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

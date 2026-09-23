@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
 import { hopByHopHeaders } from "./headers.js";
+import { responseSubstitution, servedModel } from "../provenance.js";
 import { classifyStream } from "../transport/stream.js";
 
 const maxRequestBytes = 10 * 1024 * 1024;
@@ -469,6 +470,7 @@ async function forwardStreaming(upstream, outgoing, status, spoolSink) {
     spoolPath: result.spoolPath ?? null,
     finishedWithoutSentinel: result.finishedWithoutSentinel === true,
     upstreamFailed,
+    model: result.model ?? null,
   };
 }
 
@@ -521,6 +523,7 @@ async function forwardNonStreaming(upstream, outgoing, status) {
       streamOutcome: "completed",
       usage: isObject(body) ? (body.usage ?? null) : null,
       upstreamFailed: false,
+      body,
     };
   } catch {
     return { streamOutcome: "truncated", usage: null, upstreamFailed: false };
@@ -679,6 +682,7 @@ async function main() {
       return;
     }
 
+    const swapped = stepId in config.swapPolicy;
     const model = config.swapPolicy[stepId] ?? parsed.model;
     const rewritten = {
       ...parsed,
@@ -775,6 +779,7 @@ async function main() {
         upstreamSource: null,
         upstreamFailed: false,
       };
+      let provenance = {};
       try {
         const upstream = await requestUpstream(
           config.egressUrl,
@@ -803,6 +808,23 @@ async function main() {
           upstreamStatus: status,
           upstreamSource: forwarded.upstreamFailed ? "egress" : upstreamSource,
         };
+        if (swapped && status < 400) {
+          const answered =
+            forwarded.body ??
+            (typeof forwarded.model === "string"
+              ? { model: forwarded.model }
+              : undefined);
+          const served = servedModel(answered);
+          const substitution = responseSubstitution({
+            requestedModel: model,
+            headers: upstream.headers,
+            body: answered,
+          });
+          provenance = {
+            ...(served === undefined ? {} : { servedModel: served }),
+            ...(substitution === undefined ? {} : { substitution }),
+          };
+        }
       } catch {
         if (!outgoing.headersSent) {
           sendJson(outgoing, 502, { error: "Egress request failed." });
@@ -838,6 +860,7 @@ async function main() {
         ...(result.finishedWithoutSentinel
           ? { finishedWithoutSentinel: true }
           : {}),
+        ...provenance,
         usage,
         responseSpoolPath: result.spoolPath,
         costUsd: leaseChargeUsd,

@@ -1,4 +1,8 @@
-import type { Assessment, ModelCatalogEntry } from "@rightmodeler/core";
+import type {
+  Assessment,
+  ModelCatalogEntry,
+  Substitution,
+} from "@rightmodeler/core";
 
 export type JudgeVerdict = "equivalent" | "minor_drift" | "divergent";
 
@@ -27,6 +31,7 @@ export interface JudgeChatResult {
     readonly inputTokens: number;
     readonly outputTokens: number;
   };
+  readonly substitution?: Substitution;
 }
 
 export type JudgeChat = (request: JudgeChatRequest) => Promise<JudgeChatResult>;

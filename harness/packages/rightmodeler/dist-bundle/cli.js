@@ -13294,10 +13294,10 @@ function isValidJWT(token, algorithm = null) {
     const tokensParts = token.split(".");
     if (tokensParts.length !== 3)
       return false;
-    const [header] = tokensParts;
-    if (!header)
+    const [header2] = tokensParts;
+    if (!header2)
       return false;
-    const parsedHeader = JSON.parse(atob(header));
+    const parsedHeader = JSON.parse(atob(header2));
     if ("typ" in parsedHeader && parsedHeader?.typ !== "JWT")
       return false;
     if (!parsedHeader.alg)
@@ -25156,8 +25156,13 @@ var attributionSchema = external_exports.enum([
   "ok",
   "ambiguous",
   "lost",
-  "silent-failure"
+  "silent-failure",
+  "substituted"
 ]);
+var substitutionSchema = external_exports.strictObject({
+  kind: external_exports.enum(["model", "cache", "request"]),
+  evidence: external_exports.string().min(1).max(200)
+}).readonly();
 var executionSchema = external_exports.strictObject({
   executionId: requiredStringSchema,
   evidenceQuestionId: requiredStringSchema,
@@ -25185,7 +25190,9 @@ var requestAttemptSchema = external_exports.strictObject({
   }).readonly().optional(),
   providerResponseId: requiredStringSchema.optional(),
   finishReason: requiredStringSchema.optional(),
-  latencyMs: external_exports.number().nonnegative().optional()
+  latencyMs: external_exports.number().nonnegative().optional(),
+  servedModel: requiredStringSchema.optional(),
+  substitution: substitutionSchema.optional()
 }).readonly();
 var assessmentSchema = external_exports.strictObject({
   assessmentId: requiredStringSchema,
@@ -26457,7 +26464,7 @@ function evidenceExclusionReason(fact) {
     return fact.assessmentAbsentReason;
   }
   const { attribution } = fact.execution;
-  if (attribution === "ambiguous" || attribution === "lost") {
+  if (attribution === "ambiguous" || attribution === "lost" || attribution === "substituted") {
     return `attribution_${attribution}`;
   }
   if (attribution !== "ok" || fact.requiredAbstention) {
@@ -28636,6 +28643,88 @@ import { fileURLToPath } from "node:url";
 // ../replay/dist/driver.js
 import { randomUUID as randomUUID7 } from "node:crypto";
 
+// ../replay/dist/provenance.js
+var DATED_SNAPSHOT = /^\d{2,4}(?:-?\d{2}){1,2}$/;
+var PORTKEY_CACHE_HITS = /* @__PURE__ */ new Set(["hit", "semantic hit"]);
+function objectOf(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function servedModel(body) {
+  return nonEmptyString(objectOf(body)?.model);
+}
+function modelParts(id) {
+  const segments = id.toLowerCase().split("/");
+  return {
+    name: segments[segments.length - 1],
+    ...segments.length > 1 ? { vendor: segments[segments.length - 2] } : {}
+  };
+}
+function sameModel(requested, served) {
+  const want = modelParts(requested);
+  const got = modelParts(served);
+  if (want.vendor !== void 0 && got.vendor !== void 0 && want.vendor !== got.vendor) {
+    return false;
+  }
+  if (got.name === want.name)
+    return true;
+  const prefix = `${want.name}-`;
+  return got.name.startsWith(prefix) && DATED_SNAPSHOT.test(got.name.slice(prefix.length));
+}
+function header(headers, name) {
+  if (headers instanceof Headers)
+    return headers.get(name) ?? void 0;
+  const value = headers[name];
+  return typeof value === "string" ? value : value?.join(", ");
+}
+function substitution(kind, evidence) {
+  return { kind, evidence: evidence.slice(0, 200) };
+}
+function responseSubstitution(input) {
+  const body = objectOf(input.body);
+  const extra = objectOf(body?.extra_fields);
+  const served = servedModel(body);
+  if (served !== void 0 && !sameModel(input.requestedModel, served)) {
+    return substitution("model", `served ${served} for requested ${input.requestedModel}`);
+  }
+  const fallback = nonEmptyString(objectOf(extra?.routing_info)?.server_side_fallback_model);
+  if (fallback !== void 0) {
+    return substitution("model", `bifrost server-side fallback served ${fallback}`);
+  }
+  const cacheStatus = header(input.headers, "x-portkey-cache-status");
+  if (cacheStatus !== void 0 && PORTKEY_CACHE_HITS.has(cacheStatus.toLowerCase())) {
+    return substitution("cache", `x-portkey-cache-status: ${cacheStatus}`);
+  }
+  const cacheDebug = objectOf(extra?.cache_debug);
+  if (cacheDebug?.cache_hit === true) {
+    const hitType = cacheDebug.hit_type;
+    return substitution("cache", `bifrost cache hit${typeof hitType === "string" ? ` (${hitType})` : ""}`);
+  }
+  const hookResults = objectOf(body?.hook_results);
+  const transformed = [
+    hookResults?.before_request_hooks,
+    hookResults?.after_request_hooks
+  ].flatMap((hooks) => Array.isArray(hooks) ? hooks : []).map(objectOf).find((hook) => hook?.transformed === true);
+  if (transformed !== void 0) {
+    const id = nonEmptyString(transformed.id) ?? "unnamed";
+    return substitution("request", `portkey hook ${id} transformed the call`);
+  }
+  const dropped = [
+    extra?.dropped_compat_plugin_params,
+    extra?.dropped_unsupported_tools
+  ].flatMap((items) => Array.isArray(items) ? items : []);
+  if (dropped.length > 0) {
+    return substitution("request", `bifrost dropped ${dropped.join(", ")}`);
+  }
+  const converted = nonEmptyString(extra?.converted_request_type);
+  if (converted !== void 0) {
+    return substitution("request", `bifrost converted the request to ${converted}`);
+  }
+  return void 0;
+}
+
 // ../replay/dist/provider.js
 var BlockedError = class extends Error {
   kind;
@@ -29192,13 +29281,21 @@ function createProvider(options) {
         costUsd = usage2.inputTokens * model.pricing.input + usage2.outputTokens * model.pricing.output;
         costIsEstimate = true;
       }
+      const served = servedModel(envelope);
+      const substitution2 = responseSubstitution({
+        requestedModel: request.model,
+        headers: response.headers,
+        body: envelope
+      });
       normalized = {
         content,
         usage: usage2,
         costUsd,
         costIsEstimate,
         ...finishReason === void 0 ? {} : { finishReason },
-        ...providerResponseId === void 0 ? {} : { providerResponseId }
+        ...providerResponseId === void 0 ? {} : { providerResponseId },
+        ...served === void 0 ? {} : { servedModel: served },
+        ...substitution2 === void 0 ? {} : { substitution: substitution2 }
       };
     } catch (error51) {
       const message2 = error51 instanceof Error ? error51.message : String(error51);
@@ -29333,7 +29430,12 @@ async function replayModeA(input) {
   const replayState = await replayFactState(input.store, input.budget.projectId);
   const existing = replayState.completed;
   const cells = cellsFor(input);
-  const result2 = { completed: 0, skipped: 0, blocked: [] };
+  const result2 = {
+    completed: 0,
+    skipped: 0,
+    blocked: [],
+    substituted: []
+  };
   const activeRefunds = /* @__PURE__ */ new Set();
   let nextCell = 0;
   let failure;
@@ -29408,6 +29510,10 @@ async function replayModeA(input) {
           activeRefunds.add(refundComplete);
           try {
             judgeResponse = await input.judge.chat(request);
+            if (judgeResponse.substitution !== void 0) {
+              const { kind, evidence } = judgeResponse.substitution;
+              throw new ProviderResponseError(`Judge response was substituted (${kind}): ${evidence}`, { status: 200, bodyExcerpt: evidence });
+            }
             return judgeResponse;
           } catch (error51) {
             if (error51 instanceof ProviderConfigurationError)
@@ -29574,7 +29680,9 @@ async function replayModeA(input) {
         ...attempt.errorDetail === void 0 ? {} : { errorDetail: attempt.errorDetail },
         ...attempt.providerResponseId === void 0 ? {} : { providerResponseId: attempt.providerResponseId },
         ...attempt.finishReason === void 0 ? {} : { finishReason: attempt.finishReason },
-        ...attempt.latencyMs === void 0 ? {} : { latencyMs: attempt.latencyMs }
+        ...attempt.latencyMs === void 0 ? {} : { latencyMs: attempt.latencyMs },
+        ...attempt.servedModel === void 0 ? {} : { servedModel: attempt.servedModel },
+        ...attempt.substitution === void 0 ? {} : { substitution: attempt.substitution }
       }));
       const spendId = randomUUID7();
       await writeReplayFact(input.store, input.budget.projectId, spendId, spendEventSchema.parse({
@@ -29699,6 +29807,28 @@ async function replayModeA(input) {
       }
       if (heartbeatFailure !== void 0)
         throw heartbeatFailure;
+      const { substitution: substitution2 } = response;
+      if (substitution2 !== void 0) {
+        await writeReplayFact(input.store, input.budget.projectId, executionId, executionSchema.parse({
+          executionId,
+          evidenceQuestionId: cell.step.evidenceQuestionId,
+          caseId: cell.recordedCase.caseId,
+          stepId: cell.step.stepId,
+          candidateId: cell.candidate.id,
+          trajectoryId: cell.recordedCase.trajectoryId,
+          corpusSplit: cell.recordedCase.corpusSplit,
+          selectionStage: cell.step.selectionStage ?? cell.step.corpusSplit,
+          terminalOutcome: "abstain",
+          finalOutput: response.content,
+          attribution: "substituted"
+        }));
+        result2.substituted.push({
+          candidateId: cell.candidate.id,
+          substitution: substitution2
+        });
+        result2.completed += 1;
+        return;
+      }
       const silentFailure = response.content.trim().length === 0 && response.usage.outputTokens === 0;
       const execution = executionSchema.parse({
         executionId,
@@ -30240,7 +30370,8 @@ function expectedStepModel(stepId, steps, policy) {
 }
 function parseAttempt(row2, input, cell, executionId, steps, policy, table, checkpoints) {
   const usage2 = validUsage(row2.usage);
-  if (!validIdentity(row2, input, cell, executionId) || !nonemptyString(row2.stepId) || !nonemptyString(row2.attemptId) || !nonemptyString(row2.logicalCallId) || !positiveInteger(row2.attemptGroup) || !checkpoints.pairs.has(checkpointPair(row2.logicalCallId, row2.attemptGroup)) || !nonemptyString(row2.model) || row2.model !== expectedStepModel(row2.stepId, steps, policy) || !nonemptyString(row2.streamOutcome) || !STREAM_OUTCOMES.has(row2.streamOutcome) || usage2 === void 0 || !nonnegativeInteger(row2.estimatedInputTokens) || !nonnegativeInteger(row2.maxOutputTokens) || row2.attribution !== "ok" || !nonnegativeNumber2(row2.reservedUsd) || !nonnegativeNumber2(row2.leaseChargeUsd) || !nonnegativeNumber2(row2.costUsd) || typeof row2.costIsEstimate !== "boolean" || row2.costIsEstimate !== (usage2 === null) || row2.responseSpoolPath !== null && typeof row2.responseSpoolPath !== "string" || row2.finishedWithoutSentinel !== void 0 && row2.finishedWithoutSentinel !== true || !timestamp2(row2.startedAt) || !timestamp2(row2.endedAt) || Date.parse(row2.endedAt) < Date.parse(row2.startedAt)) {
+  const substitution2 = row2.substitution === void 0 ? void 0 : substitutionSchema.safeParse(row2.substitution).data;
+  if (!validIdentity(row2, input, cell, executionId) || !nonemptyString(row2.stepId) || !nonemptyString(row2.attemptId) || !nonemptyString(row2.logicalCallId) || !positiveInteger(row2.attemptGroup) || !checkpoints.pairs.has(checkpointPair(row2.logicalCallId, row2.attemptGroup)) || !nonemptyString(row2.model) || row2.model !== expectedStepModel(row2.stepId, steps, policy) || !nonemptyString(row2.streamOutcome) || !STREAM_OUTCOMES.has(row2.streamOutcome) || usage2 === void 0 || !nonnegativeInteger(row2.estimatedInputTokens) || !nonnegativeInteger(row2.maxOutputTokens) || row2.attribution !== "ok" || !nonnegativeNumber2(row2.reservedUsd) || !nonnegativeNumber2(row2.leaseChargeUsd) || !nonnegativeNumber2(row2.costUsd) || typeof row2.costIsEstimate !== "boolean" || row2.costIsEstimate !== (usage2 === null) || row2.responseSpoolPath !== null && typeof row2.responseSpoolPath !== "string" || row2.finishedWithoutSentinel !== void 0 && row2.finishedWithoutSentinel !== true || row2.servedModel !== void 0 && !nonemptyString(row2.servedModel) || row2.substitution !== void 0 && substitution2 === void 0 || !timestamp2(row2.startedAt) || !timestamp2(row2.endedAt) || Date.parse(row2.endedAt) < Date.parse(row2.startedAt)) {
     return null;
   }
   const pricing = table[row2.model];
@@ -30273,7 +30404,9 @@ function parseAttempt(row2, input, cell, executionId, steps, policy, table, chec
     upstreamStatus,
     upstreamSource,
     costUsd,
-    latencyMs: Date.parse(row2.endedAt) - Date.parse(row2.startedAt)
+    latencyMs: Date.parse(row2.endedAt) - Date.parse(row2.startedAt),
+    ...nonemptyString(row2.servedModel) ? { servedModel: row2.servedModel } : {},
+    ...substitution2 === void 0 ? {} : { substitution: substitution2 }
   };
 }
 function parseReservation(row2, input, cell, executionId, steps, policy, table, checkpoints) {
@@ -30590,7 +30723,9 @@ async function writeAttemptFacts(input, cell, attempts, reservations) {
       usage: attempt.usage,
       costUsd: attempt.costUsd,
       costIsEstimate: true,
-      ...attempt.latencyMs === void 0 ? {} : { latencyMs: attempt.latencyMs }
+      ...attempt.latencyMs === void 0 ? {} : { latencyMs: attempt.latencyMs },
+      ...attempt.servedModel === void 0 ? {} : { servedModel: attempt.servedModel },
+      ...attempt.substitution === void 0 ? {} : { substitution: attempt.substitution }
     }));
     if (existing !== null)
       continue;
@@ -30648,7 +30783,8 @@ async function replayModeB(input) {
     blocked: [],
     rejectedRows: 0,
     lostReasons: {},
-    executions: []
+    executions: [],
+    substituted: []
   };
   if (pending.length === 0)
     return result2;
@@ -30775,6 +30911,16 @@ async function replayModeB(input) {
         execution = executionFor(cell, executionId, "success", envelope.finalOutput, infrastructureLost ? "lost" : "ok");
       } else {
         execution = executionFor(cell, executionId, "failure", targetStepExercised ? envelope?.finalOutput ?? null : null, !infrastructureLost && targetStepExercised && modelMisbehaved(inspection) ? "ok" : "lost");
+      }
+      const substitutions = inspection.attempts.flatMap(({ substitution: substitution2 }) => substitution2 === void 0 ? [] : [substitution2]);
+      if (substitutions.length > 0 && execution.attribution !== "lost") {
+        execution = executionFor(cell, executionId, "abstain", envelope?.finalOutput ?? null, "substituted");
+        for (const substitution2 of substitutions) {
+          result2.substituted.push({
+            candidateId: cell.candidateId,
+            substitution: substitution2
+          });
+        }
       }
       await writeReplayFact(input.store, input.budget.projectId, executionId, execution);
       existing.add(cell.correlationKey);
@@ -31182,6 +31328,10 @@ async function assessExecution(input, recordedCase, execution, key, existing) {
         judgeRefunds.add(refundComplete);
         try {
           judgeResponse = await input.modeB.judge.chat(request);
+          if (judgeResponse.substitution !== void 0) {
+            const { kind, evidence } = judgeResponse.substitution;
+            throw new ProviderResponseError(`Judge response was substituted (${kind}): ${evidence}`, { status: 200, bodyExcerpt: evidence });
+          }
           return judgeResponse;
         } catch (error51) {
           if (error51 instanceof ProviderConfigurationError)
@@ -31279,6 +31429,10 @@ async function outcomeFromFacts(input, key, questionId, selectedCandidateId) {
   const observations = [];
   for (const recordedCase of input.cases) {
     const execution = executions.get(recordedCase.caseId);
+    if (execution.attribution === "substituted") {
+      incomplete = true;
+      continue;
+    }
     if (execution.attribution === "lost" || execution.attribution === "ambiguous") {
       observations.push({
         trajectoryId: execution.trajectoryId,
@@ -31334,6 +31488,7 @@ async function confirmSwapSet(input) {
   const planKey = confirmPlanKey(input.budget.modeB.projectId, familyId);
   await ensurePlan(input.store, planKey, familyId, inputDigest2);
   const lostReasons = {};
+  const substituted = [];
   const infrastructureBlocks = [];
   const runSubset = async (members2, execute) => {
     const key = subsetKey(inputDigest2, members2);
@@ -31376,6 +31531,7 @@ async function confirmSwapSet(input) {
     for (const [reason, count] of Object.entries(result3.lostReasons)) {
       lostReasons[reason] = (lostReasons[reason] ?? 0) + count;
     }
+    substituted.push(...result3.substituted);
     for (const block of result3.blocked) {
       if (block.kind === "infrastructure") {
         infrastructureBlocks.push({
@@ -31450,6 +31606,7 @@ async function confirmSwapSet(input) {
     runSetsUsed: result2.runSetsUsed,
     log: result2.log,
     lostReasons,
+    substituted,
     infrastructureBlocks,
     ...capped ? { requiredMaxRunSets: input.budget.maxRunSets + 1 } : {}
   };
@@ -32178,9 +32335,9 @@ function pyprojectDependencies(content) {
   let inArray = false;
   for (const rawLine of content.split("\n")) {
     let line = rawLine.replace(/#.*/, "").trim();
-    const header = /^\[([^\]]+)\]$/.exec(line);
-    if (header !== null) {
-      table = header[1].trim();
+    const header2 = /^\[([^\]]+)\]$/.exec(line);
+    if (header2 !== null) {
+      table = header2[1].trim();
       inArray = false;
       continue;
     }
@@ -32983,8 +33140,8 @@ function reconcile(normalizedSteps, stepRecords) {
     }
     const keyed = normalizedStep.family === void 0 ? [] : sitesByTraceKey.get(normalizedStep.family) ?? [];
     if (keyed.length > 0) {
-      const sameModel = keyed.filter(({ currentModel }) => currentModel === normalizedStep.model);
-      return joinCandidates(normalizedStep, traceIndex, sameModel.length > 0 ? sameModel : keyed, AMBIGUOUS_TRACE_KEY_REASON, "trace_key");
+      const sameModel2 = keyed.filter(({ currentModel }) => currentModel === normalizedStep.model);
+      return joinCandidates(normalizedStep, traceIndex, sameModel2.length > 0 ? sameModel2 : keyed, AMBIGUOUS_TRACE_KEY_REASON, "trace_key");
     }
     const candidates = sitesByModel.get(normalizedStep.model) ?? [];
     if (candidates.length === 0) {
@@ -46128,6 +46285,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
   });
   let completed = 0;
   let skipped = 0;
+  const substituted = [];
   const blockedCellsByFamily = /* @__PURE__ */ new Map();
   const runCells = async (split, assignments) => {
     const groups = /* @__PURE__ */ new Map();
@@ -46174,6 +46332,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
         budget,
         concurrency: context2.maxConcurrency ?? 4
       });
+      substituted.push(...result2.substituted);
       const budgetBlock = result2.blocked.find(({ kind }) => kind === "budget");
       if (budgetBlock !== void 0) {
         const requiredCap = requiredCapFromMessage(budgetBlock.message);
@@ -46224,49 +46383,53 @@ async function executeReplay(context2, inputDigestValue, runId) {
       }
     }
   };
-  await runCells("shortlist", candidates);
-  const ledger = await readPipelineLedger(context2);
-  const shortlistVerdicts = aggregate(
-    await materializeAggregationFacts(
-      context2,
-      ledger,
-      plan,
-      candidates,
-      evaluation(),
-      ceilings
-    ),
-    aggregateOptions(context2.release.gate)
-  ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
-  const shortlistSelections = new Map(
-    Object.keys(plan.sampleSizes).map((family) => {
-      const familyVerdicts = shortlistVerdicts.filter(
-        (verdict) => verdict.familyId === family
-      );
-      const selectionGap = selectionEvidenceGap(
-        familyVerdicts,
-        familyCandidates(plan, candidates, family)
-      );
-      return [
-        family,
-        blockedCellsByFamily.has(family) || selectionGap !== void 0 ? noShortlistSelection() : selectWinner(
-          verdictsByCandidate(familyVerdicts),
-          context2.release.gate
-        )
-      ];
-    })
-  );
-  const holdoutCandidates = candidates.map((assignment) => ({
-    ...assignment,
-    candidates: assignment.candidates.filter((candidate) => {
-      const family = plan.steps.find(
-        ({ stepId }) => stepId === assignment.stepId
-      )?.family;
-      if (family === void 0) return false;
-      const selection = shortlistSelections.get(family);
-      return selection?.status === "confirmation_required" && selection.confirmedCandidateId === candidate.id;
-    })
-  }));
-  await runCells("holdout", holdoutCandidates);
+  try {
+    await runCells("shortlist", candidates);
+    const ledger = await readPipelineLedger(context2);
+    const shortlistVerdicts = aggregate(
+      await materializeAggregationFacts(
+        context2,
+        ledger,
+        plan,
+        candidates,
+        evaluation(),
+        ceilings
+      ),
+      aggregateOptions(context2.release.gate)
+    ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
+    const shortlistSelections = new Map(
+      Object.keys(plan.sampleSizes).map((family) => {
+        const familyVerdicts = shortlistVerdicts.filter(
+          (verdict) => verdict.familyId === family
+        );
+        const selectionGap = selectionEvidenceGap(
+          familyVerdicts,
+          familyCandidates(plan, candidates, family)
+        );
+        return [
+          family,
+          blockedCellsByFamily.has(family) || selectionGap !== void 0 ? noShortlistSelection() : selectWinner(
+            verdictsByCandidate(familyVerdicts),
+            context2.release.gate
+          )
+        ];
+      })
+    );
+    const holdoutCandidates = candidates.map((assignment) => ({
+      ...assignment,
+      candidates: assignment.candidates.filter((candidate) => {
+        const family = plan.steps.find(
+          ({ stepId }) => stepId === assignment.stepId
+        )?.family;
+        if (family === void 0) return false;
+        const selection = shortlistSelections.get(family);
+        return selection?.status === "confirmation_required" && selection.confirmedCandidateId === candidate.id;
+      })
+    }));
+    await runCells("holdout", holdoutCandidates);
+  } finally {
+    warnSubstitutedResponses(context2, substituted);
+  }
   const key = artifactKey(context2, "replay", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context2.store, key, {
     completed,
@@ -46613,6 +46776,7 @@ async function executeConfirm(context2, inputDigestValue, runId) {
       runId,
       authorizedTotalUsd: context2.maxCostUsd
     });
+    const substituted = [];
     for (const familyId of [...needsConfirmation].sort(compareText)) {
       const family = initial.families.find(
         (candidate) => candidate.familyId === familyId
@@ -46749,6 +46913,7 @@ async function executeConfirm(context2, inputDigestValue, runId) {
         budget: { modeB: budget, maxRunSets },
         policy: context2.release.gate
       });
+      substituted.push(...result2.substituted);
       confirmedFamilies += 1;
       const lostReasonEntries = Object.entries(result2.lostReasons).sort(
         ([left], [right]) => compareText(left, right)
@@ -46780,6 +46945,7 @@ async function executeConfirm(context2, inputDigestValue, runId) {
         ...result2.requiredMaxRunSets === void 0 ? {} : { requiredMaxRunSets: result2.requiredMaxRunSets }
       });
     }
+    warnSubstitutedResponses(context2, substituted);
   }
   const ledger = await readPipelineLedger(context2);
   const ceilings = await loadReferenceCeilings(context2, plan);
@@ -47635,6 +47801,17 @@ function judgeMetadata(assessment) {
 }
 function requiredCapFromMessage(message2) {
   return /raise it to at least \$([0-9.]+)/.exec(message2)?.[1];
+}
+function warnSubstitutedResponses(context2, responses) {
+  if (responses.length === 0) return;
+  const count = (kind) => responses.filter(({ substitution: substitution2 }) => substitution2.kind === kind).length;
+  const examples = [
+    ...new Set(responses.map(({ substitution: substitution2 }) => substitution2.evidence))
+  ].slice(0, 3);
+  context2.reporter.warning(
+    "replay_responses_substituted",
+    `${responses.length} replayed response(s) did not come fresh from the requested model (model ${count("model")}, cache ${count("cache")}, request ${count("request")}), for example: ${examples.join("; ")}. They were left out of the evidence as attribution_substituted. Name replay models by their upstream ids (rename custom aliases) and turn off fallbacks, response caching and request plugins for the replay route, then rerun with a fresh store (--store <directory>), because completed replay cells are reused. See "Which model answered" in rightmodeler docs getting-started.`
+  );
 }
 function normalizePipelineError(error51, context2) {
   if (error51 instanceof ProtocolError) return error51;

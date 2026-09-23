@@ -30,8 +30,15 @@ interface StubProvider {
   getHitCount(): number;
 }
 
+interface StubOptions {
+  servedModels?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
+}
+
 interface StubProviderModule {
-  startStubProvider(options: { port: number }): Promise<StubProvider>;
+  startStubProvider(
+    options: StubOptions & { port: number },
+  ): Promise<StubProvider>;
 }
 
 interface Runtime {
@@ -76,6 +83,9 @@ const transportPath = fileURLToPath(
   new URL("../transport/stream.ts", import.meta.url),
 );
 const headersPath = fileURLToPath(new URL("./headers.ts", import.meta.url));
+const provenancePath = fileURLToPath(
+  new URL("../provenance.ts", import.meta.url),
+);
 const apiKeyEnv = "REPLAY_PROXY_TEST_API_KEY";
 const credential = "credential-sentinel-that-must-never-persist";
 const runId = "run-proxy-1";
@@ -224,8 +234,12 @@ async function createRuntimeBundle(): Promise<string> {
   const headers = transpileModule(await readFile(headersPath, "utf8"), {
     compilerOptions,
   });
+  const provenance = transpileModule(await readFile(provenancePath, "utf8"), {
+    compilerOptions,
+  });
   await writeFile(join(transportDirectory, "stream.js"), transport.outputText);
   await writeFile(join(proxyDirectory, "headers.js"), headers.outputText);
+  await writeFile(join(root, "provenance.js"), provenance.outputText);
   return join(proxyDirectory, "proxy-runtime.mjs");
 }
 
@@ -242,9 +256,9 @@ async function stopRuntime(
   await exited;
 }
 
-async function startStub(): Promise<StubProvider> {
+async function startStub(options: StubOptions = {}): Promise<StubProvider> {
   const fixture = (await import(stubModuleUrl)) as StubProviderModule;
-  const stub = await fixture.startStubProvider({ port: 0 });
+  const stub = await fixture.startStubProvider({ port: 0, ...options });
   stubs.push(stub);
   return stub;
 }
@@ -260,11 +274,12 @@ async function startEgress(stub: StubProvider): Promise<EgressListener> {
 
 async function startPair(
   options: Omit<RuntimeOptions, "scratch" | "egressUrl"> = {},
+  stubOptions: StubOptions = {},
 ): Promise<Pair> {
   process.env[apiKeyEnv] = credential;
   const scratch = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-"));
   scratchDirectories.push(scratch);
-  const stub = await startStub();
+  const stub = await startStub(stubOptions);
   const egress = await startEgress(stub);
   const env = runtimeEnv({
     ...options,
@@ -612,6 +627,102 @@ describe("Mode B proxy and host egress", () => {
         costIsEstimate: attempts[0]?.costIsEstimate,
       }),
     ).toBeDefined();
+  });
+
+  it("records the served model and a model substitution on a swapped step only", async () => {
+    const pair = await startPair(
+      { swapPolicy: { "step-rewrite": "acme/lite-1" } },
+      {
+        servedModels: {
+          "acme/lite-1": "acme/large-1",
+          "acme/large-1": "acme/max-1",
+        },
+      },
+    );
+
+    for (const [stepId, logicalCallId] of [
+      ["step-rewrite", "logical-rewrite"],
+      ["step-pass-through", "logical-pass-through"],
+    ] as const) {
+      const response = await callProxy(pair.runtime, stepId, logicalCallId);
+      expect(response.status).toBe(200);
+      await response.arrayBuffer();
+    }
+
+    const [rewritten, passThrough] = await attemptsUntil(
+      spoolPath(pair.scratch),
+      2,
+    );
+    expect(rewritten).toMatchObject({
+      stepId: "step-rewrite",
+      model: "acme/lite-1",
+      servedModel: "acme/large-1",
+      substitution: {
+        kind: "model",
+        evidence: "served acme/large-1 for requested acme/lite-1",
+      },
+    });
+    expect(passThrough).toMatchObject({
+      stepId: "step-pass-through",
+      model: "acme/large-1",
+    });
+    expect(passThrough).not.toHaveProperty("servedModel");
+    expect(passThrough).not.toHaveProperty("substitution");
+  });
+
+  it("records a cache hit header on a swapped step", async () => {
+    const pair = await startPair(
+      { swapPolicy: { "step-rewrite": "acme/lite-1" } },
+      { responseHeaders: { "x-portkey-cache-status": "HIT" } },
+    );
+
+    const response = await callProxy(
+      pair.runtime,
+      "step-rewrite",
+      "logical-rewrite",
+    );
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+
+    const [attempt] = await attemptsUntil(spoolPath(pair.scratch), 1);
+    expect(attempt).toMatchObject({
+      stepId: "step-rewrite",
+      servedModel: "acme/lite-1",
+      substitution: {
+        kind: "cache",
+        evidence: "x-portkey-cache-status: HIT",
+      },
+    });
+  });
+
+  it("reads the served model from a swapped stream", async () => {
+    const pair = await startPair(
+      { swapPolicy: { "step-rewrite": "acme/lite-1" } },
+      {
+        servedModels: {
+          "acme/lite-1": "acme/large-1",
+          "acme/large-1": "acme/max-1",
+        },
+      },
+    );
+
+    const response = await callProxy(
+      pair.runtime,
+      "step-rewrite",
+      "logical-stream",
+      chatBody({ stream: true }),
+      { "x-stub-enable-streaming": "1" },
+    );
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+
+    const [attempt] = await attemptsUntil(spoolPath(pair.scratch), 1);
+    expect(attempt).toMatchObject({
+      stepId: "step-rewrite",
+      streamOutcome: "completed",
+      servedModel: "acme/large-1",
+      substitution: { kind: "model" },
+    });
   });
 
   it("asks streams for usage and meters the trailing chunk, else charges the reservation", async () => {

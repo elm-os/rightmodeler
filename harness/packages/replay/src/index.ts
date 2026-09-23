@@ -9,6 +9,7 @@ export {
   type ReplayModeAResult,
 } from "./driver.js";
 export * from "./driver-modeb.js";
+export * from "./provenance.js";
 export * from "./provider.js";
 export * from "./proxy/egress.js";
 export * from "./shortlist.js";

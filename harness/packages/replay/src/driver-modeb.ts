@@ -10,9 +10,11 @@ import {
   nonemptyString,
   requestAttemptSchema,
   spendEventSchema,
+  substitutionSchema,
   type Execution,
   type JsonValue,
   type Store,
+  type Substitution,
 } from "@rightmodeler/core";
 import {
   detectDockerAvailability,
@@ -34,6 +36,7 @@ import {
   type BlockedCell,
   type RecordedCase,
 } from "./driver.js";
+import type { SubstitutedResponse } from "./provenance.js";
 import type { ModelCatalogEntry, ModelPricing } from "./provider.js";
 import {
   startEgressListener,
@@ -122,6 +125,7 @@ export interface ReplayModeBResult {
   rejectedRows: number;
   lostReasons: Record<string, number>;
   executions: Execution[];
+  substituted: SubstitutedResponse[];
 }
 
 interface ModeBCell {
@@ -153,6 +157,8 @@ interface ValidAttemptRow {
   upstreamSource: "provider" | "egress" | null;
   costUsd: number;
   latencyMs?: number;
+  servedModel?: string;
+  substitution?: Substitution;
 }
 
 interface ValidReservationRow {
@@ -690,6 +696,10 @@ function parseAttempt(
   checkpoints: CheckpointIndex,
 ): ValidAttemptRow | null {
   const usage = validUsage(row.usage);
+  const substitution =
+    row.substitution === undefined
+      ? undefined
+      : substitutionSchema.safeParse(row.substitution).data;
   if (
     !validIdentity(row, input, cell, executionId) ||
     !nonemptyString(row.stepId) ||
@@ -716,6 +726,8 @@ function parseAttempt(
       typeof row.responseSpoolPath !== "string") ||
     (row.finishedWithoutSentinel !== undefined &&
       row.finishedWithoutSentinel !== true) ||
+    (row.servedModel !== undefined && !nonemptyString(row.servedModel)) ||
+    (row.substitution !== undefined && substitution === undefined) ||
     !timestamp(row.startedAt) ||
     !timestamp(row.endedAt) ||
     Date.parse(row.endedAt) < Date.parse(row.startedAt)
@@ -771,6 +783,10 @@ function parseAttempt(
     upstreamSource,
     costUsd,
     latencyMs: Date.parse(row.endedAt) - Date.parse(row.startedAt),
+    ...(nonemptyString(row.servedModel)
+      ? { servedModel: row.servedModel }
+      : {}),
+    ...(substitution === undefined ? {} : { substitution }),
   };
 }
 
@@ -1380,6 +1396,12 @@ async function writeAttemptFacts(
         ...(attempt.latencyMs === undefined
           ? {}
           : { latencyMs: attempt.latencyMs }),
+        ...(attempt.servedModel === undefined
+          ? {}
+          : { servedModel: attempt.servedModel }),
+        ...(attempt.substitution === undefined
+          ? {}
+          : { substitution: attempt.substitution }),
       }),
     );
     if (existing !== null) continue;
@@ -1419,9 +1441,9 @@ async function writeAttemptFacts(
 function executionFor(
   cell: ModeBCell,
   executionId: string,
-  outcome: "success" | "failure",
+  outcome: "success" | "failure" | "abstain",
   finalOutput: JsonValue,
-  attribution: "ok" | "lost" | "silent-failure",
+  attribution: "ok" | "lost" | "silent-failure" | "substituted",
 ): Execution {
   return executionSchema.parse({
     executionId,
@@ -1463,6 +1485,7 @@ export async function replayModeB(
     rejectedRows: 0,
     lostReasons: {},
     executions: [],
+    substituted: [],
   };
   if (pending.length === 0) return result;
 
@@ -1681,6 +1704,24 @@ export async function replayModeB(
             ? "ok"
             : "lost",
         );
+      }
+      const substitutions = inspection.attempts.flatMap(({ substitution }) =>
+        substitution === undefined ? [] : [substitution],
+      );
+      if (substitutions.length > 0 && execution.attribution !== "lost") {
+        execution = executionFor(
+          cell,
+          executionId,
+          "abstain",
+          envelope?.finalOutput ?? null,
+          "substituted",
+        );
+        for (const substitution of substitutions) {
+          result.substituted.push({
+            candidateId: cell.candidateId,
+            substitution,
+          });
+        }
       }
       await writeReplayFact(
         input.store,

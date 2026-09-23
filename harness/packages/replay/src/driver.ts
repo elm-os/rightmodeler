@@ -41,6 +41,7 @@ import {
   type ProviderAttempt,
   type ProviderClient,
 } from "./provider.js";
+import type { SubstitutedResponse } from "./provenance.js";
 import type { ReplayStep, StepShortlist } from "./shortlist.js";
 
 const BUDGET_HEARTBEAT_INTERVAL_MS = 30_000;
@@ -99,6 +100,7 @@ export interface ReplayModeAResult {
   completed: number;
   skipped: number;
   blocked: BlockedCell[];
+  substituted: SubstitutedResponse[];
 }
 
 interface ReplayCell {
@@ -316,7 +318,12 @@ export async function replayModeA(
   );
   const existing = replayState.completed;
   const cells = cellsFor(input);
-  const result: ReplayModeAResult = { completed: 0, skipped: 0, blocked: [] };
+  const result: ReplayModeAResult = {
+    completed: 0,
+    skipped: 0,
+    blocked: [],
+    substituted: [],
+  };
   const activeRefunds = new Set<Promise<void>>();
   let nextCell = 0;
   let failure: unknown;
@@ -435,6 +442,13 @@ export async function replayModeA(
           activeRefunds.add(refundComplete);
           try {
             judgeResponse = await input.judge!.chat(request);
+            if (judgeResponse.substitution !== undefined) {
+              const { kind, evidence } = judgeResponse.substitution;
+              throw new ProviderResponseError(
+                `Judge response was substituted (${kind}): ${evidence}`,
+                { status: 200, bodyExcerpt: evidence },
+              );
+            }
             return judgeResponse;
           } catch (error) {
             if (error instanceof ProviderConfigurationError) throw error;
@@ -650,6 +664,12 @@ export async function replayModeA(
           ...(attempt.latencyMs === undefined
             ? {}
             : { latencyMs: attempt.latencyMs }),
+          ...(attempt.servedModel === undefined
+            ? {}
+            : { servedModel: attempt.servedModel }),
+          ...(attempt.substitution === undefined
+            ? {}
+            : { substitution: attempt.substitution }),
         }),
       );
       const spendId = randomUUID();
@@ -804,6 +824,33 @@ export async function replayModeA(
       }
       if (heartbeatFailure !== undefined) throw heartbeatFailure;
 
+      const { substitution } = response;
+      if (substitution !== undefined) {
+        await writeReplayFact(
+          input.store,
+          input.budget.projectId,
+          executionId,
+          executionSchema.parse({
+            executionId,
+            evidenceQuestionId: cell.step.evidenceQuestionId,
+            caseId: cell.recordedCase.caseId,
+            stepId: cell.step.stepId,
+            candidateId: cell.candidate.id,
+            trajectoryId: cell.recordedCase.trajectoryId,
+            corpusSplit: cell.recordedCase.corpusSplit,
+            selectionStage: cell.step.selectionStage ?? cell.step.corpusSplit,
+            terminalOutcome: "abstain",
+            finalOutput: response.content,
+            attribution: "substituted",
+          }),
+        );
+        result.substituted.push({
+          candidateId: cell.candidate.id,
+          substitution,
+        });
+        result.completed += 1;
+        return;
+      }
       const silentFailure =
         response.content.trim().length === 0 &&
         response.usage.outputTokens === 0;

@@ -143,6 +143,12 @@ file, the run refuses with `no_priced_candidates` instead of reporting zero
 cost. The judge must be priced too, so price at least one model from a family
 other than the current model's and the candidate's.
 
+## Which model answered
+
+Rightmodeler checks every replay, judge and Mode B response before it counts. It records the model the response names, and it leaves a response out of the evidence when that model is not the one it asked for, when a gateway reports that it answered from its cache (Portkey's `x-portkey-cache-status: HIT`, Bifrost's `cache_debug.cache_hit`), or when a gateway reports that it changed the request (a Portkey hook with `transformed: true`, Bifrost's compat plugin dropping parameters). Such a response is recorded with `attribution: "substituted"`, is never graded, and counts as `attribution_substituted`; more than 5% of a family's replays substituted abstains the family. A `replay_responses_substituted` warning counts them.
+
+A response names the requested model when it echoes it, when it drops a gateway provider prefix (`openai/gpt-4o-mini` for `vercel/openai/gpt-4o-mini`), or when it adds a dated snapshot (`gpt-4o-mini-2024-07-18` for `gpt-4o-mini`). An alias whose answering model has another name counts as substituted, so name replay models by their upstream ids and turn off fallbacks, model aliases, response caching and request plugins for the replay route. Completed replay cells are reused, so after fixing the route rerun with a fresh store (`--store <directory>`). For streamed Mode B calls only the model a stream names and the response headers are checked.
+
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md`. The JSON report is kept inside the versioned store and is never written as a plain file, so read the final `result` event from `--output json` or `--output jsonl` for the machine-readable outcome.
 
 Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), and the [exit-code convention](exit-codes.md) before automating a full run.

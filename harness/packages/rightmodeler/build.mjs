@@ -100,6 +100,10 @@ await Promise.all([
     resolve(replayRuntime, "../transport/stream.js"),
     resolve(stagingRoot, "transport/stream.js"),
   ),
+  cp(
+    resolve(replayRuntime, "../provenance.js"),
+    resolve(stagingRoot, "provenance.js"),
+  ),
 ]);
 
 async function listFiles(root) {

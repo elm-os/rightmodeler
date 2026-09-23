@@ -80,6 +80,7 @@ import {
   type RecordedCase,
   type ReplayStep,
   type StepShortlist,
+  type SubstitutedResponse,
 } from "@rightmodeler/replay";
 import {
   createMatcherRegistry,
@@ -3389,6 +3390,7 @@ async function executeReplay(
   });
   let completed = 0;
   let skipped = 0;
+  const substituted: SubstitutedResponse[] = [];
   const blockedCellsByFamily = new Map<string, Set<string>>();
   const runCells = async (
     split: "shortlist" | "holdout",
@@ -3454,6 +3456,7 @@ async function executeReplay(
         budget,
         concurrency: context.maxConcurrency ?? 4,
       });
+      substituted.push(...result.substituted);
       const budgetBlock = result.blocked.find(({ kind }) => kind === "budget");
       if (budgetBlock !== undefined) {
         const requiredCap = requiredCapFromMessage(budgetBlock.message);
@@ -3508,54 +3511,58 @@ async function executeReplay(
     }
   };
 
-  await runCells("shortlist", candidates);
-  const ledger = await readPipelineLedger(context);
-  const shortlistVerdicts = aggregate(
-    await materializeAggregationFacts(
-      context,
-      ledger,
-      plan,
-      candidates,
-      evaluation(),
-      ceilings,
-    ),
-    aggregateOptions(context.release.gate),
-  ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
-  const shortlistSelections = new Map(
-    Object.keys(plan.sampleSizes).map((family) => {
-      const familyVerdicts = shortlistVerdicts.filter(
-        (verdict) => verdict.familyId === family,
-      );
-      const selectionGap = selectionEvidenceGap(
-        familyVerdicts,
-        familyCandidates(plan, candidates, family),
-      );
-      return [
-        family,
-        blockedCellsByFamily.has(family) || selectionGap !== undefined
-          ? noShortlistSelection()
-          : selectWinner(
-              verdictsByCandidate(familyVerdicts),
-              context.release.gate,
-            ),
-      ];
-    }),
-  );
-  const holdoutCandidates = candidates.map((assignment) => ({
-    ...assignment,
-    candidates: assignment.candidates.filter((candidate) => {
-      const family = plan.steps.find(
-        ({ stepId }) => stepId === assignment.stepId,
-      )?.family;
-      if (family === undefined) return false;
-      const selection = shortlistSelections.get(family);
-      return (
-        selection?.status === "confirmation_required" &&
-        selection.confirmedCandidateId === candidate.id
-      );
-    }),
-  }));
-  await runCells("holdout", holdoutCandidates);
+  try {
+    await runCells("shortlist", candidates);
+    const ledger = await readPipelineLedger(context);
+    const shortlistVerdicts = aggregate(
+      await materializeAggregationFacts(
+        context,
+        ledger,
+        plan,
+        candidates,
+        evaluation(),
+        ceilings,
+      ),
+      aggregateOptions(context.release.gate),
+    ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
+    const shortlistSelections = new Map(
+      Object.keys(plan.sampleSizes).map((family) => {
+        const familyVerdicts = shortlistVerdicts.filter(
+          (verdict) => verdict.familyId === family,
+        );
+        const selectionGap = selectionEvidenceGap(
+          familyVerdicts,
+          familyCandidates(plan, candidates, family),
+        );
+        return [
+          family,
+          blockedCellsByFamily.has(family) || selectionGap !== undefined
+            ? noShortlistSelection()
+            : selectWinner(
+                verdictsByCandidate(familyVerdicts),
+                context.release.gate,
+              ),
+        ];
+      }),
+    );
+    const holdoutCandidates = candidates.map((assignment) => ({
+      ...assignment,
+      candidates: assignment.candidates.filter((candidate) => {
+        const family = plan.steps.find(
+          ({ stepId }) => stepId === assignment.stepId,
+        )?.family;
+        if (family === undefined) return false;
+        const selection = shortlistSelections.get(family);
+        return (
+          selection?.status === "confirmation_required" &&
+          selection.confirmedCandidateId === candidate.id
+        );
+      }),
+    }));
+    await runCells("holdout", holdoutCandidates);
+  } finally {
+    warnSubstitutedResponses(context, substituted);
+  }
   const key = artifactKey(context, "replay", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context.store, key, {
     completed,
@@ -4002,6 +4009,7 @@ async function executeConfirm(
       authorizedTotalUsd: context.maxCostUsd,
     });
 
+    const substituted: SubstitutedResponse[] = [];
     for (const familyId of [...needsConfirmation].sort(compareText)) {
       const family = initial.families.find(
         (candidate) => candidate.familyId === familyId,
@@ -4149,6 +4157,7 @@ async function executeConfirm(
         budget: { modeB: budget, maxRunSets },
         policy: context.release.gate,
       });
+      substituted.push(...result.substituted);
       confirmedFamilies += 1;
       const lostReasonEntries = Object.entries(result.lostReasons).sort(
         ([left], [right]) => compareText(left, right),
@@ -4182,6 +4191,7 @@ async function executeConfirm(
           : { requiredMaxRunSets: result.requiredMaxRunSets }),
       });
     }
+    warnSubstitutedResponses(context, substituted);
   }
 
   const ledger = await readPipelineLedger(context);
@@ -5327,6 +5337,22 @@ function judgeMetadata(assessment: Assessment):
 
 function requiredCapFromMessage(message: string): string | undefined {
   return /raise it to at least \$([0-9.]+)/.exec(message)?.[1];
+}
+
+function warnSubstitutedResponses(
+  context: PipelineContext,
+  responses: readonly SubstitutedResponse[],
+): void {
+  if (responses.length === 0) return;
+  const count = (kind: SubstitutedResponse["substitution"]["kind"]) =>
+    responses.filter(({ substitution }) => substitution.kind === kind).length;
+  const examples = [
+    ...new Set(responses.map(({ substitution }) => substitution.evidence)),
+  ].slice(0, 3);
+  context.reporter.warning(
+    "replay_responses_substituted",
+    `${responses.length} replayed response(s) did not come fresh from the requested model (model ${count("model")}, cache ${count("cache")}, request ${count("request")}), for example: ${examples.join("; ")}. They were left out of the evidence as attribution_substituted. Name replay models by their upstream ids (rename custom aliases) and turn off fallbacks, response caching and request plugins for the replay route, then rerun with a fresh store (--store <directory>), because completed replay cells are reused. See "Which model answered" in rightmodeler docs getting-started.`,
+  );
 }
 
 function normalizePipelineError(

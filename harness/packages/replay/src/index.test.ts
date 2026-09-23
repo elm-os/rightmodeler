@@ -49,12 +49,17 @@ interface StubProvider {
   getRequests(): Array<Record<string, unknown>>;
 }
 
+interface StubOptions {
+  catalogPageSize?: number;
+  malformedJudgeModels?: string[];
+  servedModels?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
+}
+
 interface StubProviderModule {
-  startStubProvider(options: {
-    port: number;
-    catalogPageSize?: number;
-    malformedJudgeModels?: string[];
-  }): Promise<StubProvider>;
+  startStubProvider(
+    options: StubOptions & { port: number },
+  ): Promise<StubProvider>;
 }
 
 const stubModuleUrl = new URL(
@@ -78,9 +83,7 @@ const unpricedJudgeLimits = {
   maxOutputTokens: 512,
 };
 
-async function startStub(
-  options: { catalogPageSize?: number; malformedJudgeModels?: string[] } = {},
-): Promise<StubProvider> {
+async function startStub(options: StubOptions = {}): Promise<StubProvider> {
   const fixture = (await import(stubModuleUrl)) as StubProviderModule;
   return fixture.startStubProvider({ port: 0, ...options });
 }
@@ -718,6 +721,25 @@ describe("AI Gateway chat", () => {
       costIsEstimate: false,
       finishReason: "stop",
       providerResponseId: "gen_01KZYSK582PZST0T79EP0DJ1FJ",
+      servedModel: "openai/gpt-4o-mini",
+    });
+  });
+
+  it("records the served model and flags a response that names another model", async () => {
+    const fixture = JSON.parse(
+      await readFile(aiGatewayChatFixtureUrl, "utf8"),
+    ) as { model: string };
+    fixture.model = "openai/gpt-4.1-nano";
+
+    await expect(
+      chatFromFixture(JSON.stringify(fixture)),
+    ).resolves.toMatchObject({
+      content: "Ok!",
+      servedModel: "openai/gpt-4.1-nano",
+      substitution: {
+        kind: "model",
+        evidence: "served openai/gpt-4.1-nano for requested openai/gpt-4o-mini",
+      },
     });
   });
 
@@ -1809,6 +1831,17 @@ describe("Mode A replay", () => {
       responseFormat: request.responseFormat as JsonValue,
     });
 
+  async function restartStub(options: StubOptions): Promise<void> {
+    await stub.close();
+    stub = await startStub(options);
+    provider = createProvider({
+      providerId: "stub-provider",
+      baseUrl: baseUrl(stub),
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      maxConcurrency: 4,
+    });
+  }
+
   it("records two attempts but one terminal execution after a one-time 429", async () => {
     const result = await run([
       recordedCase({ headers: { "x-stub-429-once": "retry-case" } }),
@@ -1891,6 +1924,74 @@ describe("Mode A replay", () => {
       providerResponseId: expect.stringMatching(/^stub-/),
       finishReason: "stop",
     });
+  });
+
+  it("writes a candidate answered by another model as substituted and never judges it", async () => {
+    await restartStub({ servedModels: { "acme/small-1": "acme/large-1" } });
+    const counter = { calls: 0 };
+    const substitution = {
+      kind: "model",
+      evidence: "served acme/large-1 for requested acme/small-1",
+    };
+
+    const result = await run([recordedCase()], judge(counter));
+    const facts = await readFacts(store);
+    const executions = facts.filter(
+      (fact) => "executionId" in fact && "caseId" in fact,
+    );
+
+    expect(result).toMatchObject({
+      completed: 1,
+      blocked: [],
+      substituted: [{ candidateId: "acme/small-1", substitution }],
+    });
+    expect(result.substituted).toHaveLength(1);
+    expect(executions).toHaveLength(1);
+    expect(executions[0]).toMatchObject({
+      candidateId: "acme/small-1",
+      terminalOutcome: "abstain",
+      attribution: "substituted",
+      finalOutput: expect.stringMatching(/^Deterministic reply /),
+    });
+    expect(
+      facts.find(
+        (fact) => "attemptId" in fact && fact.streamOutcome === "completed",
+      ),
+    ).toMatchObject({ servedModel: "acme/large-1", substitution });
+    expect(counter.calls).toBe(0);
+    expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(0);
+  });
+
+  it("writes a cache hit as substituted", async () => {
+    await restartStub({
+      responseHeaders: { "x-portkey-cache-status": "HIT" },
+    });
+    const counter = { calls: 0 };
+
+    const result = await run([recordedCase()], judge(counter));
+    const facts = await readFacts(store);
+
+    expect(result.substituted).toEqual([
+      {
+        candidateId: "acme/small-1",
+        substitution: {
+          kind: "cache",
+          evidence: "x-portkey-cache-status: HIT",
+        },
+      },
+    ]);
+    expect(
+      facts.find((fact) => "executionId" in fact && "caseId" in fact),
+    ).toMatchObject({ terminalOutcome: "abstain", attribution: "substituted" });
+    expect(
+      facts.find(
+        (fact) => "attemptId" in fact && fact.streamOutcome === "completed",
+      ),
+    ).toMatchObject({
+      servedModel: "acme/small-1",
+      substitution: { kind: "cache" },
+    });
+    expect(counter.calls).toBe(0);
   });
 
   it("stamps every completed attempt with a measured latency", async () => {
@@ -2147,6 +2248,78 @@ describe("Mode A replay", () => {
       judgeModels.filter((model) => model === "yotta/judge-2"),
     ).toHaveLength(8);
     expect(warning).toHaveBeenCalledOnce();
+  });
+
+  it("fails over from a judge whose responses name another model", async () => {
+    await restartStub({ servedModels: { "zeta/judge-1": "acme/large-1" } });
+    const warning = vi.fn();
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    const result = await run(
+      cases,
+      providerJudge,
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
+        },
+      ],
+      warning,
+    );
+    const facts = await readFacts(store);
+    const assessments = facts.filter((fact) => "assessmentId" in fact);
+    const substitutedJudgeSpend = facts.filter(
+      (fact) =>
+        "actor" in fact &&
+        fact.actor === "judge" &&
+        typeof fact.reconcilableTo === "object" &&
+        fact.reconcilableTo !== null &&
+        !Array.isArray(fact.reconcilableTo) &&
+        fact.reconcilableTo.judgeModel === "zeta/judge-1" &&
+        fact.reconcilableTo.invocation !== undefined,
+    );
+
+    expect(result).toMatchObject({
+      completed: 4,
+      blocked: [],
+      substituted: [],
+    });
+    expect(warning).toHaveBeenCalledWith(
+      "judge_unusable",
+      expect.stringContaining("zeta/judge-1"),
+    );
+    expect(assessments).toHaveLength(4);
+    expect(
+      assessments.every((fact) => fact.evaluatorId === "yotta/judge-2"),
+    ).toBe(true);
+    expect(substitutedJudgeSpend.length).toBeGreaterThanOrEqual(3);
+    expect(
+      substitutedJudgeSpend.every(
+        (fact) => "costUsd" in fact && fact.costUsd > 0,
+      ),
+    ).toBe(true);
+    expect(
+      facts.filter(
+        (fact) =>
+          "attemptId" in fact &&
+          fact.streamOutcome === "provider_error" &&
+          fact.errorDetail?.bodyExcerpt ===
+            "served acme/large-1 for requested zeta/judge-1",
+      ).length,
+    ).toBe(substitutedJudgeSpend.length);
   });
 
   it("tries at most four systematically malformed judges", async () => {

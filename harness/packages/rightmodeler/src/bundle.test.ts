@@ -170,6 +170,7 @@ describe("packed CLI bundle", () => {
     await Promise.all(
       [
         "dist/cli.d.ts",
+        "dist-bundle/provenance.js",
         "dist-bundle/proxy/container-supervisor.mjs",
         "dist-bundle/proxy/headers.js",
         "dist-bundle/proxy/proxy-runtime.mjs",
