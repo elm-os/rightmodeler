@@ -40,3 +40,27 @@ The remaining trace fixtures are synthetic, append-friendly examples of each ada
 | `trace-langgraph-12` | `Where can I find the privacy policy?` | classify → answer          |
 | `trace-langgraph-13` | `Tell me about your warranty.`         | classify → answer          |
 | `trace-langgraph-14` | `How do refunds work?`                 | classify → answer          |
+
+`code-graph-app/` is inert TypeScript source for the code context tests: a wrapped OpenAI chat call the scanner confirms (`src/llm.ts`), an imported caller (`src/summarize.ts`), a typed-parameter caller Graphify resolves by inference (`src/routes/tickets.ts`), a callback passed by name (`src/batch.ts`), a test importing the caller (`tests/summarize.test.ts`), CODEOWNERS, and a moderation call the scanner does not match (`src/moderate.ts`). `code-graph/code-graph-app.graph.json` and `code-graph/demo-app.graph.json` are captures from the open-source Graphify engine, `graphify 0.9.65` (PyPI `graphifyy`, Apache-2.0), produced from the repository root by the recipe below, unedited apart from the final newline Prettier adds. The recipe's raw output has sha256 `f69427a1f5034e9f7d38b075ef72d0913a5a9052b06bd82180c17cc38122f54e` and `e698bb5dce8e903a7a190ab55e9839a9621e4d9501d926d642c50424f0945b46`; the stored files have sha256 `a19c3a5b20bb9bc17ec2d52beaaf1a222d01aabbc2826df7b54791af6b100f3b` and `be69b4cce724f220a9f67aa53dca93a00b4b6b9c3484dea8ead597f02f8f2981`, and `built_at_commit` `aa99b779150cdfa0c825640f6cb4adce8306b66e` and `007dfc2db911bdd52c02de9655e32289e46c8aad`. Tests that need a fresh graph copy one and set `built_at_commit` to their own repository's HEAD, because a test repository's commit can never equal the capture's.
+
+```sh
+graphify --version    # must print: graphify 0.9.65
+W=$(git rev-parse --show-toplevel)
+CAP=$(mktemp -d)
+capture() {
+  cp -R "$W/harness/fixtures/$1" "$CAP/$1"
+  git -C "$CAP/$1" init -q -b main
+  git -C "$CAP/$1" add -A
+  GIT_AUTHOR_DATE=2026-01-01T00:00:00Z GIT_COMMITTER_DATE=2026-01-01T00:00:00Z \
+    git -C "$CAP/$1" -c user.name="Fixture Author" -c user.email=fixture@example.com \
+    -c commit.gpgsign=false commit -q -m "Seed fixture"
+  (cd "$CAP/$1" && env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u GEMINI_API_KEY \
+    -u GOOGLE_API_KEY -u AI_GATEWAY_API_KEY -u OPENROUTER_API_KEY \
+    graphify extract . --code-only)
+  mkdir -p "$W/harness/fixtures/code-graph"
+  cp "$CAP/$1/graphify-out/graph.json" "$W/harness/fixtures/code-graph/$1.graph.json"
+}
+capture code-graph-app
+capture demo-app
+rm -rf "$CAP"
+```
