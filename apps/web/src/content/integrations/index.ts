@@ -2,7 +2,8 @@
 // in ./data, typed against IntegrationData here (a wrong or missing field fails `pnpm check-types`);
 // the hub, the [slug] route, the sitemap, and llms.txt all resolve from this list. To add an
 // integration: create a JSON file and add one import + one entry below. Listed in hub display
-// order: trace sources first, then replay infrastructure, then coming soon.
+// order: trace sources first, then evaluators, replay infrastructure, source control and CI, code
+// context, then coming soon.
 
 import type { IntegrationData } from "@/content/integrations/types";
 import langsmith from "@/content/integrations/data/langsmith.json";
@@ -18,6 +19,12 @@ import weave from "@/content/integrations/data/weave.json";
 import openrouter from "@/content/integrations/data/openrouter.json";
 import litellm from "@/content/integrations/data/litellm.json";
 import vercelAiGateway from "@/content/integrations/data/vercel-ai-gateway.json";
+import vercelAiSdk from "@/content/integrations/data/vercel-ai-sdk.json";
+import promptfoo from "@/content/integrations/data/promptfoo.json";
+import vercelSandbox from "@/content/integrations/data/vercel-sandbox.json";
+import github from "@/content/integrations/data/github.json";
+import githubActions from "@/content/integrations/data/github-actions.json";
+import graphify from "@/content/integrations/data/graphify.json";
 import modaic from "@/content/integrations/data/modaic.json";
 
 const integrations: IntegrationData[] = [
@@ -29,11 +36,17 @@ const integrations: IntegrationData[] = [
   braintrust,
   phoenix,
   otel,
+  vercelAiSdk,
   helicone,
   weave,
+  promptfoo,
   openrouter,
   litellm,
   vercelAiGateway,
+  vercelSandbox,
+  github,
+  githubActions,
+  graphify,
   modaic,
 ];
 
