@@ -114,6 +114,14 @@ describe("pull request watches", () => {
     await expect(
       listApprovedSwapSets({ repo: demoAppPath, store: store.root }),
     ).rejects.toThrow("Approved swap run-2 resolved to 0 immutable mappings");
+    await expect(
+      readStatus({ repo: demoAppPath, store: store.root }),
+    ).resolves.toMatchObject({
+      pullRequests: [
+        { prNumber: 1, phase: "open" },
+        { prNumber: 2, phase: "terminal" },
+      ],
+    });
   });
 });
 

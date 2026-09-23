@@ -1407,10 +1407,15 @@ export async function listWatchablePullRequests(options: {
   readonly store?: string;
 }): Promise<WatchablePullRequest[]> {
   const context = createHeadlessContext(options);
-  const ledger = await readPipelineLedger(context);
-  const events = ledger.lifecycleEvents.filter(
-    ({ prNumber }) => prNumber !== null,
+  return watchablePullRequests(
+    (await readPipelineLedger(context)).lifecycleEvents,
   );
+}
+
+function watchablePullRequests(
+  lifecycleEvents: Ledger["lifecycleEvents"],
+): WatchablePullRequest[] {
+  const events = lifecycleEvents.filter(({ prNumber }) => prNumber !== null);
   const numbers = [
     ...new Set(
       events.flatMap(({ prNumber }) => (prNumber === null ? [] : [prNumber])),
@@ -6166,6 +6171,7 @@ export async function readStatus(options: {
     spend: spendSummary(ledger.spendEvents),
     corpusVersion: corpus?.corpusVersionId ?? null,
     lastRun: runs[0] ?? null,
+    pullRequests: watchablePullRequests(ledger.lifecycleEvents),
   };
 }
 
