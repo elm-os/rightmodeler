@@ -431,9 +431,13 @@ non-empty.
 family, or a dropped shard, is printed and carried onto the verdict.
 
 **Generous defaults.** Sampling above the minimums. `confirm` by default for coupled or
-model-authored-prefix steps. One judge runs per cell; a judge that fails three consecutive
-terminal calls is marked unusable and the next-ranked neutral-family model re-judges the
-affected cells. Cheaper settings exist and are opt-in.
+model-authored-prefix steps. One judge runs per cell, from a model family that is neither the
+cell's candidate's nor the family of the model that wrote its reference: the call site's current
+model in replay, and in `confirm` the final step's model, whose output is the recorded
+reference. A family whose call sites use models of several vendors is judged per call site,
+never refused. A judge that fails three consecutive terminal calls is marked unusable and the
+next-ranked neutral-family model re-judges the affected cells. Cheaper settings exist and are
+opt-in.
 
 **Rate limits are throughput to discover, not a ceiling to hide under.** A per-provider adaptive
 concurrency controller ramps while requests succeed and backs off multiplicatively on 429 or

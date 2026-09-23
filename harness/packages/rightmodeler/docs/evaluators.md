@@ -1,6 +1,6 @@
 # Evaluators
 
-The default evaluator is the built-in judge selected from the configured provider catalog. Candidate and reference families are excluded when choosing the judge.
+The default evaluator is the built-in judge selected from the configured provider catalog. Candidate and reference families are excluded when choosing the judge. The exclusion applies per replayed call site: when the call sites of one traced family use models of different vendors (for example `openai/...` and `anthropic/...`), each call site's cases are judged by a model from neither the candidate's model family nor that call site's. Confirmation judges the recorded final output, so its judge also comes from outside the final step's model family.
 
 An external evaluator is requested with `--evaluator <provider>` on `init`, `estimate`, `replay`, and `confirm`, where the provider is `braintrust`, `langfuse`, `langsmith`, or `promptfoo`. Every other `--evaluator-*` option is a usage error without `--evaluator`.
 
