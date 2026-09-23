@@ -2853,8 +2853,7 @@ async function executeShortlist(
   for (const { plan: familyPlan, caseSteps, leftOut } of planned) {
     const { familyId: family, evidenceQuestionId, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
-    if (stepIds.length === 0) continue;
-    if (familyPlan.leftOutCases !== undefined) {
+    if (familyPlan.leftOutCases !== undefined && caseSteps.size > 0) {
       const causes = [
         [
           leftOut.ambiguous,
@@ -2874,6 +2873,7 @@ async function executeShortlist(
           .join(", ")}.`,
       );
     }
+    if (stepIds.length === 0) continue;
     const assignedRecords = stepIds.map((stepId) => recordById.get(stepId)!);
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family,

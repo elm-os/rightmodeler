@@ -45090,8 +45090,7 @@ async function executeShortlist(context2, inputDigestValue) {
   for (const { plan: familyPlan, caseSteps, leftOut } of planned) {
     const { familyId: family, evidenceQuestionId: evidenceQuestionId2, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
-    if (stepIds.length === 0) continue;
-    if (familyPlan.leftOutCases !== void 0) {
+    if (familyPlan.leftOutCases !== void 0 && caseSteps.size > 0) {
       const causes = [
         [
           leftOut.ambiguous,
@@ -45108,6 +45107,7 @@ async function executeShortlist(context2, inputDigestValue) {
         `Family ${family}: ${familyPlan.leftOutCases} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes.filter(([count]) => count > 0).map(([count, cause]) => `${count} ${cause}`).join(", ")}.`
       );
     }
+    if (stepIds.length === 0) continue;
     const assignedRecords = stepIds.map((stepId) => recordById.get(stepId));
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family

@@ -422,6 +422,37 @@ describe("AI SDK call-site binding", () => {
     ]);
   }, 120_000);
 
+  it("names left-out cases when the placed rest abstains on a floor", async () => {
+    const { root, repo } = await fixtureRepo("left-out-floor", {
+      "src/zz-notes-a.mjs": notes("notesA", "acme/lite-1"),
+    });
+    const traces = await editedCapture(
+      root,
+      retaggedTriage((call) => (call >= 59 ? "acme/large-1" : "acme/lite-1")),
+    );
+
+    const result = await shortlist(root, repo, traces);
+
+    expect(familyPlan(result.shortlist, "unclassified")).toMatchObject({
+      stepIds: [],
+      leftOutCases: 5,
+      abstainReason: {
+        reason: "insufficient_distinct_steps",
+        observed: 1,
+        required: 2,
+      },
+    });
+    expect(
+      result.warnings.filter(({ code }) => code === "family_cases_left_out"),
+    ).toEqual([
+      {
+        code: "family_cases_left_out",
+        message:
+          "Family unclassified: 5 of 64 traced cases were left out of the replay sample: 5 could not be tied to a call site of this family alone.",
+      },
+    ]);
+  }, 120_000);
+
   it("never places two families on a call site both of their traces matched", async () => {
     const { root, repo } = await fixtureRepo("shared-site", {
       "src/zz-notes-a.mjs": notes("notesA", "acme/lite-1"),

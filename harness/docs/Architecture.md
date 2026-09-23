@@ -78,8 +78,9 @@ trajectory position or by a model id that one call site alone pins. A call site 
 family: a site that another family's key claims, or that several families' traces matched, is
 never used. Cases that cannot be tied to a call site of the family alone are left out of the
 replay sample, and a family with none abstains before any spend, with
-`ambiguous_call_site_binding` or `unmatched_call_site_binding`. Nothing is assigned by path
-order.
+`ambiguous_call_site_binding` or `unmatched_call_site_binding`, or with
+`bound_call_sites_not_replayable` when every call site its traces matched needs tools or
+structured output. Nothing is assigned by path order.
 
 ## 3. State
 

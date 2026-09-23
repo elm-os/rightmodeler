@@ -52,8 +52,9 @@ The exported `ABSTAIN_REASONS` values are:
 - `insufficient_review_trials`: a kind has fewer than 10 included assessed executions.
 - `insufficient_distinct_steps`: a kind covers fewer than 2 distinct step IDs, or, for a family
   bound by trace key, fewer than `min(2, bound call sites)`.
-- `bound_call_sites_not_replayable`: every call site bound to the family by its trace key needs
-  tools or structured output, which Mode A replay cannot run, so replay is skipped before any spend.
+- `bound_call_sites_not_replayable`: every call site bound to the family, by its trace key or by
+  its own traces, needs tools or structured output, which Mode A replay cannot run, so replay is
+  skipped before any spend.
 - `ambiguous_call_site_binding`: none of the family's traced cases can be tied to a call site of
   this family alone, because several scanned call sites use the traced model, or the call site that
   produced them also produced another family's traces. Replay is skipped before any spend. For AI
