@@ -212,6 +212,7 @@ describe("GitHub client conformance", () => {
       base: "main",
       draft: true,
     });
+    expect(pull.author).toBe("rightmodeler-bot");
     expect(pull).toMatchObject({
       number: 1,
       state: "open",
@@ -225,7 +226,11 @@ describe("GitHub client conformance", () => {
         head: "rightmodeler/change",
         base: "main",
       }),
-    ).resolves.toMatchObject({ number: pull.number });
+    ).resolves.toMatchObject({
+      number: pull.number,
+      merged: false,
+      author: "rightmodeler-bot",
+    });
 
     const requested = await github.requestReviewers({
       ...repository,
@@ -371,7 +376,6 @@ describe("GitHub client conformance", () => {
       "createRef",
       "findCommitAuthorLogin",
       "findOpenPullRequest",
-      "getAuthenticatedUserLogin",
       "getCombinedStatusForRef",
       "getFileContent",
       "getPullRequest",
@@ -415,9 +419,9 @@ describe("GitHub client conformance", () => {
     expect(body.errors).toContain('"2022-11-28"');
   });
 
-  it("reads combined commit status and the authenticated user", async () => {
+  it("reads combined commit status", async () => {
     process.env[tokenEnv] = token;
-    const stub = await startStub({ tokenLogin: "octocat" });
+    const stub = await startStub();
     const seeded = await seed(stub);
     await control(stub, "/__test/commit-statuses", {
       ...repository,
@@ -450,7 +454,6 @@ describe("GitHub client conformance", () => {
         },
       ],
     });
-    await expect(github.getAuthenticatedUserLogin()).resolves.toBe("octocat");
   });
 
   it("paginates reviews, comments, and check runs while preserving event authors and states", async () => {

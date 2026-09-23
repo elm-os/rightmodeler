@@ -776,7 +776,11 @@ export async function startGithubStub({
             (head === null || `${owner}:${pull.head}` === head) &&
             (base === null || pull.base === base),
         )
-        .map((pull) => pullResponse(repo, pull));
+        .map((pull) => {
+          const listed = pullResponse(repo, pull);
+          delete listed.merged;
+          return listed;
+        });
       paginated(pulls);
       return;
     }

@@ -35521,9 +35521,10 @@ var pullRequestSchema = external_exports.object({
   title: external_exports.string(),
   body: external_exports.string().nullable(),
   draft: external_exports.boolean(),
-  merged: external_exports.boolean(),
+  merged: external_exports.boolean().optional(),
   merged_at: external_exports.string().nullable(),
   closed_at: external_exports.string().nullable(),
+  user: userSchema,
   head: external_exports.object({ ref: external_exports.string(), sha: external_exports.string() }),
   base: external_exports.object({ ref: external_exports.string(), sha: external_exports.string() }),
   requested_reviewers: external_exports.array(userSchema).default([]),
@@ -35688,10 +35689,11 @@ function normalizePullRequest(raw) {
   return {
     number: raw.number,
     state: raw.state,
+    author: raw.user.login,
     title: raw.title,
     body: raw.body,
     draft: raw.draft,
-    merged: raw.merged,
+    merged: raw.merged ?? raw.merged_at !== null,
     mergedAt: raw.merged_at,
     closedAt: raw.closed_at,
     head: raw.head,
@@ -36043,15 +36045,6 @@ function createGithubClient(options) {
           updatedAt: status.updated_at
         }))
       };
-    },
-    async getAuthenticatedUserLogin() {
-      const raw = await requestJson(
-        "/user",
-        {},
-        userSchema,
-        "GitHub user response"
-      );
-      return raw.login;
     },
     async findCommitAuthorLogin(input) {
       const raw = await requestJson(
@@ -38309,11 +38302,12 @@ async function ensureReviewRequested({
   repo,
   events,
   prNumber,
+  pullRequestAuthor,
   reviewerSet
 }) {
   const recorded = recordedReviewers(events, prNumber);
   if (recorded !== null) return recorded;
-  const author = await githubClient.getAuthenticatedUserLogin();
+  const author = pullRequestAuthor ?? (await githubClient.getPullRequest({ owner, repo, pullNumber: prNumber })).author;
   let reviewers = reviewerSet.reviewers.filter(
     (reviewer) => reviewer.toLowerCase() !== author.toLowerCase()
   );
@@ -38772,6 +38766,7 @@ async function applySwaps({
     repo,
     events: lifecycleEvents,
     prNumber: pullRequest.number,
+    pullRequestAuthor: pullRequest.author,
     reviewerSet
   });
   return {

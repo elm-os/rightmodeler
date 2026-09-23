@@ -92,11 +92,14 @@ interface StubServer {
   close(): Promise<void>;
 }
 
+type StubTokenKind = "classic" | "installation" | "fine-grained";
+
 interface StubModule {
   startGithubStub(options: {
     readonly port: number;
     readonly token?: string;
     readonly tokenLogin?: string;
+    readonly tokenKind?: StubTokenKind;
     readonly rejectReviewRequestFor?: string;
   }): Promise<StubServer>;
 }
@@ -154,9 +157,11 @@ async function control<T>(
 
 async function startStub({
   tokenLogin,
+  tokenKind,
   rejectReviewRequestFor,
 }: {
   tokenLogin?: string;
+  tokenKind?: StubTokenKind;
   rejectReviewRequestFor?: string;
 } = {}): Promise<StubServer> {
   const module = (await import(stubModuleUrl)) as StubModule;
@@ -164,6 +169,7 @@ async function startStub({
     port: 0,
     token,
     tokenLogin,
+    tokenKind,
     rejectReviewRequestFor,
   });
   openStubs.push(stub);
@@ -319,9 +325,11 @@ function applyVerdict(
 
 async function createHarness({
   tokenLogin,
+  tokenKind,
   rejectReviewRequestFor,
 }: {
   tokenLogin?: string;
+  tokenKind?: StubTokenKind;
   rejectReviewRequestFor?: string;
 } = {}): Promise<TestHarness> {
   const root = await mkdtemp(join(tmpdir(), "rightmodeler-apply-"));
@@ -375,7 +383,11 @@ async function createHarness({
   if (blast === undefined) throw new Error("Fixture blast radius is empty");
 
   process.env[tokenEnv] = token;
-  const stub = await startStub({ tokenLogin, rejectReviewRequestFor });
+  const stub = await startStub({
+    tokenLogin,
+    tokenKind,
+    rejectReviewRequestFor,
+  });
   await control(stub, "/__test/seed", {
     ...repository,
     defaultBranch: "main",
@@ -871,6 +883,65 @@ describe("applySwaps", () => {
     expect(request?.body).toMatchObject({
       reviewers: ["alpha", "bravo", "charlie", "echo"],
     });
+  });
+
+  it("takes the pull request author from GitHub with an App token, on first apply and on resume", async () => {
+    const harness = await createHarness({
+      tokenKind: "installation",
+      tokenLogin: "delta",
+    });
+    const input = applyVerdict(harness);
+
+    const applied = requireApplied(await runApply(harness, [input]));
+
+    expect(applied.reviewers).toEqual(["alpha", "bravo", "charlie", "echo"]);
+    const pullPath = `/repos/${owner}/${repo}/pulls/${applied.prNumber}`;
+    const reviewerRequests = () =>
+      harness.stub
+        .getHits()
+        .filter(
+          ({ method, path }) =>
+            method === "POST" && path === `${pullPath}/requested_reviewers`,
+        )
+        .map(({ body }) => body as { readonly reviewers: readonly string[] });
+    const pullReads = () =>
+      harness.stub
+        .getHits()
+        .filter(({ method, path }) => method === "GET" && path === pullPath);
+    const userHits = () =>
+      harness.stub.getHits().filter(({ path }) => path === "/user");
+    expect(reviewerRequests()[0]?.reviewers).toEqual([
+      "alpha",
+      "bravo",
+      "charlie",
+      "echo",
+    ]);
+    expect(userHits()).toEqual([]);
+
+    const recorded = (await lifecycleEvents(harness.store)).find(
+      ({ kind }) => kind === "review_requested",
+    );
+    if (recorded === undefined) {
+      throw new Error("Missing review_requested fact");
+    }
+    await rm(
+      join(
+        harness.store.root,
+        ".rightmodeler-store",
+        "entries",
+        factKey("project", recorded.eventId),
+      ),
+      { recursive: true, force: true },
+    );
+    const pullReadsBeforeResume = pullReads().length;
+
+    await expect(runApply(harness, [input])).resolves.toMatchObject({
+      status: "existing",
+    });
+    expect(pullReads().length).toBeGreaterThan(pullReadsBeforeResume);
+    expect(reviewerRequests()).toHaveLength(2);
+    expect(reviewerRequests()[1]?.reviewers).not.toContain("delta");
+    expect(userHits()).toEqual([]);
   });
 
   it("drops only the reviewer GitHub rejects with 422", async () => {

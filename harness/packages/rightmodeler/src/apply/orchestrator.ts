@@ -672,6 +672,7 @@ async function ensureReviewRequested({
   repo,
   events,
   prNumber,
+  pullRequestAuthor,
   reviewerSet,
 }: {
   readonly githubClient: GithubClient;
@@ -684,12 +685,16 @@ async function ensureReviewRequested({
   readonly repo: string;
   readonly events: readonly LifecycleEvent[];
   readonly prNumber: number;
+  readonly pullRequestAuthor?: string;
   readonly reviewerSet: ReviewerSet & { readonly unresolvedOwners: number };
 }): Promise<ReviewerSet> {
   const recorded = recordedReviewers(events, prNumber);
   if (recorded !== null) return recorded;
 
-  const author = await githubClient.getAuthenticatedUserLogin();
+  const author =
+    pullRequestAuthor ??
+    (await githubClient.getPullRequest({ owner, repo, pullNumber: prNumber }))
+      .author;
   let reviewers = reviewerSet.reviewers.filter(
     (reviewer) => reviewer.toLowerCase() !== author.toLowerCase(),
   );
@@ -1201,6 +1206,7 @@ export async function applySwaps({
     repo,
     events: lifecycleEvents,
     prNumber: pullRequest.number,
+    pullRequestAuthor: pullRequest.author,
     reviewerSet,
   });
 
