@@ -1,7 +1,8 @@
-import type {
-  Assessment,
-  ModelCatalogEntry,
-  Substitution,
+import {
+  withoutFastTiers,
+  type Assessment,
+  type ModelCatalogEntry,
+  type Substitution,
 } from "@rightmodeler/core";
 
 export type JudgeVerdict = "equivalent" | "minor_drift" | "divergent";
@@ -128,7 +129,7 @@ export function pickJudges(
     throw new Error("Candidate and reference model families must be known");
   }
 
-  const eligible = catalog.filter((model) => {
+  const eligible = withoutFastTiers(catalog).filter((model) => {
     if (model.id.includes(":")) return false;
 
     const outputModalities = model.outputModalities ?? [];

@@ -309,8 +309,12 @@ response's `model` is compared with the requested id (equal, a dropped gateway p
 or an added dated snapshot), and gateway cache and request markers are read from the headers and
 body. A mismatch is recorded on the attempt as `servedModel` and `substitution`, the execution as
 `attribution: "substituted"`, and the kernel excludes it as `attribution_substituted`; a
-substituted judge response is a judge failure. Only swapped steps are checked in Mode B: the rest
-are the application's own environment.
+substituted judge response is a judge failure, and in replay the first one whose model differs
+retires that judge at once: no new call to it starts and its calls still waiting for budget are
+cancelled. A catalog id `<id>-fast` whose `<id>` is also listed is that model's fast service
+tier, which Vercel AI Gateway answers as `<id>`, so it is never ranked as a judge or shortlisted
+as a candidate. Only swapped steps are checked in Mode B: the rest are the application's own
+environment.
 
 ### Fallbacks
 
@@ -448,9 +452,9 @@ model-authored-prefix steps. One judge runs per cell, from a model family that i
 cell's candidate's nor the family of the model that wrote its reference: the call site's current
 model in replay, and in `confirm` the final step's model, whose output is the recorded
 reference. A family whose call sites use models of several vendors is judged per call site,
-never refused. A judge that fails three consecutive terminal calls is marked unusable and the
-next-ranked neutral-family model re-judges the affected cells. Cheaper settings exist and are
-opt-in.
+never refused. A judge that fails three consecutive terminal calls, or once answers as another
+model, is marked unusable and the next-ranked neutral-family model re-judges the affected cells.
+Cheaper settings exist and are opt-in.
 
 **Rate limits are throughput to discover, not a ceiling to hide under.** A per-provider adaptive
 concurrency controller ramps while requests succeed and backs off multiplicatively on 429 or

@@ -20,3 +20,12 @@ export function blendedPrice(model: ModelCatalogEntry): number | null {
   if (model.pricing === null) return null;
   return (3 * model.pricing.input + model.pricing.output) / 4;
 }
+
+export function withoutFastTiers(
+  catalog: readonly ModelCatalogEntry[],
+): ModelCatalogEntry[] {
+  const ids = new Set(catalog.map(({ id }) => id));
+  return catalog.filter(
+    ({ id }) => !id.endsWith("-fast") || !ids.has(id.slice(0, -"-fast".length)),
+  );
+}

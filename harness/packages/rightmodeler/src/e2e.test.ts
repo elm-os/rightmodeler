@@ -5390,6 +5390,63 @@ describe("built CLI pipeline", () => {
     }
   }, 120_000);
 
+  it("stops sending to a judge at its first model substitution inside --max-cost-usd", async () => {
+    const { repo } = await fixtureCopy("judge-substitution-cap");
+    const stub = await startStub({
+      servedModels: { "zeta/judge-1": "zeta/judge-1-base" },
+    });
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "aggregate",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_API_KEY",
+          "--max-cost-usd",
+          "0.04",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_E2E_API_KEY: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(3);
+      expect(warningMessages(result.stderr, "judge_unusable")).toEqual([
+        "Judge zeta/judge-1 is unusable: it answered as another model (served zeta/judge-1-base for requested zeta/judge-1); switching to yotta/judge-2.",
+      ]);
+      const events = result.stderr
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { code?: string });
+      expect(events.at(-1)).toMatchObject({ code: "budget_cap_refusal" });
+      const zetaCalls = stub
+        .getRequestHeaders()
+        .filter(({ model }) => model === "zeta/judge-1").length;
+      expect(zetaCalls).toBeGreaterThanOrEqual(1);
+      expect(zetaCalls).toBeLessThanOrEqual(6);
+      const { assessments, spendEvents } = await readLedger(
+        new FsStore(join(repo, ".rightmodeler")),
+        "project",
+      );
+      expect(assessments.length).toBeGreaterThan(1);
+      expect(
+        assessments.every(({ evaluatorId }) => evaluatorId === "yotta/judge-2"),
+      ).toBe(true);
+      expect(
+        spendEvents.reduce((total, { costUsd }) => total + costUsd, 0),
+      ).toBeLessThanOrEqual(0.04);
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
   it("includes discovered trace candidates in the non-interactive remedy", async () => {
     const fixture = await fixtureCopy("discovered-trace-remedy");
     const home = await fixtureHome(fixture.root);

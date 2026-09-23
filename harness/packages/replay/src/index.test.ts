@@ -18,6 +18,7 @@ import {
 import {
   aggregate,
   judgeExecution,
+  pickJudges,
   type JudgeChat,
   type JudgeChatRequest,
   type JudgeChatResult,
@@ -78,6 +79,10 @@ const aiGatewayChatFixtureUrl = new URL(
 );
 const envoyFixtureUrl = new URL(
   "../../../fixtures/catalogs/envoy-models.json",
+  import.meta.url,
+);
+const aiGatewayFastTiersFixtureUrl = new URL(
+  "../../../fixtures/catalogs/ai-gateway-fast-tiers.json",
   import.meta.url,
 );
 
@@ -440,6 +445,69 @@ describe("AI Gateway catalog", () => {
     expect(
       catalog.some(({ id }) => id === "alibaba/qwen3-embedding-0.6b"),
     ).toBe(false);
+  });
+
+  it("never ranks a Vercel -fast service tier as a judge while its base model is listed", async () => {
+    const catalog = await listFixtureModels(
+      await readFile(aiGatewayFastTiersFixtureUrl, "utf8"),
+    );
+
+    expect(
+      pickJudges(catalog, {
+        candidateFamily: "inclusionai",
+        referenceFamily: "alibaba",
+      }),
+    ).toEqual([
+      "openai/gpt-6-astra",
+      "openai/gpt-6-sol",
+      "anthropic/claude-opus-5.5",
+      "zai/glm-5.3",
+      "spacexai/grok-4.1-fast-non-reasoning",
+      "openai/gpt-4.1-nano",
+      "morph/morph-v3-fast",
+    ]);
+  });
+
+  it("never shortlists a Vercel -fast service tier while its base model is listed", async () => {
+    const catalog = await listFixtureModels(
+      await readFile(aiGatewayFastTiersFixtureUrl, "utf8"),
+    );
+
+    const result = shortlist(
+      [step({ currentModel: "anthropic/claude-opus-5.5" })],
+      catalog,
+      { top: 20 },
+    );
+
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "inclusionai/ling-3.0-flash",
+      "alibaba/qwen3.7-flash",
+      "openai/gpt-4.1-nano",
+      "spacexai/grok-4.1-fast-non-reasoning",
+      "morph/morph-v3-fast",
+      "zai/glm-5.3",
+      "openai/gpt-6-sol",
+    ]);
+  });
+
+  it("still resolves a -fast current model and offers its base model", async () => {
+    const catalog = await listFixtureModels(
+      await readFile(aiGatewayFastTiersFixtureUrl, "utf8"),
+    );
+
+    const result = shortlist(
+      [step({ currentModel: "openai/gpt-4.1-nano-fast" })],
+      catalog,
+      { top: 20 },
+    );
+
+    expect(result[0]?.abstention).toBeUndefined();
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "inclusionai/ling-3.0-flash",
+      "alibaba/qwen3.7-flash",
+      "openai/gpt-4.1-nano",
+      "spacexai/grok-4.1-fast-non-reasoning",
+    ]);
   });
 
   it("normalizes AI Gateway output ceilings", async () => {
@@ -2111,16 +2179,19 @@ describe("Mode A replay", () => {
     ],
     warning?: (code: string, message: string) => void,
     authorizedTotalUsd = 1,
+    wrapBudget = (budget: Budget) => budget,
   ) {
     const catalog = await provider.listModels();
     const candidate = catalog.find((model) => model.id === "acme/small-1");
     if (candidate === undefined) throw new Error("Missing stub candidate");
-    const budget = createBudget({
-      store,
-      projectId,
-      runId,
-      authorizedTotalUsd,
-    });
+    const budget = wrapBudget(
+      createBudget({
+        store,
+        projectId,
+        runId,
+        authorizedTotalUsd,
+      }),
+    );
     return replayModeA({
       steps: [step()],
       cases,
@@ -2628,7 +2699,7 @@ describe("Mode A replay", () => {
     expect(
       assessments.every((fact) => fact.evaluatorId === "yotta/judge-2"),
     ).toBe(true);
-    expect(substitutedJudgeSpend.length).toBeGreaterThanOrEqual(3);
+    expect(substitutedJudgeSpend.length).toBeGreaterThanOrEqual(1);
     expect(
       substitutedJudgeSpend.every(
         (fact) => "costUsd" in fact && fact.costUsd > 0,
@@ -3496,6 +3567,222 @@ describe("Mode A replay", () => {
       expect.anything(),
     );
     expect(judgeModels).not.toContain("yotta/judge-2");
+  });
+
+  it("sends a judge nothing more after its first model substitution and cancels its calls waiting for budget", async () => {
+    await restartStub({
+      servedModels: { "zeta/judge-1": "zeta/judge-1-base" },
+    });
+    const warning = vi.fn();
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+    let zetaReservations = 0;
+
+    const result = await run(
+      cases,
+      providerJudge,
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          pricing: { input: 0, output: 0.001 },
+          maxOutputTokens: 512,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          pricing: { input: 0, output: 0.0009 },
+          maxOutputTokens: 512,
+        },
+      ],
+      warning,
+      0.8,
+      (budget) => ({
+        ...budget,
+        reserveExecution: async (reservation) => {
+          const granted = await budget.reserveExecution(reservation);
+          if (reservation.pricing.output === 0.001) zetaReservations += 1;
+          return granted;
+        },
+      }),
+    );
+    const facts = await readFacts(store);
+    const judgeNotes = facts.flatMap((fact) =>
+      "actor" in fact &&
+      fact.actor === "judge" &&
+      typeof fact.reconcilableTo === "object" &&
+      fact.reconcilableTo !== null &&
+      !Array.isArray(fact.reconcilableTo)
+        ? [{ costUsd: fact.costUsd, reconcilableTo: fact.reconcilableTo }]
+        : [],
+    );
+    const zetaFailures = judgeNotes.filter(
+      ({ reconcilableTo }) =>
+        reconcilableTo.judgeModel === "zeta/judge-1" &&
+        reconcilableTo.judgeFailureKind !== undefined,
+    );
+    const unusableNotes = judgeNotes.filter(
+      ({ reconcilableTo }) => reconcilableTo.judgeStatus === "unusable",
+    );
+    const assessments = facts.filter((fact) => "assessmentId" in fact);
+    const requestedModels = stub.getRequests().map(({ model }) => model);
+
+    expect(
+      requestedModels.filter((model) => model === "zeta/judge-1"),
+    ).toHaveLength(1);
+    expect(
+      requestedModels.filter((model) => model === "yotta/judge-2"),
+    ).toHaveLength(8);
+    expect(zetaReservations).toBe(1);
+    expect(zetaFailures.length).toBeLessThanOrEqual(1);
+    expect(
+      zetaFailures.every(
+        ({ reconcilableTo }) =>
+          reconcilableTo.judgeFailureKind === "provider_error",
+      ),
+    ).toBe(true);
+    expect(result).toMatchObject({ completed: 4, blocked: [] });
+    expect(assessments).toHaveLength(4);
+    expect(
+      assessments.every((fact) => fact.evaluatorId === "yotta/judge-2"),
+    ).toBe(true);
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning).toHaveBeenCalledWith(
+      "judge_unusable",
+      "Judge zeta/judge-1 is unusable: it answered as another model (served zeta/judge-1-base for requested zeta/judge-1); switching to yotta/judge-2.",
+    );
+    expect(unusableNotes).toHaveLength(1);
+    expect(unusableNotes[0]).toMatchObject({
+      costUsd: 0,
+      reconcilableTo: {
+        judgeModel: "zeta/judge-1",
+        judgeStatus: "unusable",
+        note: "model_substituted",
+        substitution: "served zeta/judge-1-base for requested zeta/judge-1",
+      },
+    });
+    expect((await ledgerState()).reservedUsd).toBe(0);
+  });
+
+  it("never sends a judge call whose reservation is granted after its judge was retired", async () => {
+    await restartStub({
+      servedModels: { "zeta/judge-1": "zeta/judge-1-base" },
+    });
+    let releaseGate = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    let judgeReservations = 0;
+    let gatedGranted = false;
+
+    await run(
+      [recordedCase()],
+      async (request) => {
+        const response = await providerJudge(request);
+        if (request.model === "zeta/judge-1") setTimeout(releaseGate, 20);
+        return response;
+      },
+      2,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
+        },
+      ],
+      undefined,
+      1,
+      (budget) => ({
+        ...budget,
+        reserveExecution: async (reservation) => {
+          const gated =
+            reservation.maxOutputTokens ===
+              unpricedJudgeLimits.maxOutputTokens && ++judgeReservations === 2;
+          if (!gated) return budget.reserveExecution(reservation);
+          await gate;
+          const granted = await budget.reserveExecution(reservation);
+          gatedGranted = true;
+          return granted;
+        },
+      }),
+    );
+    const requestedModels = stub.getRequests().map(({ model }) => model);
+
+    expect(gatedGranted).toBe(true);
+    expect(
+      requestedModels.filter((model) => model === "zeta/judge-1"),
+    ).toHaveLength(1);
+    expect(
+      requestedModels.filter((model) => model === "yotta/judge-2"),
+    ).toHaveLength(2);
+    expect(
+      (await readFacts(store))
+        .filter((fact) => "assessmentId" in fact)
+        .map((fact) => fact.evaluatorId),
+    ).toEqual(["yotta/judge-2"]);
+    expect((await ledgerState()).reservedUsd).toBe(0);
+  });
+
+  it("keeps a judge whose response came from a cache, which is not a model substitution", async () => {
+    const warning = vi.fn();
+    const judgeModels: string[] = [];
+    let cacheHitSent = false;
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    await run(
+      cases,
+      async (request) => {
+        judgeModels.push(request.model);
+        const response = await judge()(request);
+        if (cacheHitSent) return response;
+        cacheHitSent = true;
+        return {
+          ...response,
+          substitution: {
+            kind: "cache",
+            evidence: "x-portkey-cache-status: HIT",
+          },
+        };
+      },
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
+        },
+      ],
+      warning,
+    );
+
+    expect(warning).not.toHaveBeenCalled();
+    expect(judgeModels).not.toContain("yotta/judge-2");
+    expect(
+      judgeModels.filter((model) => model === "zeta/judge-1"),
+    ).toHaveLength(8);
   });
 
   it("converts the recorded request to provider wire messages with only the model swapped", async () => {

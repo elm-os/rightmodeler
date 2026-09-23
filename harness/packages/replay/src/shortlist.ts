@@ -1,4 +1,4 @@
-import { blendedPrice } from "@rightmodeler/core";
+import { blendedPrice, withoutFastTiers } from "@rightmodeler/core";
 import type { ModelCatalogEntry } from "./provider.js";
 import type { CorpusSplit } from "@rightmodeler/kernel";
 
@@ -74,6 +74,7 @@ export function shortlist(
   const allow =
     options.allow === undefined ? undefined : new Set(options.allow);
   const deny = new Set(options.deny ?? []);
+  const rankable = withoutFastTiers(catalog);
 
   return stepRecords.map((step) => {
     if (
@@ -113,7 +114,7 @@ export function shortlist(
     const resolvedCurrentModelId =
       resolution.kind === "resolved" ? current.id : undefined;
     const currentPrice = blendedPrice(current);
-    const capable = catalog.filter(
+    const capable = rankable.filter(
       (candidate) =>
         candidate.id !== current.id &&
         (allow === undefined || allow.has(candidate.id)) &&

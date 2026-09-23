@@ -106,6 +106,45 @@ describe("pickJudge", () => {
     ).toEqual(["vendor/model"]);
   });
 
+  it("never ranks a -fast service tier whose base model is listed", () => {
+    const catalog: ModelCatalogEntry[] = [
+      {
+        id: "vendor/model-fast",
+        family: "vendor",
+        contextLength: 100,
+        pricing: { input: 2, output: 2 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 10,
+      },
+      {
+        id: "vendor/model",
+        family: "vendor",
+        contextLength: 100,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 10,
+      },
+      {
+        id: "solo/model-fast",
+        family: "solo",
+        contextLength: 50,
+        pricing: { input: 0.5, output: 0.5 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 5,
+      },
+    ];
+
+    expect(
+      pickJudges(catalog, {
+        candidateFamily: "candidate",
+        referenceFamily: "reference",
+      }),
+    ).toEqual(["vendor/model", "solo/model-fast"]);
+  });
+
   it("ranks eligible models by summed signal percentiles", () => {
     const catalog: ModelCatalogEntry[] = [
       {

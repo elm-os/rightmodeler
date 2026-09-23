@@ -84,9 +84,11 @@ export async function reserveWhenFree(
   budget: Budget,
   input: ReserveExecutionInput,
   inFlight: ReadonlySet<Promise<void>>,
+  signal?: AbortSignal,
 ): Promise<BudgetReservation> {
   let retryMs = 25;
   for (;;) {
+    signal?.throwIfAborted();
     try {
       return await budget.reserveExecution(input);
     } catch (error) {

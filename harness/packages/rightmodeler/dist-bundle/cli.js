@@ -10604,6 +10604,10 @@ function blendedPrice(model) {
     return null;
   return (3 * model.pricing.input + model.pricing.output) / 4;
 }
+function withoutFastTiers(catalog) {
+  const ids = new Set(catalog.map(({ id }) => id));
+  return catalog.filter(({ id }) => !id.endsWith("-fast") || !ids.has(id.slice(0, -"-fast".length)));
+}
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -25924,9 +25928,10 @@ var BudgetRefusalError = class extends Error {
     this.causedByReservations = causedByReservations;
   }
 };
-async function reserveWhenFree(budget, input, inFlight) {
+async function reserveWhenFree(budget, input, inFlight, signal) {
   let retryMs = 25;
   for (; ; ) {
+    signal?.throwIfAborted();
     try {
       return await budget.reserveExecution(input);
     } catch (error51) {
@@ -27464,7 +27469,7 @@ function pickJudges(catalog, options) {
   if (!options.candidateFamily || !options.referenceFamily || options.candidateFamily === "unknown" || options.referenceFamily === "unknown") {
     throw new Error("Candidate and reference model families must be known");
   }
-  const eligible = catalog.filter((model) => {
+  const eligible = withoutFastTiers(catalog).filter((model) => {
     if (model.id.includes(":"))
       return false;
     const outputModalities = model.outputModalities ?? [];
@@ -29534,6 +29539,7 @@ async function replayModeA(input) {
   const judgeQueue = [];
   const judgeJobs = /* @__PURE__ */ new Set();
   let judgeSwitchTrigger = null;
+  let judgeRetirement = new AbortController();
   async function completeWithAssessment(job, judged) {
     const assessmentId = mintAssessmentId();
     await writeReplayFact(input.store, input.budget.projectId, assessmentId, assessmentSchema.parse({
@@ -29572,6 +29578,7 @@ async function replayModeA(input) {
     }));
   }
   async function attemptJudge(job, judge) {
+    const retirement = judgeRetirement.signal;
     let judgeInvocation = 0;
     let judgeFailureKind = "response_malformed";
     let judgePersistenceFailure;
@@ -29585,7 +29592,11 @@ async function replayModeA(input) {
             contextTokens: estimateInputTokens(request.messages),
             maxOutputTokens: judge.maxOutputTokens,
             pricing: judge.pricing
-          }, activeRefunds);
+          }, activeRefunds, retirement);
+          if (retirement.aborted) {
+            await reservation.refund(0);
+            throw retirement.reason;
+          }
           let resolveRefund = () => void 0;
           const refundComplete = new Promise((resolve14) => {
             resolveRefund = resolve14;
@@ -29595,6 +29606,10 @@ async function replayModeA(input) {
             judgeResponse = await input.judge.chat(request);
             if (judgeResponse.substitution !== void 0) {
               const { kind, evidence } = judgeResponse.substitution;
+              if (kind === "model") {
+                judgeSwitchTrigger ??= { job, substitution: evidence };
+                judgeRetirement.abort();
+              }
               throw new ProviderResponseError(`Judge response was substituted (${kind}): ${evidence}`, { status: 200, bodyExcerpt: evidence });
             }
             return judgeResponse;
@@ -29662,12 +29677,16 @@ async function replayModeA(input) {
       if (error51 instanceof BudgetRefusalError) {
         return { status: "blocked", message: error51.message };
       }
+      if (retirement.aborted && error51 === retirement.reason) {
+        return { status: "failure" };
+      }
       await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error51);
       return { status: "failure" };
     }
   }
-  async function recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments) {
-    input.judge.warning?.("judge_unusable", nextJudge === void 0 ? `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; no eligible fallback judge remains.` : `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; switching to ${nextJudge.judgeModel}.`);
+  async function recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments, substitution2) {
+    const cause = substitution2 === void 0 ? " after three consecutive terminal failures" : `: it answered as another model (${substitution2})`;
+    input.judge.warning?.("judge_unusable", nextJudge === void 0 ? `Judge ${judge.judgeModel} is unusable${cause}; no eligible fallback judge remains.` : `Judge ${judge.judgeModel} is unusable${cause}; switching to ${nextJudge.judgeModel}.`);
     const noteId = randomUUID7();
     await writeReplayFact(input.store, input.budget.projectId, noteId, spendEventSchema.parse({
       actor: "judge",
@@ -29677,8 +29696,10 @@ async function replayModeA(input) {
       reconcilableTo: {
         judgeModel: judge.judgeModel,
         judgeStatus: "unusable",
-        note: "three_consecutive_terminal_failures",
-        consecutiveAssessments
+        ...substitution2 === void 0 ? {
+          note: "three_consecutive_terminal_failures",
+          consecutiveAssessments
+        } : { note: "model_substituted", substitution: substitution2 }
       }
     }));
   }
@@ -29710,7 +29731,7 @@ async function replayModeA(input) {
       return;
     consecutiveJudgeFailures += 1;
     if (consecutiveJudgeFailures >= 3)
-      judgeSwitchTrigger = job;
+      judgeSwitchTrigger = { job };
   }
   function startJudgeJob(work) {
     const job = work().catch((error51) => {
@@ -29727,16 +29748,17 @@ async function replayModeA(input) {
     if (judgeSwitchTrigger !== null) {
       if (judgeJobs.size > 0)
         return;
-      const trigger = judgeSwitchTrigger;
+      const { job: trigger, substitution: substitution2 } = judgeSwitchTrigger;
       const judge = judges[activeJudgeIndex];
       const nextJudge = judges[activeJudgeIndex + 1];
       const consecutiveAssessments = consecutiveJudgeFailures;
       judgeSwitchTrigger = null;
       activeJudgeIndex += 1;
+      judgeRetirement = new AbortController();
       judgeQueue.unshift(...judgeFailurePending);
       judgeFailurePending = [];
       consecutiveJudgeFailures = 0;
-      startJudgeJob(() => recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments));
+      startJudgeJob(() => recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments, substitution2));
       return;
     }
     while (judgeJobs.size < JUDGE_CONCURRENCY) {
@@ -31723,6 +31745,7 @@ function shortlist(stepRecords, catalog, options = {}) {
   }
   const allow = options.allow === void 0 ? void 0 : new Set(options.allow);
   const deny = new Set(options.deny ?? []);
+  const rankable = withoutFastTiers(catalog);
   return stepRecords.map((step) => {
     if (!Number.isSafeInteger(step.observedContextTokens) || step.observedContextTokens < 0) {
       throw new Error("observedContextTokens must be a non-negative integer");
@@ -31757,7 +31780,7 @@ function shortlist(stepRecords, catalog, options = {}) {
     const current = resolution.model;
     const resolvedCurrentModelId = resolution.kind === "resolved" ? current.id : void 0;
     const currentPrice = blendedPrice(current);
-    const capable = catalog.filter((candidate) => candidate.id !== current.id && (allow === void 0 || allow.has(candidate.id)) && !deny.has(candidate.id) && (!step.needsTools || candidate.supportsTools) && (!step.needsStructuredOutput || candidate.supportsStructuredOutput) && candidate.contextLength >= step.observedContextTokens);
+    const capable = rankable.filter((candidate) => candidate.id !== current.id && (allow === void 0 || allow.has(candidate.id)) && !deny.has(candidate.id) && (!step.needsTools || candidate.supportsTools) && (!step.needsStructuredOutput || candidate.supportsStructuredOutput) && candidate.contextLength >= step.observedContextTokens);
     const fitsCeiling = (candidate) => step.recordedMaxOutputTokens === void 0 || candidate.maxOutputTokens === void 0 || candidate.maxOutputTokens === null || candidate.maxOutputTokens >= step.recordedMaxOutputTokens;
     const withinCeiling = capable.filter(fitsCeiling);
     const droppedByOutputCeiling = capable.length - withinCeiling.length;

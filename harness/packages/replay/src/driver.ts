@@ -341,7 +341,11 @@ export async function replayModeA(
   let judgeFailurePending: JudgeCell[] = [];
   const judgeQueue: JudgeCell[] = [];
   const judgeJobs = new Set<Promise<void>>();
-  let judgeSwitchTrigger: JudgeCell | null = null;
+  let judgeSwitchTrigger: {
+    readonly job: JudgeCell;
+    readonly substitution?: string;
+  } | null = null;
+  let judgeRetirement = new AbortController();
 
   async function completeWithAssessment(
     job: JudgeCell,
@@ -416,6 +420,7 @@ export async function replayModeA(
       }
     | { readonly status: "blocked"; readonly message: string }
   > {
+    const retirement = judgeRetirement.signal;
     let judgeInvocation = 0;
     let judgeFailureKind: "response_malformed" | "provider_error" =
       "response_malformed";
@@ -434,7 +439,12 @@ export async function replayModeA(
               pricing: judge.pricing,
             },
             activeRefunds,
+            retirement,
           );
+          if (retirement.aborted) {
+            await reservation.refund(0);
+            throw retirement.reason;
+          }
           let resolveRefund = (): void => undefined;
           const refundComplete = new Promise<void>((resolve) => {
             resolveRefund = resolve;
@@ -444,6 +454,10 @@ export async function replayModeA(
             judgeResponse = await input.judge!.chat(request);
             if (judgeResponse.substitution !== undefined) {
               const { kind, evidence } = judgeResponse.substitution;
+              if (kind === "model") {
+                judgeSwitchTrigger ??= { job, substitution: evidence };
+                judgeRetirement.abort();
+              }
               throw new ProviderResponseError(
                 `Judge response was substituted (${kind}): ${evidence}`,
                 { status: 200, bodyExcerpt: evidence },
@@ -528,6 +542,9 @@ export async function replayModeA(
       if (error instanceof BudgetRefusalError) {
         return { status: "blocked", message: error.message };
       }
+      if (retirement.aborted && error === retirement.reason) {
+        return { status: "failure" };
+      }
       await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error);
       return { status: "failure" };
     }
@@ -538,12 +555,17 @@ export async function replayModeA(
     nextJudge: (typeof judges)[number] | undefined,
     trigger: JudgeCell,
     consecutiveAssessments: number,
+    substitution: string | undefined,
   ): Promise<void> {
+    const cause =
+      substitution === undefined
+        ? " after three consecutive terminal failures"
+        : `: it answered as another model (${substitution})`;
     input.judge!.warning?.(
       "judge_unusable",
       nextJudge === undefined
-        ? `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; no eligible fallback judge remains.`
-        : `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; switching to ${nextJudge.judgeModel}.`,
+        ? `Judge ${judge.judgeModel} is unusable${cause}; no eligible fallback judge remains.`
+        : `Judge ${judge.judgeModel} is unusable${cause}; switching to ${nextJudge.judgeModel}.`,
     );
     const noteId = randomUUID();
     await writeReplayFact(
@@ -559,8 +581,12 @@ export async function replayModeA(
         reconcilableTo: {
           judgeModel: judge.judgeModel,
           judgeStatus: "unusable",
-          note: "three_consecutive_terminal_failures",
-          consecutiveAssessments,
+          ...(substitution === undefined
+            ? {
+                note: "three_consecutive_terminal_failures",
+                consecutiveAssessments,
+              }
+            : { note: "model_substituted", substitution }),
         },
       }),
     );
@@ -591,7 +617,7 @@ export async function replayModeA(
     judgeFailurePending.push(job);
     if (judgeSwitchTrigger !== null) return;
     consecutiveJudgeFailures += 1;
-    if (consecutiveJudgeFailures >= 3) judgeSwitchTrigger = job;
+    if (consecutiveJudgeFailures >= 3) judgeSwitchTrigger = { job };
   }
 
   function startJudgeJob(work: () => Promise<void>): void {
@@ -610,17 +636,24 @@ export async function replayModeA(
     if (failure !== undefined) return;
     if (judgeSwitchTrigger !== null) {
       if (judgeJobs.size > 0) return;
-      const trigger = judgeSwitchTrigger;
+      const { job: trigger, substitution } = judgeSwitchTrigger;
       const judge = judges[activeJudgeIndex]!;
       const nextJudge = judges[activeJudgeIndex + 1];
       const consecutiveAssessments = consecutiveJudgeFailures;
       judgeSwitchTrigger = null;
       activeJudgeIndex += 1;
+      judgeRetirement = new AbortController();
       judgeQueue.unshift(...judgeFailurePending);
       judgeFailurePending = [];
       consecutiveJudgeFailures = 0;
       startJudgeJob(() =>
-        recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments),
+        recordUnusableJudge(
+          judge,
+          nextJudge,
+          trigger,
+          consecutiveAssessments,
+          substitution,
+        ),
       );
       return;
     }
