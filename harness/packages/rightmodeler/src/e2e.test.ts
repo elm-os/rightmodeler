@@ -236,9 +236,12 @@ async function regradeAfterAssertionsEdit(input: {
     );
   try {
     const first = await init();
-    const chatAfterFirst = modelStub.getHitCount();
+    expect(first.code, first.stderr).toBe(0);
+    jsonOutput(first);
+    const chat = modelStub.getHitCount();
     const gradesAfterFirst = await grades();
-    const unchanged = await init();
+    expect(gradesAfterFirst.length).toBeGreaterThan(0);
+    expect(jsonOutput(await init()).executedStages).toEqual([]);
     await writeFile(
       assertions,
       (await readFile(assertions, "utf8")).replace(
@@ -247,20 +250,41 @@ async function regradeAfterAssertionsEdit(input: {
       ),
     );
     const edited = await init();
-    const chatAfterEdited = modelStub.getHitCount();
+    expect(edited.code, edited.stderr).toBe(0);
+    expect(JSON.parse(edited.stdout).executedStages).toEqual([
+      "replay",
+      "aggregate",
+      "confirm",
+      "report",
+    ]);
+    expect(modelStub.getHitCount()).toBe(chat);
+    const warnings = edited.stderr
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line) as Record<string, string>);
+    expect(warnings.length).toBeGreaterThan(0);
+    for (const warning of warnings) {
+      expect(warning).toMatchObject({
+        event: "warning",
+        code: "evaluator_regrade",
+      });
+    }
+    expect(
+      warnings.reduce(
+        (total, { message }) =>
+          total + Number(/^Re-grading (\d+) /u.exec(message!)?.[1]),
+        0,
+      ),
+    ).toBe(gradesAfterFirst.length);
     const gradesAfterEdited = await grades();
-    const again = await init();
-    return {
-      root,
-      first,
-      unchanged,
-      edited,
-      again,
-      chatAfterFirst,
-      chatAfterEdited,
-      gradesAfterFirst,
-      gradesAfterEdited,
-    };
+    expect(gradesAfterEdited).toHaveLength(2 * gradesAfterFirst.length);
+    expect(
+      new Set(
+        gradesAfterEdited.map(({ evaluatorIdentity }) => evaluatorIdentity),
+      ).size,
+    ).toBe(2);
+    expect(jsonOutput(await init()).executedStages).toEqual([]);
+    return { root, gradesAfterFirst, gradesAfterEdited };
   } finally {
     await modelStub.close();
   }
@@ -3677,49 +3701,11 @@ describe("built CLI pipeline", () => {
   }, 60_000);
 
   it("re-grades promptfoo candidate outputs after an assertions edit without a model call", async () => {
-    const run = await regradeAfterAssertionsEdit({
+    await regradeAfterAssertionsEdit({
       label: "promptfoo-regrade",
       command: promptfooCommandPath,
       env: () => ({}),
     });
-
-    expect(run.first.code, run.first.stderr).toBe(0);
-    jsonOutput(run.first);
-    expect(jsonOutput(run.unchanged).executedStages).toEqual([]);
-    expect(run.edited.code, run.edited.stderr).toBe(0);
-    expect(JSON.parse(run.edited.stdout).executedStages).toEqual([
-      "replay",
-      "aggregate",
-      "confirm",
-      "report",
-    ]);
-    expect(run.chatAfterEdited).toBe(run.chatAfterFirst);
-    const warnings = run.edited.stderr
-      .split("\n")
-      .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line) as Record<string, string>);
-    expect(warnings.length).toBeGreaterThan(0);
-    for (const warning of warnings) {
-      expect(warning).toMatchObject({
-        event: "warning",
-        code: "evaluator_regrade",
-      });
-    }
-    expect(
-      warnings.reduce(
-        (total, { message }) =>
-          total + Number(/^Re-grading (\d+) /u.exec(message!)?.[1]),
-        0,
-      ),
-    ).toBe(run.gradesAfterFirst.length);
-    expect(run.gradesAfterFirst.length).toBeGreaterThan(0);
-    expect(run.gradesAfterEdited).toHaveLength(2 * run.gradesAfterFirst.length);
-    expect(
-      new Set(
-        run.gradesAfterEdited.map(({ evaluatorIdentity }) => evaluatorIdentity),
-      ).size,
-    ).toBe(2);
-    expect(jsonOutput(run.again).executedStages).toEqual([]);
   }, 90_000);
 
   it.skipIf(livePromptfoo === undefined)(
@@ -3843,47 +3829,6 @@ describe("built CLI pipeline", () => {
         .filter((line) => line.length > 0)
         .at(-1)!;
 
-      expect(run.first.code, run.first.stderr).toBe(0);
-      jsonOutput(run.first);
-      expect(jsonOutput(run.unchanged).executedStages).toEqual([]);
-      expect(run.edited.code, run.edited.stderr).toBe(0);
-      expect(JSON.parse(run.edited.stdout).executedStages).toEqual([
-        "replay",
-        "aggregate",
-        "confirm",
-        "report",
-      ]);
-      expect(run.chatAfterEdited).toBe(run.chatAfterFirst);
-      const warnings = run.edited.stderr
-        .split("\n")
-        .filter((line) => line.length > 0)
-        .map((line) => JSON.parse(line) as Record<string, string>);
-      expect(warnings.length).toBeGreaterThan(0);
-      for (const warning of warnings) {
-        expect(warning).toMatchObject({
-          event: "warning",
-          code: "evaluator_regrade",
-        });
-      }
-      expect(
-        warnings.reduce(
-          (total, { message }) =>
-            total + Number(/^Re-grading (\d+) /u.exec(message!)?.[1]),
-          0,
-        ),
-      ).toBe(run.gradesAfterFirst.length);
-      expect(run.gradesAfterFirst.length).toBeGreaterThan(0);
-      expect(run.gradesAfterEdited).toHaveLength(
-        2 * run.gradesAfterFirst.length,
-      );
-      expect(
-        new Set(
-          run.gradesAfterEdited.map(
-            ({ evaluatorIdentity }) => evaluatorIdentity,
-          ),
-        ).size,
-      ).toBe(2);
-      expect(jsonOutput(run.again).executedStages).toEqual([]);
       for (const grade of run.gradesAfterEdited) {
         expect(grade.passed).toBe(false);
       }
