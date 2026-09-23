@@ -208,7 +208,7 @@ describe("pickJudge", () => {
 
     expect(pickJudges(catalog, families)).toEqual(["neutral/priced"]);
     expect(() => pickJudges([unpriced], families)).toThrow(
-      "No neutral third-family judge is available",
+      "No neutral third-family judge is available: the catalog needs a priced model",
     );
   });
 

@@ -138,7 +138,8 @@ include the model's output ceiling:
 
 Without usable pricing from the catalog, LiteLLM `/model/info`, or a pricing
 file, the run refuses with `no_priced_candidates` instead of reporting zero
-cost.
+cost. The judge must be priced too, so price at least one model from a family
+other than the current model's and the candidate's.
 
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md`. The JSON report is kept inside the versioned store and is never written as a plain file, so read the final `result` event from `--output json` or `--output jsonl` for the machine-readable outcome.
 

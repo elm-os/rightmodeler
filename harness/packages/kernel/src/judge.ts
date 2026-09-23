@@ -141,7 +141,9 @@ export function pickJudges(
   });
 
   if (eligible.length === 0) {
-    throw new Error("No neutral third-family judge is available");
+    throw new Error(
+      "No neutral third-family judge is available: the catalog needs a priced model from a family other than the candidate's and the reference's",
+    );
   }
 
   const rawSignals = eligible.map((model) => ({
