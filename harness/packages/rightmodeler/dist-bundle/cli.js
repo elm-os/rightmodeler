@@ -28619,6 +28619,9 @@ import { fileURLToPath } from "node:url";
 // ../replay/dist/driver.js
 import { randomUUID as randomUUID7 } from "node:crypto";
 
+// ../replay/dist/provider.js
+import { readFile as readFile4 } from "node:fs/promises";
+
 // ../replay/dist/provenance.js
 var DATED_SNAPSHOT = /^\d{2,4}(?:-?\d{2}){1,2}$/;
 var PORTKEY_CACHE_HITS = /* @__PURE__ */ new Set(["hit", "semantic hit"]);
@@ -28729,6 +28732,12 @@ var ProviderHttpError = class extends ProviderRequestError {
   }
 };
 var ProviderConfigurationError = class extends Error {
+};
+var CatalogReferenceError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "CatalogReferenceError";
+  }
 };
 var ProviderResponseError = class extends ProviderRequestError {
   status;
@@ -28939,7 +28948,7 @@ function normalizeModel(value, index) {
   if (!Array.isArray(outputModalities) || !outputModalities.every((modality) => typeof modality === "string")) {
     throw new Error(`models[${index}].output modalities must contain strings`);
   }
-  return {
+  const entry = {
     id: model.id,
     family: model.id.split("/", 1)[0],
     contextLength,
@@ -28955,6 +28964,95 @@ function normalizeModel(value, index) {
     outputModalities,
     requiresReasoning: reasoning.mandatory === true
   };
+  return {
+    entry,
+    declaresCapabilities: Array.isArray(model.supported_parameters),
+    declaresReasoning: model.reasoning !== void 0 && model.reasoning !== null
+  };
+}
+function failureMessage(error51) {
+  if (!(error51 instanceof Error))
+    return String(error51);
+  return error51.cause instanceof Error ? `${error51.message} (${error51.cause.message})` : error51.message;
+}
+async function readCatalogReference(reference) {
+  const models = /* @__PURE__ */ new Map();
+  const excluded = /* @__PURE__ */ new Set();
+  const remote = /^https?:\/\//iu.test(reference);
+  let rawCount = 0;
+  let next = reference;
+  for (let page = 0; page < 20 && next !== void 0; page += 1) {
+    const url2 = next;
+    next = void 0;
+    let response;
+    let text;
+    try {
+      if (remote) {
+        response = await fetch(url2, { method: "GET" });
+        text = await response.text();
+      } else {
+        text = await readFile4(url2, "utf8");
+      }
+    } catch (error51) {
+      throw new CatalogReferenceError(`Catalog reference ${reference} could not be ${remote ? "fetched" : "read"}: ${failureMessage(error51)}`);
+    }
+    if (response !== void 0 && !response.ok) {
+      throw new CatalogReferenceError(`Catalog reference ${reference} answered HTTP ${response.status}`);
+    }
+    try {
+      const envelope = objectValue(JSON.parse(text), "model catalog");
+      if (!Array.isArray(envelope.data)) {
+        throw new Error("model catalog data must be an array");
+      }
+      for (const value of envelope.data) {
+        const model = normalizeModel(value, rawCount);
+        rawCount += 1;
+        if (model === null)
+          excluded.add(value.id);
+        else
+          models.set(model.entry.id, model);
+      }
+      if (remote && typeof envelope.links === "object" && envelope.links !== null && !Array.isArray(envelope.links)) {
+        const links = envelope.links;
+        if (typeof links.next === "string" && links.next.length > 0) {
+          const resolved = new URL(links.next, url2);
+          if (resolved.origin === new URL(reference).origin) {
+            next = resolved.href;
+          }
+        }
+      }
+    } catch (error51) {
+      throw new CatalogReferenceError(`Catalog reference ${reference} is not an OpenAI-compatible /models document: ${failureMessage(error51)}`);
+    }
+  }
+  return { models, excluded };
+}
+function joinCatalogReference(models, reference) {
+  const joined = [];
+  for (const { entry, declaresCapabilities, declaresReasoning } of models) {
+    const matchId = entry.id.split("/").map((_, index, segments) => segments.slice(index).join("/")).find((id) => reference.models.has(id) || reference.excluded.has(id));
+    if (matchId === void 0) {
+      joined.push(entry);
+      continue;
+    }
+    const match = reference.models.get(matchId)?.entry;
+    if (match === void 0)
+      continue;
+    joined.push({
+      ...entry,
+      pricing: entry.pricing ?? match.pricing,
+      contextLength: entry.contextLength === 0 ? match.contextLength : entry.contextLength,
+      maxOutputTokens: entry.maxOutputTokens ?? match.maxOutputTokens,
+      ...declaresCapabilities ? {} : {
+        supportsTools: match.supportsTools,
+        supportsStructuredOutput: match.supportsStructuredOutput
+      },
+      outputModalities: entry.outputModalities?.length === 0 ? match.outputModalities : entry.outputModalities,
+      requiresReasoning: declaresReasoning ? entry.requiresReasoning : match.requiresReasoning,
+      releasedAt: entry.releasedAt ?? match.releasedAt
+    });
+  }
+  return joined;
 }
 function normalizeUsage(value) {
   if (value === void 0 || value === null)
@@ -29073,7 +29171,7 @@ function createProvider(options) {
     });
   }
   async function fetchCatalog() {
-    const entries = [];
+    const models = [];
     let rawCount = 0;
     let totalCount;
     let truncated = false;
@@ -29093,7 +29191,7 @@ function createProvider(options) {
           const model = normalizeModel(entry, rawCount);
           rawCount += 1;
           if (model !== null)
-            entries.push(model);
+            models.push(model);
         }
         if (totalCount === void 0 && typeof envelope.total_count === "number") {
           totalCount = envelope.total_count;
@@ -29124,6 +29222,7 @@ function createProvider(options) {
     if (truncated || totalCount !== void 0 && totalCount > rawCount) {
       options.warning?.("catalog_truncated", `Provider ${options.providerId} catalog is truncated: collected ${rawCount} of ${totalCount ?? "an unknown number of"} models`);
     }
+    const entries = options.catalogReference === void 0 ? models.map(({ entry }) => entry) : joinCatalogReference(models, await readCatalogReference(options.catalogReference));
     if (options.pricingOverrides !== void 0) {
       for (const entry of entries) {
         const override = options.pricingOverrides[entry.id];
@@ -29177,6 +29276,11 @@ function createProvider(options) {
       if (entries.every(({ pricing }) => pricing === null)) {
         options.warning?.("catalog_pricing_unavailable", `Provider ${options.providerId} catalog does not publish per-token pricing`);
       }
+    }
+    const unpriced = entries.flatMap(({ id, pricing }) => pricing === null ? [id] : []);
+    if (options.catalogReference !== void 0 && unpriced.length > 0) {
+      const examples = unpriced.slice(0, 5).join(", ");
+      options.warning?.("catalog_reference_unmatched", `${unpriced.length} model(s) in the ${options.providerId} catalog have no price after joining the catalog reference, for example ${examples}. Declare replay models under the ids the reference lists, or pass --pricing-file.`);
     }
     catalog = entries;
     return catalog;
@@ -31713,7 +31817,7 @@ var {
 import { execFile as execFile7 } from "node:child_process";
 import { createHash as createHash12 } from "node:crypto";
 import { readFileSync as readFileSync6 } from "node:fs";
-import { mkdir as mkdir5, readFile as readFile11, readdir as readdir4, stat as stat3, writeFile as writeFile6 } from "node:fs/promises";
+import { mkdir as mkdir5, readFile as readFile12, readdir as readdir4, stat as stat3, writeFile as writeFile6 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
 import { dirname as dirname7, join as join15, relative as relative8, resolve as resolve8, sep as sep5 } from "node:path";
 import { promisify as promisify6 } from "node:util";
@@ -35672,14 +35776,14 @@ function scrubRuns(runs) {
 // src/apply/orchestrator.ts
 import { execFile as execFile5 } from "node:child_process";
 import { createHash as createHash6 } from "node:crypto";
-import { readFile as readFile8 } from "node:fs/promises";
+import { readFile as readFile9 } from "node:fs/promises";
 import { join as join11 } from "node:path";
 import { promisify as promisify4 } from "node:util";
 
 // src/code-graph/graph.ts
 import { constants } from "node:buffer";
 import { createHash as createHash4 } from "node:crypto";
-import { readFile as readFile4, stat as stat2 } from "node:fs/promises";
+import { readFile as readFile5, stat as stat2 } from "node:fs/promises";
 import { isAbsolute, relative as relative4, sep as sep4 } from "node:path";
 var provenanceRank = {
   AMBIGUOUS: 0,
@@ -35720,7 +35824,7 @@ async function graphFileDigest(path) {
   try {
     const { size } = await stat2(path);
     if (size > constants.MAX_STRING_LENGTH) return `too-large:${size}`;
-    return createHash4("sha256").update(await readFile4(path)).digest("hex");
+    return createHash4("sha256").update(await readFile5(path)).digest("hex");
   } catch {
     return "unreadable";
   }
@@ -35759,7 +35863,7 @@ async function loadCodeGraph(path, repoDir) {
   }
   let bytes;
   try {
-    bytes = await readFile4(path);
+    bytes = await readFile5(path);
   } catch (error51) {
     return unreadable(error51);
   }
@@ -35924,7 +36028,7 @@ function blastRadius({
 
 // src/enrich/conventions.ts
 import { execFile as execFile2 } from "node:child_process";
-import { access, readFile as readFile5 } from "node:fs/promises";
+import { access, readFile as readFile6 } from "node:fs/promises";
 import { dirname as dirname3, join as join7, relative as relative5, resolve as resolve4 } from "node:path";
 import { promisify as promisify2 } from "node:util";
 
@@ -36015,7 +36119,7 @@ async function captureInstructionFiles(repoDir) {
   async function capture(path, depth, stack, includedFrom) {
     let content;
     try {
-      content = await readFile5(join7(repoDir, path), "utf8");
+      content = await readFile6(join7(repoDir, path), "utf8");
     } catch {
       warn(
         includedFrom === void 0 ? { name: "instruction_file_unreadable", path } : {
@@ -36054,7 +36158,7 @@ async function captureInstructionFiles(repoDir) {
 }
 async function readFirst(repoDir, candidates) {
   const path = await existingPath(repoDir, candidates);
-  return path === null ? null : readFile5(join7(repoDir, path), "utf8");
+  return path === null ? null : readFile6(join7(repoDir, path), "utf8");
 }
 async function detectFormatter(repoDir) {
   const prettier = await existingPath(repoDir, prettierConfigs);
@@ -36063,7 +36167,7 @@ async function detectFormatter(repoDir) {
   if (ruff !== null) return { kind: "ruff", configPath: ruff };
   const pyproject = await existingPath(repoDir, ["pyproject.toml"]);
   if (pyproject !== null && /^\s*\[tool\.ruff(?:\.[^\]]+)?\]\s*$/m.test(
-    await readFile5(join7(repoDir, pyproject), "utf8")
+    await readFile6(join7(repoDir, pyproject), "utf8")
   )) {
     return { kind: "ruff", configPath: pyproject };
   }
@@ -36135,7 +36239,7 @@ async function captureConventions({
 
 // src/enrich/owners.ts
 import { execFile as execFile3 } from "node:child_process";
-import { access as access2, readFile as readFile6 } from "node:fs/promises";
+import { access as access2, readFile as readFile7 } from "node:fs/promises";
 import { isAbsolute as isAbsolute2, join as join8, relative as relative6 } from "node:path";
 import { promisify as promisify3 } from "node:util";
 var execFileAsync3 = promisify3(execFile3);
@@ -36263,7 +36367,7 @@ async function resolveOwners({
 }) {
   const codeownersPath = await findCodeowners(repoDir);
   const rules = codeownersPath === null ? [] : parseCodeowners(
-    await readFile6(join8(repoDir, codeownersPath), "utf8")
+    await readFile7(join8(repoDir, codeownersPath), "utf8")
   ).map((rule) => ({
     ...rule,
     matcher: codeownersRegex(rule.pattern)
@@ -38926,7 +39030,7 @@ function lintSwapDiff({
 // src/apply/format.ts
 import { execFile as execFile4 } from "node:child_process";
 import { existsSync, readFileSync as readFileSync5, writeFileSync } from "node:fs";
-import { mkdtemp as mkdtemp2, readFile as readFile7, rm as rm2 } from "node:fs/promises";
+import { mkdtemp as mkdtemp2, readFile as readFile8, rm as rm2 } from "node:fs/promises";
 import { basename as basename2, dirname as dirname4, join as join10 } from "node:path";
 function pinnedPrettierVersion(repoDir) {
   const pnpmLock = join10(repoDir, "pnpm-lock.yaml");
@@ -39077,7 +39181,7 @@ async function formatWithHostFormatter({
         repoDir,
         file2.after
       );
-      const formatted = stdout === null ? await readFile7(temporaryPath, "utf8") : stdout;
+      const formatted = stdout === null ? await readFile8(temporaryPath, "utf8") : stdout;
       const touchedLines = new Set(file2.hunks.map(({ line }) => line));
       const conflictLine = firstOutsideTouchedLine(
         file2.after,
@@ -39484,7 +39588,7 @@ async function staleDigestPaths(repoDir, swaps) {
     ([left], [right]) => compareText(left, right)
   )) {
     try {
-      const content = (await readFile8(join11(repoDir, path), "utf8")).replaceAll(
+      const content = (await readFile9(join11(repoDir, path), "utf8")).replaceAll(
         "\r\n",
         "\n"
       );
@@ -40154,7 +40258,7 @@ function requireStep(stepsById, stepId) {
 }
 
 // src/drift.ts
-import { mkdir as mkdir4, readFile as readFile9, writeFile as writeFile4 } from "node:fs/promises";
+import { mkdir as mkdir4, readFile as readFile10, writeFile as writeFile4 } from "node:fs/promises";
 import { dirname as dirname5, join as join13, resolve as resolve6 } from "node:path";
 
 // src/state.ts
@@ -40368,7 +40472,7 @@ async function readCorpusVersion(options, corpusVersionId) {
 async function runDrift(options) {
   const { store, storeRoot } = context(options);
   const parent = await loadActiveCorpus(store);
-  const traceText = await readFile9(resolve6(options.traces), "utf8");
+  const traceText = await readFile10(resolve6(options.traces), "utf8");
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
   const result2 = adaptWithReport(adapter, records);
@@ -41718,7 +41822,7 @@ function providerName(provider) {
 // src/evaluators/promptfoo.ts
 import { execFile as execFile6 } from "node:child_process";
 import { createHash as createHash7 } from "node:crypto";
-import { mkdtemp as mkdtemp3, readFile as readFile10, realpath as realpath3, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
+import { mkdtemp as mkdtemp3, readFile as readFile11, realpath as realpath3, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname as dirname6, join as join14, relative as relative7, resolve as resolve7 } from "node:path";
 import { promisify as promisify5 } from "node:util";
@@ -41936,7 +42040,7 @@ function createPromptfooEvaluator(input) {
         }
         let text;
         try {
-          text = await readFile10(resultsPath, "utf8");
+          text = await readFile11(resultsPath, "utf8");
         } catch (error51) {
           if (error51.code !== "ENOENT") throw error51;
           throw new Error(
@@ -41984,7 +42088,7 @@ async function readPromptfooConfigs(assertionsPath) {
       async (extension) => {
         const file2 = `promptfooconfig.${extension}`;
         try {
-          return [{ file: file2, bytes: await readFile10(join14(directory, file2)) }];
+          return [{ file: file2, bytes: await readFile11(join14(directory, file2)) }];
         } catch (error51) {
           if (error51.code === "ENOENT") return [];
           throw error51;
@@ -44444,9 +44548,10 @@ async function estimateReplay(options) {
     maxConcurrency: context2.maxConcurrency,
     warning: (code, message2) => context2.reporter.warning(code, message2),
     pricingOverrides: context2.pricingOverrides,
-    headers: context2.requestHeaders
+    headers: context2.requestHeaders,
+    catalogReference: context2.catalogReference
   });
-  const catalog = context2.existingRunId === void 0 ? await provider.listModels() : await readDetachedReplayCatalog(context2, context2.existingRunId);
+  const catalog = context2.existingRunId === void 0 ? await providerCatalog(provider) : await readDetachedReplayCatalog(context2, context2.existingRunId);
   const candidates = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, catalog) : await approvedReplayCandidates(
     context2,
     plan,
@@ -44495,15 +44600,18 @@ async function claimDetachedReplay(options) {
       remedy: "Pass --traces <path> or complete ingest before detaching replay."
     });
   }
-  const catalogIdentity = (await createProvider({
-    providerId: "configured-provider",
-    baseUrl: context2.baseUrl,
-    apiKeyEnv: context2.apiKeyEnv,
-    maxConcurrency: context2.maxConcurrency,
-    warning: (code, message2) => context2.reporter.warning(code, message2),
-    pricingOverrides: context2.pricingOverrides,
-    headers: context2.requestHeaders
-  }).listModels()).sort((left, right) => compareText(left.id, right.id));
+  const catalogIdentity = (await providerCatalog(
+    createProvider({
+      providerId: "configured-provider",
+      baseUrl: context2.baseUrl,
+      apiKeyEnv: context2.apiKeyEnv,
+      maxConcurrency: context2.maxConcurrency,
+      warning: (code, message2) => context2.reporter.warning(code, message2),
+      pricingOverrides: context2.pricingOverrides,
+      headers: context2.requestHeaders,
+      catalogReference: context2.catalogReference
+    })
+  )).sort((left, right) => compareText(left.id, right.id));
   const targetPhase = options.through ?? "replay";
   if (!isPipelineStage(targetPhase)) {
     throw new Error(`Invalid detached replay target: ${targetPhase}`);
@@ -44523,7 +44631,8 @@ async function claimDetachedReplay(options) {
       apiKeyEnv: context2.apiKeyEnv,
       maxCostUsd: context2.maxCostUsd ?? null,
       includeFreeModels: context2.includeFreeModels,
-      ...context2.requestHeaders === void 0 ? {} : { headers: requestHeaderIdentity(context2.requestHeaders) }
+      ...context2.requestHeaders === void 0 ? {} : { headers: requestHeaderIdentity(context2.requestHeaders) },
+      ...context2.catalogReference === void 0 ? {} : { catalogReference: context2.catalogReference }
     },
     evaluator: await evaluatorRunIdentity(context2),
     modeBConfig: context2.modeBConfig === void 0 ? null : jsonValue2(context2.modeBConfig),
@@ -44613,7 +44722,7 @@ async function evaluatorRunIdentity(context2) {
   );
   return jsonValue2({
     ...context2.evaluator,
-    assertionsSha256: sha256(await readFile11(assertionsPath)),
+    assertionsSha256: sha256(await readFile12(assertionsPath)),
     ...promptfooConfigs.length === 0 ? {} : { promptfooConfigs }
   });
 }
@@ -45151,6 +45260,9 @@ function createContext(options) {
       pricingOverrides: readPricingFile(pricingFilePath)
     },
     ...options.requestHeaders === void 0 ? {} : { requestHeaders: options.requestHeaders },
+    ...options.catalogReference === void 0 ? {} : {
+      catalogReference: /^https?:\/\//iu.test(options.catalogReference) ? options.catalogReference : resolve8(options.catalogReference)
+    },
     ...policyFilePath === void 0 ? {} : { policyFilePath },
     ...options.matchersPath === void 0 ? {} : {
       matchersPath: resolve8(options.matchersPath),
@@ -45317,7 +45429,7 @@ async function inputDigest(stage, context2, state) {
       stage,
       repository: await contextRepositoryDigest(context2),
       scanner: SCAN_REVISION,
-      ...context2.matchersPath === void 0 ? {} : { matchers: sha256(await readFile11(context2.matchersPath)) }
+      ...context2.matchersPath === void 0 ? {} : { matchers: sha256(await readFile12(context2.matchersPath)) }
     });
   }
   if (stage === "ingest") {
@@ -45391,7 +45503,8 @@ async function inputDigest(stage, context2, state) {
       apiKeyEnv: context2.apiKeyEnv,
       maxCostUsd: context2.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context2),
-      ...context2.requestHeaders === void 0 ? {} : { headers: requestHeaderIdentity(context2.requestHeaders) }
+      ...context2.requestHeaders === void 0 ? {} : { headers: requestHeaderIdentity(context2.requestHeaders) },
+      ...context2.catalogReference === void 0 ? {} : { catalogReference: context2.catalogReference }
     });
     if (context2.evaluator !== void 0) {
       extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context2));
@@ -45527,6 +45640,24 @@ function invalidPricingFile(message2) {
     remedy: 'Use a JSON object mapping each model id to { "input": <non-negative USD per token>, "output": <non-negative USD per token>, "maxOutputTokens": <optional positive integer> }.'
   });
 }
+function invalidCatalogReference(message2) {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "invalid_catalog_reference",
+    message: message2,
+    remedy: "Pass --catalog-reference an http(s) URL or a readable file that returns an OpenAI-compatible /models document, or remove it, then rerun."
+  });
+}
+async function providerCatalog(provider) {
+  try {
+    return await provider.listModels();
+  } catch (error51) {
+    if (error51 instanceof CatalogReferenceError) {
+      throw invalidCatalogReference(error51.message);
+    }
+    throw error51;
+  }
+}
 function invalidPolicyFile(message2) {
   return new ProtocolError({
     exitCode: 2,
@@ -45559,12 +45690,12 @@ async function readTraceInput(path) {
     if (!isMissing2(error51)) throw error51;
     throw missingTraceInput(path);
   }
-  if (!metadata.isDirectory()) return [await readFile11(path)];
+  if (!metadata.isDirectory()) return [await readFile12(path)];
   const names = (await readdir4(path, { withFileTypes: true })).filter(
     (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
   ).map(({ name }) => name).sort();
   if (names.length === 0) throw emptyTracesDirectory(path);
-  return Promise.all(names.map((name) => readFile11(join15(path, name))));
+  return Promise.all(names.map((name) => readFile12(join15(path, name))));
 }
 async function executeStage(stage, context2, inputDigestValue, runId) {
   switch (stage) {
@@ -46190,7 +46321,7 @@ function assertPricedCandidates(baseUrl, candidates) {
       exitCode: 2,
       code: "no_priced_candidates",
       message: `The model catalog at ${baseUrl} publishes no per-token pricing, so no candidate can be priced.`,
-      remedy: "Point --base-url at a catalog that publishes pricing, or pass --pricing-file <path> mapping each model id to its input and output USD per token."
+      remedy: "Point --base-url at a catalog that publishes pricing, pass --catalog-reference <url> naming the upstream's public model list, or pass --pricing-file <path> mapping each model id to its input and output USD per token."
     });
   }
 }
@@ -46251,9 +46382,10 @@ async function executeReplay(context2, inputDigestValue, runId) {
     maxConcurrency: context2.maxConcurrency,
     warning: (code, message2) => context2.reporter.warning(code, message2),
     pricingOverrides: context2.pricingOverrides,
-    headers: context2.requestHeaders
+    headers: context2.requestHeaders,
+    catalogReference: context2.catalogReference
   });
-  const catalog = context2.existingRunId === void 0 ? await provider.listModels() : await readDetachedReplayCatalog(context2, context2.existingRunId);
+  const catalog = context2.existingRunId === void 0 ? await providerCatalog(provider) : await readDetachedReplayCatalog(context2, context2.existingRunId);
   const replaySteps = (split) => plan.steps.map((step) => ({
     ...step,
     corpusSplit: split,
@@ -46768,9 +46900,10 @@ async function executeConfirm(context2, inputDigestValue, runId) {
       maxConcurrency: context2.maxConcurrency,
       warning: (code, message2) => context2.reporter.warning(code, message2),
       pricingOverrides: context2.pricingOverrides,
-      headers: context2.requestHeaders
+      headers: context2.requestHeaders,
+      catalogReference: context2.catalogReference
     });
-    const catalog = await provider.listModels();
+    const catalog = await providerCatalog(provider);
     const configuredRecords = configuredStepRecords(config2, reconciled.records);
     const orderedRecords = topologicalRecords(configuredRecords);
     const runtimeByCanonical = config2.stepMap;
@@ -47564,7 +47697,7 @@ async function checkpointOutputExists(context2, stage, checkpoint) {
     return false;
   }
   try {
-    await readFile11(reportPath(context2));
+    await readFile12(reportPath(context2));
     return true;
   } catch (error51) {
     if (isMissing2(error51)) return false;
@@ -47746,7 +47879,7 @@ async function repositoryDigest(repo, storeRoot) {
       ...await Promise.all(
         files.slice(index, index + 16).map(async (file2) => ({
           path: file2.path,
-          sha256: sha256(await readFile11(file2.absolute))
+          sha256: sha256(await readFile12(file2.absolute))
         }))
       )
     );
@@ -48357,7 +48490,7 @@ async function runAuditTabulate(options) {
     })
   });
   const worksheet = options.worksheet ? auditWorksheetSchema.parse(
-    JSON.parse(await readFile11(resolve8(options.worksheet), "utf8"))
+    JSON.parse(await readFile12(resolve8(options.worksheet), "utf8"))
   ) : await loadCurrent(context2, "audit-sample", auditWorksheetSchema);
   const result2 = auditTabulate(worksheet);
   await putMutableJson(
@@ -49836,6 +49969,9 @@ function addPipelineOptions(command, provider) {
       "extra HTTP header for every provider request, as 'name: value' (repeatable)",
       collectOption
     ).option(
+      "--catalog-reference <url-or-path>",
+      "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks"
+    ).option(
       "--policy <path>",
       "release policy JSON file: quality floor, shortlist size, model allow and deny lists"
     ).addOption(
@@ -49970,6 +50106,7 @@ function pipelineOptions(global, local, reporter) {
     maxConcurrency,
     pricingFilePath: local.pricingFile,
     ...requestHeaders2.size === 0 ? {} : { requestHeaders: Object.fromEntries(requestHeaders2) },
+    catalogReference: local.catalogReference,
     policyFilePath: local.policy,
     includeFreeModels: local.includeFree,
     ...local.evaluator === void 0 ? {} : {
@@ -50245,6 +50382,7 @@ var PIPELINE_ARG_OPTIONS = [
   { flag: "--max-concurrency", key: "maxConcurrency", kind: "value" },
   { flag: "--pricing-file", key: "pricingFile", kind: "path" },
   { flag: "--header", key: "header", kind: "repeated" },
+  { flag: "--catalog-reference", key: "catalogReference", kind: "reference" },
   { flag: "--policy", key: "policy", kind: "path" },
   { flag: "--include-free", key: "includeFree", kind: "flag" },
   { flag: "--approved-run", key: "approvedRun", kind: "value" },
@@ -50313,7 +50451,7 @@ function pipelineArgv(options) {
     appendCliOption(
       args,
       flag,
-      kind === "path" ? resolve13(value) : kind === "command" ? detachedCommand(value) : value
+      kind === "path" || kind === "reference" && !/^https?:\/\//iu.test(value) ? resolve13(value) : kind === "command" ? detachedCommand(value) : value
     );
   }
   return args;

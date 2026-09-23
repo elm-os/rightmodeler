@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import type {
   JsonValue,
   ModelCatalogEntry,
@@ -75,6 +77,7 @@ export interface CreateProviderOptions {
     Record<string, { input: number; output: number; maxOutputTokens?: number }>
   >;
   headers?: Readonly<Record<string, string>>;
+  catalogReference?: string;
 }
 
 export type BlockedErrorInit =
@@ -125,6 +128,12 @@ class ProviderHttpError extends ProviderRequestError {
 }
 
 export class ProviderConfigurationError extends Error {}
+export class CatalogReferenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CatalogReferenceError";
+  }
+}
 export class ProviderResponseError extends ProviderRequestError {
   readonly status: number;
   readonly bodyExcerpt: string;
@@ -347,10 +356,16 @@ function chatErrorBody(text: string): boolean {
   );
 }
 
+interface NormalizedCatalogModel {
+  readonly entry: ModelCatalogEntry;
+  readonly declaresCapabilities: boolean;
+  readonly declaresReasoning: boolean;
+}
+
 function normalizeModel(
   value: unknown,
   index: number,
-): ModelCatalogEntry | null {
+): NormalizedCatalogModel | null {
   const model = objectValue(value, `models[${index}]`);
   if (typeof model.id !== "string" || model.id.length === 0) {
     throw new Error(`models[${index}].id must be a non-empty string`);
@@ -411,7 +426,7 @@ function normalizeModel(
     throw new Error(`models[${index}].output modalities must contain strings`);
   }
 
-  return {
+  const entry: ModelCatalogEntry = {
     id: model.id,
     family: model.id.split("/", 1)[0]!,
     contextLength,
@@ -435,6 +450,129 @@ function normalizeModel(
     outputModalities,
     requiresReasoning: reasoning.mandatory === true,
   };
+  return {
+    entry,
+    declaresCapabilities: Array.isArray(model.supported_parameters),
+    declaresReasoning:
+      model.reasoning !== undefined && model.reasoning !== null,
+  };
+}
+
+interface CatalogReference {
+  readonly models: ReadonlyMap<string, NormalizedCatalogModel>;
+  readonly excluded: ReadonlySet<string>;
+}
+
+function failureMessage(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  return error.cause instanceof Error
+    ? `${error.message} (${error.cause.message})`
+    : error.message;
+}
+
+async function readCatalogReference(
+  reference: string,
+): Promise<CatalogReference> {
+  const models = new Map<string, NormalizedCatalogModel>();
+  const excluded = new Set<string>();
+  const remote = /^https?:\/\//iu.test(reference);
+  let rawCount = 0;
+  let next: string | undefined = reference;
+  for (let page = 0; page < 20 && next !== undefined; page += 1) {
+    const url: string = next;
+    next = undefined;
+    let response: Response | undefined;
+    let text: string;
+    try {
+      if (remote) {
+        response = await fetch(url, { method: "GET" });
+        text = await response.text();
+      } else {
+        text = await readFile(url, "utf8");
+      }
+    } catch (error) {
+      throw new CatalogReferenceError(
+        `Catalog reference ${reference} could not be ${remote ? "fetched" : "read"}: ${failureMessage(error)}`,
+      );
+    }
+    if (response !== undefined && !response.ok) {
+      throw new CatalogReferenceError(
+        `Catalog reference ${reference} answered HTTP ${response.status}`,
+      );
+    }
+    try {
+      const envelope = objectValue(JSON.parse(text), "model catalog");
+      if (!Array.isArray(envelope.data)) {
+        throw new Error("model catalog data must be an array");
+      }
+      for (const value of envelope.data) {
+        const model = normalizeModel(value, rawCount);
+        rawCount += 1;
+        if (model === null) excluded.add((value as { id: string }).id);
+        else models.set(model.entry.id, model);
+      }
+      if (
+        remote &&
+        typeof envelope.links === "object" &&
+        envelope.links !== null &&
+        !Array.isArray(envelope.links)
+      ) {
+        const links = envelope.links as Record<string, unknown>;
+        if (typeof links.next === "string" && links.next.length > 0) {
+          const resolved = new URL(links.next, url);
+          if (resolved.origin === new URL(reference).origin) {
+            next = resolved.href;
+          }
+        }
+      }
+    } catch (error) {
+      throw new CatalogReferenceError(
+        `Catalog reference ${reference} is not an OpenAI-compatible /models document: ${failureMessage(error)}`,
+      );
+    }
+  }
+  return { models, excluded };
+}
+
+function joinCatalogReference(
+  models: readonly NormalizedCatalogModel[],
+  reference: CatalogReference,
+): ModelCatalogEntry[] {
+  const joined: ModelCatalogEntry[] = [];
+  for (const { entry, declaresCapabilities, declaresReasoning } of models) {
+    const matchId = entry.id
+      .split("/")
+      .map((_, index, segments) => segments.slice(index).join("/"))
+      .find((id) => reference.models.has(id) || reference.excluded.has(id));
+    if (matchId === undefined) {
+      joined.push(entry);
+      continue;
+    }
+    const match = reference.models.get(matchId)?.entry;
+    if (match === undefined) continue;
+    joined.push({
+      ...entry,
+      pricing: entry.pricing ?? match.pricing,
+      contextLength:
+        entry.contextLength === 0 ? match.contextLength : entry.contextLength,
+      maxOutputTokens: entry.maxOutputTokens ?? match.maxOutputTokens,
+      ...(declaresCapabilities
+        ? {}
+        : {
+            supportsTools: match.supportsTools,
+            supportsStructuredOutput: match.supportsStructuredOutput,
+          }),
+      outputModalities:
+        entry.outputModalities?.length === 0
+          ? match.outputModalities
+          : entry.outputModalities,
+      requiresReasoning: declaresReasoning
+        ? entry.requiresReasoning
+        : match.requiresReasoning,
+      releasedAt: entry.releasedAt ?? match.releasedAt,
+    });
+  }
+  return joined;
 }
 
 function normalizeUsage(value: unknown): ChatResponse["usage"] | null {
@@ -579,7 +717,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
   }
 
   async function fetchCatalog(): Promise<ModelCatalogEntry[]> {
-    const entries: ModelCatalogEntry[] = [];
+    const models: NormalizedCatalogModel[] = [];
     let rawCount = 0;
     let totalCount: number | undefined;
     let truncated = false;
@@ -602,7 +740,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         for (const entry of envelope.data) {
           const model = normalizeModel(entry, rawCount);
           rawCount += 1;
-          if (model !== null) entries.push(model);
+          if (model !== null) models.push(model);
         }
         if (
           totalCount === undefined &&
@@ -641,6 +779,13 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         `Provider ${options.providerId} catalog is truncated: collected ${rawCount} of ${totalCount ?? "an unknown number of"} models`,
       );
     }
+    const entries =
+      options.catalogReference === undefined
+        ? models.map(({ entry }) => entry)
+        : joinCatalogReference(
+            models,
+            await readCatalogReference(options.catalogReference),
+          );
     if (options.pricingOverrides !== undefined) {
       for (const entry of entries) {
         const override = options.pricingOverrides[entry.id];
@@ -724,6 +869,16 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
           `Provider ${options.providerId} catalog does not publish per-token pricing`,
         );
       }
+    }
+    const unpriced = entries.flatMap(({ id, pricing }) =>
+      pricing === null ? [id] : [],
+    );
+    if (options.catalogReference !== undefined && unpriced.length > 0) {
+      const examples = unpriced.slice(0, 5).join(", ");
+      options.warning?.(
+        "catalog_reference_unmatched",
+        `${unpriced.length} model(s) in the ${options.providerId} catalog have no price after joining the catalog reference, for example ${examples}. Declare replay models under the ids the reference lists, or pass --pricing-file.`,
+      );
     }
     catalog = entries;
     return catalog;

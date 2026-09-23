@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   budgetKey,
@@ -27,6 +28,7 @@ import {
   AdaptiveLimiter,
   BlockedError,
   BudgetRefusalError,
+  CatalogReferenceError,
   DEFAULT_RESERVATION_STALENESS_WINDOW_MS,
   createBudget,
   createProvider,
@@ -72,6 +74,10 @@ const aiGatewayFixtureUrl = new URL(
 );
 const aiGatewayChatFixtureUrl = new URL(
   "../../../fixtures/catalogs/ai-gateway-chat-response.json",
+  import.meta.url,
+);
+const envoyFixtureUrl = new URL(
+  "../../../fixtures/catalogs/envoy-models.json",
   import.meta.url,
 );
 
@@ -714,6 +720,256 @@ describe("AI Gateway catalog", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(warning).toHaveBeenCalledOnce();
+  });
+
+  async function listWithReference(
+    gatewayBody: string,
+    catalogReference: string,
+    options: {
+      warning?: (code: string, message: string) => void;
+      pricingOverrides?: Record<string, { input: number; output: number }>;
+    } = {},
+  ): Promise<ModelCatalogEntry[]> {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(gatewayBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    return createProvider({
+      providerId: "envoy-ai-gateway",
+      baseUrl: "https://gateway.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      catalogReference,
+      ...options,
+    }).listModels();
+  }
+
+  it("fills an Envoy declared-id catalog from the upstream's catalog reference", async () => {
+    const warning = vi.fn();
+    const catalog = await listWithReference(
+      await readFile(envoyFixtureUrl, "utf8"),
+      fileURLToPath(aiGatewayFixtureUrl),
+      { warning },
+    );
+
+    expect(catalog.map(({ id }) => id)).toEqual([
+      "openai/gpt-4o",
+      "openai/gpt-4o-mini",
+      "my-fast-model",
+    ]);
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o-mini")).toEqual({
+      id: "openai/gpt-4o-mini",
+      family: "openai",
+      contextLength: 128_000,
+      pricing: { input: 0.00000015, output: 0.0000006 },
+      supportsTools: true,
+      supportsStructuredOutput: false,
+      releasedAt: 1_721_260_800,
+      maxOutputTokens: 16_384,
+      outputModalities: [],
+      requiresReasoning: false,
+    });
+    expect(
+      catalog.find(({ id }) => id === "my-fast-model")?.pricing,
+    ).toBeNull();
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledWith(
+      "catalog_reference_unmatched",
+      "1 model(s) in the envoy-ai-gateway catalog have no price after joining the catalog reference, for example my-fast-model. Declare replay models under the ids the reference lists, or pass --pricing-file.",
+    );
+  });
+
+  it("joins a gateway id that adds a provider prefix to the reference id", async () => {
+    const gateway = JSON.stringify({
+      data: [
+        {
+          id: "vercel/openai/gpt-4o-mini",
+          context_length: 128_000,
+          owned_by: "openai",
+        },
+      ],
+    });
+    const [prefixed] = await listWithReference(
+      gateway,
+      fileURLToPath(aiGatewayFixtureUrl),
+    );
+
+    expect(prefixed).toMatchObject({
+      id: "vercel/openai/gpt-4o-mini",
+      family: "vercel",
+      contextLength: 128_000,
+      pricing: { input: 0.00000015, output: 0.0000006 },
+      supportsTools: true,
+    });
+
+    vi.restoreAllMocks();
+    const directory = await mkdtemp(join(tmpdir(), "rightmodeler-reference-"));
+    try {
+      const reference = join(directory, "reference.json");
+      await writeFile(
+        reference,
+        JSON.stringify({
+          data: [
+            { id: "gpt-4o-mini", pricing: { input: "0.1", output: "0.2" } },
+            {
+              id: "openai/gpt-4o-mini",
+              pricing: { input: "0.3", output: "0.4" },
+            },
+          ],
+        }),
+      );
+      const [longest] = await listWithReference(gateway, reference);
+
+      expect(longest?.pricing).toEqual({ input: 0.3, output: 0.4 });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("never overwrites what the gateway declares", async () => {
+    const [declared] = await listWithReference(
+      JSON.stringify({
+        data: [
+          {
+            id: "openai/gpt-4o-mini",
+            pricing: { prompt: "0.000001", completion: "0.000002" },
+            context_length: 64_000,
+            max_tokens: 4_096,
+            supported_parameters: [],
+            reasoning: { mandatory: true },
+          },
+        ],
+      }),
+      fileURLToPath(aiGatewayFixtureUrl),
+    );
+
+    expect(declared).toMatchObject({
+      pricing: { input: 0.000001, output: 0.000002 },
+      contextLength: 64_000,
+      maxOutputTokens: 4_096,
+      supportsTools: false,
+      supportsStructuredOutput: false,
+      requiresReasoning: true,
+    });
+  });
+
+  it("lets --pricing-file override the reference", async () => {
+    const warning = vi.fn();
+    const catalog = await listWithReference(
+      await readFile(envoyFixtureUrl, "utf8"),
+      fileURLToPath(aiGatewayFixtureUrl),
+      {
+        warning,
+        pricingOverrides: {
+          "openai/gpt-4o-mini": { input: 0.001, output: 0.002 },
+          "my-fast-model": { input: 0.0001, output: 0.0002 },
+        },
+      },
+    );
+
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o-mini")).toMatchObject(
+      { pricing: { input: 0.001, output: 0.002 }, contextLength: 128_000 },
+    );
+    expect(catalog.find(({ id }) => id === "my-fast-model")?.pricing).toEqual({
+      input: 0.0001,
+      output: 0.0002,
+    });
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  it("fetches a URL reference without the gateway's key or headers", async () => {
+    const referenceUrl = "https://reference.example/v1/models";
+    const referenceBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const gatewayBody = await readFile(envoyFixtureUrl, "utf8");
+    const sent: Array<{ url: string; headers: Headers }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      sent.push({ url, headers: new Headers(init?.headers) });
+      return new Response(url === referenceUrl ? referenceBody : gatewayBody, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    const catalog = await createProvider({
+      providerId: "portkey",
+      baseUrl: "https://gateway.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      headers: { "x-portkey-provider": "openai" },
+      catalogReference: referenceUrl,
+    }).listModels();
+
+    expect(sent.map(({ url }) => url)).toEqual([
+      "https://gateway.example/v1/models",
+      referenceUrl,
+    ]);
+    expect(sent[0]?.headers.get("authorization")).toBe(`Bearer ${fakeKey}`);
+    expect(sent[0]?.headers.get("x-portkey-provider")).toBe("openai");
+    expect([...sent[1]!.headers.keys()]).toEqual([]);
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o")?.pricing).toEqual({
+      input: 0.0000025,
+      output: 0.00001,
+    });
+  });
+
+  it("stops with a named error when the reference cannot be read", async () => {
+    const gatewayBody = await readFile(envoyFixtureUrl, "utf8");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://down.example/")) {
+        throw new TypeError("fetch failed", {
+          cause: new Error("getaddrinfo ENOTFOUND down.example"),
+        });
+      }
+      return url.startsWith("https://gone.example/")
+        ? new Response("not found", { status: 404 })
+        : new Response(gatewayBody, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+    });
+    const directory = await mkdtemp(join(tmpdir(), "rightmodeler-reference-"));
+    try {
+      const missing = join(directory, "missing.json");
+      const malformed = join(directory, "malformed.json");
+      await writeFile(malformed, JSON.stringify({ models: [] }));
+
+      for (const [catalogReference, message] of [
+        [
+          "https://gone.example/v1/models",
+          "Catalog reference https://gone.example/v1/models answered HTTP 404",
+        ],
+        [
+          "https://down.example/v1/models",
+          "Catalog reference https://down.example/v1/models could not be fetched: fetch failed (getaddrinfo ENOTFOUND down.example)",
+        ],
+        [
+          missing,
+          `Catalog reference ${missing} could not be read: ENOENT: no such file or directory, open '${missing}'`,
+        ],
+        [
+          malformed,
+          `Catalog reference ${malformed} is not an OpenAI-compatible /models document: model catalog data must be an array`,
+        ],
+      ] as const) {
+        const rejection = createProvider({
+          providerId: "envoy-ai-gateway",
+          baseUrl: "https://gateway.example/v1",
+          apiKeyEnv: "REPLAY_TEST_API_KEY",
+          catalogReference,
+        }).listModels();
+        await expect(rejection).rejects.toBeInstanceOf(CatalogReferenceError);
+        await expect(rejection).rejects.toMatchObject({
+          name: "CatalogReferenceError",
+          message,
+        });
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("shortlists cheaper tool-capable chat models for a GPT-4o incumbent", async () => {

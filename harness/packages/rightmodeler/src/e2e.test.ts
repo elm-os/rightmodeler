@@ -619,7 +619,9 @@ async function startStub(
   return module.startStubProvider({ port: 0, ...options });
 }
 
-async function startUnpricedCatalogStub(): Promise<StubProvider> {
+async function startUnpricedCatalogStub(
+  strippedFields: readonly string[] = ["pricing"],
+): Promise<StubProvider> {
   const upstream = await startStub();
   let hitCount = 0;
   const server = createServer(async (request, response) => {
@@ -645,7 +647,7 @@ async function startUnpricedCatalogStub(): Promise<StubProvider> {
           ...catalog,
           data: catalog.data.map((model) => {
             const unpriced = { ...model };
-            delete unpriced.pricing;
+            for (const field of strippedFields) delete unpriced[field];
             return unpriced;
           }),
         }),
@@ -4045,6 +4047,121 @@ describe("built CLI pipeline", () => {
       await modelStub.close();
     }
   }, 60_000);
+
+  it("prices an id-only gateway catalog from a catalog reference", async () => {
+    const { root, repo } = await fixtureCopy("catalog-reference");
+    const fresh = await fixtureCopy("catalog-reference-missing");
+    const plain = await startStub();
+    const reference = join(root, "reference.json");
+    try {
+      await writeFile(
+        reference,
+        await (await fetch(`http://127.0.0.1:${plain.port}/v1/models`)).text(),
+      );
+    } finally {
+      await plain.close();
+    }
+    const stub = await startUnpricedCatalogStub([
+      "pricing",
+      "context_length",
+      "top_provider",
+      "supported_parameters",
+    ]);
+    const apiKeyEnv = "RIGHTMODELER_CATALOG_REFERENCE_API_KEY";
+    const replay = ["init", "--through", "replay"];
+    const args = (command: readonly string[], target: string) => [
+      ...command,
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--repo",
+      target,
+    ];
+    try {
+      const priced = await runCli(
+        [
+          ...args(replay, repo),
+          "--catalog-reference",
+          reference,
+          "--output",
+          "json",
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(priced.code, priced.stderr).toBe(0);
+      expect(
+        warningMessages(priced.stderr, "catalog_reference_unmatched"),
+      ).toEqual([]);
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const facts = (await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      )) as Array<Record<string, unknown>>;
+      expect(
+        facts.filter(
+          ({ executionId, caseId }) =>
+            typeof executionId === "string" && typeof caseId === "string",
+        ).length,
+      ).toBeGreaterThan(0);
+
+      const moved = join(root, "reference-moved.json");
+      await writeFile(moved, await readFile(reference, "utf8"));
+      const rerun = await runCli(
+        [
+          ...args(replay, repo),
+          "--catalog-reference",
+          moved,
+          "--output",
+          "json",
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(rerun.code, rerun.stderr).toBe(0);
+      expect(
+        (JSON.parse(rerun.stdout) as { executedStages: string[] })
+          .executedStages,
+      ).toEqual(["replay"]);
+
+      const unpriced = await runCli(
+        [...args(replay, fresh.repo), "--output", "jsonl"],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(unpriced.code).toBe(2);
+      expect(JSON.parse(unpriced.stderr)).toMatchObject({
+        code: "no_priced_candidates",
+        remedy: expect.stringContaining("--catalog-reference"),
+      });
+
+      const missing = join(root, "missing.json");
+      for (const command of [replay, ["estimate"]]) {
+        const unreadable = await runCli(
+          [
+            ...args(command, fresh.repo),
+            "--catalog-reference",
+            missing,
+            "--output",
+            "jsonl",
+          ],
+          { env: { [apiKeyEnv]: secret } },
+        );
+
+        expect(unreadable.code, command[0]).toBe(2);
+        expect(JSON.parse(unreadable.stderr)).toMatchObject({
+          code: "invalid_catalog_reference",
+          message: expect.stringContaining(missing),
+        });
+      }
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
 
   it("warns and uses the built-in judge when the external evaluator is unreachable", async () => {
     const { repo } = await fixtureCopy("external-evaluator-unreachable");

@@ -88,6 +88,7 @@ interface PipelineCommandOptions {
   maxConcurrency?: string;
   pricingFile?: string;
   header?: string[];
+  catalogReference?: string;
   policy?: string;
   includeFree?: boolean;
   modebConfig?: string;
@@ -734,6 +735,10 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         collectOption,
       )
       .option(
+        "--catalog-reference <url-or-path>",
+        "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks",
+      )
+      .option(
         "--policy <path>",
         "release policy JSON file: quality floor, shortlist size, model allow and deny lists",
       )
@@ -922,6 +927,7 @@ function pipelineOptions(
     ...(requestHeaders.size === 0
       ? {}
       : { requestHeaders: Object.fromEntries(requestHeaders) }),
+    catalogReference: local.catalogReference,
     policyFilePath: local.policy,
     includeFreeModels: local.includeFree,
     ...(local.evaluator === undefined
@@ -1273,6 +1279,7 @@ const PIPELINE_ARG_OPTIONS = [
   { flag: "--max-concurrency", key: "maxConcurrency", kind: "value" },
   { flag: "--pricing-file", key: "pricingFile", kind: "path" },
   { flag: "--header", key: "header", kind: "repeated" },
+  { flag: "--catalog-reference", key: "catalogReference", kind: "reference" },
   { flag: "--policy", key: "policy", kind: "path" },
   { flag: "--include-free", key: "includeFree", kind: "flag" },
   { flag: "--approved-run", key: "approvedRun", kind: "value" },
@@ -1325,7 +1332,7 @@ const PIPELINE_ARG_OPTIONS = [
 ] as const satisfies readonly {
   flag: string;
   key: keyof PipelineCommandOptions;
-  kind: "value" | "path" | "command" | "flag" | "repeated";
+  kind: "value" | "path" | "reference" | "command" | "flag" | "repeated";
 }[];
 
 export function pipelineArgv(options: PipelineCommandOptions): string[] {
@@ -1346,7 +1353,7 @@ export function pipelineArgv(options: PipelineCommandOptions): string[] {
     appendCliOption(
       args,
       flag,
-      kind === "path"
+      kind === "path" || (kind === "reference" && !/^https?:\/\//iu.test(value))
         ? resolve(value)
         : kind === "command"
           ? detachedCommand(value)

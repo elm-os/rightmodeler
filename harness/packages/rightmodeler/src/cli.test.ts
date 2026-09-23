@@ -135,6 +135,7 @@ describe("pipelineArgv", () => {
       maxConcurrency: "3",
       pricingFile: "./pricing.json",
       header: ["x-portkey-provider: openai", "x-bf-cache-no-store: true"],
+      catalogReference: "https://ai-gateway.vercel.sh/v1/models",
       policy: "./policy.json",
       includeFree: true,
       approvedRun,
@@ -171,6 +172,8 @@ describe("pipelineArgv", () => {
       "x-portkey-provider: openai",
       "--header",
       "x-bf-cache-no-store: true",
+      "--catalog-reference",
+      "https://ai-gateway.vercel.sh/v1/models",
       "--policy",
       resolve("./policy.json"),
       "--include-free",
@@ -203,6 +206,13 @@ describe("pipelineArgv", () => {
 
   it("serializes empty options to an empty array", () => {
     expect(pipelineArgv({})).toEqual([]);
+  });
+
+  it("resolves a catalog reference path for the detached worker", () => {
+    expect(pipelineArgv({ catalogReference: "./catalog.json" })).toEqual([
+      "--catalog-reference",
+      resolve("./catalog.json"),
+    ]);
   });
 });
 

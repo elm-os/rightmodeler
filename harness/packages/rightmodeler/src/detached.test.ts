@@ -47,6 +47,9 @@ const tracesPath = fileURLToPath(
 const promptfooAssertionsPath = fileURLToPath(
   new URL("../../../fixtures/promptfoo-stub/assertions.yaml", import.meta.url),
 );
+const aiGatewayCatalogPath = fileURLToPath(
+  new URL("../../../fixtures/catalogs/ai-gateway-models.json", import.meta.url),
+);
 const stubModuleUrl = new URL(
   "../../../fixtures/stub-provider/server.mjs",
   import.meta.url,
@@ -411,6 +414,61 @@ describe("detached replay provider identity", () => {
           expect(text).not.toContain("route-value-a");
           expect(text).not.toContain("route-value-b");
         }
+      } finally {
+        delete process.env[apiKeyEnv];
+        await stub.close();
+      }
+    },
+  );
+
+  it(
+    "keys a detached replay to its catalog reference",
+    { timeout: 30_000 },
+    async () => {
+      const root = await mkdtemp(
+        join(tmpdir(), "rightmodeler-detached-reference-"),
+      );
+      temporaryDirectories.push(root);
+      const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+      const store = join(root, "store");
+      const traces = join(root, "traces.json");
+      await copyFile(tracesPath, traces);
+      const reference = await readFile(aiGatewayCatalogPath, "utf8");
+      const referenceA = join(root, "reference-a.json");
+      const referenceB = join(root, "reference-b.json");
+      await writeFile(referenceA, reference);
+      await writeFile(
+        referenceB,
+        reference.replace('"input": "0.00000015"', '"input": "0.00000016"'),
+      );
+      const reporter = new Reporter("json", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      });
+
+      const stubModule = (await import(stubModuleUrl)) as StubProviderModule;
+      const stub = await stubModule.startStubProvider({ port: 0 });
+      const apiKeyEnv = "RIGHTMODELER_DETACHED_REFERENCE_TEST_API_KEY";
+      process.env[apiKeyEnv] = "fixture-key";
+      const claim = (catalogReference?: string) =>
+        claimDetachedReplay({
+          repo,
+          store,
+          traces,
+          baseUrl: `http://127.0.0.1:${stub.port}/v1`,
+          apiKeyEnv,
+          ...(catalogReference === undefined ? {} : { catalogReference }),
+          reporter,
+        });
+      try {
+        const bare = await claim();
+        const withA = await claim(referenceA);
+        const withB = await claim(referenceB);
+        expect(new Set([bare.runId, withA.runId, withB.runId]).size).toBe(3);
+        await expect(claim(referenceA)).resolves.toMatchObject({
+          runId: withA.runId,
+          deduplicated: true,
+        });
       } finally {
         delete process.env[apiKeyEnv];
         await stub.close();

@@ -7,7 +7,7 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 - Node.js 24 or newer.
 - A Git repository to analyze.
 - Trace input in a supported format.
-- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for bare OpenAI or another unpriced endpoint, pass `--pricing-file`.
+- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for a gateway that lists bare model ids, pass `--catalog-reference`; for bare OpenAI or another unpriced endpoint, pass `--pricing-file`.
 
 Supported trace sources are OTel GenAI, AI SDK telemetry, OpenAI JSONL,
 Langfuse, Braintrust, LangSmith, OpenInference, Helicone, W&B Weave, Claude
@@ -113,13 +113,27 @@ Graph edges are never replay trials, runtime proof, or quality evidence, and the
 
 `qualityFloor` must be greater than 0.8 and less than 1, and `shortlistTop` must be a positive integer. Changing the policy changes the stamped gate policy version, so shortlist and replay run again instead of pooling evidence gathered under the old policy.
 
-## Catalogs without pricing
+## Catalogs without pricing or capabilities
 
 Rightmodeler reads per-token pricing from the model catalog. When every catalog
 entry has null pricing and no `--pricing-file` is set, it requests LiteLLM
 `GET /model/info` on the same host. Use `--pricing-file` for bare OpenAI
 endpoints or when `/model/info` has no usable per-token costs; file entries
 override provider pricing.
+
+Some gateways answer `/v1/models` with bare model ids: Envoy AI Gateway lists
+the models a route declares, and Bifrost lists custom providers with ids and
+context only. Pass `--catalog-reference <url|path>` to name the upstream's own
+model list, for example `https://ai-gateway.vercel.sh/v1/models` or
+`https://openrouter.ai/api/v1/models`. Rightmodeler reads it without your key or
+headers and joins it to the gateway's entries by id, or by the reference id a
+gateway id ends with (`openai/gpt-4o-mini` for `vercel/openai/gpt-4o-mini`). A
+gateway entry takes from its match only what it does not declare itself (price,
+context window, output ceiling, tool and structured-output support); a match
+that is not a language model removes the entry; `--pricing-file` values win over
+both. Entries still unpriced after the join are named in a
+`catalog_reference_unmatched` warning, and a reference that cannot be read stops
+the run with `invalid_catalog_reference`.
 
 ```sh
 npx rightmodeler estimate --base-url https://provider.example/v1 --pricing-file /path/to/pricing.json --repo /path/to/repository
@@ -138,8 +152,8 @@ include the model's output ceiling:
 }
 ```
 
-Without usable pricing from the catalog, LiteLLM `/model/info`, or a pricing
-file, the run refuses with `no_priced_candidates` instead of reporting zero
+Without usable pricing from the catalog, a catalog reference, LiteLLM
+`/model/info`, or a pricing file, the run refuses with `no_priced_candidates` instead of reporting zero
 cost. The judge must be priced too, so price at least one model from a family
 other than the current model's and the candidate's.
 

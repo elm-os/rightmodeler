@@ -62,6 +62,7 @@ import {
 } from "@rightmodeler/kernel";
 import {
   BudgetRefusalError,
+  CatalogReferenceError,
   confirmSwapSet,
   createBudget,
   createCloudExecutor,
@@ -596,6 +597,7 @@ interface PipelineContext {
   pricingOverrides?: z.infer<typeof pricingFileSchema>;
   pricingFilePath?: string;
   requestHeaders?: Readonly<Record<string, string>>;
+  catalogReference?: string;
   policyFilePath?: string;
   release: ReleasePolicyResolution;
   matchers?: readonly DeclarativeMatcher[];
@@ -620,6 +622,7 @@ export interface PipelineOptions {
   modeBConfigPath?: string;
   pricingFilePath?: string;
   requestHeaders?: Readonly<Record<string, string>>;
+  catalogReference?: string;
   policyFilePath?: string;
   matchersPath?: string;
   approvedRunSpecDigest?: string;
@@ -974,10 +977,11 @@ export async function estimateReplay(
     warning: (code, message) => context.reporter.warning(code, message),
     pricingOverrides: context.pricingOverrides,
     headers: context.requestHeaders,
+    catalogReference: context.catalogReference,
   });
   const catalog =
     context.existingRunId === undefined
-      ? await provider.listModels()
+      ? await providerCatalog(provider)
       : await readDetachedReplayCatalog(context, context.existingRunId);
   const candidates =
     context.approvedRunSpecDigest === undefined
@@ -1038,15 +1042,18 @@ export async function claimDetachedReplay(
     });
   }
   const catalogIdentity = (
-    await createProvider({
-      providerId: "configured-provider",
-      baseUrl: context.baseUrl,
-      apiKeyEnv: context.apiKeyEnv,
-      maxConcurrency: context.maxConcurrency,
-      warning: (code, message) => context.reporter.warning(code, message),
-      pricingOverrides: context.pricingOverrides,
-      headers: context.requestHeaders,
-    }).listModels()
+    await providerCatalog(
+      createProvider({
+        providerId: "configured-provider",
+        baseUrl: context.baseUrl,
+        apiKeyEnv: context.apiKeyEnv,
+        maxConcurrency: context.maxConcurrency,
+        warning: (code, message) => context.reporter.warning(code, message),
+        pricingOverrides: context.pricingOverrides,
+        headers: context.requestHeaders,
+        catalogReference: context.catalogReference,
+      }),
+    )
   ).sort((left, right) => compareText(left.id, right.id));
   const targetPhase = options.through ?? "replay";
   if (!isPipelineStage(targetPhase)) {
@@ -1070,6 +1077,9 @@ export async function claimDetachedReplay(
       ...(context.requestHeaders === undefined
         ? {}
         : { headers: requestHeaderIdentity(context.requestHeaders) }),
+      ...(context.catalogReference === undefined
+        ? {}
+        : { catalogReference: context.catalogReference }),
     },
     evaluator: await evaluatorRunIdentity(context),
     modeBConfig:
@@ -1910,6 +1920,13 @@ function createContext(options: PipelineOptions): PipelineContext {
     ...(options.requestHeaders === undefined
       ? {}
       : { requestHeaders: options.requestHeaders }),
+    ...(options.catalogReference === undefined
+      ? {}
+      : {
+          catalogReference: /^https?:\/\//iu.test(options.catalogReference)
+            ? options.catalogReference
+            : resolve(options.catalogReference),
+        }),
     ...(policyFilePath === undefined ? {} : { policyFilePath }),
     ...(options.matchersPath === undefined
       ? {}
@@ -2221,6 +2238,9 @@ async function inputDigest(
       ...(context.requestHeaders === undefined
         ? {}
         : { headers: requestHeaderIdentity(context.requestHeaders) }),
+      ...(context.catalogReference === undefined
+        ? {}
+        : { catalogReference: context.catalogReference }),
     });
     if (context.evaluator !== undefined) {
       extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context));
@@ -2382,6 +2402,29 @@ function invalidPricingFile(message: string): ProtocolError {
     remedy:
       'Use a JSON object mapping each model id to { "input": <non-negative USD per token>, "output": <non-negative USD per token>, "maxOutputTokens": <optional positive integer> }.',
   });
+}
+
+function invalidCatalogReference(message: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "invalid_catalog_reference",
+    message,
+    remedy:
+      "Pass --catalog-reference an http(s) URL or a readable file that returns an OpenAI-compatible /models document, or remove it, then rerun.",
+  });
+}
+
+async function providerCatalog(
+  provider: ProviderClient,
+): Promise<ModelCatalogEntry[]> {
+  try {
+    return await provider.listModels();
+  } catch (error) {
+    if (error instanceof CatalogReferenceError) {
+      throw invalidCatalogReference(error.message);
+    }
+    throw error;
+  }
 }
 
 function invalidPolicyFile(message: string): ProtocolError {
@@ -3265,7 +3308,7 @@ function assertPricedCandidates(
       code: "no_priced_candidates",
       message: `The model catalog at ${baseUrl} publishes no per-token pricing, so no candidate can be priced.`,
       remedy:
-        "Point --base-url at a catalog that publishes pricing, or pass --pricing-file <path> mapping each model id to its input and output USD per token.",
+        "Point --base-url at a catalog that publishes pricing, pass --catalog-reference <url> naming the upstream's public model list, or pass --pricing-file <path> mapping each model id to its input and output USD per token.",
     });
   }
 }
@@ -3348,10 +3391,11 @@ async function executeReplay(
     warning: (code, message) => context.reporter.warning(code, message),
     pricingOverrides: context.pricingOverrides,
     headers: context.requestHeaders,
+    catalogReference: context.catalogReference,
   });
   const catalog =
     context.existingRunId === undefined
-      ? await provider.listModels()
+      ? await providerCatalog(provider)
       : await readDetachedReplayCatalog(context, context.existingRunId);
   const replaySteps = (split: "shortlist" | "holdout"): ReplayStep[] =>
     plan.steps.map((step) => ({
@@ -4002,8 +4046,9 @@ async function executeConfirm(
       warning: (code, message) => context.reporter.warning(code, message),
       pricingOverrides: context.pricingOverrides,
       headers: context.requestHeaders,
+      catalogReference: context.catalogReference,
     });
-    const catalog = await provider.listModels();
+    const catalog = await providerCatalog(provider);
     const configuredRecords = configuredStepRecords(config, reconciled.records);
     const orderedRecords = topologicalRecords(configuredRecords);
     const runtimeByCanonical = config.stepMap;

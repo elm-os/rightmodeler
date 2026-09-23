@@ -70,6 +70,9 @@ Options:
                                       pricing
   --header <header>                   extra HTTP header for every provider
                                       request, as 'name: value' (repeatable)
+  --catalog-reference <url-or-path>   upstream /models URL or file that fills
+                                      pricing, context and capabilities the
+                                      provider catalog lacks
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -127,6 +130,9 @@ Options:
                                       pricing
   --header <header>                   extra HTTP header for every provider
                                       request, as 'name: value' (repeatable)
+  --catalog-reference <url-or-path>   upstream /models URL or file that fills
+                                      pricing, context and capabilities the
+                                      provider catalog lacks
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -254,6 +260,9 @@ Options:
                                       pricing
   --header <header>                   extra HTTP header for every provider
                                       request, as 'name: value' (repeatable)
+  --catalog-reference <url-or-path>   upstream /models URL or file that fills
+                                      pricing, context and capabilities the
+                                      provider catalog lacks
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -320,6 +329,9 @@ Options:
                                       pricing
   --header <header>                   extra HTTP header for every provider
                                       request, as 'name: value' (repeatable)
+  --catalog-reference <url-or-path>   upstream /models URL or file that fills
+                                      pricing, context and capabilities the
+                                      provider catalog lacks
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
