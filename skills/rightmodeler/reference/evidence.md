@@ -52,7 +52,8 @@ The exported `ABSTAIN_REASONS` values are:
 - `insufficient_review_trials`: a kind has fewer than 10 included assessed executions.
 - `insufficient_distinct_steps`: a kind covers fewer than 2 distinct step IDs, or, for a family
   bound by trace key, fewer than `min(2, bound call sites)`.
-- `bound_call_sites_not_replayable`: every call site bound to the family by its trace key needs tools or structured output, which Mode A replay cannot run, so replay is skipped before any spend.
+- `bound_call_sites_not_replayable`: every call site bound to the family by its trace key needs
+  tools or structured output, which Mode A replay cannot run, so replay is skipped before any spend.
 - `insufficient_distinct_trajectories`: a kind covers fewer than 5 distinct trajectory IDs.
 - `holdout_below_floor_minimum`: the family's holdout split has fewer cases than the smallest
   all-pass holdout that can clear the quality floor, so replay is skipped before any spend. Supply
