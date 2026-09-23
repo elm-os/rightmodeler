@@ -421,4 +421,43 @@ describe("pipeline staleness", { timeout: 120_000 }, () => {
 
     expect(await reconcile()).toContain("reconcile");
   });
+
+  it("keeps a built-in judge store's replay checkpoint digest", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-staleness-"));
+    temporaryDirectories.push(root);
+    const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+    const store = join(root, "store");
+    const traces = join(root, "traces.json");
+    await writeFile(traces, await readFile(traceFixturePath));
+    await runPipeline({
+      repo,
+      store,
+      traces,
+      baseUrl: `http://127.0.0.1:${stub.port}/v1`,
+      apiKeyEnv,
+      through: "replay",
+      reporter: new Reporter("json", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      }),
+    });
+    const { stages } = await readSetupState(new FsStore(store), "project");
+
+    expect(stages.replay!.inputDigest).toBe(
+      computeRunSpecDigest({
+        stage: "replay",
+        upstream: stages.shortlist!.inputDigest,
+        provider: computeRunSpecDigest({
+          baseUrl: `http://127.0.0.1:${stub.port}/v1`,
+          apiKeyEnv,
+          maxCostUsd: null,
+          evaluatorPlan: {
+            evaluatorKind: "judge",
+            gateMetric: "replacement-quality",
+          },
+        }),
+        approvedRunSpecDigest: null,
+      }),
+    );
+  });
 });

@@ -25195,6 +25195,7 @@ var assessmentSchema = external_exports.strictObject({
   score: external_exports.number(),
   passed: external_exports.boolean(),
   rubricVersion: requiredStringSchema,
+  evaluatorIdentity: requiredStringSchema.optional(),
   artifactRef: jsonValueSchema
 }).readonly();
 var spendEventSchema = external_exports.strictObject({
@@ -42009,6 +42010,7 @@ function assessmentMetadata(assessment) {
     evaluatorId: assessment.evaluatorId,
     passed: assessment.passed,
     rubricVersion: assessment.rubricVersion,
+    ...assessment.evaluatorIdentity === void 0 ? {} : { evaluatorIdentity: assessment.evaluatorIdentity },
     artifactRef: assessment.artifactRef
   };
 }
@@ -43869,6 +43871,7 @@ var replayOutputSchema = external_exports.strictObject({
   evaluation: external_exports.strictObject({
     evaluatorKind: external_exports.string().min(1),
     gateMetric: external_exports.string().min(1),
+    evaluatorIdentity: external_exports.string().min(1).optional(),
     assessmentAbsences: external_exports.array(
       external_exports.strictObject({
         executionId: external_exports.string().min(1),
@@ -44715,7 +44718,17 @@ async function runResultExport(options) {
       "No execution trials are available to export"
     );
   }
-  const assessments = ledger.assessments;
+  const state = await readSetupState(context2.store, context2.projectId);
+  const currentIdentity = state.stages.replay === void 0 ? void 0 : (await loadReplayOutput(context2)).evaluation.evaluatorIdentity;
+  const gradeKey = (assessment) => `${assessment.executionId}\0${assessment.evaluatorId}\0${assessment.metricName}`;
+  const current = new Set(
+    ledger.assessments.flatMap(
+      (assessment) => currentIdentity !== void 0 && assessment.evaluatorIdentity === currentIdentity ? [gradeKey(assessment)] : []
+    )
+  );
+  const assessments = ledger.assessments.filter(
+    (assessment) => assessment.evaluatorIdentity === currentIdentity || !current.has(gradeKey(assessment))
+  );
   const verdicts = await readCurrentVerdicts(context2.store, context2.projectId);
   const exportDigest = digest({
     provider: options.config.provider,
@@ -45129,6 +45142,9 @@ async function inputDigest(stage, context2, state) {
       maxCostUsd: context2.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context2)
     });
+    if (context2.evaluator !== void 0) {
+      extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context2));
+    }
     extra.approvedRunSpecDigest = context2.approvedRunSpecDigest ?? null;
     if (context2.existingRunId !== void 0) {
       extra.catalog = digest(
@@ -45990,7 +46006,9 @@ async function executeReplay(context2, inputDigestValue, runId) {
     })
   );
   let externalEvaluator;
+  let evaluatorIdentity;
   if (context2.evaluator !== void 0) {
+    evaluatorIdentity = digest(await evaluatorRunIdentity(context2));
     const configured = createEvaluator(context2.evaluator);
     externalEvaluator = await preferEvaluatorWhenReachable(
       configured,
@@ -46001,6 +46019,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
   const evaluation = () => ({
     evaluatorKind: externalEvaluator?.id ?? "judge",
     gateMetric: externalEvaluator === void 0 ? "replacement-quality" : context2.evaluator.gateMetric,
+    ...externalEvaluator === void 0 ? {} : { evaluatorIdentity },
     assessmentAbsences: [...assessmentAbsences.entries()].sort(([left], [right]) => compareText(left, right)).map(([executionId, reason]) => ({ executionId, reason }))
   });
   const budget = createBudget({
@@ -46100,6 +46119,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
           context: context2,
           plan,
           evaluator: externalEvaluator,
+          evaluatorIdentity,
           split,
           stepIds,
           candidateIds: new Set(
@@ -46157,7 +46177,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
     })
   }));
   await runCells("holdout", holdoutCandidates);
-  const key = artifactKey(context2, "replay", inputDigestValue);
+  const key = artifactKey(context2, "replay", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context2.store, key, {
     completed,
     skipped,
@@ -46864,13 +46884,19 @@ async function assessExternalExecutions(input) {
     throw new Error("External evaluator configuration is unavailable");
   }
   const ledger = await readPipelineLedger(input.context);
+  const gateGrades = ledger.assessments.filter(
+    (assessment) => assessment.evaluatorId === input.evaluator.id && assessment.metricName === config2.gateMetric
+  );
   const assessedGateExecutions = new Set(
-    ledger.assessments.flatMap(
-      (assessment) => assessment.evaluatorId === input.evaluator.id && assessment.metricName === config2.gateMetric ? [assessment.executionId] : []
+    gateGrades.flatMap(
+      (assessment) => assessment.evaluatorIdentity === input.evaluatorIdentity ? [assessment.executionId] : []
     )
   );
+  const evidenceQuestionIds = new Set(
+    input.plan.steps.map(({ evidenceQuestionId: evidenceQuestionId2 }) => evidenceQuestionId2)
+  );
   const executions = ledger.executions.filter(
-    (execution) => execution.corpusSplit === input.split && execution.terminalOutcome === "success" && execution.attribution === "ok" && input.stepIds.has(execution.stepId) && input.candidateIds.has(execution.candidateId) && !assessedGateExecutions.has(execution.executionId)
+    (execution) => evidenceQuestionIds.has(execution.evidenceQuestionId) && execution.corpusSplit === input.split && execution.terminalOutcome === "success" && execution.attribution === "ok" && input.stepIds.has(execution.stepId) && input.candidateIds.has(execution.candidateId) && !assessedGateExecutions.has(execution.executionId)
   );
   if (executions.length === 0) return [];
   const recordedCases = new Map(
@@ -46879,6 +46905,33 @@ async function assessExternalExecutions(input) {
       recordedCase
     ])
   );
+  const graded = new Set(gateGrades.map(({ executionId }) => executionId));
+  const recorded = new Set(
+    gateGrades.flatMap(
+      ({ executionId, evaluatorIdentity }) => evaluatorIdentity === void 0 ? [] : [executionId]
+    )
+  );
+  const causes = [
+    [
+      executions.filter(({ executionId }) => recorded.has(executionId)).length,
+      "were graded under a different evaluator configuration (an edited rubric file or a changed evaluator option)"
+    ],
+    [
+      executions.filter(
+        ({ executionId }) => graded.has(executionId) && !recorded.has(executionId)
+      ).length,
+      "were graded before rightmodeler recorded evaluator configurations"
+    ]
+  ];
+  const regraded = causes[0][0] + causes[1][0];
+  if (regraded > 0) {
+    input.context.reporter.warning(
+      "evaluator_regrade",
+      `Re-grading ${regraded} ${input.split} candidate outputs with ${input.evaluator.id}: ${causes.filter(([count]) => count > 0).map(([count, cause]) => `${count} ${cause}`).join(
+        ", "
+      )}. The stored outputs are reused; no model call is repeated.`
+    );
+  }
   const launched = await input.evaluator.launch({
     experimentName: `rightmodeler-${digest({
       evidenceQuestionIds: [
@@ -46887,7 +46940,8 @@ async function assessExternalExecutions(input) {
         )
       ].sort(compareText),
       candidateIds: [...input.candidateIds].sort(compareText),
-      split: input.split
+      split: input.split,
+      evaluatorIdentity: input.evaluatorIdentity
     }).slice(0, 24)}`,
     cases: executions.map((execution) => {
       const recordedCase = recordedCases.get(
@@ -46917,7 +46971,7 @@ async function assessExternalExecutions(input) {
   );
   const existingMetrics = new Set(
     ledger.assessments.flatMap(
-      (assessment) => assessment.evaluatorId === input.evaluator.id ? [`${assessment.executionId}\0${assessment.metricName}`] : []
+      (assessment) => assessment.evaluatorId === input.evaluator.id && assessment.evaluatorIdentity === input.evaluatorIdentity ? [`${assessment.executionId}\0${assessment.metricName}`] : []
     )
   );
   for (const result2 of results) {
@@ -46925,6 +46979,7 @@ async function assessExternalExecutions(input) {
       input.context,
       input.evaluator,
       config2,
+      input.evaluatorIdentity,
       launched.providerRunId,
       result2,
       existingMetrics
@@ -46943,7 +46998,7 @@ async function assessExternalExecutions(input) {
     ];
   });
 }
-async function persistEvaluatorMetrics(context2, evaluator, config2, providerRunId, result2, existingMetrics) {
+async function persistEvaluatorMetrics(context2, evaluator, config2, evaluatorIdentity, providerRunId, result2, existingMetrics) {
   for (const metric of result2.metrics) {
     const key = `${result2.caseId}\0${metric.metricName}`;
     if (existingMetrics.has(key)) continue;
@@ -46968,6 +47023,7 @@ async function persistEvaluatorMetrics(context2, evaluator, config2, providerRun
       score: metric.score,
       passed: thresholdApplied ? metric.score >= config2.gateThreshold : metric.passed,
       rubricVersion,
+      evaluatorIdentity,
       artifactRef: {
         providerRunId,
         providerArtifact: result2.artifactRef ?? null
@@ -47027,7 +47083,7 @@ async function materializeAggregationFacts(context2, ledger, plan, candidates, e
       return [];
     }
     const gateAssessments = (assessments.get(execution.executionId) ?? []).filter(
-      (assessment2) => assessment2.metricName === evaluation.gateMetric && (evaluation.evaluatorKind === "judge" || assessment2.evaluatorId === evaluation.evaluatorKind)
+      (assessment2) => assessment2.metricName === evaluation.gateMetric && assessment2.evaluatorIdentity === evaluation.evaluatorIdentity && (evaluation.evaluatorKind === "judge" || assessment2.evaluatorId === evaluation.evaluatorKind)
     );
     if (gateAssessments.length > 1) {
       throw new Error(

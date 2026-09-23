@@ -248,6 +248,19 @@ describe("fact schemas", () => {
     ).toBe(false);
   });
 
+  it("keeps an assessment's evaluator identity optional and never empty", () => {
+    const evaluatorIdentity = "a".repeat(64);
+    expect(
+      assessmentSchema.parse({ ...assessment, evaluatorIdentity })
+        .evaluatorIdentity,
+    ).toBe(evaluatorIdentity);
+    expect(assessmentSchema.safeParse(assessment).success).toBe(true);
+    expect(
+      assessmentSchema.safeParse({ ...assessment, evaluatorIdentity: "" })
+        .success,
+    ).toBe(false);
+  });
+
   it("accepts an optional candidate id on cascade findings", () => {
     expect(
       cascadeFindingSchema.parse({
