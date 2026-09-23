@@ -338,7 +338,11 @@ async function initializeFixtureRepository(repo: string): Promise<void> {
   ]);
 }
 
-async function narrowDemoFixtureForApply(root: string, repo: string) {
+async function narrowDemoFixtureForApply(
+  root: string,
+  repo: string,
+  secondModel = "acme/max-1",
+) {
   await Promise.all([
     rm(join(repo, "config"), { recursive: true, force: true }),
     rm(join(repo, "requirements.txt"), { force: true }),
@@ -369,7 +373,7 @@ async function narrowDemoFixtureForApply(root: string, repo: string) {
       "",
       "export async function extractContact(message: string) {",
       "  return generateText({",
-      '    model: "acme/max-1",',
+      `    model: "${secondModel}",`,
       "    prompt: `Extract the contact request: ${message}`,",
       "  });",
       "}",
@@ -395,8 +399,8 @@ async function narrowDemoFixtureForApply(root: string, repo: string) {
             ...trace,
             attributes: {
               ...trace.attributes,
-              "gen_ai.request.model": "acme/max-1",
-              "gen_ai.response.model": "acme/max-1",
+              "gen_ai.request.model": secondModel,
+              "gen_ai.response.model": secondModel,
             },
           },
     );
@@ -2341,6 +2345,160 @@ describe("built CLI pipeline", () => {
     }
   }, 120_000);
 
+  it("judges each call site of a mixed-vendor family outside that call site's model family", async () => {
+    const { root, repo } = await fixtureCopy("mixed-vendor");
+    const traces = await narrowDemoFixtureForApply(root, repo, "zeta/judge-1");
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_MIXED_VENDOR_API_KEY";
+    const args = [
+      "--traces",
+      traces,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+
+    try {
+      const estimate = await runCli(["estimate", ...args], {
+        env: { [apiKeyEnv]: secret },
+      });
+      expect(estimate.code, estimate.stderr).toBe(0);
+      const projection = jsonOutput(estimate) as {
+        candidateExecutions: number;
+        judgeCalls: number;
+        judgeCostUsd: number;
+      };
+      expect(projection).toMatchObject({
+        candidateExecutions: 105,
+        judgeCalls: 210,
+      });
+      expect(projection.judgeCostUsd).toBeCloseTo(0.947028, 6);
+      expect(stub.getHitCount()).toBe(0);
+
+      const result = await runCli(["init", ...args], {
+        env: { [apiKeyEnv]: secret },
+      });
+      expect([0, 1], result.stderr).toContain(result.code);
+      const verdicts = jsonOutput(result).verdicts as Array<{
+        familyId: string;
+        evaluatorKinds: Array<{ nDistinctSteps: number }>;
+      }>;
+      expect(
+        verdicts
+          .find(({ familyId }) => familyId === "summarize")
+          ?.evaluatorKinds.map(({ nDistinctSteps }) => nDistinctSteps),
+      ).toEqual([2]);
+
+      const pathByStep = new Map(
+        scan(repo, createMatcherRegistry(), "project").map(
+          ({ stepId, callSite }) => [stepId, callSite.path],
+        ),
+      );
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const facts = (await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      )) as Array<Record<string, unknown>>;
+      const pathByExecution = new Map(
+        facts
+          .filter(
+            ({ executionId, caseId }) =>
+              typeof executionId === "string" && typeof caseId === "string",
+          )
+          .map(({ executionId, stepId }) => [
+            executionId as string,
+            pathByStep.get(stepId as string)!,
+          ]),
+      );
+      const assessments = facts.filter(
+        ({ assessmentId }) => typeof assessmentId === "string",
+      );
+      expect(assessments).toHaveLength(pathByExecution.size);
+      const judges: Record<string, string[]> = {};
+      for (const { executionId, evaluatorId } of assessments) {
+        const path = pathByExecution.get(executionId as string)!;
+        judges[path] = [
+          ...new Set([...(judges[path] ?? []), evaluatorId as string]),
+        ];
+      }
+      expect(judges).toEqual({
+        "src/summarize.ts": ["zeta/judge-1"],
+        "src/extract.ts": ["yotta/judge-2"],
+      });
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
+  it("keeps one external experiment per split for a mixed-vendor family", async () => {
+    const { root, repo } = await fixtureCopy("mixed-vendor-external");
+    const traces = await narrowDemoFixtureForApply(root, repo, "zeta/judge-1");
+    const modelStub = await startStub();
+    const evaluatorStub = await startEvaluatorStub();
+
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${modelStub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_API_KEY",
+          "--evaluator",
+          "braintrust",
+          "--evaluator-base-url",
+          `http://127.0.0.1:${evaluatorStub.port}`,
+          "--evaluator-api-key-env",
+          "RIGHTMODELER_E2E_EVALUATOR_KEY",
+          "--evaluator-project-id",
+          "00000000-0000-4000-8000-000000000001",
+          "--evaluator-scorer",
+          "output_similarity",
+          "--evaluator-gate-threshold",
+          "0.8",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        {
+          env: {
+            RIGHTMODELER_E2E_API_KEY: secret,
+            RIGHTMODELER_E2E_EVALUATOR_KEY: "mixed-vendor-evaluator-key",
+          },
+        },
+      );
+      expect(result.code, result.stderr).toBe(0);
+      const verdicts = jsonOutput(result).verdicts as Array<{
+        familyId: string;
+        evaluatorKinds: Array<{
+          evaluatorKind: string;
+          nDistinctSteps: number;
+        }>;
+      }>;
+      expect(
+        verdicts.find(({ familyId }) => familyId === "summarize")
+          ?.evaluatorKinds,
+      ).toEqual([
+        expect.objectContaining({
+          evaluatorKind: "braintrust",
+          nDistinctSteps: 2,
+        }),
+      ]);
+      expect(evaluatorStub.getHitCount("POST", "/v1/experiment")).toBe(1);
+    } finally {
+      await Promise.all([modelStub.close(), evaluatorStub.close()]);
+    }
+  }, 120_000);
+
   it("abstains and reports every family when shortlist evidence is entirely missing", async () => {
     const { repo } = await fixtureCopy("missing-shortlist-verdicts");
     const stub = await startStub();
@@ -3970,6 +4128,114 @@ describe("built CLI pipeline", () => {
         expect(await store.list(factsPrefix("project"))).toHaveLength(
           factKeys.length,
         );
+      } finally {
+        await stub.close();
+      }
+    },
+    600_000,
+  );
+
+  it.skipIf(skipDocker)(
+    "confirms a mixed-vendor LangGraph family with a judge outside the final node's model family",
+    async () => {
+      const { root, repo, traces } = await langgraphFixtureCopy(
+        "mixed-vendor-confirm",
+      );
+      const spans = JSON.parse(await readFile(traces, "utf8")) as Array<{
+        name: string;
+        attributes: Record<string, unknown>;
+      }>;
+      await writeFile(
+        traces,
+        JSON.stringify(
+          spans.map((span) =>
+            span.name === "answer"
+              ? {
+                  ...span,
+                  attributes: {
+                    ...span.attributes,
+                    "gen_ai.request.model": "zeta/judge-1",
+                    "gen_ai.response.model": "zeta/judge-1",
+                  },
+                }
+              : span,
+          ),
+        ),
+      );
+      const image = await ensureLanggraphImage(root);
+      const modeBConfig = await writeModeBConfig(root, repo, image);
+      const { stepMap } = JSON.parse(await readFile(modeBConfig, "utf8")) as {
+        stepMap: Record<string, string>;
+      };
+      const answerStepId = Object.keys(stepMap).find(
+        (stepId) => stepMap[stepId] === "answer",
+      )!;
+      const stub = await startStub();
+
+      try {
+        const result = await runCli(
+          [
+            "init",
+            "--traces",
+            traces,
+            "--base-url",
+            `http://127.0.0.1:${stub.port}/v1`,
+            "--api-key-env",
+            "RIGHTMODELER_MIXED_CONFIRM_API_KEY",
+            "--modeb-config",
+            modeBConfig,
+            "--output",
+            "json",
+            "--repo",
+            repo,
+          ],
+          { env: { RIGHTMODELER_MIXED_CONFIRM_API_KEY: secret } },
+        );
+        const output = jsonOutput(result);
+        expect([0, 1], JSON.stringify(output.familyOutcomes)).toContain(
+          result.code,
+        );
+        expect(output.executedStages).toContain("confirm");
+        expect(output.familyOutcomes).toContainEqual(
+          expect.objectContaining({
+            familyId: "langgraph_order_lookup",
+            confirmation: expect.objectContaining({ status: "confirmed" }),
+          }),
+        );
+
+        const store = new FsStore(join(repo, ".rightmodeler"));
+        const facts = (await Promise.all(
+          (await store.list(factsPrefix("project"))).map(async (key) =>
+            JSON.parse(await storeText(store, key)),
+          ),
+        )) as Array<Record<string, unknown>>;
+        const executions = new Map(
+          facts
+            .filter(
+              ({ executionId, caseId }) =>
+                typeof executionId === "string" && typeof caseId === "string",
+            )
+            .map((fact) => [fact.executionId as string, fact]),
+        );
+        const judges: Record<string, string[]> = {};
+        for (const { executionId, evaluatorId } of facts.filter(
+          ({ assessmentId }) => typeof assessmentId === "string",
+        )) {
+          const execution = executions.get(executionId as string)!;
+          const role = String(execution.caseId).startsWith("confirm-")
+            ? "confirm"
+            : execution.stepId === answerStepId
+              ? "answer"
+              : "upstream";
+          judges[role] = [
+            ...new Set([...(judges[role] ?? []), evaluatorId as string]),
+          ];
+        }
+        expect(judges).toEqual({
+          confirm: ["yotta/judge-2"],
+          answer: ["yotta/judge-2"],
+          upstream: ["zeta/judge-1"],
+        });
       } finally {
         await stub.close();
       }

@@ -117,7 +117,11 @@ import {
   type ApplyResult,
   type ApplyVerdict,
 } from "./apply/orchestrator.js";
-import { estimateReplayCost, type ReplayCostEstimate } from "./estimate.js";
+import {
+  estimateReplayCost,
+  type ReplayCostEstimate,
+  type ReplayCostJudge,
+} from "./estimate.js";
 import { readActiveCorpus, readCorpusVersion } from "./drift.js";
 import {
   blastRadius,
@@ -978,47 +982,25 @@ export async function estimateReplay(
         );
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(context.baseUrl, candidates);
-  const candidateFamily = candidates
-    .flatMap(({ candidates: models }) => models)
-    .at(0)?.family;
+  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
+  const judges = new Map<string, ReplayCostJudge>();
   const judge =
-    context.evaluator !== undefined || candidateFamily === undefined
+    context.evaluator !== undefined
       ? undefined
-      : (() => {
-          const stepIds = new Set(
-            candidates
-              .filter(({ candidates: models }) =>
-                models.some(({ family }) => family === candidateFamily),
-              )
-              .map(({ stepId }) => stepId),
-          );
-          const resolvedByStepId = new Map(
-            candidates.map(({ stepId, resolvedCurrentModelId }) => [
-              stepId,
-              resolvedCurrentModelId,
-            ]),
-          );
-          const referenceFamilies = new Set(
-            plan.steps
-              .filter(({ stepId }) => stepIds.has(stepId))
-              .map(({ stepId, currentModel }) =>
-                modelFamily(resolvedByStepId.get(stepId) ?? currentModel),
-              ),
-          );
-          if (referenceFamilies.size !== 1) {
-            throw new Error(
-              `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
-            );
-          }
+      : (stepId: string, candidate: ModelCatalogEntry): ReplayCostJudge => {
+          const referenceFamily = referenceFamilyByStepId.get(stepId)!;
+          const key = JSON.stringify([candidate.family, referenceFamily]);
+          const known = judges.get(key);
+          if (known !== undefined) return known;
           const modelId = pickJudges(catalog, {
-            candidateFamily,
-            referenceFamily: [...referenceFamilies][0]!,
+            candidateFamily: candidate.family,
+            referenceFamily,
           })[0]!;
           const entry = catalog.find(({ id }) => id === modelId)!;
           if (entry.pricing === null) {
             throw new Error(`Selected judge has no pricing: ${modelId}`);
           }
-          return {
+          const selected = {
             modelId,
             pricing: entry.pricing,
             maxOutputTokens: Math.min(
@@ -1026,7 +1008,9 @@ export async function estimateReplay(
               JUDGE_OUTPUT_TOKEN_CAP,
             ),
           };
-        })();
+          judges.set(key, selected);
+          return selected;
+        };
   return {
     ...estimateReplayCost({
       steps: plan.steps,
@@ -3320,12 +3304,7 @@ async function executeReplay(
         );
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(context.baseUrl, candidates);
-  const resolvedByStepId = new Map(
-    candidates.map(({ stepId, resolvedCurrentModelId }) => [
-      stepId,
-      resolvedCurrentModelId,
-    ]),
-  );
+  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
   const currentPricingByStepId = new Map(
     plan.steps.map((step) => {
       const resolution = resolveCurrentModel(catalog, step.currentModel);
@@ -3372,54 +3351,55 @@ async function executeReplay(
     split: "shortlist" | "holdout",
     assignments: typeof candidates,
   ): Promise<void> => {
-    const candidateFamilies = [
-      ...new Set(
-        assignments.flatMap(({ candidates }) =>
-          candidates.map(({ family }) => family),
-        ),
-      ),
-    ];
-    for (const candidateFamily of candidateFamilies) {
+    const groups = new Map<
+      string,
+      { readonly candidateFamily: string; readonly referenceFamily?: string }
+    >();
+    for (const { stepId, candidates } of assignments) {
+      for (const { family: candidateFamily } of candidates) {
+        const group =
+          externalEvaluator === undefined
+            ? {
+                candidateFamily,
+                referenceFamily: referenceFamilyByStepId.get(stepId)!,
+              }
+            : { candidateFamily };
+        groups.set(JSON.stringify(group), group);
+      }
+    }
+    for (const { candidateFamily, referenceFamily } of groups.values()) {
       const familyAssignments = assignments.map((assignment) => ({
         ...assignment,
-        candidates: assignment.candidates.filter(
-          ({ family }) => family === candidateFamily,
-        ),
+        candidates:
+          referenceFamily === undefined ||
+          referenceFamilyByStepId.get(assignment.stepId) === referenceFamily
+            ? assignment.candidates.filter(
+                ({ family }) => family === candidateFamily,
+              )
+            : [],
       }));
       const stepIds = new Set(
         familyAssignments
           .filter(({ candidates }) => candidates.length > 0)
           .map(({ stepId }) => stepId),
       );
-      const judge = (() => {
-        if (externalEvaluator !== undefined) return undefined;
-        const referenceFamilies = new Set(
-          plan.steps
-            .filter(({ stepId }) => stepIds.has(stepId))
-            .map(({ stepId, currentModel }) =>
-              modelFamily(resolvedByStepId.get(stepId) ?? currentModel),
-            ),
-        );
-        if (referenceFamilies.size !== 1) {
-          throw new Error(
-            `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
-          );
-        }
-        const rankedModels = pickJudges(catalog, {
-          candidateFamily,
-          referenceFamily: [...referenceFamilies][0]!,
-        }).map((judgeModel) => ({
-          judgeModel,
-          supportsStructuredOutput: catalog.find(({ id }) => id === judgeModel)!
-            .supportsStructuredOutput,
-        }));
-        return {
-          rankedModels,
-          warning: (code: string, message: string) =>
-            context.reporter.warning(code, message),
-          chat: judgeChat(provider, catalog),
-        };
-      })();
+      const judge =
+        referenceFamily === undefined
+          ? undefined
+          : {
+              rankedModels: pickJudges(catalog, {
+                candidateFamily,
+                referenceFamily,
+              }).map((judgeModel) => ({
+                judgeModel,
+                supportsStructuredOutput: catalog.find(
+                  ({ id }) => id === judgeModel,
+                )!.supportsStructuredOutput,
+              })),
+              warning: (code: string, message: string) =>
+                context.reporter.warning(code, message),
+              chat: judgeChat(provider, catalog),
+            };
       const result = await replayModeA({
         steps: replaySteps(split),
         cases: plan.cases,
@@ -4030,16 +4010,7 @@ async function executeConfirm(
         );
         continue;
       }
-      const referenceResolution = resolveCurrentModel(
-        catalog,
-        configuredRecords[0]!.currentModel,
-      );
-      const referenceFamily = modelFamily(
-        referenceResolution.kind === "exact" ||
-          referenceResolution.kind === "resolved"
-          ? referenceResolution.model.id
-          : configuredRecords[0]!.currentModel,
-      );
+      const referenceFamily = modelFamily(runtimeRecords.at(-1)!.currentModel);
       const judgeModel = pickJudges(catalog, {
         candidateFamily: selectedCatalogEntry.family,
         referenceFamily,
@@ -4824,6 +4795,24 @@ function judgeChat(
         : { responseFormat: jsonValue(request.responseFormat) }),
     });
   };
+}
+
+function referenceFamiliesByStep(
+  plan: z.infer<typeof replayPlanSchema>,
+  candidates: readonly StepShortlist[],
+): ReadonlyMap<string, string> {
+  const resolvedByStepId = new Map(
+    candidates.map(({ stepId, resolvedCurrentModelId }) => [
+      stepId,
+      resolvedCurrentModelId,
+    ]),
+  );
+  return new Map(
+    plan.steps.map(({ stepId, currentModel }) => [
+      stepId,
+      modelFamily(resolvedByStepId.get(stepId) ?? currentModel),
+    ]),
+  );
 }
 
 function modelFamily(modelId: string | null): string {

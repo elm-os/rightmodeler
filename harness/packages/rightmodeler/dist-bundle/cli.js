@@ -38803,7 +38803,7 @@ function estimateReplayCost(input) {
       shortlistCostUsd += reservationCost(replayCase, candidate);
       shortlistExecutions += 1;
       if (input.judge !== void 0) {
-        judgeCostUsd += 2 * judgeCallCost(replayCase, input.judge);
+        judgeCostUsd += 2 * judgeCallCost(replayCase, input.judge(replayCase.stepId, candidate));
       }
     }
   }
@@ -38837,7 +38837,10 @@ function estimateReplayCost(input) {
         candidateCost += reservationCost(replayCase, candidate);
         candidateExecutions += 1;
         if (input.judge !== void 0) {
-          candidateJudgeCost += 2 * judgeCallCost(replayCase, input.judge);
+          candidateJudgeCost += 2 * judgeCallCost(
+            replayCase,
+            input.judge(replayCase.stepId, candidate)
+          );
         }
       }
       if (maximumFamily === void 0 || candidateCost > maximumFamily.cost) {
@@ -44202,38 +44205,22 @@ async function estimateReplay(options) {
   );
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(context2.baseUrl, candidates);
-  const candidateFamily = candidates.flatMap(({ candidates: models }) => models).at(0)?.family;
-  const judge = context2.evaluator !== void 0 || candidateFamily === void 0 ? void 0 : (() => {
-    const stepIds = new Set(
-      candidates.filter(
-        ({ candidates: models }) => models.some(({ family }) => family === candidateFamily)
-      ).map(({ stepId }) => stepId)
-    );
-    const resolvedByStepId = new Map(
-      candidates.map(({ stepId, resolvedCurrentModelId }) => [
-        stepId,
-        resolvedCurrentModelId
-      ])
-    );
-    const referenceFamilies = new Set(
-      plan.steps.filter(({ stepId }) => stepIds.has(stepId)).map(
-        ({ stepId, currentModel }) => modelFamily(resolvedByStepId.get(stepId) ?? currentModel)
-      )
-    );
-    if (referenceFamilies.size !== 1) {
-      throw new Error(
-        `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`
-      );
-    }
+  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
+  const judges = /* @__PURE__ */ new Map();
+  const judge = context2.evaluator !== void 0 ? void 0 : (stepId, candidate) => {
+    const referenceFamily = referenceFamilyByStepId.get(stepId);
+    const key = JSON.stringify([candidate.family, referenceFamily]);
+    const known = judges.get(key);
+    if (known !== void 0) return known;
     const modelId = pickJudges(catalog, {
-      candidateFamily,
-      referenceFamily: [...referenceFamilies][0]
+      candidateFamily: candidate.family,
+      referenceFamily
     })[0];
     const entry = catalog.find(({ id }) => id === modelId);
     if (entry.pricing === null) {
       throw new Error(`Selected judge has no pricing: ${modelId}`);
     }
-    return {
+    const selected = {
       modelId,
       pricing: entry.pricing,
       maxOutputTokens: Math.min(
@@ -44241,7 +44228,9 @@ async function estimateReplay(options) {
         JUDGE_OUTPUT_TOKEN_CAP
       )
     };
-  })();
+    judges.set(key, selected);
+    return selected;
+  };
   return {
     ...estimateReplayCost({
       steps: plan.steps,
@@ -45990,12 +45979,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
   );
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(context2.baseUrl, candidates);
-  const resolvedByStepId = new Map(
-    candidates.map(({ stepId, resolvedCurrentModelId }) => [
-      stepId,
-      resolvedCurrentModelId
-    ])
-  );
+  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
   const currentPricingByStepId = new Map(
     plan.steps.map((step) => {
       const resolution = resolveCurrentModel(catalog, step.currentModel);
@@ -46032,48 +46016,39 @@ async function executeReplay(context2, inputDigestValue, runId) {
   let skipped = 0;
   const blockedCellsByFamily = /* @__PURE__ */ new Map();
   const runCells = async (split, assignments) => {
-    const candidateFamilies = [
-      ...new Set(
-        assignments.flatMap(
-          ({ candidates: candidates2 }) => candidates2.map(({ family }) => family)
-        )
-      )
-    ];
-    for (const candidateFamily of candidateFamilies) {
+    const groups = /* @__PURE__ */ new Map();
+    for (const { stepId, candidates: candidates2 } of assignments) {
+      for (const { family: candidateFamily } of candidates2) {
+        const group = externalEvaluator === void 0 ? {
+          candidateFamily,
+          referenceFamily: referenceFamilyByStepId.get(stepId)
+        } : { candidateFamily };
+        groups.set(JSON.stringify(group), group);
+      }
+    }
+    for (const { candidateFamily, referenceFamily } of groups.values()) {
       const familyAssignments = assignments.map((assignment) => ({
         ...assignment,
-        candidates: assignment.candidates.filter(
+        candidates: referenceFamily === void 0 || referenceFamilyByStepId.get(assignment.stepId) === referenceFamily ? assignment.candidates.filter(
           ({ family }) => family === candidateFamily
-        )
+        ) : []
       }));
       const stepIds = new Set(
         familyAssignments.filter(({ candidates: candidates2 }) => candidates2.length > 0).map(({ stepId }) => stepId)
       );
-      const judge = (() => {
-        if (externalEvaluator !== void 0) return void 0;
-        const referenceFamilies = new Set(
-          plan.steps.filter(({ stepId }) => stepIds.has(stepId)).map(
-            ({ stepId, currentModel }) => modelFamily(resolvedByStepId.get(stepId) ?? currentModel)
-          )
-        );
-        if (referenceFamilies.size !== 1) {
-          throw new Error(
-            `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`
-          );
-        }
-        const rankedModels = pickJudges(catalog, {
+      const judge = referenceFamily === void 0 ? void 0 : {
+        rankedModels: pickJudges(catalog, {
           candidateFamily,
-          referenceFamily: [...referenceFamilies][0]
+          referenceFamily
         }).map((judgeModel) => ({
           judgeModel,
-          supportsStructuredOutput: catalog.find(({ id }) => id === judgeModel).supportsStructuredOutput
-        }));
-        return {
-          rankedModels,
-          warning: (code, message2) => context2.reporter.warning(code, message2),
-          chat: judgeChat(provider, catalog)
-        };
-      })();
+          supportsStructuredOutput: catalog.find(
+            ({ id }) => id === judgeModel
+          ).supportsStructuredOutput
+        })),
+        warning: (code, message2) => context2.reporter.warning(code, message2),
+        chat: judgeChat(provider, catalog)
+      };
       const result2 = await replayModeA({
         steps: replaySteps(split),
         cases: plan.cases,
@@ -46573,13 +46548,7 @@ async function executeConfirm(context2, inputDigestValue, runId) {
         );
         continue;
       }
-      const referenceResolution = resolveCurrentModel(
-        catalog,
-        configuredRecords[0].currentModel
-      );
-      const referenceFamily = modelFamily(
-        referenceResolution.kind === "exact" || referenceResolution.kind === "resolved" ? referenceResolution.model.id : configuredRecords[0].currentModel
-      );
+      const referenceFamily = modelFamily(runtimeRecords.at(-1).currentModel);
       const judgeModel = pickJudges(catalog, {
         candidateFamily: selectedCatalogEntry.family,
         referenceFamily
@@ -47182,6 +47151,20 @@ function judgeChat(provider, catalog) {
       ...request.responseFormat === void 0 ? {} : { responseFormat: jsonValue2(request.responseFormat) }
     });
   };
+}
+function referenceFamiliesByStep(plan, candidates) {
+  const resolvedByStepId = new Map(
+    candidates.map(({ stepId, resolvedCurrentModelId }) => [
+      stepId,
+      resolvedCurrentModelId
+    ])
+  );
+  return new Map(
+    plan.steps.map(({ stepId, currentModel }) => [
+      stepId,
+      modelFamily(resolvedByStepId.get(stepId) ?? currentModel)
+    ])
+  );
 }
 function modelFamily(modelId) {
   if (modelId === null) return "unknown";

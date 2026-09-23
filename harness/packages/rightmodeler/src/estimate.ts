@@ -36,16 +36,18 @@ export interface ReplayCostEstimate {
   }[];
 }
 
+export interface ReplayCostJudge {
+  readonly modelId: string;
+  readonly pricing: ModelPricing;
+  readonly maxOutputTokens: number;
+}
+
 export function estimateReplayCost(input: {
   readonly steps: readonly ReplayCostStep[];
   readonly cases: readonly ReplayCostCase[];
   readonly candidates: readonly StepShortlist[];
   readonly judge:
-    | {
-        readonly modelId: string;
-        readonly pricing: ModelPricing;
-        readonly maxOutputTokens: number;
-      }
+    | ((stepId: string, candidate: ModelCatalogEntry) => ReplayCostJudge)
     | undefined;
 }): ReplayCostEstimate {
   const stepsById = new Map(input.steps.map((step) => [step.stepId, step]));
@@ -66,7 +68,9 @@ export function estimateReplayCost(input: {
       shortlistCostUsd += reservationCost(replayCase, candidate);
       shortlistExecutions += 1;
       if (input.judge !== undefined) {
-        judgeCostUsd += 2 * judgeCallCost(replayCase, input.judge);
+        judgeCostUsd +=
+          2 *
+          judgeCallCost(replayCase, input.judge(replayCase.stepId, candidate));
       }
     }
   }
@@ -114,7 +118,12 @@ export function estimateReplayCost(input: {
         candidateCost += reservationCost(replayCase, candidate);
         candidateExecutions += 1;
         if (input.judge !== undefined) {
-          candidateJudgeCost += 2 * judgeCallCost(replayCase, input.judge);
+          candidateJudgeCost +=
+            2 *
+            judgeCallCost(
+              replayCase,
+              input.judge(replayCase.stepId, candidate),
+            );
         }
       }
       if (maximumFamily === undefined || candidateCost > maximumFamily.cost) {
