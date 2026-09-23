@@ -12,5 +12,6 @@ export * from "./driver-modeb.js";
 export * from "./provenance.js";
 export * from "./provider.js";
 export * from "./proxy/egress.js";
+export { hopByHopHeaders } from "./proxy/headers.js";
 export * from "./shortlist.js";
 export * from "./transport/stream.js";

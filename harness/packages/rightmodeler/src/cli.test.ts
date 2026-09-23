@@ -491,7 +491,15 @@ describe("CLI needs-input errors", () => {
         ["content-type: text/plain"],
         "--header cannot set content-type; rightmodeler sets it on every request",
       ],
+      [
+        ["keep-alive: timeout=5"],
+        "--header cannot set keep-alive; hop-by-hop headers do not reach the provider",
+      ],
       [["x-a: 1", "X-A: 2"], "--header x-a is given more than once"],
+      [
+        ["x-note: €uro"],
+        "--header x-note has a value HTTP cannot carry; remove line breaks, control characters and characters outside Latin-1",
+      ],
     ];
     for (const [values, message] of cases) {
       const captured = captureIo();

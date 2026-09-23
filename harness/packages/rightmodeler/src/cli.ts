@@ -7,6 +7,7 @@ import { basename, resolve } from "node:path";
 import { Writable, type Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import { hopByHopHeaders } from "@rightmodeler/replay";
 import { Argument, Command, CommanderError, Option } from "commander";
 
 import {
@@ -892,10 +893,21 @@ function pipelineOptions(
         `--header cannot set ${name}; rightmodeler sets it on every request`,
       );
     }
+    if (hopByHopHeaders.has(name)) {
+      throw invalidOption(
+        `--header cannot set ${name}; hop-by-hop headers do not reach the provider`,
+      );
+    }
     if (requestHeaders.has(name)) {
       throw invalidOption(`--header ${name} is given more than once`);
     }
-    requestHeaders.set(name, raw.slice(colon + 1).trim());
+    const value = raw.slice(colon + 1).trim();
+    if (!/^[\t\x20-\x7e\x80-\xff]*$/u.test(value)) {
+      throw invalidOption(
+        `--header ${name} has a value HTTP cannot carry; remove line breaks, control characters and characters outside Latin-1`,
+      );
+    }
+    requestHeaders.set(name, value);
   }
   return {
     repo: global.repo,

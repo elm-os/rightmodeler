@@ -10595,31 +10595,8 @@ import { basename as basename5, resolve as resolve13 } from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
-// ../../../node_modules/.pnpm/commander@14.0.3/node_modules/commander/esm.mjs
-var import_index = __toESM(require_commander(), 1);
-var {
-  program,
-  createCommand,
-  createArgument,
-  createOption,
-  CommanderError,
-  InvalidArgumentError,
-  InvalidOptionArgumentError,
-  // deprecated old name
-  Command,
-  Argument,
-  Option,
-  Help
-} = import_index.default;
-
-// src/pipeline.ts
-import { execFile as execFile7 } from "node:child_process";
-import { createHash as createHash12 } from "node:crypto";
-import { readFileSync as readFileSync6 } from "node:fs";
-import { mkdir as mkdir5, readFile as readFile11, readdir as readdir4, stat as stat3, writeFile as writeFile6 } from "node:fs/promises";
-import { hostname as hostname4 } from "node:os";
-import { dirname as dirname7, join as join15, relative as relative8, resolve as resolve8, sep as sep5 } from "node:path";
-import { promisify as promisify6 } from "node:util";
+// ../replay/dist/budget.js
+import { randomUUID as randomUUID5 } from "node:crypto";
 
 // ../core/dist/catalog.js
 function blendedPrice(model) {
@@ -25932,6 +25909,257 @@ var FsStore = class {
   }
 };
 
+// ../replay/dist/budget.js
+var DEFAULT_RESERVATION_STALENESS_WINDOW_MS = 10 * 60 * 1e3;
+var RESERVATION_RETRY_CAP_MS = 1e3;
+var BudgetRefusalError = class extends Error {
+  requiredCapUsd;
+  authorizedTotalUsd;
+  causedByReservations;
+  constructor(requiredCapUsd, authorizedTotalUsd, causedByReservations = false) {
+    super(causedByReservations ? "Budget capacity is reserved by another in-flight execution" : `Budget cap is $${formatUsd(authorizedTotalUsd)}; raise it to at least $${formatUsd(requiredCapUsd)} to start this execution`);
+    this.name = "BudgetRefusalError";
+    this.requiredCapUsd = requiredCapUsd;
+    this.authorizedTotalUsd = authorizedTotalUsd;
+    this.causedByReservations = causedByReservations;
+  }
+};
+async function reserveWhenFree(budget, input, inFlight) {
+  let retryMs = 25;
+  for (; ; ) {
+    try {
+      return await budget.reserveExecution(input);
+    } catch (error51) {
+      if (error51 instanceof BudgetRefusalError && error51.causedByReservations) {
+        const refunds = [...inFlight];
+        if (refunds.length > 0) {
+          await Promise.race(refunds);
+        } else {
+          await new Promise((resolve14) => setTimeout(resolve14, retryMs));
+          retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
+        }
+        continue;
+      }
+      throw error51;
+    }
+  }
+}
+function formatUsd(value) {
+  return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "");
+}
+function assertAmount(value, label) {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative number`);
+  }
+}
+function assertTokens(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative integer`);
+  }
+}
+function encode3(ledger) {
+  return Buffer.from(JSON.stringify(ledger), "utf8");
+}
+function decode3(body) {
+  const value = JSON.parse(Buffer.from(body).toString("utf8"));
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Budget ledger must be an object");
+  }
+  const record2 = value;
+  if (record2.authorizedTotalUsd !== void 0 && (typeof record2.authorizedTotalUsd !== "number" || !Number.isFinite(record2.authorizedTotalUsd) || record2.authorizedTotalUsd < 0) || typeof record2.spentUsd !== "number" || !Number.isFinite(record2.spentUsd) || record2.spentUsd < 0 || typeof record2.reservations !== "object" || record2.reservations === null || Array.isArray(record2.reservations)) {
+    throw new Error("Budget ledger is malformed");
+  }
+  const reservations = {};
+  for (const [reservationId, reservation] of Object.entries(record2.reservations)) {
+    if (typeof reservation !== "object" || reservation === null || Array.isArray(reservation)) {
+      throw new Error(`Budget reservation ${reservationId} is malformed`);
+    }
+    const entry = reservation;
+    if (typeof entry.reservedUsd !== "number" || !Number.isFinite(entry.reservedUsd) || entry.reservedUsd < 0 || typeof entry.runId !== "string" || entry.runId.length === 0 || typeof entry.heartbeatAt !== "string" || Number.isNaN(Date.parse(entry.heartbeatAt))) {
+      throw new Error(`Budget reservation ${reservationId} is malformed`);
+    }
+    reservations[reservationId] = {
+      reservedUsd: entry.reservedUsd,
+      runId: entry.runId,
+      heartbeatAt: entry.heartbeatAt
+    };
+  }
+  return {
+    ...record2.authorizedTotalUsd === void 0 ? {} : { authorizedTotalUsd: record2.authorizedTotalUsd },
+    spentUsd: record2.spentUsd,
+    reservations
+  };
+}
+function reservedTotal(ledger) {
+  return Object.values(ledger.reservations).reduce((total, reservation) => total + reservation.reservedUsd, 0);
+}
+function createBudget(options) {
+  if (options.authorizedTotalUsd !== void 0) {
+    assertAmount(options.authorizedTotalUsd, "authorizedTotalUsd");
+  }
+  const reservationStalenessWindowMs = options.reservationStalenessWindowMs ?? DEFAULT_RESERVATION_STALENESS_WINDOW_MS;
+  if (!Number.isSafeInteger(reservationStalenessWindowMs) || reservationStalenessWindowMs < 0) {
+    throw new Error("reservationStalenessWindowMs must be a non-negative safe integer");
+  }
+  const key = budgetKey(options.projectId, options.runId);
+  async function load(prune) {
+    for (; ; ) {
+      const entry = await options.store.get(key);
+      if (entry === null) {
+        return {
+          ledger: {
+            authorizedTotalUsd: options.authorizedTotalUsd,
+            spentUsd: 0,
+            reservations: {}
+          },
+          version: 0,
+          fenceToken: 0
+        };
+      }
+      const ledger = {
+        ...decode3(entry.body),
+        authorizedTotalUsd: options.authorizedTotalUsd
+      };
+      if (!prune) {
+        return {
+          ledger,
+          version: entry.version,
+          fenceToken: entry.fenceToken
+        };
+      }
+      const owners = /* @__PURE__ */ new Map();
+      const ownerTerminal = (runId) => {
+        let known = owners.get(runId);
+        if (known === void 0) {
+          known = options.store.get(runKey(options.projectId, runId)).then((owner) => owner !== null && runMetaSchema.parse(JSON.parse(Buffer.from(owner.body).toString("utf8"))).status !== "running");
+          owners.set(runId, known);
+        }
+        return known;
+      };
+      const reservations = {};
+      let expired = false;
+      for (const [reservationId, reservation] of Object.entries(ledger.reservations)) {
+        const stale = Date.now() - Date.parse(reservation.heartbeatAt) > reservationStalenessWindowMs;
+        if (stale || await ownerTerminal(reservation.runId)) {
+          expired = true;
+        } else {
+          reservations[reservationId] = reservation;
+        }
+      }
+      if (!expired) {
+        return {
+          ledger,
+          version: entry.version,
+          fenceToken: entry.fenceToken
+        };
+      }
+      const won = await options.store.compareAndSwap(key, entry.version, encode3({ ...ledger, reservations }), entry.fenceToken);
+      if (won)
+        continue;
+    }
+  }
+  async function reserveExecution(input) {
+    assertTokens(input.contextTokens, "contextTokens");
+    assertTokens(input.maxOutputTokens, "maxOutputTokens");
+    assertAmount(input.pricing.input, "pricing.input");
+    assertAmount(input.pricing.output, "pricing.output");
+    const worstCaseUsd = input.contextTokens * input.pricing.input + input.maxOutputTokens * input.pricing.output;
+    const reservationId = randomUUID5();
+    for (; ; ) {
+      const current = await load(true);
+      const requiredCapUsd = current.ledger.spentUsd + worstCaseUsd;
+      const capacityRequiredUsd = requiredCapUsd + reservedTotal(current.ledger);
+      if (current.ledger.authorizedTotalUsd !== void 0 && capacityRequiredUsd > current.ledger.authorizedTotalUsd) {
+        throw new BudgetRefusalError(requiredCapUsd, current.ledger.authorizedTotalUsd, requiredCapUsd <= current.ledger.authorizedTotalUsd);
+      }
+      const next = {
+        ...current.ledger,
+        reservations: {
+          ...current.ledger.reservations,
+          [reservationId]: {
+            reservedUsd: worstCaseUsd,
+            runId: options.runId,
+            heartbeatAt: (/* @__PURE__ */ new Date()).toISOString()
+          }
+        }
+      };
+      const won = await options.store.compareAndSwap(key, current.version, encode3(next), current.fenceToken);
+      if (!won)
+        continue;
+      let refunded = false;
+      return {
+        reservedUsd: worstCaseUsd,
+        async heartbeat() {
+          if (refunded)
+            return;
+          for (; ; ) {
+            const latest = await load(false);
+            const reservation = latest.ledger.reservations[reservationId];
+            if (reservation === void 0) {
+              throw new Error("Budget reservation is no longer active");
+            }
+            const next2 = {
+              ...latest.ledger,
+              reservations: {
+                ...latest.ledger.reservations,
+                [reservationId]: {
+                  ...reservation,
+                  heartbeatAt: (/* @__PURE__ */ new Date()).toISOString()
+                }
+              }
+            };
+            const heartbeatWon = await options.store.compareAndSwap(key, latest.version, encode3(next2), latest.fenceToken);
+            if (heartbeatWon)
+              return;
+          }
+        },
+        async refund(actualCostUsd) {
+          assertAmount(actualCostUsd, "actualCostUsd");
+          if (refunded)
+            return;
+          for (; ; ) {
+            const latest = await load(false);
+            if (latest.ledger.reservations[reservationId] === void 0 && actualCostUsd === 0) {
+              refunded = true;
+              return;
+            }
+            const reservations = { ...latest.ledger.reservations };
+            delete reservations[reservationId];
+            const finalized = {
+              ...latest.ledger,
+              spentUsd: latest.ledger.spentUsd + actualCostUsd,
+              reservations
+            };
+            const finalizedWon = await options.store.compareAndSwap(key, latest.version, encode3(finalized), latest.fenceToken);
+            if (finalizedWon) {
+              refunded = true;
+              return;
+            }
+          }
+        }
+      };
+    }
+  }
+  async function state() {
+    const { ledger } = await load(true);
+    return {
+      authorizedTotalUsd: ledger.authorizedTotalUsd,
+      spentUsd: ledger.spentUsd,
+      reservedUsd: reservedTotal(ledger)
+    };
+  }
+  return {
+    store: options.store,
+    projectId: options.projectId,
+    runId: options.runId,
+    reserveExecution,
+    state
+  };
+}
+
+// ../replay/dist/confirm.js
+import { randomUUID as randomUUID9 } from "node:crypto";
+
 // ../kernel/dist/statistics.js
 var MIN_REVIEW_TRIALS = 10;
 var MIN_DISTINCT_STEPS = 2;
@@ -27561,258 +27789,6 @@ function stableSeed2(value) {
   }
   return hash2 >>> 0;
 }
-
-// ../replay/dist/budget.js
-import { randomUUID as randomUUID5 } from "node:crypto";
-var DEFAULT_RESERVATION_STALENESS_WINDOW_MS = 10 * 60 * 1e3;
-var RESERVATION_RETRY_CAP_MS = 1e3;
-var BudgetRefusalError = class extends Error {
-  requiredCapUsd;
-  authorizedTotalUsd;
-  causedByReservations;
-  constructor(requiredCapUsd, authorizedTotalUsd, causedByReservations = false) {
-    super(causedByReservations ? "Budget capacity is reserved by another in-flight execution" : `Budget cap is $${formatUsd(authorizedTotalUsd)}; raise it to at least $${formatUsd(requiredCapUsd)} to start this execution`);
-    this.name = "BudgetRefusalError";
-    this.requiredCapUsd = requiredCapUsd;
-    this.authorizedTotalUsd = authorizedTotalUsd;
-    this.causedByReservations = causedByReservations;
-  }
-};
-async function reserveWhenFree(budget, input, inFlight) {
-  let retryMs = 25;
-  for (; ; ) {
-    try {
-      return await budget.reserveExecution(input);
-    } catch (error51) {
-      if (error51 instanceof BudgetRefusalError && error51.causedByReservations) {
-        const refunds = [...inFlight];
-        if (refunds.length > 0) {
-          await Promise.race(refunds);
-        } else {
-          await new Promise((resolve14) => setTimeout(resolve14, retryMs));
-          retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
-        }
-        continue;
-      }
-      throw error51;
-    }
-  }
-}
-function formatUsd(value) {
-  return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "");
-}
-function assertAmount(value, label) {
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`${label} must be a non-negative number`);
-  }
-}
-function assertTokens(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`${label} must be a non-negative integer`);
-  }
-}
-function encode3(ledger) {
-  return Buffer.from(JSON.stringify(ledger), "utf8");
-}
-function decode3(body) {
-  const value = JSON.parse(Buffer.from(body).toString("utf8"));
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Budget ledger must be an object");
-  }
-  const record2 = value;
-  if (record2.authorizedTotalUsd !== void 0 && (typeof record2.authorizedTotalUsd !== "number" || !Number.isFinite(record2.authorizedTotalUsd) || record2.authorizedTotalUsd < 0) || typeof record2.spentUsd !== "number" || !Number.isFinite(record2.spentUsd) || record2.spentUsd < 0 || typeof record2.reservations !== "object" || record2.reservations === null || Array.isArray(record2.reservations)) {
-    throw new Error("Budget ledger is malformed");
-  }
-  const reservations = {};
-  for (const [reservationId, reservation] of Object.entries(record2.reservations)) {
-    if (typeof reservation !== "object" || reservation === null || Array.isArray(reservation)) {
-      throw new Error(`Budget reservation ${reservationId} is malformed`);
-    }
-    const entry = reservation;
-    if (typeof entry.reservedUsd !== "number" || !Number.isFinite(entry.reservedUsd) || entry.reservedUsd < 0 || typeof entry.runId !== "string" || entry.runId.length === 0 || typeof entry.heartbeatAt !== "string" || Number.isNaN(Date.parse(entry.heartbeatAt))) {
-      throw new Error(`Budget reservation ${reservationId} is malformed`);
-    }
-    reservations[reservationId] = {
-      reservedUsd: entry.reservedUsd,
-      runId: entry.runId,
-      heartbeatAt: entry.heartbeatAt
-    };
-  }
-  return {
-    ...record2.authorizedTotalUsd === void 0 ? {} : { authorizedTotalUsd: record2.authorizedTotalUsd },
-    spentUsd: record2.spentUsd,
-    reservations
-  };
-}
-function reservedTotal(ledger) {
-  return Object.values(ledger.reservations).reduce((total, reservation) => total + reservation.reservedUsd, 0);
-}
-function createBudget(options) {
-  if (options.authorizedTotalUsd !== void 0) {
-    assertAmount(options.authorizedTotalUsd, "authorizedTotalUsd");
-  }
-  const reservationStalenessWindowMs = options.reservationStalenessWindowMs ?? DEFAULT_RESERVATION_STALENESS_WINDOW_MS;
-  if (!Number.isSafeInteger(reservationStalenessWindowMs) || reservationStalenessWindowMs < 0) {
-    throw new Error("reservationStalenessWindowMs must be a non-negative safe integer");
-  }
-  const key = budgetKey(options.projectId, options.runId);
-  async function load(prune) {
-    for (; ; ) {
-      const entry = await options.store.get(key);
-      if (entry === null) {
-        return {
-          ledger: {
-            authorizedTotalUsd: options.authorizedTotalUsd,
-            spentUsd: 0,
-            reservations: {}
-          },
-          version: 0,
-          fenceToken: 0
-        };
-      }
-      const ledger = {
-        ...decode3(entry.body),
-        authorizedTotalUsd: options.authorizedTotalUsd
-      };
-      if (!prune) {
-        return {
-          ledger,
-          version: entry.version,
-          fenceToken: entry.fenceToken
-        };
-      }
-      const owners = /* @__PURE__ */ new Map();
-      const ownerTerminal = (runId) => {
-        let known = owners.get(runId);
-        if (known === void 0) {
-          known = options.store.get(runKey(options.projectId, runId)).then((owner) => owner !== null && runMetaSchema.parse(JSON.parse(Buffer.from(owner.body).toString("utf8"))).status !== "running");
-          owners.set(runId, known);
-        }
-        return known;
-      };
-      const reservations = {};
-      let expired = false;
-      for (const [reservationId, reservation] of Object.entries(ledger.reservations)) {
-        const stale = Date.now() - Date.parse(reservation.heartbeatAt) > reservationStalenessWindowMs;
-        if (stale || await ownerTerminal(reservation.runId)) {
-          expired = true;
-        } else {
-          reservations[reservationId] = reservation;
-        }
-      }
-      if (!expired) {
-        return {
-          ledger,
-          version: entry.version,
-          fenceToken: entry.fenceToken
-        };
-      }
-      const won = await options.store.compareAndSwap(key, entry.version, encode3({ ...ledger, reservations }), entry.fenceToken);
-      if (won)
-        continue;
-    }
-  }
-  async function reserveExecution(input) {
-    assertTokens(input.contextTokens, "contextTokens");
-    assertTokens(input.maxOutputTokens, "maxOutputTokens");
-    assertAmount(input.pricing.input, "pricing.input");
-    assertAmount(input.pricing.output, "pricing.output");
-    const worstCaseUsd = input.contextTokens * input.pricing.input + input.maxOutputTokens * input.pricing.output;
-    const reservationId = randomUUID5();
-    for (; ; ) {
-      const current = await load(true);
-      const requiredCapUsd = current.ledger.spentUsd + worstCaseUsd;
-      const capacityRequiredUsd = requiredCapUsd + reservedTotal(current.ledger);
-      if (current.ledger.authorizedTotalUsd !== void 0 && capacityRequiredUsd > current.ledger.authorizedTotalUsd) {
-        throw new BudgetRefusalError(requiredCapUsd, current.ledger.authorizedTotalUsd, requiredCapUsd <= current.ledger.authorizedTotalUsd);
-      }
-      const next = {
-        ...current.ledger,
-        reservations: {
-          ...current.ledger.reservations,
-          [reservationId]: {
-            reservedUsd: worstCaseUsd,
-            runId: options.runId,
-            heartbeatAt: (/* @__PURE__ */ new Date()).toISOString()
-          }
-        }
-      };
-      const won = await options.store.compareAndSwap(key, current.version, encode3(next), current.fenceToken);
-      if (!won)
-        continue;
-      let refunded = false;
-      return {
-        reservedUsd: worstCaseUsd,
-        async heartbeat() {
-          if (refunded)
-            return;
-          for (; ; ) {
-            const latest = await load(false);
-            const reservation = latest.ledger.reservations[reservationId];
-            if (reservation === void 0) {
-              throw new Error("Budget reservation is no longer active");
-            }
-            const next2 = {
-              ...latest.ledger,
-              reservations: {
-                ...latest.ledger.reservations,
-                [reservationId]: {
-                  ...reservation,
-                  heartbeatAt: (/* @__PURE__ */ new Date()).toISOString()
-                }
-              }
-            };
-            const heartbeatWon = await options.store.compareAndSwap(key, latest.version, encode3(next2), latest.fenceToken);
-            if (heartbeatWon)
-              return;
-          }
-        },
-        async refund(actualCostUsd) {
-          assertAmount(actualCostUsd, "actualCostUsd");
-          if (refunded)
-            return;
-          for (; ; ) {
-            const latest = await load(false);
-            if (latest.ledger.reservations[reservationId] === void 0 && actualCostUsd === 0) {
-              refunded = true;
-              return;
-            }
-            const reservations = { ...latest.ledger.reservations };
-            delete reservations[reservationId];
-            const finalized = {
-              ...latest.ledger,
-              spentUsd: latest.ledger.spentUsd + actualCostUsd,
-              reservations
-            };
-            const finalizedWon = await options.store.compareAndSwap(key, latest.version, encode3(finalized), latest.fenceToken);
-            if (finalizedWon) {
-              refunded = true;
-              return;
-            }
-          }
-        }
-      };
-    }
-  }
-  async function state() {
-    const { ledger } = await load(true);
-    return {
-      authorizedTotalUsd: ledger.authorizedTotalUsd,
-      spentUsd: ledger.spentUsd,
-      reservedUsd: reservedTotal(ledger)
-    };
-  }
-  return {
-    store: options.store,
-    projectId: options.projectId,
-    runId: options.runId,
-    reserveExecution,
-    state
-  };
-}
-
-// ../replay/dist/confirm.js
-import { randomUUID as randomUUID9 } from "node:crypto";
 
 // ../executor/dist/index.js
 import { execFile } from "node:child_process";
@@ -31715,6 +31691,32 @@ function shortlist(stepRecords, catalog, options = {}) {
 
 // ../replay/dist/transport/stream.js
 var CONTENT_SPOOL_THRESHOLD_BYTES = 1024 * 1024;
+
+// ../../../node_modules/.pnpm/commander@14.0.3/node_modules/commander/esm.mjs
+var import_index2 = __toESM(require_commander(), 1);
+var {
+  program,
+  createCommand,
+  createArgument,
+  createOption,
+  CommanderError,
+  InvalidArgumentError,
+  InvalidOptionArgumentError,
+  // deprecated old name
+  Command,
+  Argument,
+  Option,
+  Help
+} = import_index2.default;
+
+// src/pipeline.ts
+import { execFile as execFile7 } from "node:child_process";
+import { createHash as createHash12 } from "node:crypto";
+import { readFileSync as readFileSync6 } from "node:fs";
+import { mkdir as mkdir5, readFile as readFile11, readdir as readdir4, stat as stat3, writeFile as writeFile6 } from "node:fs/promises";
+import { hostname as hostname4 } from "node:os";
+import { dirname as dirname7, join as join15, relative as relative8, resolve as resolve8, sep as sep5 } from "node:path";
+import { promisify as promisify6 } from "node:util";
 
 // ../scanner/dist/declarative-matcher.js
 import { readFileSync } from "node:fs";
@@ -49941,10 +49943,21 @@ function pipelineOptions(global, local, reporter) {
         `--header cannot set ${name}; rightmodeler sets it on every request`
       );
     }
+    if (hopByHopHeaders.has(name)) {
+      throw invalidOption(
+        `--header cannot set ${name}; hop-by-hop headers do not reach the provider`
+      );
+    }
     if (requestHeaders2.has(name)) {
       throw invalidOption(`--header ${name} is given more than once`);
     }
-    requestHeaders2.set(name, raw.slice(colon + 1).trim());
+    const value = raw.slice(colon + 1).trim();
+    if (!/^[\t\x20-\x7e\x80-\xff]*$/u.test(value)) {
+      throw invalidOption(
+        `--header ${name} has a value HTTP cannot carry; remove line breaks, control characters and characters outside Latin-1`
+      );
+    }
+    requestHeaders2.set(name, value);
   }
   return {
     repo: global.repo,
