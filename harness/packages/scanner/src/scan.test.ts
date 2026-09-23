@@ -166,6 +166,7 @@ describe("scan", () => {
       "vendor/sdk/index.js",
       "venv/lib/python3.12/site-packages/litellm/main.py",
       ".rightmodeler/config/models.json",
+      "graphify-out/viewer.js",
     ];
     await Promise.all(
       paths.map((path) => mkdir(join(root, path, ".."), { recursive: true })),
@@ -190,6 +191,10 @@ describe("scan", () => {
       writeFile(
         join(root, ".rightmodeler/config/models.json"),
         '{"ai":{"primary":{"model":"acme/large-1"}}}',
+      ),
+      writeFile(
+        join(root, "graphify-out/viewer.js"),
+        'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt })',
       ),
     ]);
 
