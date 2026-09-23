@@ -46,6 +46,7 @@
     "tsx": "^4",
     "typescript": "^5",
     "vitest": "^3",
+    "yaml": "2.9.1",
     "zod": "^4"
   },
   "optionalDependencies": {
