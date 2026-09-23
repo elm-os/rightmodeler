@@ -531,7 +531,7 @@ export async function startGithubStub({
     ) {
       json(response, 400, {
         message: "Bad Request",
-        errors: `The version you specified in the "X-GitHub-Api-Version" request header, "${apiVersion}", is not a supported version. The following versions are currently supported: "2026-03-10" (most recent) and "2022-11-28".`,
+        errors: `The version you specified in the "X-GitHub-API-Version" request header, "${apiVersion}", is not a supported version. The following versions are currently supported: "2026-03-10" (most recent) and "2022-11-28".`,
         documentation_url: "https://docs.github.com/rest",
         status: "400",
       });
