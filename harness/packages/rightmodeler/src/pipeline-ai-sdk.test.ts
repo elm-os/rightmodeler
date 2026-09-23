@@ -29,7 +29,7 @@ interface SpanAttribute {
 
 interface ShortlistArtifact {
   familyPlans: FamilyPlan[];
-  cases: Array<{ family: string; stepId: string }>;
+  cases: Array<{ family: string; stepId: string; trajectoryId: string }>;
 }
 
 interface ReconcileArtifact {
@@ -44,7 +44,12 @@ interface ReconcileArtifact {
 interface IngestArtifact {
   runs: Array<{
     traceId: string;
-    steps: Array<{ stepIndex: number; family?: string }>;
+    steps: Array<{
+      stepIndex: number;
+      family?: string;
+      model: string;
+      trajectoryId: string;
+    }>;
   }>;
 }
 
@@ -74,12 +79,12 @@ async function fixtureRepo(
 
 async function editedCapture(
   root: string,
-  edit: (attributes: SpanAttribute[]) => SpanAttribute[],
+  edit: (attributes: SpanAttribute[], line: number) => SpanAttribute[],
 ): Promise<string> {
   const lines = (await readFile(tracePath("ai-sdk-v7-legacy.jsonl"), "utf8"))
     .split("\n")
     .filter((line) => line.length > 0);
-  const edited = lines.map((line) => {
+  const edited = lines.map((line, index) => {
     const record = JSON.parse(line) as {
       resourceSpans: Array<{
         scopeSpans: Array<{ spans: Array<{ attributes: SpanAttribute[] }> }>;
@@ -88,7 +93,7 @@ async function editedCapture(
     for (const resourceSpan of record.resourceSpans) {
       for (const scopeSpan of resourceSpan.scopeSpans) {
         for (const span of scopeSpan.spans) {
-          span.attributes = edit(span.attributes);
+          span.attributes = edit(span.attributes, index);
         }
       }
     }
@@ -164,6 +169,43 @@ function stepIdsByPath(repo: string): Map<string, string> {
       .filter(({ callSite }) => callSite.matcherSlug.startsWith("js-ai-sdk-"))
       .map(({ callSite, stepId }) => [callSite.path, stepId]),
   );
+}
+
+function notes(name: string, model: string): string {
+  return [
+    'import { generateText } from "ai";',
+    "",
+    'import { acme } from "./provider.mjs";',
+    "",
+    `export async function ${name}(prompt) {`,
+    `  return generateText({ model: acme("${model}"), prompt });`,
+    "}",
+    "",
+  ].join("\n");
+}
+
+function retaggedTriage(
+  modelOf: (triageCall: number) => string,
+  functionIdOf: (triageCall: number) => string | undefined = () => undefined,
+): (attributes: SpanAttribute[], line: number) => SpanAttribute[] {
+  const triageLines: number[] = [];
+  return (attributes, line) => {
+    if (functionId(attributes) !== "triage") return attributes;
+    if (!triageLines.includes(line)) triageLines.push(line);
+    const call = triageLines.indexOf(line);
+    const model = modelOf(call);
+    const family = functionIdOf(call);
+    return attributes.flatMap((attribute) =>
+      attribute.key === "ai.telemetry.functionId"
+        ? family === undefined
+          ? []
+          : [{ key: attribute.key, value: { stringValue: family } }]
+        : attribute.key === "ai.model.id" ||
+            attribute.key === "gen_ai.request.model"
+          ? [{ key: attribute.key, value: { stringValue: model } }]
+          : [attribute],
+    );
+  };
 }
 
 function familyPlan(artifact: ShortlistArtifact, familyId: string): FamilyPlan {
@@ -258,21 +300,10 @@ describe("AI SDK call-site binding", () => {
     120_000,
   );
 
-  it("never lends a keyed call site to an unkeyed family", async () => {
-    const notes = (name: string) =>
-      [
-        'import { generateText } from "ai";',
-        "",
-        'import { acme } from "./provider.mjs";',
-        "",
-        `export async function ${name}(prompt) {`,
-        '  return generateText({ model: acme("acme/max-1"), prompt });',
-        "}",
-        "",
-      ].join("\n");
+  it("abstains an unkeyed family whose model several call sites share", async () => {
     const { root, repo } = await fixtureRepo("lend", {
-      "src/zz-notes-a.mjs": notes("notesA"),
-      "src/zz-notes-b.mjs": notes("notesB"),
+      "src/zz-notes-a.mjs": notes("notesA", "acme/max-1"),
+      "src/zz-notes-b.mjs": notes("notesB", "acme/max-1"),
     });
     const byPath = stepIdsByPath(repo);
     const traces = await editedCapture(root, (attributes) =>
@@ -283,10 +314,15 @@ describe("AI SDK call-site binding", () => {
 
     const result = await shortlist(root, repo, traces);
 
-    expect([...familyPlan(result.shortlist, "unclassified").stepIds]).toEqual([
-      byPath.get("src/zz-notes-a.mjs")!,
-      byPath.get("src/zz-notes-b.mjs")!,
-    ]);
+    expect(familyPlan(result.shortlist, "unclassified")).toMatchObject({
+      binding: "trace_match",
+      stepIds: [],
+      abstainReason: {
+        reason: "ambiguous_call_site_binding",
+        observed: 0,
+        required: 64,
+      },
+    });
     const summarizeSites = new Set([
       byPath.get("src/summarize.mjs")!,
       byPath.get("src/summarize-stream.mjs")!,
@@ -296,6 +332,121 @@ describe("AI SDK call-site binding", () => {
       expect(
         plan.stepIds.filter((stepId) => summarizeSites.has(stepId)),
       ).toEqual([]);
+    }
+  }, 120_000);
+
+  it("places an unkeyed family on the call sites its traces matched by model", async () => {
+    const { root, repo } = await fixtureRepo("by-model", {
+      "src/zz-notes-a.mjs": notes("notesA", "acme/lite-1"),
+      "src/zz-notes-b.mjs": notes("notesB", "acme/small-1"),
+    });
+    const byPath = stepIdsByPath(repo);
+    const siteByModel = new Map([
+      ["acme/lite-1", byPath.get("src/zz-notes-a.mjs")!],
+      ["acme/small-1", byPath.get("src/zz-notes-b.mjs")!],
+    ]);
+    const traces = await editedCapture(
+      root,
+      retaggedTriage((call) => (call < 32 ? "acme/lite-1" : "acme/small-1")),
+    );
+
+    const result = await shortlist(root, repo, traces);
+
+    const unclassified = familyPlan(result.shortlist, "unclassified");
+    expect(unclassified).toMatchObject({
+      binding: "trace_match",
+      stepIds: [...siteByModel.values()],
+    });
+    expect(unclassified.abstainReason).toBeUndefined();
+    expect(unclassified.leftOutCases).toBeUndefined();
+    const modelByTrajectory = new Map(
+      result.ingest.runs.flatMap(({ steps }) =>
+        steps.map(({ trajectoryId, model }) => [trajectoryId, model] as const),
+      ),
+    );
+    const placed = result.shortlist.cases.filter(
+      ({ family }) => family === "unclassified",
+    );
+    expect(placed).toHaveLength(64);
+    for (const { trajectoryId, stepId } of placed) {
+      expect(stepId).toBe(
+        siteByModel.get(modelByTrajectory.get(trajectoryId)!),
+      );
+    }
+    expect(
+      result.warnings.filter(({ code }) => code === "family_cases_left_out"),
+    ).toEqual([]);
+  }, 120_000);
+
+  it("leaves out ambiguous cases and still replays the rest", async () => {
+    const { root, repo } = await fixtureRepo("partly-ambiguous", {
+      "src/zz-notes-a.mjs": notes("notesA", "acme/lite-1"),
+      "src/zz-notes-b.mjs": notes("notesB", "acme/small-1"),
+    });
+    const byPath = stepIdsByPath(repo);
+    const traces = await editedCapture(
+      root,
+      retaggedTriage((call) =>
+        call >= 59
+          ? "acme/large-1"
+          : call < 32
+            ? "acme/lite-1"
+            : "acme/small-1",
+      ),
+    );
+
+    const result = await shortlist(root, repo, traces);
+
+    const unclassified = familyPlan(result.shortlist, "unclassified");
+    expect(unclassified).toMatchObject({
+      binding: "trace_match",
+      cases: 64,
+      leftOutCases: 5,
+      stepIds: [
+        byPath.get("src/zz-notes-a.mjs")!,
+        byPath.get("src/zz-notes-b.mjs")!,
+      ],
+    });
+    expect(unclassified.abstainReason).toBeUndefined();
+    expect(
+      result.shortlist.cases.filter(({ family }) => family === "unclassified"),
+    ).toHaveLength(59);
+    expect(
+      result.warnings.filter(({ code }) => code === "family_cases_left_out"),
+    ).toEqual([
+      {
+        code: "family_cases_left_out",
+        message:
+          "Family unclassified: 5 of 64 traced cases were left out of the replay sample: 5 could not be tied to a call site of this family alone.",
+      },
+    ]);
+  }, 120_000);
+
+  it("never places two families on a call site both of their traces matched", async () => {
+    const { root, repo } = await fixtureRepo("shared-site", {
+      "src/zz-notes-a.mjs": notes("notesA", "acme/lite-1"),
+    });
+    const traces = await editedCapture(
+      root,
+      retaggedTriage(
+        () => "acme/lite-1",
+        (call) => (call < 32 ? undefined : "notes"),
+      ),
+    );
+
+    const result = await shortlist(root, repo, traces);
+
+    for (const familyId of ["unclassified", "notes"]) {
+      expect(familyPlan(result.shortlist, familyId)).toMatchObject({
+        binding: "trace_match",
+        stepIds: [],
+        leftOutCases: 32,
+        abstainReason: {
+          reason: "ambiguous_call_site_binding",
+          observed: 0,
+          required: 32,
+        },
+      });
     }
   }, 120_000);
 

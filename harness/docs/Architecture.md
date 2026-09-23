@@ -73,6 +73,14 @@ otherwise by trace key (the literal AI SDK telemetry `functionId` the scanner re
 call site), otherwise by model id. A family whose name is a trace key is planned on exactly the
 call sites that carry that key, and those call sites are never assigned to another family.
 
+A family without a trace key is planned only on the call sites its own trace steps matched, by
+trajectory position or by a model id that one call site alone pins. A call site belongs to one
+family: a site that another family's key claims, or that several families' traces matched, is
+never used. Cases that cannot be tied to a call site of the family alone are left out of the
+replay sample, and a family with none abstains before any spend, with
+`ambiguous_call_site_binding` or `unmatched_call_site_binding`. Nothing is assigned by path
+order.
+
 ## 3. State
 
 ### Typed facts, not one row type

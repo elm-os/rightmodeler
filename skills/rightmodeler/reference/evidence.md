@@ -54,6 +54,19 @@ The exported `ABSTAIN_REASONS` values are:
   bound by trace key, fewer than `min(2, bound call sites)`.
 - `bound_call_sites_not_replayable`: every call site bound to the family by its trace key needs
   tools or structured output, which Mode A replay cannot run, so replay is skipped before any spend.
+- `ambiguous_call_site_binding`: none of the family's traced cases can be tied to a call site of
+  this family alone, because several scanned call sites use the traced model, or the call site that
+  produced them also produced another family's traces. Replay is skipped before any spend. For AI
+  SDK calls, set a string-literal telemetry `functionId` equal to the family name on the call that
+  produced the traces. The family name comes from the traces (`rightmodeler.family`,
+  `gen_ai.prompt.name`, `gen_ai.agent.name`, or the AI SDK `functionId`), so the two must match.
+  Call sites of other SDKs carry no trace key; give the call site its own model id, or split the
+  families so each call site serves one.
+- `unmatched_call_site_binding`: no scanned call site matches the family's traces (no call site
+  pins the traced model and none carries its trace key), or its cases come from a published corpus
+  whose traces were not ingested in this run. Replay is skipped before any spend. Point `--repo` at
+  the code that produced the traces and `--traces` at the traces the corpus was built from, or give
+  the call site a trace key as above.
 - `insufficient_distinct_trajectories`: a kind covers fewer than 5 distinct trajectory IDs.
 - `holdout_below_floor_minimum`: the family's holdout split has fewer cases than the smallest
   all-pass holdout that can clear the quality floor, so replay is skipped before any spend. Supply

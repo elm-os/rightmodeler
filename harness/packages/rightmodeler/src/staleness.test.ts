@@ -383,4 +383,42 @@ describe("pipeline staleness", { timeout: 120_000 }, () => {
       expect.arrayContaining(["scan", "reconcile"]),
     );
   });
+
+  it("recomputes reconcile checkpoints written under trace-key-only binding", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-staleness-"));
+    temporaryDirectories.push(root);
+    const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+    const store = join(root, "store");
+    const traces = join(root, "traces.json");
+    await writeFile(traces, await readFile(traceFixturePath));
+    const reconcile = async () =>
+      (
+        await runPipeline({
+          repo,
+          store,
+          traces,
+          through: "reconcile",
+          reporter: new Reporter("json", {
+            stdout: () => undefined,
+            stderr: () => undefined,
+          }),
+        })
+      ).executedStages;
+
+    expect(await reconcile()).toContain("reconcile");
+    const fsStore = new FsStore(store);
+    const { stages } = await readSetupState(fsStore, "project");
+    const scanArtifact = await fsStore.get(stages.scan!.outputKey);
+    await writeCheckpoint(fsStore, "project", "reconcile", {
+      ...stages.reconcile!,
+      inputDigest: computeRunSpecDigest({
+        stage: "reconcile",
+        upstream: stages.ingest!.inputDigest,
+        scan: sha256(scanArtifact!.body),
+        binding: "trace-key-v1",
+      }),
+    });
+
+    expect(await reconcile()).toContain("reconcile");
+  });
 });

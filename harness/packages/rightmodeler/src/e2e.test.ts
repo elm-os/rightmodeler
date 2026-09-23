@@ -40,7 +40,11 @@ import { createProvider } from "@rightmodeler/replay";
 import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { listApprovedSwapSets, topologicalRecords } from "./pipeline.js";
+import {
+  listApprovedSwapSets,
+  resolveCheckpointedPipelineCorpus,
+  topologicalRecords,
+} from "./pipeline.js";
 import { Reporter } from "./protocol.js";
 
 const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
@@ -3811,6 +3815,72 @@ describe("built CLI pipeline", () => {
     },
     600_000,
   );
+
+  it("plans a LangGraph family on each step's own node by trajectory position", async () => {
+    const { root, repo, traces } = await langgraphFixtureCopy("position");
+    const modeBConfig = await writeModeBConfig(root, repo, "unused-image");
+    const stepMap = Object.keys(
+      (
+        JSON.parse(await readFile(modeBConfig, "utf8")) as {
+          stepMap: Record<string, string>;
+        }
+      ).stepMap,
+    );
+
+    const result = await runCli([
+      "init",
+      "--through",
+      "shortlist",
+      "--traces",
+      traces,
+      "--modeb-config",
+      modeBConfig,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    const storeRoot = join(repo, ".rightmodeler");
+    const shortlist = (await readStageArtifact(storeRoot, "shortlist")) as {
+      familyPlans: Array<{
+        familyId: string;
+        binding?: string;
+        stepIds: string[];
+        leftOutCases?: number;
+        abstainReason?: unknown;
+      }>;
+      cases: Array<{ family: string; caseId: string; stepId: string }>;
+    };
+    const plan = shortlist.familyPlans.find(
+      ({ familyId }) => familyId === "langgraph_order_lookup",
+    );
+    expect(plan).toMatchObject({ binding: "trace_match" });
+    expect(plan).not.toHaveProperty("leftOutCases");
+    expect(plan).not.toHaveProperty("abstainReason");
+    expect([...plan!.stepIds].sort()).toEqual([...stepMap].sort());
+    const corpus = await resolveCheckpointedPipelineCorpus({
+      repo,
+      store: new FsStore(storeRoot),
+      storeRoot,
+      projectId: "project",
+    });
+    const stepIndexByCase = new Map(
+      corpus.cases.map(({ caseId, content }) => [caseId, content.stepIndex]),
+    );
+    const planCases = shortlist.cases.filter(
+      ({ family }) => family === "langgraph_order_lookup",
+    );
+    expect(planCases).toHaveLength(
+      corpus.cases.filter(
+        ({ content }) => content.family === "langgraph_order_lookup",
+      ).length,
+    );
+    for (const { caseId, stepId } of planCases) {
+      expect(stepId).toBe(stepMap[stepIndexByCase.get(caseId)!]);
+    }
+  }, 120_000);
 
   it("abstains an affected family when the provider catalog drifts before confirmation", async () => {
     const { root, repo, traces } = await langgraphFixtureCopy("catalog-drift");

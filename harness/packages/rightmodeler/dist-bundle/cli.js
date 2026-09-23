@@ -40492,25 +40492,41 @@ function traceStepKey(traceId, stepIndex) {
   return `${traceId}\0${stepIndex}`;
 }
 var SPLITS = ["shortlist", "holdout"];
+function boundStepIds(bindingCase, bindings) {
+  return bindingCase.traceId === void 0 ? void 0 : bindings.get(traceStepKey(bindingCase.traceId, bindingCase.stepIndex));
+}
+function placedHoldoutCases(cases, caseSteps) {
+  return cases.filter(
+    ({ caseId, split }) => split === "holdout" && caseSteps.has(caseId)
+  ).length;
+}
 function bindFamily(input) {
   const keyed = input.sites.filter(({ traceKey }) => traceKey === input.family);
   const caseSteps = /* @__PURE__ */ new Map();
   if (keyed.length === 0) {
-    for (const split of SPLITS) {
-      input.cases.filter((bindingCase) => bindingCase.split === split).forEach((bindingCase, index) => {
-        if (input.pathOrder.length === 0) return;
-        caseSteps.set(
-          bindingCase.caseId,
-          input.pathOrder[index % input.pathOrder.length]
-        );
-      });
+    const leftOut = { ambiguous: 0, unmatched: 0, unreplayable: 0 };
+    for (const bindingCase of input.cases) {
+      const bound = boundStepIds(bindingCase, input.bindings) ?? [];
+      if (bound.length === 0) {
+        leftOut.unmatched += 1;
+        continue;
+      }
+      const site = input.sites.find(({ stepId }) => stepId === bound[0]);
+      if (bound.length > 1 || site?.traceKey !== void 0 || input.sharedStepIds.has(bound[0])) {
+        leftOut.ambiguous += 1;
+      } else if (site?.replayable) {
+        caseSteps.set(bindingCase.caseId, bound[0]);
+      } else {
+        leftOut.unreplayable += 1;
+      }
     }
+    const used2 = new Set(caseSteps.values());
     return {
-      kind: "path_order",
-      stepIds: input.pathOrder,
+      kind: "trace_match",
+      stepIds: input.sites.map(({ stepId }) => stepId).filter((stepId) => used2.has(stepId)),
       caseSteps,
-      holdoutCases: input.cases.filter(({ split }) => split === "holdout").length,
-      unreplayableCases: 0,
+      holdoutCases: placedHoldoutCases(input.cases, caseSteps),
+      leftOut,
       requiredDistinctSteps: MIN_DISTINCT_STEPS
     };
   }
@@ -40522,9 +40538,7 @@ function bindFamily(input) {
     for (const bindingCase of input.cases.filter(
       (candidate) => candidate.split === split
     )) {
-      const bound = bindingCase.traceId === void 0 ? void 0 : input.bindings.get(
-        traceStepKey(bindingCase.traceId, bindingCase.stepIndex)
-      );
+      const bound = boundStepIds(bindingCase, input.bindings);
       const onlySite = bound?.length === 1 && keyedStepIds.has(bound[0]) ? bound[0] : void 0;
       if (onlySite !== void 0) {
         if (replayable.includes(onlySite)) {
@@ -40549,10 +40563,8 @@ function bindFamily(input) {
     kind: "trace_key",
     stepIds,
     caseSteps,
-    holdoutCases: input.cases.filter(
-      ({ caseId, split }) => split === "holdout" && caseSteps.has(caseId)
-    ).length,
-    unreplayableCases,
+    holdoutCases: placedHoldoutCases(input.cases, caseSteps),
+    leftOut: { ambiguous: 0, unmatched: 0, unreplayable: unreplayableCases },
     requiredDistinctSteps: Math.min(MIN_DISTINCT_STEPS, stepIds.length)
   };
 }
@@ -43141,7 +43153,7 @@ var AVAILABILITY_FLOOR = 0.7;
 var GATE_POLICY_BASE_VERSION = "phase-a-v3";
 var REPLAY_PROMPT_REVISION = "replay-prompt-v1";
 var SCAN_REVISION = "scan-trace-key-v1";
-var TRACE_BINDING_REVISION = "trace-key-v1";
+var TRACE_BINDING_REVISION = "trace-match-v1";
 var TRACE_READER_REVISION = "ai-sdk-dialects-v1";
 var API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 function auditResultKey(projectId3) {
@@ -43230,6 +43242,8 @@ var familyPlanSchema = external_exports.strictObject({
   stepIds: external_exports.array(external_exports.string().min(1)),
   abstainReason: external_exports.strictObject({
     reason: external_exports.enum([
+      "ambiguous_call_site_binding",
+      "unmatched_call_site_binding",
       "bound_call_sites_not_replayable",
       "holdout_below_floor_minimum",
       "insufficient_distinct_steps"
@@ -43237,7 +43251,7 @@ var familyPlanSchema = external_exports.strictObject({
     observed: external_exports.number().int().nonnegative(),
     required: external_exports.number().int().nonnegative()
   }).optional(),
-  binding: external_exports.literal("trace_key").optional(),
+  binding: external_exports.enum(["trace_key", "trace_match"]).optional(),
   leftOutCases: external_exports.number().int().positive().optional()
 });
 var replayPlanSchema = external_exports.strictObject({
@@ -44977,30 +44991,35 @@ async function planFamilies(context2, corpus, reconciled, approved) {
       ({ familyId, requestIds }) => [familyId, requestIds]
     )
   );
-  const unusedSteps = new Set(
-    replayableSteps.filter(({ traceKey }) => traceKey === void 0).map(({ stepId }) => stepId)
+  const keyedStepIds = new Set(
+    records.flatMap(
+      ({ stepId, traceKey }) => traceKey === void 0 ? [] : [stepId]
+    )
+  );
+  const keyedFamilies = new Set(
+    records.flatMap(
+      ({ traceKey }) => traceKey === void 0 ? [] : [traceKey]
+    )
+  );
+  const familiesByStep = /* @__PURE__ */ new Map();
+  for (const { content, observation } of corpus.cases) {
+    const bound = observation?.traceId === void 0 ? void 0 : bindings.get(traceStepKey(observation.traceId, content.stepIndex));
+    if (keyedFamilies.has(content.family) || bound?.length !== 1 || keyedStepIds.has(bound[0])) {
+      continue;
+    }
+    familiesByStep.set(
+      bound[0],
+      (familiesByStep.get(bound[0]) ?? /* @__PURE__ */ new Set()).add(content.family)
+    );
+  }
+  const sharedStepIds = new Set(
+    [...familiesByStep].filter(([, reached]) => reached.size > 1).map(([stepId]) => stepId)
   );
   return families.map((family) => {
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family
     );
-    const keyed = records.some(({ traceKey }) => traceKey === family);
-    const unused = replayableSteps.filter(
-      (record2) => unusedSteps.has(record2.stepId)
-    );
-    const preferred = unused.filter(
-      (record2) => !record2.callSite.path.endsWith(".yaml") && !record2.callSite.path.endsWith(".yml")
-    );
-    const assignedRecords = approved === void 0 ? [
-      ...preferred,
-      ...unused.filter((record2) => !preferred.includes(record2))
-    ].slice(0, MIN_DISTINCT_STEPS) : approvedRecords(approved, family, keyed ? replayableSteps : unused);
-    if (approved !== void 0 && assignedRecords.length === 0) {
-      throw new Error(
-        `No distinct replayable call site remains for family ${family}`
-      );
-    }
-    const binding = bindFamily({
+    const binding = approved === void 0 ? bindFamily({
       family,
       cases: familyCases.map((corpusCase) => ({
         caseId: corpusCase.caseId,
@@ -45008,12 +45027,14 @@ async function planFamilies(context2, corpus, reconciled, approved) {
         traceId: corpusCase.observation?.traceId,
         stepIndex: corpusCase.content.stepIndex
       })),
-      sites: approved === void 0 ? sites : [],
-      pathOrder: assignedRecords.map(({ stepId }) => stepId),
+      sites,
+      sharedStepIds,
       bindings
-    });
-    const abstainReason = approved !== void 0 ? void 0 : binding.kind === "trace_key" && binding.caseSteps.size === 0 ? {
-      reason: "bound_call_sites_not_replayable",
+    }) : void 0;
+    const placement = binding ?? approvedPlacement(approved, family, familyCases, replayableSteps);
+    const { leftOut } = placement;
+    const abstainReason = binding === void 0 ? void 0 : binding.caseSteps.size === 0 ? {
+      reason: leftOut.ambiguous > 0 ? "ambiguous_call_site_binding" : leftOut.unreplayable > 0 ? "bound_call_sites_not_replayable" : "unmatched_call_site_binding",
       observed: 0,
       required: familyCases.length
     } : binding.holdoutCases < context2.release.minimumHoldoutCases ? {
@@ -45025,10 +45046,8 @@ async function planFamilies(context2, corpus, reconciled, approved) {
       observed: binding.stepIds.length,
       required: binding.requiredDistinctSteps
     } : void 0;
-    const stepIds = abstainReason === void 0 ? [...binding.stepIds] : [];
-    if (binding.kind === "path_order") {
-      stepIds.forEach((stepId) => unusedSteps.delete(stepId));
-    }
+    const stepIds = abstainReason === void 0 ? [...placement.stepIds] : [];
+    const leftOutCases = leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
     const reproofRequestIds = reproofRequests.get(family) ?? [];
     const evidenceQuestionId2 = evidenceQuestionIdentity({
       corpusVersionId: corpus.corpusVersionId,
@@ -45043,15 +45062,15 @@ async function planFamilies(context2, corpus, reconciled, approved) {
         familyId: family,
         evidenceQuestionId: evidenceQuestionId2,
         cases: familyCases.length,
-        holdoutCases: binding.holdoutCases,
+        holdoutCases: placement.holdoutCases,
         minimumHoldoutCases: context2.release.minimumHoldoutCases,
         stepIds,
         ...abstainReason === void 0 ? {} : { abstainReason },
-        ...keyed ? { binding: "trace_key" } : {},
-        ...binding.unreplayableCases > 0 ? { leftOutCases: binding.unreplayableCases } : {}
+        ...binding !== void 0 ? { binding: binding.kind } : keyedFamilies.has(family) ? { binding: "trace_key" } : {},
+        ...leftOutCases > 0 ? { leftOutCases } : {}
       },
-      caseSteps: binding.caseSteps,
-      unreplayableCases: binding.unreplayableCases
+      caseSteps: placement.caseSteps,
+      leftOut
     };
   });
 }
@@ -45068,14 +45087,25 @@ async function executeShortlist(context2, inputDigestValue) {
   const steps = [];
   const cases = [];
   const sampleSizes = {};
-  for (const { plan: familyPlan, caseSteps, unreplayableCases } of planned) {
+  for (const { plan: familyPlan, caseSteps, leftOut } of planned) {
     const { familyId: family, evidenceQuestionId: evidenceQuestionId2, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
     if (stepIds.length === 0) continue;
-    if (unreplayableCases > 0) {
+    if (familyPlan.leftOutCases !== void 0) {
+      const causes = [
+        [
+          leftOut.ambiguous,
+          "could not be tied to a call site of this family alone"
+        ],
+        [leftOut.unmatched, "matched no scanned call site"],
+        [
+          leftOut.unreplayable,
+          "came from a call site that needs tools or structured output"
+        ]
+      ];
       context2.reporter.warning(
         "family_cases_left_out",
-        `Family ${family}: ${unreplayableCases} of ${familyPlan.cases} traced cases came from a call site that needs tools or structured output, which replay cannot run, and were left out of the replay sample.`
+        `Family ${family}: ${familyPlan.leftOutCases} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes.filter(([count]) => count > 0).map(([count, cause]) => `${count} ${cause}`).join(", ")}.`
       );
     }
     const assignedRecords = stepIds.map((stepId) => recordById.get(stepId));
@@ -45187,6 +45217,28 @@ function requireReplayUsage(usage2, corpusCase) {
     });
   }
   return value;
+}
+function approvedPlacement(approved, family, familyCases, records) {
+  const stepIds = approvedRecords(approved, family, records).map(
+    ({ stepId }) => stepId
+  );
+  if (stepIds.length === 0) {
+    throw new Error(
+      `No distinct replayable call site remains for family ${family}`
+    );
+  }
+  const caseSteps = /* @__PURE__ */ new Map();
+  for (const split of ["shortlist", "holdout"]) {
+    familyCases.filter((corpusCase) => corpusCase.split === split).forEach(({ caseId }, index) => {
+      caseSteps.set(caseId, stepIds[index % stepIds.length]);
+    });
+  }
+  return {
+    stepIds,
+    caseSteps,
+    holdoutCases: familyCases.filter(({ split }) => split === "holdout").length,
+    leftOut: { ambiguous: 0, unmatched: 0, unreplayable: 0 }
+  };
 }
 function approvedRecords(approved, family, records) {
   const selected = [];

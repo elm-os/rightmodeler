@@ -43,6 +43,8 @@ npx rightmodeler init --through corpus --traces /path/to/traces.json --output js
 
 `--traces` accepts a single file or a directory. A directory is read non-recursively as its `.json` and `.jsonl` files in name order; every file must use the same trace format.
 
+Each family is replayed only against the call sites its own traces came from. Traced cases that cannot be tied to one such call site, because several call sites use the traced model or none matches it, are left out of the replay sample with a `family_cases_left_out` warning. A family with no case left abstains before any spend with `ambiguous_call_site_binding` or `unmatched_call_site_binding`. The AI SDK telemetry `functionId` (see below) is the way to tie an AI SDK call site to its family.
+
 ## AI SDK telemetry
 
 The AI SDK emits telemetry in two dialects, and Rightmodeler reads both:
