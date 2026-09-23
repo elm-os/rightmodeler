@@ -68,6 +68,11 @@ before `corpus` or any paid stage. Otherwise early evidence is keyed by provider
 fallback identifiers, and can never be joined to scanner call sites without invalidating
 everything already paid for.
 
+A trace step joins a call site by trajectory position when every call site's model is unknown,
+otherwise by trace key (the literal AI SDK telemetry `functionId` the scanner records on the
+call site), otherwise by model id. A family whose name is a trace key is planned on exactly the
+call sites that carry that key, and those call sites are never assigned to another family.
+
 ## 3. State
 
 ### Typed facts, not one row type
@@ -191,7 +196,8 @@ fire cannot be registered.
 
 The initial set covers the shapes that account for the overwhelming majority of real
 repositories: OpenAI SDK, Anthropic SDK, AI SDK (`generateText`, `streamText`,
-`generateObject`), LangChain for JavaScript and Python, LangGraph, LiteLLM, and model pins in
+`generateObject`, `streamObject`, matched only in files that import them from `ai` or bind
+them by name), LangChain for JavaScript and Python, LangGraph, LiteLLM, and model pins in
 configuration. Breadth arrives through the declarative compiler, which is the actual leverage,
 rather than through a target count. A false call site pollutes the spend map, and the spend map
 is the one artifact a human reads before authorizing spend.
@@ -325,7 +331,10 @@ twenty trajectories presents as `n = 100` and behaves closer to `n = 33`.
 `MIN_DISTINCT_TRAJECTORIES`. The legacy constant counted steps; silently reusing it for
 executions would let one call site across ten cases clear a bar that previously required ten
 call sites. The three minimums are fixed at 10 review trials, 2 distinct steps and 5 distinct
-trajectories, and are not configurable.
+trajectories, and are not configurable. The one structural exception is the distinct-step
+minimum for a family bound by trace key: it is `min(2, bound call sites)`, because that
+family's evidence covers every call site that produced it. The review-trial and trajectory
+minimums never relax.
 
 **Exclusions gate.** A candidate whose call sequence diverges from the recorded one is a
 case-level failure, not a dropped row. Refuse `recommend` above a configured excluded fraction,

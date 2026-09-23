@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   appendFile,
@@ -10,8 +11,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
-import { FsStore, computeRunSpecDigest } from "@rightmodeler/core";
+import { FsStore, compareText, computeRunSpecDigest } from "@rightmodeler/core";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { runPipeline, type PipelineOptions } from "./pipeline.js";
@@ -113,6 +115,32 @@ interface StubProviderModule {
 
 const temporaryDirectories: string[] = [];
 let stub: StubProvider;
+const execFileAsync = promisify(execFile);
+
+function sha256(value: Uint8Array | string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function repositoryDigest(repo: string): Promise<string> {
+  const git = async (args: readonly string[]) =>
+    (await execFileAsync("git", ["-C", repo, ...args], { encoding: "utf8" }))
+      .stdout;
+  const paths = (
+    await git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+  )
+    .split("\0")
+    .filter((path) => path.length > 0)
+    .sort(compareText);
+  return computeRunSpecDigest({
+    revision: (await git(["rev-parse", "--verify", "HEAD"])).trim(),
+    files: await Promise.all(
+      paths.map(async (path) => ({
+        path,
+        sha256: sha256(await readFile(join(repo, path))),
+      })),
+    ),
+  });
+}
 
 function startedStages(reporter: Reporter): string[] {
   return reporter.events
@@ -303,5 +331,56 @@ describe("pipeline staleness", { timeout: 120_000 }, () => {
     });
 
     expect(await ingest()).toContain("ingest");
+  });
+
+  it("recomputes scan and reconcile checkpoints written before trace-key binding", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-staleness-"));
+    temporaryDirectories.push(root);
+    const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+    const store = join(root, "store");
+    const traces = join(root, "traces.json");
+    await writeFile(traces, await readFile(traceFixturePath));
+    const reconcile = async () =>
+      (
+        await runPipeline({
+          repo,
+          store,
+          traces,
+          through: "reconcile",
+          reporter: new Reporter("json", {
+            stdout: () => undefined,
+            stderr: () => undefined,
+          }),
+        })
+      ).executedStages;
+
+    expect(await reconcile()).toContain("reconcile");
+    const fsStore = new FsStore(store);
+    const { stages } = await readSetupState(fsStore, "project");
+    const repository = await repositoryDigest(repo);
+    expect(stages.scan!.inputDigest).toBe(
+      computeRunSpecDigest({
+        stage: "scan",
+        repository,
+        scanner: "scan-trace-key-v1",
+      }),
+    );
+    const scanArtifact = await fsStore.get(stages.scan!.outputKey);
+    await writeCheckpoint(fsStore, "project", "scan", {
+      ...stages.scan!,
+      inputDigest: repository,
+    });
+    await writeCheckpoint(fsStore, "project", "reconcile", {
+      ...stages.reconcile!,
+      inputDigest: computeRunSpecDigest({
+        stage: "reconcile",
+        upstream: stages.ingest!.inputDigest,
+        scan: sha256(scanArtifact!.body),
+      }),
+    });
+
+    expect(await reconcile()).toEqual(
+      expect.arrayContaining(["scan", "reconcile"]),
+    );
   });
 });

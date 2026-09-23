@@ -62,6 +62,12 @@ const langgraphTracesPath = fileURLToPath(
 const tracesPath = fileURLToPath(
   new URL("../../../fixtures/traces/otel-genai.json", import.meta.url),
 );
+const aiSdkAppPath = fileURLToPath(
+  new URL("../../../fixtures/ai-sdk-app", import.meta.url),
+);
+const aiSdkLegacyTracesPath = fileURLToPath(
+  new URL("../../../fixtures/traces/ai-sdk-v7-legacy.jsonl", import.meta.url),
+);
 const promptfooCommandPath = fileURLToPath(
   new URL("../../../fixtures/promptfoo-stub/run.mjs", import.meta.url),
 );
@@ -188,6 +194,17 @@ async function fixtureCopy(
   temporaryDirectories.push(root);
   const repo = join(root, "demo-app");
   await cp(demoAppPath, repo, { recursive: true });
+  await initializeFixtureRepository(repo);
+  return { root, repo };
+}
+
+async function aiSdkFixtureCopy(
+  label: string,
+): Promise<{ root: string; repo: string }> {
+  const root = await mkdtemp(join(tmpdir(), `rightmodeler-${label}-`));
+  temporaryDirectories.push(root);
+  const repo = join(root, "ai-sdk-app");
+  await cp(aiSdkAppPath, repo, { recursive: true });
   await initializeFixtureRepository(repo);
   return { root, repo };
 }
@@ -2116,6 +2133,50 @@ describe("built CLI pipeline", () => {
       await stub.close();
     }
   }, 60_000);
+
+  it("replays a single call site bound by its functionId without a distinct-step abstention", async () => {
+    const { repo } = await aiSdkFixtureCopy("single-bound-call-site");
+    const stub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          aiSdkLegacyTracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_BOUND_CALL_SITE_API_KEY",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_BOUND_CALL_SITE_API_KEY: secret } },
+      );
+
+      expect([0, 1], result.stderr).toContain(result.code);
+      const output = JSON.parse(result.stdout) as {
+        verdicts: Array<{
+          familyId: string;
+          evaluatorKinds: Array<{ nDistinctSteps: number }>;
+          abstainReason?: { reason: string };
+        }>;
+      };
+      const triage = output.verdicts.find(
+        ({ familyId }) => familyId === "triage",
+      );
+      expect(triage).toBeDefined();
+      expect(
+        triage!.evaluatorKinds.map(({ nDistinctSteps }) => nDistinctSteps),
+      ).toEqual([1]);
+      expect(triage!.abstainReason?.reason).not.toBe(
+        "insufficient_distinct_steps",
+      );
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
 
   it("abstains and reports every family when shortlist evidence is entirely missing", async () => {
     const { repo } = await fixtureCopy("missing-shortlist-verdicts");

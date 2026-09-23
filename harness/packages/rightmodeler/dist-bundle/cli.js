@@ -6103,18 +6103,18 @@ var require_validate = __commonJS({
         const { schemaCode } = this;
         this.fail((0, codegen_1._)`${schemaCode} !== undefined && (${(0, codegen_1.or)(this.invalid$data(), condition)})`);
       }
-      error(append, errorParams, errorPaths) {
+      error(append2, errorParams, errorPaths) {
         if (errorParams) {
           this.setParams(errorParams);
-          this._error(append, errorPaths);
+          this._error(append2, errorPaths);
           this.setParams({});
           return;
         }
-        this._error(append, errorPaths);
+        this._error(append2, errorPaths);
       }
-      _error(append, errorPaths) {
+      _error(append2, errorPaths) {
         ;
-        (append ? errors_1.reportExtraError : errors_1.reportError)(this, this.def.error, errorPaths);
+        (append2 ? errors_1.reportExtraError : errors_1.reportError)(this, this.def.error, errorPaths);
       }
       $dataError() {
         (0, errors_1.reportError)(this, this.def.$dataError || errors_1.keyword$DataError);
@@ -25672,6 +25672,7 @@ var stepRecordSchema = external_exports.strictObject({
   capabilityRequirements: external_exports.array(external_exports.string()),
   evaluatorLadder: external_exports.array(external_exports.string()),
   currentModel: external_exports.string().min(1).nullable(),
+  traceKey: external_exports.string().min(1).optional(),
   observedCostUsd: external_exports.number().nonnegative(),
   downstreamStepIds: external_exports.array(external_exports.string().min(1)),
   candidates: external_exports.array(external_exports.json()),
@@ -26133,6 +26134,7 @@ function aggregate(facts, { gatePolicyVersion, qualityFloor, availabilityFloor }
 function aggregateGroup(facts, gatePolicyVersion, qualityFloor, availabilityFloor, cascadeFindings) {
   const first = facts[0];
   assertConsistentGroup(facts, first);
+  const distinctStepFloor = first.traceBoundCallSites === void 0 ? MIN_DISTINCT_STEPS : Math.min(MIN_DISTINCT_STEPS, first.traceBoundCallSites);
   const included = facts.filter((fact) => !fact.requiredAbstention && fact.execution.attribution === "ok" && fact.assessment !== void 0 && evidenceExclusionReason(fact) === void 0);
   const excludedExecutions = facts.filter((fact) => evidenceExclusionReason(fact) !== void 0).length;
   const excludedFraction = excludedExecutions / facts.length;
@@ -26160,6 +26162,7 @@ function aggregateGroup(facts, gatePolicyVersion, qualityFloor, availabilityFloo
   const satisfiedRequiredAbstentions = facts.filter((fact) => fact.requiredAbstention && fact.execution.attribution === "ok" && fact.execution.terminalOutcome === "abstain").length;
   const abstainReason = findAbstainReason({
     evaluatorKinds,
+    distinctStepFloor,
     availability,
     availabilityFloor,
     requiresDeterministicEvidence: facts.some((fact) => fact.requiresDeterministicEvidence),
@@ -26295,8 +26298,8 @@ function findAbstainReason(input) {
     return abstention("insufficient_review_trials", reviewTrials, MIN_REVIEW_TRIALS);
   }
   const distinctSteps = Math.min(...input.evaluatorKinds.map((kind) => kind.nDistinctSteps));
-  if (distinctSteps < MIN_DISTINCT_STEPS) {
-    return abstention("insufficient_distinct_steps", distinctSteps, MIN_DISTINCT_STEPS);
+  if (distinctSteps < input.distinctStepFloor) {
+    return abstention("insufficient_distinct_steps", distinctSteps, input.distinctStepFloor);
   }
   const distinctTrajectories = Math.min(...input.evaluatorKinds.map((kind) => kind.nTrajectories));
   if (distinctTrajectories < MIN_DISTINCT_TRAJECTORIES) {
@@ -26432,6 +26435,9 @@ function validateFact(fact) {
   if (!Number.isFinite(fact.referenceCeilingMultiplier) || fact.referenceCeilingMultiplier < 0 || fact.referenceCeilingMultiplier > 1) {
     throw new RangeError("referenceCeilingMultiplier must be a finite number in [0, 1]");
   }
+  if (fact.traceBoundCallSites !== void 0 && (!Number.isSafeInteger(fact.traceBoundCallSites) || fact.traceBoundCallSites < 1)) {
+    throw new RangeError("traceBoundCallSites must be a positive safe integer");
+  }
   if (fact.assessmentAbsentReason !== void 0 && fact.assessmentAbsentReason.length === 0) {
     throw new TypeError("assessmentAbsentReason must not be empty");
   }
@@ -26479,7 +26485,7 @@ function assertConsistentGroup(facts, first) {
     throw new Error("expectedEvaluatorAssignments must be predeclared");
   }
   for (const fact of facts.slice(1)) {
-    if (fact.familyId !== first.familyId || fact.candidateFamily !== first.candidateFamily || fact.candidateCostUsd !== first.candidateCostUsd || fact.referenceCeilingMultiplier !== first.referenceCeilingMultiplier || !sameStrings(fact.expectedEvaluatorAssignments.map((assignment) => assignmentKey(assignment.caseId, assignment.stratumId, assignment.evaluatorKind)).sort(compareText), first.expectedEvaluatorAssignments.map((assignment) => assignmentKey(assignment.caseId, assignment.stratumId, assignment.evaluatorKind)).sort(compareText))) {
+    if (fact.familyId !== first.familyId || fact.candidateFamily !== first.candidateFamily || fact.candidateCostUsd !== first.candidateCostUsd || fact.referenceCeilingMultiplier !== first.referenceCeilingMultiplier || fact.traceBoundCallSites !== first.traceBoundCallSites || !sameStrings(fact.expectedEvaluatorAssignments.map((assignment) => assignmentKey(assignment.caseId, assignment.stratumId, assignment.evaluatorKind)).sort(compareText), first.expectedEvaluatorAssignments.map((assignment) => assignmentKey(assignment.caseId, assignment.stratumId, assignment.evaluatorKind)).sort(compareText))) {
       throw new Error(`inconsistent materialization for evidence question ${first.execution.evidenceQuestionId}`);
     }
   }
@@ -31734,7 +31740,7 @@ function createCallMatcher(options) {
         const position = match.index;
         const matchedText = extractCallText(content, position);
         const callee = match.groups?.callee ?? match[0].replace(/\s*\($/, "");
-        matches.push(candidateFromText({
+        const candidate = candidateFromText({
           slug: options.slug,
           label: options.label,
           content,
@@ -31743,7 +31749,8 @@ function createCallMatcher(options) {
           callee,
           needsStructuredOutput: options.needsStructuredOutput,
           needsTools: options.needsTools
-        }));
+        });
+        matches.push(options.refine?.(candidate, matchedText) ?? candidate);
       }
       return matches;
     }
@@ -32600,35 +32607,63 @@ var breadthMatchers = Object.freeze([
 // ../scanner/dist/matchers/builtins.js
 var javascriptFiles2 = ["**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"];
 var pythonFiles2 = ["**/*.py"];
+function aiSdkFileAnchor(callee) {
+  return new RegExp(`\\bfrom\\s*["']ai["']|\\brequire\\s*\\(\\s*["']ai["']\\s*\\)|\\bimport\\s*\\(\\s*["']ai["']\\s*\\)|\\bwrapAISDK\\s*\\(|\\bimport\\s*\\{[^}]*\\b${callee}\\b[^}]*\\}\\s*from\\s*["'][^"']+["']`);
+}
+var outputTextOnly = /\b(?:experimental_)?output\s*:\s*Output\.text\s*\(/;
+var telemetryFunctionId = /\b(?:experimental_)?telemetry\s*:\s*\{(?:[^{}]|\{[^{}]*\})*?\bfunctionId\s*:\s*(["'])([^"'\\\r\n]+)\1/;
+function aiSdkCallDetails(candidate, callText) {
+  const keys = candidate.normalizedCallShape.argumentKeys;
+  const traceKey = telemetryFunctionId.exec(callText)?.[2];
+  return {
+    ...candidate,
+    needsStructuredOutput: candidate.needsStructuredOutput || (keys.includes("output") || keys.includes("experimental_output")) && !outputTextOnly.test(callText),
+    ...traceKey === void 0 ? {} : { traceKey }
+  };
+}
+function aiSdkCallMatcher(options) {
+  return createCallMatcher({
+    slug: options.slug,
+    description: options.description,
+    noiseTier: "precise",
+    filePatterns: javascriptFiles2,
+    examples: [options.example],
+    pattern: new RegExp(`(?<!\\bfunction\\s{1,20})\\b(?<callee>${options.callee})\\s*\\(`),
+    fileAnchor: aiSdkFileAnchor(options.callee),
+    refine: aiSdkCallDetails,
+    label: options.label,
+    needsStructuredOutput: options.needsStructuredOutput
+  });
+}
 var callMatchers2 = [
-  createCallMatcher({
+  aiSdkCallMatcher({
     slug: "js-ai-sdk-generate-text",
     description: "AI SDK text generation calls",
-    noiseTier: "precise",
-    filePatterns: javascriptFiles2,
-    examples: ['generateText({ model: "acme/large-1", prompt: input })'],
-    pattern: /\b(?<callee>generateText)\s*\(/,
+    callee: "generateText",
+    example: 'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt: input })',
     label: "AI SDK generateText"
   }),
-  createCallMatcher({
+  aiSdkCallMatcher({
     slug: "js-ai-sdk-stream-text",
     description: "AI SDK streaming text generation calls",
-    noiseTier: "precise",
-    filePatterns: javascriptFiles2,
-    examples: ['streamText({ model: "acme/large-1", prompt: input })'],
-    pattern: /\b(?<callee>streamText)\s*\(/,
+    callee: "streamText",
+    example: 'import { streamText } from "ai";\nstreamText({ model: "acme/large-1", prompt: input })',
     label: "AI SDK streamText"
   }),
-  createCallMatcher({
+  aiSdkCallMatcher({
     slug: "js-ai-sdk-generate-object",
     description: "AI SDK structured object generation calls",
-    noiseTier: "precise",
-    filePatterns: javascriptFiles2,
-    examples: [
-      'generateObject({ model: "acme/large-1", schema, prompt: input })'
-    ],
-    pattern: /\b(?<callee>generateObject)\s*\(/,
+    callee: "generateObject",
+    example: 'import { generateObject } from "ai";\ngenerateObject({ model: "acme/large-1", schema, prompt: input })',
     label: "AI SDK generateObject",
+    needsStructuredOutput: true
+  }),
+  aiSdkCallMatcher({
+    slug: "js-ai-sdk-stream-object",
+    description: "AI SDK streaming structured object calls",
+    callee: "streamObject",
+    example: 'import { streamObject } from "ai";\nstreamObject({ model: "acme/large-1", schema, prompt: input })',
+    label: "AI SDK streamObject",
     needsStructuredOutput: true
   }),
   createCallMatcher({
@@ -32792,6 +32827,7 @@ var builtinMatchers = Object.freeze([
 
 // ../scanner/dist/reconcile.js
 var AMBIGUOUS_MODEL_ID_REASON = "multiple_call_sites_share_model_id";
+var AMBIGUOUS_TRACE_KEY_REASON = "multiple_call_sites_share_trace_key";
 function canJoinByTrajectoryPosition(normalizedSteps, stepRecords) {
   if (stepRecords.length === 0 || !stepRecords.every(({ currentModel }) => currentModel === null)) {
     return false;
@@ -32854,21 +32890,44 @@ function enrichCallSites(traceSteps, stepRecords) {
     ];
   }));
 }
+function append(groups, key, value) {
+  const group = groups.get(key);
+  if (group === void 0)
+    groups.set(key, [value]);
+  else
+    group.push(value);
+}
+function groupBy(records, key) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const record2 of records) {
+    const value = key(record2);
+    if (value !== null && value !== void 0)
+      append(groups, value, record2);
+  }
+  return groups;
+}
+function joinCandidates(normalizedStep, traceIndex, candidates, reason, via) {
+  if (candidates.length === 1) {
+    return {
+      normalizedStep,
+      traceIndex,
+      status: "matched",
+      stepId: candidates[0].stepId,
+      via
+    };
+  }
+  return {
+    normalizedStep,
+    traceIndex,
+    status: "ambiguous",
+    candidateStepIds: candidates.map(({ stepId }) => stepId).sort(),
+    reason,
+    via
+  };
+}
 function reconcile(normalizedSteps, stepRecords) {
-  const sitesByModel = /* @__PURE__ */ new Map();
-  for (const record2 of stepRecords) {
-    if (record2.currentModel === null)
-      continue;
-    const records = sitesByModel.get(record2.currentModel) ?? [];
-    records.push(record2);
-    sitesByModel.set(record2.currentModel, records);
-  }
-  const tracesByModel = /* @__PURE__ */ new Map();
-  for (const [traceIndex, step] of normalizedSteps.entries()) {
-    const indexes = tracesByModel.get(step.model) ?? [];
-    indexes.push(traceIndex);
-    tracesByModel.set(step.model, indexes);
-  }
+  const sitesByModel = groupBy(stepRecords, (record2) => record2.currentModel);
+  const sitesByTraceKey = groupBy(stepRecords, (record2) => record2.traceKey);
   const joinByTrajectoryPosition = canJoinByTrajectoryPosition(normalizedSteps, stepRecords);
   const traceSteps = normalizedSteps.map((normalizedStep, traceIndex) => {
     if (joinByTrajectoryPosition) {
@@ -32876,51 +32935,47 @@ function reconcile(normalizedSteps, stepRecords) {
         normalizedStep,
         traceIndex,
         status: "matched",
-        stepId: stepRecords[normalizedStep.stepIndex].stepId
+        stepId: stepRecords[normalizedStep.stepIndex].stepId,
+        via: "trajectory_position"
       };
+    }
+    const keyed = normalizedStep.family === void 0 ? [] : sitesByTraceKey.get(normalizedStep.family) ?? [];
+    if (keyed.length > 0) {
+      const sameModel = keyed.filter(({ currentModel }) => currentModel === normalizedStep.model);
+      return joinCandidates(normalizedStep, traceIndex, sameModel.length > 0 ? sameModel : keyed, AMBIGUOUS_TRACE_KEY_REASON, "trace_key");
     }
     const candidates = sitesByModel.get(normalizedStep.model) ?? [];
-    if (candidates.length === 1) {
-      return {
-        normalizedStep,
-        traceIndex,
-        status: "matched",
-        stepId: candidates[0].stepId
-      };
+    if (candidates.length === 0) {
+      return { normalizedStep, traceIndex, status: "unmatched" };
     }
-    if (candidates.length > 1) {
-      return {
-        normalizedStep,
-        traceIndex,
-        status: "ambiguous",
-        candidateStepIds: candidates.map(({ stepId }) => stepId).sort(),
-        reason: AMBIGUOUS_MODEL_ID_REASON
-      };
-    }
-    return { normalizedStep, traceIndex, status: "unmatched" };
+    return joinCandidates(normalizedStep, traceIndex, candidates, AMBIGUOUS_MODEL_ID_REASON, "model");
   });
+  const matchedIndexes = /* @__PURE__ */ new Map();
+  const ambiguousSteps = /* @__PURE__ */ new Map();
+  for (const traceStep of traceSteps) {
+    if (traceStep.status === "matched") {
+      append(matchedIndexes, traceStep.stepId, traceStep.traceIndex);
+    } else if (traceStep.status === "ambiguous") {
+      for (const stepId of traceStep.candidateStepIds) {
+        append(ambiguousSteps, stepId, traceStep);
+      }
+    }
+  }
   const enrichedByStepId = enrichCallSites(traceSteps, stepRecords);
   const callSites = stepRecords.map((original) => {
     const stepRecord = enrichedByStepId.get(original.stepId);
-    if (joinByTrajectoryPosition) {
-      return {
-        stepRecord,
-        status: "matched",
-        traceIndexes: traceSteps.flatMap((traceStep) => traceStep.stepId === original.stepId ? [traceStep.traceIndex] : [])
-      };
+    const matched = matchedIndexes.get(original.stepId);
+    if (matched !== void 0) {
+      return { stepRecord, status: "matched", traceIndexes: matched };
     }
-    const traceIndexes = original.currentModel === null ? [] : tracesByModel.get(original.currentModel) ?? [];
-    const modelSites = original.currentModel === null ? [] : sitesByModel.get(original.currentModel) ?? [];
-    if (traceIndexes.length > 0 && modelSites.length > 1) {
+    const ambiguous = ambiguousSteps.get(original.stepId);
+    if (ambiguous !== void 0) {
       return {
         stepRecord,
         status: "ambiguous",
-        traceIndexes,
-        reason: AMBIGUOUS_MODEL_ID_REASON
+        traceIndexes: ambiguous.map(({ traceIndex }) => traceIndex),
+        reason: ambiguous[0].reason
       };
-    }
-    if (traceIndexes.length > 0) {
-      return { stepRecord, status: "matched", traceIndexes };
     }
     return { stepRecord, status: "unmatched", traceIndexes: [] };
   });
@@ -33030,6 +33085,7 @@ function scanRepository(rootDir, registry2, projectId3) {
           capabilityRequirements: capabilityRequirements(candidate),
           evaluatorLadder: [],
           currentModel: candidate.modelId ?? null,
+          ...candidate.traceKey === void 0 ? {} : { traceKey: candidate.traceKey },
           observedCostUsd: 0,
           downstreamStepIds: [],
           candidates: [],
@@ -40431,6 +40487,76 @@ function objectValue2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
 }
 
+// src/family-binding.ts
+function traceStepKey(traceId, stepIndex) {
+  return `${traceId}\0${stepIndex}`;
+}
+var SPLITS = ["shortlist", "holdout"];
+function bindFamily(input) {
+  const keyed = input.sites.filter(({ traceKey }) => traceKey === input.family);
+  const caseSteps = /* @__PURE__ */ new Map();
+  if (keyed.length === 0) {
+    for (const split of SPLITS) {
+      input.cases.filter((bindingCase) => bindingCase.split === split).forEach((bindingCase, index) => {
+        if (input.pathOrder.length === 0) return;
+        caseSteps.set(
+          bindingCase.caseId,
+          input.pathOrder[index % input.pathOrder.length]
+        );
+      });
+    }
+    return {
+      kind: "path_order",
+      stepIds: input.pathOrder,
+      caseSteps,
+      holdoutCases: input.cases.filter(({ split }) => split === "holdout").length,
+      unreplayableCases: 0,
+      requiredDistinctSteps: MIN_DISTINCT_STEPS
+    };
+  }
+  const keyedStepIds = new Set(keyed.map(({ stepId }) => stepId));
+  const replayable = keyed.filter((site) => site.replayable).map(({ stepId }) => stepId);
+  let unreplayableCases = 0;
+  for (const split of SPLITS) {
+    let next = 0;
+    for (const bindingCase of input.cases.filter(
+      (candidate) => candidate.split === split
+    )) {
+      const bound = bindingCase.traceId === void 0 ? void 0 : input.bindings.get(
+        traceStepKey(bindingCase.traceId, bindingCase.stepIndex)
+      );
+      const onlySite = bound?.length === 1 && keyedStepIds.has(bound[0]) ? bound[0] : void 0;
+      if (onlySite !== void 0) {
+        if (replayable.includes(onlySite)) {
+          caseSteps.set(bindingCase.caseId, onlySite);
+        } else {
+          unreplayableCases += 1;
+        }
+      } else if (replayable.length > 0) {
+        caseSteps.set(
+          bindingCase.caseId,
+          replayable[next % replayable.length]
+        );
+        next += 1;
+      } else {
+        unreplayableCases += 1;
+      }
+    }
+  }
+  const used = new Set(caseSteps.values());
+  const stepIds = replayable.filter((stepId) => used.has(stepId));
+  return {
+    kind: "trace_key",
+    stepIds,
+    caseSteps,
+    holdoutCases: input.cases.filter(
+      ({ caseId, split }) => split === "holdout" && caseSteps.has(caseId)
+    ).length,
+    unreplayableCases,
+    requiredDistinctSteps: Math.min(MIN_DISTINCT_STEPS, stepIds.length)
+  };
+}
+
 // src/evaluators/shared.ts
 function resolveScoringConfig(config2) {
   if (config2.scorers.length === 0) {
@@ -43014,6 +43140,8 @@ var DEFAULT_QUALITY_FLOOR = 0.85;
 var AVAILABILITY_FLOOR = 0.7;
 var GATE_POLICY_BASE_VERSION = "phase-a-v3";
 var REPLAY_PROMPT_REVISION = "replay-prompt-v1";
+var SCAN_REVISION = "scan-trace-key-v1";
+var TRACE_BINDING_REVISION = "trace-key-v1";
 var TRACE_READER_REVISION = "ai-sdk-dialects-v1";
 var API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 function auditResultKey(projectId3) {
@@ -43034,7 +43162,15 @@ var reconcileOutputSchema = external_exports.strictObject({
   matchedCallSites: external_exports.number().int().nonnegative(),
   ambiguousCallSites: external_exports.number().int().nonnegative(),
   unmatchedCallSites: external_exports.number().int().nonnegative(),
-  ambiguityReasons: external_exports.array(external_exports.string())
+  ambiguityReasons: external_exports.array(external_exports.string()),
+  traceStepBindings: external_exports.array(
+    external_exports.strictObject({
+      traceId: external_exports.string().min(1),
+      stepIndex: external_exports.number().int().nonnegative(),
+      stepIds: external_exports.array(external_exports.string().min(1)),
+      via: external_exports.enum(["trajectory_position", "trace_key", "model"]).optional()
+    })
+  ).default([])
 });
 var ingestOutputSchema = external_exports.strictObject({
   format: external_exports.enum(traceAdapters.map(({ name }) => name)),
@@ -43094,12 +43230,15 @@ var familyPlanSchema = external_exports.strictObject({
   stepIds: external_exports.array(external_exports.string().min(1)),
   abstainReason: external_exports.strictObject({
     reason: external_exports.enum([
+      "bound_call_sites_not_replayable",
       "holdout_below_floor_minimum",
       "insufficient_distinct_steps"
     ]),
     observed: external_exports.number().int().nonnegative(),
     required: external_exports.number().int().nonnegative()
-  }).optional()
+  }).optional(),
+  binding: external_exports.literal("trace_key").optional(),
+  leftOutCases: external_exports.number().int().positive().optional()
 });
 var replayPlanSchema = external_exports.strictObject({
   top: external_exports.number().int().positive(),
@@ -43365,13 +43504,13 @@ async function planStages(context2, options) {
   ) && result2.some(
     ({ stage, state: state2 }) => stage === "corpus" && state2 === "complete"
   ) && stages.includes("shortlist")) {
-    const records = (await loadReconcile(context2)).records;
+    const reconciled = await loadReconcile(context2);
     const corpus = await resolveCheckpointedPipelineCorpus(context2);
     const approved = context2.approvedRunSpecDigest === void 0 ? void 0 : await approvedSwapSetByDigest(context2, context2.approvedRunSpecDigest);
     return {
       stages: result2,
       policy: context2.release.effective,
-      familyPlans: await planFamilies(context2, corpus, records, approved)
+      familyPlans: (await planFamilies(context2, corpus, reconciled, approved)).map(({ plan }) => plan)
     };
   }
   return { stages: result2, policy: context2.release.effective };
@@ -44337,12 +44476,11 @@ async function scanArtifactDigest(context2, state) {
 }
 async function inputDigest(stage, context2, state) {
   if (stage === "scan") {
-    const repository = await contextRepositoryDigest(context2);
-    if (context2.matchersPath === void 0) return repository;
     return digest({
       stage,
-      repository,
-      matchers: sha256(await readFile10(context2.matchersPath))
+      repository: await contextRepositoryDigest(context2),
+      scanner: SCAN_REVISION,
+      ...context2.matchersPath === void 0 ? {} : { matchers: sha256(await readFile10(context2.matchersPath)) }
     });
   }
   if (stage === "ingest") {
@@ -44361,6 +44499,7 @@ async function inputDigest(stage, context2, state) {
   const extra = {};
   if (stage === "reconcile") {
     extra.scan = await scanArtifactDigest(context2, state);
+    extra.binding = TRACE_BINDING_REVISION;
     if (context2.modeBConfig !== void 0) {
       extra.stepMap = context2.modeBConfig.stepMap;
     }
@@ -44713,7 +44852,11 @@ async function executeReconcile(context2, inputDigestValue) {
   })();
   const normalizedSteps = records.every(
     ({ currentModel }) => currentModel === null
-  ) ? ingestOutput.runs.filter(({ steps }) => steps.length === records.length).flatMap(({ steps }) => steps) : ingestOutput.runs.flatMap(({ steps }) => steps);
+  ) ? ingestOutput.runs.filter(({ steps }) => steps.length === records.length).flatMap(
+    ({ traceId, steps }) => steps.map((step) => ({ ...step, traceId }))
+  ) : ingestOutput.runs.flatMap(
+    ({ traceId, steps }) => steps.map((step) => ({ ...step, traceId }))
+  );
   const result2 = reconcile(normalizedSteps, records);
   const reconciledRecords = result2.callSites.map(
     ({ stepRecord }) => stepRecord
@@ -44744,7 +44887,15 @@ async function executeReconcile(context2, inputDigestValue) {
           ({ reason }) => reason === void 0 ? [] : [reason]
         )
       )
-    ]
+    ],
+    traceStepBindings: result2.traceSteps.map(
+      ({ normalizedStep, status, stepId, candidateStepIds, via }) => ({
+        traceId: normalizedStep.traceId,
+        stepIndex: normalizedStep.stepIndex,
+        stepIds: status === "matched" ? [stepId] : status === "ambiguous" ? [...candidateStepIds] : [],
+        ...via === void 0 ? {} : { via }
+      })
+    )
   });
   return key;
 }
@@ -44792,13 +44943,23 @@ async function executeAuditSample(context2, inputDigestValue) {
   await putImmutableJson(context2.store, key, worksheet);
   return key;
 }
-async function planFamilies(context2, corpus, records, approved) {
-  const replayableSteps = records.filter(
-    (record2) => !record2.capabilityRequirements.includes("tools") && !record2.capabilityRequirements.includes("structured_output")
-  );
+async function planFamilies(context2, corpus, reconciled, approved) {
+  const { records } = reconciled;
+  const replayable = (record2) => !record2.capabilityRequirements.includes("tools") && !record2.capabilityRequirements.includes("structured_output");
+  const replayableSteps = records.filter(replayable);
   if (replayableSteps.length === 0) {
     throw noReplayableCallSites();
   }
+  const sites = records.map((record2) => ({
+    stepId: record2.stepId,
+    ...record2.traceKey === void 0 ? {} : { traceKey: record2.traceKey },
+    replayable: replayable(record2)
+  }));
+  const bindings = new Map(
+    reconciled.traceStepBindings.map(
+      ({ traceId, stepIndex, stepIds }) => [traceStepKey(traceId, stepIndex), stepIds]
+    )
+  );
   const families = [
     ...new Set(corpus.cases.map(({ content }) => content.family))
   ].filter(
@@ -44816,11 +44977,14 @@ async function planFamilies(context2, corpus, records, approved) {
       ({ familyId, requestIds }) => [familyId, requestIds]
     )
   );
-  const unusedSteps = new Set(replayableSteps.map(({ stepId }) => stepId));
+  const unusedSteps = new Set(
+    replayableSteps.filter(({ traceKey }) => traceKey === void 0).map(({ stepId }) => stepId)
+  );
   return families.map((family) => {
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family
     );
+    const keyed = records.some(({ traceKey }) => traceKey === family);
     const unused = replayableSteps.filter(
       (record2) => unusedSteps.has(record2.stepId)
     );
@@ -44830,26 +44994,41 @@ async function planFamilies(context2, corpus, records, approved) {
     const assignedRecords = approved === void 0 ? [
       ...preferred,
       ...unused.filter((record2) => !preferred.includes(record2))
-    ].slice(0, MIN_DISTINCT_STEPS) : approvedRecords(approved, family, unused);
+    ].slice(0, MIN_DISTINCT_STEPS) : approvedRecords(approved, family, keyed ? replayableSteps : unused);
     if (approved !== void 0 && assignedRecords.length === 0) {
       throw new Error(
         `No distinct replayable call site remains for family ${family}`
       );
     }
-    const holdoutCases = familyCases.filter(
-      ({ split }) => split === "holdout"
-    ).length;
-    const abstainReason = approved !== void 0 ? void 0 : holdoutCases < context2.release.minimumHoldoutCases ? {
+    const binding = bindFamily({
+      family,
+      cases: familyCases.map((corpusCase) => ({
+        caseId: corpusCase.caseId,
+        split: corpusCase.split,
+        traceId: corpusCase.observation?.traceId,
+        stepIndex: corpusCase.content.stepIndex
+      })),
+      sites: approved === void 0 ? sites : [],
+      pathOrder: assignedRecords.map(({ stepId }) => stepId),
+      bindings
+    });
+    const abstainReason = approved !== void 0 ? void 0 : binding.kind === "trace_key" && binding.caseSteps.size === 0 ? {
+      reason: "bound_call_sites_not_replayable",
+      observed: 0,
+      required: familyCases.length
+    } : binding.holdoutCases < context2.release.minimumHoldoutCases ? {
       reason: "holdout_below_floor_minimum",
-      observed: holdoutCases,
+      observed: binding.holdoutCases,
       required: context2.release.minimumHoldoutCases
-    } : assignedRecords.length < MIN_DISTINCT_STEPS ? {
+    } : binding.stepIds.length < binding.requiredDistinctSteps ? {
       reason: "insufficient_distinct_steps",
-      observed: assignedRecords.length,
-      required: MIN_DISTINCT_STEPS
+      observed: binding.stepIds.length,
+      required: binding.requiredDistinctSteps
     } : void 0;
-    const stepIds = abstainReason === void 0 ? assignedRecords.map(({ stepId }) => stepId) : [];
-    stepIds.forEach((stepId) => unusedSteps.delete(stepId));
+    const stepIds = abstainReason === void 0 ? [...binding.stepIds] : [];
+    if (binding.kind === "path_order") {
+      stepIds.forEach((stepId) => unusedSteps.delete(stepId));
+    }
     const reproofRequestIds = reproofRequests.get(family) ?? [];
     const evidenceQuestionId2 = evidenceQuestionIdentity({
       corpusVersionId: corpus.corpusVersionId,
@@ -44860,31 +45039,45 @@ async function planFamilies(context2, corpus, records, approved) {
       reproofRequestIds
     });
     return {
-      familyId: family,
-      evidenceQuestionId: evidenceQuestionId2,
-      cases: familyCases.length,
-      holdoutCases,
-      minimumHoldoutCases: context2.release.minimumHoldoutCases,
-      stepIds,
-      ...abstainReason === void 0 ? {} : { abstainReason }
+      plan: {
+        familyId: family,
+        evidenceQuestionId: evidenceQuestionId2,
+        cases: familyCases.length,
+        holdoutCases: binding.holdoutCases,
+        minimumHoldoutCases: context2.release.minimumHoldoutCases,
+        stepIds,
+        ...abstainReason === void 0 ? {} : { abstainReason },
+        ...keyed ? { binding: "trace_key" } : {},
+        ...binding.unreplayableCases > 0 ? { leftOutCases: binding.unreplayableCases } : {}
+      },
+      caseSteps: binding.caseSteps,
+      unreplayableCases: binding.unreplayableCases
     };
   });
 }
 async function executeShortlist(context2, inputDigestValue) {
-  const records = (await loadReconcile(context2)).records;
+  const reconciled = await loadReconcile(context2);
+  const { records } = reconciled;
   const runs = (await loadScrub(context2)).runs;
   const corpus = await resolveCheckpointedPipelineCorpus(context2);
   const approved = context2.approvedRunSpecDigest === void 0 ? void 0 : await approvedSwapSetByDigest(context2, context2.approvedRunSpecDigest);
-  const familyPlans = await planFamilies(context2, corpus, records, approved);
+  const planned = await planFamilies(context2, corpus, reconciled, approved);
+  const familyPlans = planned.map(({ plan }) => plan);
   const recordById = new Map(records.map((record2) => [record2.stepId, record2]));
   const usageByCase = replayUsageByCase(runs);
   const steps = [];
   const cases = [];
   const sampleSizes = {};
-  for (const familyPlan of familyPlans) {
+  for (const { plan: familyPlan, caseSteps, unreplayableCases } of planned) {
     const { familyId: family, evidenceQuestionId: evidenceQuestionId2, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
     if (stepIds.length === 0) continue;
+    if (unreplayableCases > 0) {
+      context2.reporter.warning(
+        "family_cases_left_out",
+        `Family ${family}: ${unreplayableCases} of ${familyPlan.cases} traced cases came from a call site that needs tools or structured output, which replay cannot run, and were left out of the replay sample.`
+      );
+    }
     const assignedRecords = stepIds.map((stepId) => recordById.get(stepId));
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family
@@ -44894,8 +45087,10 @@ async function executeShortlist(context2, inputDigestValue) {
     );
     const recordedMaxOutputTokens = /* @__PURE__ */ new Map();
     for (const split of ["shortlist", "holdout"]) {
-      familyCases.filter((corpusCase) => corpusCase.split === split).forEach((corpusCase, index) => {
-        const step = assignedRecords[index % assignedRecords.length];
+      familyCases.filter((corpusCase) => corpusCase.split === split).forEach((corpusCase) => {
+        const stepId = caseSteps.get(corpusCase.caseId);
+        if (stepId === void 0) return;
+        const step = recordById.get(stepId);
         const contextTokens = requireReplayUsage(
           usageByCase,
           corpusCase
@@ -46201,6 +46396,9 @@ async function materializeAggregationFacts(context2, ledger, plan, candidates, e
   const selectedByStep = new Map(
     candidates.map((item) => [item.stepId, item.candidates])
   );
+  const traceBound = new Map(
+    plan.familyPlans.filter(({ binding }) => binding === "trace_key").map(({ familyId, stepIds }) => [familyId, stepIds.length])
+  );
   const expectedAssignments = (family, candidateId3, corpusSplit) => plan.cases.filter(
     (item) => item.family === family && item.corpusSplit === corpusSplit && selectedByStep.get(item.stepId)?.some(({ id }) => id === candidateId3)
   ).map((item) => ({
@@ -46245,6 +46443,7 @@ async function materializeAggregationFacts(context2, ledger, plan, candidates, e
         evaluatorKind: evaluation.evaluatorKind,
         candidateCostUsd: blendedPrice(selected) ?? 0,
         referenceCeilingMultiplier: referenceCeilingFor(ceilings, family).multiplier,
+        ...traceBound.get(family) === void 0 ? {} : { traceBoundCallSites: traceBound.get(family) },
         unsafeSubstitution: false,
         evidenceCovered: true,
         expectedEvaluatorAssignments: expectedAssignments(

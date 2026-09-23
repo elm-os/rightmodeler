@@ -27,7 +27,10 @@ skip stronger deterministic or trajectory evidence.
 ## Minimums and units
 
 - `MIN_REVIEW_TRIALS = 10`: included, assessed executions **per evaluator kind**.
-- `MIN_DISTINCT_STEPS = 2`: distinct `stepId` values **per evaluator kind**.
+- `MIN_DISTINCT_STEPS = 2`: distinct `stepId` values **per evaluator kind**. A family bound to
+  its call sites by trace key (the literal AI SDK telemetry `functionId`) needs
+  `min(2, bound call sites)` instead, because its evidence covers every call site that produced
+  it. The review-trial and trajectory minimums never relax.
 - `MIN_DISTINCT_TRAJECTORIES = 5`: distinct `trajectoryId` values **per evaluator kind**.
 - `EXCLUDED_FRACTION_MAX = 0.05`: maximum excluded fraction per evaluator kind; exactly 5% passes,
   while anything greater abstains.
@@ -47,7 +50,9 @@ The exported `ABSTAIN_REASONS` values are:
 - `insufficient_availability`: the availability lower bound is below the configured floor.
 - `excluded_fraction_exceeded`: the largest per-kind excluded fraction is greater than `0.05`.
 - `insufficient_review_trials`: a kind has fewer than 10 included assessed executions.
-- `insufficient_distinct_steps`: a kind covers fewer than 2 distinct step IDs.
+- `insufficient_distinct_steps`: a kind covers fewer than 2 distinct step IDs, or, for a family
+  bound by trace key, fewer than `min(2, bound call sites)`.
+- `bound_call_sites_not_replayable`: every call site bound to the family by its trace key needs tools or structured output, which Mode A replay cannot run, so replay is skipped before any spend.
 - `insufficient_distinct_trajectories`: a kind covers fewer than 5 distinct trajectory IDs.
 - `holdout_below_floor_minimum`: the family's holdout split has fewer cases than the smallest
   all-pass holdout that can clear the quality floor, so replay is skipped before any spend. Supply

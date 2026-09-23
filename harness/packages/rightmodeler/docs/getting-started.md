@@ -52,6 +52,8 @@ The AI SDK emits telemetry in two dialects, and Rightmodeler reads both:
 
 `registerTelemetry` comes from `ai`; `LegacyOpenTelemetry` and `OpenTelemetry` come from `@ai-sdk/otel`. Register only one of them: an export that holds both dialects is ambiguous. Keep `recordInputs` and `recordOutputs` on, which is the default, because a model call without its prompt or output cannot become a corpus case. Set a string-literal `functionId` on every call (`telemetry: { functionId: "summarize" }` in AI SDK 7, `experimental_telemetry: { isEnabled: true, functionId: "summarize" }` before it); it becomes the call's family.
 
+The scanner records that `functionId` on the call site, and a family binds to exactly the call sites whose `functionId` equals its name: its evidence and any swap stay on those call sites, and no other family borrows them. Two call sites that do the same job may share one `functionId`. A family bound to a single call site can still be recommended. The `functionId` must be a string literal in the call; a variable or a template literal is not read, and the call site then binds by model id only.
+
 Export the spans through the OpenTelemetry NodeSDK or `@vercel/otel` to an OTLP collector, and pass the collector's file exporter output with `--traces`. A model call that ended without a finish reason, because it was aborted or errored, is left out of the corpus with a `trace_steps_excluded` warning, and the rest of the input is read. Token usage from AI SDK 4 exports (`ai.usage.promptTokens`) is not read, so those calls carry no usage.
 
 ## Run the complete pipeline
