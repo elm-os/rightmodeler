@@ -259,6 +259,11 @@ export function toWireMessages(
     ) {
       throw new Error(`Recorded message ${index + 1}.role is unsupported`);
     }
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      throw new Error(
+        `Recorded message ${index + 1} carries tool calls, which replay does not send yet`,
+      );
+    }
     const content = (() => {
       if (typeof message.content === "string") return message.content;
       if (!Array.isArray(message.parts)) {

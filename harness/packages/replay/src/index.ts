@@ -2,6 +2,7 @@ export * from "./budget.js";
 export * from "./confirm.js";
 export {
   replayModeA,
+  toWireMessages,
   type BlockedCell,
   type RecordedCase,
   type ReplayModeAInput,

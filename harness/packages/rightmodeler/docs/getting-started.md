@@ -69,6 +69,8 @@ npx rightmodeler init --traces /path/to/traces.json --base-url https://provider.
 `--api-key-env <name>` to use a different exported variable. The CLI does not ask
 for a secret value.
 
+Replay resends each recorded conversation as text. A recorded case whose conversation contains tool calls, non-text parts, or tool definitions is left out of the replay sample with a `recorded_messages_not_replayable` warning; the family's other cases replay, and a family left with too few cases abstains under the usual sample-size reasons.
+
 ## Estimate replay spend
 
 ```sh

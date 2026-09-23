@@ -419,6 +419,46 @@ async function narrowDemoFixtureForApply(
   return filteredTraces;
 }
 
+async function writeToolCallTraces(
+  root: string,
+  summarizeSpans: number,
+): Promise<string> {
+  const traces = JSON.parse(await readFile(tracesPath, "utf8")) as Array<{
+    attributes: Record<string, unknown>;
+  }>;
+  for (const { attributes } of traces
+    .filter(
+      ({ attributes }) => attributes["rightmodeler.family"] === "summarize",
+    )
+    .slice(0, summarizeSpans)) {
+    attributes["gen_ai.input.messages"] = [
+      ...(attributes["gen_ai.input.messages"] as JsonValue[]),
+      {
+        role: "assistant",
+        parts: [
+          { type: "tool_call", id: "call-042", name: "lookup", arguments: {} },
+        ],
+      },
+      {
+        role: "tool",
+        parts: [{ type: "tool_call_response", id: "call-042", response: "ok" }],
+      },
+    ];
+  }
+  const path = join(root, "traces.json");
+  await writeFile(path, JSON.stringify(traces));
+  return path;
+}
+
+function warningMessages(stderr: string, code: string): string[] {
+  return stderr
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { code?: string; message: string })
+    .filter((event) => event.code === code)
+    .map(({ message }) => message);
+}
+
 async function langgraphFixtureCopy(
   label: string,
 ): Promise<{ root: string; repo: string; traces: string }> {
@@ -2347,6 +2387,124 @@ describe("built CLI pipeline", () => {
       await stub.close();
     }
   }, 120_000);
+
+  it("leaves recorded tool-call cases out of the replay sample and replays the rest", async () => {
+    const { root, repo } = await fixtureCopy("unsendable-cases");
+    const traces = await writeToolCallTraces(root, 4);
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_UNSENDABLE_CASES_API_KEY";
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "replay",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const warnings = warningMessages(
+        result.stderr,
+        "recorded_messages_not_replayable",
+      );
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("Family summarize: 4 of 70");
+      expect(warnings[0]).toContain("must be a text part");
+      const storeRoot = join(repo, ".rightmodeler");
+      const shortlist = (await readStageArtifact(storeRoot, "shortlist")) as {
+        familyPlans: Array<{ familyId: string; leftOutCases?: number }>;
+        cases: Array<{ messages: Array<{ parts?: Array<{ type: string }> }> }>;
+      };
+      expect(
+        shortlist.familyPlans.find(({ familyId }) => familyId === "summarize")
+          ?.leftOutCases,
+      ).toBeGreaterThanOrEqual(4);
+      expect(
+        shortlist.cases
+          .flatMap(({ messages }) => messages)
+          .flatMap(({ parts }) => parts ?? [])
+          .filter(({ type }) => type === "tool_call"),
+      ).toEqual([]);
+      const store = new FsStore(storeRoot);
+      const facts = (await Promise.all(
+        (await store.list(factsPrefix("project"))).map(async (key) =>
+          JSON.parse(await storeText(store, key)),
+        ),
+      )) as Array<Record<string, unknown>>;
+      expect(
+        facts.filter(
+          ({ executionId, caseId }) =>
+            typeof executionId === "string" && typeof caseId === "string",
+        ).length,
+      ).toBeGreaterThan(0);
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
+  it("abstains a family whose recorded cases are all unsendable on the holdout floor", async () => {
+    const { root, repo } = await fixtureCopy("all-unsendable-cases");
+    const traces = await writeToolCallTraces(root, 70);
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_ALL_UNSENDABLE_API_KEY";
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "shortlist",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const warnings = warningMessages(
+        result.stderr,
+        "recorded_messages_not_replayable",
+      );
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("Family summarize: 70 of 70");
+      const shortlist = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "shortlist",
+      );
+      expect(shortlist.familyPlans).toContainEqual(
+        expect.objectContaining({
+          familyId: "summarize",
+          stepIds: [],
+          leftOutCases: 70,
+          abstainReason: {
+            reason: "holdout_below_floor_minimum",
+            observed: 0,
+            required: minimumHoldout,
+          },
+        }),
+      );
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
 
   it("judges each call site of a mixed-vendor family outside that call site's model family", async () => {
     const { root, repo } = await fixtureCopy("mixed-vendor");

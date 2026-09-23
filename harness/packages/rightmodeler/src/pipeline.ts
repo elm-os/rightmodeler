@@ -72,6 +72,7 @@ import {
   replayModeA,
   resolveCurrentModel,
   shortlist,
+  toWireMessages,
   type ModelCatalogEntry,
   type ModelPricing,
   type ModeBCase,
@@ -227,7 +228,7 @@ const AVAILABILITY_FLOOR = 0.7;
 const GATE_POLICY_BASE_VERSION = "phase-a-v3";
 const REPLAY_PROMPT_REVISION = "replay-prompt-v1";
 const SCAN_REVISION = "scan-trace-key-v1";
-const TRACE_BINDING_REVISION = "trace-match-v1";
+const TRACE_BINDING_REVISION = "sendable-cases-v1";
 const TRACE_READER_REVISION = "ai-sdk-dialects-v1";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 
@@ -2707,6 +2708,7 @@ async function planFamilies(
     plan: FamilyPlan;
     caseSteps: ReadonlyMap<string, string>;
     leftOut: FamilyBinding["leftOut"];
+    unsendable: readonly string[];
   }>
 > {
   const { records } = reconciled;
@@ -2788,11 +2790,16 @@ async function planFamilies(
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family,
     );
+    const reasons = familyCases.map(unsendableReason);
+    const sendableCases = familyCases.filter(
+      (_, index) => reasons[index] === undefined,
+    );
+    const unsendable = reasons.filter((reason) => reason !== undefined);
     const binding =
       approved === undefined
         ? bindFamily({
             family,
-            cases: familyCases.map((corpusCase) => ({
+            cases: sendableCases.map((corpusCase) => ({
               caseId: corpusCase.caseId,
               split: corpusCase.split,
               traceId: corpusCase.observation?.traceId,
@@ -2805,12 +2812,14 @@ async function planFamilies(
         : undefined;
     const placement =
       binding ??
-      approvedPlacement(approved!, family, familyCases, replayableSteps);
+      approvedPlacement(approved!, family, sendableCases, replayableSteps);
     const { leftOut } = placement;
+    const bindingLeftOut =
+      leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
     const abstainReason: FamilyPlan["abstainReason"] =
       binding === undefined
         ? undefined
-        : binding.caseSteps.size === 0
+        : binding.caseSteps.size === 0 && bindingLeftOut > 0
           ? {
               reason:
                 leftOut.ambiguous > 0
@@ -2835,8 +2844,7 @@ async function planFamilies(
                 }
               : undefined;
     const stepIds = abstainReason === undefined ? [...placement.stepIds] : [];
-    const leftOutCases =
-      leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
+    const leftOutCases = bindingLeftOut + unsendable.length;
     const reproofRequestIds = reproofRequests.get(family) ?? [];
     const evidenceQuestionId = evidenceQuestionIdentity({
       corpusVersionId: corpus.corpusVersionId,
@@ -2864,8 +2872,23 @@ async function planFamilies(
       },
       caseSteps: placement.caseSteps,
       leftOut,
+      unsendable,
     };
   });
+}
+
+function unsendableReason(
+  corpusCase: Corpus["cases"][number],
+): string | undefined {
+  try {
+    toWireMessages(
+      corpusCase.content.messages,
+      corpusCase.content.systemPrompt,
+    );
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 }
 
 async function executeShortlist(
@@ -2887,10 +2910,12 @@ async function executeShortlist(
   const steps: Array<Omit<ReplayStep, "corpusSplit"> & { family: string }> = [];
   const cases: Array<RecordedCase & { family: string }> = [];
   const sampleSizes: Record<string, number> = {};
-  for (const { plan: familyPlan, caseSteps, leftOut } of planned) {
+  for (const { plan: familyPlan, caseSteps, leftOut, unsendable } of planned) {
     const { familyId: family, evidenceQuestionId, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
-    if (familyPlan.leftOutCases !== undefined && caseSteps.size > 0) {
+    const bindingLeftOut =
+      leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
+    if (bindingLeftOut > 0 && caseSteps.size > 0) {
       const causes = [
         [
           leftOut.ambiguous,
@@ -2904,10 +2929,16 @@ async function executeShortlist(
       ] as const;
       context.reporter.warning(
         "family_cases_left_out",
-        `Family ${family}: ${familyPlan.leftOutCases} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes
+        `Family ${family}: ${bindingLeftOut} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes
           .filter(([count]) => count > 0)
           .map(([count, cause]) => `${count} ${cause}`)
           .join(", ")}.`,
+      );
+    }
+    if (unsendable.length > 0) {
+      context.reporter.warning(
+        "recorded_messages_not_replayable",
+        `Family ${family}: ${unsendable.length} of ${familyPlan.cases} recorded cases carry messages the replay cannot send yet and were left out of the replay sample (first: ${unsendable[0]}). Tool calls, non-text parts and tool definitions in a recorded conversation are not replayed.`,
       );
     }
     if (stepIds.length === 0) continue;

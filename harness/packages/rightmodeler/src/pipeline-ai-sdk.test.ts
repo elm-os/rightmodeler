@@ -515,7 +515,11 @@ describe("AI SDK call-site binding", () => {
     expect(summarize.leftOutCases).toBe(12);
     expect(result.warnings).toContainEqual({
       code: "family_cases_left_out",
-      message: expect.stringContaining("Family summarize: 12 of"),
+      message: expect.stringContaining("Family summarize: 6 of"),
+    });
+    expect(result.warnings).toContainEqual({
+      code: "recorded_messages_not_replayable",
+      message: expect.stringContaining("Family summarize: 6 of"),
     });
   }, 120_000);
 });

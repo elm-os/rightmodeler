@@ -1713,6 +1713,22 @@ describe("toWireMessages", () => {
       ]),
     ).toEqual([{ role: "tool", tool_call_id: "call-1", content: "delivered" }]);
   });
+
+  it("refuses a recorded assistant message that carries tool calls", () => {
+    const toolCall = {
+      id: "call-1",
+      type: "function",
+      function: { name: "lookup", arguments: "{}" },
+    };
+    expect(() =>
+      toWireMessages([
+        { role: "assistant", content: "", tool_calls: [toolCall] },
+      ]),
+    ).toThrow(/carries tool calls/);
+    expect(
+      toWireMessages([{ role: "assistant", content: "", tool_calls: [] }]),
+    ).toEqual([{ role: "assistant", content: "" }]);
+  });
 });
 
 describe("Mode A replay", () => {
