@@ -246,7 +246,13 @@ async function runStep(
     writeFile(files.output, ""),
     writeFile(files.summary, ""),
     writeFile(files.log, ""),
-    writeFile(files.scenario, JSON.stringify(options.scenario ?? {})),
+    writeFile(
+      files.scenario,
+      JSON.stringify({
+        "--version": { exit: 0, stdout: `${version}\n` },
+        ...options.scenario,
+      }),
+    ),
     writeFile(files.script, script),
     writeFile(join(bin, "npx"), `#!${process.execPath}\n${fakeNpx}`),
     symlink(process.execPath, join(bin, "node")),
@@ -446,6 +452,7 @@ describe("exit mapping", () => {
     );
     const workspace = result.workspace;
     expect(result.invocations).toEqual([
+      ["--yes", spec, "--version"],
       [
         "--yes",
         spec,
@@ -531,6 +538,7 @@ describe("exit mapping", () => {
       result.workspace,
     ];
     expect(result.invocations).toEqual([
+      ["--yes", spec, "--version"],
       ["--yes", spec, "apply", "--dry-run", ...common],
       ["--yes", spec, "apply", ...common],
     ]);
@@ -563,8 +571,10 @@ describe("exit mapping", () => {
       "::error title=rightmodeler release_gate_failed::A gate is red.",
       "::error title=rightmodeler::apply (dry-run) exited 1; the annotations above name the cause and the fix.",
     ]);
-    expect(result.invocations).toHaveLength(1);
-    expect(result.invocations[0]).toContain("--dry-run");
+    expect(result.invocations.map((argv) => argv.slice(2, 4))).toEqual([
+      ["--version"],
+      ["apply", "--dry-run"],
+    ]);
   });
 
   const statusWith = (...prNumbers: number[]) =>
@@ -580,8 +590,9 @@ describe("exit mapping", () => {
       },
     });
     expect(result.code, diagnostic(result)).toBe(0);
-    expect(result.stdout).toBe("");
+    expect(result.stdout).toBe(`${version}\n`);
     expect(result.invocations.map((argv) => argv.slice(0, 5))).toEqual([
+      ["--yes", spec, "--version"],
       ["--yes", spec, "status", "--output", "json"],
       ["--yes", spec, "watch", "--pr", "7"],
     ]);
@@ -661,8 +672,38 @@ describe("exit mapping", () => {
       scenario: { status: { exit: 0, stdout: statusWith() } },
     });
     expect(result.code, diagnostic(result)).toBe(0);
-    expect(result.invocations.map((argv) => argv[2])).toEqual(["status"]);
+    expect(result.invocations.map((argv) => argv[2])).toEqual([
+      "--version",
+      "status",
+    ]);
   });
+
+  // npx exits 1 when npm cannot install the package, the same code as init's recommendation.
+  it.each(["init", "apply", "watch"])(
+    "%s stops with npm's error when npx cannot install the pinned CLI",
+    async (jobId) => {
+      const npmError = {
+        exit: 1,
+        stderr: `npm error notarget No matching version found for ${spec}.\n`,
+      };
+      const result = await runStep(jobId, jobId, {
+        scenario: Object.fromEntries(
+          [
+            "--version",
+            "init",
+            "apply --dry-run",
+            "apply",
+            "status",
+            "watch",
+          ].map((key) => [key, npmError]),
+        ),
+      });
+      expect(result.code, diagnostic(result)).toBe(1);
+      expect(result.stderr).toContain("npm error notarget");
+      expect(result.outputs).toEqual({});
+      expect(result.invocations).toEqual([["--yes", spec, "--version"]]);
+    },
+  );
 });
 
 describe("against the real CLI", () => {
@@ -734,7 +775,10 @@ describe("against the real CLI", () => {
 
       const fresh = await runStep("watch", "watch", options);
       expect(fresh.code, diagnostic(fresh)).toBe(0);
-      expect(fresh.invocations.map((argv) => argv[2])).toEqual(["status"]);
+      expect(fresh.invocations.map((argv) => argv[2])).toEqual([
+        "--version",
+        "status",
+      ]);
 
       const init = await runStep("init", "init", options);
       expect(init.code, diagnostic(init)).toBe(0);

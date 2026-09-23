@@ -104,6 +104,7 @@ jobs:
         run: |
           out="$RUNNER_TEMP/rightmodeler"
           mkdir -p "$out"
+          npx --yes "rightmodeler@${RIGHTMODELER_VERSION}" --version
           set +e
           npx --yes "rightmodeler@${RIGHTMODELER_VERSION}" init \
             --traces "$RIGHTMODELER_TRACES" \
@@ -170,6 +171,7 @@ jobs:
         run: |
           out="$RUNNER_TEMP/rightmodeler"
           mkdir -p "$out"
+          npx --yes "rightmodeler@${RIGHTMODELER_VERSION}" --version
           run_apply() {
             npx --yes "rightmodeler@${RIGHTMODELER_VERSION}" apply "$@" \
               --owner "$GITHUB_REPOSITORY_OWNER" \
@@ -239,6 +241,7 @@ jobs:
         run: |
           out="$RUNNER_TEMP/rightmodeler"
           mkdir -p "$out"
+          npx --yes "rightmodeler@${RIGHTMODELER_VERSION}" --version
           set +e
           npx --yes "rightmodeler@${RIGHTMODELER_VERSION}" status --output json \
             --repo "$GITHUB_WORKSPACE" >"$out/status.json" 2>"$out/status.err"
@@ -322,4 +325,4 @@ To confirm in Vercel Sandbox, add `--modeb-config <file>` to the `init` command 
 
 ## Upgrading
 
-Change `RIGHTMODELER_VERSION`. Each release's copy of this guide pins that release, and `rightmodeler docs github-actions` prints the copy for the installed version.
+Change `RIGHTMODELER_VERSION`. Each rightmodeler step first runs the CLI with `--version`, so a version npm cannot install fails the step with npm's error in its log instead of being mistaken for a rightmodeler exit code. Each release's copy of this guide pins that release, and `rightmodeler docs github-actions` prints the copy for the installed version.
