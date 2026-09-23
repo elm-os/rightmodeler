@@ -1249,9 +1249,9 @@ describe("Mode B proxy and host egress", () => {
     expect(response.status).toBe(200);
     await response.arrayBuffer();
 
-    expect(
-      provider.requests.map(({ acceptEncoding }) => acceptEncoding),
-    ).toEqual(["identity"]);
+    expect(provider.requests).toEqual([
+      { url: "/v1/chat/completions", acceptEncoding: "identity" },
+    ]);
     expect(await attemptsUntil(spoolPath(scratch), 1)).toEqual([
       expect.objectContaining({
         streamOutcome: "completed",
