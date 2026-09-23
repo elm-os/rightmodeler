@@ -90,7 +90,7 @@ npx rightmodeler report --code-graph graphify-out/graph.json --repo .
 
 `init --code-graph <path>` renders the same section at the end of a run. For each call site the scanner found, the section lists the enclosing symbol, its callers, the tests that reach it, and the owners of those files, which are listed only. It also lists files that import an AI SDK where the scanner found no call site.
 
-Graph edges are never replay trials, runtime proof, or quality evidence, and the flag never changes a stage before the report, a verdict, a gate, or confirmation. Each finding is labelled EXTRACTED, or INFERRED or AMBIGUOUS to verify, by its weakest hop. A graph built at another commit is shown file-level with a stale note. An unusable graph produces one warning, and the report is written without the section. The scan ignores `graphify-out/`, so building a graph never makes finished stages stale. Only `graphify update` and `graphify extract --code-only` are needed; other Graphify commands can call a language model.
+Graph edges are never replay trials, runtime proof, or quality evidence, and the flag never changes a stage before the report, a verdict, a gate, or confirmation. Each finding is labelled EXTRACTED, or INFERRED or AMBIGUOUS to verify, by its weakest hop. A graph built at another commit is shown file-level with a stale note. An unusable graph produces one warning, the section says why it is not shown, and the rest of the report is unchanged. The scan ignores `graphify-out/`, so building a graph never makes finished stages stale. Only `graphify update` and `graphify extract --code-only` are needed; other Graphify commands can call a language model.
 
 ## Release policy
 
