@@ -51,6 +51,8 @@ describe("aggregate", () => {
     expect(ABSTAIN_REASONS).toEqual(
       expect.arrayContaining([
         "bound_call_sites_not_replayable",
+        "ambiguous_call_site_binding",
+        "unmatched_call_site_binding",
         "selection_candidate_verdict_missing",
         "selection_missing_shortlist_verdicts",
         "replay_operational_block",

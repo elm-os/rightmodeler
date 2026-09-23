@@ -242,7 +242,23 @@ async function narrowDemoFixtureForApply(root: string, repo: string) {
     rm(join(repo, "src", "model-notes.ts"), { force: true }),
     rm(join(repo, "src", "support.py"), { force: true }),
     rm(join(repo, "src", "triage.py"), { force: true }),
+    rm(join(repo, "src", "summarize-stream.ts"), { force: true }),
   ]);
+  await writeFile(
+    join(repo, "src", "summarize.ts"),
+    [
+      'import { generateText } from "ai";',
+      "",
+      "export async function summarize(article: string) {",
+      "  return generateText({",
+      '    model: "acme/large-1",',
+      '    system: "Summarize the article faithfully in two concise sentences.",',
+      "    prompt: article,",
+      "  });",
+      "}",
+      "",
+    ].join("\n"),
+  );
   await writeFile(
     join(repo, "src", "extract.ts"),
     [
@@ -1337,12 +1353,12 @@ describe("built CLI pipeline", () => {
       expect.objectContaining({
         familyId: "support",
         cases: 7,
-        holdoutCases: 4,
+        holdoutCases: 0,
         stepIds: [],
         abstainReason: {
-          reason: "holdout_below_floor_minimum",
-          observed: 4,
-          required: minimumHoldout,
+          reason: "ambiguous_call_site_binding",
+          observed: 0,
+          required: 7,
         },
       }),
     ]);
@@ -1770,9 +1786,9 @@ describe("built CLI pipeline", () => {
           familyId: "support",
           decision: "abstain",
           abstainReason: {
-            reason: "holdout_below_floor_minimum",
-            observed: 4,
-            required: minimumHoldout,
+            reason: "ambiguous_call_site_binding",
+            observed: 0,
+            required: 7,
           },
         }),
       );
@@ -1827,9 +1843,7 @@ describe("built CLI pipeline", () => {
         store,
         reportKey("project", "report.md"),
       );
-      expect(reportMarkdown).toContain(
-        `holdout_below_floor_minimum (4 of ${minimumHoldout})`,
-      );
+      expect(reportMarkdown).toContain("ambiguous_call_site_binding (0 of 7)");
       expect(reportMarkdown).toContain("## Gates");
       expect(reportMarkdown).toContain("## Selection");
       expect(reportMarkdown).toContain("Selection-adjusted estimate");
@@ -1924,7 +1938,7 @@ describe("built CLI pipeline", () => {
       );
       expect(humanReport.stdout).toContain("summarize | recommend");
       expect(humanReport.stdout).toContain(
-        `holdout_below_floor_minimum (4 of ${minimumHoldout})`,
+        "ambiguous_call_site_binding (0 of 7)",
       );
       expect(humanReport.stdout).toContain("report.md");
       expect(humanReport.stdout).not.toContain('"verdicts"');
@@ -1964,6 +1978,22 @@ describe("built CLI pipeline", () => {
         "  return generateText({",
         '    model: "acme/large-1",',
         "    prompt: message,",
+        '    experimental_telemetry: { isEnabled: true, functionId: "support" },',
+        "  });",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(repo, "src", "support-stream.ts"),
+      [
+        'import { streamText } from "ai";',
+        "",
+        "export function supportStream(message: string) {",
+        "  return streamText({",
+        '    model: "acme/large-1",',
+        "    prompt: message,",
+        '    experimental_telemetry: { isEnabled: true, functionId: "support" },',
         "  });",
         "}",
         "",
@@ -1975,7 +2005,7 @@ describe("built CLI pipeline", () => {
       repo,
       "commit",
       "--message",
-      "Add second family call site",
+      "Add second family call sites",
     ]);
     const traces = JSON.parse(await readFile(tracesPath, "utf8")) as Array<{
       traceId: string;
@@ -2060,14 +2090,31 @@ describe("built CLI pipeline", () => {
   }, 120_000);
 
   it("abstains a single-call-site family before any replay spend", async () => {
-    const { repo } = await fixtureCopy("single-call-site-family");
+    const { root, repo } = await fixtureCopy("single-call-site-family");
     await Promise.all([
       rm(join(repo, "src", "support.py"), { force: true }),
       rm(join(repo, "src", "triage.py"), { force: true }),
       rm(join(repo, "src", "model-notes.ts"), { force: true }),
+      rm(join(repo, "src", "summarize-stream.ts"), { force: true }),
+      rm(join(repo, "src", "extract.ts"), { force: true }),
       rm(join(repo, "config"), { recursive: true, force: true }),
       rm(join(repo, "requirements.txt"), { force: true }),
     ]);
+    await writeFile(
+      join(repo, "src", "summarize.ts"),
+      [
+        'import { generateText } from "ai";',
+        "",
+        "export async function summarize(article: string) {",
+        "  return generateText({",
+        '    model: "acme/large-1",',
+        '    system: "Summarize the article faithfully in two concise sentences.",',
+        "    prompt: article,",
+        "  });",
+        "}",
+        "",
+      ].join("\n"),
+    );
     await writeFile(
       join(repo, "package.json"),
       `${JSON.stringify({ dependencies: { ai: "*" } }, null, 2)}\n`,
@@ -2080,13 +2127,26 @@ describe("built CLI pipeline", () => {
       "--message",
       "Narrow single call site fixture",
     ]);
+    const traces = JSON.parse(await readFile(tracesPath, "utf8")) as Array<{
+      attributes?: Record<string, unknown>;
+    }>;
+    const summarizeTraces = join(root, "summarize-otel.json");
+    await writeFile(
+      summarizeTraces,
+      JSON.stringify(
+        traces.filter(
+          ({ attributes }) =>
+            attributes?.["rightmodeler.family"] === "summarize",
+        ),
+      ),
+    );
     const stub = await startStub();
     try {
       const result = await runCli(
         [
           "init",
           "--traces",
-          tracesPath,
+          summarizeTraces,
           "--base-url",
           `http://127.0.0.1:${stub.port}/v1`,
           "--api-key-env",
@@ -2298,7 +2358,7 @@ describe("built CLI pipeline", () => {
         resultValue?.familyOutcomes?.find(
           ({ familyId }) => familyId === "support",
         )?.verdict.abstainReason?.reason,
-      ).toBe("holdout_below_floor_minimum");
+      ).toBe("ambiguous_call_site_binding");
     } finally {
       await stub.close();
     }
@@ -2345,18 +2405,19 @@ describe("built CLI pipeline", () => {
   it("resolves a bare recorded model id against the provider catalog", async () => {
     const { repo } = await fixtureCopy("shortlist-model-resolution");
     await Promise.all(
-      ["summarize.ts", "extract.ts", "triage.py", "support.py"].map(
-        async (name) => {
-          const path = join(repo, "src", name);
-          await writeFile(
-            path,
-            (await readFile(path, "utf8")).replaceAll(
-              "acme/large-1",
-              "large-1",
-            ),
-          );
-        },
-      ),
+      [
+        "summarize.ts",
+        "summarize-stream.ts",
+        "extract.ts",
+        "triage.py",
+        "support.py",
+      ].map(async (name) => {
+        const path = join(repo, "src", name);
+        await writeFile(
+          path,
+          (await readFile(path, "utf8")).replaceAll("acme/large-1", "large-1"),
+        );
+      }),
     );
     const tracesDirectory = await mkdtemp(
       join(tmpdir(), "rightmodeler-bare-model-"),
@@ -2682,7 +2743,7 @@ describe("built CLI pipeline", () => {
       expect(
         families.find(({ familyId }) => familyId === "support")?.verdict
           .abstainReason?.reason,
-      ).toBe("holdout_below_floor_minimum");
+      ).toBe("ambiguous_call_site_binding");
       const report = await storeText(
         new FsStore(join(repo, ".rightmodeler")),
         reportKey("project", "report.md"),
@@ -3378,7 +3439,7 @@ describe("built CLI pipeline", () => {
         verdicts.find(({ familyId }) => familyId === "support"),
       ).toMatchObject({
         assessmentAbsent: 0,
-        abstainReason: { reason: "holdout_below_floor_minimum" },
+        abstainReason: { reason: "ambiguous_call_site_binding" },
       });
 
       const store = new FsStore(join(repo, ".rightmodeler"));
@@ -4185,6 +4246,7 @@ describe("built CLI pipeline", () => {
     const { repo } = await fixtureCopy("no-replayable-call-sites");
     await Promise.all([
       rm(join(repo, "src", "summarize.ts"), { force: true }),
+      rm(join(repo, "src", "summarize-stream.ts"), { force: true }),
       rm(join(repo, "src", "support.py"), { force: true }),
       rm(join(repo, "src", "triage.py"), { force: true }),
       rm(join(repo, "src", "model-notes.ts"), { force: true }),

@@ -1,6 +1,6 @@
 # Shared test fixtures
 
-`demo-app/` is inert scan-target source that covers AI SDK text and structured generation, OpenAI-compatible tool calling, Anthropic messages, and a LiteLLM-style model pin. `demo-app/src/model-notes.ts` is the comment-only red herring that scanners must ignore.
+`demo-app/` is inert scan-target source that covers AI SDK text, streamed and structured generation, OpenAI-compatible tool calling, Anthropic messages, and a LiteLLM-style model pin. Its two summarize call sites, `src/summarize.ts` (`generateText`) and `src/summarize-stream.ts` (`streamText`), share the `summarize` telemetry `functionId`, so the `summarize` traces bind to them by trace key. Every call site pins `acme/large-1`, so the `support` traces cannot be tied to one call site. `demo-app/src/model-notes.ts` is the comment-only red herring that scanners must ignore.
 
 `traces/otel-genai.json` contains 15 runs and 17 current-convention GenAI spans across summarize and support task families (10 summarize and 7 support spans). The two pairs sharing `trace-trajectory-a` and `trace-trajectory-b` exercise trajectory clustering. Record `trace-support-pii-01` is the only trace record containing fake personal data; scrub tests should target its prompt.
 

@@ -14,11 +14,15 @@ export interface BindingSite {
 }
 
 export interface FamilyBinding {
-  readonly kind: "trace_key" | "path_order";
+  readonly kind: "trace_key" | "trace_match";
   readonly stepIds: readonly string[];
   readonly caseSteps: ReadonlyMap<string, string>;
   readonly holdoutCases: number;
-  readonly unreplayableCases: number;
+  readonly leftOut: {
+    readonly ambiguous: number;
+    readonly unmatched: number;
+    readonly unreplayable: number;
+  };
   readonly requiredDistinctSteps: number;
 }
 
@@ -28,35 +32,64 @@ export function traceStepKey(traceId: string, stepIndex: number): string {
 
 const SPLITS = ["shortlist", "holdout"] as const;
 
+function boundStepIds(
+  bindingCase: BindingCase,
+  bindings: ReadonlyMap<string, readonly string[]>,
+): readonly string[] | undefined {
+  return bindingCase.traceId === undefined
+    ? undefined
+    : bindings.get(traceStepKey(bindingCase.traceId, bindingCase.stepIndex));
+}
+
+function placedHoldoutCases(
+  cases: readonly BindingCase[],
+  caseSteps: ReadonlyMap<string, string>,
+): number {
+  return cases.filter(
+    ({ caseId, split }) => split === "holdout" && caseSteps.has(caseId),
+  ).length;
+}
+
 export function bindFamily(input: {
   readonly family: string;
   readonly cases: readonly BindingCase[];
   readonly sites: readonly BindingSite[];
-  readonly pathOrder: readonly string[];
+  readonly sharedStepIds: ReadonlySet<string>;
   readonly bindings: ReadonlyMap<string, readonly string[]>;
 }): FamilyBinding {
   const keyed = input.sites.filter(({ traceKey }) => traceKey === input.family);
   const caseSteps = new Map<string, string>();
 
   if (keyed.length === 0) {
-    for (const split of SPLITS) {
-      input.cases
-        .filter((bindingCase) => bindingCase.split === split)
-        .forEach((bindingCase, index) => {
-          if (input.pathOrder.length === 0) return;
-          caseSteps.set(
-            bindingCase.caseId,
-            input.pathOrder[index % input.pathOrder.length]!,
-          );
-        });
+    const leftOut = { ambiguous: 0, unmatched: 0, unreplayable: 0 };
+    for (const bindingCase of input.cases) {
+      const bound = boundStepIds(bindingCase, input.bindings) ?? [];
+      if (bound.length === 0) {
+        leftOut.unmatched += 1;
+        continue;
+      }
+      const site = input.sites.find(({ stepId }) => stepId === bound[0]);
+      if (
+        bound.length > 1 ||
+        site?.traceKey !== undefined ||
+        input.sharedStepIds.has(bound[0]!)
+      ) {
+        leftOut.ambiguous += 1;
+      } else if (site?.replayable) {
+        caseSteps.set(bindingCase.caseId, bound[0]!);
+      } else {
+        leftOut.unreplayable += 1;
+      }
     }
+    const used = new Set(caseSteps.values());
     return {
-      kind: "path_order",
-      stepIds: input.pathOrder,
+      kind: "trace_match",
+      stepIds: input.sites
+        .map(({ stepId }) => stepId)
+        .filter((stepId) => used.has(stepId)),
       caseSteps,
-      holdoutCases: input.cases.filter(({ split }) => split === "holdout")
-        .length,
-      unreplayableCases: 0,
+      holdoutCases: placedHoldoutCases(input.cases, caseSteps),
+      leftOut,
       requiredDistinctSteps: MIN_DISTINCT_STEPS,
     };
   }
@@ -71,12 +104,7 @@ export function bindFamily(input: {
     for (const bindingCase of input.cases.filter(
       (candidate) => candidate.split === split,
     )) {
-      const bound =
-        bindingCase.traceId === undefined
-          ? undefined
-          : input.bindings.get(
-              traceStepKey(bindingCase.traceId, bindingCase.stepIndex),
-            );
+      const bound = boundStepIds(bindingCase, input.bindings);
       const onlySite =
         bound?.length === 1 && keyedStepIds.has(bound[0]!)
           ? bound[0]!
@@ -105,10 +133,8 @@ export function bindFamily(input: {
     kind: "trace_key",
     stepIds,
     caseSteps,
-    holdoutCases: input.cases.filter(
-      ({ caseId, split }) => split === "holdout" && caseSteps.has(caseId),
-    ).length,
-    unreplayableCases,
+    holdoutCases: placedHoldoutCases(input.cases, caseSteps),
+    leftOut: { ambiguous: 0, unmatched: 0, unreplayable: unreplayableCases },
     requiredDistinctSteps: Math.min(MIN_DISTINCT_STEPS, stepIds.length),
   };
 }

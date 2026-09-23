@@ -42,6 +42,7 @@ describe("scan", () => {
       "cfg-litellm-yaml",
       "js-ai-sdk-generate-object",
       "js-ai-sdk-generate-text",
+      "js-ai-sdk-stream-text",
       "py-anthropic-messages",
       "py-openai-chat-completions",
     ]);
@@ -59,6 +60,7 @@ describe("scan", () => {
       "cfg-litellm-yaml": [],
       "js-ai-sdk-generate-object": ["structured_output"],
       "js-ai-sdk-generate-text": [],
+      "js-ai-sdk-stream-text": [],
       "py-anthropic-messages": [],
       "py-openai-chat-completions": ["tools"],
     });

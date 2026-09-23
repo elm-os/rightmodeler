@@ -1,7 +1,7 @@
-import { generateText } from "ai";
+import { streamText } from "ai";
 
-export async function summarize(article: string) {
-  return generateText({
+export function summarizeStream(article: string) {
+  return streamText({
     model: "acme/large-1",
     system: "Summarize the article faithfully in two concise sentences.",
     prompt: article,

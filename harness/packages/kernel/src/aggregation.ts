@@ -32,6 +32,8 @@ export const ABSTAIN_REASONS = [
   "insufficient_review_trials",
   "insufficient_distinct_steps",
   "bound_call_sites_not_replayable",
+  "ambiguous_call_site_binding",
+  "unmatched_call_site_binding",
   "insufficient_distinct_trajectories",
   "holdout_below_floor_minimum",
   "missing_deterministic_evidence",

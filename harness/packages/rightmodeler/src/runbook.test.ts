@@ -103,7 +103,23 @@ async function narrowFixtureForApply(
     rm(join(repo, "src", "model-notes.ts"), { force: true }),
     rm(join(repo, "src", "support.py"), { force: true }),
     rm(join(repo, "src", "triage.py"), { force: true }),
+    rm(join(repo, "src", "summarize-stream.ts"), { force: true }),
   ]);
+  await writeFile(
+    join(repo, "src", "summarize.ts"),
+    [
+      'import { generateText } from "ai";',
+      "",
+      "export async function summarize(article: string) {",
+      "  return generateText({",
+      '    model: "acme/large-1",',
+      '    system: "Summarize the article faithfully in two concise sentences.",',
+      "    prompt: article,",
+      "  });",
+      "}",
+      "",
+    ].join("\n"),
+  );
   await writeFile(
     join(repo, "src", "extract.ts"),
     [
