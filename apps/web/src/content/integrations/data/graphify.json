@@ -1,0 +1,108 @@
+{
+  "slug": "graphify",
+  "name": "Graphify",
+  "website": "https://github.com/Graphify-Labs/graphify",
+  "logo": "/integrations/logos/graphify.svg",
+  "category": "code-context",
+  "categoryLabel": "Code context · open source",
+  "title": "Graphify integration: code context for model swaps",
+  "description": "Build a code graph with open-source Graphify and rightmodeler lists the callers, tests, and owners of each tested call site in its report, never as evidence.",
+  "h1": "rightmodeler + Graphify",
+  "lede": "Graphify, the open-source code graph engine, maps the calls, imports and references in your source with a local AST pass. rightmodeler reads its graph.json to show what surrounds each call site it tested, beside the evidence and never inside it.",
+  "tldr": "Pass --code-graph graphify-out/graph.json to report, init, or apply and rightmodeler adds a Code context (Graphify) section: for each call site the scanner found, or each one a pull request swaps, its enclosing symbol, its callers, the tests that reach it, and the owners of those files, each finding labelled EXTRACTED, INFERRED, or AMBIGUOUS by its weakest hop. The graph comes from the open-source Graphify CLI (Apache-2.0, tested with 0.9.65), built locally with graphify update . and no account or model call. Graph edges are never counted as evidence: they change no verdict, gate, confirmation, swap, or reviewer.",
+  "steps": [
+    {
+      "label": "01 · Build",
+      "title": "Build the graph from the AST",
+      "body": "Install the Graphify CLI from PyPI as graphifyy and run graphify update . at the repository root. It parses your code locally with tree-sitter, calls no model, and writes graphify-out/graph.json stamped with the commit it was built at. Only graphify update and graphify extract --code-only are needed here; some other Graphify commands can call a language model."
+    },
+    {
+      "label": "02 · Report",
+      "title": "A code context section in the report",
+      "body": "rightmodeler report --code-graph graphify-out/graph.json, or init with the same flag, renders the section at the end of the report. Each scanned call site gets its enclosing symbol, callers up to two hops away, tests that reach it within three hops, and the owners of the files those findings point to, from CODEOWNERS or git blame, listed only. Files that import a model SDK where the scanner found no call site are listed separately as unconfirmed imports."
+    },
+    {
+      "label": "03 · Label",
+      "title": "Every finding carries its provenance",
+      "body": "A finding is labelled EXTRACTED when every hop is explicit in source, and INFERRED or AMBIGUOUS, marked verify, when its weakest hop was resolved by inference or is uncertain, with Graphify's confidence score beside it. A graph built at a different commit than the scan is shown file-level only, under a stale banner that says how to rebuild it."
+    },
+    {
+      "label": "04 · Pull request",
+      "title": "The same context in the draft pull request",
+      "body": "rightmodeler apply --code-graph appends a Code context (Graphify) section to the draft pull request body, limited to the call sites the pull request swaps and to five findings of each kind per call site. Owners listed there are never requested as reviewers, and apply --dry-run prints the exact body it would post."
+    }
+  ],
+  "setup": {
+    "intro": "Graphify runs on your machine with no account. Build the graph at the commit you scanned, then pass its path to the rightmodeler command whose output should carry the context. Without the flag nothing changes; a graph found at graphify-out/graph.json only prints a hint.",
+    "commands": [
+      {
+        "comment": "# install the Graphify CLI release rightmodeler is tested with (PyPI package graphifyy)",
+        "command": "uv tool install graphifyy==0.9.65"
+      },
+      {
+        "comment": "# build graphify-out/graph.json from the AST, with no model call",
+        "command": "graphify update ."
+      },
+      {
+        "comment": "# add code context to the report of your latest run",
+        "command": "npx rightmodeler report --code-graph graphify-out/graph.json --repo ."
+      },
+      {
+        "comment": "# preview the pull request body with the same section, writing nothing",
+        "command": "npx rightmodeler apply --owner $OWNER --github-token-env GITHUB_TOKEN --code-graph graphify-out/graph.json --dry-run --repo ."
+      }
+    ]
+  },
+  "reads": [],
+  "detection": "",
+  "useCases": [
+    {
+      "title": "Review a swap with its callers in view",
+      "body": "The draft pull request lists what calls the swapped call site and which tests reach it, so a reviewer can weigh the reach of a model change without leaving the pull request. The evidence table above the section is the same with or without the graph."
+    },
+    {
+      "title": "Know which tests to run before merging",
+      "body": "Tests are found through call, import, and reference edges up to three hops from the call site, so the report names the test files the graph links to the code whose model would change, each labelled by how directly it reaches it."
+    },
+    {
+      "title": "Find model calls the scanner did not match",
+      "body": "Unconfirmed imports list files that import a model SDK where the scanner found no call site, such as a wrapper module. Nothing in them was evaluated; if one calls a model you want audited, add a --matchers rule and rerun."
+    },
+    {
+      "title": "Add context without re-running the audit",
+      "body": "The flag only changes the report stage, so adding a graph to a finished run renders the section without repeating scan, replay, or any other evidence stage. The scanner ignores graphify-out/, so building or rebuilding the graph leaves finished stages current."
+    }
+  ],
+  "limits": [
+    "Graph edges are static structure. They are never replay trials, runtime proof, or quality evidence, and the flag never changes a stage before the report, a verdict, a release gate, confirmation, the proposed swap, its digest, or who is asked to review.",
+    "INFERRED and AMBIGUOUS findings were resolved by inference or are uncertain, and are marked verify. A multi-hop finding carries its weakest hop, so a single inferred edge anywhere in the chain labels the whole finding.",
+    "A graph built at a different commit than the scan is shown file-level only: enclosing symbols and callers are hidden until you rebuild with graphify update . at the scanned commit.",
+    "An unusable graph, such as a missing file, a file that is not a Graphify graph, one too large for Node.js to read, or one built from another repository, produces a warning and a section that says why it is not shown, and the rest of the report is unchanged. Edges and nodes whose shape this version does not read are ignored and counted in the section.",
+    "Owners come from CODEOWNERS, or from git blame when no rule matches, and are listed only. Reviewers on the pull request still come from apply's own CODEOWNERS and blame rules, never from the graph.",
+    "Tested with Graphify 0.9.65: real graphs from that release were rendered in the report for fixture apps and a copy of the Vercel AI chatbot, and the pull request section was checked against a local GitHub stub, not a live pull request. rightmodeler never installs or runs Graphify; it only reads the graph.json you pass."
+  ],
+  "faq": [
+    {
+      "q": "Does the code graph change what rightmodeler recommends?",
+      "a": "No. The flag only adds a section to the report or the pull request body. Graph data stays out of every store entry except the report, and it never changes a verdict, a gate, confirmation, the swap, its digest, or its reviewers, so a run recommends the same thing with or without --code-graph."
+    },
+    {
+      "q": "Does building the graph send my code anywhere?",
+      "a": "Not with the commands rightmodeler needs. graphify update . parses code locally with tree-sitter and makes no model call, and Graphify's README states it has no telemetry. Some other Graphify commands can call a language model, such as graphify extract without --code-only when a provider key is set, so stick to graphify update or graphify extract --code-only for this graph."
+    },
+    {
+      "q": "Do I need a Graphify account?",
+      "a": "No. rightmodeler reads the graph.json written by the open-source Graphify CLI, installed from PyPI as graphifyy under the Apache-2.0 license. No hosted service is involved, and rightmodeler never runs Graphify itself; it only reads the file you pass."
+    },
+    {
+      "q": "What happens when my graph is out of date?",
+      "a": "rightmodeler compares the commit recorded in graph.json with the scanned revision. When they differ it prints a code_graph_stale warning, shows the section file-level only under a stale banner, and tells you to rebuild with graphify update . at the scanned commit."
+    },
+    {
+      "q": "Why does rightmodeler mention a graph I did not pass?",
+      "a": "When graphify-out/graph.json exists and --code-graph is absent, report, init, and apply print a code_graph_available hint with the exact flag to add. The hint changes no exit code and adds no section; the context appears only when you pass the flag."
+    }
+  ],
+  "related": ["github", "vercel-ai-sdk", "claude-code"],
+  "cta": "github"
+}
