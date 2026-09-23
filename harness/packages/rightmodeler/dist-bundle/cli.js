@@ -44593,10 +44593,12 @@ async function runWatch(options) {
 }
 async function listWatchablePullRequests(options) {
   const context2 = createHeadlessContext(options);
-  const ledger = await readPipelineLedger(context2);
-  const events = ledger.lifecycleEvents.filter(
-    ({ prNumber }) => prNumber !== null
+  return watchablePullRequests(
+    (await readPipelineLedger(context2)).lifecycleEvents
   );
+}
+function watchablePullRequests(lifecycleEvents) {
+  const events = lifecycleEvents.filter(({ prNumber }) => prNumber !== null);
   const numbers = [
     ...new Set(
       events.flatMap(({ prNumber }) => prNumber === null ? [] : [prNumber])
@@ -48174,7 +48176,8 @@ async function readStatus(options) {
     droppedFacts: ledger.droppedRows,
     spend: spendSummary(ledger.spendEvents),
     corpusVersion: corpus?.corpusVersionId ?? null,
-    lastRun: runs[0] ?? null
+    lastRun: runs[0] ?? null,
+    pullRequests: watchablePullRequests(ledger.lifecycleEvents)
   };
 }
 async function maybeLoadCorpus(context2) {
