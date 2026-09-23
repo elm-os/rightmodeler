@@ -1,0 +1,67 @@
+{
+  "requestedModel": "stub/requested",
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "x-portkey-cache-status": "DISABLED",
+    "x-portkey-last-used-option-index": "config",
+    "x-portkey-provider": "openai",
+    "x-portkey-retry-attempt-count": "0",
+    "x-portkey-trace-id": ""
+  },
+  "body": {
+    "id": "chatcmpl-echo",
+    "object": "chat.completion",
+    "created": 1790118087,
+    "model": "stub/requested",
+    "choices": [
+      {
+        "index": 0,
+        "finish_reason": "stop",
+        "message": {
+          "role": "assistant",
+          "content": "echo 65"
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 11,
+      "completion_tokens": 2,
+      "total_tokens": 13
+    },
+    "hook_results": {
+      "before_request_hooks": [
+        {
+          "verdict": true,
+          "id": "input_guardrail_pod",
+          "transformed": true,
+          "checks": [
+            {
+              "data": {
+                "prefix": "PREFIX-INJECTED: ",
+                "requestType": "chatComplete",
+                "applyToRole": "user",
+                "addToExisting": true,
+                "onlyIfEmpty": false
+              },
+              "verdict": true,
+              "id": "default.addPrefix",
+              "execution_time": 1,
+              "transformed": true,
+              "created_at": "2026-09-23T15:53:11.124Z",
+              "log": null,
+              "fail_on_error": false
+            }
+          ],
+          "feedback": null,
+          "execution_time": 1,
+          "async": false,
+          "type": "mutator",
+          "created_at": "2026-09-23T15:53:11.124Z",
+          "deny": false
+        }
+      ],
+      "after_request_hooks": []
+    }
+  }
+}
