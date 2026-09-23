@@ -562,7 +562,7 @@ print documentation packaged with this CLI
 
 Arguments:
   name        packaged document name (choices: "commands", "evaluators",
-              "exit-codes", "getting-started", "modeb")
+              "exit-codes", "getting-started", "github", "modeb")
 
 Options:
   -h, --help  display help for command

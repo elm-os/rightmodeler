@@ -140,4 +140,6 @@ The default store is `.rightmodeler/` inside the analyzed repository. Completed 
 
 Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), and the [exit-code convention](exit-codes.md) before automating a full run.
 
+To open the draft pull request and keep it reconciled, read the [GitHub guide](github.md).
+
 Run `rightmodeler docs <name>` to print any of these documents from the installed package.

@@ -402,6 +402,7 @@ async function assertPackedDocumentation(
     "docs/evaluators.md",
     "docs/exit-codes.md",
     "docs/getting-started.md",
+    "docs/github.md",
     "docs/modeb.md",
   ]);
 
@@ -436,6 +437,7 @@ async function assertPackedDocumentation(
     "evaluators",
     "exit-codes",
     "getting-started",
+    "github",
     "modeb",
   ]) {
     expect(await runInstalled(binary, ["docs", name], cwd)).toEqual({
