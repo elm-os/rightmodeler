@@ -33,6 +33,7 @@ import {
 import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { CodeContext, CodeFinding } from "../code-graph/index.js";
 import {
   blastRadius,
   captureConventions,
@@ -323,6 +324,83 @@ function applyVerdict(
   };
 }
 
+const graphFindings: readonly CodeFinding[] = [
+  {
+    kind: "caller",
+    label: "handleArticle()",
+    path: "src/routes/articles.ts",
+    line: 9,
+    hops: 1,
+    provenance: "EXTRACTED",
+    score: 1,
+  },
+  {
+    kind: "caller",
+    label: "nightlyDigest()",
+    path: "src/jobs/digest.ts",
+    line: 14,
+    hops: 2,
+    provenance: "INFERRED",
+    score: 0.8,
+  },
+  {
+    kind: "owner",
+    label: "@acme/graph-only",
+    path: "src/jobs/digest.ts",
+    line: null,
+    hops: 2,
+    provenance: "INFERRED",
+    score: 0.8,
+  },
+];
+
+function graphContext(
+  harness: TestHarness,
+  findings: readonly CodeFinding[] = graphFindings,
+): CodeContext {
+  return {
+    status: "ok",
+    graphPath: "graphify-out/graph.json",
+    sha256: "b".repeat(64),
+    builtAtCommit: harness.head,
+    revision: harness.head,
+    stale: false,
+    nodes: 12,
+    edges: 20,
+    ignoredNodes: 0,
+    ignoredEdges: 0,
+    callSites: [
+      {
+        stepId: harness.stepRecord.stepId,
+        family: harness.stepRecord.family,
+        path: sourcePath,
+        line: harness.stepRecord.callSite.line,
+        inGraph: true,
+        enclosingSymbol: "summarize()",
+        findings,
+      },
+      {
+        stepId: "f".repeat(64),
+        family: "unswapped",
+        path: "src/unswapped.ts",
+        line: 3,
+        inGraph: true,
+        enclosingSymbol: "unswapped()",
+        findings: [],
+      },
+    ],
+    unconfirmedImports: [
+      {
+        path: "src/moderate.ts",
+        line: 1,
+        module: "openai",
+        provenance: "EXTRACTED",
+        score: 1,
+      },
+    ],
+  };
+}
+
 async function createHarness({
   tokenLogin,
   tokenKind,
@@ -420,6 +498,7 @@ async function runApply(
   verdicts: readonly ApplyVerdict[],
   dryRun = false,
   githubClient: GithubClient = harness.githubClient,
+  codeContext?: CodeContext,
 ): Promise<ApplyResult> {
   return applySwaps({
     store: harness.store,
@@ -429,6 +508,7 @@ async function runApply(
     conventions: harness.conventions,
     verdicts,
     dryRun,
+    ...(codeContext === undefined ? {} : { codeContext }),
   });
 }
 
@@ -488,6 +568,13 @@ async function runRollbackCli(
 function requireApplied(result: ApplyResult) {
   if (result.status !== "applied") {
     throw new Error(`Expected applied result, received ${result.status}`);
+  }
+  return result;
+}
+
+function requireDryRun(result: ApplyResult) {
+  if (result.status !== "dry_run") {
+    throw new Error(`Expected dry_run result, received ${result.status}`);
   }
   return result;
 }
@@ -1375,6 +1462,176 @@ describe("applySwaps", () => {
     });
 
     expect(pull.body).toContain("| n/a | n/a | n/a | n/a |");
+  });
+
+  it("appends Graphify code context after the evidence without changing the swap, its digest or its reviewers", async () => {
+    const harness = await createHarness();
+    const verdict = applyVerdict(harness);
+
+    const plain = requireDryRun(await runApply(harness, [verdict], true));
+    const withGraph = requireDryRun(
+      await runApply(
+        harness,
+        [verdict],
+        true,
+        harness.githubClient,
+        graphContext(harness),
+      ),
+    );
+
+    for (const field of [
+      "runSpecDigest",
+      "branch",
+      "title",
+      "files",
+      "reviewers",
+      "teamReviewers",
+    ] as const) {
+      expect(withGraph[field]).toEqual(plain[field]);
+    }
+    expect(withGraph.body.startsWith(plain.body)).toBe(true);
+    expect(plain.body).not.toContain("## Code context");
+    expect(withGraph.body).toContain("## Code context (Graphify)");
+    expect(withGraph.body).toContain(
+      "They never change a verdict, a gate, confirmation, the proposed swap, or who is asked to review.",
+    );
+    expect(withGraph.body).toContain(
+      `\`${sourcePath}:${harness.stepRecord.callSite.line}\` in \`summarize()\``,
+    );
+    expect(withGraph.body).toContain(
+      "| caller (2 hops) | `nightlyDigest()` | `src/jobs/digest.ts:14` | INFERRED 0.80, verify |",
+    );
+    expect(withGraph.body).toContain(
+      "| owner, listed only | `@acme/graph-only` |",
+    );
+    expect(withGraph.body).not.toContain("src/unswapped.ts");
+    expect(withGraph.body).not.toContain("Unconfirmed SDK imports");
+    expect(githubWrites(harness.stub)).toEqual([]);
+  });
+
+  it("lists graph-derived owners without requesting them or recording graph data", async () => {
+    const harness = await createHarness();
+    const verdict = applyVerdict(harness);
+
+    const preview = requireDryRun(await runApply(harness, [verdict], true));
+    const applied = requireApplied(
+      await runApply(
+        harness,
+        [verdict],
+        false,
+        harness.githubClient,
+        graphContext(harness),
+      ),
+    );
+    const pull = await harness.githubClient.getPullRequest({
+      ...repository,
+      pullNumber: applied.prNumber,
+    });
+
+    expect(pull.body).toContain("`@acme/graph-only`");
+    expect(applied.reviewers).toEqual(preview.reviewers);
+    expect(applied.teamReviewers).toEqual(preview.teamReviewers);
+    expect(
+      [...applied.reviewers, ...applied.teamReviewers].join(" "),
+    ).not.toContain("graph-only");
+    expect(
+      harness.stub
+        .getHits()
+        .filter(({ path }) => path.endsWith("/requested_reviewers"))
+        .map(({ body }) => JSON.stringify(body)),
+    ).not.toContainEqual(expect.stringContaining("graph-only"));
+    const recorded = JSON.stringify(await lifecycleEvents(harness.store));
+    expect(recorded).not.toContain("graph-only");
+    expect(recorded).not.toContain("nightlyDigest()");
+  });
+
+  it("shows at most five findings of each kind per swapped call site", async () => {
+    const harness = await createHarness();
+    const callers = Array.from({ length: 7 }, (_, index): CodeFinding => ({
+      kind: "caller",
+      label: `caller${index + 1}()`,
+      path: `src/routes/caller${index + 1}.ts`,
+      line: index + 1,
+      hops: 1,
+      provenance: "EXTRACTED",
+      score: 1,
+    }));
+
+    const { body } = requireDryRun(
+      await runApply(
+        harness,
+        [applyVerdict(harness)],
+        true,
+        harness.githubClient,
+        graphContext(harness, callers),
+      ),
+    );
+
+    for (const index of [1, 2, 3, 4, 5]) {
+      expect(body).toContain(`\`caller${index}()\``);
+    }
+    expect(body).not.toContain("`caller6()`");
+    expect(body).not.toContain("`caller7()`");
+    expect(body).toContain(
+      "At most five findings of each kind are shown per call site.",
+    );
+  });
+
+  it("keeps the pull request body within GitHub's 65,536-character limit", async () => {
+    const harness = await createHarness();
+    const verdict = applyVerdict(harness);
+    const plain = requireDryRun(await runApply(harness, [verdict], true));
+
+    const { body } = requireDryRun(
+      await runApply(
+        harness,
+        [verdict],
+        true,
+        harness.githubClient,
+        graphContext(harness, [
+          {
+            kind: "caller",
+            label: "x".repeat(70_000),
+            path: "src/routes/articles.ts",
+            line: 9,
+            hops: 1,
+            provenance: "EXTRACTED",
+            score: 1,
+          },
+        ]),
+      ),
+    );
+
+    expect(body.length).toBeLessThanOrEqual(65_536);
+    expect(body.startsWith(plain.body)).toBe(true);
+    expect(body).toContain(
+      "Omitted: the section would push this pull request body past GitHub's 65,536-character limit.",
+    );
+  });
+
+  it("states an unavailable code context in one line", async () => {
+    const harness = await createHarness();
+
+    const { body } = requireDryRun(
+      await runApply(
+        harness,
+        [applyVerdict(harness)],
+        true,
+        harness.githubClient,
+        {
+          status: "unavailable",
+          graphPath: "graphify-out/graph.json",
+          reason:
+            "None of the 1 scanned call-site files appear in the code graph.",
+        },
+      ),
+    );
+
+    expect(
+      body.endsWith(
+        "Not shown: None of the 1 scanned call-site files appear in the code graph.\n",
+      ),
+    ).toBe(true);
   });
 
   it("restores the exact pre-apply branch state, records apply_failed, and resumes", async () => {

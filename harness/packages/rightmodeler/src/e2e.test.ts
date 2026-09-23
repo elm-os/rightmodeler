@@ -67,6 +67,9 @@ const langgraphTracesPath = fileURLToPath(
 const tracesPath = fileURLToPath(
   new URL("../../../fixtures/traces/otel-genai.json", import.meta.url),
 );
+const demoGraphPath = fileURLToPath(
+  new URL("../../../fixtures/code-graph/demo-app.graph.json", import.meta.url),
+);
 const aiSdkAppPath = fileURLToPath(
   new URL("../../../fixtures/ai-sdk-app", import.meta.url),
 );
@@ -3130,6 +3133,33 @@ describe("built CLI pipeline", () => {
       const dryRun = await runCli([...applyArgs, "--dry-run"], { env });
       expect(dryRun.code).toBe(0);
       expect(jsonOutput(dryRun)).toMatchObject({ status: "dry_run" });
+      const preview = jsonOutput(dryRun);
+      const graphDryRun = await runCli(
+        [...applyArgs, "--dry-run", "--code-graph", demoGraphPath],
+        { env },
+      );
+      expect(graphDryRun.code).toBe(0);
+      expect(graphDryRun.stderr).toContain('"code":"code_graph_stale"');
+      const graphPreview = JSON.parse(graphDryRun.stdout) as Record<
+        string,
+        unknown
+      >;
+      for (const field of [
+        "runSpecDigest",
+        "branch",
+        "title",
+        "files",
+        "reviewers",
+        "teamReviewers",
+      ]) {
+        expect(graphPreview[field]).toEqual(preview[field]);
+      }
+      expect(String(graphPreview.body).startsWith(String(preview.body))).toBe(
+        true,
+      );
+      expect(String(graphPreview.body)).toContain("## Code context (Graphify)");
+      expect(String(graphPreview.body)).toContain("Stale: built at");
+      expect(String(preview.body)).not.toContain("## Code context");
       expect(
         github
           .getHits()

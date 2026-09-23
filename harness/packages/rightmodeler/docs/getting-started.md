@@ -92,6 +92,8 @@ npx rightmodeler report --code-graph graphify-out/graph.json --repo .
 
 Graph edges are never replay trials, runtime proof, or quality evidence, and the flag never changes a stage before the report, a verdict, a gate, or confirmation. Each finding is labelled EXTRACTED, or INFERRED or AMBIGUOUS to verify, by its weakest hop. A graph built at another commit is shown file-level with a stale note. An unusable graph produces one warning, the section says why it is not shown, and the rest of the report is unchanged. The scan ignores `graphify-out/`, so building a graph never makes finished stages stale. Only `graphify update` and `graphify extract --code-only` are needed; other Graphify commands can call a language model.
 
+`apply --code-graph <path>` appends the same section to the draft pull request body, limited to the call sites the pull request swaps and to five findings of each kind per call site. Owners there are listed only and are never requested as reviewers; reviewers still come from CODEOWNERS and blame. The graph never changes the swap, its digest, or its reviewers. `apply --dry-run` prints the exact body it would post, with or without `--code-graph`.
+
 ## Release policy
 
 `--policy <path>` is accepted by `init`, `estimate`, `replay`, and `confirm`. The JSON object can set the quality floor, shortlist size, and model allow and deny lists:

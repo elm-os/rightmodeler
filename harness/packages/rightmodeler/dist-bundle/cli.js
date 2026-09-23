@@ -35469,11 +35469,1034 @@ function scrubRuns(runs) {
 }
 
 // src/apply/orchestrator.ts
-import { execFile as execFile3 } from "node:child_process";
-import { createHash as createHash5 } from "node:crypto";
-import { readFile as readFile5 } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { execFile as execFile5 } from "node:child_process";
+import { createHash as createHash6 } from "node:crypto";
+import { readFile as readFile8 } from "node:fs/promises";
+import { join as join11 } from "node:path";
+import { promisify as promisify4 } from "node:util";
+
+// src/code-graph/graph.ts
+import { constants } from "node:buffer";
+import { createHash as createHash4 } from "node:crypto";
+import { readFile as readFile4, stat as stat2 } from "node:fs/promises";
+import { isAbsolute, relative as relative4, sep as sep4 } from "node:path";
+var provenanceRank = {
+  AMBIGUOUS: 0,
+  INFERRED: 1,
+  EXTRACTED: 2
+};
+var tierScores = {
+  EXTRACTED: 1,
+  INFERRED: 0.55,
+  AMBIGUOUS: 0.2
+};
+var locationSchema = external_exports.union([external_exports.string(), external_exports.number()]).nullable().optional();
+var fileSchema = external_exports.looseObject({
+  nodes: external_exports.array(external_exports.unknown()),
+  links: external_exports.array(external_exports.unknown()).optional(),
+  edges: external_exports.array(external_exports.unknown()).optional(),
+  built_at_commit: external_exports.string().min(1).optional().catch(void 0)
+});
+var nodeSchema = external_exports.looseObject({
+  id: external_exports.string().min(1),
+  label: external_exports.string().optional(),
+  file_type: external_exports.string().optional(),
+  source_file: external_exports.string().nullable().optional(),
+  source_location: locationSchema
+});
+var edgeSchema = external_exports.looseObject({
+  source: external_exports.string().min(1),
+  target: external_exports.string().min(1),
+  relation: external_exports.string().min(1),
+  _src: external_exports.string().min(1).optional(),
+  _tgt: external_exports.string().min(1).optional(),
+  confidence: external_exports.enum(["EXTRACTED", "INFERRED", "AMBIGUOUS"]),
+  confidence_score: external_exports.number().optional(),
+  source_file: external_exports.string().nullable().optional(),
+  source_location: locationSchema
+});
+async function graphFileDigest(path) {
+  try {
+    const { size } = await stat2(path);
+    if (size > constants.MAX_STRING_LENGTH) return `too-large:${size}`;
+    return createHash4("sha256").update(await readFile4(path)).digest("hex");
+  } catch {
+    return "unreadable";
+  }
+}
+async function loadCodeGraph(path, repoDir) {
+  const fromRepo = relative4(repoDir, path).split(sep4).join("/");
+  const displayPath = fromRepo.startsWith("..") ? path : fromRepo;
+  const unreadable = (error51) => ({
+    displayPath,
+    issue: {
+      code: "code_graph_unreadable",
+      message: `Cannot read the code graph at ${displayPath} (${errorCode(error51)}). Code context is omitted. Check the --code-graph path, or rebuild the graph with \`graphify update .\`.`
+    }
+  });
+  const invalid = (reason) => ({
+    displayPath,
+    issue: {
+      code: "code_graph_invalid",
+      message: `${displayPath} is not a Graphify graph.json (${reason}). Code context is omitted. Pass the graph.json that \`graphify update .\` writes under graphify-out/.`
+    }
+  });
+  let size;
+  try {
+    size = (await stat2(path)).size;
+  } catch (error51) {
+    return unreadable(error51);
+  }
+  if (size > constants.MAX_STRING_LENGTH) {
+    return {
+      displayPath,
+      issue: {
+        code: "code_graph_too_large",
+        message: `The code graph at ${displayPath} is ${size} bytes, over the ${constants.MAX_STRING_LENGTH}-byte limit Node.js can read. Code context is omitted. Narrow the graph with a .graphifyignore and rebuild it with \`graphify update .\`.`
+      }
+    };
+  }
+  let bytes;
+  try {
+    bytes = await readFile4(path);
+  } catch (error51) {
+    return unreadable(error51);
+  }
+  let raw;
+  try {
+    raw = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    return invalid("not JSON");
+  }
+  const file2 = fileSchema.safeParse(raw);
+  if (!file2.success) {
+    return invalid(
+      Array.isArray(raw?.nodes) ? "no links or edges array" : "no nodes array"
+    );
+  }
+  const rawEdges = file2.data.links ?? file2.data.edges;
+  if (rawEdges === void 0) return invalid("no links or edges array");
+  const nodes = /* @__PURE__ */ new Map();
+  let ignoredNodes = 0;
+  for (const value of file2.data.nodes) {
+    const node = nodeSchema.safeParse(value);
+    if (!node.success) {
+      ignoredNodes += 1;
+      continue;
+    }
+    nodes.set(node.data.id, {
+      id: node.data.id,
+      label: node.data.label ?? node.data.id,
+      path: normalizeSourcePath(node.data.source_file, repoDir),
+      line: parseLine(node.data.source_location),
+      fileType: node.data.file_type ?? null
+    });
+  }
+  const edges = [];
+  const unknownConfidences = /* @__PURE__ */ new Set();
+  let ignoredEdges = 0;
+  for (const value of rawEdges) {
+    const edge = edgeSchema.safeParse(value);
+    if (!edge.success) {
+      ignoredEdges += 1;
+      const confidence9 = value?.confidence;
+      if (typeof confidence9 === "string" && !Object.hasOwn(tierScores, confidence9) && unknownConfidences.size < 3) {
+        unknownConfidences.add(confidence9);
+      }
+      continue;
+    }
+    const { _src, _tgt } = edge.data;
+    const [source, target] = _src !== void 0 && _tgt !== void 0 ? [_src, _tgt] : [edge.data.source, edge.data.target];
+    if (!nodes.has(source) || !nodes.has(target)) {
+      ignoredEdges += 1;
+      continue;
+    }
+    const score = edge.data.confidence_score;
+    edges.push({
+      source,
+      target,
+      relation: edge.data.relation,
+      provenance: edge.data.confidence,
+      score: score !== void 0 && score >= 0 && score <= 1 ? score : tierScores[edge.data.confidence],
+      path: normalizeSourcePath(edge.data.source_file, repoDir),
+      line: parseLine(edge.data.source_location)
+    });
+  }
+  const sample = unknownConfidences.size === 0 ? "" : ` (for example confidence ${[...unknownConfidences].map((value) => `"${value}"`).join(", ")})`;
+  return {
+    graph: {
+      displayPath,
+      sha256: createHash4("sha256").update(bytes).digest("hex"),
+      builtAtCommit: file2.data.built_at_commit ?? null,
+      nodes,
+      edges,
+      ignoredNodes,
+      ignoredEdges
+    },
+    issues: ignoredNodes + ignoredEdges === 0 ? [] : [
+      {
+        code: "code_graph_schema_drift",
+        message: `Ignored ${ignoredEdges} edges and ${ignoredNodes} nodes in ${displayPath} whose shape this rightmodeler does not read${sample}. The rest of the graph is used. Rebuilding with a current Graphify (tested with 0.9.65) usually clears this.`
+      }
+    ]
+  };
+}
+function normalizeSourcePath(value, repoDir) {
+  if (value === void 0 || value === null || value === "") return null;
+  const slashed = value.replaceAll("\\", "/");
+  const path = isAbsolute(slashed) ? relative4(repoDir, slashed).split(sep4).join("/") : slashed;
+  return path.startsWith("./") ? path.slice(2) : path;
+}
+function parseLine(value) {
+  const match = /^L?([1-9]\d*)$/.exec(String(value));
+  return match === null ? null : Number(match[1]);
+}
+function errorCode(error51) {
+  const { code, message: message2 } = error51;
+  return code ?? message2;
+}
+
+// src/code-graph/context.ts
+import { basename } from "node:path";
+
+// src/enrich/blast-radius.ts
+function addOwner(owners, owner) {
+  const current = owners.get(owner.handle);
+  if (current === void 0 || owner.source === "codeowners") {
+    owners.set(owner.handle, owner);
+  }
+}
+function blastRadius({
+  stepRecords,
+  verdicts,
+  owners: ownerResolutions
+}) {
+  const recordsById = new Map(
+    stepRecords.map((record2) => [record2.stepId, record2])
+  );
+  const ownersByPath = new Map(
+    ownerResolutions.map(
+      (resolution) => [resolution.path, resolution]
+    )
+  );
+  const recommendedFamilies = [
+    ...new Set(
+      verdicts.filter(({ decision }) => decision === "recommend").map(({ familyId }) => familyId)
+    )
+  ].sort(compareText);
+  return recommendedFamilies.map((familyId) => {
+    const roots = stepRecords.filter((record2) => record2.family === familyId);
+    const swappedFiles = new Set(roots.map((record2) => record2.callSite.path));
+    const downstreamFiles = /* @__PURE__ */ new Set();
+    const visited = new Set(roots.map((record2) => record2.stepId));
+    const queue = roots.flatMap((record2) => record2.downstreamStepIds);
+    const owners = /* @__PURE__ */ new Map();
+    for (const root of roots) {
+      for (const owner of ownersByPath.get(root.callSite.path)?.owners ?? []) {
+        addOwner(owners, owner);
+      }
+    }
+    while (queue.length > 0) {
+      const stepId = queue.shift();
+      if (visited.has(stepId)) continue;
+      visited.add(stepId);
+      const record2 = recordsById.get(stepId);
+      if (record2 === void 0) continue;
+      if (!swappedFiles.has(record2.callSite.path)) {
+        downstreamFiles.add(record2.callSite.path);
+      }
+      for (const owner of ownersByPath.get(record2.callSite.path)?.owners ?? []) {
+        addOwner(owners, owner);
+      }
+      queue.push(...record2.downstreamStepIds);
+    }
+    return {
+      familyId,
+      files: [...swappedFiles].sort(compareText),
+      downstreamFiles: [...downstreamFiles].sort(compareText),
+      owners: [...owners.values()].sort(
+        (left, right) => compareText(left.handle, right.handle)
+      )
+    };
+  });
+}
+
+// src/enrich/conventions.ts
+import { execFile as execFile2 } from "node:child_process";
+import { access, readFile as readFile5 } from "node:fs/promises";
+import { dirname as dirname3, join as join7, relative as relative5, resolve as resolve4 } from "node:path";
 import { promisify as promisify2 } from "node:util";
+
+// src/enrich/shared.ts
+var codeownersPaths = [
+  ".github/CODEOWNERS",
+  "CODEOWNERS",
+  "docs/CODEOWNERS"
+];
+
+// src/enrich/conventions.ts
+var execFileAsync2 = promisify2(execFile2);
+var pullRequestTemplates = [
+  ".github/PULL_REQUEST_TEMPLATE.md",
+  "docs/PULL_REQUEST_TEMPLATE.md",
+  "PULL_REQUEST_TEMPLATE.md"
+];
+var prettierConfigs = [
+  ".prettierrc",
+  ".prettierrc.json",
+  ".prettierrc.yaml",
+  ".prettierrc.yml",
+  ".prettierrc.toml",
+  ".prettierrc.js",
+  ".prettierrc.cjs",
+  ".prettierrc.mjs",
+  "prettier.config.js",
+  "prettier.config.cjs",
+  "prettier.config.mjs"
+];
+function posixPath(repoDir, absolutePath) {
+  return relative5(repoDir, absolutePath).replaceAll("\\", "/");
+}
+async function existingPath(repoDir, candidates) {
+  for (const path of candidates) {
+    try {
+      await access(join7(repoDir, path));
+      return path;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+async function nestedAgentFiles(repoDir) {
+  return (await gitOutput(repoDir, ["ls-files", "--", "*AGENTS.md"])).split(/\r?\n/).filter((path) => path === "AGENTS.md" || path.endsWith("/AGENTS.md"));
+}
+function includeTargets(content) {
+  const targets = [];
+  for (const line of content.split(/\r?\n/)) {
+    const include = line.match(/^\s*@include\s+(.+?)\s*$/)?.[1];
+    if (include?.endsWith(".md")) {
+      targets.push(include);
+      continue;
+    }
+    const pointer = line.match(/^\s*@([^\s]+\.md)\s*$/)?.[1];
+    if (pointer !== void 0) targets.push(pointer);
+  }
+  return targets;
+}
+function includePath(repoDir, includedFrom, target) {
+  const absolute = target.startsWith("/") ? resolve4(repoDir, target.slice(1)) : resolve4(repoDir, dirname3(includedFrom), target);
+  return { absolute, relative: posixPath(repoDir, absolute) };
+}
+async function captureInstructionFiles(repoDir) {
+  const rootFiles = (await Promise.all(
+    ["AGENTS.md", "CLAUDE.md"].map(async (path) => {
+      try {
+        await access(join7(repoDir, path));
+        return path;
+      } catch {
+        return null;
+      }
+    })
+  )).filter((path) => path !== null);
+  const seeds = [
+    .../* @__PURE__ */ new Set([...rootFiles, ...await nestedAgentFiles(repoDir)])
+  ];
+  const files = /* @__PURE__ */ new Map();
+  const warnings = [];
+  const warningKeys = /* @__PURE__ */ new Set();
+  function warn(warning) {
+    const key = JSON.stringify(warning);
+    if (warningKeys.has(key)) return;
+    warningKeys.add(key);
+    warnings.push(warning);
+  }
+  async function capture(path, depth, stack, includedFrom) {
+    let content;
+    try {
+      content = await readFile5(join7(repoDir, path), "utf8");
+    } catch {
+      warn(
+        includedFrom === void 0 ? { name: "instruction_file_unreadable", path } : {
+          name: "instruction_include_unreadable",
+          path,
+          includedFrom
+        }
+      );
+      return;
+    }
+    files.set(path, content);
+    for (const target of includeTargets(content)) {
+      const included = includePath(repoDir, path, target);
+      if (stack.includes(included.relative) || included.relative === path) {
+        warn({
+          name: "instruction_include_cycle",
+          path: included.relative,
+          includedFrom: path
+        });
+        continue;
+      }
+      if (depth < 1) {
+        await capture(included.relative, depth + 1, [...stack, path], path);
+      }
+    }
+  }
+  for (const seed of seeds.sort(compareText)) {
+    await capture(seed, 0, []);
+  }
+  return {
+    files: [...files.entries()].sort(([left], [right]) => compareText(left, right)).map(([path, content]) => ({ path, content })),
+    warnings: warnings.sort(
+      (left, right) => compareText(left.name, right.name) || compareText(left.path, right.path) || compareText(left.includedFrom ?? "", right.includedFrom ?? "")
+    )
+  };
+}
+async function readFirst(repoDir, candidates) {
+  const path = await existingPath(repoDir, candidates);
+  return path === null ? null : readFile5(join7(repoDir, path), "utf8");
+}
+async function detectFormatter(repoDir) {
+  const prettier = await existingPath(repoDir, prettierConfigs);
+  if (prettier !== null) return { kind: "prettier", configPath: prettier };
+  const ruff = await existingPath(repoDir, ["ruff.toml", ".ruff.toml"]);
+  if (ruff !== null) return { kind: "ruff", configPath: ruff };
+  const pyproject = await existingPath(repoDir, ["pyproject.toml"]);
+  if (pyproject !== null && /^\s*\[tool\.ruff(?:\.[^\]]+)?\]\s*$/m.test(
+    await readFile5(join7(repoDir, pyproject), "utf8")
+  )) {
+    return { kind: "ruff", configPath: pyproject };
+  }
+  const goModule = await existingPath(repoDir, ["go.mod"]);
+  if (goModule !== null) return { kind: "gofmt", configPath: goModule };
+  return { kind: null, configPath: null };
+}
+async function gitOutput(repoDir, args) {
+  try {
+    const { stdout } = await execFileAsync2("git", ["-C", repoDir, ...args], {
+      encoding: "utf8"
+    });
+    return stdout;
+  } catch {
+    return "";
+  }
+}
+async function inferCommitConvention(repoDir) {
+  const inferredFrom = (await gitOutput(repoDir, ["log", "-30", "--format=%s"])).split(/\r?\n/).filter((subject) => subject !== "");
+  const conventional = inferredFrom.filter(
+    (subject) => /^(?:build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(?:\([^)]+\))?!?:\s+.+$/.test(
+      subject
+    )
+  ).length;
+  return {
+    style: inferredFrom.length > 0 && conventional > inferredFrom.length / 2 ? "conventional" : "plain",
+    inferredFrom
+  };
+}
+async function inferBranchPrefix(repoDir) {
+  const branches = (await gitOutput(repoDir, [
+    "for-each-ref",
+    "--sort=-committerdate",
+    "--count=30",
+    "--format=%(refname)",
+    "refs/heads",
+    "refs/remotes"
+  ])).split(/\r?\n/).filter((branch) => branch !== "").map(
+    (branch) => branch.startsWith("refs/heads/") ? branch.slice("refs/heads/".length) : branch.replace(/^refs\/remotes\/[^/]+\//, "")
+  ).filter((branch) => branch !== "HEAD");
+  const counts = /* @__PURE__ */ new Map();
+  for (const branch of new Set(branches)) {
+    const slash = branch.indexOf("/");
+    if (slash < 1) continue;
+    const prefix = branch.slice(0, slash + 1);
+    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort(
+    ([leftPrefix, leftCount], [rightPrefix, rightCount]) => rightCount - leftCount || compareText(leftPrefix, rightPrefix)
+  );
+  if (ranked.length === 0) return null;
+  return ranked[0][0];
+}
+async function captureConventions({
+  repoDir
+}) {
+  const instructions = await captureInstructionFiles(repoDir);
+  return {
+    version: "1",
+    instructionFiles: instructions.files,
+    prTemplate: await readFirst(repoDir, pullRequestTemplates),
+    codeowners: await existingPath(repoDir, codeownersPaths),
+    formatter: await detectFormatter(repoDir),
+    commitConvention: await inferCommitConvention(repoDir),
+    branchPrefix: await inferBranchPrefix(repoDir),
+    warnings: instructions.warnings
+  };
+}
+
+// src/enrich/owners.ts
+import { execFile as execFile3 } from "node:child_process";
+import { access as access2, readFile as readFile6 } from "node:fs/promises";
+import { isAbsolute as isAbsolute2, join as join8, relative as relative6 } from "node:path";
+import { promisify as promisify3 } from "node:util";
+var execFileAsync3 = promisify3(execFile3);
+var maximumBlameOwners = 3;
+var maximumBlameConcurrency = 4;
+function repositoryPath(repoDir, filePath) {
+  const path = isAbsolute2(filePath) ? relative6(repoDir, filePath) : filePath;
+  return path.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, "");
+}
+async function findCodeowners(repoDir) {
+  for (const path of codeownersPaths) {
+    try {
+      await access2(join8(repoDir, path));
+      return path;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+function parseCodeowners(content) {
+  const rules = [];
+  for (const line of content.split(/\r?\n/)) {
+    const rule = line.split("#")[0].trim();
+    if (rule === "") continue;
+    const [pattern, ...owners] = rule.split(/\s+/);
+    rules.push({ pattern, owners });
+  }
+  return rules;
+}
+function escapeRegex3(character) {
+  return /[\\^$.*+?()[\]{}|]/.test(character) ? `\\${character}` : character;
+}
+function patternBody(pattern) {
+  let body = "";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+    if (character !== "*") {
+      body += character === "?" ? "[^/]" : escapeRegex3(character);
+      continue;
+    }
+    const next = pattern[index + 1];
+    if (next !== "*") {
+      body += "[^/]*";
+      continue;
+    }
+    while (pattern[index + 1] === "*") index += 1;
+    if (pattern[index + 1] === "/") {
+      index += 1;
+      body += "(?:.*/)?";
+    } else {
+      body += ".*";
+    }
+  }
+  return body;
+}
+function codeownersRegex(pattern) {
+  const anchored = pattern.startsWith("/") || pattern.replace(/\/$/, "").includes("/");
+  const directory = pattern.endsWith("/");
+  const normalized = pattern.replace(/^\//, "").replace(/\/$/, "");
+  const exactPath = !/[*?]/.test(normalized);
+  const prefix = anchored ? "^" : "(?:^|.*/)";
+  const descendants = directory || exactPath || pattern.endsWith("/**") || /^\*\*\/[^*?/]+$/.test(pattern) ? "(?:/.*)?" : "";
+  return new RegExp(`${prefix}${patternBody(normalized)}${descendants}$`);
+}
+function matchingRule(rules, filePath) {
+  let matched = null;
+  for (const rule of rules) {
+    if (rule.matcher.test(filePath)) matched = rule;
+  }
+  return matched;
+}
+function blameAuthors(output) {
+  const authors = /* @__PURE__ */ new Map();
+  let authorEmail = null;
+  let authorTime = 0;
+  let committerEmail = null;
+  let committerTime = 0;
+  for (const line of output.split(/\r?\n/)) {
+    if (line.startsWith("author-mail ")) {
+      authorEmail = line.slice("author-mail ".length).replace(/^<|>$/g, "");
+    } else if (line.startsWith("author-time ")) {
+      authorTime = Number.parseInt(line.slice("author-time ".length), 10) || 0;
+    } else if (line.startsWith("committer-mail ")) {
+      committerEmail = line.slice("committer-mail ".length).replace(/^<|>$/g, "");
+    } else if (line.startsWith("committer-time ")) {
+      committerTime = Number.parseInt(line.slice("committer-time ".length), 10) || 0;
+    } else if (line.startsWith("	")) {
+      const email3 = authorEmail ?? committerEmail;
+      const time3 = authorTime || committerTime;
+      if (email3 !== null) {
+        const author = authors.get(email3) ?? {
+          lines: 0,
+          latestAuthorTime: 0
+        };
+        author.lines += 1;
+        author.latestAuthorTime = Math.max(author.latestAuthorTime, time3);
+        authors.set(email3, author);
+      }
+      authorEmail = null;
+      authorTime = 0;
+      committerEmail = null;
+      committerTime = 0;
+    }
+  }
+  return [...authors.entries()].sort(
+    ([leftEmail, left], [rightEmail, right]) => right.latestAuthorTime - left.latestAuthorTime || right.lines - left.lines || compareText(leftEmail, rightEmail)
+  ).slice(0, maximumBlameOwners).map(([handle]) => ({ handle, source: "blame" }));
+}
+async function ownersFromBlame(repoDir, filePath) {
+  try {
+    const { stdout } = await execFileAsync3(
+      "git",
+      ["-C", repoDir, "blame", "--line-porcelain", "--", filePath],
+      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
+    );
+    return blameAuthors(stdout);
+  } catch {
+    return [];
+  }
+}
+async function resolveOwners({
+  repoDir,
+  filePaths
+}) {
+  const codeownersPath = await findCodeowners(repoDir);
+  const rules = codeownersPath === null ? [] : parseCodeowners(
+    await readFile6(join8(repoDir, codeownersPath), "utf8")
+  ).map((rule) => ({
+    ...rule,
+    matcher: codeownersRegex(rule.pattern)
+  }));
+  const paths = filePaths.map(
+    (inputPath) => repositoryPath(repoDir, inputPath)
+  );
+  const rulesByPath = new Map(
+    [...new Set(paths)].map(
+      (path) => [path, matchingRule(rules, path)]
+    )
+  );
+  const blamePaths = [...rulesByPath.entries()].filter(([, rule]) => rule === null).map(([path]) => path);
+  const blameOwnersByPath = /* @__PURE__ */ new Map();
+  let nextPath = 0;
+  async function blameWorker() {
+    while (nextPath < blamePaths.length) {
+      const path = blamePaths[nextPath++];
+      blameOwnersByPath.set(path, await ownersFromBlame(repoDir, path));
+    }
+  }
+  await Promise.all(
+    Array.from(
+      { length: Math.min(maximumBlameConcurrency, blamePaths.length) },
+      () => blameWorker()
+    )
+  );
+  return paths.map((path) => {
+    const rule = rulesByPath.get(path) ?? null;
+    if (rule !== null) {
+      return rule.owners.length === 0 ? {
+        path,
+        owners: [],
+        reason: "codeowners_rule_without_owners"
+      } : {
+        path,
+        owners: rule.owners.map((handle) => ({
+          handle,
+          source: "codeowners"
+        }))
+      };
+    }
+    const owners = blameOwnersByPath.get(path) ?? [];
+    return owners.length === 0 ? {
+      path,
+      owners,
+      reason: "no_codeowners_match_or_blame"
+    } : { path, owners };
+  });
+}
+
+// src/code-graph/context.ts
+var CALLER_RELATIONS = /* @__PURE__ */ new Set(["calls", "indirect_call"]);
+var CALLER_DEPTH = 2;
+var TEST_RELATIONS = /* @__PURE__ */ new Set([
+  "calls",
+  "indirect_call",
+  "references",
+  "imports",
+  "imports_from",
+  "dynamic_import",
+  "re_exports",
+  "inherits",
+  "extends",
+  "implements",
+  "uses",
+  "mixes_in",
+  "embeds",
+  "requires",
+  "contains",
+  "method"
+]);
+var TEST_DEPTH = 3;
+var IMPORT_RELATIONS = /* @__PURE__ */ new Set([
+  "imports",
+  "imports_from",
+  "dynamic_import",
+  "re_exports"
+]);
+var TEST_PATH = /(^|\/)(__tests__|tests?)\/|\.(test|spec)\.[^/]+$|(^|\/)test_[^/]*\.py$|_test\.(py|go)$/;
+var MANIFEST_PATH = /(^|\/)(package\.json|pyproject\.toml|requirements\.txt)$/;
+var KIND_ORDER = {
+  caller: 0,
+  test: 1,
+  owner: 2
+};
+function weaker(left, right) {
+  return provenanceRank[left] <= provenanceRank[right] ? left : right;
+}
+function stronger(left, right) {
+  return (provenanceRank[left.provenance] - provenanceRank[right.provenance] || left.score - right.score || right.hops - left.hops || compareText(right.path, left.path)) > 0;
+}
+function walk(seed, nodes, incoming, relations, depth) {
+  const visited = /* @__PURE__ */ new Set([seed.id]);
+  const hits = [];
+  let frontier = [{ id: seed.id, provenance: "EXTRACTED", score: 1 }];
+  for (let hops = 1; hops <= depth && frontier.length > 0; hops += 1) {
+    const next = [];
+    for (const parent of frontier) {
+      for (const edge of incoming.get(parent.id) ?? []) {
+        if (!relations.has(edge.relation) || visited.has(edge.source)) {
+          continue;
+        }
+        visited.add(edge.source);
+        const node = nodes.get(edge.source);
+        const provenance = weaker(parent.provenance, edge.provenance);
+        const score = Math.min(parent.score, edge.score);
+        hits.push({
+          node,
+          hops,
+          provenance,
+          score,
+          path: edge.path ?? node.path,
+          line: edge.line
+        });
+        next.push({ id: node.id, provenance, score });
+      }
+    }
+    frontier = next;
+  }
+  return hits;
+}
+function compareFindings(left, right) {
+  return KIND_ORDER[left.kind] - KIND_ORDER[right.kind] || left.hops - right.hops || compareText(left.path, right.path) || compareLines(left.line, right.line) || compareText(left.label, right.label);
+}
+function compareLines(left, right) {
+  if (left === right) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return left - right;
+}
+function append2(map2, key, value) {
+  const list = map2.get(key);
+  if (list === void 0) map2.set(key, [value]);
+  else list.push(value);
+}
+function graphifyId(name) {
+  return name.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+}
+async function readCodeContext(input) {
+  const loaded = await loadCodeGraph(input.graphPath, input.repoDir);
+  if ("issue" in loaded) {
+    return {
+      context: {
+        status: "unavailable",
+        graphPath: loaded.displayPath,
+        reason: loaded.issue.message
+      },
+      issues: [loaded.issue]
+    };
+  }
+  const { graph } = loaded;
+  const issues = [...loaded.issues];
+  const nodesByPath = /* @__PURE__ */ new Map();
+  for (const node of graph.nodes.values()) {
+    if (node.path !== null) append2(nodesByPath, node.path, node);
+  }
+  const incoming = /* @__PURE__ */ new Map();
+  for (const edge of graph.edges) append2(incoming, edge.target, edge);
+  for (const edges of incoming.values()) {
+    edges.sort(
+      (left, right) => compareText(left.source, right.source) || compareText(left.relation, right.relation)
+    );
+  }
+  const callSitePaths = new Set(input.callSites.map(({ path }) => path));
+  if (callSitePaths.size > 0 && ![...callSitePaths].some((path) => nodesByPath.has(path))) {
+    const issue3 = {
+      code: "code_graph_repo_mismatch",
+      message: `None of the ${callSitePaths.size} scanned call-site files appear in the code graph at ${graph.displayPath}, so it describes another repository or folder. Code context is omitted. Build the graph from the repository root with \`graphify update .\`.`
+    };
+    return {
+      context: {
+        status: "unavailable",
+        graphPath: graph.displayPath,
+        reason: issue3.message
+      },
+      issues: [...issues, issue3]
+    };
+  }
+  const stale = graph.builtAtCommit !== input.revision;
+  if (stale) {
+    issues.push({
+      code: "code_graph_stale",
+      message: `The code graph was built at ${graph.builtAtCommit?.slice(0, 12) ?? "an unrecorded commit"} but the scan is at ${input.revision.slice(0, 12)}, so code context is file-level only. Rebuild with \`graphify update .\` at the scanned commit, or rerun the scan.`
+    });
+  }
+  const callSites = [];
+  for (const callSite of input.callSites) {
+    const inPath = nodesByPath.get(callSite.path);
+    if (inPath === void 0) {
+      callSites.push({
+        ...callSite,
+        inGraph: false,
+        enclosingSymbol: null,
+        findings: []
+      });
+      continue;
+    }
+    const fileNode = inPath.find(
+      ({ label }) => label === basename(callSite.path)
+    );
+    const enclosing = stale ? void 0 : inPath.filter(
+      (node) => node !== fileNode && node.line !== null && node.line <= callSite.line
+    ).sort(
+      (left, right) => right.line - left.line || compareText(left.id, right.id)
+    )[0];
+    const seed = enclosing ?? fileNode;
+    const findings = [];
+    const hitFinding = (kind, label, hit) => {
+      if (hit.path === null) return;
+      findings.push({
+        kind,
+        label,
+        path: hit.path,
+        line: hit.line,
+        hops: hit.hops,
+        provenance: hit.provenance,
+        score: hit.score
+      });
+    };
+    if (enclosing !== void 0) {
+      for (const hit of walk(
+        enclosing,
+        graph.nodes,
+        incoming,
+        CALLER_RELATIONS,
+        CALLER_DEPTH
+      )) {
+        hitFinding("caller", hit.node.label, hit);
+      }
+    }
+    if (seed !== void 0) {
+      const testFiles = /* @__PURE__ */ new Set();
+      for (const hit of walk(
+        seed,
+        graph.nodes,
+        incoming,
+        TEST_RELATIONS,
+        TEST_DEPTH
+      )) {
+        const file2 = hit.node.path;
+        if (file2 === null || !TEST_PATH.test(file2) || testFiles.has(file2)) {
+          continue;
+        }
+        testFiles.add(file2);
+        hitFinding("test", file2, { ...hit, path: file2 });
+      }
+    }
+    const surfaced = [...new Set(findings.map(({ path }) => path))];
+    if (surfaced.length > 0) {
+      const resolutions = await resolveOwners({
+        repoDir: input.repoDir,
+        filePaths: surfaced
+      });
+      const strongest = /* @__PURE__ */ new Map();
+      resolutions.forEach(({ owners }, index) => {
+        const sources = findings.filter(({ path }) => path === surfaced[index]);
+        for (const { handle } of owners) {
+          for (const source of sources) {
+            const current = strongest.get(handle);
+            if (current === void 0 || stronger(source, current)) {
+              strongest.set(handle, source);
+            }
+          }
+        }
+      });
+      for (const [handle, source] of strongest) {
+        findings.push({
+          kind: "owner",
+          label: handle,
+          path: source.path,
+          line: null,
+          hops: source.hops,
+          provenance: source.provenance,
+          score: source.score
+        });
+      }
+    }
+    callSites.push({
+      ...callSite,
+      inGraph: true,
+      enclosingSymbol: enclosing?.label ?? null,
+      findings: findings.sort(compareFindings)
+    });
+  }
+  const jsIds = new Set(
+    input.sdkModules.filter(({ language }) => language === "javascript").map(({ name }) => `ref_${graphifyId(name)}`)
+  );
+  const pythonIds = input.sdkModules.filter(({ language }) => language === "python").map(({ name }) => graphifyId(name));
+  const imports = /* @__PURE__ */ new Map();
+  for (const edge of graph.edges) {
+    const target = graph.nodes.get(edge.target);
+    if (!IMPORT_RELATIONS.has(edge.relation) || target.fileType !== "concept" || !(jsIds.has(target.id) || pythonIds.some(
+      (id) => target.id === id || target.id.startsWith(`${id}_`)
+    )) || edge.path === null || MANIFEST_PATH.test(edge.path) || TEST_PATH.test(edge.path) || input.scannedPaths.has(edge.path)) {
+      continue;
+    }
+    const key = `${edge.path}\0${target.label}`;
+    const current = imports.get(key);
+    if (current === void 0 || compareLines(edge.line, current.line) < 0) {
+      imports.set(key, {
+        path: edge.path,
+        line: edge.line,
+        module: target.label,
+        provenance: edge.provenance,
+        score: edge.score
+      });
+    }
+  }
+  return {
+    context: {
+      status: "ok",
+      graphPath: graph.displayPath,
+      sha256: graph.sha256,
+      builtAtCommit: graph.builtAtCommit,
+      revision: input.revision,
+      stale,
+      nodes: graph.nodes.size,
+      edges: graph.edges.length,
+      ignoredNodes: graph.ignoredNodes,
+      ignoredEdges: graph.ignoredEdges,
+      callSites,
+      unconfirmedImports: [...imports.values()].sort(
+        (left, right) => compareText(left.path, right.path) || compareLines(left.line, right.line)
+      )
+    },
+    issues
+  };
+}
+
+// src/report/format.ts
+function percent(value) {
+  return `${(value * 100).toFixed(1)}%`;
+}
+function escapeCell(value) {
+  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
+}
+function formatUsdPerCase(value) {
+  return value === null ? "n/a" : `$${value.toFixed(6)}`;
+}
+function formatDeltaPct(value) {
+  return value === null ? "n/a" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+function formatLatencyMs(value) {
+  return value === null ? "n/a" : `${Math.round(value)} ms`;
+}
+
+// src/code-graph/render.ts
+function provenanceText(provenance, score) {
+  switch (provenance) {
+    case "EXTRACTED":
+      return `EXTRACTED ${score.toFixed(2)}`;
+    case "INFERRED":
+      return `INFERRED ${score.toFixed(2)}, verify`;
+    case "AMBIGUOUS":
+      return `AMBIGUOUS ${score.toFixed(2)}, verify`;
+    default:
+      return provenance;
+  }
+}
+function location(path, line) {
+  return `\`${path}${line === null ? "" : `:${line}`}\``;
+}
+function findingCell(finding) {
+  if (finding.kind === "owner") return "owner, listed only";
+  return finding.hops > 1 ? `${finding.kind} (${finding.hops} hops)` : finding.kind;
+}
+function row(cells) {
+  return `| ${cells.map(escapeCell).join(" | ")} |`;
+}
+function renderCodeContext(context2) {
+  const lines = [
+    "## Code context (Graphify)",
+    "",
+    "Static code context from a Graphify graph. Graph edges are not replay trials, runtime proof, or quality evidence. They never change a verdict, a gate, confirmation, the proposed swap, or who is asked to review.",
+    ""
+  ];
+  if (context2.status === "unavailable") {
+    lines.push(`Not shown: ${context2.reason}`);
+    return lines;
+  }
+  const ignored = context2.ignoredEdges + context2.ignoredNodes > 0 ? `, ${context2.ignoredEdges} edges and ${context2.ignoredNodes} nodes ignored` : "";
+  const built = context2.builtAtCommit === null ? "an unrecorded commit" : `\`${context2.builtAtCommit.slice(0, 12)}\``;
+  const freshness = context2.stale ? `Stale: built at ${built}, but the scan is at \`${context2.revision.slice(0, 12)}\`. Line-level resolution is off, so enclosing symbols and callers are not shown. Rebuild with \`graphify update .\` at the scanned commit.` : `Built at ${built}, the scanned revision.`;
+  lines.push(
+    `Graph \`${context2.graphPath}\`, sha256 \`${context2.sha256.slice(0, 12)}\`, ${context2.nodes} nodes, ${context2.edges} edges${ignored}. ${freshness}`,
+    "",
+    "| Call site | Family | Finding | Item | Where | Provenance |",
+    "| --- | --- | --- | --- | --- | --- |"
+  );
+  for (const callSite of context2.callSites) {
+    const site = `${location(callSite.path, callSite.line)}${callSite.enclosingSymbol === null ? "" : ` in \`${callSite.enclosingSymbol}\``}`;
+    if (callSite.findings.length === 0) {
+      lines.push(
+        row([
+          site,
+          callSite.family,
+          callSite.inGraph ? "none found" : "not in graph",
+          "",
+          "",
+          ""
+        ])
+      );
+      continue;
+    }
+    for (const finding of callSite.findings) {
+      lines.push(
+        row([
+          site,
+          callSite.family,
+          findingCell(finding),
+          `\`${finding.label}\``,
+          location(finding.path, finding.line),
+          provenanceText(finding.provenance, finding.score)
+        ])
+      );
+    }
+  }
+  if (context2.unconfirmedImports.length > 0) {
+    lines.push(
+      "",
+      "Unconfirmed SDK imports: the scanner found no model call site in these files, so they are not call sites and nothing in them was evaluated.",
+      "",
+      ...context2.unconfirmedImports.map(
+        (entry) => `- ${location(entry.path, entry.line)} imports \`${entry.module}\` (${provenanceText(entry.provenance, entry.score)}). If it calls a model you want evaluated, add a --matchers rule and rerun.`
+      )
+    );
+  }
+  lines.push(
+    "",
+    "EXTRACTED: explicit in source. INFERRED: resolved by inference, verify before relying on it. AMBIGUOUS: uncertain, verify. A multi-hop finding carries its weakest hop. An enclosing symbol is the nearest definition at or above the call line."
+  );
+  return lines;
+}
 
 // src/github/client.ts
 var BlockedError2 = class extends Error {
@@ -35627,7 +36650,7 @@ function redact2(value, token) {
 function pathPart(value) {
   return value.split("/").map(encodeURIComponent).join("/");
 }
-function repositoryPath(input) {
+function repositoryPath2(input) {
   return `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}`;
 }
 function retryAfterAt(response, now) {
@@ -35798,7 +36821,7 @@ function createGithubClient(options) {
   return {
     async getRef(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/git/ref/${pathPart(input.ref)}`,
+        `${repositoryPath2(input)}/git/ref/${pathPart(input.ref)}`,
         {},
         refSchema,
         "GitHub reference response"
@@ -35807,7 +36830,7 @@ function createGithubClient(options) {
     },
     async compareCommits(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/compare/${pathPart(input.base)}...${pathPart(input.head)}`,
+        `${repositoryPath2(input)}/compare/${pathPart(input.base)}...${pathPart(input.head)}`,
         {},
         comparisonSchema,
         "GitHub comparison response"
@@ -35824,7 +36847,7 @@ function createGithubClient(options) {
     },
     async createRef(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/git/refs`,
+        `${repositoryPath2(input)}/git/refs`,
         {
           method: "POST",
           body: JSON.stringify({ ref: input.ref, sha: input.sha })
@@ -35836,7 +36859,7 @@ function createGithubClient(options) {
     },
     async getFileContent(input) {
       const result2 = await request(
-        `${repositoryPath(input)}/contents/${pathPart(input.path)}?ref=${encodeURIComponent(input.ref)}`
+        `${repositoryPath2(input)}/contents/${pathPart(input.path)}?ref=${encodeURIComponent(input.ref)}`
       );
       const value = parseJson(result2.text, "GitHub file-contents response");
       if (Array.isArray(value)) {
@@ -35866,7 +36889,7 @@ function createGithubClient(options) {
     },
     async createOrUpdateFile(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/contents/${pathPart(input.path)}`,
+        `${repositoryPath2(input)}/contents/${pathPart(input.path)}`,
         {
           method: "PUT",
           body: JSON.stringify({
@@ -35883,7 +36906,7 @@ function createGithubClient(options) {
     },
     async createPullRequest(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls`,
+        `${repositoryPath2(input)}/pulls`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -35907,7 +36930,7 @@ function createGithubClient(options) {
         per_page: "2"
       });
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls?${query.toString()}`,
+        `${repositoryPath2(input)}/pulls?${query.toString()}`,
         {},
         external_exports.array(pullRequestSchema),
         "GitHub pull-request list response"
@@ -35921,7 +36944,7 @@ function createGithubClient(options) {
     },
     async requestReviewers(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}/requested_reviewers`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}/requested_reviewers`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -35936,7 +36959,7 @@ function createGithubClient(options) {
     },
     async listReviews(input) {
       const raw = await listJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}/reviews`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}/reviews`,
         reviewSchema,
         "GitHub reviews response"
       );
@@ -35951,7 +36974,7 @@ function createGithubClient(options) {
     },
     async listReviewComments(input) {
       const raw = await listJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}/comments`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}/comments`,
         reviewCommentSchema,
         "GitHub review-comments response"
       );
@@ -35968,7 +36991,7 @@ function createGithubClient(options) {
     },
     async listIssueComments(input) {
       const raw = await listJson(
-        `${repositoryPath(input)}/issues/${input.issueNumber}/comments`,
+        `${repositoryPath2(input)}/issues/${input.issueNumber}/comments`,
         issueCommentSchema,
         "GitHub issue-comments response"
       );
@@ -35982,7 +37005,7 @@ function createGithubClient(options) {
     },
     async createIssueComment(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/issues/${input.issueNumber}/comments`,
+        `${repositoryPath2(input)}/issues/${input.issueNumber}/comments`,
         { method: "POST", body: JSON.stringify({ body: input.body }) },
         issueCommentSchema,
         "GitHub create-issue-comment response"
@@ -35997,7 +37020,7 @@ function createGithubClient(options) {
     },
     async getPullRequest(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}`,
         {},
         pullRequestSchema,
         "GitHub pull-request response"
@@ -36007,7 +37030,7 @@ function createGithubClient(options) {
     async listCheckRunsForRef(input) {
       const runs = [];
       let totalCount = 0;
-      let next = `${repositoryPath(input)}/commits/${pathPart(input.ref)}/check-runs?per_page=100`;
+      let next = `${repositoryPath2(input)}/commits/${pathPart(input.ref)}/check-runs?per_page=100`;
       while (next !== void 0) {
         const result2 = await request(next);
         const raw = parsed(
@@ -36034,7 +37057,7 @@ function createGithubClient(options) {
     },
     async getCombinedStatusForRef(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/commits/${pathPart(input.ref)}/status?per_page=100`,
+        `${repositoryPath2(input)}/commits/${pathPart(input.ref)}/status?per_page=100`,
         {},
         combinedStatusSchema,
         "GitHub combined-status response"
@@ -36053,7 +37076,7 @@ function createGithubClient(options) {
     },
     async findCommitAuthorLogin(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/commits?author=${encodeURIComponent(input.email)}&per_page=1`,
+        `${repositoryPath2(input)}/commits?author=${encodeURIComponent(input.email)}&per_page=1`,
         {},
         external_exports.array(commitAuthorSchema),
         "GitHub commits response"
@@ -36062,7 +37085,7 @@ function createGithubClient(options) {
     },
     async closePullRequest(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}`,
         { method: "PATCH", body: JSON.stringify({ state: "closed" }) },
         pullRequestSchema,
         "GitHub close-pull-request response"
@@ -36073,7 +37096,7 @@ function createGithubClient(options) {
 }
 
 // src/apply/remediation.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 
 // src/contract-validation.ts
 var import__ = __toESM(require__(), 1);
@@ -36749,10 +37772,10 @@ var remediationLifecycleEventSchema = remediationLifecycleEventBodySchema.extend
   event_id: contentDigestSchema
 });
 function digestJson(value) {
-  return `sha256:${createHash4("sha256").update(canonicalJson(jsonValueSchema.parse(value))).digest("hex")}`;
+  return `sha256:${createHash5("sha256").update(canonicalJson(jsonValueSchema.parse(value))).digest("hex")}`;
 }
 function digestFileContent(content) {
-  return `sha256:${createHash4("sha256").update(content).digest("hex")}`;
+  return `sha256:${createHash5("sha256").update(content).digest("hex")}`;
 }
 function sortedUnique(values) {
   return [...new Set(values)].sort();
@@ -36931,26 +37954,9 @@ async function restoreBranch({
   }
 }
 
-// src/report/format.ts
-function percent(value) {
-  return `${(value * 100).toFixed(1)}%`;
-}
-function escapeCell(value) {
-  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
-}
-function formatUsdPerCase(value) {
-  return value === null ? "n/a" : `$${value.toFixed(6)}`;
-}
-function formatDeltaPct(value) {
-  return value === null ? "n/a" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
-function formatLatencyMs(value) {
-  return value === null ? "n/a" : `${Math.round(value)} ms`;
-}
-
 // src/apply/diff.ts
 import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join9 } from "node:path";
 
 // src/apply/lex.ts
 function regexStartsAt(content, index) {
@@ -37380,7 +38386,7 @@ function buildSwapDiff({
   for (const [path, fileSwaps] of grouped) {
     let before;
     try {
-      before = readFileSync4(join7(repoDir, path), "utf8");
+      before = readFileSync4(join9(repoDir, path), "utf8");
     } catch {
       results.push({ path, reason: "stale_location" });
       continue;
@@ -37717,19 +38723,19 @@ function lintSwapDiff({
 }
 
 // src/apply/format.ts
-import { execFile as execFile2 } from "node:child_process";
+import { execFile as execFile4 } from "node:child_process";
 import { existsSync, readFileSync as readFileSync5, writeFileSync } from "node:fs";
-import { mkdtemp as mkdtemp2, readFile as readFile4, rm as rm2 } from "node:fs/promises";
-import { basename, dirname as dirname3, join as join8 } from "node:path";
+import { mkdtemp as mkdtemp2, readFile as readFile7, rm as rm2 } from "node:fs/promises";
+import { basename as basename2, dirname as dirname4, join as join10 } from "node:path";
 function pinnedPrettierVersion(repoDir) {
-  const pnpmLock = join8(repoDir, "pnpm-lock.yaml");
+  const pnpmLock = join10(repoDir, "pnpm-lock.yaml");
   if (existsSync(pnpmLock)) {
     const match = /^  prettier@([^:\s(]+)(?:\([^\n]*)?:/m.exec(
       readFileSync5(pnpmLock, "utf8")
     );
     if (match !== null) return match[1];
   }
-  const packageLock = join8(repoDir, "package-lock.json");
+  const packageLock = join10(repoDir, "package-lock.json");
   if (existsSync(packageLock)) {
     const parsed2 = JSON.parse(readFileSync5(packageLock, "utf8"));
     if (typeof parsed2 === "object" && parsed2 !== null && "packages" in parsed2) {
@@ -37742,7 +38748,7 @@ function pinnedPrettierVersion(repoDir) {
       }
     }
   }
-  const yarnLock = join8(repoDir, "yarn.lock");
+  const yarnLock = join10(repoDir, "yarn.lock");
   if (existsSync(yarnLock)) {
     return /(?:^|\n)["']?prettier@[^\n]+:\n\s+version\s+["']([^"']+)["']/.exec(
       readFileSync5(yarnLock, "utf8")
@@ -37752,9 +38758,9 @@ function pinnedPrettierVersion(repoDir) {
 }
 function formatterCommand(repoDir, formatter) {
   const { kind, configPath } = formatter;
-  const configArgs = configPath === null ? [] : ["--config", join8(repoDir, configPath)];
+  const configArgs = configPath === null ? [] : ["--config", join10(repoDir, configPath)];
   if (kind === "prettier") {
-    const executable = join8(
+    const executable = join10(
       repoDir,
       "node_modules",
       ".bin",
@@ -37782,7 +38788,7 @@ function formatterCommand(repoDir, formatter) {
     };
   }
   if (kind === "ruff") {
-    const local = join8(
+    const local = join10(
       repoDir,
       ".venv",
       process.platform === "win32" ? "Scripts/ruff.exe" : "bin/ruff"
@@ -37804,7 +38810,7 @@ function formatterCommand(repoDir, formatter) {
 }
 function runFormatter(command, filePath, cwd, input) {
   return new Promise((resolve14, reject) => {
-    const child = execFile2(
+    const child = execFile4(
       command.executable,
       command.args(filePath),
       { cwd, encoding: "utf8" },
@@ -37850,27 +38856,27 @@ async function formatWithHostFormatter({
   }
   const formattedFiles = [];
   for (const [fileIndex, file2] of files.entries()) {
-    const sourcePath = join8(repoDir, file2.path);
+    const sourcePath = join10(repoDir, file2.path);
     let temporaryDirectory = null;
     try {
       if (!command.stdin) {
         temporaryDirectory = await mkdtemp2(
-          join8(dirname3(sourcePath), ".rightmodeler-format-")
+          join10(dirname4(sourcePath), ".rightmodeler-format-")
         );
         writeFileSync(
-          join8(temporaryDirectory, basename(sourcePath)),
+          join10(temporaryDirectory, basename2(sourcePath)),
           file2.after,
           "utf8"
         );
       }
-      const temporaryPath = temporaryDirectory === null ? sourcePath : join8(temporaryDirectory, basename(sourcePath));
+      const temporaryPath = temporaryDirectory === null ? sourcePath : join10(temporaryDirectory, basename2(sourcePath));
       const stdout = await runFormatter(
         command,
         command.stdin ? sourcePath : temporaryPath,
         repoDir,
         file2.after
       );
-      const formatted = stdout === null ? await readFile4(temporaryPath, "utf8") : stdout;
+      const formatted = stdout === null ? await readFile7(temporaryPath, "utf8") : stdout;
       const touchedLines = new Set(file2.hunks.map(({ line }) => line));
       const conflictLine = firstOutsideTouchedLine(
         file2.after,
@@ -37942,9 +38948,11 @@ async function formatWithHostFormatter({
 }
 
 // src/apply/orchestrator.ts
-var execFileAsync2 = promisify2(execFile3);
+var execFileAsync4 = promisify4(execFile5);
 var projectId = "project";
 var reviewerLimit = 5;
+var codeContextFindingsPerKind = 5;
+var githubBodyLimit = 65536;
 var caseIdPattern = /^[0-9a-f]{64}$/;
 var ApplyServiceError = class extends Error {
   code;
@@ -38048,7 +39056,40 @@ function evidenceRow({
     caseIds: renderedCaseIds.join(", ")
   };
 }
-function evidenceBody(conventions, verdicts) {
+function pullRequestCodeContext(codeContext, verdicts) {
+  if (codeContext.status === "unavailable") {
+    return renderCodeContext(codeContext).join("\n");
+  }
+  const stepIds = new Set(
+    verdicts.flatMap(
+      ({ swaps }) => swaps.map(({ stepRecord }) => stepRecord.stepId)
+    )
+  );
+  let cut = false;
+  const callSites = codeContext.callSites.filter(({ stepId }) => stepIds.has(stepId)).map((callSite) => {
+    const shown = /* @__PURE__ */ new Map();
+    const findings = callSite.findings.filter(({ kind }) => {
+      const count = (shown.get(kind) ?? 0) + 1;
+      shown.set(kind, count);
+      if (count > codeContextFindingsPerKind) cut = true;
+      return count <= codeContextFindingsPerKind;
+    });
+    return { ...callSite, findings };
+  });
+  const lines = renderCodeContext({
+    ...codeContext,
+    callSites,
+    unconfirmedImports: []
+  });
+  if (cut) {
+    lines.push(
+      "",
+      "At most five findings of each kind are shown per call site. Run `rightmodeler report --code-graph <path>` for the full list."
+    );
+  }
+  return lines.join("\n");
+}
+function evidenceBody(conventions, verdicts, codeContext) {
   const evidence = verdicts[0].evidence;
   const table = [
     "## Rightmodeler evidence",
@@ -38068,9 +39109,18 @@ function evidenceBody(conventions, verdicts) {
     ""
   ].join("\n");
   const template = conventions.prTemplate?.trimEnd();
-  return template === void 0 || template === null || template === "" ? table : `${template}
+  const body = template === void 0 || template === null || template === "" ? table : `${template}
 
 ${table}`;
+  if (codeContext === void 0) return body;
+  const withContext = `${body}
+${pullRequestCodeContext(codeContext, verdicts)}
+`;
+  return withContext.length <= githubBodyLimit ? withContext : `${body}
+## Code context (Graphify)
+
+Omitted: the section would push this pull request body past GitHub's 65,536-character limit. Run \`rightmodeler report --code-graph <path>\` to read it.
+`;
 }
 async function reviewersFor(githubClient, owner, repo, verdicts) {
   const owners = [
@@ -38121,8 +39171,8 @@ async function reviewersFor(githubClient, owner, repo, verdicts) {
     unresolvedOwners
   };
 }
-async function gitOutput(repoDir, args) {
-  const { stdout } = await execFileAsync2("git", ["-C", repoDir, ...args], {
+async function gitOutput2(repoDir, args) {
+  const { stdout } = await execFileAsync4("git", ["-C", repoDir, ...args], {
     encoding: "utf8"
   });
   return stdout.trim();
@@ -38131,7 +39181,7 @@ async function dirtySwapPaths(repoDir, paths) {
   const dirty = [];
   for (const path of paths) {
     try {
-      await execFileAsync2(
+      await execFileAsync4(
         "git",
         ["-C", repoDir, "diff", "--quiet", "HEAD", "--", path],
         { encoding: "utf8" }
@@ -38147,7 +39197,7 @@ async function dirtySwapPaths(repoDir, paths) {
   return dirty;
 }
 function committedBlobSha(repoDir, path) {
-  return gitOutput(repoDir, ["rev-parse", `HEAD:${path}`]);
+  return gitOutput2(repoDir, ["rev-parse", `HEAD:${path}`]);
 }
 async function resumedApplyUpdates({
   githubClient,
@@ -38233,11 +39283,11 @@ async function staleDigestPaths(repoDir, swaps) {
     ([left], [right]) => compareText(left, right)
   )) {
     try {
-      const content = (await readFile5(join9(repoDir, path), "utf8")).replaceAll(
+      const content = (await readFile8(join11(repoDir, path), "utf8")).replaceAll(
         "\r\n",
         "\n"
       );
-      const actual = createHash5("sha256").update(content).digest("hex");
+      const actual = createHash6("sha256").update(content).digest("hex");
       if (expected.size !== 1 || !expected.has(actual)) stale.push(path);
     } catch {
       stale.push(path);
@@ -38389,7 +39439,8 @@ async function applySwaps({
   repo,
   conventions,
   verdicts,
-  dryRun
+  dryRun,
+  codeContext
 }) {
   if (conventions.warnings.length > 0) {
     return refusal(
@@ -38490,7 +39541,7 @@ async function applySwaps({
       ...requestedReviewers2
     };
   }
-  const head = await gitOutput(repoDir, ["rev-parse", "HEAD"]);
+  const head = await gitOutput2(repoDir, ["rev-parse", "HEAD"]);
   if (head !== evidence.revision) {
     return refusal(
       "stale_evidence",
@@ -38498,7 +39549,7 @@ async function applySwaps({
       { evidenceRevision: evidence.revision, head, action: "re-prove" }
     );
   }
-  const base = await gitOutput(repoDir, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const base = await gitOutput2(repoDir, ["rev-parse", "--abbrev-ref", "HEAD"]);
   if (base === "HEAD") {
     return refusal(
       "detached_head",
@@ -38571,6 +39622,7 @@ async function applySwaps({
       runSpecDigest,
       branch,
       title,
+      body: evidenceBody(conventions, selected, codeContext),
       files: formatted.files.map(({ path }) => path),
       reviewers: reviewerSet.reviewers,
       teamReviewers: reviewerSet.teamReviewers
@@ -38682,7 +39734,7 @@ async function applySwaps({
       owner,
       repo,
       title,
-      body: evidenceBody(conventions, selected),
+      body: evidenceBody(conventions, selected, codeContext),
       head: branch,
       base,
       draft: true
@@ -38901,11 +39953,11 @@ function requireStep(stepsById, stepId) {
 }
 
 // src/drift.ts
-import { mkdir as mkdir4, readFile as readFile6, writeFile as writeFile4 } from "node:fs/promises";
-import { dirname as dirname4, join as join11, resolve as resolve5 } from "node:path";
+import { mkdir as mkdir4, readFile as readFile9, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname as dirname5, join as join13, resolve as resolve6 } from "node:path";
 
 // src/state.ts
-import { join as join10, resolve as resolve4 } from "node:path";
+import { join as join12, resolve as resolve5 } from "node:path";
 var checkpointSchema = external_exports.strictObject({
   inputDigest: external_exports.string().min(1),
   outputKey: external_exports.string().min(1),
@@ -38917,7 +39969,7 @@ var setupStateSchema = external_exports.strictObject({
   stages: external_exports.record(external_exports.string(), checkpointSchema)
 });
 function resolveStoreRoot(repoDir, store) {
-  return resolve4(store ?? join10(repoDir, ".rightmodeler"));
+  return resolve5(store ?? join12(repoDir, ".rightmodeler"));
 }
 async function putImmutableJson(store, key, value) {
   await store.putImmutable(
@@ -39115,7 +40167,7 @@ async function readCorpusVersion(options, corpusVersionId) {
 async function runDrift(options) {
   const { store, storeRoot } = context(options);
   const parent = await loadActiveCorpus(store);
-  const traceText = await readFile6(resolve5(options.traces), "utf8");
+  const traceText = await readFile9(resolve6(options.traces), "utf8");
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
   const result2 = adaptWithReport(adapter, records);
@@ -39159,8 +40211,8 @@ async function runDrift(options) {
   );
   const markdown = renderDriftProposal(proposal);
   await store.putImmutable(keys.report, Buffer.from(markdown, "utf8"));
-  const reportPath2 = join11(storeRoot, keys.report);
-  await mkdir4(dirname4(reportPath2), { recursive: true });
+  const reportPath2 = join13(storeRoot, keys.report);
+  await mkdir4(dirname5(reportPath2), { recursive: true });
   await writeFile4(reportPath2, markdown, "utf8");
   return {
     proposal,
@@ -39652,7 +40704,7 @@ function promptValue(content) {
   });
 }
 function context(options) {
-  const repo = resolve5(options.repo);
+  const repo = resolve6(options.repo);
   const storeRoot = resolveStoreRoot(repo, options.store);
   return {
     store: new FsStore(storeRoot),
@@ -39776,461 +40828,6 @@ function errorMessage2(error51) {
 }
 function digestId(corpusVersionId) {
   return `sha256:${corpusVersionIdSchema.parse(corpusVersionId)}`;
-}
-
-// src/enrich/blast-radius.ts
-function addOwner(owners, owner) {
-  const current = owners.get(owner.handle);
-  if (current === void 0 || owner.source === "codeowners") {
-    owners.set(owner.handle, owner);
-  }
-}
-function blastRadius({
-  stepRecords,
-  verdicts,
-  owners: ownerResolutions
-}) {
-  const recordsById = new Map(
-    stepRecords.map((record2) => [record2.stepId, record2])
-  );
-  const ownersByPath = new Map(
-    ownerResolutions.map(
-      (resolution) => [resolution.path, resolution]
-    )
-  );
-  const recommendedFamilies = [
-    ...new Set(
-      verdicts.filter(({ decision }) => decision === "recommend").map(({ familyId }) => familyId)
-    )
-  ].sort(compareText);
-  return recommendedFamilies.map((familyId) => {
-    const roots = stepRecords.filter((record2) => record2.family === familyId);
-    const swappedFiles = new Set(roots.map((record2) => record2.callSite.path));
-    const downstreamFiles = /* @__PURE__ */ new Set();
-    const visited = new Set(roots.map((record2) => record2.stepId));
-    const queue = roots.flatMap((record2) => record2.downstreamStepIds);
-    const owners = /* @__PURE__ */ new Map();
-    for (const root of roots) {
-      for (const owner of ownersByPath.get(root.callSite.path)?.owners ?? []) {
-        addOwner(owners, owner);
-      }
-    }
-    while (queue.length > 0) {
-      const stepId = queue.shift();
-      if (visited.has(stepId)) continue;
-      visited.add(stepId);
-      const record2 = recordsById.get(stepId);
-      if (record2 === void 0) continue;
-      if (!swappedFiles.has(record2.callSite.path)) {
-        downstreamFiles.add(record2.callSite.path);
-      }
-      for (const owner of ownersByPath.get(record2.callSite.path)?.owners ?? []) {
-        addOwner(owners, owner);
-      }
-      queue.push(...record2.downstreamStepIds);
-    }
-    return {
-      familyId,
-      files: [...swappedFiles].sort(compareText),
-      downstreamFiles: [...downstreamFiles].sort(compareText),
-      owners: [...owners.values()].sort(
-        (left, right) => compareText(left.handle, right.handle)
-      )
-    };
-  });
-}
-
-// src/enrich/conventions.ts
-import { execFile as execFile4 } from "node:child_process";
-import { access, readFile as readFile7 } from "node:fs/promises";
-import { dirname as dirname5, join as join12, relative as relative4, resolve as resolve6 } from "node:path";
-import { promisify as promisify3 } from "node:util";
-
-// src/enrich/shared.ts
-var codeownersPaths = [
-  ".github/CODEOWNERS",
-  "CODEOWNERS",
-  "docs/CODEOWNERS"
-];
-
-// src/enrich/conventions.ts
-var execFileAsync3 = promisify3(execFile4);
-var pullRequestTemplates = [
-  ".github/PULL_REQUEST_TEMPLATE.md",
-  "docs/PULL_REQUEST_TEMPLATE.md",
-  "PULL_REQUEST_TEMPLATE.md"
-];
-var prettierConfigs = [
-  ".prettierrc",
-  ".prettierrc.json",
-  ".prettierrc.yaml",
-  ".prettierrc.yml",
-  ".prettierrc.toml",
-  ".prettierrc.js",
-  ".prettierrc.cjs",
-  ".prettierrc.mjs",
-  "prettier.config.js",
-  "prettier.config.cjs",
-  "prettier.config.mjs"
-];
-function posixPath(repoDir, absolutePath) {
-  return relative4(repoDir, absolutePath).replaceAll("\\", "/");
-}
-async function existingPath(repoDir, candidates) {
-  for (const path of candidates) {
-    try {
-      await access(join12(repoDir, path));
-      return path;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-async function nestedAgentFiles(repoDir) {
-  return (await gitOutput2(repoDir, ["ls-files", "--", "*AGENTS.md"])).split(/\r?\n/).filter((path) => path === "AGENTS.md" || path.endsWith("/AGENTS.md"));
-}
-function includeTargets(content) {
-  const targets = [];
-  for (const line of content.split(/\r?\n/)) {
-    const include = line.match(/^\s*@include\s+(.+?)\s*$/)?.[1];
-    if (include?.endsWith(".md")) {
-      targets.push(include);
-      continue;
-    }
-    const pointer = line.match(/^\s*@([^\s]+\.md)\s*$/)?.[1];
-    if (pointer !== void 0) targets.push(pointer);
-  }
-  return targets;
-}
-function includePath(repoDir, includedFrom, target) {
-  const absolute = target.startsWith("/") ? resolve6(repoDir, target.slice(1)) : resolve6(repoDir, dirname5(includedFrom), target);
-  return { absolute, relative: posixPath(repoDir, absolute) };
-}
-async function captureInstructionFiles(repoDir) {
-  const rootFiles = (await Promise.all(
-    ["AGENTS.md", "CLAUDE.md"].map(async (path) => {
-      try {
-        await access(join12(repoDir, path));
-        return path;
-      } catch {
-        return null;
-      }
-    })
-  )).filter((path) => path !== null);
-  const seeds = [
-    .../* @__PURE__ */ new Set([...rootFiles, ...await nestedAgentFiles(repoDir)])
-  ];
-  const files = /* @__PURE__ */ new Map();
-  const warnings = [];
-  const warningKeys = /* @__PURE__ */ new Set();
-  function warn(warning) {
-    const key = JSON.stringify(warning);
-    if (warningKeys.has(key)) return;
-    warningKeys.add(key);
-    warnings.push(warning);
-  }
-  async function capture(path, depth, stack, includedFrom) {
-    let content;
-    try {
-      content = await readFile7(join12(repoDir, path), "utf8");
-    } catch {
-      warn(
-        includedFrom === void 0 ? { name: "instruction_file_unreadable", path } : {
-          name: "instruction_include_unreadable",
-          path,
-          includedFrom
-        }
-      );
-      return;
-    }
-    files.set(path, content);
-    for (const target of includeTargets(content)) {
-      const included = includePath(repoDir, path, target);
-      if (stack.includes(included.relative) || included.relative === path) {
-        warn({
-          name: "instruction_include_cycle",
-          path: included.relative,
-          includedFrom: path
-        });
-        continue;
-      }
-      if (depth < 1) {
-        await capture(included.relative, depth + 1, [...stack, path], path);
-      }
-    }
-  }
-  for (const seed of seeds.sort(compareText)) {
-    await capture(seed, 0, []);
-  }
-  return {
-    files: [...files.entries()].sort(([left], [right]) => compareText(left, right)).map(([path, content]) => ({ path, content })),
-    warnings: warnings.sort(
-      (left, right) => compareText(left.name, right.name) || compareText(left.path, right.path) || compareText(left.includedFrom ?? "", right.includedFrom ?? "")
-    )
-  };
-}
-async function readFirst(repoDir, candidates) {
-  const path = await existingPath(repoDir, candidates);
-  return path === null ? null : readFile7(join12(repoDir, path), "utf8");
-}
-async function detectFormatter(repoDir) {
-  const prettier = await existingPath(repoDir, prettierConfigs);
-  if (prettier !== null) return { kind: "prettier", configPath: prettier };
-  const ruff = await existingPath(repoDir, ["ruff.toml", ".ruff.toml"]);
-  if (ruff !== null) return { kind: "ruff", configPath: ruff };
-  const pyproject = await existingPath(repoDir, ["pyproject.toml"]);
-  if (pyproject !== null && /^\s*\[tool\.ruff(?:\.[^\]]+)?\]\s*$/m.test(
-    await readFile7(join12(repoDir, pyproject), "utf8")
-  )) {
-    return { kind: "ruff", configPath: pyproject };
-  }
-  const goModule = await existingPath(repoDir, ["go.mod"]);
-  if (goModule !== null) return { kind: "gofmt", configPath: goModule };
-  return { kind: null, configPath: null };
-}
-async function gitOutput2(repoDir, args) {
-  try {
-    const { stdout } = await execFileAsync3("git", ["-C", repoDir, ...args], {
-      encoding: "utf8"
-    });
-    return stdout;
-  } catch {
-    return "";
-  }
-}
-async function inferCommitConvention(repoDir) {
-  const inferredFrom = (await gitOutput2(repoDir, ["log", "-30", "--format=%s"])).split(/\r?\n/).filter((subject) => subject !== "");
-  const conventional = inferredFrom.filter(
-    (subject) => /^(?:build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(?:\([^)]+\))?!?:\s+.+$/.test(
-      subject
-    )
-  ).length;
-  return {
-    style: inferredFrom.length > 0 && conventional > inferredFrom.length / 2 ? "conventional" : "plain",
-    inferredFrom
-  };
-}
-async function inferBranchPrefix(repoDir) {
-  const branches = (await gitOutput2(repoDir, [
-    "for-each-ref",
-    "--sort=-committerdate",
-    "--count=30",
-    "--format=%(refname)",
-    "refs/heads",
-    "refs/remotes"
-  ])).split(/\r?\n/).filter((branch) => branch !== "").map(
-    (branch) => branch.startsWith("refs/heads/") ? branch.slice("refs/heads/".length) : branch.replace(/^refs\/remotes\/[^/]+\//, "")
-  ).filter((branch) => branch !== "HEAD");
-  const counts = /* @__PURE__ */ new Map();
-  for (const branch of new Set(branches)) {
-    const slash = branch.indexOf("/");
-    if (slash < 1) continue;
-    const prefix = branch.slice(0, slash + 1);
-    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
-  }
-  const ranked = [...counts.entries()].sort(
-    ([leftPrefix, leftCount], [rightPrefix, rightCount]) => rightCount - leftCount || compareText(leftPrefix, rightPrefix)
-  );
-  if (ranked.length === 0) return null;
-  return ranked[0][0];
-}
-async function captureConventions({
-  repoDir
-}) {
-  const instructions = await captureInstructionFiles(repoDir);
-  return {
-    version: "1",
-    instructionFiles: instructions.files,
-    prTemplate: await readFirst(repoDir, pullRequestTemplates),
-    codeowners: await existingPath(repoDir, codeownersPaths),
-    formatter: await detectFormatter(repoDir),
-    commitConvention: await inferCommitConvention(repoDir),
-    branchPrefix: await inferBranchPrefix(repoDir),
-    warnings: instructions.warnings
-  };
-}
-
-// src/enrich/owners.ts
-import { execFile as execFile5 } from "node:child_process";
-import { access as access2, readFile as readFile8 } from "node:fs/promises";
-import { isAbsolute, join as join13, relative as relative5 } from "node:path";
-import { promisify as promisify4 } from "node:util";
-var execFileAsync4 = promisify4(execFile5);
-var maximumBlameOwners = 3;
-var maximumBlameConcurrency = 4;
-function repositoryPath2(repoDir, filePath) {
-  const path = isAbsolute(filePath) ? relative5(repoDir, filePath) : filePath;
-  return path.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, "");
-}
-async function findCodeowners(repoDir) {
-  for (const path of codeownersPaths) {
-    try {
-      await access2(join13(repoDir, path));
-      return path;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-function parseCodeowners(content) {
-  const rules = [];
-  for (const line of content.split(/\r?\n/)) {
-    const rule = line.split("#")[0].trim();
-    if (rule === "") continue;
-    const [pattern, ...owners] = rule.split(/\s+/);
-    rules.push({ pattern, owners });
-  }
-  return rules;
-}
-function escapeRegex3(character) {
-  return /[\\^$.*+?()[\]{}|]/.test(character) ? `\\${character}` : character;
-}
-function patternBody(pattern) {
-  let body = "";
-  for (let index = 0; index < pattern.length; index += 1) {
-    const character = pattern[index];
-    if (character !== "*") {
-      body += character === "?" ? "[^/]" : escapeRegex3(character);
-      continue;
-    }
-    const next = pattern[index + 1];
-    if (next !== "*") {
-      body += "[^/]*";
-      continue;
-    }
-    while (pattern[index + 1] === "*") index += 1;
-    if (pattern[index + 1] === "/") {
-      index += 1;
-      body += "(?:.*/)?";
-    } else {
-      body += ".*";
-    }
-  }
-  return body;
-}
-function codeownersRegex(pattern) {
-  const anchored = pattern.startsWith("/") || pattern.replace(/\/$/, "").includes("/");
-  const directory = pattern.endsWith("/");
-  const normalized = pattern.replace(/^\//, "").replace(/\/$/, "");
-  const exactPath = !/[*?]/.test(normalized);
-  const prefix = anchored ? "^" : "(?:^|.*/)";
-  const descendants = directory || exactPath || pattern.endsWith("/**") || /^\*\*\/[^*?/]+$/.test(pattern) ? "(?:/.*)?" : "";
-  return new RegExp(`${prefix}${patternBody(normalized)}${descendants}$`);
-}
-function matchingRule(rules, filePath) {
-  let matched = null;
-  for (const rule of rules) {
-    if (rule.matcher.test(filePath)) matched = rule;
-  }
-  return matched;
-}
-function blameAuthors(output) {
-  const authors = /* @__PURE__ */ new Map();
-  let authorEmail = null;
-  let authorTime = 0;
-  let committerEmail = null;
-  let committerTime = 0;
-  for (const line of output.split(/\r?\n/)) {
-    if (line.startsWith("author-mail ")) {
-      authorEmail = line.slice("author-mail ".length).replace(/^<|>$/g, "");
-    } else if (line.startsWith("author-time ")) {
-      authorTime = Number.parseInt(line.slice("author-time ".length), 10) || 0;
-    } else if (line.startsWith("committer-mail ")) {
-      committerEmail = line.slice("committer-mail ".length).replace(/^<|>$/g, "");
-    } else if (line.startsWith("committer-time ")) {
-      committerTime = Number.parseInt(line.slice("committer-time ".length), 10) || 0;
-    } else if (line.startsWith("	")) {
-      const email3 = authorEmail ?? committerEmail;
-      const time3 = authorTime || committerTime;
-      if (email3 !== null) {
-        const author = authors.get(email3) ?? {
-          lines: 0,
-          latestAuthorTime: 0
-        };
-        author.lines += 1;
-        author.latestAuthorTime = Math.max(author.latestAuthorTime, time3);
-        authors.set(email3, author);
-      }
-      authorEmail = null;
-      authorTime = 0;
-      committerEmail = null;
-      committerTime = 0;
-    }
-  }
-  return [...authors.entries()].sort(
-    ([leftEmail, left], [rightEmail, right]) => right.latestAuthorTime - left.latestAuthorTime || right.lines - left.lines || compareText(leftEmail, rightEmail)
-  ).slice(0, maximumBlameOwners).map(([handle]) => ({ handle, source: "blame" }));
-}
-async function ownersFromBlame(repoDir, filePath) {
-  try {
-    const { stdout } = await execFileAsync4(
-      "git",
-      ["-C", repoDir, "blame", "--line-porcelain", "--", filePath],
-      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
-    );
-    return blameAuthors(stdout);
-  } catch {
-    return [];
-  }
-}
-async function resolveOwners({
-  repoDir,
-  filePaths
-}) {
-  const codeownersPath = await findCodeowners(repoDir);
-  const rules = codeownersPath === null ? [] : parseCodeowners(
-    await readFile8(join13(repoDir, codeownersPath), "utf8")
-  ).map((rule) => ({
-    ...rule,
-    matcher: codeownersRegex(rule.pattern)
-  }));
-  const paths = filePaths.map(
-    (inputPath) => repositoryPath2(repoDir, inputPath)
-  );
-  const rulesByPath = new Map(
-    [...new Set(paths)].map(
-      (path) => [path, matchingRule(rules, path)]
-    )
-  );
-  const blamePaths = [...rulesByPath.entries()].filter(([, rule]) => rule === null).map(([path]) => path);
-  const blameOwnersByPath = /* @__PURE__ */ new Map();
-  let nextPath = 0;
-  async function blameWorker() {
-    while (nextPath < blamePaths.length) {
-      const path = blamePaths[nextPath++];
-      blameOwnersByPath.set(path, await ownersFromBlame(repoDir, path));
-    }
-  }
-  await Promise.all(
-    Array.from(
-      { length: Math.min(maximumBlameConcurrency, blamePaths.length) },
-      () => blameWorker()
-    )
-  );
-  return paths.map((path) => {
-    const rule = rulesByPath.get(path) ?? null;
-    if (rule !== null) {
-      return rule.owners.length === 0 ? {
-        path,
-        owners: [],
-        reason: "codeowners_rule_without_owners"
-      } : {
-        path,
-        owners: rule.owners.map((handle) => ({
-          handle,
-          source: "codeowners"
-        }))
-      };
-    }
-    const owners = blameOwnersByPath.get(path) ?? [];
-    return owners.length === 0 ? {
-      path,
-      owners,
-      reason: "no_codeowners_match_or_blame"
-    } : { path, owners };
-  });
 }
 
 // src/evaluators/braintrust.ts
@@ -40919,10 +41516,10 @@ function providerName(provider) {
 
 // src/evaluators/promptfoo.ts
 import { execFile as execFile6 } from "node:child_process";
-import { createHash as createHash6 } from "node:crypto";
-import { mkdtemp as mkdtemp3, readFile as readFile9, realpath as realpath3, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
+import { createHash as createHash7 } from "node:crypto";
+import { mkdtemp as mkdtemp3, readFile as readFile10, realpath as realpath3, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname as dirname6, join as join14, relative as relative6, resolve as resolve7 } from "node:path";
+import { dirname as dirname6, join as join14, relative as relative7, resolve as resolve7 } from "node:path";
 import { promisify as promisify5 } from "node:util";
 var PROMPTFOO_VERIFIED_VERSION = "0.123.1";
 var PROMPTFOO_EVAL_FLAGS = [
@@ -41092,7 +41689,7 @@ function createPromptfooEvaluator(input) {
       return (await runPromptfoo(command, ["--version"], process.cwd())).code === 0;
     },
     async launch(input2) {
-      const providerRunId = createHash6("sha256").update(
+      const providerRunId = createHash7("sha256").update(
         JSON.stringify({
           experimentName: input2.experimentName,
           caseIds: input2.cases.map(({ caseId }) => caseId)
@@ -41123,7 +41720,7 @@ function createPromptfooEvaluator(input) {
             "--assertions",
             assertionsPath,
             "--model-outputs",
-            relative6(cwd, modelOutputsPath),
+            relative7(cwd, modelOutputsPath),
             "--output",
             resultsPath,
             ...PROMPTFOO_EVAL_FLAGS
@@ -41138,7 +41735,7 @@ function createPromptfooEvaluator(input) {
         }
         let text;
         try {
-          text = await readFile9(resultsPath, "utf8");
+          text = await readFile10(resultsPath, "utf8");
         } catch (error51) {
           if (error51.code !== "ENOENT") throw error51;
           throw new Error(
@@ -41186,7 +41783,7 @@ async function readPromptfooConfigs(assertionsPath) {
       async (extension) => {
         const file2 = `promptfooconfig.${extension}`;
         try {
-          return [{ file: file2, bytes: await readFile9(join14(directory, file2)) }];
+          return [{ file: file2, bytes: await readFile10(join14(directory, file2)) }];
         } catch (error51) {
           if (error51.code === "ENOENT") return [];
           throw error51;
@@ -41217,7 +41814,7 @@ async function runPromptfoo(command, args, cwd) {
 }
 
 // src/evaluators/langfuse.ts
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 var healthSchema = external_exports.object({ status: external_exports.string().min(1) });
 var otelResponseSchema = external_exports.object({ partialSuccess: external_exports.unknown().optional() });
 var scoreSchema = external_exports.object({
@@ -41548,11 +42145,11 @@ function rubric2(score) {
   return rubricVersion === void 0 ? {} : { rubricVersion };
 }
 function hashHex(value) {
-  return createHash7("sha256").update(JSON.stringify(value)).digest("hex");
+  return createHash8("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 // src/evaluators/langsmith.ts
-import { createHash as createHash8 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 var sessionSchema = external_exports.object({ id: external_exports.string().min(1) });
 var feedbackEntrySchema = external_exports.object({
   score: external_exports.number().optional(),
@@ -41790,7 +42387,7 @@ function scorerRule(value) {
   return separator === -1 ? value : value.slice(separator + 1);
 }
 function stableUuid(value) {
-  const hex3 = createHash8("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32);
+  const hex3 = createHash9("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32);
   return `${hex3.slice(0, 8)}-${hex3.slice(8, 12)}-4${hex3.slice(13, 16)}-8${hex3.slice(17, 20)}-${hex3.slice(20)}`;
 }
 
@@ -42027,555 +42624,6 @@ function braintrustUrl(baseUrl, path) {
   const root = baseUrl.replace(/\/+$/, "");
   const versioned = root.endsWith("/v1") ? root : `${root}/v1`;
   return `${versioned}/${path}`;
-}
-
-// src/code-graph/graph.ts
-import { constants } from "node:buffer";
-import { createHash as createHash9 } from "node:crypto";
-import { readFile as readFile10, stat as stat2 } from "node:fs/promises";
-import { isAbsolute as isAbsolute2, relative as relative7, sep as sep4 } from "node:path";
-var provenanceRank = {
-  AMBIGUOUS: 0,
-  INFERRED: 1,
-  EXTRACTED: 2
-};
-var tierScores = {
-  EXTRACTED: 1,
-  INFERRED: 0.55,
-  AMBIGUOUS: 0.2
-};
-var locationSchema = external_exports.union([external_exports.string(), external_exports.number()]).nullable().optional();
-var fileSchema = external_exports.looseObject({
-  nodes: external_exports.array(external_exports.unknown()),
-  links: external_exports.array(external_exports.unknown()).optional(),
-  edges: external_exports.array(external_exports.unknown()).optional(),
-  built_at_commit: external_exports.string().min(1).optional().catch(void 0)
-});
-var nodeSchema = external_exports.looseObject({
-  id: external_exports.string().min(1),
-  label: external_exports.string().optional(),
-  file_type: external_exports.string().optional(),
-  source_file: external_exports.string().nullable().optional(),
-  source_location: locationSchema
-});
-var edgeSchema = external_exports.looseObject({
-  source: external_exports.string().min(1),
-  target: external_exports.string().min(1),
-  relation: external_exports.string().min(1),
-  _src: external_exports.string().min(1).optional(),
-  _tgt: external_exports.string().min(1).optional(),
-  confidence: external_exports.enum(["EXTRACTED", "INFERRED", "AMBIGUOUS"]),
-  confidence_score: external_exports.number().optional(),
-  source_file: external_exports.string().nullable().optional(),
-  source_location: locationSchema
-});
-async function graphFileDigest(path) {
-  try {
-    const { size } = await stat2(path);
-    if (size > constants.MAX_STRING_LENGTH) return `too-large:${size}`;
-    return createHash9("sha256").update(await readFile10(path)).digest("hex");
-  } catch {
-    return "unreadable";
-  }
-}
-async function loadCodeGraph(path, repoDir) {
-  const fromRepo = relative7(repoDir, path).split(sep4).join("/");
-  const displayPath = fromRepo.startsWith("..") ? path : fromRepo;
-  const unreadable = (error51) => ({
-    displayPath,
-    issue: {
-      code: "code_graph_unreadable",
-      message: `Cannot read the code graph at ${displayPath} (${errorCode(error51)}). Code context is omitted. Check the --code-graph path, or rebuild the graph with \`graphify update .\`.`
-    }
-  });
-  const invalid = (reason) => ({
-    displayPath,
-    issue: {
-      code: "code_graph_invalid",
-      message: `${displayPath} is not a Graphify graph.json (${reason}). Code context is omitted. Pass the graph.json that \`graphify update .\` writes under graphify-out/.`
-    }
-  });
-  let size;
-  try {
-    size = (await stat2(path)).size;
-  } catch (error51) {
-    return unreadable(error51);
-  }
-  if (size > constants.MAX_STRING_LENGTH) {
-    return {
-      displayPath,
-      issue: {
-        code: "code_graph_too_large",
-        message: `The code graph at ${displayPath} is ${size} bytes, over the ${constants.MAX_STRING_LENGTH}-byte limit Node.js can read. Code context is omitted. Narrow the graph with a .graphifyignore and rebuild it with \`graphify update .\`.`
-      }
-    };
-  }
-  let bytes;
-  try {
-    bytes = await readFile10(path);
-  } catch (error51) {
-    return unreadable(error51);
-  }
-  let raw;
-  try {
-    raw = JSON.parse(bytes.toString("utf8"));
-  } catch {
-    return invalid("not JSON");
-  }
-  const file2 = fileSchema.safeParse(raw);
-  if (!file2.success) {
-    return invalid(
-      Array.isArray(raw?.nodes) ? "no links or edges array" : "no nodes array"
-    );
-  }
-  const rawEdges = file2.data.links ?? file2.data.edges;
-  if (rawEdges === void 0) return invalid("no links or edges array");
-  const nodes = /* @__PURE__ */ new Map();
-  let ignoredNodes = 0;
-  for (const value of file2.data.nodes) {
-    const node = nodeSchema.safeParse(value);
-    if (!node.success) {
-      ignoredNodes += 1;
-      continue;
-    }
-    nodes.set(node.data.id, {
-      id: node.data.id,
-      label: node.data.label ?? node.data.id,
-      path: normalizeSourcePath(node.data.source_file, repoDir),
-      line: parseLine(node.data.source_location),
-      fileType: node.data.file_type ?? null
-    });
-  }
-  const edges = [];
-  const unknownConfidences = /* @__PURE__ */ new Set();
-  let ignoredEdges = 0;
-  for (const value of rawEdges) {
-    const edge = edgeSchema.safeParse(value);
-    if (!edge.success) {
-      ignoredEdges += 1;
-      const confidence9 = value?.confidence;
-      if (typeof confidence9 === "string" && !Object.hasOwn(tierScores, confidence9) && unknownConfidences.size < 3) {
-        unknownConfidences.add(confidence9);
-      }
-      continue;
-    }
-    const { _src, _tgt } = edge.data;
-    const [source, target] = _src !== void 0 && _tgt !== void 0 ? [_src, _tgt] : [edge.data.source, edge.data.target];
-    if (!nodes.has(source) || !nodes.has(target)) {
-      ignoredEdges += 1;
-      continue;
-    }
-    const score = edge.data.confidence_score;
-    edges.push({
-      source,
-      target,
-      relation: edge.data.relation,
-      provenance: edge.data.confidence,
-      score: score !== void 0 && score >= 0 && score <= 1 ? score : tierScores[edge.data.confidence],
-      path: normalizeSourcePath(edge.data.source_file, repoDir),
-      line: parseLine(edge.data.source_location)
-    });
-  }
-  const sample = unknownConfidences.size === 0 ? "" : ` (for example confidence ${[...unknownConfidences].map((value) => `"${value}"`).join(", ")})`;
-  return {
-    graph: {
-      displayPath,
-      sha256: createHash9("sha256").update(bytes).digest("hex"),
-      builtAtCommit: file2.data.built_at_commit ?? null,
-      nodes,
-      edges,
-      ignoredNodes,
-      ignoredEdges
-    },
-    issues: ignoredNodes + ignoredEdges === 0 ? [] : [
-      {
-        code: "code_graph_schema_drift",
-        message: `Ignored ${ignoredEdges} edges and ${ignoredNodes} nodes in ${displayPath} whose shape this rightmodeler does not read${sample}. The rest of the graph is used. Rebuilding with a current Graphify (tested with 0.9.65) usually clears this.`
-      }
-    ]
-  };
-}
-function normalizeSourcePath(value, repoDir) {
-  if (value === void 0 || value === null || value === "") return null;
-  const slashed = value.replaceAll("\\", "/");
-  const path = isAbsolute2(slashed) ? relative7(repoDir, slashed).split(sep4).join("/") : slashed;
-  return path.startsWith("./") ? path.slice(2) : path;
-}
-function parseLine(value) {
-  const match = /^L?([1-9]\d*)$/.exec(String(value));
-  return match === null ? null : Number(match[1]);
-}
-function errorCode(error51) {
-  const { code, message: message2 } = error51;
-  return code ?? message2;
-}
-
-// src/code-graph/context.ts
-import { basename as basename2 } from "node:path";
-var CALLER_RELATIONS = /* @__PURE__ */ new Set(["calls", "indirect_call"]);
-var CALLER_DEPTH = 2;
-var TEST_RELATIONS = /* @__PURE__ */ new Set([
-  "calls",
-  "indirect_call",
-  "references",
-  "imports",
-  "imports_from",
-  "dynamic_import",
-  "re_exports",
-  "inherits",
-  "extends",
-  "implements",
-  "uses",
-  "mixes_in",
-  "embeds",
-  "requires",
-  "contains",
-  "method"
-]);
-var TEST_DEPTH = 3;
-var IMPORT_RELATIONS = /* @__PURE__ */ new Set([
-  "imports",
-  "imports_from",
-  "dynamic_import",
-  "re_exports"
-]);
-var TEST_PATH = /(^|\/)(__tests__|tests?)\/|\.(test|spec)\.[^/]+$|(^|\/)test_[^/]*\.py$|_test\.(py|go)$/;
-var MANIFEST_PATH = /(^|\/)(package\.json|pyproject\.toml|requirements\.txt)$/;
-var KIND_ORDER = {
-  caller: 0,
-  test: 1,
-  owner: 2
-};
-function weaker(left, right) {
-  return provenanceRank[left] <= provenanceRank[right] ? left : right;
-}
-function stronger(left, right) {
-  return (provenanceRank[left.provenance] - provenanceRank[right.provenance] || left.score - right.score || right.hops - left.hops || compareText(right.path, left.path)) > 0;
-}
-function walk(seed, nodes, incoming, relations, depth) {
-  const visited = /* @__PURE__ */ new Set([seed.id]);
-  const hits = [];
-  let frontier = [{ id: seed.id, provenance: "EXTRACTED", score: 1 }];
-  for (let hops = 1; hops <= depth && frontier.length > 0; hops += 1) {
-    const next = [];
-    for (const parent of frontier) {
-      for (const edge of incoming.get(parent.id) ?? []) {
-        if (!relations.has(edge.relation) || visited.has(edge.source)) {
-          continue;
-        }
-        visited.add(edge.source);
-        const node = nodes.get(edge.source);
-        const provenance = weaker(parent.provenance, edge.provenance);
-        const score = Math.min(parent.score, edge.score);
-        hits.push({
-          node,
-          hops,
-          provenance,
-          score,
-          path: edge.path ?? node.path,
-          line: edge.line
-        });
-        next.push({ id: node.id, provenance, score });
-      }
-    }
-    frontier = next;
-  }
-  return hits;
-}
-function compareFindings(left, right) {
-  return KIND_ORDER[left.kind] - KIND_ORDER[right.kind] || left.hops - right.hops || compareText(left.path, right.path) || compareLines(left.line, right.line) || compareText(left.label, right.label);
-}
-function compareLines(left, right) {
-  if (left === right) return 0;
-  if (left === null) return 1;
-  if (right === null) return -1;
-  return left - right;
-}
-function append2(map2, key, value) {
-  const list = map2.get(key);
-  if (list === void 0) map2.set(key, [value]);
-  else list.push(value);
-}
-function graphifyId(name) {
-  return name.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
-}
-async function readCodeContext(input) {
-  const loaded = await loadCodeGraph(input.graphPath, input.repoDir);
-  if ("issue" in loaded) {
-    return {
-      context: {
-        status: "unavailable",
-        graphPath: loaded.displayPath,
-        reason: loaded.issue.message
-      },
-      issues: [loaded.issue]
-    };
-  }
-  const { graph } = loaded;
-  const issues = [...loaded.issues];
-  const nodesByPath = /* @__PURE__ */ new Map();
-  for (const node of graph.nodes.values()) {
-    if (node.path !== null) append2(nodesByPath, node.path, node);
-  }
-  const incoming = /* @__PURE__ */ new Map();
-  for (const edge of graph.edges) append2(incoming, edge.target, edge);
-  for (const edges of incoming.values()) {
-    edges.sort(
-      (left, right) => compareText(left.source, right.source) || compareText(left.relation, right.relation)
-    );
-  }
-  const callSitePaths = new Set(input.callSites.map(({ path }) => path));
-  if (callSitePaths.size > 0 && ![...callSitePaths].some((path) => nodesByPath.has(path))) {
-    const issue3 = {
-      code: "code_graph_repo_mismatch",
-      message: `None of the ${callSitePaths.size} scanned call-site files appear in the code graph at ${graph.displayPath}, so it describes another repository or folder. Code context is omitted. Build the graph from the repository root with \`graphify update .\`.`
-    };
-    return {
-      context: {
-        status: "unavailable",
-        graphPath: graph.displayPath,
-        reason: issue3.message
-      },
-      issues: [...issues, issue3]
-    };
-  }
-  const stale = graph.builtAtCommit !== input.revision;
-  if (stale) {
-    issues.push({
-      code: "code_graph_stale",
-      message: `The code graph was built at ${graph.builtAtCommit?.slice(0, 12) ?? "an unrecorded commit"} but the scan is at ${input.revision.slice(0, 12)}, so code context is file-level only. Rebuild with \`graphify update .\` at the scanned commit, or rerun the scan.`
-    });
-  }
-  const callSites = [];
-  for (const callSite of input.callSites) {
-    const inPath = nodesByPath.get(callSite.path);
-    if (inPath === void 0) {
-      callSites.push({
-        ...callSite,
-        inGraph: false,
-        enclosingSymbol: null,
-        findings: []
-      });
-      continue;
-    }
-    const fileNode = inPath.find(
-      ({ label }) => label === basename2(callSite.path)
-    );
-    const enclosing = stale ? void 0 : inPath.filter(
-      (node) => node !== fileNode && node.line !== null && node.line <= callSite.line
-    ).sort(
-      (left, right) => right.line - left.line || compareText(left.id, right.id)
-    )[0];
-    const seed = enclosing ?? fileNode;
-    const findings = [];
-    const hitFinding = (kind, label, hit) => {
-      if (hit.path === null) return;
-      findings.push({
-        kind,
-        label,
-        path: hit.path,
-        line: hit.line,
-        hops: hit.hops,
-        provenance: hit.provenance,
-        score: hit.score
-      });
-    };
-    if (enclosing !== void 0) {
-      for (const hit of walk(
-        enclosing,
-        graph.nodes,
-        incoming,
-        CALLER_RELATIONS,
-        CALLER_DEPTH
-      )) {
-        hitFinding("caller", hit.node.label, hit);
-      }
-    }
-    if (seed !== void 0) {
-      const testFiles = /* @__PURE__ */ new Set();
-      for (const hit of walk(
-        seed,
-        graph.nodes,
-        incoming,
-        TEST_RELATIONS,
-        TEST_DEPTH
-      )) {
-        const file2 = hit.node.path;
-        if (file2 === null || !TEST_PATH.test(file2) || testFiles.has(file2)) {
-          continue;
-        }
-        testFiles.add(file2);
-        hitFinding("test", file2, { ...hit, path: file2 });
-      }
-    }
-    const surfaced = [...new Set(findings.map(({ path }) => path))];
-    if (surfaced.length > 0) {
-      const resolutions = await resolveOwners({
-        repoDir: input.repoDir,
-        filePaths: surfaced
-      });
-      const strongest = /* @__PURE__ */ new Map();
-      resolutions.forEach(({ owners }, index) => {
-        const sources = findings.filter(({ path }) => path === surfaced[index]);
-        for (const { handle } of owners) {
-          for (const source of sources) {
-            const current = strongest.get(handle);
-            if (current === void 0 || stronger(source, current)) {
-              strongest.set(handle, source);
-            }
-          }
-        }
-      });
-      for (const [handle, source] of strongest) {
-        findings.push({
-          kind: "owner",
-          label: handle,
-          path: source.path,
-          line: null,
-          hops: source.hops,
-          provenance: source.provenance,
-          score: source.score
-        });
-      }
-    }
-    callSites.push({
-      ...callSite,
-      inGraph: true,
-      enclosingSymbol: enclosing?.label ?? null,
-      findings: findings.sort(compareFindings)
-    });
-  }
-  const jsIds = new Set(
-    input.sdkModules.filter(({ language }) => language === "javascript").map(({ name }) => `ref_${graphifyId(name)}`)
-  );
-  const pythonIds = input.sdkModules.filter(({ language }) => language === "python").map(({ name }) => graphifyId(name));
-  const imports = /* @__PURE__ */ new Map();
-  for (const edge of graph.edges) {
-    const target = graph.nodes.get(edge.target);
-    if (!IMPORT_RELATIONS.has(edge.relation) || target.fileType !== "concept" || !(jsIds.has(target.id) || pythonIds.some(
-      (id) => target.id === id || target.id.startsWith(`${id}_`)
-    )) || edge.path === null || MANIFEST_PATH.test(edge.path) || TEST_PATH.test(edge.path) || input.scannedPaths.has(edge.path)) {
-      continue;
-    }
-    const key = `${edge.path}\0${target.label}`;
-    const current = imports.get(key);
-    if (current === void 0 || compareLines(edge.line, current.line) < 0) {
-      imports.set(key, {
-        path: edge.path,
-        line: edge.line,
-        module: target.label,
-        provenance: edge.provenance,
-        score: edge.score
-      });
-    }
-  }
-  return {
-    context: {
-      status: "ok",
-      graphPath: graph.displayPath,
-      sha256: graph.sha256,
-      builtAtCommit: graph.builtAtCommit,
-      revision: input.revision,
-      stale,
-      nodes: graph.nodes.size,
-      edges: graph.edges.length,
-      ignoredNodes: graph.ignoredNodes,
-      ignoredEdges: graph.ignoredEdges,
-      callSites,
-      unconfirmedImports: [...imports.values()].sort(
-        (left, right) => compareText(left.path, right.path) || compareLines(left.line, right.line)
-      )
-    },
-    issues
-  };
-}
-
-// src/code-graph/render.ts
-function provenanceText(provenance, score) {
-  switch (provenance) {
-    case "EXTRACTED":
-      return `EXTRACTED ${score.toFixed(2)}`;
-    case "INFERRED":
-      return `INFERRED ${score.toFixed(2)}, verify`;
-    case "AMBIGUOUS":
-      return `AMBIGUOUS ${score.toFixed(2)}, verify`;
-    default:
-      return provenance;
-  }
-}
-function location(path, line) {
-  return `\`${path}${line === null ? "" : `:${line}`}\``;
-}
-function findingCell(finding) {
-  if (finding.kind === "owner") return "owner, listed only";
-  return finding.hops > 1 ? `${finding.kind} (${finding.hops} hops)` : finding.kind;
-}
-function row(cells) {
-  return `| ${cells.map(escapeCell).join(" | ")} |`;
-}
-function renderCodeContext(context2) {
-  const lines = [
-    "## Code context (Graphify)",
-    "",
-    "Static code context from a Graphify graph. Graph edges are not replay trials, runtime proof, or quality evidence. They never change a verdict, a gate, confirmation, the proposed swap, or who is asked to review.",
-    ""
-  ];
-  if (context2.status === "unavailable") {
-    lines.push(`Not shown: ${context2.reason}`);
-    return lines;
-  }
-  const ignored = context2.ignoredEdges + context2.ignoredNodes > 0 ? `, ${context2.ignoredEdges} edges and ${context2.ignoredNodes} nodes ignored` : "";
-  const built = context2.builtAtCommit === null ? "an unrecorded commit" : `\`${context2.builtAtCommit.slice(0, 12)}\``;
-  const freshness = context2.stale ? `Stale: built at ${built}, but the scan is at \`${context2.revision.slice(0, 12)}\`. Line-level resolution is off, so enclosing symbols and callers are not shown. Rebuild with \`graphify update .\` at the scanned commit.` : `Built at ${built}, the scanned revision.`;
-  lines.push(
-    `Graph \`${context2.graphPath}\`, sha256 \`${context2.sha256.slice(0, 12)}\`, ${context2.nodes} nodes, ${context2.edges} edges${ignored}. ${freshness}`,
-    "",
-    "| Call site | Family | Finding | Item | Where | Provenance |",
-    "| --- | --- | --- | --- | --- | --- |"
-  );
-  for (const callSite of context2.callSites) {
-    const site = `${location(callSite.path, callSite.line)}${callSite.enclosingSymbol === null ? "" : ` in \`${callSite.enclosingSymbol}\``}`;
-    if (callSite.findings.length === 0) {
-      lines.push(
-        row([
-          site,
-          callSite.family,
-          callSite.inGraph ? "none found" : "not in graph",
-          "",
-          "",
-          ""
-        ])
-      );
-      continue;
-    }
-    for (const finding of callSite.findings) {
-      lines.push(
-        row([
-          site,
-          callSite.family,
-          findingCell(finding),
-          `\`${finding.label}\``,
-          location(finding.path, finding.line),
-          provenanceText(finding.provenance, finding.score)
-        ])
-      );
-    }
-  }
-  if (context2.unconfirmedImports.length > 0) {
-    lines.push(
-      "",
-      "Unconfirmed SDK imports: the scanner found no model call site in these files, so they are not call sites and nothing in them was evaluated.",
-      "",
-      ...context2.unconfirmedImports.map(
-        (entry) => `- ${location(entry.path, entry.line)} imports \`${entry.module}\` (${provenanceText(entry.provenance, entry.score)}). If it calls a model you want evaluated, add a --matchers rule and rerun.`
-      )
-    );
-  }
-  lines.push(
-    "",
-    "EXTRACTED: explicit in source. INFERRED: resolved by inference, verify before relying on it. AMBIGUOUS: uncertain, verify. A multi-hop finding carries its weakest hop. An enclosing symbol is the nearest definition at or above the call line."
-  );
-  return lines;
 }
 
 // src/protocol.ts
@@ -44504,6 +44552,18 @@ function isPipelineStage(value) {
 async function runApply(options) {
   const context2 = createHeadlessContext(options);
   const prepared = await prepareApply(context2);
+  const codeContext = await codeContextFor(
+    context2,
+    prepared.verdicts.flatMap(
+      ({ verdict, swaps }) => swaps.map(({ stepRecord }) => ({
+        stepId: stepRecord.stepId,
+        family: verdict.familyId,
+        path: stepRecord.callSite.path,
+        line: stepRecord.callSite.line
+      }))
+    ),
+    options.warning ?? (() => void 0)
+  );
   return applySwaps({
     store: context2.store,
     repoDir: context2.repo,
@@ -44512,7 +44572,8 @@ async function runApply(options) {
     repo: options.githubRepo,
     conventions: prepared.conventions,
     verdicts: prepared.verdicts,
-    dryRun: options.dryRun
+    dryRun: options.dryRun,
+    ...codeContext === void 0 ? {} : { codeContext }
   });
 }
 async function runWatch(options) {
@@ -44750,6 +44811,7 @@ function createHeadlessContext(options) {
   return createContext({
     repo: options.repo,
     store: options.store,
+    codeGraphPath: options.codeGraphPath,
     reporter: new Reporter("human", {
       stdout: () => void 0,
       stderr: () => void 0
@@ -48134,7 +48196,9 @@ function applySwaps2(options) {
     }),
     owner: options.owner,
     githubRepo: options.githubRepo ?? basename3(resolve9(options.repo)),
-    dryRun: options.dryRun ?? false
+    dryRun: options.dryRun ?? false,
+    ...options.codeGraphPath === void 0 ? {} : { codeGraphPath: options.codeGraphPath },
+    ...options.warning === void 0 ? {} : { warning: options.warning }
   });
 }
 
@@ -49325,7 +49389,10 @@ function createProgram(io = processIo, runtime = processRuntime) {
   ).requiredOption(
     "--github-token-env <name>",
     "environment variable containing the GitHub token"
-  ).option("--dry-run", "run all machine gates without writing GitHub state");
+  ).option("--dry-run", "run all machine gates without writing GitHub state").option(
+    "--code-graph <path>",
+    "Graphify graph.json for static code context in the pull request body; never evidence"
+  );
   run(apply, async (reporter, global) => {
     const local = apply.opts();
     const result2 = await applySwaps2({
@@ -49335,7 +49402,9 @@ function createProgram(io = processIo, runtime = processRuntime) {
       ...local.githubRepo === void 0 ? {} : { githubRepo: local.githubRepo },
       githubBaseUrl: local.githubBaseUrl,
       githubTokenEnv: local.githubTokenEnv,
-      dryRun: local.dryRun ?? false
+      dryRun: local.dryRun ?? false,
+      ...local.codeGraph === void 0 ? {} : { codeGraphPath: local.codeGraph },
+      warning: (code2, message2) => reporter.warning(code2, message2)
     });
     reporter.result(result2);
     return result2.status === "refused" ? 1 : 0;

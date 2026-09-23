@@ -124,6 +124,7 @@ interface ApplyCommandOptions {
   githubBaseUrl: string;
   githubTokenEnv: string;
   dryRun?: boolean;
+  codeGraph?: string;
 }
 
 interface RollbackCommandOptions {
@@ -480,7 +481,11 @@ export function createProgram(
       "--github-token-env <name>",
       "environment variable containing the GitHub token",
     )
-    .option("--dry-run", "run all machine gates without writing GitHub state");
+    .option("--dry-run", "run all machine gates without writing GitHub state")
+    .option(
+      "--code-graph <path>",
+      "Graphify graph.json for static code context in the pull request body; never evidence",
+    );
   run(apply, async (reporter, global) => {
     const local = apply.opts<ApplyCommandOptions>();
     const result = await applySwaps({
@@ -493,6 +498,10 @@ export function createProgram(
       githubBaseUrl: local.githubBaseUrl,
       githubTokenEnv: local.githubTokenEnv,
       dryRun: local.dryRun ?? false,
+      ...(local.codeGraph === undefined
+        ? {}
+        : { codeGraphPath: local.codeGraph }),
+      warning: (code, message) => reporter.warning(code, message),
     });
     reporter.result(result);
     return result.status === "refused" ? 1 : 0;

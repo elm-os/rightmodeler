@@ -671,6 +671,8 @@ export interface ApplyPipelineOptions {
   readonly owner: string;
   readonly githubRepo: string;
   readonly dryRun: boolean;
+  readonly codeGraphPath?: string;
+  readonly warning?: (code: string, message: string) => void;
 }
 
 export interface WatchPipelineOptions {
@@ -1357,6 +1359,18 @@ export async function runApply(
 ): Promise<RunApplyResult> {
   const context = createHeadlessContext(options);
   const prepared = await prepareApply(context);
+  const codeContext = await codeContextFor(
+    context,
+    prepared.verdicts.flatMap(({ verdict, swaps }) =>
+      swaps.map(({ stepRecord }) => ({
+        stepId: stepRecord.stepId,
+        family: verdict.familyId,
+        path: stepRecord.callSite.path,
+        line: stepRecord.callSite.line,
+      })),
+    ),
+    options.warning ?? (() => undefined),
+  );
   return applyPreparedSwaps({
     store: context.store,
     repoDir: context.repo,
@@ -1366,6 +1380,7 @@ export async function runApply(
     conventions: prepared.conventions,
     verdicts: prepared.verdicts,
     dryRun: options.dryRun,
+    ...(codeContext === undefined ? {} : { codeContext }),
   });
 }
 
@@ -1689,10 +1704,12 @@ export async function runResultExport(options: {
 function createHeadlessContext(options: {
   readonly repo: string;
   readonly store?: string;
+  readonly codeGraphPath?: string;
 }): PipelineContext {
   return createContext({
     repo: options.repo,
     store: options.store,
+    codeGraphPath: options.codeGraphPath,
     reporter: new Reporter("human", {
       stdout: () => undefined,
       stderr: () => undefined,

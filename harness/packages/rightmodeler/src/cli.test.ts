@@ -326,6 +326,13 @@ describe("CLI trace guidance wiring", () => {
     }
   });
 
+  it("registers --code-graph on apply", async () => {
+    const captured = captureIo();
+
+    expect(await executeCli(["apply", "--help"], captured.io)).toBe(0);
+    expect(captured.stdout()).toContain("--code-graph <path>");
+  });
+
   it("rejects --code-graph without a path as a usage error", async () => {
     const captured = captureIo();
 

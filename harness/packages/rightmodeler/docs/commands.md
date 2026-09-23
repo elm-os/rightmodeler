@@ -447,6 +447,8 @@ Options:
                              "https://api.github.com")
   --github-token-env <name>  environment variable containing the GitHub token
   --dry-run                  run all machine gates without writing GitHub state
+  --code-graph <path>        Graphify graph.json for static code context in the
+                             pull request body; never evidence
   -h, --help                 display help for command
 ```
 
