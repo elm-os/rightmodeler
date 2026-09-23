@@ -614,6 +614,7 @@ export function createProgram(
       owner: local.owner,
       githubRepo: local.githubRepo,
       prNumber,
+      warning: (code, message) => reporter.warning(code, message),
     });
     reporter.result(result);
     return result.status === "lock_held"

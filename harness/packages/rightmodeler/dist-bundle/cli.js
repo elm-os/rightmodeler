@@ -43340,6 +43340,15 @@ ${marker}`
         owner: input.owner,
         repo: input.repo,
         ref: pull.head.sha
+      }).catch((error51) => {
+        if (!(error51 instanceof GithubHttpError) || error51.status !== 403) {
+          throw error51;
+        }
+        input.warning?.(
+          "github_checks_unavailable",
+          `GitHub refused to list check runs for pull request #${input.prNumber} (HTTP 403). This token cannot read check runs (fine-grained personal access tokens never can), so this pass reconciled reviews, comments, commit statuses, merges and base-branch changes without check-run results. To include check runs, use a GitHub App installation token with Checks: read or a classic token with the repo scope.`
+        );
+        return { totalCount: 0, checkRuns: [] };
       }),
       input.githubClient.getRef({
         owner: input.owner,
@@ -44521,7 +44530,8 @@ async function runWatch(options) {
     repo: options.githubRepo,
     prNumber: options.prNumber,
     conventions: prepared.conventions,
-    verdicts: prepared.verdicts
+    verdicts: prepared.verdicts,
+    warning: options.warning
   });
 }
 async function listWatchablePullRequests(options) {
@@ -49371,7 +49381,8 @@ function createProgram(io = processIo, runtime = processRuntime) {
       }),
       owner: local.owner,
       githubRepo: local.githubRepo,
-      prNumber
+      prNumber,
+      warning: (code2, message2) => reporter.warning(code2, message2)
     });
     reporter.result(result2);
     return result2.status === "lock_held" ? 2 : result2.status === "actions_taken" ? 1 : 0;

@@ -675,6 +675,7 @@ export interface WatchPipelineOptions {
   readonly owner: string;
   readonly githubRepo: string;
   readonly prNumber: number;
+  readonly warning?: (code: string, message: string) => void;
 }
 
 export interface WatchablePullRequest {
@@ -1397,6 +1398,7 @@ export async function runWatch(
     prNumber: options.prNumber,
     conventions: prepared.conventions,
     verdicts: prepared.verdicts,
+    warning: options.warning,
   });
 }
 
