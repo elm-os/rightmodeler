@@ -197,4 +197,14 @@ describe("evaluator documentation", () => {
     expect(section).toContain("`external_evaluator_error`");
     expect(section).toContain("`promptfooconfig.*`");
   });
+
+  it("names the re-grade warning the pipeline emits", () => {
+    const pipelineSource = readFileSync(
+      new URL("../pipeline.ts", import.meta.url),
+      "utf8",
+    );
+    expect(pipelineSource).toContain('"evaluator_regrade"');
+    expect(doc).toContain("`evaluator_regrade`");
+    expect(doc).toContain("## Changing an evaluator");
+  });
 });

@@ -56,6 +56,14 @@ dimension, pooled with measured judge-agreement carried as extra variance. A par
 that includes every dimension fragments a 24 case family below every minimum and abstains
 forever, which is a different way to be wrong.
 
+An external evaluator's configuration is not part of the key either: its options and, for
+promptfoo, the bytes of its rubric files. Each grade it produces records that configuration as
+`evaluatorIdentity`, and a replay under a changed one re-grades the stored outputs instead of
+replaying the candidates. The ledger keeps the earlier grades, but only grades made under the
+configuration in force are scored, and an export leaves out any grade a re-grade superseded.
+The evaluator plan (kind, scorers, gate metric, pass threshold) stays in the key, so changing
+it asks a new question.
+
 `computeEvidenceQuestionId` in `core/src/identity.ts` hashes exactly those six fields. The
 pipeline's `evidenceQuestionIdentity` binds `promptRevision` to the replay prompt revision and
 `replayMode` to `single_shot`, and folds the family, its step ids and any reproof request ids
@@ -92,12 +100,12 @@ re-judgements, and spend. Two position-swapped judge calls plus a later re-judge
 
 The ledger stores immutable typed facts linked by identifiers.
 
-| Fact             | Grain                                 | Key fields                                                                                                                                                |
-| ---------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Execution`      | one logical candidate run of one case | `executionId`, `evidenceQuestionId`, `caseId`, `stepId`, `candidateId`, `trajectoryId`, `corpusSplit`, `selectionStage`, `terminalOutcome`, `finalOutput` |
-| `RequestAttempt` | one physical HTTP request             | `attemptId`, `logicalCallId`, `executionId`, `streamOutcome`, `usage`, `costUsd`, `costIsEstimate`                                                        |
-| `Assessment`     | one evaluator judgement               | `assessmentId`, `executionId`, `evaluatorId`, `metricName`, `score`, `passed`, `rubricVersion`, `artifactRef`                                             |
-| `SpendEvent`     | any paid action by any actor          | `actor`, `phase`, `costUsd`, `provider`, `reconcilableTo`                                                                                                 |
+| Fact             | Grain                                 | Key fields                                                                                                                                                    |
+| ---------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Execution`      | one logical candidate run of one case | `executionId`, `evidenceQuestionId`, `caseId`, `stepId`, `candidateId`, `trajectoryId`, `corpusSplit`, `selectionStage`, `terminalOutcome`, `finalOutput`     |
+| `RequestAttempt` | one physical HTTP request             | `attemptId`, `logicalCallId`, `executionId`, `streamOutcome`, `usage`, `costUsd`, `costIsEstimate`                                                            |
+| `Assessment`     | one evaluator judgement               | `assessmentId`, `executionId`, `evaluatorId`, `metricName`, `score`, `passed`, `rubricVersion`, `evaluatorIdentity` (external evaluators only), `artifactRef` |
+| `SpendEvent`     | any paid action by any actor          | `actor`, `phase`, `costUsd`, `provider`, `reconcilableTo`                                                                                                     |
 
 An `Execution` materializes into exactly one outcome. Every attempt is charged. Exactly one is
 scored.
