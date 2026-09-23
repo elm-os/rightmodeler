@@ -153,9 +153,9 @@ include the model's output ceiling:
 ```
 
 Without usable pricing from the catalog, a catalog reference, LiteLLM
-`/model/info`, or a pricing file, the run refuses with `no_priced_candidates` instead of reporting zero
-cost. The judge must be priced too, so price at least one model from a family
-other than the current model's and the candidate's.
+`/model/info`, or a pricing file, the run refuses with `no_priced_candidates`
+instead of reporting zero cost. The judge must be priced too, so price at least
+one model from a family other than the current model's and the candidate's.
 
 ## Which model answered
 
