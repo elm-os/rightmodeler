@@ -401,11 +401,13 @@ under the remaining lease exceed it together, and cutting them mid-stream preser
 only by manufacturing invalid executions.
 
 Worst-case cost is **reserved before forwarding**, computed from context size, maximum output,
-and pinned pricing. Concurrency is capped against available reservation. The unused remainder is
-refunded on completion. The host holds authorized totals in `budget/<runId>.json`; the proxy
-enforces; re-leasing is a host round trip. Judge spend is metered and charged against the same
-ledger after the call, not reserved before it, so a judge can carry the ledger past the
-authorized total until the next execution reservation refuses.
+and pinned pricing. In Mode B the proxy receives prices only for the models the case's steps
+call, so a request for any other model is refused before it is forwarded instead of being paid
+for and then discarded by the host. Concurrency is capped against available reservation. The
+unused remainder is refunded on completion. The host holds authorized totals in
+`budget/<runId>.json`; the proxy enforces; re-leasing is a host round trip. Judge spend is
+metered and charged against the same ledger after the call, not reserved before it, so a judge
+can carry the ledger past the authorized total until the next execution reservation refuses.
 
 Caps are opt-in bounds, not defaults.
 
@@ -483,9 +485,11 @@ check in the egress listener. The cloud backend is selected with `"backend": "cl
 Mode B config file and fails closed with `modeb_cloud_unavailable` before any case runs when the
 sandbox SDK or its credentials are absent. Its network policy attaches the model credential to
 one host by header transform and keeps a wildcard entry that preserves other egress, so it is
-credential brokering rather than an allowlist. Mode B **refuses** rather than degrading onto a
-host with real egress and a real environment, which would silently falsify the security claim
-on the default path.
+credential brokering rather than an allowlist. With no host listener in that path, the
+in-sandbox proxy itself asks the provider for uncompressed responses, keeps the provider base
+path, and attributes every HTTP answer to the provider. Mode B **refuses** rather than degrading
+onto a host with real egress and a real environment, which would silently falsify the security
+claim on the default path.
 
 `.rightmodeler/` is the store root inside the client repository and is excluded from scanning.
 Isolating it as its own workspace root, with an empty workspace file and a pinned package

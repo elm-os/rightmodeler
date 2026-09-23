@@ -9,6 +9,7 @@ import {
   factsPrefix,
   FsStore,
   requestAttemptSchema,
+  spendEventSchema,
 } from "@rightmodeler/core";
 import {
   createCloudExecutor,
@@ -219,30 +220,46 @@ describe.skipIf(liveReason !== "available")(
       expect(result.blocked).toEqual([]);
       expect(result.executions).toHaveLength(3);
       for (const execution of result.executions) {
-        expect(execution).toMatchObject({
-          terminalOutcome: "success",
-          attribution: "ok",
+        // A live model may answer with nothing; that is its outcome, never the backend's.
+        expect([
+          { terminalOutcome: "success", attribution: "ok" },
+          { terminalOutcome: "failure", attribution: "silent-failure" },
+        ]).toContainEqual({
+          terminalOutcome: execution.terminalOutcome,
+          attribution: execution.attribution,
         });
       }
-      const attempts = (
-        await Promise.all(
-          (await store.list(factsPrefix(projectId))).map(async (key) => {
-            const entry = await store.get(key);
-            return factSchema.parse(
-              JSON.parse(Buffer.from(entry!.body).toString("utf8")),
-            );
-          }),
-        )
-      ).flatMap((fact) => {
+      const facts = await Promise.all(
+        (await store.list(factsPrefix(projectId))).map(async (key) => {
+          const entry = await store.get(key);
+          return factSchema.parse(
+            JSON.parse(Buffer.from(entry!.body).toString("utf8")),
+          );
+        }),
+      );
+      const attempts = facts.flatMap((fact) => {
         const parsed = requestAttemptSchema.safeParse(fact);
         return parsed.success ? [parsed.data] : [];
+      });
+      const spend = facts.flatMap((fact) => {
+        const parsed = spendEventSchema.safeParse(fact);
+        return parsed.success ? [parsed.data.reconcilableTo] : [];
       });
       for (const execution of result.executions) {
         const own = attempts.filter(
           ({ executionId }) => executionId === execution.executionId,
         );
         expect(own).toHaveLength(1);
+        expect(own[0]).toMatchObject({ streamOutcome: "completed" });
+        expect(own[0]!.usage).not.toBeNull();
         expect(own[0]!.costUsd).toBeGreaterThan(0);
+        expect(spend).toContainEqual(
+          expect.objectContaining({
+            attemptId: own[0]!.attemptId,
+            upstreamStatus: 200,
+            upstreamSource: "provider",
+          }),
+        );
       }
       // Only the 17 MiB file is skipped, and skipping it does not fail its case.
       expect(result.rejectedRows).toBe(1);
