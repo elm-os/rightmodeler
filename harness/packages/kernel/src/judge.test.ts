@@ -179,6 +179,39 @@ describe("pickJudge", () => {
     ).toEqual(["neutral/text"]);
   });
 
+  it("never ranks a model without catalog pricing as a judge", () => {
+    const unpriced: ModelCatalogEntry = {
+      id: "neutral/unpriced",
+      family: "neutral-unpriced",
+      contextLength: 1_000,
+      pricing: null,
+      supportsTools: false,
+      supportsStructuredOutput: true,
+      releasedAt: 100,
+    };
+    const catalog: ModelCatalogEntry[] = [
+      unpriced,
+      {
+        id: "neutral/priced",
+        family: "neutral-priced",
+        contextLength: 10,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 1,
+      },
+    ];
+    const families = {
+      candidateFamily: "candidate",
+      referenceFamily: "reference",
+    };
+
+    expect(pickJudges(catalog, families)).toEqual(["neutral/priced"]);
+    expect(() => pickJudges([unpriced], families)).toThrow(
+      "No neutral third-family judge is available",
+    );
+  });
+
   it("prefers a non-reasoning model over its reasoning twin", () => {
     const catalog: ModelCatalogEntry[] = [
       {

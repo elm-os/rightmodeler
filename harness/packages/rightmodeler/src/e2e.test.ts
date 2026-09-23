@@ -4934,6 +4934,49 @@ describe("built CLI pipeline", () => {
     }
   });
 
+  it("keeps judge spend inside --max-cost-usd and names the next required cap", async () => {
+    const { repo } = await fixtureCopy("judge-budget-cap");
+    const stub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "replay",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_API_KEY",
+          "--max-cost-usd",
+          "0.01",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_E2E_API_KEY: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(3);
+      expect(JSON.parse(result.stderr)).toMatchObject({
+        code: "budget_cap_refusal",
+        remedy: expect.stringMatching(/--max-cost-usd/),
+      });
+      const { spendEvents } = await readLedger(
+        new FsStore(join(repo, ".rightmodeler")),
+        "project",
+      );
+      expect(
+        spendEvents.reduce((total, { costUsd }) => total + costUsd, 0),
+      ).toBeLessThanOrEqual(0.01);
+      expect(spendEvents.some(({ actor }) => actor === "judge")).toBe(true);
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
   it("includes discovered trace candidates in the non-interactive remedy", async () => {
     const fixture = await fixtureCopy("discovered-trace-remedy");
     const home = await fixtureHome(fixture.root);

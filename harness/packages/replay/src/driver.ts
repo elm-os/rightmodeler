@@ -25,13 +25,16 @@ import {
 
 import {
   BudgetRefusalError,
+  reserveWhenFree,
   type Budget,
   type BudgetReservation,
 } from "./budget.js";
 import {
   BlockedError,
+  estimateInputTokens,
   type ChatMessage,
   type ModelCatalogEntry,
+  type ModelPricing,
   ProviderConfigurationError,
   ProviderRequestError,
   ProviderResponseError,
@@ -41,7 +44,6 @@ import {
 import type { ReplayStep, StepShortlist } from "./shortlist.js";
 
 const BUDGET_HEARTBEAT_INTERVAL_MS = 30_000;
-const RESERVATION_RETRY_CAP_MS = 1_000;
 const JUDGE_CONCURRENCY = 8;
 
 export interface RecordedCase {
@@ -72,6 +74,8 @@ export interface ReplayModeAInput {
     rankedModels: readonly {
       judgeModel: string;
       supportsStructuredOutput: boolean;
+      pricing: ModelPricing;
+      maxOutputTokens: number;
     }[];
     warning?: (code: string, message: string) => void;
   };
@@ -398,6 +402,7 @@ export async function replayModeA(
     | {
         readonly status: "failure";
       }
+    | { readonly status: "blocked"; readonly message: string }
   > {
     let judgeInvocation = 0;
     let judgeFailureKind: "response_malformed" | "provider_error" =
@@ -409,6 +414,20 @@ export async function replayModeA(
           let judgeResponse: JudgeChatResult | undefined;
           judgeInvocation += 1;
           const judgeLogicalCallId = randomUUID();
+          const reservation = await reserveWhenFree(
+            input.budget,
+            {
+              contextTokens: estimateInputTokens(request.messages),
+              maxOutputTokens: judge.maxOutputTokens,
+              pricing: judge.pricing,
+            },
+            activeRefunds,
+          );
+          let resolveRefund = (): void => undefined;
+          const refundComplete = new Promise<void>((resolve) => {
+            resolveRefund = resolve;
+          });
+          activeRefunds.add(refundComplete);
           try {
             judgeResponse = await input.judge!.chat(request);
             return judgeResponse;
@@ -460,12 +479,13 @@ export async function replayModeA(
                   },
                 }),
               );
-              if (judgeResponse !== undefined && judgeResponse.costUsd > 0) {
-                await input.budget.charge(judgeResponse.costUsd);
-              }
+              await reservation.refund(judgeResponse?.costUsd ?? 0);
             } catch (persistenceError) {
               judgePersistenceFailure = persistenceError;
               throw persistenceError;
+            } finally {
+              activeRefunds.delete(refundComplete);
+              resolveRefund();
             }
           }
         },
@@ -485,6 +505,9 @@ export async function replayModeA(
         judgePersistenceFailure !== undefined
       ) {
         throw error;
+      }
+      if (error instanceof BudgetRefusalError) {
+        return { status: "blocked", message: error.message };
       }
       await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error);
       return { status: "failure" };
@@ -534,6 +557,16 @@ export async function replayModeA(
         consecutiveJudgeFailures = 0;
       }
       await completeWithAssessment(job, outcome.assessment);
+      return;
+    }
+    if (outcome.status === "blocked") {
+      result.blocked.push({
+        stepId: job.cell.step.stepId,
+        caseId: job.cell.recordedCase.caseId,
+        candidateId: job.cell.candidate.id,
+        kind: "budget",
+        message: outcome.message,
+      });
       return;
     }
     judgeFailurePending.push(job);
@@ -665,38 +698,28 @@ export async function replayModeA(
       );
     }
     let reservation: BudgetReservation;
-    let retryMs = 25;
-    for (;;) {
-      try {
-        reservation = await input.budget.reserveExecution({
+    try {
+      reservation = await reserveWhenFree(
+        input.budget,
+        {
           contextTokens: cell.recordedCase.contextTokens,
           maxOutputTokens: cell.recordedCase.maxOutputTokens,
           pricing: cell.candidate.pricing,
+        },
+        activeRefunds,
+      );
+    } catch (error) {
+      if (error instanceof BudgetRefusalError) {
+        result.blocked.push({
+          stepId: cell.step.stepId,
+          caseId: cell.recordedCase.caseId,
+          candidateId: cell.candidate.id,
+          kind: "budget",
+          message: error.message,
         });
-        break;
-      } catch (error) {
-        if (error instanceof BudgetRefusalError && error.causedByReservations) {
-          const refunds = [...activeRefunds];
-          if (refunds.length > 0) {
-            await Promise.race(refunds);
-          } else {
-            await new Promise<void>((resolve) => setTimeout(resolve, retryMs));
-            retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
-          }
-          continue;
-        }
-        if (error instanceof BudgetRefusalError) {
-          result.blocked.push({
-            stepId: cell.step.stepId,
-            caseId: cell.recordedCase.caseId,
-            candidateId: cell.candidate.id,
-            kind: "budget",
-            message: error.message,
-          });
-          return;
-        }
-        throw error;
+        return;
       }
+      throw error;
     }
 
     let resolveRefund = (): void => undefined;

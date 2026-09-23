@@ -73,6 +73,7 @@ import {
   resolveCurrentModel,
   shortlist,
   type ModelCatalogEntry,
+  type ModelPricing,
   type ModeBCase,
   type ProviderClient,
   type RecordedCase,
@@ -998,18 +999,7 @@ export async function estimateReplay(
             candidateFamily: candidate.family,
             referenceFamily,
           })[0]!;
-          const entry = catalog.find(({ id }) => id === modelId)!;
-          if (entry.pricing === null) {
-            throw new Error(`Selected judge has no pricing: ${modelId}`);
-          }
-          const selected = {
-            modelId,
-            pricing: entry.pricing,
-            maxOutputTokens: Math.min(
-              entry.maxOutputTokens ?? JUDGE_OUTPUT_TOKEN_CAP,
-              JUDGE_OUTPUT_TOKEN_CAP,
-            ),
-          };
+          const selected = { modelId, ...judgeLimits(catalog, modelId) };
           judges.set(key, selected);
           return selected;
         };
@@ -3417,6 +3407,7 @@ async function executeReplay(
                 supportsStructuredOutput: catalog.find(
                   ({ id }) => id === judgeModel,
                 )!.supportsStructuredOutput,
+                ...judgeLimits(catalog, judgeModel),
               })),
               warning: (code: string, message: string) =>
                 context.reporter.warning(code, message),
@@ -4118,6 +4109,7 @@ async function executeConfirm(
           judge: {
             judgeModel,
             supportsStructuredOutput: judgeSupportsStructuredOutput,
+            ...judgeLimits(catalog, judgeModel),
             providerId: provider.providerId,
             chat: judgeChat(provider, catalog),
           },
@@ -4796,6 +4788,23 @@ function effectiveVerdict(
 }
 
 const JUDGE_OUTPUT_TOKEN_CAP = 512;
+
+function judgeLimits(
+  catalog: readonly ModelCatalogEntry[],
+  judgeModel: string,
+): { readonly pricing: ModelPricing; readonly maxOutputTokens: number } {
+  const entry = catalog.find(({ id }) => id === judgeModel)!;
+  if (entry.pricing === null) {
+    throw new Error(`Selected judge has no pricing: ${judgeModel}`);
+  }
+  return {
+    pricing: entry.pricing,
+    maxOutputTokens: Math.min(
+      entry.maxOutputTokens ?? JUDGE_OUTPUT_TOKEN_CAP,
+      JUDGE_OUTPUT_TOKEN_CAP,
+    ),
+  };
+}
 
 function judgeChat(
   provider: ProviderClient,

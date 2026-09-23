@@ -16,7 +16,9 @@ import {
 } from "@rightmodeler/core";
 import {
   aggregate,
+  judgeExecution,
   type JudgeChat,
+  type JudgeChatRequest,
   type JudgeChatResult,
 } from "@rightmodeler/kernel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +30,7 @@ import {
   DEFAULT_RESERVATION_STALENESS_WINDOW_MS,
   createBudget,
   createProvider,
+  estimateInputTokens,
   ProviderRequestError,
   replayModeA,
   shortlist,
@@ -70,6 +73,10 @@ const aiGatewayChatFixtureUrl = new URL(
 const projectId = "replay-test";
 const runId = "run-1";
 const fakeKey = "fake-provider-key-never-persist";
+const unpricedJudgeLimits = {
+  pricing: { input: 0, output: 0 },
+  maxOutputTokens: 512,
+};
 
 async function startStub(
   options: { catalogPageSize?: number; malformedJudgeModels?: string[] } = {},
@@ -1738,8 +1745,11 @@ describe("Mode A replay", () => {
     judgeChat = judge(),
     concurrency = 2,
     judgeModel = "neutral/judge",
-    rankedModels = [{ judgeModel, supportsStructuredOutput: true }],
+    rankedModels = [
+      { judgeModel, supportsStructuredOutput: true, ...unpricedJudgeLimits },
+    ],
     warning?: (code: string, message: string) => void,
+    authorizedTotalUsd = 1,
   ) {
     const catalog = await provider.listModels();
     const candidate = catalog.find((model) => model.id === "acme/small-1");
@@ -1748,7 +1758,7 @@ describe("Mode A replay", () => {
       store,
       projectId,
       runId,
-      authorizedTotalUsd: 1,
+      authorizedTotalUsd,
     });
     return replayModeA({
       steps: [step()],
@@ -1920,6 +1930,7 @@ describe("Mode A replay", () => {
       {
         judgeModel: "zeta/judge-1",
         supportsStructuredOutput: true,
+        ...unpricedJudgeLimits,
       },
     ]);
 
@@ -2006,10 +2017,12 @@ describe("Mode A replay", () => {
         {
           judgeModel: "zeta/judge-1",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "yotta/judge-2",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
       ],
       warning,
@@ -2092,10 +2105,12 @@ describe("Mode A replay", () => {
         {
           judgeModel: "zeta/judge-1",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "yotta/judge-2",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
       ],
       warning,
@@ -2140,22 +2155,27 @@ describe("Mode A replay", () => {
         {
           judgeModel: "zeta/judge-1",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "yotta/judge-2",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "xray/judge-3",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "whiskey/judge-4",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "unused/judge-5",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
       ],
       warning,
@@ -2770,6 +2790,7 @@ describe("Mode A replay", () => {
           {
             judgeModel: "neutral/judge",
             supportsStructuredOutput: true,
+            ...unpricedJudgeLimits,
           },
         ],
       },
@@ -2783,6 +2804,186 @@ describe("Mode A replay", () => {
       spentUsd: 0.002004,
       reservedUsd: 0,
     });
+  });
+
+  const pricedJudge = {
+    judgeModel: "neutral/judge",
+    supportsStructuredOutput: true,
+    pricing: { input: 0.00001, output: 0.00001 },
+    maxOutputTokens: 512,
+  };
+  const ledgerState = () => createBudget({ store, projectId, runId }).state();
+
+  it("holds judge spend inside the cap and blocks the judge cells the cap cannot cover", async () => {
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    const result = await run(
+      cases,
+      async (request) => ({ ...(await judge()(request)), costUsd: 0.003 }),
+      2,
+      pricedJudge.judgeModel,
+      [pricedJudge],
+      undefined,
+      0.01,
+    );
+    const facts = await readFacts(store);
+
+    expect((await ledgerState()).spentUsd).toBeLessThanOrEqual(0.01);
+    expect(result.blocked.length).toBeGreaterThan(0);
+    for (const blocked of result.blocked) {
+      expect(blocked).toMatchObject({
+        kind: "budget",
+        message: expect.stringMatching(/raise it to at least/),
+      });
+    }
+    expect(
+      facts.filter((fact) => "caseId" in fact && "terminalOutcome" in fact),
+    ).toHaveLength(4);
+    expect(facts.filter((fact) => "assessmentId" in fact).length).toBeLessThan(
+      4,
+    );
+    expect(
+      facts.some(
+        (fact) =>
+          "actor" in fact &&
+          typeof fact.reconcilableTo === "object" &&
+          fact.reconcilableTo !== null &&
+          !Array.isArray(fact.reconcilableTo) &&
+          fact.reconcilableTo.judgeFailureKind !== undefined,
+      ),
+    ).toBe(false);
+  });
+
+  it("books the judge's actual cost when its reservation is refunded", async () => {
+    await run(
+      [recordedCase()],
+      async (request) => ({ ...(await judge()(request)), costUsd: 0.0004 }),
+      2,
+      pricedJudge.judgeModel,
+      [pricedJudge],
+    );
+    const candidateCostUsd = (await readFacts(store))
+      .filter((fact) => "actor" in fact)
+      .filter((event) => event.actor === "replay-driver")
+      .reduce((total, event) => total + event.costUsd, 0);
+    const state = await ledgerState();
+
+    expect(candidateCostUsd).toBeGreaterThan(0);
+    expect(state.spentUsd).toBeCloseTo(candidateCostUsd + 2 * 0.0004, 12);
+    expect(state.reservedUsd).toBe(0);
+  });
+
+  it("waits for an in-flight judge reservation instead of refusing", async () => {
+    const delegate = provider;
+    provider = {
+      providerId: delegate.providerId,
+      listModels: () => delegate.listModels(),
+      chat: async (request) => {
+        const response = {
+          content: "candidate output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          costUsd: 0.000001,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+    const captured: JudgeChatRequest[] = [];
+    await judgeExecution({
+      chat: async (request) => {
+        captured.push(request);
+        return judge()(request);
+      },
+      judgeModel: pricedJudge.judgeModel,
+      supportsStructuredOutput: true,
+      task: recordedCase().task,
+      reference: "Accepted summary",
+      candidate: "candidate output",
+    });
+    const inputTokens = estimateInputTokens(captured[0]!.messages);
+    const cap =
+      (inputTokens * pricedJudge.pricing.input +
+        pricedJudge.maxOutputTokens * pricedJudge.pricing.output) *
+      1.5;
+    const calls: { inputTokens: number; start: number; end: number }[] = [];
+
+    const result = await run(
+      [recordedCase()],
+      async (request) => {
+        const start = performance.now();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        calls.push({
+          inputTokens: estimateInputTokens(request.messages),
+          start,
+          end: performance.now(),
+        });
+        return judge()(request);
+      },
+      2,
+      pricedJudge.judgeModel,
+      [pricedJudge],
+      undefined,
+      cap,
+    );
+    const facts = await readFacts(store);
+
+    expect(result.blocked).toEqual([]);
+    expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(1);
+    expect(calls.map((call) => call.inputTokens)).toEqual([
+      inputTokens,
+      inputTokens,
+    ]);
+    expect(calls[1]!.start).toBeGreaterThanOrEqual(calls[0]!.end);
+  });
+
+  it("never counts a budget refusal toward judge failover", async () => {
+    const warning = vi.fn();
+    const judgeModels: string[] = [];
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    const result = await run(
+      cases,
+      async (request) => {
+        judgeModels.push(request.model);
+        return judge()(request);
+      },
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          pricing: { input: 1, output: 1 },
+          maxOutputTokens: 512,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
+        },
+      ],
+      warning,
+      0.01,
+    );
+
+    expect(result.blocked.length).toBeGreaterThan(0);
+    expect(result.blocked.every(({ kind }) => kind === "budget")).toBe(true);
+    expect(warning).not.toHaveBeenCalledWith(
+      "judge_unusable",
+      expect.anything(),
+    );
+    expect(judgeModels).not.toContain("yotta/judge-2");
   });
 
   it("converts the recorded request to provider wire messages with only the model swapped", async () => {

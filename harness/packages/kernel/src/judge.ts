@@ -130,6 +130,7 @@ export function pickJudges(
     if (outputModalities.length > 0 && !outputModalities.includes("text")) {
       return false;
     }
+    if (model.pricing === null) return false;
 
     return (
       Boolean(model.family) &&

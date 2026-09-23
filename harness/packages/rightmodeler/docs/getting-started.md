@@ -77,6 +77,8 @@ npx rightmodeler estimate --traces /path/to/traces.json --base-url https://provi
 
 Estimate projects candidate replay spend from recorded token usage and the current
 model catalog before paid model calls begin.
+`--max-cost-usd` caps candidate replays and judge calls together: each call reserves
+its worst case before it is sent, and a call the cap cannot cover is not sent.
 
 ## Static code context (Graphify)
 

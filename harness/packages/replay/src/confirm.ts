@@ -32,7 +32,7 @@ export {
   detectCloudAvailability,
 } from "@rightmodeler/executor/cloud-sandbox";
 
-import type { Budget } from "./budget.js";
+import { BudgetRefusalError, reserveWhenFree, type Budget } from "./budget.js";
 import {
   replayModeB,
   type ModeBCase,
@@ -41,7 +41,11 @@ import {
   type ReplayModeBResult,
 } from "./driver-modeb.js";
 import { writeReplayFact } from "./driver.js";
-import { ProviderConfigurationError } from "./provider.js";
+import {
+  estimateInputTokens,
+  ProviderConfigurationError,
+  type ModelPricing,
+} from "./provider.js";
 import type { ReplayStep } from "./shortlist.js";
 
 type PlanItemStatus = "pending" | "running" | "pass" | "fail";
@@ -85,6 +89,8 @@ export interface ConfirmModeB {
     readonly chat: JudgeChat;
     readonly judgeModel: string;
     readonly supportsStructuredOutput: boolean;
+    readonly pricing: ModelPricing;
+    readonly maxOutputTokens: number;
     readonly providerId?: string;
   };
   readonly runner?: (input: ReplayModeBInput) => Promise<ReplayModeBResult>;
@@ -568,15 +574,30 @@ async function assessExecution(
   if (matches[0] !== undefined) return matches[0];
 
   let invocation = 0;
-  let judgeFailureKind: "response_malformed" | "provider_error" =
+  let judgeFailureKind: "response_malformed" | "provider_error" | "budget" =
     "response_malformed";
   let judgePersistenceFailure: unknown;
+  const judgeRefunds = new Set<Promise<void>>();
   let judged;
   try {
     judged = await judgeExecution({
       chat: async (request) => {
         let judgeResponse: JudgeChatResult | undefined;
         invocation += 1;
+        const reservation = await reserveWhenFree(
+          input.budget.modeB,
+          {
+            contextTokens: estimateInputTokens(request.messages),
+            maxOutputTokens: input.modeB.judge.maxOutputTokens,
+            pricing: input.modeB.judge.pricing,
+          },
+          judgeRefunds,
+        );
+        let resolveRefund = (): void => undefined;
+        const refundComplete = new Promise<void>((resolve) => {
+          resolveRefund = resolve;
+        });
+        judgeRefunds.add(refundComplete);
         try {
           judgeResponse = await input.modeB.judge.chat(request);
           return judgeResponse;
@@ -609,12 +630,13 @@ async function assessExecution(
                 },
               }),
             );
-            if (judgeResponse !== undefined && judgeResponse.costUsd > 0) {
-              await input.budget.modeB.charge(judgeResponse.costUsd);
-            }
+            await reservation.refund(judgeResponse?.costUsd ?? 0);
           } catch (persistenceError) {
             judgePersistenceFailure = persistenceError;
             throw persistenceError;
+          } finally {
+            judgeRefunds.delete(refundComplete);
+            resolveRefund();
           }
         }
       },
@@ -637,6 +659,7 @@ async function assessExecution(
     ) {
       throw error;
     }
+    if (error instanceof BudgetRefusalError) judgeFailureKind = "budget";
     const failureId = randomUUID();
     await writeReplayFact(
       input.store,

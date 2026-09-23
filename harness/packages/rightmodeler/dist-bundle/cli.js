@@ -27236,6 +27236,8 @@ function pickJudges(catalog, options) {
     if (outputModalities.length > 0 && !outputModalities.includes("text")) {
       return false;
     }
+    if (model.pricing === null)
+      return false;
     return Boolean(model.family) && model.family !== "unknown" && model.family !== options.candidateFamily && model.family !== options.referenceFamily;
   });
   if (eligible.length === 0) {
@@ -27556,6 +27558,7 @@ function stableSeed2(value) {
 // ../replay/dist/budget.js
 import { randomUUID as randomUUID5 } from "node:crypto";
 var DEFAULT_RESERVATION_STALENESS_WINDOW_MS = 10 * 60 * 1e3;
+var RESERVATION_RETRY_CAP_MS = 1e3;
 var BudgetRefusalError = class extends Error {
   requiredCapUsd;
   authorizedTotalUsd;
@@ -27568,6 +27571,26 @@ var BudgetRefusalError = class extends Error {
     this.causedByReservations = causedByReservations;
   }
 };
+async function reserveWhenFree(budget, input, inFlight) {
+  let retryMs = 25;
+  for (; ; ) {
+    try {
+      return await budget.reserveExecution(input);
+    } catch (error51) {
+      if (error51 instanceof BudgetRefusalError && error51.causedByReservations) {
+        const refunds = [...inFlight];
+        if (refunds.length > 0) {
+          await Promise.race(refunds);
+        } else {
+          await new Promise((resolve14) => setTimeout(resolve14, retryMs));
+          retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
+        }
+        continue;
+      }
+      throw error51;
+    }
+  }
+}
 function formatUsd(value) {
   return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "");
 }
@@ -27772,27 +27795,11 @@ function createBudget(options) {
       reservedUsd: reservedTotal(ledger)
     };
   }
-  async function charge(costUsd) {
-    assertAmount(costUsd, "costUsd");
-    if (costUsd === 0)
-      return;
-    for (; ; ) {
-      const latest = await load(false);
-      const charged = {
-        ...latest.ledger,
-        spentUsd: latest.ledger.spentUsd + costUsd
-      };
-      if (await options.store.compareAndSwap(key, latest.version, encode3(charged), latest.fenceToken)) {
-        return;
-      }
-    }
-  }
   return {
     store: options.store,
     projectId: options.projectId,
     runId: options.runId,
     reserveExecution,
-    charge,
     state
   };
 }
@@ -28897,6 +28904,9 @@ function normalizeUsage(value) {
     outputTokens: tokenCount(output, "usage.completion_tokens")
   };
 }
+function estimateInputTokens(messages) {
+  return Math.max(1, Math.ceil(Buffer.byteLength(JSON.stringify(messages)) / 4));
+}
 function createProvider(options) {
   const baseUrl = options.baseUrl.replace(/\/$/, "");
   const limiter = new AdaptiveLimiter(options.maxConcurrency ?? 8);
@@ -29154,7 +29164,7 @@ function createProvider(options) {
       const usageObject = envelope.usage === void 0 || envelope.usage === null ? {} : objectValue(envelope.usage, "chat response usage");
       const usageUnreported = content.trim().length > 0 && (reportedUsage === null || reportedUsage.outputTokens === 0);
       const usage2 = usageUnreported ? {
-        inputTokens: reportedUsage?.inputTokens || request.estimatedInputTokens || Math.max(1, Math.ceil(Buffer.byteLength(JSON.stringify(request.messages)) / 4)),
+        inputTokens: reportedUsage?.inputTokens || request.estimatedInputTokens || estimateInputTokens(request.messages),
         outputTokens: Math.max(1, Math.ceil(Buffer.byteLength(content) / 4)),
         status: "usage_unreported"
       } : reportedUsage ?? {
@@ -29219,7 +29229,6 @@ function createProvider(options) {
 
 // ../replay/dist/driver.js
 var BUDGET_HEARTBEAT_INTERVAL_MS = 3e4;
-var RESERVATION_RETRY_CAP_MS = 1e3;
 var JUDGE_CONCURRENCY = 8;
 function replayCorrelationKey(evidenceQuestionId2, caseId, candidateId3) {
   return JSON.stringify([evidenceQuestionId2, caseId, candidateId3]);
@@ -29384,6 +29393,16 @@ async function replayModeA(input) {
           let judgeResponse;
           judgeInvocation += 1;
           const judgeLogicalCallId = randomUUID7();
+          const reservation = await reserveWhenFree(input.budget, {
+            contextTokens: estimateInputTokens(request.messages),
+            maxOutputTokens: judge.maxOutputTokens,
+            pricing: judge.pricing
+          }, activeRefunds);
+          let resolveRefund = () => void 0;
+          const refundComplete = new Promise((resolve14) => {
+            resolveRefund = resolve14;
+          });
+          activeRefunds.add(refundComplete);
           try {
             judgeResponse = await input.judge.chat(request);
             return judgeResponse;
@@ -29427,12 +29446,13 @@ async function replayModeA(input) {
                   usage: judgeResponse?.usage ?? null
                 }
               }));
-              if (judgeResponse !== void 0 && judgeResponse.costUsd > 0) {
-                await input.budget.charge(judgeResponse.costUsd);
-              }
+              await reservation.refund(judgeResponse?.costUsd ?? 0);
             } catch (persistenceError) {
               judgePersistenceFailure = persistenceError;
               throw persistenceError;
+            } finally {
+              activeRefunds.delete(refundComplete);
+              resolveRefund();
             }
           }
         },
@@ -29446,6 +29466,9 @@ async function replayModeA(input) {
     } catch (error51) {
       if (error51 instanceof ProviderConfigurationError || judgePersistenceFailure !== void 0) {
         throw error51;
+      }
+      if (error51 instanceof BudgetRefusalError) {
+        return { status: "blocked", message: error51.message };
       }
       await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error51);
       return { status: "failure" };
@@ -29478,6 +29501,16 @@ async function replayModeA(input) {
         consecutiveJudgeFailures = 0;
       }
       await completeWithAssessment(job, outcome.assessment);
+      return;
+    }
+    if (outcome.status === "blocked") {
+      result2.blocked.push({
+        stepId: job.cell.step.stepId,
+        caseId: job.cell.recordedCase.caseId,
+        candidateId: job.cell.candidate.id,
+        kind: "budget",
+        message: outcome.message
+      });
       return;
     }
     judgeFailurePending.push(job);
@@ -29577,38 +29610,24 @@ async function replayModeA(input) {
       throw new ProviderConfigurationError(`Candidate has no pricing: ${cell.candidate.id}`);
     }
     let reservation;
-    let retryMs = 25;
-    for (; ; ) {
-      try {
-        reservation = await input.budget.reserveExecution({
-          contextTokens: cell.recordedCase.contextTokens,
-          maxOutputTokens: cell.recordedCase.maxOutputTokens,
-          pricing: cell.candidate.pricing
+    try {
+      reservation = await reserveWhenFree(input.budget, {
+        contextTokens: cell.recordedCase.contextTokens,
+        maxOutputTokens: cell.recordedCase.maxOutputTokens,
+        pricing: cell.candidate.pricing
+      }, activeRefunds);
+    } catch (error51) {
+      if (error51 instanceof BudgetRefusalError) {
+        result2.blocked.push({
+          stepId: cell.step.stepId,
+          caseId: cell.recordedCase.caseId,
+          candidateId: cell.candidate.id,
+          kind: "budget",
+          message: error51.message
         });
-        break;
-      } catch (error51) {
-        if (error51 instanceof BudgetRefusalError && error51.causedByReservations) {
-          const refunds = [...activeRefunds];
-          if (refunds.length > 0) {
-            await Promise.race(refunds);
-          } else {
-            await new Promise((resolve14) => setTimeout(resolve14, retryMs));
-            retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
-          }
-          continue;
-        }
-        if (error51 instanceof BudgetRefusalError) {
-          result2.blocked.push({
-            stepId: cell.step.stepId,
-            caseId: cell.recordedCase.caseId,
-            candidateId: cell.candidate.id,
-            kind: "budget",
-            message: error51.message
-          });
-          return;
-        }
-        throw error51;
+        return;
       }
+      throw error51;
     }
     let resolveRefund = () => void 0;
     const refundComplete = new Promise((resolve14) => {
@@ -31141,12 +31160,23 @@ async function assessExecution(input, recordedCase, execution, key, existing) {
   let invocation = 0;
   let judgeFailureKind = "response_malformed";
   let judgePersistenceFailure;
+  const judgeRefunds = /* @__PURE__ */ new Set();
   let judged;
   try {
     judged = await judgeExecution({
       chat: async (request) => {
         let judgeResponse;
         invocation += 1;
+        const reservation = await reserveWhenFree(input.budget.modeB, {
+          contextTokens: estimateInputTokens(request.messages),
+          maxOutputTokens: input.modeB.judge.maxOutputTokens,
+          pricing: input.modeB.judge.pricing
+        }, judgeRefunds);
+        let resolveRefund = () => void 0;
+        const refundComplete = new Promise((resolve14) => {
+          resolveRefund = resolve14;
+        });
+        judgeRefunds.add(refundComplete);
         try {
           judgeResponse = await input.modeB.judge.chat(request);
           return judgeResponse;
@@ -31173,12 +31203,13 @@ async function assessExecution(input, recordedCase, execution, key, existing) {
                 subsetKey: key
               }
             }));
-            if (judgeResponse !== void 0 && judgeResponse.costUsd > 0) {
-              await input.budget.modeB.charge(judgeResponse.costUsd);
-            }
+            await reservation.refund(judgeResponse?.costUsd ?? 0);
           } catch (persistenceError) {
             judgePersistenceFailure = persistenceError;
             throw persistenceError;
+          } finally {
+            judgeRefunds.delete(refundComplete);
+            resolveRefund();
           }
         }
       },
@@ -31192,6 +31223,8 @@ async function assessExecution(input, recordedCase, execution, key, existing) {
     if (error51 instanceof ProviderConfigurationError || judgePersistenceFailure !== void 0) {
       throw error51;
     }
+    if (error51 instanceof BudgetRefusalError)
+      judgeFailureKind = "budget";
     const failureId = randomUUID9();
     await writeReplayFact(input.store, input.budget.modeB.projectId, failureId, spendEventSchema.parse({
       actor: "judge",
@@ -44264,18 +44297,7 @@ async function estimateReplay(options) {
       candidateFamily: candidate.family,
       referenceFamily
     })[0];
-    const entry = catalog.find(({ id }) => id === modelId);
-    if (entry.pricing === null) {
-      throw new Error(`Selected judge has no pricing: ${modelId}`);
-    }
-    const selected = {
-      modelId,
-      pricing: entry.pricing,
-      maxOutputTokens: Math.min(
-        entry.maxOutputTokens ?? JUDGE_OUTPUT_TOKEN_CAP,
-        JUDGE_OUTPUT_TOKEN_CAP
-      )
-    };
+    const selected = { modelId, ...judgeLimits(catalog, modelId) };
     judges.set(key, selected);
     return selected;
   };
@@ -46108,7 +46130,8 @@ async function executeReplay(context2, inputDigestValue, runId) {
           judgeModel,
           supportsStructuredOutput: catalog.find(
             ({ id }) => id === judgeModel
-          ).supportsStructuredOutput
+          ).supportsStructuredOutput,
+          ...judgeLimits(catalog, judgeModel)
         })),
         warning: (code, message2) => context2.reporter.warning(code, message2),
         chat: judgeChat(provider, catalog)
@@ -46689,6 +46712,7 @@ async function executeConfirm(context2, inputDigestValue, runId) {
           judge: {
             judgeModel,
             supportsStructuredOutput: judgeSupportsStructuredOutput,
+            ...judgeLimits(catalog, judgeModel),
             providerId: provider.providerId,
             chat: judgeChat(provider, catalog)
           }
@@ -47204,6 +47228,19 @@ function effectiveVerdict(verdicts, selection) {
   return shortlist2;
 }
 var JUDGE_OUTPUT_TOKEN_CAP = 512;
+function judgeLimits(catalog, judgeModel) {
+  const entry = catalog.find(({ id }) => id === judgeModel);
+  if (entry.pricing === null) {
+    throw new Error(`Selected judge has no pricing: ${judgeModel}`);
+  }
+  return {
+    pricing: entry.pricing,
+    maxOutputTokens: Math.min(
+      entry.maxOutputTokens ?? JUDGE_OUTPUT_TOKEN_CAP,
+      JUDGE_OUTPUT_TOKEN_CAP
+    )
+  };
+}
 function judgeChat(provider, catalog) {
   return (request) => {
     const ceiling = catalog.find(({ id }) => id === request.model)?.maxOutputTokens ?? null;

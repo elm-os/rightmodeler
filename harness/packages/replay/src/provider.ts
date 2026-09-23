@@ -443,6 +443,13 @@ function normalizeUsage(value: unknown): ChatResponse["usage"] | null {
   };
 }
 
+export function estimateInputTokens(messages: unknown): number {
+  return Math.max(
+    1,
+    Math.ceil(Buffer.byteLength(JSON.stringify(messages)) / 4),
+  );
+}
+
 export function createProvider(options: CreateProviderOptions): ProviderClient {
   const baseUrl = options.baseUrl.replace(/\/$/, "");
   const limiter = new AdaptiveLimiter(options.maxConcurrency ?? 8);
@@ -796,12 +803,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
             inputTokens:
               reportedUsage?.inputTokens ||
               request.estimatedInputTokens ||
-              Math.max(
-                1,
-                Math.ceil(
-                  Buffer.byteLength(JSON.stringify(request.messages)) / 4,
-                ),
-              ),
+              estimateInputTokens(request.messages),
             outputTokens: Math.max(
               1,
               Math.ceil(Buffer.byteLength(content) / 4),

@@ -413,9 +413,12 @@ and pinned pricing. In Mode B the proxy receives prices only for the models the 
 call, so a request for any other model is refused before it is forwarded instead of being paid
 for and then discarded by the host. Concurrency is capped against available reservation. The
 unused remainder is refunded on completion. The host holds authorized totals in
-`budget/<runId>.json`; the proxy enforces; re-leasing is a host round trip. Judge spend is
-metered and charged against the same ledger after the call, not reserved before it, so a judge
-can carry the ledger past the authorized total until the next execution reservation refuses.
+`budget/<runId>.json`; the proxy enforces; re-leasing is a host round trip. Judge calls reserve
+the same way: each call reserves the judge's worst case (catalog pricing, the output cap the
+judge request asks for, and an input estimate) before it is sent and books its actual cost when
+it returns, so no judge call can carry the ledger past the authorized total. A judge call the
+cap cannot cover is never sent: in replay the run stops with the next required cap, and in
+confirmation the case is recorded as `judge_evidence_incomplete`.
 
 Caps are opt-in bounds, not defaults.
 

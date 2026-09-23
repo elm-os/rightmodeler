@@ -70,6 +70,10 @@ const twoCaseIsolationPolicy: ReleaseGatePolicy = {
   passFraction: releaseGatePolicy.passFraction,
 };
 const confirmationCaseCount = 17;
+const unpricedJudgeLimits = {
+  pricing: { input: 0, output: 0 },
+  maxOutputTokens: 512,
+};
 
 const catalog: ModelCatalogEntry[] = [
   {
@@ -340,6 +344,7 @@ async function testContext(
           chat: judgeChat(),
           judgeModel: "neutral/judge",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
         },
         runner: runner.run,
       },
@@ -489,6 +494,7 @@ async function realModeBContext(
           chat: judgeChat(),
           judgeModel: "neutral/judge",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
           providerId: "deterministic-test-judge",
         },
       },
@@ -676,6 +682,7 @@ describe.skipIf(skipDocker)("confirmSwapSet", () => {
                 }),
               judgeModel: "zeta/judge-1",
               supportsStructuredOutput: true,
+              ...unpricedJudgeLimits,
               providerId: provider.providerId,
             },
           },
@@ -789,6 +796,52 @@ describe.skipIf(skipDocker)("confirmSwapSet", () => {
     expect(second).toMatchObject({ verdict: "confirmed", runSetsUsed: 1 });
     expect(runner.calls()).toBe(1);
     expect(assessments).toHaveLength(17);
+  });
+
+  it("holds confirm judge spend inside the cap and names the refused case judge_evidence_incomplete", async () => {
+    const runner = fakeRunner(() => false);
+    const context = await testContext(runner, 1);
+    const budget = createBudget({
+      store: context.store,
+      projectId,
+      runId: "judge-budget-cap",
+      authorizedTotalUsd: 0.001,
+    });
+    const delegate = judgeChat();
+
+    const result = await confirmSwapSet({
+      ...context.input,
+      modeB: {
+        ...context.input.modeB,
+        judge: {
+          ...context.input.modeB.judge,
+          chat: async (request) => ({
+            ...(await delegate(request)),
+            costUsd: 0.0004,
+          }),
+          pricing: { input: 0.00001, output: 0.00001 },
+          maxOutputTokens: 512,
+        },
+      },
+      budget: { modeB: budget, maxRunSets: 1 },
+    });
+    const storedFacts = await facts(context.store);
+
+    expect((await budget.state()).spentUsd).toBeLessThanOrEqual(0.001);
+    expect(result.verdict).toBe("inconclusive");
+    expect(storedFacts.filter((fact) => "assessmentId" in fact)).toEqual([]);
+    expect(storedFacts).toContainEqual(
+      expect.objectContaining({
+        actor: "judge",
+        reconcilableTo: expect.objectContaining({
+          assessmentAbsentReason: "judge_evidence_incomplete",
+          judgeFailureKind: "budget",
+          errorDetail: expect.objectContaining({
+            message: expect.stringContaining("raise it to at least"),
+          }),
+        }),
+      }),
+    );
   });
 
   it("writes the swap set candidate on the cascade finding", async () => {
