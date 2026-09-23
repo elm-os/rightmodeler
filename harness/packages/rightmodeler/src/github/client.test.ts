@@ -391,6 +391,30 @@ describe("GitHub client conformance", () => {
     ]);
   });
 
+  it("sends an API version GitHub supports", async () => {
+    process.env[tokenEnv] = token;
+    const stub = await startStub();
+    const seeded = await seed(stub);
+
+    await expect(
+      client(stub).getRef({ ...repository, ref: "heads/main" }),
+    ).resolves.toMatchObject({ sha: seeded.sha });
+    const unsupported = await fetch(
+      `${baseUrl(stub)}/repos/acme/demo/git/ref/heads/main`,
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-github-api-version": "2099-01-01",
+        },
+      },
+    );
+    expect(unsupported.status).toBe(400);
+    const body = (await unsupported.json()) as { errors: string };
+    expect(body.errors).toContain('"2099-01-01"');
+    expect(body.errors).toContain('"2026-03-10" (most recent)');
+    expect(body.errors).toContain('"2022-11-28"');
+  });
+
   it("reads combined commit status and the authenticated user", async () => {
     process.env[tokenEnv] = token;
     const stub = await startStub({ tokenLogin: "octocat" });
