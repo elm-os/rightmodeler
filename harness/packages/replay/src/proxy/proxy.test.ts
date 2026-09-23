@@ -28,6 +28,12 @@ interface StubProvider {
   port: number;
   close(): Promise<void>;
   getHitCount(): number;
+  getRequestHeaders(): Array<{
+    method: string;
+    path: string;
+    headers: Record<string, string>;
+    model?: string;
+  }>;
 }
 
 interface StubOptions {
@@ -70,6 +76,7 @@ interface RuntimeOptions {
   maxUsd?: number;
   streamIdleTimeoutMs?: number;
   streamHardDeadlineMs?: number;
+  requestHeaders?: Record<string, string>;
 }
 
 const stubModuleUrl = new URL(
@@ -152,6 +159,9 @@ function runtimeEnv(options: RuntimeOptions): NodeJS.ProcessEnv {
     ...(options.streamHardDeadlineMs === undefined
       ? {}
       : { RM_STREAM_HARD_DEADLINE_MS: String(options.streamHardDeadlineMs) }),
+    ...(options.requestHeaders === undefined
+      ? {}
+      : { RM_REQUEST_HEADERS: JSON.stringify(options.requestHeaders) }),
   };
 }
 
@@ -1417,6 +1427,34 @@ describe("Mode B proxy and host egress", () => {
     ]);
   });
 
+  it("forwards configured headers over the application's own", async () => {
+    const { runtime, stub } = await startPair({
+      requestHeaders: {
+        "x-portkey-provider": "openai",
+        "x-bf-cache-no-store": "true",
+      },
+    });
+
+    const response = await callProxy(
+      runtime,
+      "step-headers",
+      "logical-headers",
+      chatBody(),
+      { "x-portkey-provider": "app" },
+    );
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+
+    const chats = stub
+      .getRequestHeaders()
+      .filter(({ path }) => path === "/v1/chat/completions");
+    expect(chats).toHaveLength(1);
+    expect(chats[0]!.headers).toMatchObject({
+      "x-portkey-provider": "openai",
+      "x-bf-cache-no-store": "true",
+    });
+  });
+
   it("injects credentials at forward time and redacts provider errors", async () => {
     delete process.env[apiKeyEnv];
     const scratch = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-secret-"));
@@ -1576,5 +1614,24 @@ describe("Mode B proxy and host egress", () => {
         await createRuntimeBundle(),
       ),
     ).rejects.toThrow("attempt spool has malformed JSON on line 1");
+  });
+
+  it("fails startup on a malformed RM_REQUEST_HEADERS", async () => {
+    const scratch = await mkdtemp(
+      join(tmpdir(), "rightmodeler-proxy-request-headers-"),
+    );
+    scratchDirectories.push(scratch);
+
+    await expect(
+      startRuntime(
+        {
+          ...runtimeEnv({ scratch, egressUrl: "http://127.0.0.1:9" }),
+          RM_REQUEST_HEADERS: JSON.stringify(["x-portkey-provider: openai"]),
+        },
+        await createRuntimeBundle(),
+      ),
+    ).rejects.toThrow(
+      "RM_REQUEST_HEADERS must map header names to string values",
+    );
   });
 });

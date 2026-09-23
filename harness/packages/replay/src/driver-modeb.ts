@@ -86,6 +86,7 @@ export interface ModeBAppSpec {
 export interface ModeBEgress extends EgressListenerOptions {
   readonly providerId: string;
   readonly catalog: readonly ModelCatalogEntry[];
+  readonly requestHeaders?: Readonly<Record<string, string>>;
 }
 
 export type ModeBExecutor = Omit<DockerExecutor, "reapOrphans"> & {
@@ -516,6 +517,11 @@ function launchCase(
       RM_DEFAULT_MAX_OUTPUT_TOKENS: String(DEFAULT_MAX_OUTPUT_TOKENS),
       RM_BUDGET_LEASE: JSON.stringify({ maxUsd: leaseUsd }),
       RM_DEADLINE_MS: String(input.appSpec.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      ...(Object.keys(input.egress.requestHeaders ?? {}).length === 0
+        ? {}
+        : {
+            RM_REQUEST_HEADERS: JSON.stringify(input.egress.requestHeaders),
+          }),
       ...(resume ? { RM_RESUME: "1" } : {}),
     },
     mounts: [

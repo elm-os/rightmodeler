@@ -272,6 +272,73 @@ describe("provider client", () => {
     await expect(provider.listModels()).rejects.toThrow("REPLAY_TEST_API_KEY");
   });
 
+  it("sends configured headers on catalog, chat and model-info requests and keeps authorization last", async () => {
+    const sent: Array<{ url: string; headers: Headers }> = [];
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        sent.push({ url, headers: new Headers(init?.headers) });
+        const body = url.endsWith("/models")
+          ? { data: [{ id: "acme/small-1", context_length: 128_000 }] }
+          : url.endsWith("/model/info")
+            ? {
+                data: [
+                  {
+                    model_name: "acme/small-1",
+                    model_info: {
+                      input_cost_per_token: 0.000001,
+                      output_cost_per_token: 0.000002,
+                    },
+                  },
+                ],
+              }
+            : {
+                model: "acme/small-1",
+                choices: [
+                  {
+                    message: { role: "assistant", content: "ok" },
+                    finish_reason: "stop",
+                  },
+                ],
+                usage: { prompt_tokens: 4, completion_tokens: 1 },
+              };
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      });
+    try {
+      const provider = createProvider({
+        providerId: "header-gateway",
+        baseUrl: "https://gateway.example/v1",
+        apiKeyEnv: "REPLAY_TEST_API_KEY",
+        headers: {
+          "x-portkey-provider": "openai",
+          authorization: "must-not-win",
+        },
+      });
+      await provider.listModels();
+      await provider.chat({
+        model: "acme/small-1",
+        messages: [{ role: "user", content: "hello" }],
+        headers: { "x-portkey-provider": "recorded" },
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(sent.map(({ url }) => url)).toEqual([
+      "https://gateway.example/v1/models",
+      "https://gateway.example/model/info",
+      "https://gateway.example/v1/chat/completions",
+    ]);
+    for (const { headers } of sent) {
+      expect(headers.get("x-portkey-provider")).toBe("openai");
+      expect(headers.get("authorization")).toBe(`Bearer ${fakeKey}`);
+    }
+  });
+
   it("rejects internal parts arrays at the strict stub boundary", async () => {
     const response = await fetch(`${baseUrl(stub)}/chat/completions`, {
       method: "POST",

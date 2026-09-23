@@ -114,6 +114,21 @@ function parseConfig() {
     throw new Error("RM_EGRESS_URL must use http or https");
   }
 
+  const requestHeaders =
+    process.env.RM_REQUEST_HEADERS === undefined
+      ? {}
+      : jsonEnv("RM_REQUEST_HEADERS");
+  if (
+    !isObject(requestHeaders) ||
+    Object.entries(requestHeaders).some(
+      ([name, value]) => name.length === 0 || typeof value !== "string",
+    )
+  ) {
+    throw new Error(
+      "RM_REQUEST_HEADERS must map header names to string values",
+    );
+  }
+
   return {
     runId: requiredEnv("RM_RUN_ID"),
     caseId: requiredEnv("RM_CASE_ID"),
@@ -126,6 +141,7 @@ function parseConfig() {
     pricingTable,
     defaultMaxOutputTokens,
     lease,
+    requestHeaders,
   };
 }
 
@@ -249,7 +265,7 @@ function responseHeaders(headers) {
   return forwarded;
 }
 
-function requestHeaders(headers, bodyLength) {
+function requestHeaders(headers, bodyLength, configured) {
   const forwarded = {};
   for (const [name, value] of Object.entries(headers)) {
     if (
@@ -263,6 +279,7 @@ function requestHeaders(headers, bodyLength) {
       forwarded[name] = value;
     }
   }
+  Object.assign(forwarded, configured);
   forwarded["accept-encoding"] = "identity";
   forwarded["content-length"] = String(bodyLength);
   return forwarded;
@@ -785,7 +802,11 @@ async function main() {
           config.egressUrl,
           incoming.url ?? "/",
           incoming.method ?? "POST",
-          requestHeaders(incoming.headers, forwardedBody.length),
+          requestHeaders(
+            incoming.headers,
+            forwardedBody.length,
+            config.requestHeaders,
+          ),
           forwardedBody,
           streamHardDeadlineMs,
         );

@@ -134,6 +134,15 @@ interface StubProvider {
   getMaxInFlight(): number;
 }
 
+interface RecordingStubProvider extends StubProvider {
+  getRequestHeaders(): Array<{
+    method: string;
+    path: string;
+    headers: Record<string, string>;
+    model?: string;
+  }>;
+}
+
 interface StubProviderModule {
   startStubProvider(options: {
     port: number;
@@ -145,7 +154,7 @@ interface StubProviderModule {
     rateLimitedModels?: string[];
     rateLimitMessageIncludes?: string;
     servedModels?: Record<string, string>;
-  }): Promise<StubProvider>;
+  }): Promise<RecordingStubProvider>;
 }
 
 interface EvaluatorStub {
@@ -605,7 +614,7 @@ async function startStub(
     rateLimitMessageIncludes?: string;
     servedModels?: Record<string, string>;
   } = {},
-): Promise<StubProvider> {
+): Promise<RecordingStubProvider> {
   const module = (await import(stubModuleUrl)) as StubProviderModule;
   return module.startStubProvider({ port: 0, ...options });
 }
@@ -3978,6 +3987,60 @@ describe("built CLI pipeline", () => {
             substitutedIds.has(fact.executionId as string),
         ),
       ).toBe(false);
+    } finally {
+      await modelStub.close();
+    }
+  }, 60_000);
+
+  it("sends --header values with catalog, replay and judge requests", async () => {
+    const { repo } = await fixtureCopy("static-headers");
+    const modelStub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "replay",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${modelStub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_API_KEY",
+          "--header",
+          "x-rightmodeler-replay: 1",
+          "--header",
+          "x-route: e2e",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_E2E_API_KEY: secret } },
+      );
+      expect(result.code, result.stderr).toBe(0);
+
+      const received = modelStub.getRequestHeaders();
+      const kinds = [
+        received.filter(
+          ({ method, path }) => method === "GET" && path === "/v1/models",
+        ),
+        received.filter(
+          ({ model }) => model === "acme/small-1" || model === "acme/lite-1",
+        ),
+        received.filter(
+          ({ model }) => model === "zeta/judge-1" || model === "yotta/judge-2",
+        ),
+      ];
+      for (const requests of kinds) {
+        expect(requests.length).toBeGreaterThan(0);
+        for (const { headers } of requests) {
+          expect(headers).toMatchObject({
+            "x-rightmodeler-replay": "1",
+            "x-route": "e2e",
+          });
+        }
+      }
     } finally {
       await modelStub.close();
     }

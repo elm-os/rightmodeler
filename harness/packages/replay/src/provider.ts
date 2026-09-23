@@ -74,6 +74,7 @@ export interface CreateProviderOptions {
   pricingOverrides?: Readonly<
     Record<string, { input: number; output: number; maxOutputTokens?: number }>
   >;
+  headers?: Readonly<Record<string, string>>;
 }
 
 export type BlockedErrorInit =
@@ -477,6 +478,9 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
   ): Promise<PhysicalResponse> {
     const key = apiKey();
     const headers = new Headers(init.headers);
+    for (const [name, value] of Object.entries(options.headers ?? {})) {
+      headers.set(name, value);
+    }
     headers.set("authorization", `Bearer ${key}`);
     return limiter.run(async (ticket) => {
       const startedAt = performance.now();

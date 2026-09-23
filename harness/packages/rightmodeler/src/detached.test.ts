@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import {
   copyFile,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   writeFile,
@@ -29,6 +31,7 @@ import {
   readRunStatus,
   readStatus,
   releasePolicy,
+  requestHeaderIdentity,
   runPipeline,
 } from "./pipeline.js";
 import { Reporter } from "./protocol.js";
@@ -354,6 +357,76 @@ describe("detached replay identity", () => {
       }
     },
   );
+});
+
+describe("detached replay provider identity", () => {
+  it(
+    "keys a detached replay to its header values without storing them",
+    { timeout: 30_000 },
+    async () => {
+      const root = await mkdtemp(
+        join(tmpdir(), "rightmodeler-detached-headers-"),
+      );
+      temporaryDirectories.push(root);
+      const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+      const store = join(root, "store");
+      const traces = join(root, "traces.json");
+      await copyFile(tracesPath, traces);
+      const reporter = new Reporter("json", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      });
+
+      const stubModule = (await import(stubModuleUrl)) as StubProviderModule;
+      const stub = await stubModule.startStubProvider({ port: 0 });
+      const apiKeyEnv = "RIGHTMODELER_DETACHED_HEADERS_TEST_API_KEY";
+      process.env[apiKeyEnv] = "fixture-key";
+      const claim = (requestHeaders?: Record<string, string>) =>
+        claimDetachedReplay({
+          repo,
+          store,
+          traces,
+          baseUrl: `http://127.0.0.1:${stub.port}/v1`,
+          apiKeyEnv,
+          ...(requestHeaders === undefined ? {} : { requestHeaders }),
+          reporter,
+        });
+      try {
+        const bare = await claim();
+        const routeA = await claim({ "x-route": "route-value-a" });
+        const routeB = await claim({ "x-route": "route-value-b" });
+        expect(new Set([bare.runId, routeA.runId, routeB.runId]).size).toBe(3);
+        await expect(
+          claim({ "x-route": "route-value-a" }),
+        ).resolves.toMatchObject({ runId: routeA.runId, deduplicated: true });
+
+        const files = (
+          await readdir(store, { recursive: true, withFileTypes: true })
+        )
+          .filter((entry) => entry.isFile())
+          .map((entry) => join(entry.parentPath, entry.name));
+        expect(files.length).toBeGreaterThan(0);
+        for (const file of files) {
+          const text = await readFile(file, "utf8");
+          expect(text).not.toContain("route-value-a");
+          expect(text).not.toContain("route-value-b");
+        }
+      } finally {
+        delete process.env[apiKeyEnv];
+        await stub.close();
+      }
+    },
+  );
+
+  it("hashes header values in the provider identity", () => {
+    const digest = (value: string) =>
+      createHash("sha256").update(value).digest("hex");
+
+    expect(requestHeaderIdentity({ "x-b": "two", "x-a": "one" })).toEqual([
+      ["x-a", digest("one")],
+      ["x-b", digest("two")],
+    ]);
+  });
 });
 
 describe("status spend", () => {

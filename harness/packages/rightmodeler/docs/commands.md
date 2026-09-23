@@ -68,6 +68,8 @@ Options:
   --pricing-file <path>               JSON map from model id to per-token input
                                       and output USD, for catalogs without
                                       pricing
+  --header <header>                   extra HTTP header for every provider
+                                      request, as 'name: value' (repeatable)
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -123,6 +125,8 @@ Options:
   --pricing-file <path>               JSON map from model id to per-token input
                                       and output USD, for catalogs without
                                       pricing
+  --header <header>                   extra HTTP header for every provider
+                                      request, as 'name: value' (repeatable)
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -248,6 +252,8 @@ Options:
   --pricing-file <path>               JSON map from model id to per-token input
                                       and output USD, for catalogs without
                                       pricing
+  --header <header>                   extra HTTP header for every provider
+                                      request, as 'name: value' (repeatable)
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -312,6 +318,8 @@ Options:
   --pricing-file <path>               JSON map from model id to per-token input
                                       and output USD, for catalogs without
                                       pricing
+  --header <header>                   extra HTTP header for every provider
+                                      request, as 'name: value' (repeatable)
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:

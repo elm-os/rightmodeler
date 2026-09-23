@@ -149,6 +149,10 @@ Rightmodeler checks every replay and judge response, and in Mode B every respons
 
 A response names the requested model when it echoes it, when it drops a gateway provider prefix (`openai/gpt-4o-mini` for `vercel/openai/gpt-4o-mini`), or when it adds a dated snapshot (`gpt-4o-mini-2024-07-18` for `gpt-4o-mini`). An alias whose answering model has another name counts as substituted, so name replay models by their upstream ids and turn off fallbacks, model aliases, response caching and request plugins for the replay route. Completed replay cells are reused, so after fixing the route rerun with a fresh store (`--store <directory>`). For streamed Mode B calls only the model a stream names and the response headers are checked.
 
+## Gateways that route by header
+
+Some gateways choose the upstream, the cache policy, or a trace tag from request headers. Pass each one with `--header 'name: value'`; repeat the option for more. Rightmodeler sends them with every request it makes to the provider base URL: the model catalog, candidate replays, judge calls, and the calls Mode B makes from your application. `authorization` comes only from `--api-key-env`, and `content-type`, `content-length` and `host` are set by rightmodeler, so none of them can be passed as a header. A detached replay run is keyed to the header values by their SHA-256 digests; the values themselves are passed to the detached worker on its command line and are not written to the store. Do not put secrets in headers.
+
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md`. The JSON report is kept inside the versioned store and is never written as a plain file, so read the final `result` event from `--output json` or `--output jsonl` for the machine-readable outcome.
 
 Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), and the [exit-code convention](exit-codes.md) before automating a full run.

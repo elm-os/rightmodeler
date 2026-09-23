@@ -134,6 +134,7 @@ describe("pipelineArgv", () => {
       maxCostUsd: "1.25",
       maxConcurrency: "3",
       pricingFile: "./pricing.json",
+      header: ["x-portkey-provider: openai", "x-bf-cache-no-store: true"],
       policy: "./policy.json",
       includeFree: true,
       approvedRun,
@@ -166,6 +167,10 @@ describe("pipelineArgv", () => {
       "3",
       "--pricing-file",
       resolve("./pricing.json"),
+      "--header",
+      "x-portkey-provider: openai",
+      "--header",
+      "x-bf-cache-no-store: true",
       "--policy",
       resolve("./policy.json"),
       "--include-free",
@@ -468,6 +473,45 @@ describe("CLI needs-input errors", () => {
       code: "invalid_option",
       message: "--max-concurrency must be a positive integer",
     });
+  });
+
+  it("rejects malformed, reserved and repeated --header values", async () => {
+    const cases: Array<[string[], string]> = [
+      [["no-colon"], "--header must be 'name: value'; got no-colon"],
+      [[": empty"], "--header must be 'name: value'; got : empty"],
+      [
+        ["bad name: x"],
+        "--header name bad name is not a valid HTTP header name",
+      ],
+      [
+        ["Authorization: Bearer x"],
+        "--header cannot set authorization; pass the key's environment variable with --api-key-env",
+      ],
+      [
+        ["content-type: text/plain"],
+        "--header cannot set content-type; rightmodeler sets it on every request",
+      ],
+      [["x-a: 1", "X-A: 2"], "--header x-a is given more than once"],
+    ];
+    for (const [values, message] of cases) {
+      const captured = captureIo();
+
+      expect(
+        await executeCli(
+          [
+            "--output",
+            "json",
+            "estimate",
+            ...values.flatMap((value) => ["--header", value]),
+          ],
+          captured.io,
+        ),
+      ).toBe(2);
+      expect(JSON.parse(captured.stderr())).toMatchObject({
+        code: "invalid_option",
+        message,
+      });
+    }
   });
 
   it("accepts valid declarative matchers", async () => {

@@ -595,6 +595,7 @@ interface PipelineContext {
   modeBConfigPath?: string;
   pricingOverrides?: z.infer<typeof pricingFileSchema>;
   pricingFilePath?: string;
+  requestHeaders?: Readonly<Record<string, string>>;
   policyFilePath?: string;
   release: ReleasePolicyResolution;
   matchers?: readonly DeclarativeMatcher[];
@@ -618,6 +619,7 @@ export interface PipelineOptions {
   evaluator?: EvaluatorConfig;
   modeBConfigPath?: string;
   pricingFilePath?: string;
+  requestHeaders?: Readonly<Record<string, string>>;
   policyFilePath?: string;
   matchersPath?: string;
   approvedRunSpecDigest?: string;
@@ -971,6 +973,7 @@ export async function estimateReplay(
     maxConcurrency: context.maxConcurrency,
     warning: (code, message) => context.reporter.warning(code, message),
     pricingOverrides: context.pricingOverrides,
+    headers: context.requestHeaders,
   });
   const catalog =
     context.existingRunId === undefined
@@ -1042,6 +1045,7 @@ export async function claimDetachedReplay(
       maxConcurrency: context.maxConcurrency,
       warning: (code, message) => context.reporter.warning(code, message),
       pricingOverrides: context.pricingOverrides,
+      headers: context.requestHeaders,
     }).listModels()
   ).sort((left, right) => compareText(left.id, right.id));
   const targetPhase = options.through ?? "replay";
@@ -1063,6 +1067,9 @@ export async function claimDetachedReplay(
       apiKeyEnv: context.apiKeyEnv,
       maxCostUsd: context.maxCostUsd ?? null,
       includeFreeModels: context.includeFreeModels,
+      ...(context.requestHeaders === undefined
+        ? {}
+        : { headers: requestHeaderIdentity(context.requestHeaders) }),
     },
     evaluator: await evaluatorRunIdentity(context),
     modeBConfig:
@@ -1155,6 +1162,14 @@ export async function readActiveDetachedReplay(options: {
     return null;
   }
   return readRunStatus({ ...options, runId: worker.runId });
+}
+
+export function requestHeaderIdentity(
+  headers: Readonly<Record<string, string>>,
+): [string, string][] {
+  return Object.entries(headers)
+    .sort(([left], [right]) => compareText(left, right))
+    .map(([name, value]) => [name, sha256(value)]);
 }
 
 async function evaluatorRunIdentity(
@@ -1892,6 +1907,9 @@ function createContext(options: PipelineOptions): PipelineContext {
           pricingFilePath,
           pricingOverrides: readPricingFile(pricingFilePath),
         }),
+    ...(options.requestHeaders === undefined
+      ? {}
+      : { requestHeaders: options.requestHeaders }),
     ...(policyFilePath === undefined ? {} : { policyFilePath }),
     ...(options.matchersPath === undefined
       ? {}
@@ -2200,6 +2218,9 @@ async function inputDigest(
       apiKeyEnv: context.apiKeyEnv,
       maxCostUsd: context.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context),
+      ...(context.requestHeaders === undefined
+        ? {}
+        : { headers: requestHeaderIdentity(context.requestHeaders) }),
     });
     if (context.evaluator !== undefined) {
       extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context));
@@ -3326,6 +3347,7 @@ async function executeReplay(
     maxConcurrency: context.maxConcurrency,
     warning: (code, message) => context.reporter.warning(code, message),
     pricingOverrides: context.pricingOverrides,
+    headers: context.requestHeaders,
   });
   const catalog =
     context.existingRunId === undefined
@@ -3979,6 +4001,7 @@ async function executeConfirm(
       maxConcurrency: context.maxConcurrency,
       warning: (code, message) => context.reporter.warning(code, message),
       pricingOverrides: context.pricingOverrides,
+      headers: context.requestHeaders,
     });
     const catalog = await provider.listModels();
     const configuredRecords = configuredStepRecords(config, reconciled.records);
@@ -4126,6 +4149,9 @@ async function executeConfirm(
               providerBaseUrl: modeBProviderBaseUrl(context.baseUrl),
               apiKeyEnv: context.apiKeyEnv,
               catalog,
+              ...(context.requestHeaders === undefined
+                ? {}
+                : { requestHeaders: context.requestHeaders }),
             },
             image: config.image,
             appSpec: {

@@ -29011,6 +29011,9 @@ function createProvider(options) {
   async function physicalFetch(url2, init) {
     const key = apiKey();
     const headers = new Headers(init.headers);
+    for (const [name, value] of Object.entries(options.headers ?? {})) {
+      headers.set(name, value);
+    }
     headers.set("authorization", `Bearer ${key}`);
     return limiter.run(async (ticket) => {
       const startedAt = performance.now();
@@ -30253,6 +30256,9 @@ function launchCase(input, listener, cell, executionId, scratchHostPath2, policy
       RM_DEFAULT_MAX_OUTPUT_TOKENS: String(DEFAULT_MAX_OUTPUT_TOKENS),
       RM_BUDGET_LEASE: JSON.stringify({ maxUsd: leaseUsd }),
       RM_DEADLINE_MS: String(input.appSpec.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      ...Object.keys(input.egress.requestHeaders ?? {}).length === 0 ? {} : {
+        RM_REQUEST_HEADERS: JSON.stringify(input.egress.requestHeaders)
+      },
       ...resume ? { RM_RESUME: "1" } : {}
     },
     mounts: [
@@ -44435,7 +44441,8 @@ async function estimateReplay(options) {
     apiKeyEnv: context2.apiKeyEnv,
     maxConcurrency: context2.maxConcurrency,
     warning: (code, message2) => context2.reporter.warning(code, message2),
-    pricingOverrides: context2.pricingOverrides
+    pricingOverrides: context2.pricingOverrides,
+    headers: context2.requestHeaders
   });
   const catalog = context2.existingRunId === void 0 ? await provider.listModels() : await readDetachedReplayCatalog(context2, context2.existingRunId);
   const candidates = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, catalog) : await approvedReplayCandidates(
@@ -44492,7 +44499,8 @@ async function claimDetachedReplay(options) {
     apiKeyEnv: context2.apiKeyEnv,
     maxConcurrency: context2.maxConcurrency,
     warning: (code, message2) => context2.reporter.warning(code, message2),
-    pricingOverrides: context2.pricingOverrides
+    pricingOverrides: context2.pricingOverrides,
+    headers: context2.requestHeaders
   }).listModels()).sort((left, right) => compareText(left.id, right.id));
   const targetPhase = options.through ?? "replay";
   if (!isPipelineStage(targetPhase)) {
@@ -44512,7 +44520,8 @@ async function claimDetachedReplay(options) {
       baseUrl: context2.baseUrl,
       apiKeyEnv: context2.apiKeyEnv,
       maxCostUsd: context2.maxCostUsd ?? null,
-      includeFreeModels: context2.includeFreeModels
+      includeFreeModels: context2.includeFreeModels,
+      ...context2.requestHeaders === void 0 ? {} : { headers: requestHeaderIdentity(context2.requestHeaders) }
     },
     evaluator: await evaluatorRunIdentity(context2),
     modeBConfig: context2.modeBConfig === void 0 ? null : jsonValue2(context2.modeBConfig),
@@ -44587,6 +44596,9 @@ async function readActiveDetachedReplay(options) {
     return null;
   }
   return readRunStatus({ ...options, runId: worker.runId });
+}
+function requestHeaderIdentity(headers) {
+  return Object.entries(headers).sort(([left], [right]) => compareText(left, right)).map(([name, value]) => [name, sha256(value)]);
 }
 async function evaluatorRunIdentity(context2) {
   if (context2.evaluator === void 0) return null;
@@ -45136,6 +45148,7 @@ function createContext(options) {
       pricingFilePath,
       pricingOverrides: readPricingFile(pricingFilePath)
     },
+    ...options.requestHeaders === void 0 ? {} : { requestHeaders: options.requestHeaders },
     ...policyFilePath === void 0 ? {} : { policyFilePath },
     ...options.matchersPath === void 0 ? {} : {
       matchersPath: resolve8(options.matchersPath),
@@ -45375,7 +45388,8 @@ async function inputDigest(stage, context2, state) {
       baseUrl: context2.baseUrl,
       apiKeyEnv: context2.apiKeyEnv,
       maxCostUsd: context2.maxCostUsd ?? null,
-      evaluatorPlan: evaluatorPlan(context2)
+      evaluatorPlan: evaluatorPlan(context2),
+      ...context2.requestHeaders === void 0 ? {} : { headers: requestHeaderIdentity(context2.requestHeaders) }
     });
     if (context2.evaluator !== void 0) {
       extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context2));
@@ -46234,7 +46248,8 @@ async function executeReplay(context2, inputDigestValue, runId) {
     apiKeyEnv: context2.apiKeyEnv,
     maxConcurrency: context2.maxConcurrency,
     warning: (code, message2) => context2.reporter.warning(code, message2),
-    pricingOverrides: context2.pricingOverrides
+    pricingOverrides: context2.pricingOverrides,
+    headers: context2.requestHeaders
   });
   const catalog = context2.existingRunId === void 0 ? await provider.listModels() : await readDetachedReplayCatalog(context2, context2.existingRunId);
   const replaySteps = (split) => plan.steps.map((step) => ({
@@ -46750,7 +46765,8 @@ async function executeConfirm(context2, inputDigestValue, runId) {
       apiKeyEnv: context2.apiKeyEnv,
       maxConcurrency: context2.maxConcurrency,
       warning: (code, message2) => context2.reporter.warning(code, message2),
-      pricingOverrides: context2.pricingOverrides
+      pricingOverrides: context2.pricingOverrides,
+      headers: context2.requestHeaders
     });
     const catalog = await provider.listModels();
     const configuredRecords = configuredStepRecords(config2, reconciled.records);
@@ -46884,7 +46900,8 @@ async function executeConfirm(context2, inputDigestValue, runId) {
               providerId: provider.providerId,
               providerBaseUrl: modeBProviderBaseUrl(context2.baseUrl),
               apiKeyEnv: context2.apiKeyEnv,
-              catalog
+              catalog,
+              ...context2.requestHeaders === void 0 ? {} : { requestHeaders: context2.requestHeaders }
             },
             image: config2.image,
             appSpec: {
@@ -49813,6 +49830,10 @@ function addPipelineOptions(command, provider) {
       "--pricing-file <path>",
       "JSON map from model id to per-token input and output USD, for catalogs without pricing"
     ).option(
+      "--header <header>",
+      "extra HTTP header for every provider request, as 'name: value' (repeatable)",
+      collectOption
+    ).option(
       "--policy <path>",
       "release policy JSON file: quality floor, shortlist size, model allow and deny lists"
     ).addOption(
@@ -49898,6 +49919,33 @@ function pipelineOptions(global, local, reporter) {
       `At least one --evaluator-scorer is required with --evaluator ${local.evaluator}`
     );
   }
+  const requestHeaders2 = /* @__PURE__ */ new Map();
+  for (const raw of local.header ?? []) {
+    const colon = raw.indexOf(":");
+    const name = colon === -1 ? "" : raw.slice(0, colon).trim().toLowerCase();
+    if (name.length === 0) {
+      throw invalidOption(`--header must be 'name: value'; got ${raw}`);
+    }
+    if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/u.test(name)) {
+      throw invalidOption(
+        `--header name ${name} is not a valid HTTP header name`
+      );
+    }
+    if (name === "authorization") {
+      throw invalidOption(
+        "--header cannot set authorization; pass the key's environment variable with --api-key-env"
+      );
+    }
+    if (name === "content-type" || name === "content-length" || name === "host") {
+      throw invalidOption(
+        `--header cannot set ${name}; rightmodeler sets it on every request`
+      );
+    }
+    if (requestHeaders2.has(name)) {
+      throw invalidOption(`--header ${name} is given more than once`);
+    }
+    requestHeaders2.set(name, raw.slice(colon + 1).trim());
+  }
   return {
     repo: global.repo,
     store: global.store,
@@ -49908,6 +49956,7 @@ function pipelineOptions(global, local, reporter) {
     maxCostUsd,
     maxConcurrency,
     pricingFilePath: local.pricingFile,
+    ...requestHeaders2.size === 0 ? {} : { requestHeaders: Object.fromEntries(requestHeaders2) },
     policyFilePath: local.policy,
     includeFreeModels: local.includeFree,
     ...local.evaluator === void 0 ? {} : {
@@ -50182,6 +50231,7 @@ var PIPELINE_ARG_OPTIONS = [
   { flag: "--max-cost-usd", key: "maxCostUsd", kind: "value" },
   { flag: "--max-concurrency", key: "maxConcurrency", kind: "value" },
   { flag: "--pricing-file", key: "pricingFile", kind: "path" },
+  { flag: "--header", key: "header", kind: "repeated" },
   { flag: "--policy", key: "policy", kind: "path" },
   { flag: "--include-free", key: "includeFree", kind: "flag" },
   { flag: "--approved-run", key: "approvedRun", kind: "value" },
