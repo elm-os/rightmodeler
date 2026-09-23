@@ -76,7 +76,7 @@ afterAll(async () => {
 });
 
 // `pnpm pack` runs the prepack bundle, which rewrites dist-bundle/ and dist/publish/ in place, so
-// the file packs once and both tests install the same tarball.
+// the file packs once and every test reads the same tarball.
 let packed: Promise<string> | undefined;
 function packOnce(): Promise<string> {
   packed ??= (async () => {
