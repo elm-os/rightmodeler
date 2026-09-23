@@ -11,7 +11,15 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { FsStore, readLedger, type Assessment } from "@rightmodeler/core";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   runPipeline,
@@ -219,6 +227,7 @@ async function run(
   workspace: Workspace,
   evaluator: EvaluatorConfig,
   store = workspace.store,
+  through: PipelineOptions["through"] = "aggregate",
 ) {
   const lines: string[] = [];
   const result = await runPipeline({
@@ -228,7 +237,7 @@ async function run(
     baseUrl: `http://127.0.0.1:${providerStub.port}/v1`,
     apiKeyEnv: API_KEY,
     evaluator,
-    through: "aggregate",
+    through,
     reporter: new Reporter("json", {
       stdout: () => undefined,
       stderr: (text) => lines.push(text),
@@ -289,7 +298,10 @@ async function replayEvaluation(store: string) {
   const entry = await fsStore.get(stages.replay!.outputKey);
   return (
     JSON.parse(Buffer.from(entry!.body).toString("utf8")) as {
-      evaluation: { evaluatorIdentity?: string };
+      evaluation: {
+        evaluatorIdentity?: string;
+        assessmentAbsences: readonly unknown[];
+      };
     }
   ).evaluation;
 }
@@ -635,5 +647,37 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
     expect(projectedVerdicts(reverted.result.verdicts)).toEqual(
       projectedVerdicts(firstRun.result.verdicts),
     );
+  });
+
+  it("returns to an earlier evaluator configuration whose grading left outputs absent", async () => {
+    const work = await workspace();
+    const config = promptfooConfig(work);
+    const assertions = join(work.rubric, "assertions.yaml");
+    const original = await readFile(assertions);
+    vi.stubEnv("PROMPTFOO_STUB_FAULT", "rewrite-output");
+    try {
+      await run(work, config, work.store, "confirm");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    const chat = providerStub.getHitCount();
+    const absent = await replayEvaluation(work.store);
+    expect(absent.assessmentAbsences.length).toBeGreaterThan(0);
+    expect(await gateGrades(work.store, "promptfoo")).toEqual([]);
+
+    await editAssertions(work);
+    await run(work, config, work.store, "confirm");
+    await writeFile(assertions, original);
+    const reverted = await run(work, config, work.store, "confirm");
+
+    expect(reverted.result.executedStages).toEqual([
+      "replay",
+      "aggregate",
+      "confirm",
+    ]);
+    expect(providerStub.getHitCount()).toBe(chat);
+    const evaluation = await replayEvaluation(work.store);
+    expect(evaluation.evaluatorIdentity).toBe(absent.evaluatorIdentity);
+    expect(evaluation.assessmentAbsences).toEqual([]);
   });
 });

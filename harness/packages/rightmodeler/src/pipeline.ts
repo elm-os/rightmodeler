@@ -2442,7 +2442,7 @@ async function executeStage(
     case "replay":
       return executeReplay(context, inputDigestValue, runId);
     case "aggregate":
-      return executeAggregate(context, inputDigestValue);
+      return executeAggregate(context, inputDigestValue, runId);
     case "confirm":
       return executeConfirm(context, inputDigestValue, runId);
     case "report": {
@@ -3561,6 +3561,7 @@ async function executeReplay(
 async function executeAggregate(
   context: PipelineContext,
   inputDigestValue: string,
+  runId: string,
 ): Promise<string> {
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
@@ -3587,7 +3588,7 @@ async function executeAggregate(
     context.release.gate,
   );
   await writeFamilyVerdicts(context, families);
-  const key = artifactKey(context, "aggregate", inputDigestValue);
+  const key = artifactKey(context, "aggregate", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context.store, key, { allVerdicts, families });
   return key;
 }
@@ -4221,7 +4222,7 @@ async function executeConfirm(
     };
   });
   await writeFamilyVerdicts(context, families);
-  const key = artifactKey(context, "confirm", inputDigestValue);
+  const key = artifactKey(context, "confirm", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context.store, key, {
     allVerdicts,
     families,

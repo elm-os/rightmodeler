@@ -45334,7 +45334,7 @@ async function executeStage(stage, context2, inputDigestValue, runId) {
     case "replay":
       return executeReplay(context2, inputDigestValue, runId);
     case "aggregate":
-      return executeAggregate(context2, inputDigestValue);
+      return executeAggregate(context2, inputDigestValue, runId);
     case "confirm":
       return executeConfirm(context2, inputDigestValue, runId);
     case "report": {
@@ -46200,7 +46200,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
   });
   return key;
 }
-async function executeAggregate(context2, inputDigestValue) {
+async function executeAggregate(context2, inputDigestValue, runId) {
   const plan = await loadReplayPlan(context2);
   const replay = await loadReplayOutput(context2);
   const ceilings = await loadReferenceCeilings(context2, plan);
@@ -46226,7 +46226,7 @@ async function executeAggregate(context2, inputDigestValue) {
     context2.release.gate
   );
   await writeFamilyVerdicts(context2, families);
-  const key = artifactKey(context2, "aggregate", inputDigestValue);
+  const key = artifactKey(context2, "aggregate", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context2.store, key, { allVerdicts, families });
   return key;
 }
@@ -46746,7 +46746,7 @@ async function executeConfirm(context2, inputDigestValue, runId) {
     };
   });
   await writeFamilyVerdicts(context2, families);
-  const key = artifactKey(context2, "confirm", inputDigestValue);
+  const key = artifactKey(context2, "confirm", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context2.store, key, {
     allVerdicts,
     families,
