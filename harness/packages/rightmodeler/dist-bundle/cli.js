@@ -10591,7 +10591,7 @@ var require__ = __commonJS({
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { basename as basename4, resolve as resolve13 } from "node:path";
+import { basename as basename5, resolve as resolve13 } from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
@@ -49395,7 +49395,7 @@ function createProgram(io = processIo, runtime = processRuntime) {
         tokenEnv: local.githubTokenEnv
       }),
       owner: local.owner,
-      githubRepo: local.githubRepo ?? basename4(resolve13(global.repo)),
+      githubRepo: local.githubRepo ?? basename5(resolve13(global.repo)),
       prNumber,
       warning: (code2, message2) => reporter.warning(code2, message2)
     });
