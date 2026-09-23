@@ -33,7 +33,7 @@ Commenting on a pull request needs only Pull requests write, so neither token ne
 - local `HEAD` on a branch and equal to the evidence revision, and that branch on GitHub at the same revision (the branch becomes the pull request base);
 - no uncommitted change to any file the swap touches.
 
-`--dry-run` runs every check and reads GitHub but writes nothing. Its result lists the branch, title, files and reviewers it would use. The reviewer list is shown before the pull request author is removed, because the author is known only once the pull request exists.
+`--dry-run` runs every check and reads GitHub but writes nothing. Its result lists the branch, title, body, files and reviewers it would use. The reviewer list is shown before the pull request author is removed, because the author is known only once the pull request exists.
 
 Reviewers:
 
@@ -44,7 +44,7 @@ Reviewers:
 - Team reviewers need a repository owned by an organization, and every reviewer needs access to the repository.
 - GitHub does not request code owners on draft pull requests by itself, so every review request on the draft comes from `apply`.
 
-The branch is `<prefix>swap-<family>-<digest prefix>`, where the prefix is the one most common among the repository's recent branches, or `rightmodeler/` when no branch has one. The title is `perf(models): swap <families>` when the repository uses conventional commits, and `Swap <families> models` otherwise. The body is the repository's pull request template, if it has one, followed by the `## Rightmodeler evidence` table: revision, corpus version, and per family the decision, evaluators, cascade status, worst-case bound, models, cost per case, latency, caps and case IDs. Case IDs are SHA-256 digests of the replayed cases, never prompts.
+The branch is `<prefix>swap-<family>-<digest prefix>`, where the prefix is the one most common among the repository's recent branches, or `rightmodeler/` when no branch has one. The title is `perf(models): swap <families>` when the repository uses conventional commits, and `Swap <families> models` otherwise. The body is the repository's pull request template, if it has one, followed by the `## Rightmodeler evidence` table: revision, corpus version, and per family the decision, evaluators, cascade status, worst-case bound, models, cost per case, latency, caps and case IDs. Case IDs are SHA-256 digests of the replayed cases, never prompts. With `--code-graph <path>`, a `## Code context (Graphify)` section for the swapped call sites follows the table; the owners it lists are never requested as reviewers.
 
 Rerunning `apply` for the same evidence returns the same open pull request with `status: "existing"` and requests reviewers again only if the first attempt left no record of them.
 

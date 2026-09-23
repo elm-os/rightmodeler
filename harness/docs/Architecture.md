@@ -520,7 +520,7 @@ each contract is reached from a fixed call site today.
 | Model provider           | `listModels`, `chat`, cost authority          | additive  | shipped |
 | Matcher                  | `match(content, path)` plus `examples[]`      | additive  | shipped |
 | Harness reference        | the `_template.md` question set               | additive  | shipped |
-| Code graph (report only) | Graphify `graph.json`, read by `--code-graph` | additive  | shipped |
+| Code graph (report, PRs) | Graphify `graph.json`, read by `--code-graph` | additive  | shipped |
 | Agent adapter            | `AsyncGenerator<Progress, Result>`            | additive  | planned |
 | Notifier / exporter      | `notify(params)`                              | additive  | planned |
 | Executor                 | `launch`, `collect`, `status`                 | last wins | shipped |
