@@ -2456,54 +2456,42 @@ describe("built CLI pipeline", () => {
   it("abstains a family whose recorded cases are all unsendable on the holdout floor", async () => {
     const { root, repo } = await fixtureCopy("all-unsendable-cases");
     const traces = await writeToolCallTraces(root, 70);
-    const stub = await startStub();
-    const apiKeyEnv = "RIGHTMODELER_ALL_UNSENDABLE_API_KEY";
-    try {
-      const result = await runCli(
-        [
-          "init",
-          "--through",
-          "shortlist",
-          "--traces",
-          traces,
-          "--base-url",
-          `http://127.0.0.1:${stub.port}/v1`,
-          "--api-key-env",
-          apiKeyEnv,
-          "--output",
-          "json",
-          "--repo",
-          repo,
-        ],
-        { env: { [apiKeyEnv]: secret } },
-      );
 
-      expect(result.code, result.stderr).toBe(0);
-      const warnings = warningMessages(
-        result.stderr,
-        "recorded_messages_not_replayable",
-      );
-      expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toContain("Family summarize: 70 of 70");
-      const shortlist = await readStageArtifact(
-        join(repo, ".rightmodeler"),
-        "shortlist",
-      );
-      expect(shortlist.familyPlans).toContainEqual(
-        expect.objectContaining({
-          familyId: "summarize",
-          stepIds: [],
-          leftOutCases: 70,
-          abstainReason: {
-            reason: "holdout_below_floor_minimum",
-            observed: 0,
-            required: minimumHoldout,
-          },
-        }),
-      );
-    } finally {
-      await stub.close();
-    }
+    const result = await runCli([
+      "init",
+      "--through",
+      "shortlist",
+      "--traces",
+      traces,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    const warnings = warningMessages(
+      result.stderr,
+      "recorded_messages_not_replayable",
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("Family summarize: 70 of 70");
+    const shortlist = await readStageArtifact(
+      join(repo, ".rightmodeler"),
+      "shortlist",
+    );
+    expect(shortlist.familyPlans).toContainEqual(
+      expect.objectContaining({
+        familyId: "summarize",
+        stepIds: [],
+        leftOutCases: 70,
+        abstainReason: {
+          reason: "holdout_below_floor_minimum",
+          observed: 0,
+          required: minimumHoldout,
+        },
+      }),
+    );
   }, 60_000);
 
   it("judges each call site of a mixed-vendor family outside that call site's model family", async () => {
