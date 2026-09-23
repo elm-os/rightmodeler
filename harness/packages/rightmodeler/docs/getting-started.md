@@ -78,6 +78,20 @@ npx rightmodeler estimate --traces /path/to/traces.json --base-url https://provi
 Estimate projects candidate replay spend from recorded token usage and the current
 model catalog before paid model calls begin.
 
+## Static code context (Graphify)
+
+rightmodeler can read a code graph built by the open-source Graphify CLI (PyPI package `graphifyy`, Apache-2.0, tested with 0.9.65). Graphify builds it locally from your source, with no account and no model call.
+
+```sh
+uv tool install graphifyy
+graphify update .
+npx rightmodeler report --code-graph graphify-out/graph.json --repo .
+```
+
+`init --code-graph <path>` renders the same section at the end of a run. For each call site the scanner found, the section lists the enclosing symbol, its callers, the tests that reach it, and the owners of those files, which are listed only. It also lists files that import an AI SDK where the scanner found no call site.
+
+Graph edges are never replay trials, runtime proof, or quality evidence, and the flag never changes a stage before the report, a verdict, a gate, or confirmation. Each finding is labelled EXTRACTED, or INFERRED or AMBIGUOUS to verify, by its weakest hop. A graph built at another commit is shown file-level with a stale note. An unusable graph produces one warning, and the report is written without the section. The scan ignores `graphify-out/`, so building a graph never makes finished stages stale. Only `graphify update` and `graphify extract --code-only` are needed; other Graphify commands can call a language model.
+
 ## Release policy
 
 `--policy <path>` is accepted by `init`, `estimate`, `replay`, and `confirm`. The JSON object can set the quality floor, shortlist size, and model allow and deny lists:

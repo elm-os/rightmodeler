@@ -95,6 +95,7 @@ interface PipelineCommandOptions {
   detach?: boolean;
   internalRunId?: string;
   approvedRun?: string;
+  codeGraph?: string;
 }
 
 interface AuditTabulateOptions {
@@ -624,9 +625,17 @@ export function createProgram(
 
   const report = program
     .command("report")
-    .description("write report.md and report.json");
+    .description("write report.md and report.json")
+    .option(
+      "--code-graph <path>",
+      "Graphify graph.json for static code context in the report; never evidence",
+    );
   run(report, async (reporter, global) => {
-    const result = await readReport(global);
+    const result = await readReport({
+      ...global,
+      codeGraphPath: report.opts<{ codeGraph?: string }>().codeGraph,
+      reporter,
+    });
     reporter.result({ ...result.report, reportPath: result.reportPath });
     return result.recommends ? 1 : 0;
   });
@@ -744,6 +753,10 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         new Option("--through <stage>", "stop after this stage").choices([
           ...PIPELINE_STAGES,
         ]),
+      )
+      .option(
+        "--code-graph <path>",
+        "Graphify graph.json for static code context in the report; never evidence",
       );
   }
   if (command.name() === "init" || command.name() === "estimate") {
@@ -841,6 +854,7 @@ function pipelineOptions(
         }),
     modeBConfigPath: local.modebConfig,
     approvedRunSpecDigest: local.approvedRun,
+    codeGraphPath: local.codeGraph,
     through: local.through,
     plan: local.plan,
     reporter,

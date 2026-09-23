@@ -156,6 +156,13 @@ import type {
   EvaluatorCaseResult,
   EvaluatorProvider,
 } from "./evaluators/types.js";
+import {
+  graphFileDigest,
+  readCodeContext,
+  renderCodeContext,
+  type CallSiteInput,
+  type CodeContext,
+} from "./code-graph/index.js";
 import type { GithubClient } from "./github/index.js";
 import { ProtocolError, Reporter } from "./protocol.js";
 import {
@@ -561,6 +568,7 @@ interface PipelineCache {
   repositoryFiles?: Promise<Array<{ absolute: string; path: string }>>;
   repositoryDigest?: Promise<string>;
   setupArtifacts: Map<string, Promise<unknown[]>>;
+  codeContext?: Promise<CodeContext | undefined>;
 }
 
 interface PipelineContext {
@@ -585,6 +593,7 @@ interface PipelineContext {
   matchersPath?: string;
   existingRunId?: string;
   approvedRunSpecDigest?: string;
+  codeGraphPath?: string;
   reporter: Reporter;
   cache: PipelineCache;
 }
@@ -604,6 +613,7 @@ export interface PipelineOptions {
   policyFilePath?: string;
   matchersPath?: string;
   approvedRunSpecDigest?: string;
+  codeGraphPath?: string;
   through?: PipelineStage;
   plan?: boolean;
   existingRunId?: string;
@@ -1875,6 +1885,9 @@ function createContext(options: PipelineOptions): PipelineContext {
     ...(options.approvedRunSpecDigest === undefined
       ? {}
       : { approvedRunSpecDigest: options.approvedRunSpecDigest }),
+    ...(options.codeGraphPath === undefined
+      ? {}
+      : { codeGraphPath: resolve(options.codeGraphPath) }),
     reporter: options.reporter,
     cache: { setupArtifacts: new Map() },
   };
@@ -2207,6 +2220,9 @@ async function inputDigest(
         maxCostUsd: context.maxCostUsd ?? null,
       });
     }
+  }
+  if (stage === "report" && context.codeGraphPath !== undefined) {
+    extra.codeGraph = await graphFileDigest(context.codeGraphPath);
   }
   return digest({ stage, upstream: upstream.inputDigest, ...extra });
 }
@@ -4751,6 +4767,68 @@ function reportPath(context: PipelineContext): string {
   return join(context.storeRoot, reportKey(context.projectId, "report.md"));
 }
 
+async function codeContextFor(
+  context: PipelineContext,
+  callSites: readonly CallSiteInput[],
+  warn: (code: string, message: string) => void,
+): Promise<CodeContext | undefined> {
+  if (context.codeGraphPath === undefined) {
+    const found = join(context.repo, "graphify-out", "graph.json");
+    if (
+      await stat(found).then(
+        (entry) => entry.isFile(),
+        () => false,
+      )
+    ) {
+      const fromCwd = relative(process.cwd(), found);
+      const shown = fromCwd.startsWith("..") ? found : fromCwd;
+      warn(
+        "code_graph_available",
+        `Found ${shown}. Pass --code-graph ${shown} to add static code context; it never changes the evidence.`,
+      );
+    }
+    return undefined;
+  }
+  const scanOutput = await loadScan(context);
+  const result = await readCodeContext({
+    graphPath: context.codeGraphPath,
+    repoDir: context.repo,
+    revision: scanOutput.revision,
+    callSites,
+    scannedPaths: new Set(
+      scanOutput.records.map(({ callSite }) => callSite.path),
+    ),
+    sdkModules: detectTech(context.repo).aiDependencies,
+  });
+  for (const issue of result.issues) warn(issue.code, issue.message);
+  return result.context;
+}
+
+function reportCodeContext(
+  context: PipelineContext,
+): Promise<CodeContext | undefined> {
+  context.cache.codeContext ??= (async () => {
+    const [scanOutput, plan] = await Promise.all([
+      loadScan(context),
+      loadReplayPlan(context),
+    ]);
+    const familyByStep = new Map(
+      plan.steps.map(({ stepId, family }) => [stepId, family] as const),
+    );
+    return codeContextFor(
+      context,
+      scanOutput.records.map((record) => ({
+        stepId: record.stepId,
+        family: familyByStep.get(record.stepId) ?? record.family,
+        path: record.callSite.path,
+        line: record.callSite.line,
+      })),
+      (code, message) => context.reporter.warning(code, message),
+    );
+  })();
+  return context.cache.codeContext;
+}
+
 async function executeReport(
   context: PipelineContext,
   inputDigestValue: string,
@@ -5211,6 +5289,7 @@ interface ReportData {
     createdAt: string;
     eventCount: number;
   }>;
+  codeContext?: CodeContext;
 }
 
 function blockedFamilyDiagnosis(
@@ -5560,6 +5639,7 @@ async function buildReport(
     "audit-sample",
     auditWorksheetSchema,
   );
+  const codeContext = await reportCodeContext(context);
   return {
     verdicts,
     families: decisionOutput.families,
@@ -5613,6 +5693,7 @@ async function buildReport(
       return blocked === undefined ? [] : [blocked];
     }),
     apply: lifecycleReport(ledger.lifecycleEvents),
+    ...(codeContext === undefined ? {} : { codeContext }),
   };
 }
 
@@ -5763,6 +5844,8 @@ function renderReport(report: ReportData): string {
       "",
     );
   }
+  if (report.codeContext !== undefined)
+    lines.push(...renderCodeContext(report.codeContext), "");
   return lines.join("\n");
 }
 
@@ -5917,6 +6000,8 @@ export async function runAuditTabulate(options: {
 export async function readReport(options: {
   repo: string;
   store?: string;
+  codeGraphPath?: string;
+  reporter?: Reporter;
 }): Promise<{
   report: ReportData;
   reportPath: string;
@@ -5924,10 +6009,12 @@ export async function readReport(options: {
 }> {
   const context = createContext({
     ...options,
-    reporter: new Reporter("human", {
-      stdout: () => undefined,
-      stderr: () => undefined,
-    }),
+    reporter:
+      options.reporter ??
+      new Reporter("human", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      }),
   });
   const state = await readSetupState(context.store, context.projectId);
   const aggregateCheckpoint = state.stages.aggregate;

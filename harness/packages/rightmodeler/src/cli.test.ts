@@ -316,6 +316,33 @@ describe("CLI trace guidance wiring", () => {
     expect(captured.stdout()).toContain("--policy <path>");
   });
 
+  it("registers --code-graph on init and report", async () => {
+    for (const command of ["init", "report"]) {
+      const captured = captureIo();
+
+      expect(await executeCli([command, "--help"], captured.io)).toBe(0);
+      expect(captured.stdout()).toContain("--code-graph <path>");
+    }
+  });
+
+  it("rejects --code-graph without a path as a usage error", async () => {
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        ["--output", "json", "report", "--code-graph"],
+        captured.io,
+      ),
+    ).toBe(10);
+    expect(captured.stdout()).toBe("");
+    const lines = captured.stderr().trimEnd().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      code: "usage_error",
+      message: expect.stringContaining("--code-graph"),
+    });
+  });
+
   it("resumes the ingested trace before discovery", async () => {
     const { repo, homeDir, older } = await fixture();
     const first = captureIo();

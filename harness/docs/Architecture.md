@@ -497,17 +497,18 @@ Every integration is a package behind a declared contract with its own conforman
 A registry built from a plugin list is planned, not shipped: the unwired one was deleted, and
 each contract is reached from a fixed call site today.
 
-| Kind                | Contract                                 | Merge     | Status  |
-| ------------------- | ---------------------------------------- | --------- | ------- |
-| Trace adapter       | `detect(sample)`, `adapt(records)`       | additive  | shipped |
-| Evaluator provider  | `launch`, `status`, `collect`            | additive  | shipped |
-| Model provider      | `listModels`, `chat`, cost authority     | additive  | shipped |
-| Matcher             | `match(content, path)` plus `examples[]` | additive  | shipped |
-| Harness reference   | the `_template.md` question set          | additive  | shipped |
-| Agent adapter       | `AsyncGenerator<Progress, Result>`       | additive  | planned |
-| Notifier / exporter | `notify(params)`                         | additive  | planned |
-| Executor            | `launch`, `collect`, `status`            | last wins | shipped |
-| Ownership / people  | provider lookups                         | last wins | planned |
+| Kind                     | Contract                                      | Merge     | Status  |
+| ------------------------ | --------------------------------------------- | --------- | ------- |
+| Trace adapter            | `detect(sample)`, `adapt(records)`            | additive  | shipped |
+| Evaluator provider       | `launch`, `status`, `collect`                 | additive  | shipped |
+| Model provider           | `listModels`, `chat`, cost authority          | additive  | shipped |
+| Matcher                  | `match(content, path)` plus `examples[]`      | additive  | shipped |
+| Harness reference        | the `_template.md` question set               | additive  | shipped |
+| Code graph (report only) | Graphify `graph.json`, read by `--code-graph` | additive  | shipped |
+| Agent adapter            | `AsyncGenerator<Progress, Result>`            | additive  | planned |
+| Notifier / exporter      | `notify(params)`                              | additive  | planned |
+| Executor                 | `launch`, `collect`, `status`                 | last wins | shipped |
+| Ownership / people       | provider lookups                              | last wins | planned |
 
 A CLI extension point and an integration listing on `status` are planned. `status` today
 summarizes the store.
