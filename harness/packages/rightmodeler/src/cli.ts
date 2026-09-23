@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { Writable, type Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
@@ -150,7 +150,7 @@ interface DriftPublishCommandOptions {
 
 interface WatchCommandOptions {
   owner: string;
-  githubRepo: string;
+  githubRepo?: string;
   pr: string;
   githubBaseUrl: string;
   githubTokenEnv: string;
@@ -193,7 +193,7 @@ export function createProgram(
     .description("Find and prove safe model substitutions.")
     .addHelpText(
       "after",
-      "\nExit codes are command-specific: apply and rollback use 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
+      "\nExit codes are command-specific: apply uses 0 success, 1 refused, 2 needs a completed run, >=10 runtime error; rollback uses 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere (result on stdout) or needs a completed run (error on stderr), >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
     )
     .version(version)
     .option("--repo <dir>", "repository to analyze", process.cwd())
@@ -471,7 +471,11 @@ export function createProgram(
       "--github-repo <repo>",
       "GitHub repository name (default: the repository directory name)",
     )
-    .requiredOption("--github-base-url <url>", "GitHub API base URL")
+    .option(
+      "--github-base-url <url>",
+      "GitHub API base URL",
+      "https://api.github.com",
+    )
     .requiredOption(
       "--github-token-env <name>",
       "environment variable containing the GitHub token",
@@ -503,7 +507,11 @@ export function createProgram(
       "GitHub repository name (default: the repository directory name)",
     )
     .requiredOption("--pr <number>", "merged pull request number")
-    .requiredOption("--github-base-url <url>", "GitHub API base URL")
+    .option(
+      "--github-base-url <url>",
+      "GitHub API base URL",
+      "https://api.github.com",
+    )
     .requiredOption(
       "--github-token-env <name>",
       "environment variable containing the GitHub token",
@@ -591,9 +599,16 @@ export function createProgram(
     .command("watch")
     .description("reconcile one open model-swap pull request")
     .requiredOption("--owner <owner>", "GitHub repository owner")
-    .requiredOption("--github-repo <repo>", "GitHub repository name")
+    .option(
+      "--github-repo <repo>",
+      "GitHub repository name (default: the repository directory name)",
+    )
     .requiredOption("--pr <number>", "pull request number")
-    .requiredOption("--github-base-url <url>", "GitHub API base URL")
+    .option(
+      "--github-base-url <url>",
+      "GitHub API base URL",
+      "https://api.github.com",
+    )
     .requiredOption(
       "--github-token-env <name>",
       "environment variable containing the GitHub token",
@@ -612,7 +627,7 @@ export function createProgram(
         tokenEnv: local.githubTokenEnv,
       }),
       owner: local.owner,
-      githubRepo: local.githubRepo,
+      githubRepo: local.githubRepo ?? basename(resolve(global.repo)),
       prNumber,
       warning: (code, message) => reporter.warning(code, message),
     });

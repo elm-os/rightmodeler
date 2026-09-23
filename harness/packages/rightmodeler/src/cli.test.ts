@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  createProgram,
   executeCli,
   pipelineArgv,
   type PipelineCommandOptions,
@@ -422,6 +423,27 @@ describe("CLI exit codes", () => {
     const unknown = captureIo();
     expect(await executeCli(["docs", "nope"], unknown.io)).toBe(10);
     expect(unknown.stderr()).toContain("Allowed choices are");
+  });
+});
+
+describe("CLI GitHub options", () => {
+  it("defaults the GitHub API base URL and the watched repository", () => {
+    const { program } = createProgram();
+    const option = (command: string, flag: string) => {
+      const found = program.commands
+        .find((candidate) => candidate.name() === command)
+        ?.options.find(({ long }) => long === flag);
+      if (found === undefined) throw new Error(`${command} has no ${flag}`);
+      return found;
+    };
+
+    for (const command of ["apply", "rollback", "watch"]) {
+      expect(option(command, "--github-base-url")).toMatchObject({
+        mandatory: false,
+        defaultValue: "https://api.github.com",
+      });
+    }
+    expect(option("watch", "--github-repo").mandatory).toBe(false);
   });
 });
 

@@ -487,8 +487,6 @@ describe("TypeScript CLI runbook", () => {
           "watch",
           "--owner",
           githubOwner,
-          "--github-repo",
-          githubRepo,
           "--pr",
           "1",
           "--github-base-url",

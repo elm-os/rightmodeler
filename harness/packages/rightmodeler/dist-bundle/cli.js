@@ -10591,7 +10591,7 @@ var require__ = __commonJS({
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { resolve as resolve13 } from "node:path";
+import { basename as basename4, resolve as resolve13 } from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
@@ -49068,7 +49068,7 @@ function createProgram(io = processIo, runtime = processRuntime) {
   let usageOutput = "";
   const program2 = new Command().name("rightmodeler").description("Find and prove safe model substitutions.").addHelpText(
     "after",
-    "\nExit codes are command-specific: apply and rollback use 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n"
+    "\nExit codes are command-specific: apply uses 0 success, 1 refused, 2 needs a completed run, >=10 runtime error; rollback uses 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere (result on stdout) or needs a completed run (error on stderr), >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n"
   ).version(version2).option("--repo <dir>", "repository to analyze", process.cwd()).option("--store <dir>", "store directory").addOption(
     new Option("--output <mode>", "output mode").choices(["human", "json", "jsonl"]).default("human")
   ).exitOverride().configureOutput({
@@ -49275,7 +49275,11 @@ function createProgram(io = processIo, runtime = processRuntime) {
   const apply = program2.command("apply").description("open a draft pull request for proven model swaps").requiredOption("--owner <owner>", "GitHub repository owner").option(
     "--github-repo <repo>",
     "GitHub repository name (default: the repository directory name)"
-  ).requiredOption("--github-base-url <url>", "GitHub API base URL").requiredOption(
+  ).option(
+    "--github-base-url <url>",
+    "GitHub API base URL",
+    "https://api.github.com"
+  ).requiredOption(
     "--github-token-env <name>",
     "environment variable containing the GitHub token"
   ).option("--dry-run", "run all machine gates without writing GitHub state");
@@ -49296,7 +49300,11 @@ function createProgram(io = processIo, runtime = processRuntime) {
   const rollback = program2.command("rollback").description("open a draft pull request restoring a prior model swap").requiredOption("--owner <owner>", "GitHub repository owner").option(
     "--github-repo <repo>",
     "GitHub repository name (default: the repository directory name)"
-  ).requiredOption("--pr <number>", "merged pull request number").requiredOption("--github-base-url <url>", "GitHub API base URL").requiredOption(
+  ).requiredOption("--pr <number>", "merged pull request number").option(
+    "--github-base-url <url>",
+    "GitHub API base URL",
+    "https://api.github.com"
+  ).requiredOption(
     "--github-token-env <name>",
     "environment variable containing the GitHub token"
   );
@@ -49362,7 +49370,14 @@ function createProgram(io = processIo, runtime = processRuntime) {
     reporter.result(result2);
     return 0;
   });
-  const watch = program2.command("watch").description("reconcile one open model-swap pull request").requiredOption("--owner <owner>", "GitHub repository owner").requiredOption("--github-repo <repo>", "GitHub repository name").requiredOption("--pr <number>", "pull request number").requiredOption("--github-base-url <url>", "GitHub API base URL").requiredOption(
+  const watch = program2.command("watch").description("reconcile one open model-swap pull request").requiredOption("--owner <owner>", "GitHub repository owner").option(
+    "--github-repo <repo>",
+    "GitHub repository name (default: the repository directory name)"
+  ).requiredOption("--pr <number>", "pull request number").option(
+    "--github-base-url <url>",
+    "GitHub API base URL",
+    "https://api.github.com"
+  ).requiredOption(
     "--github-token-env <name>",
     "environment variable containing the GitHub token"
   );
@@ -49380,7 +49395,7 @@ function createProgram(io = processIo, runtime = processRuntime) {
         tokenEnv: local.githubTokenEnv
       }),
       owner: local.owner,
-      githubRepo: local.githubRepo,
+      githubRepo: local.githubRepo ?? basename4(resolve13(global.repo)),
       prNumber,
       warning: (code2, message2) => reporter.warning(code2, message2)
     });

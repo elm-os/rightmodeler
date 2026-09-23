@@ -443,7 +443,8 @@ Options:
   --owner <owner>            GitHub repository owner
   --github-repo <repo>       GitHub repository name (default: the repository
                              directory name)
-  --github-base-url <url>    GitHub API base URL
+  --github-base-url <url>    GitHub API base URL (default:
+                             "https://api.github.com")
   --github-token-env <name>  environment variable containing the GitHub token
   --dry-run                  run all machine gates without writing GitHub state
   -h, --help                 display help for command
@@ -461,7 +462,8 @@ Options:
   --github-repo <repo>       GitHub repository name (default: the repository
                              directory name)
   --pr <number>              merged pull request number
-  --github-base-url <url>    GitHub API base URL
+  --github-base-url <url>    GitHub API base URL (default:
+                             "https://api.github.com")
   --github-token-env <name>  environment variable containing the GitHub token
   -h, --help                 display help for command
 ```
@@ -517,9 +519,11 @@ reconcile one open model-swap pull request
 
 Options:
   --owner <owner>            GitHub repository owner
-  --github-repo <repo>       GitHub repository name
+  --github-repo <repo>       GitHub repository name (default: the repository
+                             directory name)
   --pr <number>              pull request number
-  --github-base-url <url>    GitHub API base URL
+  --github-base-url <url>    GitHub API base URL (default:
+                             "https://api.github.com")
   --github-token-env <name>  environment variable containing the GitHub token
   -h, --help                 display help for command
 ```
