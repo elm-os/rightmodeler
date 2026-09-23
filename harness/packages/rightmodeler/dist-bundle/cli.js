@@ -30017,13 +30017,18 @@ function modeBCaseWorstCaseUsd(recordedCase, stepRecords, policy, catalog) {
     return total + recordedCase.contextTokens * LEASE_BYTES_PER_TOKEN * pricing.input + Math.max(recordedCase.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS) * pricing.output;
   }, 0);
 }
-function validatePricing(steps, policy, table) {
+function stepPricing(steps, policy, catalog) {
+  const table = pricingTable(catalog);
+  const reachable = {};
   for (const step of steps) {
     const model = expectedModel(step, policy);
-    if (table[model] === void 0) {
+    const pricing = table[model];
+    if (pricing === void 0) {
       throw new Error(`Pricing is unavailable for model: ${model}`);
     }
+    reachable[model] = pricing;
   }
+  return reachable;
 }
 function createWaiter() {
   let resolve14 = () => void 0;
@@ -30644,8 +30649,7 @@ async function replayModeB(input) {
       olderThanMs: timeoutMs + EXIT_GRACE_MS
     });
   }
-  const table = pricingTable(input.egress.catalog);
-  validatePricing(input.stepRecords, policy, table);
+  const table = stepPricing(input.stepRecords, policy, input.egress.catalog);
   const workerLimit = Math.min(input.concurrency, pending.length);
   const budgetState = await input.budget.state();
   if (budgetState.authorizedTotalUsd !== void 0) {

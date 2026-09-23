@@ -385,17 +385,22 @@ export function modeBCaseWorstCaseUsd(
   }, 0);
 }
 
-function validatePricing(
+function stepPricing(
   steps: readonly ReplayStep[],
   policy: ModeBSwapPolicy,
-  table: Readonly<Record<string, ModelPricing>>,
-): void {
+  catalog: readonly ModelCatalogEntry[],
+): Readonly<Record<string, ModelPricing>> {
+  const table = pricingTable(catalog);
+  const reachable: Record<string, ModelPricing> = {};
   for (const step of steps) {
     const model = expectedModel(step, policy);
-    if (table[model] === undefined) {
+    const pricing = table[model];
+    if (pricing === undefined) {
       throw new Error(`Pricing is unavailable for model: ${model}`);
     }
+    reachable[model] = pricing;
   }
+  return reachable;
 }
 
 function createWaiter(): ReservationWaiter {
@@ -1482,8 +1487,7 @@ export async function replayModeB(
     });
   }
 
-  const table = pricingTable(input.egress.catalog);
-  validatePricing(input.stepRecords, policy, table);
+  const table = stepPricing(input.stepRecords, policy, input.egress.catalog);
   const workerLimit = Math.min(input.concurrency, pending.length);
   const budgetState = await input.budget.state();
   if (budgetState.authorizedTotalUsd !== undefined) {
