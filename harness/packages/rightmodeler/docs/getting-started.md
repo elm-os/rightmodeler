@@ -171,7 +171,7 @@ Some gateways choose the upstream, the cache policy, or a trace tag from request
 
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md`. The JSON report is kept inside the versioned store and is never written as a plain file, so read the final `result` event from `--output json` or `--output jsonl` for the machine-readable outcome.
 
-Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), and the [exit-code convention](exit-codes.md) before automating a full run.
+Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), the [gateway guide](gateways.md), and the [exit-code convention](exit-codes.md) before automating a full run.
 
 To open the draft pull request and keep it reconciled, read the [GitHub guide](github.md).
 
