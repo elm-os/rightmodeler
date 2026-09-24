@@ -1,3 +1,6 @@
 - type: equals
   value: Paris
   metric: output_similarity
+- type: icontains
+  value: paris
+  metric: secondary_similarity

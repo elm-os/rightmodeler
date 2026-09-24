@@ -1,3 +1,5 @@
+import { generateText } from "ai";
+
 const SUMMARY_MODEL = "acme/large-1";
 
 export async function summarizeWithConstant(prompt: string) {

@@ -11,6 +11,7 @@ interface CallMatcherOptions {
   label: string;
   needsStructuredOutput?: boolean;
   needsTools?: boolean;
+  refine?: (candidate: CandidateMatch, callText: string) => CandidateMatch;
 }
 
 function maskNonCode(content: string, includeHashComments: boolean): string {
@@ -270,18 +271,17 @@ export function createCallMatcher(options: CallMatcherOptions): Matcher {
         const position = match.index;
         const matchedText = extractCallText(content, position);
         const callee = match.groups?.callee ?? match[0].replace(/\s*\($/, "");
-        matches.push(
-          candidateFromText({
-            slug: options.slug,
-            label: options.label,
-            content,
-            position,
-            matchedText,
-            callee,
-            needsStructuredOutput: options.needsStructuredOutput,
-            needsTools: options.needsTools,
-          }),
-        );
+        const candidate = candidateFromText({
+          slug: options.slug,
+          label: options.label,
+          content,
+          position,
+          matchedText,
+          callee,
+          needsStructuredOutput: options.needsStructuredOutput,
+          needsTools: options.needsTools,
+        });
+        matches.push(options.refine?.(candidate, matchedText) ?? candidate);
       }
       return matches;
     },

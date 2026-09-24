@@ -40,6 +40,14 @@ const catalog: ModelCatalogEntry[] = [
     supportsTools: true,
     supportsStructuredOutput: false,
   },
+  ...Array.from({ length: 300 }, (_, index): ModelCatalogEntry => ({
+    id: `filler/model-${index}`,
+    family: "filler",
+    contextLength: 128_000,
+    pricing: { input: 0.000001, output: 0.000002 },
+    supportsTools: true,
+    supportsStructuredOutput: false,
+  })),
 ];
 
 const stepRecords: ReplayStep[] = [
@@ -151,5 +159,13 @@ describe("cloud Mode B launch contract", () => {
       maxUsd: expect.any(Number),
     });
     expect(dockerProbe).not.toHaveBeenCalled();
+  });
+
+  it("sends the sandbox only the prices of the models its steps can call", () => {
+    const launch = launches[0]!;
+    expect(JSON.parse(launch.env.RM_PRICING_TABLE)).toEqual({
+      "acme/small-1": { input: 0.0000002, output: 0.0000008 },
+    });
+    expect(Buffer.byteLength(JSON.stringify(launch.env))).toBeLessThan(4096);
   });
 });

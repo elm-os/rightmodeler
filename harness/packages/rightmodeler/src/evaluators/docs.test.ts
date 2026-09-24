@@ -6,6 +6,11 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { createProgram, executeCli } from "../cli.js";
 import { EVALUATOR_POLL_BUDGET_MS } from "./braintrust.js";
+import {
+  PROMPTFOO_ENV,
+  PROMPTFOO_EVAL_FLAGS,
+  PROMPTFOO_VERIFIED_VERSION,
+} from "./promptfoo.js";
 
 interface Row {
   readonly flag: string;
@@ -177,5 +182,29 @@ describe("evaluator documentation", () => {
 
   it("states the polling budget", () => {
     expect(doc).toContain(`up to ${EVALUATOR_POLL_BUDGET_MS / 60_000} minutes`);
+  });
+
+  it("states the promptfoo invocation the adapter uses", () => {
+    const section = doc.split("\n### promptfoo\n")[1]!.split(/\n## /u)[0]!;
+    expect(section).toContain(
+      `verified against promptfoo ${PROMPTFOO_VERIFIED_VERSION}`,
+    );
+    for (const flag of PROMPTFOO_EVAL_FLAGS) expect(section).toContain(flag);
+    for (const [name, value] of Object.entries(PROMPTFOO_ENV)) {
+      expect(section).toContain(`\`${name}=${value}\``);
+    }
+    expect(section).toContain("`external_output_mismatch`");
+    expect(section).toContain("`external_evaluator_error`");
+    expect(section).toContain("`promptfooconfig.*`");
+  });
+
+  it("names the re-grade warning the pipeline emits", () => {
+    const pipelineSource = readFileSync(
+      new URL("../pipeline.ts", import.meta.url),
+      "utf8",
+    );
+    expect(pipelineSource).toContain('"evaluator_regrade"');
+    expect(doc).toContain("`evaluator_regrade`");
+    expect(doc).toContain("## Changing an evaluator");
   });
 });

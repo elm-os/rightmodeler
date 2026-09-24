@@ -1,0 +1,442 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "id": "src_summarize_stream_summarizestream",
+      "label": "summarizeStream()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 1,
+      "file_type": "code",
+      "norm_label": "summarizestream()",
+      "source_file": "src/summarize-stream.ts",
+      "source_location": "L3"
+    },
+    {
+      "id": "src_summarize_summarize",
+      "label": "summarize()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 1,
+      "file_type": "code",
+      "norm_label": "summarize()",
+      "source_file": "src/summarize.ts",
+      "source_location": "L3"
+    },
+    {
+      "id": "src_extract_extractcontact",
+      "label": "extractContact()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 2,
+      "file_type": "code",
+      "norm_label": "extractcontact()",
+      "source_file": "src/extract.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "src_triage_triage_ticket",
+      "label": "triage_ticket()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 3,
+      "file_type": "code",
+      "norm_label": "triage_ticket()",
+      "source_file": "src/triage.py",
+      "source_location": "L6"
+    },
+    {
+      "id": "src_support_draft_support_reply",
+      "label": "draft_support_reply()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 4,
+      "file_type": "code",
+      "norm_label": "draft_support_reply()",
+      "source_file": "src/support.py",
+      "source_location": "L6"
+    },
+    {
+      "id": "package",
+      "label": "package.json",
+      "_origin": "ast",
+      "community": 0,
+      "file_type": "code",
+      "norm_label": "package.json",
+      "source_file": "package.json",
+      "source_location": "L1"
+    },
+    {
+      "id": "package_dependencies",
+      "label": "dependencies",
+      "_origin": "ast",
+      "community": 0,
+      "file_type": "code",
+      "norm_label": "dependencies",
+      "source_file": "package.json",
+      "source_location": "L2"
+    },
+    {
+      "id": "package_dependencies_ai",
+      "label": "ai",
+      "_origin": "ast",
+      "community": 0,
+      "file_type": "code",
+      "norm_label": "ai",
+      "source_file": "package.json",
+      "source_location": "L3"
+    },
+    {
+      "id": "package_dependencies_openai",
+      "label": "openai",
+      "_origin": "ast",
+      "community": 0,
+      "file_type": "code",
+      "norm_label": "openai",
+      "source_file": "package.json",
+      "source_location": "L4"
+    },
+    {
+      "id": "ref_openai",
+      "label": "openai",
+      "_origin": "ast",
+      "community": 0,
+      "file_type": "concept",
+      "norm_label": "openai",
+      "source_file": "package.json",
+      "source_location": "L4"
+    },
+    {
+      "id": "src_summarize",
+      "label": "summarize.ts",
+      "_origin": "ast",
+      "community": 1,
+      "file_type": "code",
+      "norm_label": "summarize.ts",
+      "source_file": "src/summarize.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_summarize_stream",
+      "label": "summarize-stream.ts",
+      "_origin": "ast",
+      "community": 1,
+      "file_type": "code",
+      "norm_label": "summarize-stream.ts",
+      "source_file": "src/summarize-stream.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "ref_ai",
+      "label": "ai",
+      "_origin": "ast",
+      "community": 1,
+      "file_type": "concept",
+      "norm_label": "ai",
+      "source_file": "package.json",
+      "source_location": "L3"
+    },
+    {
+      "id": "src_extract",
+      "label": "extract.ts",
+      "_origin": "ast",
+      "community": 2,
+      "file_type": "code",
+      "norm_label": "extract.ts",
+      "source_file": "src/extract.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_extract_contactschema",
+      "label": "contactSchema",
+      "_origin": "ast",
+      "community": 2,
+      "file_type": "code",
+      "norm_label": "contactschema",
+      "source_file": "src/extract.ts",
+      "source_location": "L4"
+    },
+    {
+      "id": "src_triage",
+      "label": "triage.py",
+      "_origin": "ast",
+      "community": 3,
+      "file_type": "code",
+      "norm_label": "triage.py",
+      "source_file": "src/triage.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_support",
+      "label": "support.py",
+      "_origin": "ast",
+      "community": 4,
+      "file_type": "code",
+      "norm_label": "support.py",
+      "source_file": "src/support.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_model_notes",
+      "label": "model-notes.ts",
+      "_origin": "ast",
+      "community": 5,
+      "file_type": "code",
+      "norm_label": "model-notes.ts",
+      "source_file": "src/model-notes.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_model_notes_experimentenabled",
+      "label": "experimentEnabled",
+      "_origin": "ast",
+      "community": 5,
+      "file_type": "code",
+      "norm_label": "experimentenabled",
+      "source_file": "src/model-notes.ts",
+      "source_location": "L2"
+    },
+    {
+      "id": "ref_zod",
+      "label": "ref_zod",
+      "community": 2,
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_zod",
+      "source_file": "",
+      "type": "external"
+    },
+    {
+      "id": "anthropic",
+      "label": "anthropic",
+      "community": 3,
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "anthropic",
+      "source_file": "",
+      "type": "external"
+    },
+    {
+      "id": "openai",
+      "label": "openai",
+      "community": 4,
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "openai",
+      "source_file": "",
+      "type": "external"
+    }
+  ],
+  "links": [
+    {
+      "source": "package",
+      "target": "ref_ai",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "package.json",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "package",
+      "target": "ref_openai",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "package.json",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "src_extract",
+      "target": "ref_ai",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/extract.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "src_extract",
+      "target": "ref_zod",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/extract.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "src_summarize",
+      "target": "ref_ai",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/summarize.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "src_summarize_stream",
+      "target": "ref_ai",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/summarize-stream.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "src_support",
+      "target": "openai",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/support.py",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "src_triage",
+      "target": "anthropic",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/triage.py",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "package",
+      "target": "package_dependencies",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "package_dependencies",
+      "target": "package_dependencies_ai",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "package_dependencies",
+      "target": "package_dependencies_openai",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "package.json",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "src_extract",
+      "target": "src_extract_extractcontact",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/extract.ts",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "src_extract",
+      "target": "src_extract_contactschema",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/extract.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "src_model_notes",
+      "target": "src_model_notes_experimentenabled",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/model-notes.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "src_summarize",
+      "target": "src_summarize_summarize",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/summarize.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "src_summarize_stream",
+      "target": "src_summarize_stream_summarizestream",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/summarize-stream.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "src_support",
+      "target": "src_support_draft_support_reply",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/support.py",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "src_triage",
+      "target": "src_triage_triage_ticket",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/triage.py",
+      "source_location": "L6",
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [],
+  "built_at_commit": "007dfc2db911bdd52c02de9655e32289e46c8aad"
+}

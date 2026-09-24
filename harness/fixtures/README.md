@@ -1,8 +1,10 @@
 # Shared test fixtures
 
-`demo-app/` is inert scan-target source that covers AI SDK text and structured generation, OpenAI-compatible tool calling, Anthropic messages, and a LiteLLM-style model pin. `demo-app/src/model-notes.ts` is the comment-only red herring that scanners must ignore.
+`demo-app/` is inert scan-target source that covers AI SDK text, streamed and structured generation, OpenAI-compatible tool calling, Anthropic messages, and a LiteLLM-style model pin. Its two summarize call sites, `src/summarize.ts` (`generateText`) and `src/summarize-stream.ts` (`streamText`), share the `summarize` telemetry `functionId`, so the `summarize` traces bind to them by trace key. Every call site pins `acme/large-1`, so the `support` traces cannot be tied to one call site. `demo-app/src/model-notes.ts` is the comment-only red herring that scanners must ignore.
 
-`traces/otel-genai.json` contains 15 runs and 17 current-convention GenAI spans across summarize and support task families (10 summarize and 7 support spans). The two pairs sharing `trace-trajectory-a` and `trace-trajectory-b` exercise trajectory clustering. Record `trace-support-pii-01` is the only trace record containing fake personal data; scrub tests should target its prompt.
+`traces/otel-genai.json` contains 75 runs and 77 current-convention GenAI spans across summarize and support task families (70 summarize and 7 support spans). The two pairs sharing `trace-trajectory-a` and `trace-trajectory-b` exercise trajectory clustering. Record `trace-support-pii-01` is the only trace record containing fake personal data; scrub tests should target its prompt.
+
+`ai-sdk-app/` is a standalone AI SDK app pinned to `ai` 7.0.110, `@ai-sdk/otel` 1.0.110 and `ai-v6` (npm `ai@6.0.288`) with OpenTelemetry `api` 1.9.1, `sdk-trace-base`, `resources` and `context-async-hooks` 2.11.0 and `otlp-transformer` 0.222.0; its six call sites (`summarize`, `summarizeStream`, `triage`, `supportAgent`, `extractOrder`, `extractOrderStream`) call a deterministic mock model. Its captures, taken on 2026-09-22, are `traces/ai-sdk-v7-legacy.jsonl` (the `ai.*` dialect from `LegacyOpenTelemetry`, 145 lines), `traces/ai-sdk-v7-legacy-split.jsonl` (the first eight calls of the same run with one span per line, 18 lines), `traces/ai-sdk-v7-genai.jsonl` (the GenAI dialect from `OpenTelemetry`, 145 lines) and `traces/ai-sdk-v6.jsonl` (AI SDK 6 with `experimental_telemetry`, the first 24 calls). Without `--split` each line is one OTLP JSON `resourceSpans` document holding every span of one call. The call plan runs, in order, summarize on the planted article, support-agent on `Where is order ORD-104?` (two model steps around one `lookup_order` tool call), extract, extract-stream, summarize-stream, triage, a summarize-stream aborted after its first chunk, and summarize; then 30 more summarize, 31 more summarize-stream, 63 more triage, 5 more support-agent, 4 more extract and 4 more extract-stream calls, 145 in all. They were regenerated from a scratch copy with `npm ci --ignore-scripts`, then `node generate.mjs v7-legacy`, `node generate.mjs v7-legacy --split --traces 8`, `node generate.mjs v7-genai` and `node generate.mjs v6 --traces 24` (see `ai-sdk-app/README.md`). Trace and span ids come from two counters, so the legacy and GenAI files share trace ids line by line. The planted email and phone appear in exactly one trace, the first call (two lines of the split file, its root and step span). The aborted v7 stream leaves a step span with no finish reason and no output in both v7 dialects; the aborted v6 stream exported only its `ai.streamText` root span, with no `doStream` span.
 
 `traces/openai.jsonl` contains eight request/response pairs in the append-friendly shape emitted by the capture script. It covers accepted summarize outputs and support tool calls with stable case identifiers, usage, and fake model identifiers. The `support-004` record is the fixture's planted scrub target.
 
@@ -10,9 +12,15 @@ The remaining trace fixtures are synthetic, append-friendly examples of each ada
 
 `stub-provider/server.mjs` is a dependency-free OpenAI-compatible test server with a priced model catalog, an optional free candidate for policy tests, and deterministic non-streaming chat completions. Its chat endpoint rejects internal `parts` arrays and requires string `role` and `content` wire fields, so hermetic replay tests catch request-shape drift. Run it with `--selftest` to exercise both endpoints and the streaming rejection path on an ephemeral port.
 
+`github-stub/server.mjs` is a dependency-free GitHub REST stub with `/__test/` control routes for seeding repositories, reviews, comments, checks, statuses, merges and closes. It models token kinds: `classic` by default, `installation` refuses `GET /user` with 403, and `fine-grained` refuses check runs with 403. It answers 422 when the pull request author is requested as a reviewer, omits `merged` from the pull request list as GitHub does, and rejects an unsupported `x-github-api-version` with the 400 body GitHub returned on 2026-09-22. `src/github.live.test.ts` in the CLI package compares these responses with api.github.com. Run it with `--selftest` to exercise the pull request lifecycle on an ephemeral port.
+
 `catalogs/ai-gateway-models.json` is a sanitized eight-model sample of the AI Gateway model-catalog response. It preserves per-token string pricing, context and output limits, capability parameters, tags, and model types so replay tests cover language-model normalization, capability-aware shortlisting, and exclusion of embedding entries.
 
 `catalogs/ai-gateway-chat-response.json` is a sanitized non-streaming AI Gateway chat completion. It preserves standard token usage, token-detail objects, and BYOK billing fields so replay tests cover response normalization and upstream-cost precedence.
+
+`promptfoo-stub/captured/` holds one real run of the open-source promptfoo CLI 0.123.1 (npm `promptfoo@0.123.1`, MIT, git `34f74d3`), captured on 2026-09-22 with `npm exec --yes promptfoo@0.123.1` in a scratch directory whose `PROMPTFOO_CONFIG_DIR` pointed at scratch, with the adapter's pinned environment. `version.txt` is `promptfoo --version`. `model-outputs.json` holds five outputs: `Paris`, `Parish`, `Paris` with a trailing newline, the template `{{ 7 * 7 }}` (graded as `49`), and `file://rightmodeler-capture-missing.txt` (a real error row). `results.json` is what `promptfoo eval --assertions <a copy of ../assertions.yaml> --model-outputs model-outputs.json --output results.json --no-write --no-share --no-table --no-progress-bar` wrote, run in the directory holding both files, exit code 100, with the scratch path replaced by `/capture` and formatted by prettier. `promptfoo-stub/run.mjs` mirrors that CLI for hermetic tests: it grades the captured `equals` and `icontains` assertions, strips one trailing newline as promptfoo does, writes the captured error row for any `file://` output, resolves `--model-outputs` against its working directory, rejects unknown options, prints the captured version for `--version`, and exits with `PROMPTFOO_FAILED_TEST_EXIT_CODE` (default 100) when a case fails. `PROMPTFOO_STUB_RECORD=<file>` records its arguments, working directory, `PROMPTFOO_*` environment, and the outputs it received; `PROMPTFOO_STUB_FAULT` is `exit-1`, `no-results`, `read-stdin`, or `rewrite-output`.
+
+`cloud-smoke-app/app.mjs` is a dependency-free Node 24 Mode B workload for the opt-in live cloud test. It reads the case file named by its first argument, sends one chat completion with `x-rm-step` and `x-rm-call` correlation headers through the in-sandbox proxy at `OPENAI_BASE_URL` using the incumbent model id from the case input (the proxy swaps in the candidate), and prints the terminal envelope as its last stdout line. The `oversize` mode also writes a 17 MiB file into the `workload` namespace, which collection must skip without failing the case.
 
 `langgraph-app/` is a standalone three-node StateGraph fixture. Its classify node routes requests, its lookup node handles a `lookup_order` tool selection and invokes the deterministic local order tool, and its answer node composes the terminal output. Lookup-routed inputs without an order number use `ORD-000`. The documented tool-route case input is `Where is order ORD-104?`. From the repository root, verify it with `python harness/fixtures/langgraph-app/main.py --selftest` after installing its pinned requirements in an isolated environment.
 
@@ -34,3 +42,27 @@ The remaining trace fixtures are synthetic, append-friendly examples of each ada
 | `trace-langgraph-12` | `Where can I find the privacy policy?` | classify → answer          |
 | `trace-langgraph-13` | `Tell me about your warranty.`         | classify → answer          |
 | `trace-langgraph-14` | `How do refunds work?`                 | classify → answer          |
+
+`code-graph-app/` is inert TypeScript source for the code context tests: a wrapped OpenAI chat call the scanner confirms (`src/llm.ts`), an imported caller (`src/summarize.ts`), a typed-parameter caller Graphify resolves by inference (`src/routes/tickets.ts`), a callback passed by name (`src/batch.ts`), a test importing the caller (`tests/summarize.test.ts`), CODEOWNERS, and a moderation call the scanner does not match (`src/moderate.ts`). `code-graph/code-graph-app.graph.json` and `code-graph/demo-app.graph.json` are captures from the open-source Graphify engine, `graphify 0.9.65` (PyPI `graphifyy`, Apache-2.0), produced from the repository root by the recipe below, unedited apart from the final newline Prettier adds. The recipe's raw output has sha256 `f69427a1f5034e9f7d38b075ef72d0913a5a9052b06bd82180c17cc38122f54e` and `e698bb5dce8e903a7a190ab55e9839a9621e4d9501d926d642c50424f0945b46`; the stored files have sha256 `a19c3a5b20bb9bc17ec2d52beaaf1a222d01aabbc2826df7b54791af6b100f3b` and `be69b4cce724f220a9f67aa53dca93a00b4b6b9c3484dea8ead597f02f8f2981`, and `built_at_commit` `aa99b779150cdfa0c825640f6cb4adce8306b66e` and `007dfc2db911bdd52c02de9655e32289e46c8aad`. Tests that need a fresh graph copy one and set `built_at_commit` to their own repository's HEAD, because a test repository's commit can never equal the capture's.
+
+```sh
+graphify --version    # must print: graphify 0.9.65
+W=$(git rev-parse --show-toplevel)
+CAP=$(mktemp -d)
+capture() {
+  cp -R "$W/harness/fixtures/$1" "$CAP/$1"
+  git -C "$CAP/$1" init -q -b main
+  git -C "$CAP/$1" add -A
+  GIT_AUTHOR_DATE=2026-01-01T00:00:00Z GIT_COMMITTER_DATE=2026-01-01T00:00:00Z \
+    git -C "$CAP/$1" -c user.name="Fixture Author" -c user.email=fixture@example.com \
+    -c commit.gpgsign=false commit -q -m "Seed fixture"
+  (cd "$CAP/$1" && env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u GEMINI_API_KEY \
+    -u GOOGLE_API_KEY -u AI_GATEWAY_API_KEY -u OPENROUTER_API_KEY \
+    graphify extract . --code-only)
+  mkdir -p "$W/harness/fixtures/code-graph"
+  cp "$CAP/$1/graphify-out/graph.json" "$W/harness/fixtures/code-graph/$1.graph.json"
+}
+capture code-graph-app
+capture demo-app
+rm -rf "$CAP"
+```

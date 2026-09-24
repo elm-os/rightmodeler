@@ -47,10 +47,13 @@ function user(login) {
   return { login };
 }
 
+const supportedApiVersions = ["2026-03-10", "2022-11-28"];
+
 export async function startGithubStub({
   port,
   token = "github-stub-token",
   tokenLogin = "rightmodeler-bot",
+  tokenKind = "classic",
   transientFailures = 0,
   rejectReviewRequestFor = undefined,
   rateLimit,
@@ -142,6 +145,7 @@ export async function startGithubStub({
         ref: pull.base,
         sha: pull.baseSha,
       },
+      user: user(pull.author),
       requested_reviewers: pull.reviewers.map(user),
       requested_teams: pull.teamReviewers.map((slug) => ({ slug })),
     };
@@ -520,6 +524,20 @@ export async function startGithubStub({
 
     if (await testControl(url.pathname, request.method, body, response)) return;
 
+    const apiVersion = request.headers["x-github-api-version"];
+    if (
+      apiVersion !== undefined &&
+      !supportedApiVersions.includes(apiVersion)
+    ) {
+      json(response, 400, {
+        message: "Bad Request",
+        errors: `The version you specified in the "X-GitHub-API-Version" request header, "${apiVersion}", is not a supported version. The following versions are currently supported: "2026-03-10" (most recent) and "2022-11-28".`,
+        documentation_url: "https://docs.github.com/rest",
+        status: "400",
+      });
+      return;
+    }
+
     if (reflectAuthError && !reflected) {
       reflected = true;
       json(response, 500, {
@@ -552,6 +570,12 @@ export async function startGithubStub({
     }
 
     if (url.pathname === "/user" && request.method === "GET") {
+      if (tokenKind === "installation") {
+        json(response, 403, {
+          message: "Resource not accessible by integration",
+        });
+        return;
+      }
       json(response, 200, user(tokenLogin));
       return;
     }
@@ -725,6 +749,7 @@ export async function startGithubStub({
         merged: false,
         mergedAt: null,
         closedAt: null,
+        author: tokenLogin,
         head: body.head,
         headSha,
         base: body.base,
@@ -751,7 +776,11 @@ export async function startGithubStub({
             (head === null || `${owner}:${pull.head}` === head) &&
             (base === null || pull.base === base),
         )
-        .map((pull) => pullResponse(repo, pull));
+        .map((pull) => {
+          const listed = pullResponse(repo, pull);
+          delete listed.merged;
+          return listed;
+        });
       paginated(pulls);
       return;
     }
@@ -766,6 +795,16 @@ export async function startGithubStub({
       if (
         rejectReviewRequestFor !== undefined &&
         (body.reviewers ?? []).includes(rejectReviewRequestFor)
+      ) {
+        json(response, 422, {
+          message: "Review cannot be requested from pull request author.",
+        });
+        return;
+      }
+      if (
+        (body.reviewers ?? []).some(
+          (reviewer) => reviewer.toLowerCase() === pull.author.toLowerCase(),
+        )
       ) {
         json(response, 422, {
           message: "Review cannot be requested from pull request author.",
@@ -885,6 +924,12 @@ export async function startGithubStub({
 
     const checksMatch = /^\/commits\/(.+)\/check-runs$/.exec(path);
     if (request.method === "GET" && checksMatch !== null) {
+      if (tokenKind === "fine-grained") {
+        json(response, 403, {
+          message: "Resource not accessible by personal access token",
+        });
+        return;
+      }
       const sha = resolveCommit(repo, decodeURIComponent(checksMatch[1]));
       if (sha === undefined) {
         json(response, 404, { message: "Commit not found" });

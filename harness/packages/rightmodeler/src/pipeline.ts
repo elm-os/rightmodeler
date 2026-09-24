@@ -96,11 +96,14 @@ import {
   auditTabulate,
   buildCorpus,
   detectFormat,
+  excludedStepsWarning,
   FormatDetectionError,
   normalizedRunSchema,
   parseTraceRecords,
   referenceCeilings,
   scrubRuns,
+  strictRuns,
+  TraceAdaptError,
   traceAdapters,
   writeCorpus,
   type AuditResult,
@@ -114,7 +117,11 @@ import {
   type ApplyResult,
   type ApplyVerdict,
 } from "./apply/orchestrator.js";
-import { estimateReplayCost, type ReplayCostEstimate } from "./estimate.js";
+import {
+  estimateReplayCost,
+  type ReplayCostEstimate,
+  type ReplayCostJudge,
+} from "./estimate.js";
 import { readActiveCorpus, readCorpusVersion } from "./drift.js";
 import {
   blastRadius,
@@ -127,10 +134,16 @@ import {
   preferEvaluatorWhenReachable,
 } from "./evaluators/braintrust.js";
 import {
+  bindFamily,
+  traceStepKey,
+  type FamilyBinding,
+} from "./family-binding.js";
+import {
   importCorpus,
   writeImportedCorpus,
   type CorpusImportConfig,
 } from "./evaluators/corpus-import.js";
+import { readPromptfooConfigs } from "./evaluators/promptfoo.js";
 import {
   createEvaluator,
   resolveEvaluatorConfig,
@@ -147,6 +160,13 @@ import type {
   EvaluatorCaseResult,
   EvaluatorProvider,
 } from "./evaluators/types.js";
+import {
+  graphFileDigest,
+  readCodeContext,
+  renderCodeContext,
+  type CallSiteInput,
+  type CodeContext,
+} from "./code-graph/index.js";
 import type { GithubClient } from "./github/index.js";
 import { ProtocolError, Reporter } from "./protocol.js";
 import {
@@ -205,6 +225,9 @@ const DEFAULT_QUALITY_FLOOR = 0.85;
 const AVAILABILITY_FLOOR = 0.7;
 const GATE_POLICY_BASE_VERSION = "phase-a-v3";
 const REPLAY_PROMPT_REVISION = "replay-prompt-v1";
+const SCAN_REVISION = "scan-trace-key-v1";
+const TRACE_BINDING_REVISION = "trace-match-v1";
+const TRACE_READER_REVISION = "ai-sdk-dialects-v1";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 
 function auditResultKey(projectId: string): string {
@@ -228,6 +251,16 @@ const reconcileOutputSchema = z.strictObject({
   ambiguousCallSites: z.number().int().nonnegative(),
   unmatchedCallSites: z.number().int().nonnegative(),
   ambiguityReasons: z.array(z.string()),
+  traceStepBindings: z
+    .array(
+      z.strictObject({
+        traceId: z.string().min(1),
+        stepIndex: z.number().int().nonnegative(),
+        stepIds: z.array(z.string().min(1)),
+        via: z.enum(["trajectory_position", "trace_key", "model"]).optional(),
+      }),
+    )
+    .default([]),
 });
 const ingestOutputSchema = z.strictObject({
   format: z.enum(traceAdapters.map(({ name }) => name)),
@@ -288,6 +321,9 @@ const familyPlanSchema = z.strictObject({
   abstainReason: z
     .strictObject({
       reason: z.enum([
+        "ambiguous_call_site_binding",
+        "unmatched_call_site_binding",
+        "bound_call_sites_not_replayable",
         "holdout_below_floor_minimum",
         "insufficient_distinct_steps",
       ]),
@@ -295,6 +331,8 @@ const familyPlanSchema = z.strictObject({
       required: z.number().int().nonnegative(),
     })
     .optional(),
+  binding: z.enum(["trace_key", "trace_match"]).optional(),
+  leftOutCases: z.number().int().positive().optional(),
 });
 const replayPlanSchema = z.strictObject({
   top: z.number().int().positive(),
@@ -361,6 +399,7 @@ const replayOutputSchema = z.strictObject({
   evaluation: z.strictObject({
     evaluatorKind: z.string().min(1),
     gateMetric: z.string().min(1),
+    evaluatorIdentity: z.string().min(1).optional(),
     assessmentAbsences: z.array(
       z.strictObject({
         executionId: z.string().min(1),
@@ -534,6 +573,7 @@ interface PipelineCache {
   repositoryFiles?: Promise<Array<{ absolute: string; path: string }>>;
   repositoryDigest?: Promise<string>;
   setupArtifacts: Map<string, Promise<unknown[]>>;
+  codeContext?: Promise<CodeContext | undefined>;
 }
 
 interface PipelineContext {
@@ -558,6 +598,7 @@ interface PipelineContext {
   matchersPath?: string;
   existingRunId?: string;
   approvedRunSpecDigest?: string;
+  codeGraphPath?: string;
   reporter: Reporter;
   cache: PipelineCache;
 }
@@ -577,6 +618,7 @@ export interface PipelineOptions {
   policyFilePath?: string;
   matchersPath?: string;
   approvedRunSpecDigest?: string;
+  codeGraphPath?: string;
   through?: PipelineStage;
   plan?: boolean;
   existingRunId?: string;
@@ -629,6 +671,8 @@ export interface ApplyPipelineOptions {
   readonly owner: string;
   readonly githubRepo: string;
   readonly dryRun: boolean;
+  readonly codeGraphPath?: string;
+  readonly warning?: (code: string, message: string) => void;
 }
 
 export interface WatchPipelineOptions {
@@ -638,6 +682,7 @@ export interface WatchPipelineOptions {
   readonly owner: string;
   readonly githubRepo: string;
   readonly prNumber: number;
+  readonly warning?: (code: string, message: string) => void;
 }
 
 export interface WatchablePullRequest {
@@ -763,7 +808,7 @@ async function planStages(
     ) &&
     stages.includes("shortlist")
   ) {
-    const records = (await loadReconcile(context)).records;
+    const reconciled = await loadReconcile(context);
     const corpus = await resolveCheckpointedPipelineCorpus(context);
     const approved =
       context.approvedRunSpecDigest === undefined
@@ -772,7 +817,9 @@ async function planStages(
     return {
       stages: result,
       policy: context.release.effective,
-      familyPlans: await planFamilies(context, corpus, records, approved),
+      familyPlans: (
+        await planFamilies(context, corpus, reconciled, approved)
+      ).map(({ plan }) => plan),
     };
   }
   return { stages: result, policy: context.release.effective };
@@ -937,47 +984,25 @@ export async function estimateReplay(
         );
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(context.baseUrl, candidates);
-  const candidateFamily = candidates
-    .flatMap(({ candidates: models }) => models)
-    .at(0)?.family;
+  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
+  const judges = new Map<string, ReplayCostJudge>();
   const judge =
-    context.evaluator !== undefined || candidateFamily === undefined
+    context.evaluator !== undefined
       ? undefined
-      : (() => {
-          const stepIds = new Set(
-            candidates
-              .filter(({ candidates: models }) =>
-                models.some(({ family }) => family === candidateFamily),
-              )
-              .map(({ stepId }) => stepId),
-          );
-          const resolvedByStepId = new Map(
-            candidates.map(({ stepId, resolvedCurrentModelId }) => [
-              stepId,
-              resolvedCurrentModelId,
-            ]),
-          );
-          const referenceFamilies = new Set(
-            plan.steps
-              .filter(({ stepId }) => stepIds.has(stepId))
-              .map(({ stepId, currentModel }) =>
-                modelFamily(resolvedByStepId.get(stepId) ?? currentModel),
-              ),
-          );
-          if (referenceFamilies.size !== 1) {
-            throw new Error(
-              `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
-            );
-          }
+      : (stepId: string, candidate: ModelCatalogEntry): ReplayCostJudge => {
+          const referenceFamily = referenceFamilyByStepId.get(stepId)!;
+          const key = JSON.stringify([candidate.family, referenceFamily]);
+          const known = judges.get(key);
+          if (known !== undefined) return known;
           const modelId = pickJudges(catalog, {
-            candidateFamily,
-            referenceFamily: [...referenceFamilies][0]!,
+            candidateFamily: candidate.family,
+            referenceFamily,
           })[0]!;
           const entry = catalog.find(({ id }) => id === modelId)!;
           if (entry.pricing === null) {
             throw new Error(`Selected judge has no pricing: ${modelId}`);
           }
-          return {
+          const selected = {
             modelId,
             pricing: entry.pricing,
             maxOutputTokens: Math.min(
@@ -985,7 +1010,9 @@ export async function estimateReplay(
               JUDGE_OUTPUT_TOKEN_CAP,
             ),
           };
-        })();
+          judges.set(key, selected);
+          return selected;
+        };
   return {
     ...estimateReplayCost({
       steps: plan.steps,
@@ -1005,15 +1032,7 @@ export async function claimDetachedReplay(
     throw missingProviderConfiguration();
   }
   const state = await readSetupState(context.store, context.projectId);
-  const traceIdentity =
-    context.traces === undefined
-      ? state.stages.ingest?.inputDigest
-      : digest({
-          stage: "ingest",
-          traceSha256: sha256(
-            Buffer.concat([...(await readTraceInput(context.traces))]),
-          ),
-        });
+  const traceIdentity = await inputDigest("ingest", context, state);
   if (traceIdentity === undefined) {
     throw new ProtocolError({
       exitCode: 2,
@@ -1153,11 +1172,14 @@ async function evaluatorRunIdentity(
   if (context.evaluator.provider !== "promptfoo") {
     return jsonValue(context.evaluator);
   }
+  const assertionsPath = resolve(context.evaluator.assertionsPath);
+  const promptfooConfigs = (await readPromptfooConfigs(assertionsPath)).map(
+    ({ file, bytes }) => ({ file, sha256: sha256(bytes) }),
+  );
   return jsonValue({
     ...context.evaluator,
-    assertionsSha256: sha256(
-      await readFile(resolve(context.evaluator.assertionsPath)),
-    ),
+    assertionsSha256: sha256(await readFile(assertionsPath)),
+    ...(promptfooConfigs.length === 0 ? {} : { promptfooConfigs }),
   });
 }
 
@@ -1337,6 +1359,18 @@ export async function runApply(
 ): Promise<RunApplyResult> {
   const context = createHeadlessContext(options);
   const prepared = await prepareApply(context);
+  const codeContext = await codeContextFor(
+    context,
+    prepared.verdicts.flatMap(({ verdict, swaps }) =>
+      swaps.map(({ stepRecord }) => ({
+        stepId: stepRecord.stepId,
+        family: verdict.familyId,
+        path: stepRecord.callSite.path,
+        line: stepRecord.callSite.line,
+      })),
+    ),
+    options.warning ?? (() => undefined),
+  );
   return applyPreparedSwaps({
     store: context.store,
     repoDir: context.repo,
@@ -1346,6 +1380,7 @@ export async function runApply(
     conventions: prepared.conventions,
     verdicts: prepared.verdicts,
     dryRun: options.dryRun,
+    ...(codeContext === undefined ? {} : { codeContext }),
   });
 }
 
@@ -1363,6 +1398,7 @@ export async function runWatch(
     prNumber: options.prNumber,
     conventions: prepared.conventions,
     verdicts: prepared.verdicts,
+    warning: options.warning,
   });
 }
 
@@ -1371,10 +1407,15 @@ export async function listWatchablePullRequests(options: {
   readonly store?: string;
 }): Promise<WatchablePullRequest[]> {
   const context = createHeadlessContext(options);
-  const ledger = await readPipelineLedger(context);
-  const events = ledger.lifecycleEvents.filter(
-    ({ prNumber }) => prNumber !== null,
+  return watchablePullRequests(
+    (await readPipelineLedger(context)).lifecycleEvents,
   );
+}
+
+function watchablePullRequests(
+  lifecycleEvents: Ledger["lifecycleEvents"],
+): WatchablePullRequest[] {
+  const events = lifecycleEvents.filter(({ prNumber }) => prNumber !== null);
   const numbers = [
     ...new Set(
       events.flatMap(({ prNumber }) => (prNumber === null ? [] : [prNumber])),
@@ -1609,7 +1650,26 @@ export async function runResultExport(options: {
       "No execution trials are available to export",
     );
   }
-  const assessments = ledger.assessments;
+  const state = await readSetupState(context.store, context.projectId);
+  const currentIdentity =
+    state.stages.replay === undefined
+      ? undefined
+      : (await loadReplayOutput(context)).evaluation.evaluatorIdentity;
+  const gradeKey = (assessment: Assessment) =>
+    `${assessment.executionId}\0${assessment.evaluatorId}\0${assessment.metricName}`;
+  const current = new Set(
+    ledger.assessments.flatMap((assessment) =>
+      currentIdentity !== undefined &&
+      assessment.evaluatorIdentity === currentIdentity
+        ? [gradeKey(assessment)]
+        : [],
+    ),
+  );
+  const assessments = ledger.assessments.filter(
+    (assessment) =>
+      assessment.evaluatorIdentity === currentIdentity ||
+      !current.has(gradeKey(assessment)),
+  );
   const verdicts = await readCurrentVerdicts(context.store, context.projectId);
   const exportDigest = digest({
     provider: options.config.provider,
@@ -1649,10 +1709,12 @@ export async function runResultExport(options: {
 function createHeadlessContext(options: {
   readonly repo: string;
   readonly store?: string;
+  readonly codeGraphPath?: string;
 }): PipelineContext {
   return createContext({
     repo: options.repo,
     store: options.store,
+    codeGraphPath: options.codeGraphPath,
     reporter: new Reporter("human", {
       stdout: () => undefined,
       stderr: () => undefined,
@@ -1851,6 +1913,9 @@ function createContext(options: PipelineOptions): PipelineContext {
     ...(options.approvedRunSpecDigest === undefined
       ? {}
       : { approvedRunSpecDigest: options.approvedRunSpecDigest }),
+    ...(options.codeGraphPath === undefined
+      ? {}
+      : { codeGraphPath: resolve(options.codeGraphPath) }),
     reporter: options.reporter,
     cache: { setupArtifacts: new Map() },
   };
@@ -2056,12 +2121,13 @@ async function inputDigest(
   state: SetupState,
 ): Promise<string | undefined> {
   if (stage === "scan") {
-    const repository = await contextRepositoryDigest(context);
-    if (context.matchersPath === undefined) return repository;
     return digest({
       stage,
-      repository,
-      matchers: sha256(await readFile(context.matchersPath)),
+      repository: await contextRepositoryDigest(context),
+      scanner: SCAN_REVISION,
+      ...(context.matchersPath === undefined
+        ? {}
+        : { matchers: sha256(await readFile(context.matchersPath)) }),
     });
   }
   if (stage === "ingest") {
@@ -2071,6 +2137,7 @@ async function inputDigest(
       traceSha256: sha256(
         Buffer.concat([...(await readTraceInput(context.traces))]),
       ),
+      reader: TRACE_READER_REVISION,
     });
   }
 
@@ -2080,6 +2147,7 @@ async function inputDigest(
   const extra: Record<string, JsonValue> = {};
   if (stage === "reconcile") {
     extra.scan = await scanArtifactDigest(context, state);
+    extra.binding = TRACE_BINDING_REVISION;
     if (context.modeBConfig !== undefined) {
       extra.stepMap = context.modeBConfig.stepMap;
     }
@@ -2141,6 +2209,9 @@ async function inputDigest(
       maxCostUsd: context.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context),
     });
+    if (context.evaluator !== undefined) {
+      extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context));
+    }
     extra.approvedRunSpecDigest = context.approvedRunSpecDigest ?? null;
     if (context.existingRunId !== undefined) {
       extra.catalog = digest(
@@ -2180,6 +2251,9 @@ async function inputDigest(
         maxCostUsd: context.maxCostUsd ?? null,
       });
     }
+  }
+  if (stage === "report" && context.codeGraphPath !== undefined) {
+    extra.codeGraph = await graphFileDigest(context.codeGraphPath);
   }
   return digest({ stage, upstream: upstream.inputDigest, ...extra });
 }
@@ -2374,7 +2448,7 @@ async function executeStage(
     case "replay":
       return executeReplay(context, inputDigestValue, runId);
     case "aggregate":
-      return executeAggregate(context, inputDigestValue);
+      return executeAggregate(context, inputDigestValue, runId);
     case "confirm":
       return executeConfirm(context, inputDigestValue, runId);
     case "report": {
@@ -2448,7 +2522,20 @@ async function executeIngest(
   const names = [...new Set(detected.map(({ name }) => name))];
   if (names.length > 1) throw mixedTraceFormats(names);
   const adapter = detected[0]!;
-  const runs = adapter.adapt(texts.flatMap((text) => parseTraceRecords(text)));
+  const result = adapter.adaptWithReport(
+    texts.flatMap((text) => parseTraceRecords(text)),
+  );
+  const runs = strictRuns(adapter.name, result);
+  const excluded = excludedStepsWarning(result);
+  if (excluded !== undefined) {
+    context.reporter.warning("trace_steps_excluded", excluded);
+  }
+  if (runs.length === 0) {
+    throw new TraceAdaptError(
+      adapter.name,
+      `The ${adapter.name} trace input contains no model calls that can be read`,
+    );
+  }
   const key = artifactKey(context, "ingest", inputDigestValue);
   await putImmutableJson(context.store, key, {
     format: adapter.name,
@@ -2494,8 +2581,12 @@ async function executeReconcile(
   )
     ? ingestOutput.runs
         .filter(({ steps }) => steps.length === records.length)
-        .flatMap(({ steps }) => steps)
-    : ingestOutput.runs.flatMap(({ steps }) => steps);
+        .flatMap(({ traceId, steps }) =>
+          steps.map((step) => ({ ...step, traceId })),
+        )
+    : ingestOutput.runs.flatMap(({ traceId, steps }) =>
+        steps.map((step) => ({ ...step, traceId })),
+      );
   const result = reconcile(normalizedSteps, records);
   const reconciledRecords = result.callSites.map(
     ({ stepRecord }) => stepRecord,
@@ -2527,6 +2618,19 @@ async function executeReconcile(
         ),
       ),
     ],
+    traceStepBindings: result.traceSteps.map(
+      ({ normalizedStep, status, stepId, candidateStepIds, via }) => ({
+        traceId: normalizedStep.traceId,
+        stepIndex: normalizedStep.stepIndex,
+        stepIds:
+          status === "matched"
+            ? [stepId!]
+            : status === "ambiguous"
+              ? [...candidateStepIds!]
+              : [],
+        ...(via === undefined ? {} : { via }),
+      }),
+    ),
   });
   return key;
 }
@@ -2606,17 +2710,34 @@ async function executeAuditSample(
 async function planFamilies(
   context: PipelineContext,
   corpus: Corpus,
-  records: readonly StepRecord[],
+  reconciled: z.infer<typeof reconcileOutputSchema>,
   approved: ApprovedSwapSet | undefined,
-): Promise<FamilyPlan[]> {
-  const replayableSteps = records.filter(
-    (record) =>
-      !record.capabilityRequirements.includes("tools") &&
-      !record.capabilityRequirements.includes("structured_output"),
-  );
+): Promise<
+  Array<{
+    plan: FamilyPlan;
+    caseSteps: ReadonlyMap<string, string>;
+    leftOut: FamilyBinding["leftOut"];
+  }>
+> {
+  const { records } = reconciled;
+  const replayable = (record: StepRecord): boolean =>
+    !record.capabilityRequirements.includes("tools") &&
+    !record.capabilityRequirements.includes("structured_output");
+  const replayableSteps = records.filter(replayable);
   if (replayableSteps.length === 0) {
     throw noReplayableCallSites();
   }
+  const sites = records.map((record) => ({
+    stepId: record.stepId,
+    ...(record.traceKey === undefined ? {} : { traceKey: record.traceKey }),
+    replayable: replayable(record),
+  }));
+  const bindings = new Map(
+    reconciled.traceStepBindings.map(
+      ({ traceId, stepIndex, stepIds }) =>
+        [traceStepKey(traceId, stepIndex), stepIds] as const,
+    ),
+  );
 
   const families = [
     ...new Set(corpus.cases.map(({ content }) => content.family)),
@@ -2640,55 +2761,92 @@ async function planFamilies(
       ({ familyId, requestIds }) => [familyId, requestIds] as const,
     ),
   );
-  const unusedSteps = new Set(replayableSteps.map(({ stepId }) => stepId));
+  const keyedStepIds = new Set(
+    records.flatMap(({ stepId, traceKey }) =>
+      traceKey === undefined ? [] : [stepId],
+    ),
+  );
+  const keyedFamilies = new Set(
+    records.flatMap(({ traceKey }) =>
+      traceKey === undefined ? [] : [traceKey],
+    ),
+  );
+  const familiesByStep = new Map<string, Set<string>>();
+  for (const { content, observation } of corpus.cases) {
+    const bound =
+      observation?.traceId === undefined
+        ? undefined
+        : bindings.get(traceStepKey(observation.traceId, content.stepIndex));
+    if (
+      keyedFamilies.has(content.family) ||
+      bound?.length !== 1 ||
+      keyedStepIds.has(bound[0]!)
+    ) {
+      continue;
+    }
+    familiesByStep.set(
+      bound[0]!,
+      (familiesByStep.get(bound[0]!) ?? new Set<string>()).add(content.family),
+    );
+  }
+  const sharedStepIds = new Set(
+    [...familiesByStep]
+      .filter(([, reached]) => reached.size > 1)
+      .map(([stepId]) => stepId),
+  );
   return families.map((family) => {
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family,
     );
-    const unused = replayableSteps.filter((record) =>
-      unusedSteps.has(record.stepId),
-    );
-    const preferred = unused.filter(
-      (record) =>
-        !record.callSite.path.endsWith(".yaml") &&
-        !record.callSite.path.endsWith(".yml"),
-    );
-    const assignedRecords =
+    const binding =
       approved === undefined
-        ? [
-            ...preferred,
-            ...unused.filter((record) => !preferred.includes(record)),
-          ].slice(0, MIN_DISTINCT_STEPS)
-        : approvedRecords(approved, family, unused);
-    if (approved !== undefined && assignedRecords.length === 0) {
-      throw new Error(
-        `No distinct replayable call site remains for family ${family}`,
-      );
-    }
-    const holdoutCases = familyCases.filter(
-      ({ split }) => split === "holdout",
-    ).length;
+        ? bindFamily({
+            family,
+            cases: familyCases.map((corpusCase) => ({
+              caseId: corpusCase.caseId,
+              split: corpusCase.split,
+              traceId: corpusCase.observation?.traceId,
+              stepIndex: corpusCase.content.stepIndex,
+            })),
+            sites,
+            sharedStepIds,
+            bindings,
+          })
+        : undefined;
+    const placement =
+      binding ??
+      approvedPlacement(approved!, family, familyCases, replayableSteps);
+    const { leftOut } = placement;
     const abstainReason: FamilyPlan["abstainReason"] =
-      approved !== undefined
+      binding === undefined
         ? undefined
-        : holdoutCases < context.release.minimumHoldoutCases
+        : binding.caseSteps.size === 0
           ? {
-              reason: "holdout_below_floor_minimum",
-              observed: holdoutCases,
-              required: context.release.minimumHoldoutCases,
+              reason:
+                leftOut.ambiguous > 0
+                  ? "ambiguous_call_site_binding"
+                  : leftOut.unreplayable > 0
+                    ? "bound_call_sites_not_replayable"
+                    : "unmatched_call_site_binding",
+              observed: 0,
+              required: familyCases.length,
             }
-          : assignedRecords.length < MIN_DISTINCT_STEPS
+          : binding.holdoutCases < context.release.minimumHoldoutCases
             ? {
-                reason: "insufficient_distinct_steps",
-                observed: assignedRecords.length,
-                required: MIN_DISTINCT_STEPS,
+                reason: "holdout_below_floor_minimum",
+                observed: binding.holdoutCases,
+                required: context.release.minimumHoldoutCases,
               }
-            : undefined;
-    const stepIds =
-      abstainReason === undefined
-        ? assignedRecords.map(({ stepId }) => stepId)
-        : [];
-    stepIds.forEach((stepId) => unusedSteps.delete(stepId));
+            : binding.stepIds.length < binding.requiredDistinctSteps
+              ? {
+                  reason: "insufficient_distinct_steps",
+                  observed: binding.stepIds.length,
+                  required: binding.requiredDistinctSteps,
+                }
+              : undefined;
+    const stepIds = abstainReason === undefined ? [...placement.stepIds] : [];
+    const leftOutCases =
+      leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
     const reproofRequestIds = reproofRequests.get(family) ?? [];
     const evidenceQuestionId = evidenceQuestionIdentity({
       corpusVersionId: corpus.corpusVersionId,
@@ -2699,13 +2857,23 @@ async function planFamilies(
       reproofRequestIds,
     });
     return {
-      familyId: family,
-      evidenceQuestionId,
-      cases: familyCases.length,
-      holdoutCases,
-      minimumHoldoutCases: context.release.minimumHoldoutCases,
-      stepIds,
-      ...(abstainReason === undefined ? {} : { abstainReason }),
+      plan: {
+        familyId: family,
+        evidenceQuestionId,
+        cases: familyCases.length,
+        holdoutCases: placement.holdoutCases,
+        minimumHoldoutCases: context.release.minimumHoldoutCases,
+        stepIds,
+        ...(abstainReason === undefined ? {} : { abstainReason }),
+        ...(binding !== undefined
+          ? { binding: binding.kind }
+          : keyedFamilies.has(family)
+            ? { binding: "trace_key" as const }
+            : {}),
+        ...(leftOutCases > 0 ? { leftOutCases } : {}),
+      },
+      caseSteps: placement.caseSteps,
+      leftOut,
     };
   });
 }
@@ -2714,22 +2882,44 @@ async function executeShortlist(
   context: PipelineContext,
   inputDigestValue: string,
 ): Promise<string> {
-  const records = (await loadReconcile(context)).records;
+  const reconciled = await loadReconcile(context);
+  const { records } = reconciled;
   const runs = (await loadScrub(context)).runs;
   const corpus = await resolveCheckpointedPipelineCorpus(context);
   const approved =
     context.approvedRunSpecDigest === undefined
       ? undefined
       : await approvedSwapSetByDigest(context, context.approvedRunSpecDigest);
-  const familyPlans = await planFamilies(context, corpus, records, approved);
+  const planned = await planFamilies(context, corpus, reconciled, approved);
+  const familyPlans = planned.map(({ plan }) => plan);
   const recordById = new Map(records.map((record) => [record.stepId, record]));
   const usageByCase = replayUsageByCase(runs);
   const steps: Array<Omit<ReplayStep, "corpusSplit"> & { family: string }> = [];
   const cases: Array<RecordedCase & { family: string }> = [];
   const sampleSizes: Record<string, number> = {};
-  for (const familyPlan of familyPlans) {
+  for (const { plan: familyPlan, caseSteps, leftOut } of planned) {
     const { familyId: family, evidenceQuestionId, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
+    if (familyPlan.leftOutCases !== undefined && caseSteps.size > 0) {
+      const causes = [
+        [
+          leftOut.ambiguous,
+          "could not be tied to a call site of this family alone",
+        ],
+        [leftOut.unmatched, "matched no scanned call site"],
+        [
+          leftOut.unreplayable,
+          "came from a call site that needs tools or structured output",
+        ],
+      ] as const;
+      context.reporter.warning(
+        "family_cases_left_out",
+        `Family ${family}: ${familyPlan.leftOutCases} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes
+          .filter(([count]) => count > 0)
+          .map(([count, cause]) => `${count} ${cause}`)
+          .join(", ")}.`,
+      );
+    }
     if (stepIds.length === 0) continue;
     const assignedRecords = stepIds.map((stepId) => recordById.get(stepId)!);
     const familyCases = corpus.cases.filter(
@@ -2742,8 +2932,10 @@ async function executeShortlist(
     for (const split of ["shortlist", "holdout"] as const) {
       familyCases
         .filter((corpusCase) => corpusCase.split === split)
-        .forEach((corpusCase, index) => {
-          const step = assignedRecords[index % assignedRecords.length]!;
+        .forEach((corpusCase) => {
+          const stepId = caseSteps.get(corpusCase.caseId);
+          if (stepId === undefined) return;
+          const step = recordById.get(stepId)!;
           const contextTokens = requireReplayUsage(
             usageByCase,
             corpusCase,
@@ -2857,6 +3049,36 @@ function requireReplayUsage(
     });
   }
   return value;
+}
+
+function approvedPlacement(
+  approved: ApprovedSwapSet,
+  family: string,
+  familyCases: Corpus["cases"],
+  records: readonly StepRecord[],
+): Omit<FamilyBinding, "kind" | "requiredDistinctSteps"> {
+  const stepIds = approvedRecords(approved, family, records).map(
+    ({ stepId }) => stepId,
+  );
+  if (stepIds.length === 0) {
+    throw new Error(
+      `No distinct replayable call site remains for family ${family}`,
+    );
+  }
+  const caseSteps = new Map<string, string>();
+  for (const split of ["shortlist", "holdout"] as const) {
+    familyCases
+      .filter((corpusCase) => corpusCase.split === split)
+      .forEach(({ caseId }, index) => {
+        caseSteps.set(caseId, stepIds[index % stepIds.length]!);
+      });
+  }
+  return {
+    stepIds,
+    caseSteps,
+    holdoutCases: familyCases.filter(({ split }) => split === "holdout").length,
+    leftOut: { ambiguous: 0, unmatched: 0, unreplayable: 0 },
+  };
 }
 
 function approvedRecords(
@@ -3104,12 +3326,7 @@ async function executeReplay(
         );
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(context.baseUrl, candidates);
-  const resolvedByStepId = new Map(
-    candidates.map(({ stepId, resolvedCurrentModelId }) => [
-      stepId,
-      resolvedCurrentModelId,
-    ]),
-  );
+  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
   const currentPricingByStepId = new Map(
     plan.steps.map((step) => {
       const resolution = resolveCurrentModel(catalog, step.currentModel);
@@ -3122,7 +3339,9 @@ async function executeReplay(
     }),
   );
   let externalEvaluator: EvaluatorProvider | undefined;
+  let evaluatorIdentity: string | undefined;
   if (context.evaluator !== undefined) {
+    evaluatorIdentity = digest(await evaluatorRunIdentity(context));
     const configured = createEvaluator(context.evaluator);
     externalEvaluator = await preferEvaluatorWhenReachable(
       configured,
@@ -3136,6 +3355,7 @@ async function executeReplay(
       externalEvaluator === undefined
         ? "replacement-quality"
         : context.evaluator!.gateMetric,
+    ...(externalEvaluator === undefined ? {} : { evaluatorIdentity }),
     assessmentAbsences: [...assessmentAbsences.entries()]
       .sort(([left], [right]) => compareText(left, right))
       .map(([executionId, reason]) => ({ executionId, reason })),
@@ -3153,54 +3373,55 @@ async function executeReplay(
     split: "shortlist" | "holdout",
     assignments: typeof candidates,
   ): Promise<void> => {
-    const candidateFamilies = [
-      ...new Set(
-        assignments.flatMap(({ candidates }) =>
-          candidates.map(({ family }) => family),
-        ),
-      ),
-    ];
-    for (const candidateFamily of candidateFamilies) {
+    const groups = new Map<
+      string,
+      { readonly candidateFamily: string; readonly referenceFamily?: string }
+    >();
+    for (const { stepId, candidates } of assignments) {
+      for (const { family: candidateFamily } of candidates) {
+        const group =
+          externalEvaluator === undefined
+            ? {
+                candidateFamily,
+                referenceFamily: referenceFamilyByStepId.get(stepId)!,
+              }
+            : { candidateFamily };
+        groups.set(JSON.stringify(group), group);
+      }
+    }
+    for (const { candidateFamily, referenceFamily } of groups.values()) {
       const familyAssignments = assignments.map((assignment) => ({
         ...assignment,
-        candidates: assignment.candidates.filter(
-          ({ family }) => family === candidateFamily,
-        ),
+        candidates:
+          referenceFamily === undefined ||
+          referenceFamilyByStepId.get(assignment.stepId) === referenceFamily
+            ? assignment.candidates.filter(
+                ({ family }) => family === candidateFamily,
+              )
+            : [],
       }));
       const stepIds = new Set(
         familyAssignments
           .filter(({ candidates }) => candidates.length > 0)
           .map(({ stepId }) => stepId),
       );
-      const judge = (() => {
-        if (externalEvaluator !== undefined) return undefined;
-        const referenceFamilies = new Set(
-          plan.steps
-            .filter(({ stepId }) => stepIds.has(stepId))
-            .map(({ stepId, currentModel }) =>
-              modelFamily(resolvedByStepId.get(stepId) ?? currentModel),
-            ),
-        );
-        if (referenceFamilies.size !== 1) {
-          throw new Error(
-            `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`,
-          );
-        }
-        const rankedModels = pickJudges(catalog, {
-          candidateFamily,
-          referenceFamily: [...referenceFamilies][0]!,
-        }).map((judgeModel) => ({
-          judgeModel,
-          supportsStructuredOutput: catalog.find(({ id }) => id === judgeModel)!
-            .supportsStructuredOutput,
-        }));
-        return {
-          rankedModels,
-          warning: (code: string, message: string) =>
-            context.reporter.warning(code, message),
-          chat: judgeChat(provider, catalog),
-        };
-      })();
+      const judge =
+        referenceFamily === undefined
+          ? undefined
+          : {
+              rankedModels: pickJudges(catalog, {
+                candidateFamily,
+                referenceFamily,
+              }).map((judgeModel) => ({
+                judgeModel,
+                supportsStructuredOutput: catalog.find(
+                  ({ id }) => id === judgeModel,
+                )!.supportsStructuredOutput,
+              })),
+              warning: (code: string, message: string) =>
+                context.reporter.warning(code, message),
+              chat: judgeChat(provider, catalog),
+            };
       const result = await replayModeA({
         steps: replaySteps(split),
         cases: plan.cases,
@@ -3249,6 +3470,7 @@ async function executeReplay(
           context,
           plan,
           evaluator: externalEvaluator,
+          evaluatorIdentity: evaluatorIdentity!,
           split,
           stepIds,
           candidateIds: new Set(
@@ -3312,7 +3534,7 @@ async function executeReplay(
     }),
   }));
   await runCells("holdout", holdoutCandidates);
-  const key = artifactKey(context, "replay", inputDigestValue);
+  const key = artifactKey(context, "replay", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context.store, key, {
     completed,
     skipped,
@@ -3341,6 +3563,7 @@ async function executeReplay(
 async function executeAggregate(
   context: PipelineContext,
   inputDigestValue: string,
+  runId: string,
 ): Promise<string> {
   const plan = await loadReplayPlan(context);
   const replay = await loadReplayOutput(context);
@@ -3367,7 +3590,7 @@ async function executeAggregate(
     context.release.gate,
   );
   await writeFamilyVerdicts(context, families);
-  const key = artifactKey(context, "aggregate", inputDigestValue);
+  const key = artifactKey(context, "aggregate", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context.store, key, { allVerdicts, families });
   return key;
 }
@@ -3809,16 +4032,7 @@ async function executeConfirm(
         );
         continue;
       }
-      const referenceResolution = resolveCurrentModel(
-        catalog,
-        configuredRecords[0]!.currentModel,
-      );
-      const referenceFamily = modelFamily(
-        referenceResolution.kind === "exact" ||
-          referenceResolution.kind === "resolved"
-          ? referenceResolution.model.id
-          : configuredRecords[0]!.currentModel,
-      );
+      const referenceFamily = modelFamily(runtimeRecords.at(-1)!.currentModel);
       const judgeModel = pickJudges(catalog, {
         candidateFamily: selectedCatalogEntry.family,
         referenceFamily,
@@ -4001,7 +4215,7 @@ async function executeConfirm(
     };
   });
   await writeFamilyVerdicts(context, families);
-  const key = artifactKey(context, "confirm", inputDigestValue);
+  const key = artifactKey(context, "confirm", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context.store, key, {
     allVerdicts,
     families,
@@ -4180,6 +4394,7 @@ async function assessExternalExecutions(input: {
   context: PipelineContext;
   plan: z.infer<typeof replayPlanSchema>;
   evaluator: EvaluatorProvider;
+  evaluatorIdentity: string;
   split: "shortlist" | "holdout";
   stepIds: ReadonlySet<string>;
   candidateIds: ReadonlySet<string>;
@@ -4189,16 +4404,24 @@ async function assessExternalExecutions(input: {
     throw new Error("External evaluator configuration is unavailable");
   }
   const ledger = await readPipelineLedger(input.context);
-  const assessedGateExecutions = new Set(
-    ledger.assessments.flatMap((assessment) =>
+  const gateGrades = ledger.assessments.filter(
+    (assessment) =>
       assessment.evaluatorId === input.evaluator.id &&
-      assessment.metricName === config.gateMetric
+      assessment.metricName === config.gateMetric,
+  );
+  const assessedGateExecutions = new Set(
+    gateGrades.flatMap((assessment) =>
+      assessment.evaluatorIdentity === input.evaluatorIdentity
         ? [assessment.executionId]
         : [],
     ),
   );
+  const evidenceQuestionIds = new Set(
+    input.plan.steps.map(({ evidenceQuestionId }) => evidenceQuestionId),
+  );
   const executions = ledger.executions.filter(
     (execution) =>
+      evidenceQuestionIds.has(execution.evidenceQuestionId) &&
       execution.corpusSplit === input.split &&
       execution.terminalOutcome === "success" &&
       execution.attribution === "ok" &&
@@ -4214,6 +4437,37 @@ async function assessExternalExecutions(input: {
       recordedCase,
     ]),
   );
+  const graded = new Set(gateGrades.map(({ executionId }) => executionId));
+  const recorded = new Set(
+    gateGrades.flatMap(({ executionId, evaluatorIdentity }) =>
+      evaluatorIdentity === undefined ? [] : [executionId],
+    ),
+  );
+  const causes = [
+    [
+      executions.filter(({ executionId }) => recorded.has(executionId)).length,
+      "were graded under a different evaluator configuration (an edited rubric file or a changed evaluator option)",
+    ],
+    [
+      executions.filter(
+        ({ executionId }) =>
+          graded.has(executionId) && !recorded.has(executionId),
+      ).length,
+      "were graded before rightmodeler recorded evaluator configurations",
+    ],
+  ] as const;
+  const regraded = causes[0][0] + causes[1][0];
+  if (regraded > 0) {
+    input.context.reporter.warning(
+      "evaluator_regrade",
+      `Re-grading ${regraded} ${input.split} candidate outputs with ${input.evaluator.id}: ${causes
+        .filter(([count]) => count > 0)
+        .map(([count, cause]) => `${count} ${cause}`)
+        .join(
+          ", ",
+        )}. The stored outputs are reused; no model call is repeated.`,
+    );
+  }
   const launched = await input.evaluator.launch({
     experimentName: `rightmodeler-${digest({
       evidenceQuestionIds: [
@@ -4223,6 +4477,7 @@ async function assessExternalExecutions(input: {
       ].sort(compareText),
       candidateIds: [...input.candidateIds].sort(compareText),
       split: input.split,
+      evaluatorIdentity: input.evaluatorIdentity,
     }).slice(0, 24)}`,
     cases: executions.map((execution) => {
       const recordedCase = recordedCases.get(
@@ -4254,7 +4509,8 @@ async function assessExternalExecutions(input: {
   );
   const existingMetrics = new Set(
     ledger.assessments.flatMap((assessment) =>
-      assessment.evaluatorId === input.evaluator.id
+      assessment.evaluatorId === input.evaluator.id &&
+      assessment.evaluatorIdentity === input.evaluatorIdentity
         ? [`${assessment.executionId}\0${assessment.metricName}`]
         : [],
     ),
@@ -4264,6 +4520,7 @@ async function assessExternalExecutions(input: {
       input.context,
       input.evaluator,
       config,
+      input.evaluatorIdentity,
       launched.providerRunId,
       result,
       existingMetrics,
@@ -4281,11 +4538,12 @@ async function assessExternalExecutions(input: {
       {
         executionId: execution.executionId,
         reason:
-          status === "failed"
+          result?.absentReason ??
+          (status === "failed"
             ? "external_experiment_failed"
             : result === undefined
               ? "external_event_missing"
-              : "external_gate_metric_missing",
+              : "external_gate_metric_missing"),
       },
     ];
   });
@@ -4295,6 +4553,7 @@ async function persistEvaluatorMetrics(
   context: PipelineContext,
   evaluator: EvaluatorProvider,
   config: ResolvedEvaluatorConfig,
+  evaluatorIdentity: string,
   providerRunId: string,
   result: EvaluatorCaseResult,
   existingMetrics: Set<string>,
@@ -4328,6 +4587,7 @@ async function persistEvaluatorMetrics(
         ? metric.score >= config.gateThreshold!
         : metric.passed!,
       rubricVersion,
+      evaluatorIdentity,
       artifactRef: {
         providerRunId,
         providerArtifact: result.artifactRef ?? null,
@@ -4379,6 +4639,11 @@ async function materializeAggregationFacts(
   const selectedByStep = new Map(
     candidates.map((item) => [item.stepId, item.candidates]),
   );
+  const traceBound = new Map(
+    plan.familyPlans
+      .filter(({ binding }) => binding === "trace_key")
+      .map(({ familyId, stepIds }) => [familyId, stepIds.length]),
+  );
   const expectedAssignments = (
     family: string,
     candidateId: string,
@@ -4406,6 +4671,7 @@ async function materializeAggregationFacts(
     ).filter(
       (assessment) =>
         assessment.metricName === evaluation.gateMetric &&
+        assessment.evaluatorIdentity === evaluation.evaluatorIdentity &&
         (evaluation.evaluatorKind === "judge" ||
           assessment.evaluatorId === evaluation.evaluatorKind),
     );
@@ -4450,6 +4716,9 @@ async function materializeAggregationFacts(
         candidateCostUsd: blendedPrice(selected) ?? 0,
         referenceCeilingMultiplier: referenceCeilingFor(ceilings, family)
           .multiplier,
+        ...(traceBound.get(family) === undefined
+          ? {}
+          : { traceBoundCallSites: traceBound.get(family)! }),
         unsafeSubstitution: false,
         evidenceCovered: true,
         expectedEvaluatorAssignments: expectedAssignments(
@@ -4550,6 +4819,24 @@ function judgeChat(
   };
 }
 
+function referenceFamiliesByStep(
+  plan: z.infer<typeof replayPlanSchema>,
+  candidates: readonly StepShortlist[],
+): ReadonlyMap<string, string> {
+  const resolvedByStepId = new Map(
+    candidates.map(({ stepId, resolvedCurrentModelId }) => [
+      stepId,
+      resolvedCurrentModelId,
+    ]),
+  );
+  return new Map(
+    plan.steps.map(({ stepId, currentModel }) => [
+      stepId,
+      modelFamily(resolvedByStepId.get(stepId) ?? currentModel),
+    ]),
+  );
+}
+
 function modelFamily(modelId: string | null): string {
   if (modelId === null) return "unknown";
   return modelId.split("/", 1)[0] ?? "unknown";
@@ -4565,6 +4852,68 @@ function modeBProviderBaseUrl(baseUrl: string): string {
 
 function reportPath(context: PipelineContext): string {
   return join(context.storeRoot, reportKey(context.projectId, "report.md"));
+}
+
+async function codeContextFor(
+  context: PipelineContext,
+  callSites: readonly CallSiteInput[],
+  warn: (code: string, message: string) => void,
+): Promise<CodeContext | undefined> {
+  if (context.codeGraphPath === undefined) {
+    const found = join(context.repo, "graphify-out", "graph.json");
+    if (
+      await stat(found).then(
+        (entry) => entry.isFile(),
+        () => false,
+      )
+    ) {
+      const fromCwd = relative(process.cwd(), found);
+      const shown = fromCwd.startsWith("..") ? found : fromCwd;
+      warn(
+        "code_graph_available",
+        `Found ${shown}. Pass --code-graph ${shown} to add static code context; it never changes the evidence.`,
+      );
+    }
+    return undefined;
+  }
+  const scanOutput = await loadScan(context);
+  const result = await readCodeContext({
+    graphPath: context.codeGraphPath,
+    repoDir: context.repo,
+    revision: scanOutput.revision,
+    callSites,
+    scannedPaths: new Set(
+      scanOutput.records.map(({ callSite }) => callSite.path),
+    ),
+    sdkModules: detectTech(context.repo).aiDependencies,
+  });
+  for (const issue of result.issues) warn(issue.code, issue.message);
+  return result.context;
+}
+
+function reportCodeContext(
+  context: PipelineContext,
+): Promise<CodeContext | undefined> {
+  context.cache.codeContext ??= (async () => {
+    const [scanOutput, plan] = await Promise.all([
+      loadScan(context),
+      loadReplayPlan(context),
+    ]);
+    const familyByStep = new Map(
+      plan.steps.map(({ stepId, family }) => [stepId, family] as const),
+    );
+    return codeContextFor(
+      context,
+      scanOutput.records.map((record) => ({
+        stepId: record.stepId,
+        family: familyByStep.get(record.stepId) ?? record.family,
+        path: record.callSite.path,
+        line: record.callSite.line,
+      })),
+      (code, message) => context.reporter.warning(code, message),
+    );
+  })();
+  return context.cache.codeContext;
 }
 
 async function executeReport(
@@ -5027,6 +5376,7 @@ interface ReportData {
     createdAt: string;
     eventCount: number;
   }>;
+  codeContext?: CodeContext;
 }
 
 function blockedFamilyDiagnosis(
@@ -5376,6 +5726,7 @@ async function buildReport(
     "audit-sample",
     auditWorksheetSchema,
   );
+  const codeContext = await reportCodeContext(context);
   return {
     verdicts,
     families: decisionOutput.families,
@@ -5429,6 +5780,7 @@ async function buildReport(
       return blocked === undefined ? [] : [blocked];
     }),
     apply: lifecycleReport(ledger.lifecycleEvents),
+    ...(codeContext === undefined ? {} : { codeContext }),
   };
 }
 
@@ -5579,6 +5931,8 @@ function renderReport(report: ReportData): string {
       "",
     );
   }
+  if (report.codeContext !== undefined)
+    lines.push(...renderCodeContext(report.codeContext), "");
   return lines.join("\n");
 }
 
@@ -5733,6 +6087,8 @@ export async function runAuditTabulate(options: {
 export async function readReport(options: {
   repo: string;
   store?: string;
+  codeGraphPath?: string;
+  reporter?: Reporter;
 }): Promise<{
   report: ReportData;
   reportPath: string;
@@ -5740,10 +6096,12 @@ export async function readReport(options: {
 }> {
   const context = createContext({
     ...options,
-    reporter: new Reporter("human", {
-      stdout: () => undefined,
-      stderr: () => undefined,
-    }),
+    reporter:
+      options.reporter ??
+      new Reporter("human", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      }),
   });
   const state = await readSetupState(context.store, context.projectId);
   const aggregateCheckpoint = state.stages.aggregate;
@@ -5813,6 +6171,7 @@ export async function readStatus(options: {
     spend: spendSummary(ledger.spendEvents),
     corpusVersion: corpus?.corpusVersionId ?? null,
     lastRun: runs[0] ?? null,
+    pullRequests: watchablePullRequests(ledger.lifecycleEvents),
   };
 }
 

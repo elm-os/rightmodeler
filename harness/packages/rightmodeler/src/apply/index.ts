@@ -25,6 +25,8 @@ export interface ApplySwapsOptions {
   readonly githubBaseUrl: string;
   readonly githubTokenEnv: string;
   readonly dryRun?: boolean;
+  readonly codeGraphPath?: string;
+  readonly warning?: (code: string, message: string) => void;
 }
 
 export type ApplySwapsResult = RunApplyResult;
@@ -42,5 +44,9 @@ export function applySwaps(
     owner: options.owner,
     githubRepo: options.githubRepo ?? basename(resolve(options.repo)),
     dryRun: options.dryRun ?? false,
+    ...(options.codeGraphPath === undefined
+      ? {}
+      : { codeGraphPath: options.codeGraphPath }),
+    ...(options.warning === undefined ? {} : { warning: options.warning }),
   });
 }

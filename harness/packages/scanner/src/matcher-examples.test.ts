@@ -5,7 +5,7 @@ import { samplePath } from "./path-pattern.js";
 
 describe("builtin matcher examples", () => {
   it("discovers every named builtin matcher", () => {
-    expect(builtinMatchers).toHaveLength(30);
+    expect(builtinMatchers).toHaveLength(31);
   });
 
   for (const matcher of builtinMatchers) {
@@ -42,6 +42,42 @@ describe("builtin matcher examples", () => {
     ).toEqual([]);
   });
 
+  it("requires an AI SDK import and ignores declarations", () => {
+    const generateText = builtinMatchers.find(
+      ({ slug }) => slug === "js-ai-sdk-generate-text",
+    )!;
+    const call = 'generateText({ model: "acme/large-1", prompt })';
+
+    expect(generateText.match(call, "src/a.ts")).toEqual([]);
+    expect(
+      generateText.match(
+        `import { generateText } from "@/lib/ai";\n${call}`,
+        "src/a.ts",
+      ),
+    ).toHaveLength(1);
+    expect(
+      generateText.match(
+        `const { generateText } = wrapAISDK(ai);\n${call}`,
+        "src/a.ts",
+      ),
+    ).toHaveLength(1);
+    expect(
+      generateText.match(`import * as ai from "ai";\nai.${call}`, "src/a.ts"),
+    ).toHaveLength(1);
+    expect(
+      generateText.match(
+        `import {\n  generateText,\n  streamText,\n} from "ai";\n${call}`,
+        "src/a.ts",
+      ),
+    ).toHaveLength(1);
+    expect(
+      generateText.match(
+        'import { streamText } from "ai";\nexport function generateText(input) { return input; }',
+        "src/a.ts",
+      ),
+    ).toEqual([]);
+  });
+
   it("ignores calls written inside string and docstring bodies", () => {
     const generateText = builtinMatchers.find(
       ({ slug }) => slug === "js-ai-sdk-generate-text",
@@ -52,7 +88,7 @@ describe("builtin matcher examples", () => {
 
     expect(
       generateText.match(
-        '`call generateText({ model: "acme/large-1" })`',
+        'import { generateText } from "ai";\n`call generateText({ model: "acme/large-1" })`',
         "src/notes.ts",
       ),
     ).toEqual([]);
@@ -70,7 +106,7 @@ describe("builtin matcher examples", () => {
     )!;
 
     const matches = matcher.match(
-      'const quote = /"/g;\nexport async function run() {\n  return generateText({ model: "acme/large-1", prompt });\n}\n',
+      'import { generateText } from "ai";\nconst quote = /"/g;\nexport async function run() {\n  return generateText({ model: "acme/large-1", prompt });\n}\n',
       "src/run.ts",
     );
 
@@ -85,7 +121,7 @@ describe("builtin matcher examples", () => {
 
     expect(
       matcher.match(
-        'const doc = `\ngenerateText({ model: "x" })\n`;',
+        'import { generateText } from "ai";\nconst doc = `\ngenerateText({ model: "x" })\n`;',
         "src/notes.ts",
       ),
     ).toEqual([]);
@@ -98,28 +134,24 @@ describe("builtin matcher examples", () => {
 
     expect(
       generateText
-        .match('generateText({ model: "acme/large-1", prompt })', "src/a.ts")
+        .match(
+          'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt })',
+          "src/a.ts",
+        )
         .map(({ modelId }) => modelId),
     ).toEqual(["acme/large-1"]);
     expect(
       generateText
-        .match("generateText({ model: SUMMARY_MODEL, prompt })", "src/a.ts")
+        .match(
+          'import { generateText } from "ai";\ngenerateText({ model: SUMMARY_MODEL, prompt })',
+          "src/a.ts",
+        )
         .map(({ modelId }) => modelId),
     ).toEqual(["SUMMARY_MODEL"]);
     expect(
       generateText
-        .match("generateText({ model: process.env.MODEL, prompt })", "src/a.ts")
-        .map(({ modelId }) => modelId),
-    ).toEqual([undefined]);
-    expect(
-      generateText
-        .match("generateText({ model: settings.model, prompt })", "src/a.ts")
-        .map(({ modelId }) => modelId),
-    ).toEqual([undefined]);
-    expect(
-      generateText
         .match(
-          'generateText({ model: os.environ["MODEL"], prompt })',
+          'import { generateText } from "ai";\ngenerateText({ model: process.env.MODEL, prompt })',
           "src/a.ts",
         )
         .map(({ modelId }) => modelId),
@@ -127,7 +159,7 @@ describe("builtin matcher examples", () => {
     expect(
       generateText
         .match(
-          'generateText({ model: myProvider.languageModel("x"), prompt })',
+          'import { generateText } from "ai";\ngenerateText({ model: settings.model, prompt })',
           "src/a.ts",
         )
         .map(({ modelId }) => modelId),
@@ -135,7 +167,23 @@ describe("builtin matcher examples", () => {
     expect(
       generateText
         .match(
-          'generateText({ model: openai("acme/large-1"), prompt })',
+          'import { generateText } from "ai";\ngenerateText({ model: os.environ["MODEL"], prompt })',
+          "src/a.ts",
+        )
+        .map(({ modelId }) => modelId),
+    ).toEqual([undefined]);
+    expect(
+      generateText
+        .match(
+          'import { generateText } from "ai";\ngenerateText({ model: myProvider.languageModel("x"), prompt })',
+          "src/a.ts",
+        )
+        .map(({ modelId }) => modelId),
+    ).toEqual([undefined]);
+    expect(
+      generateText
+        .match(
+          'import { generateText } from "ai";\ngenerateText({ model: openai("acme/large-1"), prompt })',
           "src/a.ts",
         )
         .map(({ modelId }) => modelId),
@@ -149,9 +197,9 @@ describe("builtin matcher examples", () => {
 
     expect(
       matcher.match(
-        'generateText({ model: "acme/large-1" })',
+        'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1" })',
         "src/a.ts",
-        " ".repeat(39),
+        " ".repeat(74),
       ),
     ).toEqual([]);
   });

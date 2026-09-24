@@ -206,12 +206,8 @@ describe("trace adapters", () => {
     const missingTime = trajectory.map((record) => ({ ...record }));
     delete missingTime[0]!.startTimeUnixNano;
 
-    expect(() => otelGenAiAdapter.adapt(missingTime)).toThrowError(
-      expect.objectContaining({
-        name: "TraceAdaptError",
-        message: expect.stringMatching(/start time/i),
-      }) as TraceAdaptError,
-    );
+    expect(() => otelGenAiAdapter.adapt(missingTime)).toThrow(TraceAdaptError);
+    expect(() => otelGenAiAdapter.adapt(missingTime)).toThrow(/start time/i);
   });
 
   it("adapts future operation names and uses the v0 family fallback", async () => {

@@ -6,6 +6,7 @@ import type { NormalizedRun, NormalizedUsage } from "../normalized-run.js";
 
 export type TraceFormat =
   | "otel-genai"
+  | "ai-sdk"
   | "openai-jsonl"
   | "langfuse"
   | "braintrust"
@@ -21,9 +22,18 @@ export interface DroppedTraceRecord {
   reason: string;
 }
 
+export type TraceExclusionReason = "stream_incomplete";
+
+export interface ExcludedTraceStep {
+  recordIndex: number;
+  traceId: string;
+  reason: TraceExclusionReason;
+}
+
 export interface TraceAdaptResult {
   runs: NormalizedRun[];
   droppedRecords: readonly DroppedTraceRecord[];
+  excludedSteps?: readonly ExcludedTraceStep[];
 }
 
 export interface NamedTraceAdapter {
@@ -276,6 +286,14 @@ export function strictRuns(
     throw new TraceRecordsDroppedError(format, result);
   }
   return result.runs;
+}
+
+export function excludedStepsWarning(
+  result: TraceAdaptResult,
+): string | undefined {
+  const count = result.excludedSteps?.length ?? 0;
+  if (count === 0) return undefined;
+  return `${count} traced model call(s) ended without a finish reason and were left out of the corpus (stream_incomplete: the call was aborted or errored before it finished). The rest of the trace input was read.`;
 }
 
 export function requiredString(

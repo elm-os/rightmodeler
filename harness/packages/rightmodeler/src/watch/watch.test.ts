@@ -59,6 +59,7 @@ interface StubModule {
     readonly port: number;
     readonly token?: string;
     readonly tokenLogin?: string;
+    readonly tokenKind?: "classic" | "installation" | "fine-grained";
   }): Promise<StubServer>;
 }
 
@@ -266,11 +267,20 @@ async function remediationEvidenceArtifacts(
 
 async function createHarness({
   tokenLogin,
-}: { tokenLogin?: string } = {}): Promise<Harness> {
+  tokenKind,
+}: {
+  tokenLogin?: string;
+  tokenKind?: "classic" | "installation" | "fine-grained";
+} = {}): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "rightmodeler-watch-"));
   temporaryDirectories.push(root);
   const module = (await import(stubModuleUrl)) as StubModule;
-  const stub = await module.startGithubStub({ port: 0, token, tokenLogin });
+  const stub = await module.startGithubStub({
+    port: 0,
+    token,
+    tokenLogin,
+    tokenKind,
+  });
   openStubs.push(stub);
   process.env[tokenEnv] = token;
   const seeded = await control<{ sha: string }>(stub, "/__test/seed", {
@@ -937,6 +947,33 @@ describe("watchOnce", () => {
         }),
       ]),
     );
+  });
+
+  it("keeps reconciling with a clear warning when the token cannot read check runs", async () => {
+    const harness = await createHarness({ tokenKind: "fine-grained" });
+    await control(harness.stub, "/__test/commit-statuses", {
+      ...repository,
+      ref: harness.head,
+      statuses: [{ context: "ci/circleci", state: "failure" }],
+    });
+    const warnings: { code: string; message: string }[] = [];
+    const warning = (code: string, message: string) => {
+      warnings.push({ code, message });
+    };
+
+    await expect(
+      watchOnce({ ...watchInput(harness), warning }),
+    ).resolves.toMatchObject({ status: "actions_taken" });
+    const comment = postedComments(harness.stub, harness.prNumber)[0];
+    expect(
+      String((comment?.body as Record<string, unknown> | undefined)?.body),
+    ).toContain("ci/circleci");
+    expect(warnings).toEqual([
+      {
+        code: "github_checks_unavailable",
+        message: expect.stringContaining("Checks: read"),
+      },
+    ]);
   });
 
   it("records a merge and ends without making later GitHub calls", async () => {

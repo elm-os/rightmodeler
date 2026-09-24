@@ -9,35 +9,89 @@ import { breadthMatchers } from "./breadth.js";
 const javascriptFiles = ["**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"];
 const pythonFiles = ["**/*.py"];
 
+function aiSdkFileAnchor(callee: string): RegExp {
+  return new RegExp(
+    `\\bfrom\\s*["']ai["']|\\brequire\\s*\\(\\s*["']ai["']\\s*\\)|\\bimport\\s*\\(\\s*["']ai["']\\s*\\)|\\bwrapAISDK\\s*\\(|\\bimport\\s*\\{[^}]*\\b${callee}\\b[^}]*\\}\\s*from\\s*["'][^"']+["']`,
+  );
+}
+
+const outputTextOnly = /\b(?:experimental_)?output\s*:\s*Output\.text\s*\(/;
+const telemetryFunctionId =
+  /\b(?:experimental_)?telemetry\s*:\s*\{(?:[^{}]|\{[^{}]*\})*?\bfunctionId\s*:\s*(["'])([^"'\\\r\n]+)\1/;
+
+function aiSdkCallDetails(
+  candidate: CandidateMatch,
+  callText: string,
+): CandidateMatch {
+  const keys = candidate.normalizedCallShape.argumentKeys;
+  const traceKey = telemetryFunctionId.exec(callText)?.[2];
+  return {
+    ...candidate,
+    needsStructuredOutput:
+      candidate.needsStructuredOutput ||
+      ((keys.includes("output") || keys.includes("experimental_output")) &&
+        !outputTextOnly.test(callText)),
+    ...(traceKey === undefined ? {} : { traceKey }),
+  };
+}
+
+function aiSdkCallMatcher(options: {
+  slug: string;
+  description: string;
+  callee: string;
+  example: string;
+  label: string;
+  needsStructuredOutput?: boolean;
+}): Matcher {
+  return createCallMatcher({
+    slug: options.slug,
+    description: options.description,
+    noiseTier: "precise",
+    filePatterns: javascriptFiles,
+    examples: [options.example],
+    pattern: new RegExp(
+      `(?<!\\bfunction\\s{1,20})\\b(?<callee>${options.callee})\\s*\\(`,
+    ),
+    fileAnchor: aiSdkFileAnchor(options.callee),
+    refine: aiSdkCallDetails,
+    label: options.label,
+    needsStructuredOutput: options.needsStructuredOutput,
+  });
+}
+
 const callMatchers: Matcher[] = [
-  createCallMatcher({
+  aiSdkCallMatcher({
     slug: "js-ai-sdk-generate-text",
     description: "AI SDK text generation calls",
-    noiseTier: "precise",
-    filePatterns: javascriptFiles,
-    examples: ['generateText({ model: "acme/large-1", prompt: input })'],
-    pattern: /\b(?<callee>generateText)\s*\(/,
+    callee: "generateText",
+    example:
+      'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt: input })',
     label: "AI SDK generateText",
   }),
-  createCallMatcher({
+  aiSdkCallMatcher({
     slug: "js-ai-sdk-stream-text",
     description: "AI SDK streaming text generation calls",
-    noiseTier: "precise",
-    filePatterns: javascriptFiles,
-    examples: ['streamText({ model: "acme/large-1", prompt: input })'],
-    pattern: /\b(?<callee>streamText)\s*\(/,
+    callee: "streamText",
+    example:
+      'import { streamText } from "ai";\nstreamText({ model: "acme/large-1", prompt: input })',
     label: "AI SDK streamText",
   }),
-  createCallMatcher({
+  aiSdkCallMatcher({
     slug: "js-ai-sdk-generate-object",
     description: "AI SDK structured object generation calls",
-    noiseTier: "precise",
-    filePatterns: javascriptFiles,
-    examples: [
-      'generateObject({ model: "acme/large-1", schema, prompt: input })',
-    ],
-    pattern: /\b(?<callee>generateObject)\s*\(/,
+    callee: "generateObject",
+    example:
+      'import { generateObject } from "ai";\ngenerateObject({ model: "acme/large-1", schema, prompt: input })',
     label: "AI SDK generateObject",
+    needsStructuredOutput: true,
+  }),
+  aiSdkCallMatcher({
+    slug: "js-ai-sdk-stream-object",
+    description: "AI SDK streaming structured object calls",
+    callee: "streamObject",
+    example:
+      'import { streamObject } from "ai";\nstreamObject({ model: "acme/large-1", schema, prompt: input })',
+    label: "AI SDK streamObject",
     needsStructuredOutput: true,
   }),
   createCallMatcher({

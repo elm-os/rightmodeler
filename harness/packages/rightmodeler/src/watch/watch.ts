@@ -113,6 +113,7 @@ export interface WatchOnceInput {
   readonly prNumber: number;
   readonly verdicts: readonly ApplyVerdict[];
   readonly conventions: CapturedConventions;
+  readonly warning?: (code: string, message: string) => void;
 }
 
 interface LifecycleContext {
@@ -693,11 +694,22 @@ export async function watchOnce(input: WatchOnceInput): Promise<WatchResult> {
         repo: input.repo,
         issueNumber: input.prNumber,
       }),
-      input.githubClient.listCheckRunsForRef({
-        owner: input.owner,
-        repo: input.repo,
-        ref: pull.head.sha,
-      }),
+      input.githubClient
+        .listCheckRunsForRef({
+          owner: input.owner,
+          repo: input.repo,
+          ref: pull.head.sha,
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof GithubHttpError) || error.status !== 403) {
+            throw error;
+          }
+          input.warning?.(
+            "github_checks_unavailable",
+            `GitHub refused to list check runs for pull request #${input.prNumber} (HTTP 403). This token cannot read check runs (fine-grained personal access tokens never can), so this pass reconciled reviews, comments, commit statuses, merges and base-branch changes without check-run results. To include check runs, use a GitHub App installation token with Checks: read or a classic token with the repo scope.`,
+          );
+          return { totalCount: 0, checkRuns: [] };
+        }),
       input.githubClient.getRef({
         owner: input.owner,
         repo: input.repo,
