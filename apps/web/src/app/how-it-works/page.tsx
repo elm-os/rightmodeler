@@ -163,12 +163,15 @@ function RunModeCard({
   name,
   body,
   grain,
+  eager,
   children,
 }: {
   Icon: typeof TerminalIcon;
   name: string;
   body: string;
   grain?: string;
+  /** The card sits above the fold, where its grain is the page's Largest Contentful Paint. */
+  eager?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -181,6 +184,7 @@ function RunModeCard({
           alt=""
           fill
           aria-hidden
+          loading={eager ? "eager" : undefined}
           className="-z-10 object-cover object-left-bottom"
           sizes="(min-width: 1024px) 33vw, 100vw"
         />
@@ -227,6 +231,7 @@ export default function HowItWorksPage() {
               <RunModeCard
                 Icon={TerminalIcon}
                 grain="/agent/showcase-grain.jpg"
+                eager
                 name="From your terminal"
                 body="One command, nothing to install. It finds the traces Claude Code and Codex already left on disk, or asks for a file, and runs free through shortlist. Add a provider only when you want the replay, and estimate projects that spend first."
               >

@@ -75,7 +75,7 @@ function Band({
               <p className="mt-3 max-w-xs text-body text-driftwood">{intro}</p>
             )}
           </Reveal>
-          <div className="min-w-0">{children}</div>
+          <div className="min-w-0 wrap-break-word">{children}</div>
         </div>
       </div>
     </section>
@@ -200,7 +200,7 @@ export default async function IntegrationPage({
           >
             <div className="rounded-xl border border-ash-border bg-warm-sand">
               <div className="flex items-center justify-between gap-3 border-b border-ash-border px-4 py-2.5">
-                <span className="min-w-0 truncate font-mono text-caption text-driftwood">
+                <span className="min-w-0 font-mono text-caption text-driftwood">
                   normalized schema ← {data.name}
                 </span>
               </div>

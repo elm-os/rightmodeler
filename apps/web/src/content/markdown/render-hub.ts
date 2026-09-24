@@ -44,7 +44,7 @@ export function renderIntegrationsIndexMarkdown(): string {
   return [
     "# Works with the traces you already have",
     "",
-    "Every tool rightmodeler works with: the trace formats it reads, the infrastructure it replays through, and what is coming next.",
+    "Every tool rightmodeler works with: the trace formats it reads, where candidates run, what grades them, where changes ship, code context, and what is coming next.",
     "",
     ...getAllIntegrations().map((integration) =>
       link(

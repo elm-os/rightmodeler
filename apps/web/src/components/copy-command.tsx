@@ -4,7 +4,7 @@
 // monochrome). Click copies to the clipboard and the copy glyph morphs to a check. Mono 13px on
 // a warm-sand surface with an ash-border hairline; press-scale for physical feedback.
 
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { CheckIcon, CopyIcon } from "@/components/icons";
 
 export function CopyCommand({
@@ -38,8 +38,17 @@ export function CopyCommand({
       <span aria-hidden className="select-none font-mono text-[13px] text-fog">
         $
       </span>
-      <code className="font-mono text-[13px] text-midnight-ink wrap-anywhere">
-        {command}
+      {/* Each token is an inline-block, so lines break only at the spaces between them and a flag
+          or URL never splits at its own hyphens; a token wider than the line still wraps inside. */}
+      <code className="font-mono text-[13px] text-midnight-ink">
+        {command.split(" ").map((token, i) => (
+          <Fragment key={i}>
+            {i > 0 && " "}
+            <span className="inline-block max-w-full wrap-anywhere">
+              {token}
+            </span>
+          </Fragment>
+        ))}
       </code>
       <span className="ml-1 text-driftwood transition-colors duration-150 group-hover:text-midnight-ink">
         {copied ? (
