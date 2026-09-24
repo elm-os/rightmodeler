@@ -7,3 +7,5 @@ node_modules
 pnpm-lock.yaml
 harness/fixtures/diff-cases/src/misformatted.ts
 harness/packages/rightmodeler/dist-bundle
+harness/apps/agent/.eve
+harness/apps/agent/.output
