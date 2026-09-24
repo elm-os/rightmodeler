@@ -83,7 +83,8 @@ fi
 "${RIGHTMODELER[@]}" --help
 "${RIGHTMODELER[@]}" init --help
 "${RIGHTMODELER[@]}" docs
-# Replace <name> with getting-started, commands, exit-codes, evaluators, or modeb.
+# Replace <name> with a name from the list above, for example getting-started,
+# commands, exit-codes, evaluators, modeb, gateways, github, or github-actions.
 "${RIGHTMODELER[@]}" docs <name>
 ```
 
@@ -245,6 +246,15 @@ abstentions; present them instead of saying that nothing happened.
 Only proceed when the complete result has an effective recommendation. `apply`
 runs the machine gates and opens a draft pull request. It does not merge.
 
+`GITHUB_TOKEN_ENV` below names the environment variable that holds the GitHub token;
+never pass the token itself. A GitHub App installation token or a classic token with the
+`repo` scope supports `apply` and `watch` fully. A fine-grained personal access token
+supports `apply`; `watch` then cannot read check runs, uses commit statuses only, and
+prints a `github_checks_unavailable` warning, which is expected, not a failure. In GitHub
+Actions, the job's `GITHUB_TOKEN` also works when the job grants the permissions it needs.
+`"${RIGHTMODELER[@]}" docs github` lists those permissions, the other token details, and
+the GitHub App permissions.
+
 First run the machine-gated dry run:
 
 ```bash
@@ -264,9 +274,11 @@ GITHUB_TOKEN_ENV=GITHUB_TOKEN
 ```
 
 Apply exit codes are command-specific: 0 means the dry run is clean or changes were
-applied, 1 means a machine gate refused the change, and 10 or greater means a runtime
-failure. If the dry run exits 0, run the same command without `--dry-run` to open the
-draft pull request and request review from the resolved owners.
+applied, 1 means a machine gate refused the change, 2 means the store has no completed
+run, and 10 or greater means a runtime failure. On exit 2, read the JSON error on stderr,
+such as `stage_not_completed`, and handle it as in section 7. If the dry run exits 0,
+run the same command without `--dry-run` to open the draft pull request and request
+review from the resolved owners.
 
 After the command returns the pull request number, watch one reconciliation pass:
 
@@ -283,7 +295,14 @@ PR_NUMBER=123
 ```
 
 Watch exits 0 when no action is needed, 1 when review or continuous-integration
-actions were taken, 2 when another watcher holds the lock, and 10 or greater on a
-runtime failure. Repeat watch on repository events or the project's schedule. The
-resolved owners review the draft pull request and decide whether to merge. The CLI
+actions were taken, and 10 or greater on a runtime failure. Exit 2 has two meanings.
+Either another watcher holds the lock, and stdout ends with a `result` event whose
+result has `"status":"lock_held"`, so try again later; or the store has no completed
+run, and stderr has a JSON error such as `stage_not_completed`, so handle it as in
+section 7. Report any `{"event":"warning"}` line to the user with its `code` and
+`message`, and continue. Repeat watch on repository events or the project's schedule.
+The resolved owners review the draft pull request and decide whether to merge. The CLI
 must never merge it.
+
+To run this loop in GitHub Actions, print the tested workflow with
+`"${RIGHTMODELER[@]}" docs github-actions` and follow its Setup section.
