@@ -256,6 +256,9 @@ function assessmentMetadata(assessment: Assessment): JsonValue {
     evaluatorId: assessment.evaluatorId,
     passed: assessment.passed,
     rubricVersion: assessment.rubricVersion,
+    ...(assessment.evaluatorIdentity === undefined
+      ? {}
+      : { evaluatorIdentity: assessment.evaluatorIdentity }),
     artifactRef: assessment.artifactRef,
   };
 }

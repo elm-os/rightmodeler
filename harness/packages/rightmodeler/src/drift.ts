@@ -34,6 +34,7 @@ import {
   adaptWithReport,
   buildCorpus,
   detectFormat,
+  excludedStepsWarning,
   parseTraceRecords,
   refreshCorpusVersionId,
   scrubRuns,
@@ -205,6 +206,7 @@ export interface RunDriftOptions {
   readonly repo: string;
   readonly store?: string;
   readonly traces: string;
+  readonly warning?: (code: string, message: string) => void;
 }
 
 export interface ApproveDriftProposalOptions {
@@ -269,7 +271,12 @@ export async function runDrift(
   const traceText = await readFile(resolve(options.traces), "utf8");
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
-  const runs = strictRuns(adapter.name, adaptWithReport(adapter, records));
+  const result = adaptWithReport(adapter, records);
+  const runs = strictRuns(adapter.name, result);
+  const excluded = excludedStepsWarning(result);
+  if (excluded !== undefined) {
+    options.warning?.("trace_steps_excluded", excluded);
+  }
   const candidateCorpus = buildCorpus(scrubRuns(runs).runs, {
     seed: parent.corpus.seed,
   });

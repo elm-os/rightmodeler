@@ -42,6 +42,7 @@ describe("scan", () => {
       "cfg-litellm-yaml",
       "js-ai-sdk-generate-object",
       "js-ai-sdk-generate-text",
+      "js-ai-sdk-stream-text",
       "py-anthropic-messages",
       "py-openai-chat-completions",
     ]);
@@ -59,6 +60,7 @@ describe("scan", () => {
       "cfg-litellm-yaml": [],
       "js-ai-sdk-generate-object": ["structured_output"],
       "js-ai-sdk-generate-text": [],
+      "js-ai-sdk-stream-text": [],
       "py-anthropic-messages": [],
       "py-openai-chat-completions": ["tools"],
     });
@@ -90,7 +92,7 @@ describe("scan", () => {
       createMatcherRegistry()
         .getBySlug("js-ai-sdk-generate-text")!
         .match(
-          'export async function summarize() { return generateText({ prompt, model: "acme/large-1", system: instructions }) }',
+          'import { generateText } from "ai";\nexport async function summarize() { return generateText({ prompt, model: "acme/large-1", system: instructions }) }',
           "src/summarize.ts",
         )[0],
     ).toMatchObject({
@@ -164,6 +166,7 @@ describe("scan", () => {
       "vendor/sdk/index.js",
       "venv/lib/python3.12/site-packages/litellm/main.py",
       ".rightmodeler/config/models.json",
+      "graphify-out/viewer.js",
     ];
     await Promise.all(
       paths.map((path) => mkdir(join(root, path, ".."), { recursive: true })),
@@ -171,15 +174,15 @@ describe("scan", () => {
     await Promise.all([
       writeFile(
         join(root, "src/app.ts"),
-        'generateText({ model: "acme/large-1", prompt })',
+        'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt })',
       ),
       writeFile(
         join(root, ".next/server/chunks/app.js"),
-        'generateText({ model: "acme/large-1", prompt })',
+        'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt })',
       ),
       writeFile(
         join(root, "vendor/sdk/index.js"),
-        'generateText({ model: "acme/large-1", prompt })',
+        'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt })',
       ),
       writeFile(
         join(root, "venv/lib/python3.12/site-packages/litellm/main.py"),
@@ -188,6 +191,10 @@ describe("scan", () => {
       writeFile(
         join(root, ".rightmodeler/config/models.json"),
         '{"ai":{"primary":{"model":"acme/large-1"}}}',
+      ),
+      writeFile(
+        join(root, "graphify-out/viewer.js"),
+        'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt })',
       ),
     ]);
 
@@ -205,11 +212,11 @@ describe("scan", () => {
     await Promise.all([
       writeFile(
         join(root, "src/a.ts"),
-        'explode();\ngenerateText({ model: "acme/large-1", prompt })',
+        'import { generateText } from "ai";\nexplode();\ngenerateText({ model: "acme/large-1", prompt })',
       ),
       writeFile(
         join(root, "src/b.ts"),
-        'generateText({ model: "acme/large-1", prompt })',
+        'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt })',
       ),
     ]);
     const plugin: Matcher = {
@@ -295,5 +302,83 @@ describe("scan", () => {
     scan(root, createMatcherRegistry([plugin]), "p");
 
     expect(suppliedMask).toBe("                \nconst x = pluginCall();\n");
+  });
+
+  async function scanSource(source: string) {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-scanner-ai-sdk-"));
+    temporaryDirectories.push(root);
+    await mkdir(join(root, "src"));
+    await writeFile(join(root, "src/a.ts"), source);
+    return scan(root, createMatcherRegistry(), "p");
+  }
+
+  it("records the literal telemetry functionId as the trace key", async () => {
+    const records = await scanSource(
+      [
+        'import { generateText } from "ai";',
+        "export async function summarize(prompt) {",
+        '  return generateText({ model: "acme/large-1", prompt, telemetry: { functionId: "summarize" } });',
+        "}",
+        "export async function triage(prompt) {",
+        "  return generateText({ model: \"acme/large-1\", prompt, experimental_telemetry: { metadata: { a: 1 }, functionId: 'triage' } });",
+        "}",
+      ].join("\n"),
+    );
+
+    expect(records.map(({ traceKey }) => traceKey)).toEqual([
+      "summarize",
+      "triage",
+    ]);
+  });
+
+  it("records no trace key for a variable or template functionId", async () => {
+    const records = await scanSource(
+      [
+        'import { generateText } from "ai";',
+        "export async function summarize(prompt, name) {",
+        '  return generateText({ model: "acme/large-1", prompt, telemetry: { functionId: name } });',
+        "}",
+        "export async function triage(prompt, kind) {",
+        '  return generateText({ model: "acme/large-1", prompt, telemetry: { functionId: `triage-${kind}` } });',
+        "}",
+      ].join("\n"),
+    );
+
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => "traceKey" in record)).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it("marks a structured output request as structured", async () => {
+    const records = await scanSource(
+      [
+        'import { generateText, Output } from "ai";',
+        "export async function extract(prompt) {",
+        '  return generateText({ model: "acme/large-1", prompt, output: Output.object({ schema }) });',
+        "}",
+        "export async function answer(prompt) {",
+        '  return generateText({ model: "acme/large-1", prompt, output: Output.text() });',
+        "}",
+      ].join("\n"),
+    );
+
+    expect(
+      records.map(({ capabilityRequirements }) => capabilityRequirements),
+    ).toEqual([["structured_output"], []]);
+  });
+
+  it("finds streamObject calls", async () => {
+    const records = await scanSource(
+      'import { streamObject } from "ai";\nstreamObject({ model: "acme/large-1", schema, prompt });\n',
+    );
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      callSite: { matcherSlug: "js-ai-sdk-stream-object", line: 2 },
+      currentModel: "acme/large-1",
+      capabilityRequirements: ["structured_output"],
+    });
   });
 });

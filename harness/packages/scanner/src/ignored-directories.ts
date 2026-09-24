@@ -11,6 +11,7 @@ export const IGNORED_DIRECTORIES: ReadonlySet<string> = new Set([
   "build",
   "coverage",
   "dist",
+  "graphify-out",
   "node_modules",
   "out",
   "site-packages",

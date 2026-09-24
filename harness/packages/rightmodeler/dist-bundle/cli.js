@@ -3844,11 +3844,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         if (!names[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants);
+          this.rhs = optimizeExpr(this.rhs, names, constants2);
         return this;
       }
       get names() {
@@ -3865,10 +3865,10 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants);
+        this.rhs = optimizeExpr(this.rhs, names, constants2);
         return this;
       }
       get names() {
@@ -3929,8 +3929,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants) {
-        this.code = optimizeExpr(this.code, names, constants);
+      optimizeNames(names, constants2) {
+        this.code = optimizeExpr(this.code, names, constants2);
         return this;
       }
       get names() {
@@ -3959,12 +3959,12 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         const { nodes } = this;
         let i = nodes.length;
         while (i--) {
           const n = nodes[i];
-          if (n.optimizeNames(names, constants))
+          if (n.optimizeNames(names, constants2))
             continue;
           subtractNames(names, n.names);
           nodes.splice(i, 1);
@@ -4017,12 +4017,12 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         var _a3;
-        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants);
-        if (!(super.optimizeNames(names, constants) || this.else))
+        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants2);
+        if (!(super.optimizeNames(names, constants2) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants);
+        this.condition = optimizeExpr(this.condition, names, constants2);
         return this;
       }
       get names() {
@@ -4045,10 +4045,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names, constants2) {
+        if (!super.optimizeNames(names, constants2))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants);
+        this.iteration = optimizeExpr(this.iteration, names, constants2);
         return this;
       }
       get names() {
@@ -4084,10 +4084,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names, constants2) {
+        if (!super.optimizeNames(names, constants2))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants);
+        this.iterable = optimizeExpr(this.iterable, names, constants2);
         return this;
       }
       get names() {
@@ -4129,11 +4129,11 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names, constants2) {
         var _a3, _b;
-        super.optimizeNames(names, constants);
-        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants);
+        super.optimizeNames(names, constants2);
+        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants2);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants2);
         return this;
       }
       get names() {
@@ -4434,7 +4434,7 @@ var require_codegen = __commonJS({
     function addExprNames(names, from) {
       return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
     }
-    function optimizeExpr(expr, names, constants) {
+    function optimizeExpr(expr, names, constants2) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -4449,14 +4449,14 @@ var require_codegen = __commonJS({
         return items;
       }, []));
       function replaceName(n) {
-        const c = constants[n.str];
+        const c = constants2[n.str];
         if (c === void 0 || names[n.str] !== 1)
           return n;
         delete names[n.str];
         return c;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants[c.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants2[c.str] !== void 0);
       }
     }
     function subtractNames(names, from) {
@@ -6103,18 +6103,18 @@ var require_validate = __commonJS({
         const { schemaCode } = this;
         this.fail((0, codegen_1._)`${schemaCode} !== undefined && (${(0, codegen_1.or)(this.invalid$data(), condition)})`);
       }
-      error(append, errorParams, errorPaths) {
+      error(append3, errorParams, errorPaths) {
         if (errorParams) {
           this.setParams(errorParams);
-          this._error(append, errorPaths);
+          this._error(append3, errorPaths);
           this.setParams({});
           return;
         }
-        this._error(append, errorPaths);
+        this._error(append3, errorPaths);
       }
-      _error(append, errorPaths) {
+      _error(append3, errorPaths) {
         ;
-        (append ? errors_1.reportExtraError : errors_1.reportError)(this, this.def.error, errorPaths);
+        (append3 ? errors_1.reportExtraError : errors_1.reportError)(this, this.def.error, errorPaths);
       }
       $dataError() {
         (0, errors_1.reportError)(this, this.def.$dataError || errors_1.keyword$DataError);
@@ -6418,7 +6418,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve13.call(this, root, ref);
+      let _sch = resolve14.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -6445,7 +6445,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve13(root, ref) {
+    function resolve14(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -7076,55 +7076,55 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve13(baseURI, relativeURI, options) {
+    function resolve14(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative9, options, skipNormalization) {
+    function resolveComponent(base, relative11, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse3(serialize(base, options), options);
-        relative9 = parse3(serialize(relative9, options), options);
+        relative11 = parse3(serialize(relative11, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative9.scheme) {
-        target.scheme = relative9.scheme;
-        target.userinfo = relative9.userinfo;
-        target.host = relative9.host;
-        target.port = relative9.port;
-        target.path = removeDotSegments(relative9.path || "");
-        target.query = relative9.query;
+      if (!options.tolerant && relative11.scheme) {
+        target.scheme = relative11.scheme;
+        target.userinfo = relative11.userinfo;
+        target.host = relative11.host;
+        target.port = relative11.port;
+        target.path = removeDotSegments(relative11.path || "");
+        target.query = relative11.query;
       } else {
-        if (relative9.userinfo !== void 0 || relative9.host !== void 0 || relative9.port !== void 0) {
-          target.userinfo = relative9.userinfo;
-          target.host = relative9.host;
-          target.port = relative9.port;
-          target.path = removeDotSegments(relative9.path || "");
-          target.query = relative9.query;
+        if (relative11.userinfo !== void 0 || relative11.host !== void 0 || relative11.port !== void 0) {
+          target.userinfo = relative11.userinfo;
+          target.host = relative11.host;
+          target.port = relative11.port;
+          target.path = removeDotSegments(relative11.path || "");
+          target.query = relative11.query;
         } else {
-          if (!relative9.path) {
+          if (!relative11.path) {
             target.path = base.path;
-            if (relative9.query !== void 0) {
-              target.query = relative9.query;
+            if (relative11.query !== void 0) {
+              target.query = relative11.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative9.path[0] === "/") {
-              target.path = removeDotSegments(relative9.path);
+            if (relative11.path[0] === "/") {
+              target.path = removeDotSegments(relative11.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative9.path;
+                target.path = "/" + relative11.path;
               } else if (!base.path) {
-                target.path = relative9.path;
+                target.path = relative11.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative9.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative11.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative9.query;
+            target.query = relative11.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -7132,7 +7132,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative9.fragment;
+      target.fragment = relative11.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -7340,7 +7340,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve13,
+      resolve: resolve14,
       resolveComponent,
       equal,
       serialize,
@@ -7746,10 +7746,10 @@ var require_core = __commonJS({
         return this;
       }
       // Add format
-      addFormat(name, format9) {
-        if (typeof format9 == "string")
-          format9 = new RegExp(format9);
-        this.formats[name] = format9;
+      addFormat(name, format10) {
+        if (typeof format10 == "string")
+          format10 = new RegExp(format10);
+        this.formats[name] = format10;
         return this;
       }
       errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
@@ -7867,9 +7867,9 @@ var require_core = __commonJS({
     }
     function addInitialFormats() {
       for (const name in this.opts.formats) {
-        const format9 = this.opts.formats[name];
-        if (format9)
-          this.addFormat(name, format9);
+        const format10 = this.opts.formats[name];
+        if (format10)
+          this.addFormat(name, format10);
       }
     }
     function addInitialKeywords(defs) {
@@ -9871,18 +9871,18 @@ var require_format = __commonJS({
           });
           const fDef = gen.const("fDef", (0, codegen_1._)`${fmts}[${schemaCode}]`);
           const fType = gen.let("fType");
-          const format9 = gen.let("format");
-          gen.if((0, codegen_1._)`typeof ${fDef} == "object" && !(${fDef} instanceof RegExp)`, () => gen.assign(fType, (0, codegen_1._)`${fDef}.type || "string"`).assign(format9, (0, codegen_1._)`${fDef}.validate`), () => gen.assign(fType, (0, codegen_1._)`"string"`).assign(format9, fDef));
+          const format10 = gen.let("format");
+          gen.if((0, codegen_1._)`typeof ${fDef} == "object" && !(${fDef} instanceof RegExp)`, () => gen.assign(fType, (0, codegen_1._)`${fDef}.type || "string"`).assign(format10, (0, codegen_1._)`${fDef}.validate`), () => gen.assign(fType, (0, codegen_1._)`"string"`).assign(format10, fDef));
           cxt.fail$data((0, codegen_1.or)(unknownFmt(), invalidFmt()));
           function unknownFmt() {
             if (opts.strictSchema === false)
               return codegen_1.nil;
-            return (0, codegen_1._)`${schemaCode} && !${format9}`;
+            return (0, codegen_1._)`${schemaCode} && !${format10}`;
           }
           function invalidFmt() {
-            const callFormat = schemaEnv.$async ? (0, codegen_1._)`(${fDef}.async ? await ${format9}(${data}) : ${format9}(${data}))` : (0, codegen_1._)`${format9}(${data})`;
-            const validData = (0, codegen_1._)`(typeof ${format9} == "function" ? ${callFormat} : ${format9}.test(${data}))`;
-            return (0, codegen_1._)`${format9} && ${format9} !== true && ${fType} === ${ruleType} && !${validData}`;
+            const callFormat = schemaEnv.$async ? (0, codegen_1._)`(${fDef}.async ? await ${format10}(${data}) : ${format10}(${data}))` : (0, codegen_1._)`${format10}(${data})`;
+            const validData = (0, codegen_1._)`(typeof ${format10} == "function" ? ${callFormat} : ${format10}.test(${data}))`;
+            return (0, codegen_1._)`${format10} && ${format10} !== true && ${fType} === ${ruleType} && !${validData}`;
           }
         }
         function validateFormat() {
@@ -9893,7 +9893,7 @@ var require_format = __commonJS({
           }
           if (formatDef === true)
             return;
-          const [fmtType, format9, fmtRef] = getFormat(formatDef);
+          const [fmtType, format10, fmtRef] = getFormat(formatDef);
           if (fmtType === ruleType)
             cxt.pass(validCondition());
           function unknownFormat() {
@@ -9920,7 +9920,7 @@ var require_format = __commonJS({
                 throw new Error("async format in sync schema");
               return (0, codegen_1._)`await ${fmtRef}(${data})`;
             }
-            return typeof format9 == "function" ? (0, codegen_1._)`${fmtRef}(${data})` : (0, codegen_1._)`${fmtRef}.test(${data})`;
+            return typeof format10 == "function" ? (0, codegen_1._)`${fmtRef}(${data})` : (0, codegen_1._)`${fmtRef}.test(${data})`;
           }
         }
       }
@@ -9935,8 +9935,8 @@ var require_format2 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var format_1 = require_format();
-    var format9 = [format_1.default];
-    exports.default = format9;
+    var format10 = [format_1.default];
+    exports.default = format10;
   }
 });
 
@@ -10485,7 +10485,7 @@ var require_json_schema_2020_12 = __commonJS({
     var unevaluated = require_unevaluated2();
     var content = require_content();
     var core = require_core3();
-    var format9 = require_format_annotation();
+    var format10 = require_format_annotation();
     var metadata = require_meta_data();
     var validation = require_validation2();
     var META_SUPPORT_DATA = ["/properties"];
@@ -10497,7 +10497,7 @@ var require_json_schema_2020_12 = __commonJS({
         unevaluated,
         content,
         core,
-        with$data(this, format9),
+        with$data(this, format10),
         metadata,
         with$data(this, validation)
       ].forEach((sch) => this.addMetaSchema(sch, void 0, false));
@@ -10591,7 +10591,7 @@ var require__ = __commonJS({
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { resolve as resolve12 } from "node:path";
+import { basename as basename5, resolve as resolve13 } from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
@@ -10614,11 +10614,11 @@ var {
 
 // src/pipeline.ts
 import { execFile as execFile7 } from "node:child_process";
-import { createHash as createHash11 } from "node:crypto";
+import { createHash as createHash12 } from "node:crypto";
 import { readFileSync as readFileSync6 } from "node:fs";
-import { mkdir as mkdir5, readFile as readFile10, readdir as readdir4, stat as stat2, writeFile as writeFile6 } from "node:fs/promises";
+import { mkdir as mkdir5, readFile as readFile11, readdir as readdir4, stat as stat3, writeFile as writeFile6 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
-import { dirname as dirname6, join as join15, relative as relative6, resolve as resolve7, sep as sep4 } from "node:path";
+import { dirname as dirname7, join as join15, relative as relative8, resolve as resolve8, sep as sep5 } from "node:path";
 import { promisify as promisify6 } from "node:util";
 
 // ../core/dist/catalog.js
@@ -22020,13 +22020,13 @@ function _stringbool(Classes, _params) {
   return codec2;
 }
 // @__NO_SIDE_EFFECTS__
-function _stringFormat(Class2, format9, fnOrRegex, _params = {}) {
+function _stringFormat(Class2, format10, fnOrRegex, _params = {}) {
   const params = normalizeParams(_params);
   const def = {
     ...normalizeParams(_params),
     check: "string_format",
     type: "string",
-    format: format9,
+    format: format10,
     fn: typeof fnOrRegex === "function" ? fnOrRegex : (val) => fnOrRegex.test(val),
     ...params
   };
@@ -22408,16 +22408,16 @@ var formatMap = {
 var stringProcessor = (schema, ctx, _json, _params) => {
   const json3 = _json;
   json3.type = "string";
-  const { minimum, maximum, format: format9, patterns, contentEncoding } = schema._zod.bag;
+  const { minimum, maximum, format: format10, patterns, contentEncoding } = schema._zod.bag;
   if (typeof minimum === "number")
     json3.minLength = minimum;
   if (typeof maximum === "number")
     json3.maxLength = maximum;
-  if (format9) {
-    json3.format = formatMap[format9] ?? format9;
+  if (format10) {
+    json3.format = formatMap[format10] ?? format10;
     if (json3.format === "")
       delete json3.format;
-    if (format9 === "time") {
+    if (format10 === "time") {
       delete json3.format;
     }
   }
@@ -22439,8 +22439,8 @@ var stringProcessor = (schema, ctx, _json, _params) => {
 };
 var numberProcessor = (schema, ctx, _json, _params) => {
   const json3 = _json;
-  const { minimum, maximum, format: format9, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
-  if (typeof format9 === "string" && format9.includes("int"))
+  const { minimum, maximum, format: format10, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
+  if (typeof format10 === "string" && format10.includes("int"))
     json3.type = "integer";
   else
     json3.type = "number";
@@ -23739,8 +23739,8 @@ var ZodCustomStringFormat = /* @__PURE__ */ $constructor("ZodCustomStringFormat"
   $ZodCustomStringFormat.init(inst, def);
   ZodStringFormat.init(inst, def);
 });
-function stringFormat(format9, fnOrRegex, _params = {}) {
-  return _stringFormat(ZodCustomStringFormat, format9, fnOrRegex, _params);
+function stringFormat(format10, fnOrRegex, _params = {}) {
+  return _stringFormat(ZodCustomStringFormat, format10, fnOrRegex, _params);
 }
 function hostname2(_params) {
   return _stringFormat(ZodCustomStringFormat, "hostname", regexes_exports.hostname, _params);
@@ -23750,11 +23750,11 @@ function hex2(_params) {
 }
 function hash(alg, params) {
   const enc = params?.enc ?? "hex";
-  const format9 = `${alg}_${enc}`;
-  const regex = regexes_exports[format9];
+  const format10 = `${alg}_${enc}`;
+  const regex = regexes_exports[format10];
   if (!regex)
-    throw new Error(`Unrecognized hash format: ${format9}`);
-  return _stringFormat(ZodCustomStringFormat, format9, regex, params);
+    throw new Error(`Unrecognized hash format: ${format10}`);
+  return _stringFormat(ZodCustomStringFormat, format10, regex, params);
 }
 var ZodNumber = /* @__PURE__ */ $constructor("ZodNumber", (inst, def) => {
   $ZodNumber.init(inst, def);
@@ -24826,52 +24826,52 @@ function convertBaseSchema(schema, ctx) {
     case "string": {
       let stringSchema = z.string();
       if (schema.format) {
-        const format9 = schema.format;
-        if (format9 === "email") {
+        const format10 = schema.format;
+        if (format10 === "email") {
           stringSchema = stringSchema.check(z.email());
-        } else if (format9 === "uri" || format9 === "uri-reference") {
+        } else if (format10 === "uri" || format10 === "uri-reference") {
           stringSchema = stringSchema.check(z.url());
-        } else if (format9 === "uuid" || format9 === "guid") {
+        } else if (format10 === "uuid" || format10 === "guid") {
           stringSchema = stringSchema.check(z.uuid());
-        } else if (format9 === "date-time") {
+        } else if (format10 === "date-time") {
           stringSchema = stringSchema.check(z.iso.datetime());
-        } else if (format9 === "date") {
+        } else if (format10 === "date") {
           stringSchema = stringSchema.check(z.iso.date());
-        } else if (format9 === "time") {
+        } else if (format10 === "time") {
           stringSchema = stringSchema.check(z.iso.time());
-        } else if (format9 === "duration") {
+        } else if (format10 === "duration") {
           stringSchema = stringSchema.check(z.iso.duration());
-        } else if (format9 === "ipv4") {
+        } else if (format10 === "ipv4") {
           stringSchema = stringSchema.check(z.ipv4());
-        } else if (format9 === "ipv6") {
+        } else if (format10 === "ipv6") {
           stringSchema = stringSchema.check(z.ipv6());
-        } else if (format9 === "mac") {
+        } else if (format10 === "mac") {
           stringSchema = stringSchema.check(z.mac());
-        } else if (format9 === "cidr") {
+        } else if (format10 === "cidr") {
           stringSchema = stringSchema.check(z.cidrv4());
-        } else if (format9 === "cidr-v6") {
+        } else if (format10 === "cidr-v6") {
           stringSchema = stringSchema.check(z.cidrv6());
-        } else if (format9 === "base64") {
+        } else if (format10 === "base64") {
           stringSchema = stringSchema.check(z.base64());
-        } else if (format9 === "base64url") {
+        } else if (format10 === "base64url") {
           stringSchema = stringSchema.check(z.base64url());
-        } else if (format9 === "e164") {
+        } else if (format10 === "e164") {
           stringSchema = stringSchema.check(z.e164());
-        } else if (format9 === "jwt") {
+        } else if (format10 === "jwt") {
           stringSchema = stringSchema.check(z.jwt());
-        } else if (format9 === "emoji") {
+        } else if (format10 === "emoji") {
           stringSchema = stringSchema.check(z.emoji());
-        } else if (format9 === "nanoid") {
+        } else if (format10 === "nanoid") {
           stringSchema = stringSchema.check(z.nanoid());
-        } else if (format9 === "cuid") {
+        } else if (format10 === "cuid") {
           stringSchema = stringSchema.check(z.cuid());
-        } else if (format9 === "cuid2") {
+        } else if (format10 === "cuid2") {
           stringSchema = stringSchema.check(z.cuid2());
-        } else if (format9 === "ulid") {
+        } else if (format10 === "ulid") {
           stringSchema = stringSchema.check(z.ulid());
-        } else if (format9 === "xid") {
+        } else if (format10 === "xid") {
           stringSchema = stringSchema.check(z.xid());
-        } else if (format9 === "ksuid") {
+        } else if (format10 === "ksuid") {
           stringSchema = stringSchema.check(z.ksuid());
         }
       }
@@ -25195,6 +25195,7 @@ var assessmentSchema = external_exports.strictObject({
   score: external_exports.number(),
   passed: external_exports.boolean(),
   rubricVersion: requiredStringSchema,
+  evaluatorIdentity: requiredStringSchema.optional(),
   artifactRef: jsonValueSchema
 }).readonly();
 var spendEventSchema = external_exports.strictObject({
@@ -25471,14 +25472,14 @@ function firstIssueMessage(error51) {
   if (issue3 === void 0) {
     return "Invalid fact";
   }
-  const location = issue3.path.length > 0 ? issue3.path.join(".") : "(root)";
-  return `${location}: ${issue3.message}`;
+  const location2 = issue3.path.length > 0 ? issue3.path.join(".") : "(root)";
+  return `${location2}: ${issue3.message}`;
 }
-function parseFactRow(row) {
-  let candidate = row;
-  if (typeof row === "string") {
+function parseFactRow(row2) {
+  let candidate = row2;
+  if (typeof row2 === "string") {
     try {
-      candidate = JSON.parse(row);
+      candidate = JSON.parse(row2);
     } catch (error51) {
       return {
         success: false,
@@ -25495,8 +25496,8 @@ function parseFactRow(row) {
 function parseFacts(input) {
   const facts = [];
   let droppedRows = 0;
-  for (const row of rowsFrom(input)) {
-    const parsed2 = parseFactRow(row);
+  for (const row2 of rowsFrom(input)) {
+    const parsed2 = parseFactRow(row2);
     if (parsed2.success) {
       facts.push(parsed2.fact);
     } else {
@@ -25672,6 +25673,7 @@ var stepRecordSchema = external_exports.strictObject({
   capabilityRequirements: external_exports.array(external_exports.string()),
   evaluatorLadder: external_exports.array(external_exports.string()),
   currentModel: external_exports.string().min(1).nullable(),
+  traceKey: external_exports.string().min(1).optional(),
   observedCostUsd: external_exports.number().nonnegative(),
   downstreamStepIds: external_exports.array(external_exports.string().min(1)),
   candidates: external_exports.array(external_exports.json()),
@@ -26133,6 +26135,7 @@ function aggregate(facts, { gatePolicyVersion, qualityFloor, availabilityFloor }
 function aggregateGroup(facts, gatePolicyVersion, qualityFloor, availabilityFloor, cascadeFindings) {
   const first = facts[0];
   assertConsistentGroup(facts, first);
+  const distinctStepFloor = first.traceBoundCallSites === void 0 ? MIN_DISTINCT_STEPS : Math.min(MIN_DISTINCT_STEPS, first.traceBoundCallSites);
   const included = facts.filter((fact) => !fact.requiredAbstention && fact.execution.attribution === "ok" && fact.assessment !== void 0 && evidenceExclusionReason(fact) === void 0);
   const excludedExecutions = facts.filter((fact) => evidenceExclusionReason(fact) !== void 0).length;
   const excludedFraction = excludedExecutions / facts.length;
@@ -26160,6 +26163,7 @@ function aggregateGroup(facts, gatePolicyVersion, qualityFloor, availabilityFloo
   const satisfiedRequiredAbstentions = facts.filter((fact) => fact.requiredAbstention && fact.execution.attribution === "ok" && fact.execution.terminalOutcome === "abstain").length;
   const abstainReason = findAbstainReason({
     evaluatorKinds,
+    distinctStepFloor,
     availability,
     availabilityFloor,
     requiresDeterministicEvidence: facts.some((fact) => fact.requiresDeterministicEvidence),
@@ -26295,8 +26299,8 @@ function findAbstainReason(input) {
     return abstention("insufficient_review_trials", reviewTrials, MIN_REVIEW_TRIALS);
   }
   const distinctSteps = Math.min(...input.evaluatorKinds.map((kind) => kind.nDistinctSteps));
-  if (distinctSteps < MIN_DISTINCT_STEPS) {
-    return abstention("insufficient_distinct_steps", distinctSteps, MIN_DISTINCT_STEPS);
+  if (distinctSteps < input.distinctStepFloor) {
+    return abstention("insufficient_distinct_steps", distinctSteps, input.distinctStepFloor);
   }
   const distinctTrajectories = Math.min(...input.evaluatorKinds.map((kind) => kind.nTrajectories));
   if (distinctTrajectories < MIN_DISTINCT_TRAJECTORIES) {
@@ -26432,6 +26436,9 @@ function validateFact(fact) {
   if (!Number.isFinite(fact.referenceCeilingMultiplier) || fact.referenceCeilingMultiplier < 0 || fact.referenceCeilingMultiplier > 1) {
     throw new RangeError("referenceCeilingMultiplier must be a finite number in [0, 1]");
   }
+  if (fact.traceBoundCallSites !== void 0 && (!Number.isSafeInteger(fact.traceBoundCallSites) || fact.traceBoundCallSites < 1)) {
+    throw new RangeError("traceBoundCallSites must be a positive safe integer");
+  }
   if (fact.assessmentAbsentReason !== void 0 && fact.assessmentAbsentReason.length === 0) {
     throw new TypeError("assessmentAbsentReason must not be empty");
   }
@@ -26479,7 +26486,7 @@ function assertConsistentGroup(facts, first) {
     throw new Error("expectedEvaluatorAssignments must be predeclared");
   }
   for (const fact of facts.slice(1)) {
-    if (fact.familyId !== first.familyId || fact.candidateFamily !== first.candidateFamily || fact.candidateCostUsd !== first.candidateCostUsd || fact.referenceCeilingMultiplier !== first.referenceCeilingMultiplier || !sameStrings(fact.expectedEvaluatorAssignments.map((assignment) => assignmentKey(assignment.caseId, assignment.stratumId, assignment.evaluatorKind)).sort(compareText), first.expectedEvaluatorAssignments.map((assignment) => assignmentKey(assignment.caseId, assignment.stratumId, assignment.evaluatorKind)).sort(compareText))) {
+    if (fact.familyId !== first.familyId || fact.candidateFamily !== first.candidateFamily || fact.candidateCostUsd !== first.candidateCostUsd || fact.referenceCeilingMultiplier !== first.referenceCeilingMultiplier || fact.traceBoundCallSites !== first.traceBoundCallSites || !sameStrings(fact.expectedEvaluatorAssignments.map((assignment) => assignmentKey(assignment.caseId, assignment.stratumId, assignment.evaluatorKind)).sort(compareText), first.expectedEvaluatorAssignments.map((assignment) => assignmentKey(assignment.caseId, assignment.stratumId, assignment.evaluatorKind)).sort(compareText))) {
       throw new Error(`inconsistent materialization for evidence question ${first.execution.evidenceQuestionId}`);
     }
   }
@@ -28006,7 +28013,7 @@ function createDockerExecutor(options) {
           return;
         if (attempt === 3)
           break;
-        await new Promise((resolve13) => setTimeout(resolve13, 1e3));
+        await new Promise((resolve14) => setTimeout(resolve14, 1e3));
       }
     }
     await runDocker(["rm", "--force", handle]).catch(() => void 0);
@@ -28716,10 +28723,10 @@ var AdaptiveLimiter = class {
       this.active += 1;
       return Promise.resolve(this.sequence++);
     }
-    return new Promise((resolve13) => {
+    return new Promise((resolve14) => {
       this.waiters.push(() => {
         this.active += 1;
-        resolve13(this.sequence++);
+        resolve14(this.sequence++);
       });
     });
   }
@@ -28797,7 +28804,7 @@ function retryDelay(response, attempt) {
   return backoffDelay(attempt);
 }
 function sleep(milliseconds) {
-  return new Promise((resolve13) => setTimeout(resolve13, milliseconds));
+  return new Promise((resolve14) => setTimeout(resolve14, milliseconds));
 }
 function isRetryable(status) {
   return status === 408 || status === 409 || status === 429 || status >= 500;
@@ -29060,17 +29067,17 @@ function createProvider(options) {
         }
         const pricingByModel = /* @__PURE__ */ new Map();
         for (const [index, value] of envelope.data.entries()) {
-          const row = objectValue(value, `model info data[${index}]`);
-          if (typeof row.model_name !== "string" || row.model_name.length === 0) {
+          const row2 = objectValue(value, `model info data[${index}]`);
+          if (typeof row2.model_name !== "string" || row2.model_name.length === 0) {
             throw new Error(`model info data[${index}].model_name must be a non-empty string`);
           }
-          const modelInfo = objectValue(row.model_info, `model info data[${index}].model_info`);
+          const modelInfo = objectValue(row2.model_info, `model info data[${index}].model_info`);
           const input = price(modelInfo.input_cost_per_token, `model info data[${index}].model_info.input_cost_per_token`);
           const output = price(modelInfo.output_cost_per_token, `model info data[${index}].model_info.output_cost_per_token`);
           const rawMaxOutputTokens = modelInfo.max_output_tokens ?? modelInfo.max_tokens;
           const maxOutputTokens = rawMaxOutputTokens === void 0 || rawMaxOutputTokens === null || rawMaxOutputTokens === 0 ? void 0 : tokenCount(rawMaxOutputTokens, `model info data[${index}].model_info.max_output_tokens`);
           if (input !== null && output !== null) {
-            pricingByModel.set(row.model_name, {
+            pricingByModel.set(row2.model_name, {
               pricing: { input, output },
               ...maxOutputTokens === void 0 ? {} : { maxOutputTokens }
             });
@@ -29585,7 +29592,7 @@ async function replayModeA(input) {
           if (refunds.length > 0) {
             await Promise.race(refunds);
           } else {
-            await new Promise((resolve13) => setTimeout(resolve13, retryMs));
+            await new Promise((resolve14) => setTimeout(resolve14, retryMs));
             retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
           }
           continue;
@@ -29604,8 +29611,8 @@ async function replayModeA(input) {
       }
     }
     let resolveRefund = () => void 0;
-    const refundComplete = new Promise((resolve13) => {
-      resolveRefund = resolve13;
+    const refundComplete = new Promise((resolve14) => {
+      resolveRefund = resolve14;
     });
     activeRefunds.add(refundComplete);
     let heartbeatFailure;
@@ -29780,8 +29787,8 @@ function redactCredential(body, credential) {
   return Buffer.from(body.toString("utf8").split(credential).join("[REDACTED]"), "utf8");
 }
 function close(server) {
-  return new Promise((resolve13, reject) => {
-    server.close((error51) => error51 === void 0 ? resolve13() : reject(error51));
+  return new Promise((resolve14, reject) => {
+    server.close((error51) => error51 === void 0 ? resolve14() : reject(error51));
   });
 }
 async function startEgressListener(options) {
@@ -29849,9 +29856,9 @@ async function startEgressListener(options) {
     incoming.pipe(upstream);
   });
   const hostname5 = options.hostname ?? "0.0.0.0";
-  await new Promise((resolve13, reject) => {
+  await new Promise((resolve14, reject) => {
     server.once("error", reject);
-    server.listen(options.port ?? 0, hostname5, resolve13);
+    server.listen(options.port ?? 0, hostname5, resolve14);
   });
   const address = server.address();
   return {
@@ -30011,20 +30018,25 @@ function modeBCaseWorstCaseUsd(recordedCase, stepRecords, policy, catalog) {
     return total + recordedCase.contextTokens * LEASE_BYTES_PER_TOKEN * pricing.input + Math.max(recordedCase.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS) * pricing.output;
   }, 0);
 }
-function validatePricing(steps, policy, table) {
+function stepPricing(steps, policy, catalog) {
+  const table = pricingTable(catalog);
+  const reachable = {};
   for (const step of steps) {
     const model = expectedModel(step, policy);
-    if (table[model] === void 0) {
+    const pricing = table[model];
+    if (pricing === void 0) {
       throw new Error(`Pricing is unavailable for model: ${model}`);
     }
+    reachable[model] = pricing;
   }
+  return reachable;
 }
 function createWaiter() {
-  let resolve13 = () => void 0;
+  let resolve14 = () => void 0;
   const promise2 = new Promise((done) => {
-    resolve13 = done;
+    resolve14 = done;
   });
-  return { promise: promise2, resolve: resolve13 };
+  return { promise: promise2, resolve: resolve14 };
 }
 async function reserveCase(input, activeRefunds, worstCaseUsd) {
   for (; ; ) {
@@ -30129,7 +30141,7 @@ async function waitForExit(executor, handle, timeoutMs) {
     if (Date.now() >= deadline) {
       throw new Error(`Container ${handle} did not exit within ${timeoutMs + EXIT_GRACE_MS} ms`);
     }
-    await new Promise((resolve13) => setTimeout(resolve13, EXIT_POLL_INTERVAL_MS));
+    await new Promise((resolve14) => setTimeout(resolve14, EXIT_POLL_INTERVAL_MS));
   }
 }
 function textFiles(collected) {
@@ -30159,24 +30171,24 @@ function parseCheckpoints(source, expectedCaseId) {
   let rejectedRows = 0;
   const groups = /* @__PURE__ */ new Map();
   const pairs = /* @__PURE__ */ new Set();
-  for (const row of parsedLines(source)) {
-    if (!isRecord(row) || row.caseId !== expectedCaseId || !positiveInteger(row.seqPos) || row.seqPos !== sequence + 1 || !positiveInteger(row.attemptGroup) || row.logicalCallId !== null && !nonemptyString(row.logicalCallId)) {
+  for (const row2 of parsedLines(source)) {
+    if (!isRecord(row2) || row2.caseId !== expectedCaseId || !positiveInteger(row2.seqPos) || row2.seqPos !== sequence + 1 || !positiveInteger(row2.attemptGroup) || row2.logicalCallId !== null && !nonemptyString(row2.logicalCallId)) {
       rejectedRows += 1;
       continue;
     }
-    const logicalCallId = row.logicalCallId;
+    const logicalCallId = row2.logicalCallId;
     const priorGroup = logicalCallId === null ? void 0 : groups.get(logicalCallId);
     const expectedGroup = priorGroup ?? highestGroup + 1;
-    if (row.attemptGroup !== expectedGroup) {
+    if (row2.attemptGroup !== expectedGroup) {
       rejectedRows += 1;
       continue;
     }
-    sequence = row.seqPos;
-    highestGroup = Math.max(highestGroup, row.attemptGroup);
+    sequence = row2.seqPos;
+    highestGroup = Math.max(highestGroup, row2.attemptGroup);
     if (logicalCallId !== null && priorGroup === void 0) {
-      groups.set(logicalCallId, row.attemptGroup);
+      groups.set(logicalCallId, row2.attemptGroup);
     }
-    pairs.add(checkpointPair(logicalCallId, row.attemptGroup));
+    pairs.add(checkpointPair(logicalCallId, row2.attemptGroup));
   }
   return {
     count: sequence,
@@ -30197,82 +30209,82 @@ function validUsage(value) {
     totalTokens: value.totalTokens
   };
 }
-function validIdentity(row, input, cell, executionId) {
-  return row.runId === input.budget.runId && row.caseId === cell.recordedCase.caseId && row.executionId === executionId;
+function validIdentity(row2, input, cell, executionId) {
+  return row2.runId === input.budget.runId && row2.caseId === cell.recordedCase.caseId && row2.executionId === executionId;
 }
 function expectedStepModel(stepId, steps, policy) {
   const step = steps.get(stepId);
   return step === void 0 ? null : expectedModel(step, policy);
 }
-function parseAttempt(row, input, cell, executionId, steps, policy, table, checkpoints) {
-  const usage2 = validUsage(row.usage);
-  if (!validIdentity(row, input, cell, executionId) || !nonemptyString(row.stepId) || !nonemptyString(row.attemptId) || !nonemptyString(row.logicalCallId) || !positiveInteger(row.attemptGroup) || !checkpoints.pairs.has(checkpointPair(row.logicalCallId, row.attemptGroup)) || !nonemptyString(row.model) || row.model !== expectedStepModel(row.stepId, steps, policy) || !nonemptyString(row.streamOutcome) || !STREAM_OUTCOMES.has(row.streamOutcome) || usage2 === void 0 || !nonnegativeInteger(row.estimatedInputTokens) || !nonnegativeInteger(row.maxOutputTokens) || row.attribution !== "ok" || !nonnegativeNumber2(row.reservedUsd) || !nonnegativeNumber2(row.leaseChargeUsd) || !nonnegativeNumber2(row.costUsd) || typeof row.costIsEstimate !== "boolean" || row.costIsEstimate !== (usage2 === null) || row.responseSpoolPath !== null && typeof row.responseSpoolPath !== "string" || row.finishedWithoutSentinel !== void 0 && row.finishedWithoutSentinel !== true || !timestamp2(row.startedAt) || !timestamp2(row.endedAt) || Date.parse(row.endedAt) < Date.parse(row.startedAt)) {
+function parseAttempt(row2, input, cell, executionId, steps, policy, table, checkpoints) {
+  const usage2 = validUsage(row2.usage);
+  if (!validIdentity(row2, input, cell, executionId) || !nonemptyString(row2.stepId) || !nonemptyString(row2.attemptId) || !nonemptyString(row2.logicalCallId) || !positiveInteger(row2.attemptGroup) || !checkpoints.pairs.has(checkpointPair(row2.logicalCallId, row2.attemptGroup)) || !nonemptyString(row2.model) || row2.model !== expectedStepModel(row2.stepId, steps, policy) || !nonemptyString(row2.streamOutcome) || !STREAM_OUTCOMES.has(row2.streamOutcome) || usage2 === void 0 || !nonnegativeInteger(row2.estimatedInputTokens) || !nonnegativeInteger(row2.maxOutputTokens) || row2.attribution !== "ok" || !nonnegativeNumber2(row2.reservedUsd) || !nonnegativeNumber2(row2.leaseChargeUsd) || !nonnegativeNumber2(row2.costUsd) || typeof row2.costIsEstimate !== "boolean" || row2.costIsEstimate !== (usage2 === null) || row2.responseSpoolPath !== null && typeof row2.responseSpoolPath !== "string" || row2.finishedWithoutSentinel !== void 0 && row2.finishedWithoutSentinel !== true || !timestamp2(row2.startedAt) || !timestamp2(row2.endedAt) || Date.parse(row2.endedAt) < Date.parse(row2.startedAt)) {
     return null;
   }
-  const pricing = table[row.model];
+  const pricing = table[row2.model];
   if (pricing === void 0)
     return null;
-  const reservedUsd = row.estimatedInputTokens * pricing.input + row.maxOutputTokens * pricing.output;
+  const reservedUsd = row2.estimatedInputTokens * pricing.input + row2.maxOutputTokens * pricing.output;
   const costUsd = usage2 === null ? reservedUsd : usage2.inputTokens * pricing.input + usage2.outputTokens * pricing.output;
-  if (!closeEnough(row.reservedUsd, reservedUsd) || !closeEnough(row.leaseChargeUsd, costUsd) || !closeEnough(row.costUsd, costUsd)) {
+  if (!closeEnough(row2.reservedUsd, reservedUsd) || !closeEnough(row2.leaseChargeUsd, costUsd) || !closeEnough(row2.costUsd, costUsd)) {
     return null;
   }
-  const upstreamStatus = row.upstreamStatus;
-  const upstreamSource = row.upstreamSource;
+  const upstreamStatus = row2.upstreamStatus;
+  const upstreamSource = row2.upstreamSource;
   if (!(upstreamStatus === null && upstreamSource === null || positiveInteger(upstreamStatus) && upstreamStatus >= 100 && upstreamStatus <= 599 && (upstreamSource === "provider" || upstreamSource === "egress"))) {
     return null;
   }
-  if (upstreamSource === null && row.streamOutcome !== "truncated" && row.streamOutcome !== "client_cancelled") {
+  if (upstreamSource === null && row2.streamOutcome !== "truncated" && row2.streamOutcome !== "client_cancelled") {
     return null;
   }
   return {
-    attemptId: row.attemptId,
-    logicalCallId: row.logicalCallId,
+    attemptId: row2.attemptId,
+    logicalCallId: row2.logicalCallId,
     executionId,
-    stepId: row.stepId,
-    model: row.model,
-    streamOutcome: row.streamOutcome,
+    stepId: row2.stepId,
+    model: row2.model,
+    streamOutcome: row2.streamOutcome,
     usage: usage2,
-    estimatedInputTokens: row.estimatedInputTokens,
-    maxOutputTokens: row.maxOutputTokens,
-    attemptGroup: row.attemptGroup,
+    estimatedInputTokens: row2.estimatedInputTokens,
+    maxOutputTokens: row2.maxOutputTokens,
+    attemptGroup: row2.attemptGroup,
     upstreamStatus,
     upstreamSource,
     costUsd,
-    latencyMs: Date.parse(row.endedAt) - Date.parse(row.startedAt)
+    latencyMs: Date.parse(row2.endedAt) - Date.parse(row2.startedAt)
   };
 }
-function parseReservation(row, input, cell, executionId, steps, policy, table, checkpoints) {
-  if (!validIdentity(row, input, cell, executionId) || !nonemptyString(row.stepId) || !nonemptyString(row.attemptId) || !nonemptyString(row.logicalCallId) || !positiveInteger(row.attemptGroup) || !checkpoints.pairs.has(checkpointPair(row.logicalCallId, row.attemptGroup)) || !nonemptyString(row.model) || row.model !== expectedStepModel(row.stepId, steps, policy) || !nonnegativeInteger(row.estimatedInputTokens) || !nonnegativeInteger(row.maxOutputTokens) || !nonnegativeNumber2(row.reservedUsd) || !timestamp2(row.startedAt)) {
+function parseReservation(row2, input, cell, executionId, steps, policy, table, checkpoints) {
+  if (!validIdentity(row2, input, cell, executionId) || !nonemptyString(row2.stepId) || !nonemptyString(row2.attemptId) || !nonemptyString(row2.logicalCallId) || !positiveInteger(row2.attemptGroup) || !checkpoints.pairs.has(checkpointPair(row2.logicalCallId, row2.attemptGroup)) || !nonemptyString(row2.model) || row2.model !== expectedStepModel(row2.stepId, steps, policy) || !nonnegativeInteger(row2.estimatedInputTokens) || !nonnegativeInteger(row2.maxOutputTokens) || !nonnegativeNumber2(row2.reservedUsd) || !timestamp2(row2.startedAt)) {
     return null;
   }
-  const pricing = table[row.model];
+  const pricing = table[row2.model];
   if (pricing === void 0)
     return null;
-  const reservedUsd = row.estimatedInputTokens * pricing.input + row.maxOutputTokens * pricing.output;
-  if (!closeEnough(row.reservedUsd, reservedUsd))
+  const reservedUsd = row2.estimatedInputTokens * pricing.input + row2.maxOutputTokens * pricing.output;
+  if (!closeEnough(row2.reservedUsd, reservedUsd))
     return null;
   return {
-    attemptId: row.attemptId,
-    logicalCallId: row.logicalCallId,
+    attemptId: row2.attemptId,
+    logicalCallId: row2.logicalCallId,
     executionId,
-    stepId: row.stepId,
-    model: row.model,
-    estimatedInputTokens: row.estimatedInputTokens,
-    maxOutputTokens: row.maxOutputTokens,
-    attemptGroup: row.attemptGroup,
+    stepId: row2.stepId,
+    model: row2.model,
+    estimatedInputTokens: row2.estimatedInputTokens,
+    maxOutputTokens: row2.maxOutputTokens,
+    attemptGroup: row2.attemptGroup,
     reservedUsd
   };
 }
-function validBlockedRow(row, input, cell, executionId, steps, policy, table, checkpoints) {
-  if (!validIdentity(row, input, cell, executionId) || row.reason !== "budget" || !nonemptyString(row.stepId) || !nonemptyString(row.logicalCallId) || !positiveInteger(row.attemptGroup) || !checkpoints.pairs.has(checkpointPair(row.logicalCallId, row.attemptGroup)) || !nonemptyString(row.model) || row.model !== expectedStepModel(row.stepId, steps, policy) || !nonnegativeInteger(row.estimatedInputTokens) || !nonnegativeInteger(row.maxOutputTokens) || !nonnegativeNumber2(row.estimatedWorstCaseUsd) || !isRecord(row.lease) || !nonnegativeNumber2(row.lease.maxUsd) || !isRecord(row.requiredLease) || !nonnegativeNumber2(row.requiredLease.maxUsd) || row.requiredLease.maxUsd <= row.lease.maxUsd || !timestamp2(row.timestamp)) {
+function validBlockedRow(row2, input, cell, executionId, steps, policy, table, checkpoints) {
+  if (!validIdentity(row2, input, cell, executionId) || row2.reason !== "budget" || !nonemptyString(row2.stepId) || !nonemptyString(row2.logicalCallId) || !positiveInteger(row2.attemptGroup) || !checkpoints.pairs.has(checkpointPair(row2.logicalCallId, row2.attemptGroup)) || !nonemptyString(row2.model) || row2.model !== expectedStepModel(row2.stepId, steps, policy) || !nonnegativeInteger(row2.estimatedInputTokens) || !nonnegativeInteger(row2.maxOutputTokens) || !nonnegativeNumber2(row2.estimatedWorstCaseUsd) || !isRecord(row2.lease) || !nonnegativeNumber2(row2.lease.maxUsd) || !isRecord(row2.requiredLease) || !nonnegativeNumber2(row2.requiredLease.maxUsd) || row2.requiredLease.maxUsd <= row2.lease.maxUsd || !timestamp2(row2.timestamp)) {
     return false;
   }
-  const pricing = table[row.model];
-  return pricing !== void 0 && closeEnough(row.estimatedWorstCaseUsd, row.estimatedInputTokens * pricing.input + row.maxOutputTokens * pricing.output);
+  const pricing = table[row2.model];
+  return pricing !== void 0 && closeEnough(row2.estimatedWorstCaseUsd, row2.estimatedInputTokens * pricing.input + row2.maxOutputTokens * pricing.output);
 }
-function validLostRow(row, input, cell, executionId, steps, checkpoints) {
-  return validIdentity(row, input, cell, executionId) && (row.stepId === null || nonemptyString(row.stepId) && steps.has(row.stepId)) && nonemptyString(row.attemptId) && (row.logicalCallId === null || nonemptyString(row.logicalCallId)) && positiveInteger(row.attemptGroup) && checkpoints.pairs.has(checkpointPair(row.logicalCallId, row.attemptGroup)) && row.attribution === "lost" && row.streamOutcome === null && row.usage === null && row.costUsd === null && row.costIsEstimate === false && row.reservedUsd === 0 && row.leaseChargeUsd === 0 && nonemptyString(row.rejectionReason) && timestamp2(row.startedAt) && timestamp2(row.endedAt) && Date.parse(row.endedAt) >= Date.parse(row.startedAt);
+function validLostRow(row2, input, cell, executionId, steps, checkpoints) {
+  return validIdentity(row2, input, cell, executionId) && (row2.stepId === null || nonemptyString(row2.stepId) && steps.has(row2.stepId)) && nonemptyString(row2.attemptId) && (row2.logicalCallId === null || nonemptyString(row2.logicalCallId)) && positiveInteger(row2.attemptGroup) && checkpoints.pairs.has(checkpointPair(row2.logicalCallId, row2.attemptGroup)) && row2.attribution === "lost" && row2.streamOutcome === null && row2.usage === null && row2.costUsd === null && row2.costIsEstimate === false && row2.reservedUsd === 0 && row2.leaseChargeUsd === 0 && nonemptyString(row2.rejectionReason) && timestamp2(row2.startedAt) && timestamp2(row2.endedAt) && Date.parse(row2.endedAt) >= Date.parse(row2.startedAt);
 }
 function terminalEnvelope(source, input, cell, executionId) {
   if (source === void 0)
@@ -30638,8 +30650,7 @@ async function replayModeB(input) {
       olderThanMs: timeoutMs + EXIT_GRACE_MS
     });
   }
-  const table = pricingTable(input.egress.catalog);
-  validatePricing(input.stepRecords, policy, table);
+  const table = stepPricing(input.stepRecords, policy, input.egress.catalog);
   const workerLimit = Math.min(input.concurrency, pending.length);
   const budgetState = await input.budget.state();
   if (budgetState.authorizedTotalUsd !== void 0) {
@@ -31734,7 +31745,7 @@ function createCallMatcher(options) {
         const position = match.index;
         const matchedText = extractCallText(content, position);
         const callee = match.groups?.callee ?? match[0].replace(/\s*\($/, "");
-        matches.push(candidateFromText({
+        const candidate = candidateFromText({
           slug: options.slug,
           label: options.label,
           content,
@@ -31743,7 +31754,8 @@ function createCallMatcher(options) {
           callee,
           needsStructuredOutput: options.needsStructuredOutput,
           needsTools: options.needsTools
-        }));
+        });
+        matches.push(options.refine?.(candidate, matchedText) ?? candidate);
       }
       return matches;
     }
@@ -32048,6 +32060,7 @@ var IGNORED_DIRECTORIES = /* @__PURE__ */ new Set([
   "build",
   "coverage",
   "dist",
+  "graphify-out",
   "node_modules",
   "out",
   "site-packages",
@@ -32600,35 +32613,63 @@ var breadthMatchers = Object.freeze([
 // ../scanner/dist/matchers/builtins.js
 var javascriptFiles2 = ["**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"];
 var pythonFiles2 = ["**/*.py"];
+function aiSdkFileAnchor(callee) {
+  return new RegExp(`\\bfrom\\s*["']ai["']|\\brequire\\s*\\(\\s*["']ai["']\\s*\\)|\\bimport\\s*\\(\\s*["']ai["']\\s*\\)|\\bwrapAISDK\\s*\\(|\\bimport\\s*\\{[^}]*\\b${callee}\\b[^}]*\\}\\s*from\\s*["'][^"']+["']`);
+}
+var outputTextOnly = /\b(?:experimental_)?output\s*:\s*Output\.text\s*\(/;
+var telemetryFunctionId = /\b(?:experimental_)?telemetry\s*:\s*\{(?:[^{}]|\{[^{}]*\})*?\bfunctionId\s*:\s*(["'])([^"'\\\r\n]+)\1/;
+function aiSdkCallDetails(candidate, callText) {
+  const keys = candidate.normalizedCallShape.argumentKeys;
+  const traceKey = telemetryFunctionId.exec(callText)?.[2];
+  return {
+    ...candidate,
+    needsStructuredOutput: candidate.needsStructuredOutput || (keys.includes("output") || keys.includes("experimental_output")) && !outputTextOnly.test(callText),
+    ...traceKey === void 0 ? {} : { traceKey }
+  };
+}
+function aiSdkCallMatcher(options) {
+  return createCallMatcher({
+    slug: options.slug,
+    description: options.description,
+    noiseTier: "precise",
+    filePatterns: javascriptFiles2,
+    examples: [options.example],
+    pattern: new RegExp(`(?<!\\bfunction\\s{1,20})\\b(?<callee>${options.callee})\\s*\\(`),
+    fileAnchor: aiSdkFileAnchor(options.callee),
+    refine: aiSdkCallDetails,
+    label: options.label,
+    needsStructuredOutput: options.needsStructuredOutput
+  });
+}
 var callMatchers2 = [
-  createCallMatcher({
+  aiSdkCallMatcher({
     slug: "js-ai-sdk-generate-text",
     description: "AI SDK text generation calls",
-    noiseTier: "precise",
-    filePatterns: javascriptFiles2,
-    examples: ['generateText({ model: "acme/large-1", prompt: input })'],
-    pattern: /\b(?<callee>generateText)\s*\(/,
+    callee: "generateText",
+    example: 'import { generateText } from "ai";\ngenerateText({ model: "acme/large-1", prompt: input })',
     label: "AI SDK generateText"
   }),
-  createCallMatcher({
+  aiSdkCallMatcher({
     slug: "js-ai-sdk-stream-text",
     description: "AI SDK streaming text generation calls",
-    noiseTier: "precise",
-    filePatterns: javascriptFiles2,
-    examples: ['streamText({ model: "acme/large-1", prompt: input })'],
-    pattern: /\b(?<callee>streamText)\s*\(/,
+    callee: "streamText",
+    example: 'import { streamText } from "ai";\nstreamText({ model: "acme/large-1", prompt: input })',
     label: "AI SDK streamText"
   }),
-  createCallMatcher({
+  aiSdkCallMatcher({
     slug: "js-ai-sdk-generate-object",
     description: "AI SDK structured object generation calls",
-    noiseTier: "precise",
-    filePatterns: javascriptFiles2,
-    examples: [
-      'generateObject({ model: "acme/large-1", schema, prompt: input })'
-    ],
-    pattern: /\b(?<callee>generateObject)\s*\(/,
+    callee: "generateObject",
+    example: 'import { generateObject } from "ai";\ngenerateObject({ model: "acme/large-1", schema, prompt: input })',
     label: "AI SDK generateObject",
+    needsStructuredOutput: true
+  }),
+  aiSdkCallMatcher({
+    slug: "js-ai-sdk-stream-object",
+    description: "AI SDK streaming structured object calls",
+    callee: "streamObject",
+    example: 'import { streamObject } from "ai";\nstreamObject({ model: "acme/large-1", schema, prompt: input })',
+    label: "AI SDK streamObject",
     needsStructuredOutput: true
   }),
   createCallMatcher({
@@ -32792,6 +32833,7 @@ var builtinMatchers = Object.freeze([
 
 // ../scanner/dist/reconcile.js
 var AMBIGUOUS_MODEL_ID_REASON = "multiple_call_sites_share_model_id";
+var AMBIGUOUS_TRACE_KEY_REASON = "multiple_call_sites_share_trace_key";
 function canJoinByTrajectoryPosition(normalizedSteps, stepRecords) {
   if (stepRecords.length === 0 || !stepRecords.every(({ currentModel }) => currentModel === null)) {
     return false;
@@ -32854,21 +32896,44 @@ function enrichCallSites(traceSteps, stepRecords) {
     ];
   }));
 }
+function append(groups, key, value) {
+  const group = groups.get(key);
+  if (group === void 0)
+    groups.set(key, [value]);
+  else
+    group.push(value);
+}
+function groupBy(records, key) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const record2 of records) {
+    const value = key(record2);
+    if (value !== null && value !== void 0)
+      append(groups, value, record2);
+  }
+  return groups;
+}
+function joinCandidates(normalizedStep, traceIndex, candidates, reason, via) {
+  if (candidates.length === 1) {
+    return {
+      normalizedStep,
+      traceIndex,
+      status: "matched",
+      stepId: candidates[0].stepId,
+      via
+    };
+  }
+  return {
+    normalizedStep,
+    traceIndex,
+    status: "ambiguous",
+    candidateStepIds: candidates.map(({ stepId }) => stepId).sort(),
+    reason,
+    via
+  };
+}
 function reconcile(normalizedSteps, stepRecords) {
-  const sitesByModel = /* @__PURE__ */ new Map();
-  for (const record2 of stepRecords) {
-    if (record2.currentModel === null)
-      continue;
-    const records = sitesByModel.get(record2.currentModel) ?? [];
-    records.push(record2);
-    sitesByModel.set(record2.currentModel, records);
-  }
-  const tracesByModel = /* @__PURE__ */ new Map();
-  for (const [traceIndex, step] of normalizedSteps.entries()) {
-    const indexes = tracesByModel.get(step.model) ?? [];
-    indexes.push(traceIndex);
-    tracesByModel.set(step.model, indexes);
-  }
+  const sitesByModel = groupBy(stepRecords, (record2) => record2.currentModel);
+  const sitesByTraceKey = groupBy(stepRecords, (record2) => record2.traceKey);
   const joinByTrajectoryPosition = canJoinByTrajectoryPosition(normalizedSteps, stepRecords);
   const traceSteps = normalizedSteps.map((normalizedStep, traceIndex) => {
     if (joinByTrajectoryPosition) {
@@ -32876,51 +32941,47 @@ function reconcile(normalizedSteps, stepRecords) {
         normalizedStep,
         traceIndex,
         status: "matched",
-        stepId: stepRecords[normalizedStep.stepIndex].stepId
+        stepId: stepRecords[normalizedStep.stepIndex].stepId,
+        via: "trajectory_position"
       };
+    }
+    const keyed = normalizedStep.family === void 0 ? [] : sitesByTraceKey.get(normalizedStep.family) ?? [];
+    if (keyed.length > 0) {
+      const sameModel = keyed.filter(({ currentModel }) => currentModel === normalizedStep.model);
+      return joinCandidates(normalizedStep, traceIndex, sameModel.length > 0 ? sameModel : keyed, AMBIGUOUS_TRACE_KEY_REASON, "trace_key");
     }
     const candidates = sitesByModel.get(normalizedStep.model) ?? [];
-    if (candidates.length === 1) {
-      return {
-        normalizedStep,
-        traceIndex,
-        status: "matched",
-        stepId: candidates[0].stepId
-      };
+    if (candidates.length === 0) {
+      return { normalizedStep, traceIndex, status: "unmatched" };
     }
-    if (candidates.length > 1) {
-      return {
-        normalizedStep,
-        traceIndex,
-        status: "ambiguous",
-        candidateStepIds: candidates.map(({ stepId }) => stepId).sort(),
-        reason: AMBIGUOUS_MODEL_ID_REASON
-      };
-    }
-    return { normalizedStep, traceIndex, status: "unmatched" };
+    return joinCandidates(normalizedStep, traceIndex, candidates, AMBIGUOUS_MODEL_ID_REASON, "model");
   });
+  const matchedIndexes = /* @__PURE__ */ new Map();
+  const ambiguousSteps = /* @__PURE__ */ new Map();
+  for (const traceStep of traceSteps) {
+    if (traceStep.status === "matched") {
+      append(matchedIndexes, traceStep.stepId, traceStep.traceIndex);
+    } else if (traceStep.status === "ambiguous") {
+      for (const stepId of traceStep.candidateStepIds) {
+        append(ambiguousSteps, stepId, traceStep);
+      }
+    }
+  }
   const enrichedByStepId = enrichCallSites(traceSteps, stepRecords);
   const callSites = stepRecords.map((original) => {
     const stepRecord = enrichedByStepId.get(original.stepId);
-    if (joinByTrajectoryPosition) {
-      return {
-        stepRecord,
-        status: "matched",
-        traceIndexes: traceSteps.flatMap((traceStep) => traceStep.stepId === original.stepId ? [traceStep.traceIndex] : [])
-      };
+    const matched = matchedIndexes.get(original.stepId);
+    if (matched !== void 0) {
+      return { stepRecord, status: "matched", traceIndexes: matched };
     }
-    const traceIndexes = original.currentModel === null ? [] : tracesByModel.get(original.currentModel) ?? [];
-    const modelSites = original.currentModel === null ? [] : sitesByModel.get(original.currentModel) ?? [];
-    if (traceIndexes.length > 0 && modelSites.length > 1) {
+    const ambiguous = ambiguousSteps.get(original.stepId);
+    if (ambiguous !== void 0) {
       return {
         stepRecord,
         status: "ambiguous",
-        traceIndexes,
-        reason: AMBIGUOUS_MODEL_ID_REASON
+        traceIndexes: ambiguous.map(({ traceIndex }) => traceIndex),
+        reason: ambiguous[0].reason
       };
-    }
-    if (traceIndexes.length > 0) {
-      return { stepRecord, status: "matched", traceIndexes };
     }
     return { stepRecord, status: "unmatched", traceIndexes: [] };
   });
@@ -33030,6 +33091,7 @@ function scanRepository(rootDir, registry2, projectId3) {
           capabilityRequirements: capabilityRequirements(candidate),
           evaluatorLadder: [],
           currentModel: candidate.modelId ?? null,
+          ...candidate.traceKey === void 0 ? {} : { traceKey: candidate.traceKey },
           observedCostUsd: 0,
           downstreamStepIds: [],
           candidates: [],
@@ -33091,18 +33153,18 @@ var TraceParseError = class extends Error {
 };
 var TraceAdaptError = class extends Error {
   format;
-  constructor(format9, message2, options) {
+  constructor(format10, message2, options) {
     super(message2, options);
     this.name = "TraceAdaptError";
-    this.format = format9;
+    this.format = format10;
   }
 };
 var TraceRecordsDroppedError = class extends TraceAdaptError {
   result;
-  constructor(format9, result2) {
+  constructor(format10, result2) {
     super(
-      format9,
-      `${format9} dropped ${result2.droppedRecords.length} unmappable record(s): ${result2.droppedRecords.map(
+      format10,
+      `${format10} dropped ${result2.droppedRecords.length} unmappable record(s): ${result2.droppedRecords.map(
         ({ recordIndex, reason }) => `record ${recordIndex + 1}: ${reason}`
       ).join("; ")}`
     );
@@ -33260,56 +33322,61 @@ function detectFormat(sample, adapters) {
 function adaptWithReport(adapter, records) {
   return adapter.adaptWithReport(records);
 }
-function strictRuns(format9, result2) {
+function strictRuns(format10, result2) {
   if (result2.droppedRecords.length > 0) {
-    throw new TraceRecordsDroppedError(format9, result2);
+    throw new TraceRecordsDroppedError(format10, result2);
   }
   return result2.runs;
 }
-function requiredString(value, label, format9) {
+function excludedStepsWarning(result2) {
+  const count = result2.excludedSteps?.length ?? 0;
+  if (count === 0) return void 0;
+  return `${count} traced model call(s) ended without a finish reason and were left out of the corpus (stream_incomplete: the call was aborted or errored before it finished). The rest of the trace input was read.`;
+}
+function requiredString(value, label, format10) {
   if (typeof value !== "string" || value.length === 0) {
-    throw new TraceAdaptError(format9, `${label} must be a non-empty string`);
+    throw new TraceAdaptError(format10, `${label} must be a non-empty string`);
   }
   return value;
 }
 function optionalString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
-function tokenCount2(value, label, format9) {
+function tokenCount2(value, label, format10) {
   if (value === void 0) return 0;
   if (!Number.isInteger(value) || value < 0) {
     throw new TraceAdaptError(
-      format9,
+      format10,
       `${label} must be a non-negative integer`
     );
   }
   return value;
 }
-function optionalTokenCount(value, label, format9) {
+function optionalTokenCount(value, label, format10) {
   if (value === void 0 || value === null) return void 0;
-  return tokenCount2(value, label, format9);
+  return tokenCount2(value, label, format10);
 }
-function optionalUsage(input, output, label, format9) {
-  const inputTokens = optionalTokenCount(input, `${label} input usage`, format9);
+function optionalUsage(input, output, label, format10) {
+  const inputTokens = optionalTokenCount(input, `${label} input usage`, format10);
   const outputTokens = optionalTokenCount(
     output,
     `${label} output usage`,
-    format9
+    format10
   );
   if (inputTokens === void 0 || outputTokens === void 0) return void 0;
   return { inputTokens, outputTokens };
 }
-function optionalNonnegativeNumber(value, label, format9) {
+function optionalNonnegativeNumber(value, label, format10) {
   if (value === void 0 || value === null) return void 0;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new TraceAdaptError(format9, `${label} must be a non-negative number`);
+    throw new TraceAdaptError(format10, `${label} must be a non-negative number`);
   }
   return value;
 }
-function jsonValue(value, label, format9) {
+function jsonValue(value, label, format10) {
   const parsed2 = normalizedJsonValue(value);
   if (parsed2 === void 0) {
-    throw new TraceAdaptError(format9, `${label} must be valid JSON data`);
+    throw new TraceAdaptError(format10, `${label} must be valid JSON data`);
   }
   return parsed2;
 }
@@ -33389,15 +33456,354 @@ function compareStartValues(left, right) {
   }
   return left < right ? -1 : left > right ? 1 : 0;
 }
-function recordList(records, format9, label) {
+function recordList(records, format10, label) {
   if (!Array.isArray(records)) {
-    throw new TraceAdaptError(format9, `${label} must be a list`);
+    throw new TraceAdaptError(format10, `${label} must be a list`);
   }
   return records;
 }
 
+// src/data/adapters/spans.ts
+function traceSpans(records) {
+  const spans = [];
+  for (const [recordIndex, record2] of records.entries()) {
+    if (!isRecord(record2)) continue;
+    const candidates = Array.isArray(record2.resourceSpans) ? otlpSpans(record2).map((span) => ({
+      span,
+      attributes: otlpAttributes(span)
+    })) : [
+      {
+        span: record2,
+        attributes: isRecord(record2.attributes) ? record2.attributes : otlpAttributes(record2)
+      }
+    ];
+    for (const { span, attributes } of candidates) {
+      spans.push({
+        recordIndex,
+        sourceIndex: spans.length,
+        span,
+        attributes,
+        traceId: optionalString(span.traceId ?? span.trace_id),
+        spanId: optionalString(span.spanId ?? span.span_id),
+        parentSpanId: optionalString(span.parentSpanId ?? span.parent_span_id)
+      });
+    }
+  }
+  return spans;
+}
+function spanTree(spans) {
+  const byId = /* @__PURE__ */ new Map();
+  for (const span of spans) {
+    if (span.traceId !== void 0 && span.spanId !== void 0) {
+      byId.set(`${span.traceId}\0${span.spanId}`, span);
+    }
+  }
+  const parentOf = (span) => span.traceId === void 0 || span.parentSpanId === void 0 ? void 0 : byId.get(`${span.traceId}\0${span.parentSpanId}`);
+  const children = /* @__PURE__ */ new Map();
+  for (const span of spans) {
+    const parent = parentOf(span);
+    if (parent === void 0) continue;
+    const siblings = children.get(parent) ?? [];
+    siblings.push(span);
+    children.set(parent, siblings);
+  }
+  return { parentOf, childrenOf: (span) => children.get(span) ?? [] };
+}
+function errorMessage(error51) {
+  return error51 instanceof Error ? error51.message : String(error51);
+}
+function adaptSpans(format10, label, records, classify) {
+  const list = recordList(records, format10, `${label} trace records`);
+  const dropped = /* @__PURE__ */ new Map();
+  for (const [recordIndex, record2] of list.entries()) {
+    if (!isRecord(record2)) {
+      dropped.set(recordIndex, `${label} record must be an object`);
+    }
+  }
+  const spans = traceSpans(list);
+  const tree = spanTree(spans);
+  let steps = [];
+  let excludedSteps = [];
+  for (const span of spans) {
+    try {
+      const result2 = classify(span, tree);
+      if (result2.kind === "skip") continue;
+      const traceId = requiredString(
+        span.traceId,
+        `${label} span ${span.sourceIndex + 1} trace ID`,
+        format10
+      );
+      if (result2.kind === "excluded") {
+        excludedSteps.push({
+          recordIndex: span.recordIndex,
+          traceId,
+          reason: result2.reason
+        });
+      } else {
+        steps.push({ span, traceId, step: result2.step });
+      }
+    } catch (error51) {
+      if (!dropped.has(span.recordIndex)) {
+        dropped.set(span.recordIndex, errorMessage(error51));
+      }
+    }
+  }
+  steps = steps.filter(({ span }) => !dropped.has(span.recordIndex));
+  const traceCounts = /* @__PURE__ */ new Map();
+  for (const { traceId } of steps) {
+    traceCounts.set(traceId, (traceCounts.get(traceId) ?? 0) + 1);
+  }
+  for (const { span, traceId } of steps) {
+    if ((traceCounts.get(traceId) ?? 0) > 1 && startValue(span.span) === void 0 && !dropped.has(span.recordIndex)) {
+      dropped.set(
+        span.recordIndex,
+        `${label} trajectory ${traceId} is missing its start time`
+      );
+    }
+  }
+  steps = steps.filter(({ span }) => !dropped.has(span.recordIndex));
+  excludedSteps = excludedSteps.filter(
+    ({ recordIndex }) => !dropped.has(recordIndex)
+  );
+  const grouped = /* @__PURE__ */ new Map();
+  for (const step of steps) {
+    const group = grouped.get(step.traceId) ?? [];
+    group.push(step);
+    grouped.set(step.traceId, group);
+  }
+  const runs = [...grouped.entries()].map(
+    ([traceId, group]) => {
+      group.sort(
+        (left, right) => compareStartValues(
+          startValue(left.span.span),
+          startValue(right.span.span)
+        ) || left.span.sourceIndex - right.span.sourceIndex
+      );
+      return normalizedRunSchema.parse({
+        version: "2",
+        traceId,
+        sourceFormat: format10,
+        steps: group.map(({ span, step }, stepIndex) => {
+          const timestamp3 = startValue(span.span);
+          return {
+            stepIndex,
+            ...step,
+            trajectoryId: traceId,
+            ...timestamp3 === void 0 ? {} : { timestamp: timestamp3 }
+          };
+        })
+      });
+    }
+  );
+  return {
+    runs,
+    droppedRecords: [...dropped.entries()].sort(([left], [right]) => left - right).map(([recordIndex, reason]) => ({ recordIndex, reason })),
+    excludedSteps
+  };
+}
+
+// src/data/adapters/ai-sdk.ts
+var format = "ai-sdk";
+var stepOperations = /* @__PURE__ */ new Set([
+  "ai.generateText.doGenerate",
+  "ai.streamText.doStream",
+  "ai.generateObject.doGenerate",
+  "ai.streamObject.doStream"
+]);
+var objectOperations = /* @__PURE__ */ new Set([
+  "ai.generateObject.doGenerate",
+  "ai.streamObject.doStream"
+]);
+var finishReasons = {
+  stop: "stop",
+  length: "length",
+  "content-filter": "content_filter",
+  "tool-calls": "tool_call",
+  error: "error",
+  other: "stop",
+  unknown: "stop"
+};
+function isAiOperation(span) {
+  const operation = span.attributes["ai.operationId"];
+  return typeof operation === "string" && operation.startsWith("ai.");
+}
+function detect(sample) {
+  const spans = traceSpans(sampleRecords(sample));
+  if (spans.length === 0) return 0;
+  const matching = spans.filter(isAiOperation).length;
+  return matching === 0 ? 0 : 0.7 + 0.3 * (matching / spans.length);
+}
+function toolResponse(output) {
+  if (!isRecord(output)) return void 0;
+  if (output.type === "text" || output.type === "error-text" || output.type === "json" || output.type === "error-json") {
+    return output.value;
+  }
+  if (output.type === "execution-denied") {
+    return {
+      denied: true,
+      ...output.reason === void 0 ? {} : { reason: output.reason }
+    };
+  }
+  return output;
+}
+function inputPart(part) {
+  if (!isRecord(part)) return part;
+  switch (part.type) {
+    case "text":
+      return { type: "text", content: part.text };
+    case "reasoning":
+      return { type: "reasoning", content: part.text };
+    case "tool-call":
+      return {
+        type: "tool_call",
+        id: part.toolCallId ?? null,
+        name: part.toolName,
+        arguments: jsonEncodedValue(part.input)
+      };
+    case "tool-result": {
+      const response = toolResponse(part.output);
+      return {
+        type: "tool_call_response",
+        id: part.toolCallId ?? null,
+        ...response === void 0 ? {} : { response }
+      };
+    }
+    default:
+      return part;
+  }
+}
+function outputParts(attributes, label) {
+  const reasoning = attributes["ai.response.reasoning"];
+  const text = attributes["ai.response.text"];
+  const toolCalls2 = attributes["ai.response.toolCalls"];
+  const parts = [];
+  if (typeof reasoning === "string" && reasoning.length > 0) {
+    parts.push({ type: "reasoning", content: reasoning });
+  }
+  if (typeof text === "string" && text.length > 0) {
+    parts.push({ type: "text", content: text });
+  }
+  if (toolCalls2 !== void 0) {
+    for (const call of recordList(
+      jsonEncodedValue(toolCalls2),
+      format,
+      `${label} ai.response.toolCalls`
+    )) {
+      parts.push(
+        isRecord(call) ? {
+          type: "tool_call",
+          id: call.toolCallId,
+          name: call.toolName,
+          arguments: jsonEncodedValue(call.input)
+        } : call
+      );
+    }
+  }
+  return parts;
+}
+function aiSdkStep(span) {
+  const { attributes } = span;
+  const operation = attributes["ai.operationId"];
+  if (typeof operation !== "string" || !stepOperations.has(operation)) {
+    return { kind: "skip" };
+  }
+  if (attributes["ai.response.finishReason"] === void 0) {
+    return { kind: "excluded", reason: "stream_incomplete" };
+  }
+  const label = `AI SDK span ${span.sourceIndex + 1}`;
+  const model = requiredString(
+    attributes["ai.model.id"] ?? attributes["gen_ai.request.model"],
+    `${label} model`,
+    format
+  );
+  const prompt = jsonEncodedValue(attributes["ai.prompt.messages"]);
+  if (!Array.isArray(prompt)) {
+    throw new TraceAdaptError(
+      format,
+      `${label} has no ai.prompt.messages; keep telemetry recordInputs enabled`
+    );
+  }
+  const system = [];
+  const messages = [];
+  for (const message2 of prompt) {
+    if (isRecord(message2) && message2.role === "system" && typeof message2.content === "string") {
+      if (message2.content.length > 0) system.push(message2.content);
+    } else if (isRecord(message2)) {
+      messages.push({
+        role: message2.role,
+        parts: typeof message2.content === "string" ? [{ type: "text", content: message2.content }] : recordList(
+          message2.content,
+          format,
+          `${label} message content`
+        ).map(inputPart)
+      });
+    } else {
+      messages.push(message2);
+    }
+  }
+  const objectOutput = objectOperations.has(operation);
+  const outputKeys = objectOutput ? ["ai.response.object"] : ["ai.response.text", "ai.response.toolCalls", "ai.response.reasoning"];
+  if (outputKeys.every((key) => attributes[key] === void 0)) {
+    throw new TraceAdaptError(
+      format,
+      `${label} has no recorded output; keep telemetry recordOutputs enabled`
+    );
+  }
+  const parts = objectOutput ? [{ type: "text", content: String(attributes["ai.response.object"]) }] : outputParts(attributes, label);
+  const finishReason = requiredString(
+    attributes["ai.response.finishReason"],
+    `${label} finish reason`,
+    format
+  );
+  const usage2 = optionalUsage(
+    attributes["ai.usage.inputTokens"] ?? attributes["gen_ai.usage.input_tokens"],
+    attributes["ai.usage.outputTokens"] ?? attributes["gen_ai.usage.output_tokens"],
+    label,
+    format
+  );
+  const family = optionalString(attributes["rightmodeler.family"]) ?? optionalString(attributes["ai.telemetry.functionId"]);
+  return {
+    kind: "step",
+    step: {
+      model,
+      messages: messages.map(
+        (message2, index) => jsonValue(message2, `${label} input message ${index + 1}`, format)
+      ),
+      output: jsonValue(
+        [
+          {
+            role: "assistant",
+            parts,
+            finish_reason: finishReasons[finishReason] ?? finishReason
+          }
+        ],
+        `${label} output`,
+        format
+      ),
+      ...usage2 === void 0 ? {} : { usage: usage2 },
+      ...system.length === 0 ? {} : { systemPrompt: system.join("\n") },
+      ...family === void 0 ? {} : { family }
+    }
+  };
+}
+function adaptWithReport2(records) {
+  return adaptSpans(format, "AI SDK", records, aiSdkStep);
+}
+var aiSdkAdapter = {
+  name: format,
+  detect,
+  adapt: (records) => {
+    const result2 = adaptWithReport2(records);
+    if (result2.runs.length === 0 && result2.droppedRecords.length === 0) {
+      throw new TraceAdaptError(format, "No AI SDK model call spans found");
+    }
+    return strictRuns(format, result2);
+  },
+  adaptWithReport: adaptWithReport2
+};
+
 // src/data/adapters/row-adapter.ts
-function buildRuns(format9, mapped) {
+function buildRuns(format10, mapped) {
   const grouped = /* @__PURE__ */ new Map();
   for (const item of mapped) {
     const group = grouped.get(item.traceId) ?? [];
@@ -33415,13 +33821,13 @@ function buildRuns(format9, mapped) {
     return normalizedRunSchema.parse({
       version: "2",
       traceId,
-      sourceFormat: format9,
+      sourceFormat: format10,
       steps
     });
   });
 }
 function createRowAdapter(options) {
-  const adaptWithReport4 = (records) => {
+  const adaptWithReport5 = (records) => {
     const source = recordList(records, options.format, options.label);
     const mapped = [];
     const droppedRecords = [];
@@ -33466,14 +33872,14 @@ function createRowAdapter(options) {
           `${options.label} trace contains no records`
         );
       }
-      return strictRuns(options.format, adaptWithReport4(source));
+      return strictRuns(options.format, adaptWithReport5(source));
     },
-    adaptWithReport: adaptWithReport4
+    adaptWithReport: adaptWithReport5
   };
 }
 
 // src/data/adapters/braintrust.ts
-var format = "braintrust";
+var format2 = "braintrust";
 function confidence(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
@@ -33483,7 +33889,7 @@ function confidence(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var braintrustAdapter = createRowAdapter({
-  format,
+  format: format2,
   label: "Braintrust span export",
   detect: confidence,
   mapRecord(record2, recordIndex) {
@@ -33492,14 +33898,14 @@ var braintrustAdapter = createRowAdapter({
     const traceId = requiredString(
       record2.root_span_id,
       `Braintrust record ${recordIndex + 1} root_span_id`,
-      format
+      format2
     );
     const metadata = isRecord(record2.metadata) ? record2.metadata : {};
     const metrics = isRecord(record2.metrics) ? record2.metrics : {};
     const model = requiredString(
       metadata.model,
       `Braintrust record ${recordIndex + 1} metadata.model`,
-      format
+      format2
     );
     const rawMessages = Array.isArray(record2.input) ? record2.input : [record2.input];
     const timestamp3 = optionalString(record2.created);
@@ -33507,7 +33913,7 @@ var braintrustAdapter = createRowAdapter({
       metrics.prompt_tokens,
       metrics.completion_tokens,
       `Braintrust record ${recordIndex + 1}`,
-      format
+      format2
     );
     return [
       {
@@ -33520,13 +33926,13 @@ var braintrustAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `Braintrust record ${recordIndex + 1} input ${index + 1}`,
-              format
+              format2
             )
           ),
           output: jsonValue(
             record2.output,
             `Braintrust record ${recordIndex + 1} output`,
-            format
+            format2
           ),
           ...usage2 === void 0 ? {} : { usage: usage2 },
           trajectoryId: traceId,
@@ -33539,7 +33945,7 @@ var braintrustAdapter = createRowAdapter({
 });
 
 // src/data/adapters/claude-code.ts
-var format2 = "claude-code";
+var format3 = "claude-code";
 function confidence2(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
@@ -33575,29 +33981,29 @@ function claudeUsage(usage2, label) {
   const input = optionalTokenCount(
     usage2.input_tokens,
     `${label} input usage`,
-    format2
+    format3
   );
   const output = optionalTokenCount(
     usage2.output_tokens,
     `${label} output usage`,
-    format2
+    format3
   );
   if (input === void 0 || output === void 0) return void 0;
   return {
     inputTokens: input + (optionalTokenCount(
       usage2.cache_read_input_tokens,
       `${label} cache read usage`,
-      format2
+      format3
     ) ?? 0) + (optionalTokenCount(
       usage2.cache_creation_input_tokens,
       `${label} cache creation usage`,
-      format2
+      format3
     ) ?? 0),
     outputTokens: output
   };
 }
-function adaptWithReport2(records) {
-  const source = recordList(records, format2, "Claude Code transcript");
+function adaptWithReport3(records) {
+  const source = recordList(records, format3, "Claude Code transcript");
   const droppedRecords = [];
   const recordsByUuid = /* @__PURE__ */ new Map();
   const groups = /* @__PURE__ */ new Map();
@@ -33630,12 +34036,12 @@ function adaptWithReport2(records) {
       const sessionId = requiredString(
         candidate.sessionId,
         `Claude Code record ${recordIndex + 1} sessionId`,
-        format2
+        format3
       );
       const parentUuid = requiredString(
         candidate.parentUuid,
         `Claude Code record ${recordIndex + 1} parentUuid`,
-        format2
+        format3
       );
       const message2 = candidate.message;
       if (!isRecord(message2) || !Array.isArray(message2.content)) {
@@ -33646,12 +34052,12 @@ function adaptWithReport2(records) {
       const messageId = requiredString(
         message2.id,
         `Claude Code record ${recordIndex + 1} message.id`,
-        format2
+        format3
       );
       const model = requiredString(
         message2.model,
         `Claude Code record ${recordIndex + 1} message.model`,
-        format2
+        format3
       );
       claudeUsage(message2.usage, `Claude Code record ${recordIndex + 1}`);
       const key = `${sessionId}:${messageId}`;
@@ -33714,7 +34120,7 @@ function adaptWithReport2(records) {
         (input, index) => jsonValue(
           input.message,
           `Claude Code message ${group.messageId} input ${index + 1}`,
-          format2
+          format3
         )
       ),
       output: jsonValue(
@@ -33724,7 +34130,7 @@ function adaptWithReport2(records) {
           ...toolResults.length === 0 ? {} : { toolResults }
         },
         `Claude Code message ${group.messageId} output`,
-        format2
+        format3
       ),
       ...usage2 === void 0 ? {} : { usage: usage2 },
       trajectoryId: trajectoryId(group, recordsByUuid),
@@ -33740,7 +34146,7 @@ function adaptWithReport2(records) {
       return normalizedRunSchema.parse({
         version: "2",
         traceId,
-        sourceFormat: format2,
+        sourceFormat: format3,
         steps: ordered.map(({ step }, stepIndex) => ({ ...step, stepIndex }))
       });
     }
@@ -33748,23 +34154,23 @@ function adaptWithReport2(records) {
   return { runs, droppedRecords };
 }
 var claudeCodeAdapter = {
-  name: format2,
+  name: format3,
   detect: confidence2,
   adapt(records) {
-    const result2 = adaptWithReport2(records);
+    const result2 = adaptWithReport3(records);
     if (result2.runs.length === 0 && result2.droppedRecords.length === 0) {
       throw new TraceAdaptError(
-        format2,
+        format3,
         "No Claude Code assistant messages found"
       );
     }
-    return strictRuns(format2, result2);
+    return strictRuns(format3, result2);
   },
-  adaptWithReport: adaptWithReport2
+  adaptWithReport: adaptWithReport3
 };
 
 // src/data/adapters/codex.ts
-var format3 = "codex";
+var format4 = "codex";
 function confidence3(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   const meta3 = records.some(
@@ -33786,8 +34192,8 @@ function usageDelta(final, baseline) {
   if (typeof final !== "number") return final;
   return typeof baseline === "number" ? Math.max(0, final - baseline) : final;
 }
-function adaptWithReport3(records) {
-  const source = recordList(records, format3, "Codex rollout");
+function adaptWithReport4(records) {
+  const source = recordList(records, format4, "Codex rollout");
   const droppedRecords = [];
   const turns = /* @__PURE__ */ new Map();
   const pendingInputs = /* @__PURE__ */ new Map();
@@ -33813,7 +34219,7 @@ function adaptWithReport3(records) {
         const id = requiredString(
           payload.id ?? payload.session_id,
           `Codex record ${recordIndex + 1} session id`,
-          format3
+          format4
         );
         if (traceId === void 0) traceId = id;
       } catch (error51) {
@@ -33829,12 +34235,12 @@ function adaptWithReport3(records) {
         const turnId2 = requiredString(
           payload.turn_id,
           `Codex record ${recordIndex + 1} turn_id`,
-          format3
+          format4
         );
         const model = requiredString(
           payload.model,
           `Codex record ${recordIndex + 1} model`,
-          format3
+          format4
         );
         activeTurn = {
           turnId: turnId2,
@@ -33867,12 +34273,12 @@ function adaptWithReport3(records) {
             optionalTokenCount(
               candidateUsage.input_tokens,
               `Codex record ${recordIndex + 1} input usage`,
-              format3
+              format4
             );
             optionalTokenCount(
               candidateUsage.output_tokens,
               `Codex record ${recordIndex + 1} output usage`,
-              format3
+              format4
             );
           }
           if (total !== void 0) {
@@ -33934,7 +34340,7 @@ function adaptWithReport3(records) {
         final === void 0 ? selected.input_tokens : usageDelta(final.input_tokens, baseline?.input_tokens),
         final === void 0 ? selected.output_tokens : usageDelta(final.output_tokens, baseline?.output_tokens),
         `Codex turn ${turn.turnId}`,
-        format3
+        format4
       );
       return {
         stepIndex,
@@ -33943,13 +34349,13 @@ function adaptWithReport3(records) {
           (message2, index) => jsonValue(
             message2,
             `Codex turn ${turn.turnId} input ${index + 1}`,
-            format3
+            format4
           )
         ),
         output: jsonValue(
           turn.outputs,
           `Codex turn ${turn.turnId} output`,
-          format3
+          format4
         ),
         ...stepUsage === void 0 ? {} : { usage: stepUsage },
         trajectoryId: turn.turnId,
@@ -33961,7 +34367,7 @@ function adaptWithReport3(records) {
         normalizedRunSchema.parse({
           version: "2",
           traceId,
-          sourceFormat: format3,
+          sourceFormat: format4,
           steps
         })
       );
@@ -33970,20 +34376,20 @@ function adaptWithReport3(records) {
   return { runs, droppedRecords };
 }
 var codexAdapter = {
-  name: format3,
+  name: format4,
   detect: confidence3,
   adapt(records) {
-    const result2 = adaptWithReport3(records);
+    const result2 = adaptWithReport4(records);
     if (result2.runs.length === 0 && result2.droppedRecords.length === 0) {
-      throw new TraceAdaptError(format3, "No Codex model turns found");
+      throw new TraceAdaptError(format4, "No Codex model turns found");
     }
-    return strictRuns(format3, result2);
+    return strictRuns(format4, result2);
   },
-  adaptWithReport: adaptWithReport3
+  adaptWithReport: adaptWithReport4
 };
 
 // src/data/adapters/helicone.ts
-var format4 = "helicone";
+var format5 = "helicone";
 function confidence4(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
@@ -33993,14 +34399,14 @@ function confidence4(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var heliconeAdapter = createRowAdapter({
-  format: format4,
+  format: format5,
   label: "Helicone request export",
   detect: confidence4,
   mapRecord(record2, recordIndex) {
     const requestId = requiredString(
       record2.request_id,
       `Helicone record ${recordIndex + 1} request_id`,
-      format4
+      format5
     );
     const request = jsonEncodedValue(record2.request_body);
     const response = jsonEncodedValue(record2.response_body);
@@ -34017,7 +34423,7 @@ var heliconeAdapter = createRowAdapter({
     const model = requiredString(
       record2.model ?? record2.response_model ?? record2.request_model ?? request.model ?? schemaRequest.model,
       `Helicone record ${recordIndex + 1} model`,
-      format4
+      format5
     );
     const properties = isRecord(record2.request_properties) ? record2.request_properties : isRecord(record2.properties) ? record2.properties : {};
     const trajectoryId2 = optionalString(properties["Helicone-Session-Id"]) ?? requestId;
@@ -34026,7 +34432,7 @@ var heliconeAdapter = createRowAdapter({
       record2.prompt_tokens,
       record2.completion_tokens,
       `Helicone record ${recordIndex + 1}`,
-      format4
+      format5
     );
     return [
       {
@@ -34039,13 +34445,13 @@ var heliconeAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `Helicone record ${recordIndex + 1} input ${index + 1}`,
-              format4
+              format5
             )
           ),
           output: jsonValue(
             response,
             `Helicone record ${recordIndex + 1} response`,
-            format4
+            format5
           ),
           ...usage2 === void 0 ? {} : { usage: usage2 },
           trajectoryId: trajectoryId2,
@@ -34057,7 +34463,7 @@ var heliconeAdapter = createRowAdapter({
 });
 
 // src/data/adapters/langfuse.ts
-var format5 = "langfuse";
+var format6 = "langfuse";
 function confidence5(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
@@ -34067,7 +34473,7 @@ function confidence5(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var langfuseAdapter = createRowAdapter({
-  format: format5,
+  format: format6,
   label: "Langfuse observation export",
   detect: confidence5,
   mapRecord(record2, recordIndex) {
@@ -34075,12 +34481,12 @@ var langfuseAdapter = createRowAdapter({
     const traceId = requiredString(
       record2.trace_id,
       `Langfuse record ${recordIndex + 1} trace_id`,
-      format5
+      format6
     );
     const model = requiredString(
       record2.provided_model_name,
       `Langfuse record ${recordIndex + 1} provided_model_name`,
-      format5
+      format6
     );
     const input = jsonEncodedValue(record2.input);
     const output = jsonEncodedValue(record2.output);
@@ -34090,7 +34496,7 @@ var langfuseAdapter = createRowAdapter({
       (message2, index) => jsonValue(
         message2,
         `Langfuse record ${recordIndex + 1} input ${index + 1}`,
-        format5
+        format6
       )
     );
     if (record2.tool_definitions !== void 0) {
@@ -34098,7 +34504,7 @@ var langfuseAdapter = createRowAdapter({
         jsonValue(
           { tool_definitions: record2.tool_definitions },
           `Langfuse record ${recordIndex + 1} tool definitions`,
-          format5
+          format6
         )
       );
     }
@@ -34108,7 +34514,7 @@ var langfuseAdapter = createRowAdapter({
       usage2.input,
       usage2.output,
       `Langfuse record ${recordIndex + 1}`,
-      format5
+      format6
     );
     const step = {
       stepIndex: 0,
@@ -34117,13 +34523,13 @@ var langfuseAdapter = createRowAdapter({
       output: jsonValue(
         toolCalls2.length === 0 ? output : { value: output, toolCalls: toolCalls2 },
         `Langfuse record ${recordIndex + 1} output`,
-        format5
+        format6
       ),
       ...stepUsage === void 0 ? {} : { usage: stepUsage },
       trajectoryId: optionalString(record2.session_id) ?? requiredString(
         record2.trace_id,
         `Langfuse record ${recordIndex + 1} trajectory`,
-        format5
+        format6
       ),
       ...optionalString(record2.prompt_name ?? record2.name) === void 0 ? {} : { family: optionalString(record2.prompt_name ?? record2.name) },
       ...optionalString(record2.start_time) === void 0 ? {} : { timestamp: optionalString(record2.start_time) }
@@ -34133,7 +34539,7 @@ var langfuseAdapter = createRowAdapter({
 });
 
 // src/data/adapters/langsmith.ts
-var format6 = "langsmith";
+var format7 = "langsmith";
 function confidence6(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
@@ -34143,7 +34549,7 @@ function confidence6(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var langsmithAdapter = createRowAdapter({
-  format: format6,
+  format: format7,
   label: "LangSmith bulk run export",
   detect: confidence6,
   mapRecord(record2, recordIndex) {
@@ -34151,7 +34557,7 @@ var langsmithAdapter = createRowAdapter({
     const traceId = requiredString(
       record2.trace_id,
       `LangSmith record ${recordIndex + 1} trace_id`,
-      format6
+      format7
     );
     const inputs = isRecord(record2.inputs) ? record2.inputs : void 0;
     const outputs = isRecord(record2.outputs) ? record2.outputs : void 0;
@@ -34164,7 +34570,7 @@ var langsmithAdapter = createRowAdapter({
     const model = requiredString(
       metadata.ls_model_name ?? invocation.model,
       `LangSmith record ${recordIndex + 1} model`,
-      format6
+      format7
     );
     const rawMessages = Array.isArray(inputs.messages) ? inputs.messages : [inputs];
     const timestamp3 = optionalString(record2.start_time);
@@ -34172,7 +34578,7 @@ var langsmithAdapter = createRowAdapter({
       record2.prompt_tokens,
       record2.completion_tokens,
       `LangSmith record ${recordIndex + 1}`,
-      format6
+      format7
     );
     return [
       {
@@ -34185,13 +34591,13 @@ var langsmithAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `LangSmith record ${recordIndex + 1} input ${index + 1}`,
-              format6
+              format7
             )
           ),
           output: jsonValue(
             outputs,
             `LangSmith record ${recordIndex + 1} outputs`,
-            format6
+            format7
           ),
           ...usage2 === void 0 ? {} : { usage: usage2 },
           trajectoryId: optionalString(
@@ -34206,7 +34612,7 @@ var langsmithAdapter = createRowAdapter({
 });
 
 // src/data/adapters/openinference.ts
-var format7 = "openinference";
+var format8 = "openinference";
 function confidence7(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
@@ -34236,7 +34642,7 @@ function toolDefinitions(spanAttributes) {
   );
 }
 var openInferenceAdapter = createRowAdapter({
-  format: format7,
+  format: format8,
   label: "OpenInference OTLP file export",
   detect: confidence7,
   mapRecord(record2, recordIndex) {
@@ -34247,12 +34653,12 @@ var openInferenceAdapter = createRowAdapter({
       const traceId = requiredString(
         span.traceId,
         `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} traceId`,
-        format7
+        format8
       );
       const model = requiredString(
         spanAttributes["llm.model_name"],
         `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} model`,
-        format7
+        format8
       );
       let rawMessages = indexedMessages(
         spanAttributes,
@@ -34273,7 +34679,7 @@ var openInferenceAdapter = createRowAdapter({
         spanAttributes["llm.token_count.prompt"],
         spanAttributes["llm.token_count.completion"],
         `OpenInference record ${recordIndex + 1}`,
-        format7
+        format8
       );
       mapped.push({
         traceId,
@@ -34285,13 +34691,13 @@ var openInferenceAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `OpenInference record ${recordIndex + 1} input ${index + 1}`,
-              format7
+              format8
             )
           ),
           output: jsonValue(
             output,
             `OpenInference record ${recordIndex + 1} output`,
-            format7
+            format8
           ),
           ...usage2 === void 0 ? {} : { usage: usage2 },
           trajectoryId: optionalString(spanAttributes["session.id"]) ?? traceId,
@@ -34305,7 +34711,7 @@ var openInferenceAdapter = createRowAdapter({
 });
 
 // src/data/adapters/weave.ts
-var format8 = "weave";
+var format9 = "weave";
 function confidence8(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
@@ -34315,21 +34721,21 @@ function confidence8(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var weaveAdapter = createRowAdapter({
-  format: format8,
+  format: format9,
   label: "W&B Weave call export",
   detect: confidence8,
   mapRecord(record2, recordIndex) {
     const traceId = requiredString(
       record2.trace_id,
       `Weave record ${recordIndex + 1} trace_id`,
-      format8
+      format9
     );
     const inputs = isRecord(record2.inputs) ? record2.inputs : void 0;
     if (inputs === void 0) throw new Error("Weave inputs must be an object");
     const model = requiredString(
       inputs.model,
       `Weave record ${recordIndex + 1} inputs.model`,
-      format8
+      format9
     );
     const rawMessages = Array.isArray(inputs.messages) ? [...inputs.messages] : [inputs];
     if (Array.isArray(inputs.tools)) rawMessages.push({ tools: inputs.tools });
@@ -34340,7 +34746,7 @@ var weaveAdapter = createRowAdapter({
       usage2.prompt_tokens ?? usage2.input_tokens,
       usage2.completion_tokens ?? usage2.output_tokens,
       `Weave record ${recordIndex + 1}`,
-      format8
+      format9
     );
     const timestamp3 = optionalString(record2.started_at);
     const family = optionalString(record2.display_name ?? record2.op_name);
@@ -34355,13 +34761,13 @@ var weaveAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `Weave record ${recordIndex + 1} input ${index + 1}`,
-              format8
+              format9
             )
           ),
           output: jsonValue(
             record2.output,
             `Weave record ${recordIndex + 1} output`,
-            format8
+            format9
           ),
           ...stepUsage === void 0 ? {} : { usage: stepUsage },
           trajectoryId: traceId,
@@ -34391,112 +34797,110 @@ function otelConfidence(sample) {
   }).length;
   return matching === 0 ? 0 : 0.7 + 0.3 * (matching / records.length);
 }
-function adaptOtel(records) {
-  const format9 = "otel-genai";
-  if (!Array.isArray(records)) {
-    throw new TraceAdaptError(format9, "OTel trace records must be a span list");
-  }
-  const grouped = /* @__PURE__ */ new Map();
-  for (const [sourceIndex, candidate] of otelSpans(records).entries()) {
-    if (!isRecord(candidate)) {
-      throw new TraceAdaptError(
-        format9,
-        `OTel span ${sourceIndex + 1} must be an object`
-      );
-    }
-    const attributes = candidate.attributes;
-    if (!isRecord(attributes)) continue;
-    const operation = attributes["gen_ai.operation.name"];
-    if (typeof operation !== "string") continue;
-    if (typeof attributes["gen_ai.request.model"] !== "string" && typeof attributes["gen_ai.response.model"] !== "string") {
-      throw new TraceAdaptError(
-        format9,
-        `OTel span ${sourceIndex + 1} is missing its request or response model`
-      );
-    }
-    const traceId = requiredString(
-      candidate.traceId ?? candidate.trace_id,
-      `OTel span ${sourceIndex + 1} trace ID`,
-      format9
-    );
-    const group = grouped.get(traceId) ?? [];
-    group.push({ record: candidate, sourceIndex });
-    grouped.set(traceId, group);
-  }
-  if (grouped.size === 0) {
-    throw new TraceAdaptError(format9, "No OTel GenAI inference spans found");
-  }
-  return [...grouped.entries()].map(([traceId, spans]) => {
-    if (spans.length > 1 && spans.some(({ record: record2 }) => startValue(record2) === void 0)) {
-      throw new TraceAdaptError(
-        format9,
-        `OTel trajectory ${traceId} must provide a start time for every span`
-      );
-    }
-    spans.sort(
-      (left, right) => compareStartValues(startValue(left.record), startValue(right.record)) || left.sourceIndex - right.sourceIndex
-    );
-    const steps = spans.map(({ record: record2 }, stepIndex) => {
-      const attributes = record2.attributes;
-      const model = requiredString(
-        attributes["gen_ai.request.model"] ?? attributes["gen_ai.response.model"],
-        `OTel trace ${traceId} model`,
-        format9
-      );
-      const usage2 = optionalUsage(
-        attributes["gen_ai.usage.input_tokens"],
-        attributes["gen_ai.usage.output_tokens"],
-        `OTel trace ${traceId}`,
-        format9
-      );
-      const messages = jsonEncodedValue(attributes["gen_ai.input.messages"]);
-      if (!Array.isArray(messages)) {
-        throw new TraceAdaptError(
-          format9,
-          `OTel trace ${traceId} input messages must be an array`
-        );
-      }
-      if (attributes["gen_ai.output.messages"] === void 0) {
-        throw new TraceAdaptError(
-          format9,
-          `OTel trace ${traceId} is missing output messages`
-        );
-      }
-      const step = {
-        stepIndex,
-        model,
-        messages: messages.map(
-          (message2, index) => jsonValue(
-            message2,
-            `OTel trace ${traceId} input message ${index + 1}`,
-            format9
-          )
-        ),
-        output: jsonValue(
-          jsonEncodedValue(attributes["gen_ai.output.messages"]),
-          `OTel trace ${traceId} output messages`,
-          format9
-        ),
-        ...usage2 === void 0 ? {} : { usage: usage2 },
-        trajectoryId: traceId
-      };
-      const systemPrompt = textParts(
-        jsonEncodedValue(attributes["gen_ai.system_instructions"])
-      );
-      if (systemPrompt !== void 0) step.systemPrompt = systemPrompt;
-      const family = optionalString(attributes["rightmodeler.family"]) ?? optionalString(attributes["gen_ai.prompt.name"]);
-      if (family !== void 0) step.family = family;
-      const timestamp3 = startValue(record2);
-      if (timestamp3 !== void 0) step.timestamp = timestamp3;
-      return step;
-    });
-    return normalizedRunSchema.parse({
-      version: "2",
-      traceId,
-      sourceFormat: format9,
-      steps
-    });
+var structuralOperations = /* @__PURE__ */ new Set([
+  "agent_step",
+  "execute_tool",
+  "create_agent",
+  "embeddings",
+  "rerank"
+]);
+function isInference(span) {
+  const operation = span.attributes["gen_ai.operation.name"];
+  return typeof operation === "string" && !structuralOperations.has(operation) && operation !== "invoke_agent";
+}
+function hasInferenceDescendant(span, tree, seen = /* @__PURE__ */ new Set()) {
+  return tree.childrenOf(span).some((child) => {
+    if (seen.has(child)) return false;
+    seen.add(child);
+    return isInference(child) || hasInferenceDescendant(child, tree, seen);
   });
+}
+function agentName(span, tree) {
+  const seen = /* @__PURE__ */ new Set();
+  for (let parent = tree.parentOf(span); parent !== void 0 && !seen.has(parent); parent = tree.parentOf(parent)) {
+    seen.add(parent);
+    if (parent.attributes["gen_ai.operation.name"] === "invoke_agent") {
+      return optionalString(parent.attributes["gen_ai.agent.name"]);
+    }
+  }
+  return void 0;
+}
+function otelStep(span, tree) {
+  const format10 = "otel-genai";
+  const { attributes, sourceIndex } = span;
+  const operation = attributes["gen_ai.operation.name"];
+  if (typeof operation !== "string" || structuralOperations.has(operation)) {
+    return { kind: "skip" };
+  }
+  if (operation === "invoke_agent" && hasInferenceDescendant(span, tree)) {
+    return { kind: "skip" };
+  }
+  if (attributes["gen_ai.output.messages"] === void 0 && attributes["gen_ai.response.finish_reasons"] === void 0) {
+    return { kind: "excluded", reason: "stream_incomplete" };
+  }
+  if (typeof attributes["gen_ai.request.model"] !== "string" && typeof attributes["gen_ai.response.model"] !== "string") {
+    throw new TraceAdaptError(
+      format10,
+      `OTel span ${sourceIndex + 1} is missing its request or response model`
+    );
+  }
+  const traceId = requiredString(
+    span.traceId,
+    `OTel span ${sourceIndex + 1} trace ID`,
+    format10
+  );
+  const model = requiredString(
+    attributes["gen_ai.request.model"] ?? attributes["gen_ai.response.model"],
+    `OTel trace ${traceId} model`,
+    format10
+  );
+  const usage2 = optionalUsage(
+    attributes["gen_ai.usage.input_tokens"],
+    attributes["gen_ai.usage.output_tokens"],
+    `OTel trace ${traceId}`,
+    format10
+  );
+  const messages = jsonEncodedValue(attributes["gen_ai.input.messages"]);
+  if (!Array.isArray(messages)) {
+    throw new TraceAdaptError(
+      format10,
+      `OTel trace ${traceId} input messages must be an array`
+    );
+  }
+  if (attributes["gen_ai.output.messages"] === void 0) {
+    throw new TraceAdaptError(
+      format10,
+      `OTel trace ${traceId} is missing output messages`
+    );
+  }
+  const systemPrompt = textParts(
+    jsonEncodedValue(attributes["gen_ai.system_instructions"])
+  );
+  const family = optionalString(attributes["rightmodeler.family"]) ?? optionalString(attributes["gen_ai.prompt.name"]) ?? optionalString(attributes["gen_ai.agent.name"]) ?? agentName(span, tree);
+  return {
+    kind: "step",
+    step: {
+      model,
+      messages: messages.map(
+        (message2, index) => jsonValue(
+          message2,
+          `OTel trace ${traceId} input message ${index + 1}`,
+          format10
+        )
+      ),
+      output: jsonValue(
+        jsonEncodedValue(attributes["gen_ai.output.messages"]),
+        `OTel trace ${traceId} output messages`,
+        format10
+      ),
+      ...usage2 === void 0 ? {} : { usage: usage2 },
+      ...systemPrompt === void 0 ? {} : { systemPrompt },
+      ...family === void 0 ? {} : { family }
+    }
+  };
+}
+function adaptOtelWithReport(records) {
+  return adaptSpans("otel-genai", "OTel", records, otelStep);
 }
 function openAiConfidence(sample) {
   const records = sampleRecords(sample).filter(isRecord);
@@ -34507,29 +34911,29 @@ function openAiConfidence(sample) {
   return matching === 0 ? 0 : 0.7 + 0.3 * (matching / records.length);
 }
 function adaptOpenAi(records) {
-  const format9 = "openai-jsonl";
+  const format10 = "openai-jsonl";
   if (!Array.isArray(records)) {
-    throw new TraceAdaptError(format9, "OpenAI trace records must be a list");
+    throw new TraceAdaptError(format10, "OpenAI trace records must be a list");
   }
   const grouped = /* @__PURE__ */ new Map();
   for (const [index, candidate] of records.entries()) {
     if (!isRecord(candidate)) {
       throw new TraceAdaptError(
-        format9,
+        format10,
         `OpenAI record ${index + 1} must be an object`
       );
     }
     const trajectoryId2 = requiredString(
       candidate.case_id,
       `OpenAI record ${index + 1} case_id`,
-      format9
+      format10
     );
     const group = grouped.get(trajectoryId2) ?? [];
     group.push({ record: candidate, sourceIndex: index });
     grouped.set(trajectoryId2, group);
   }
   if (grouped.size === 0) {
-    throw new TraceAdaptError(format9, "OpenAI trace contains no records");
+    throw new TraceAdaptError(format10, "OpenAI trace contains no records");
   }
   return [...grouped.entries()].map(([traceId, group]) => {
     group.sort(
@@ -34541,35 +34945,35 @@ function adaptOpenAi(records) {
     const steps = group.map(({ record: record2 }, stepIndex) => {
       if (!Array.isArray(record2.messages)) {
         throw new TraceAdaptError(
-          format9,
+          format10,
           `OpenAI trace ${traceId} messages must be an array`
         );
       }
       const response = record2.response;
       if (!isRecord(response) || !Array.isArray(response.choices)) {
         throw new TraceAdaptError(
-          format9,
+          format10,
           `OpenAI trace ${traceId} response choices must be an array`
         );
       }
       const choice = response.choices[0];
       if (!isRecord(choice) || !isRecord(choice.message)) {
         throw new TraceAdaptError(
-          format9,
+          format10,
           `OpenAI trace ${traceId} is missing its first response message`
         );
       }
       const model = requiredString(
         record2.model ?? response.model,
         `OpenAI trace ${traceId} model`,
-        format9
+        format10
       );
       const usage2 = isRecord(record2.usage) ? record2.usage : isRecord(response.usage) ? response.usage : {};
       const stepUsage = optionalUsage(
         usage2.prompt_tokens,
         usage2.completion_tokens,
         `OpenAI trace ${traceId}`,
-        format9
+        format10
       );
       const systemMessages = record2.messages.filter(
         (message2) => isRecord(message2) && message2.role === "system"
@@ -34584,13 +34988,13 @@ function adaptOpenAi(records) {
           (message2, index) => jsonValue(
             message2,
             `OpenAI trace ${traceId} input message ${index + 1}`,
-            format9
+            format10
           )
         ),
         output: jsonValue(
           choice.message,
           `OpenAI trace ${traceId} response message`,
-          format9
+          format10
         ),
         ...stepUsage === void 0 ? {} : { usage: stepUsage },
         trajectoryId: traceId
@@ -34604,34 +35008,34 @@ function adaptOpenAi(records) {
       const costUsd = optionalNonnegativeNumber(
         record2.cost_usd ?? response.cost_usd,
         `OpenAI trace ${traceId} cost_usd`,
-        format9
+        format10
       );
       if (costUsd !== void 0) step.costUsd = costUsd;
       const durationMs = optionalNonnegativeNumber(
         record2.duration_ms ?? response.duration_ms ?? record2.latency_ms,
         `OpenAI trace ${traceId} duration_ms`,
-        format9
+        format10
       );
       if (durationMs !== void 0) step.durationMs = durationMs;
       if (record2.evaluator !== void 0) {
         step.evaluator = jsonValue(
           record2.evaluator,
           `OpenAI trace ${traceId} evaluator`,
-          format9
+          format10
         );
       }
       if (record2.evaluator_version !== void 0) {
         step.evaluatorVersion = jsonValue(
           record2.evaluator_version,
           `OpenAI trace ${traceId} evaluator version`,
-          format9
+          format10
         );
       }
       if (record2.retry_count !== void 0) {
         step.retryCount = tokenCount2(
           record2.retry_count,
           `OpenAI trace ${traceId} retry count`,
-          format9
+          format10
         );
       }
       return step;
@@ -34639,16 +35043,16 @@ function adaptOpenAi(records) {
     return normalizedRunSchema.parse({
       version: "2",
       traceId,
-      sourceFormat: format9,
+      sourceFormat: format10,
       steps
     });
   });
 }
-function existingAdapterReport(records, format9, adapt) {
+function existingAdapterReport(records, format10, adapt) {
   if (!Array.isArray(records)) {
-    throw new TraceAdaptError(format9, `${format9} trace records must be a list`);
+    throw new TraceAdaptError(format10, `${format10} trace records must be a list`);
   }
-  let accepted = [];
+  const accepted = [];
   const droppedRecords = [];
   for (const [recordIndex, record2] of records.entries()) {
     try {
@@ -34667,28 +35071,6 @@ function existingAdapterReport(records, format9, adapt) {
       });
     }
   }
-  if (format9 === "otel-genai") {
-    const traceCounts = /* @__PURE__ */ new Map();
-    for (const { record: record2 } of accepted) {
-      if (!isRecord(record2)) continue;
-      const traceId = optionalString(record2.traceId ?? record2.trace_id);
-      if (traceId !== void 0) {
-        traceCounts.set(traceId, (traceCounts.get(traceId) ?? 0) + 1);
-      }
-    }
-    accepted = accepted.filter(({ record: record2, recordIndex }) => {
-      if (!isRecord(record2)) return true;
-      const traceId = optionalString(record2.traceId ?? record2.trace_id);
-      if (traceId !== void 0 && (traceCounts.get(traceId) ?? 0) > 1 && startValue(record2) === void 0) {
-        droppedRecords.push({
-          recordIndex,
-          reason: `OTel trajectory ${traceId} is missing its start time`
-        });
-        return false;
-      }
-      return true;
-    });
-  }
   return {
     runs: accepted.length === 0 ? [] : adapt(accepted.map(({ record: record2 }) => record2)),
     droppedRecords
@@ -34697,8 +35079,17 @@ function existingAdapterReport(records, format9, adapt) {
 var otelGenAiAdapter = {
   name: "otel-genai",
   detect: otelConfidence,
-  adapt: adaptOtel,
-  adaptWithReport: (records) => existingAdapterReport(records, "otel-genai", adaptOtel)
+  adapt: (records) => {
+    const result2 = adaptOtelWithReport(records);
+    if (result2.runs.length === 0 && result2.droppedRecords.length === 0) {
+      throw new TraceAdaptError(
+        "otel-genai",
+        "No OTel GenAI inference spans found"
+      );
+    }
+    return strictRuns("otel-genai", result2);
+  },
+  adaptWithReport: adaptOtelWithReport
 };
 var openAiJsonlAdapter = {
   name: "openai-jsonl",
@@ -34708,6 +35099,7 @@ var openAiJsonlAdapter = {
 };
 var traceAdapters = [
   otelGenAiAdapter,
+  aiSdkAdapter,
   openAiJsonlAdapter,
   langfuseAdapter,
   braintrustAdapter,
@@ -35077,11 +35469,1034 @@ function scrubRuns(runs) {
 }
 
 // src/apply/orchestrator.ts
-import { execFile as execFile3 } from "node:child_process";
-import { createHash as createHash5 } from "node:crypto";
-import { readFile as readFile5 } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { execFile as execFile5 } from "node:child_process";
+import { createHash as createHash6 } from "node:crypto";
+import { readFile as readFile8 } from "node:fs/promises";
+import { join as join11 } from "node:path";
+import { promisify as promisify4 } from "node:util";
+
+// src/code-graph/graph.ts
+import { constants } from "node:buffer";
+import { createHash as createHash4 } from "node:crypto";
+import { readFile as readFile4, stat as stat2 } from "node:fs/promises";
+import { isAbsolute, relative as relative4, sep as sep4 } from "node:path";
+var provenanceRank = {
+  AMBIGUOUS: 0,
+  INFERRED: 1,
+  EXTRACTED: 2
+};
+var tierScores = {
+  EXTRACTED: 1,
+  INFERRED: 0.55,
+  AMBIGUOUS: 0.2
+};
+var locationSchema = external_exports.union([external_exports.string(), external_exports.number()]).nullable().optional();
+var fileSchema = external_exports.looseObject({
+  nodes: external_exports.array(external_exports.unknown()),
+  links: external_exports.array(external_exports.unknown()).optional(),
+  edges: external_exports.array(external_exports.unknown()).optional(),
+  built_at_commit: external_exports.string().min(1).optional().catch(void 0)
+});
+var nodeSchema = external_exports.looseObject({
+  id: external_exports.string().min(1),
+  label: external_exports.string().optional(),
+  file_type: external_exports.string().optional(),
+  source_file: external_exports.string().nullable().optional(),
+  source_location: locationSchema
+});
+var edgeSchema = external_exports.looseObject({
+  source: external_exports.string().min(1),
+  target: external_exports.string().min(1),
+  relation: external_exports.string().min(1),
+  _src: external_exports.string().min(1).optional(),
+  _tgt: external_exports.string().min(1).optional(),
+  confidence: external_exports.enum(["EXTRACTED", "INFERRED", "AMBIGUOUS"]),
+  confidence_score: external_exports.number().optional(),
+  source_file: external_exports.string().nullable().optional(),
+  source_location: locationSchema
+});
+async function graphFileDigest(path) {
+  try {
+    const { size } = await stat2(path);
+    if (size > constants.MAX_STRING_LENGTH) return `too-large:${size}`;
+    return createHash4("sha256").update(await readFile4(path)).digest("hex");
+  } catch {
+    return "unreadable";
+  }
+}
+async function loadCodeGraph(path, repoDir) {
+  const fromRepo = relative4(repoDir, path).split(sep4).join("/");
+  const displayPath = fromRepo.startsWith("..") ? path : fromRepo;
+  const unreadable = (error51) => ({
+    displayPath,
+    issue: {
+      code: "code_graph_unreadable",
+      message: `Cannot read the code graph at ${displayPath} (${errorCode(error51)}). Code context is omitted. Check the --code-graph path, or rebuild the graph with \`graphify update .\`.`
+    }
+  });
+  const invalid = (reason) => ({
+    displayPath,
+    issue: {
+      code: "code_graph_invalid",
+      message: `${displayPath} is not a Graphify graph.json (${reason}). Code context is omitted. Pass the graph.json that \`graphify update .\` writes under graphify-out/.`
+    }
+  });
+  let size;
+  try {
+    size = (await stat2(path)).size;
+  } catch (error51) {
+    return unreadable(error51);
+  }
+  if (size > constants.MAX_STRING_LENGTH) {
+    return {
+      displayPath,
+      issue: {
+        code: "code_graph_too_large",
+        message: `The code graph at ${displayPath} is ${size} bytes, over the ${constants.MAX_STRING_LENGTH}-byte limit Node.js can read. Code context is omitted. Narrow the graph with a .graphifyignore and rebuild it with \`graphify update .\`.`
+      }
+    };
+  }
+  let bytes;
+  try {
+    bytes = await readFile4(path);
+  } catch (error51) {
+    return unreadable(error51);
+  }
+  let raw;
+  try {
+    raw = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    return invalid("not JSON");
+  }
+  const file2 = fileSchema.safeParse(raw);
+  if (!file2.success) {
+    return invalid(
+      Array.isArray(raw?.nodes) ? "no links or edges array" : "no nodes array"
+    );
+  }
+  const rawEdges = file2.data.links ?? file2.data.edges;
+  if (rawEdges === void 0) return invalid("no links or edges array");
+  const nodes = /* @__PURE__ */ new Map();
+  let ignoredNodes = 0;
+  for (const value of file2.data.nodes) {
+    const node = nodeSchema.safeParse(value);
+    if (!node.success) {
+      ignoredNodes += 1;
+      continue;
+    }
+    nodes.set(node.data.id, {
+      id: node.data.id,
+      label: node.data.label ?? node.data.id,
+      path: normalizeSourcePath(node.data.source_file, repoDir),
+      line: parseLine(node.data.source_location),
+      fileType: node.data.file_type ?? null
+    });
+  }
+  const edges = [];
+  const unknownConfidences = /* @__PURE__ */ new Set();
+  let ignoredEdges = 0;
+  for (const value of rawEdges) {
+    const edge = edgeSchema.safeParse(value);
+    if (!edge.success) {
+      ignoredEdges += 1;
+      const confidence9 = value?.confidence;
+      if (typeof confidence9 === "string" && !Object.hasOwn(tierScores, confidence9) && unknownConfidences.size < 3) {
+        unknownConfidences.add(confidence9);
+      }
+      continue;
+    }
+    const { _src, _tgt } = edge.data;
+    const [source, target] = _src !== void 0 && _tgt !== void 0 ? [_src, _tgt] : [edge.data.source, edge.data.target];
+    if (!nodes.has(source) || !nodes.has(target)) {
+      ignoredEdges += 1;
+      continue;
+    }
+    const score = edge.data.confidence_score;
+    edges.push({
+      source,
+      target,
+      relation: edge.data.relation,
+      provenance: edge.data.confidence,
+      score: score !== void 0 && score >= 0 && score <= 1 ? score : tierScores[edge.data.confidence],
+      path: normalizeSourcePath(edge.data.source_file, repoDir),
+      line: parseLine(edge.data.source_location)
+    });
+  }
+  const sample = unknownConfidences.size === 0 ? "" : ` (for example confidence ${[...unknownConfidences].map((value) => `"${value}"`).join(", ")})`;
+  return {
+    graph: {
+      displayPath,
+      sha256: createHash4("sha256").update(bytes).digest("hex"),
+      builtAtCommit: file2.data.built_at_commit ?? null,
+      nodes,
+      edges,
+      ignoredNodes,
+      ignoredEdges
+    },
+    issues: ignoredNodes + ignoredEdges === 0 ? [] : [
+      {
+        code: "code_graph_schema_drift",
+        message: `Ignored ${ignoredEdges} edges and ${ignoredNodes} nodes in ${displayPath} whose shape this rightmodeler does not read${sample}. The rest of the graph is used. Rebuilding with a current Graphify (tested with 0.9.65) usually clears this.`
+      }
+    ]
+  };
+}
+function normalizeSourcePath(value, repoDir) {
+  if (value === void 0 || value === null || value === "") return null;
+  const slashed = value.replaceAll("\\", "/");
+  const path = isAbsolute(slashed) ? relative4(repoDir, slashed).split(sep4).join("/") : slashed;
+  return path.startsWith("./") ? path.slice(2) : path;
+}
+function parseLine(value) {
+  const match = /^L?([1-9]\d*)$/.exec(String(value));
+  return match === null ? null : Number(match[1]);
+}
+function errorCode(error51) {
+  const { code, message: message2 } = error51;
+  return code ?? message2;
+}
+
+// src/code-graph/context.ts
+import { basename } from "node:path";
+
+// src/enrich/blast-radius.ts
+function addOwner(owners, owner) {
+  const current = owners.get(owner.handle);
+  if (current === void 0 || owner.source === "codeowners") {
+    owners.set(owner.handle, owner);
+  }
+}
+function blastRadius({
+  stepRecords,
+  verdicts,
+  owners: ownerResolutions
+}) {
+  const recordsById = new Map(
+    stepRecords.map((record2) => [record2.stepId, record2])
+  );
+  const ownersByPath = new Map(
+    ownerResolutions.map(
+      (resolution) => [resolution.path, resolution]
+    )
+  );
+  const recommendedFamilies = [
+    ...new Set(
+      verdicts.filter(({ decision }) => decision === "recommend").map(({ familyId }) => familyId)
+    )
+  ].sort(compareText);
+  return recommendedFamilies.map((familyId) => {
+    const roots = stepRecords.filter((record2) => record2.family === familyId);
+    const swappedFiles = new Set(roots.map((record2) => record2.callSite.path));
+    const downstreamFiles = /* @__PURE__ */ new Set();
+    const visited = new Set(roots.map((record2) => record2.stepId));
+    const queue = roots.flatMap((record2) => record2.downstreamStepIds);
+    const owners = /* @__PURE__ */ new Map();
+    for (const root of roots) {
+      for (const owner of ownersByPath.get(root.callSite.path)?.owners ?? []) {
+        addOwner(owners, owner);
+      }
+    }
+    while (queue.length > 0) {
+      const stepId = queue.shift();
+      if (visited.has(stepId)) continue;
+      visited.add(stepId);
+      const record2 = recordsById.get(stepId);
+      if (record2 === void 0) continue;
+      if (!swappedFiles.has(record2.callSite.path)) {
+        downstreamFiles.add(record2.callSite.path);
+      }
+      for (const owner of ownersByPath.get(record2.callSite.path)?.owners ?? []) {
+        addOwner(owners, owner);
+      }
+      queue.push(...record2.downstreamStepIds);
+    }
+    return {
+      familyId,
+      files: [...swappedFiles].sort(compareText),
+      downstreamFiles: [...downstreamFiles].sort(compareText),
+      owners: [...owners.values()].sort(
+        (left, right) => compareText(left.handle, right.handle)
+      )
+    };
+  });
+}
+
+// src/enrich/conventions.ts
+import { execFile as execFile2 } from "node:child_process";
+import { access, readFile as readFile5 } from "node:fs/promises";
+import { dirname as dirname3, join as join7, relative as relative5, resolve as resolve4 } from "node:path";
 import { promisify as promisify2 } from "node:util";
+
+// src/enrich/shared.ts
+var codeownersPaths = [
+  ".github/CODEOWNERS",
+  "CODEOWNERS",
+  "docs/CODEOWNERS"
+];
+
+// src/enrich/conventions.ts
+var execFileAsync2 = promisify2(execFile2);
+var pullRequestTemplates = [
+  ".github/PULL_REQUEST_TEMPLATE.md",
+  "docs/PULL_REQUEST_TEMPLATE.md",
+  "PULL_REQUEST_TEMPLATE.md"
+];
+var prettierConfigs = [
+  ".prettierrc",
+  ".prettierrc.json",
+  ".prettierrc.yaml",
+  ".prettierrc.yml",
+  ".prettierrc.toml",
+  ".prettierrc.js",
+  ".prettierrc.cjs",
+  ".prettierrc.mjs",
+  "prettier.config.js",
+  "prettier.config.cjs",
+  "prettier.config.mjs"
+];
+function posixPath(repoDir, absolutePath) {
+  return relative5(repoDir, absolutePath).replaceAll("\\", "/");
+}
+async function existingPath(repoDir, candidates) {
+  for (const path of candidates) {
+    try {
+      await access(join7(repoDir, path));
+      return path;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+async function nestedAgentFiles(repoDir) {
+  return (await gitOutput(repoDir, ["ls-files", "--", "*AGENTS.md"])).split(/\r?\n/).filter((path) => path === "AGENTS.md" || path.endsWith("/AGENTS.md"));
+}
+function includeTargets(content) {
+  const targets = [];
+  for (const line of content.split(/\r?\n/)) {
+    const include = line.match(/^\s*@include\s+(.+?)\s*$/)?.[1];
+    if (include?.endsWith(".md")) {
+      targets.push(include);
+      continue;
+    }
+    const pointer = line.match(/^\s*@([^\s]+\.md)\s*$/)?.[1];
+    if (pointer !== void 0) targets.push(pointer);
+  }
+  return targets;
+}
+function includePath(repoDir, includedFrom, target) {
+  const absolute = target.startsWith("/") ? resolve4(repoDir, target.slice(1)) : resolve4(repoDir, dirname3(includedFrom), target);
+  return { absolute, relative: posixPath(repoDir, absolute) };
+}
+async function captureInstructionFiles(repoDir) {
+  const rootFiles = (await Promise.all(
+    ["AGENTS.md", "CLAUDE.md"].map(async (path) => {
+      try {
+        await access(join7(repoDir, path));
+        return path;
+      } catch {
+        return null;
+      }
+    })
+  )).filter((path) => path !== null);
+  const seeds = [
+    .../* @__PURE__ */ new Set([...rootFiles, ...await nestedAgentFiles(repoDir)])
+  ];
+  const files = /* @__PURE__ */ new Map();
+  const warnings = [];
+  const warningKeys = /* @__PURE__ */ new Set();
+  function warn(warning) {
+    const key = JSON.stringify(warning);
+    if (warningKeys.has(key)) return;
+    warningKeys.add(key);
+    warnings.push(warning);
+  }
+  async function capture(path, depth, stack, includedFrom) {
+    let content;
+    try {
+      content = await readFile5(join7(repoDir, path), "utf8");
+    } catch {
+      warn(
+        includedFrom === void 0 ? { name: "instruction_file_unreadable", path } : {
+          name: "instruction_include_unreadable",
+          path,
+          includedFrom
+        }
+      );
+      return;
+    }
+    files.set(path, content);
+    for (const target of includeTargets(content)) {
+      const included = includePath(repoDir, path, target);
+      if (stack.includes(included.relative) || included.relative === path) {
+        warn({
+          name: "instruction_include_cycle",
+          path: included.relative,
+          includedFrom: path
+        });
+        continue;
+      }
+      if (depth < 1) {
+        await capture(included.relative, depth + 1, [...stack, path], path);
+      }
+    }
+  }
+  for (const seed of seeds.sort(compareText)) {
+    await capture(seed, 0, []);
+  }
+  return {
+    files: [...files.entries()].sort(([left], [right]) => compareText(left, right)).map(([path, content]) => ({ path, content })),
+    warnings: warnings.sort(
+      (left, right) => compareText(left.name, right.name) || compareText(left.path, right.path) || compareText(left.includedFrom ?? "", right.includedFrom ?? "")
+    )
+  };
+}
+async function readFirst(repoDir, candidates) {
+  const path = await existingPath(repoDir, candidates);
+  return path === null ? null : readFile5(join7(repoDir, path), "utf8");
+}
+async function detectFormatter(repoDir) {
+  const prettier = await existingPath(repoDir, prettierConfigs);
+  if (prettier !== null) return { kind: "prettier", configPath: prettier };
+  const ruff = await existingPath(repoDir, ["ruff.toml", ".ruff.toml"]);
+  if (ruff !== null) return { kind: "ruff", configPath: ruff };
+  const pyproject = await existingPath(repoDir, ["pyproject.toml"]);
+  if (pyproject !== null && /^\s*\[tool\.ruff(?:\.[^\]]+)?\]\s*$/m.test(
+    await readFile5(join7(repoDir, pyproject), "utf8")
+  )) {
+    return { kind: "ruff", configPath: pyproject };
+  }
+  const goModule = await existingPath(repoDir, ["go.mod"]);
+  if (goModule !== null) return { kind: "gofmt", configPath: goModule };
+  return { kind: null, configPath: null };
+}
+async function gitOutput(repoDir, args) {
+  try {
+    const { stdout } = await execFileAsync2("git", ["-C", repoDir, ...args], {
+      encoding: "utf8"
+    });
+    return stdout;
+  } catch {
+    return "";
+  }
+}
+async function inferCommitConvention(repoDir) {
+  const inferredFrom = (await gitOutput(repoDir, ["log", "-30", "--format=%s"])).split(/\r?\n/).filter((subject) => subject !== "");
+  const conventional = inferredFrom.filter(
+    (subject) => /^(?:build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(?:\([^)]+\))?!?:\s+.+$/.test(
+      subject
+    )
+  ).length;
+  return {
+    style: inferredFrom.length > 0 && conventional > inferredFrom.length / 2 ? "conventional" : "plain",
+    inferredFrom
+  };
+}
+async function inferBranchPrefix(repoDir) {
+  const branches = (await gitOutput(repoDir, [
+    "for-each-ref",
+    "--sort=-committerdate",
+    "--count=30",
+    "--format=%(refname)",
+    "refs/heads",
+    "refs/remotes"
+  ])).split(/\r?\n/).filter((branch) => branch !== "").map(
+    (branch) => branch.startsWith("refs/heads/") ? branch.slice("refs/heads/".length) : branch.replace(/^refs\/remotes\/[^/]+\//, "")
+  ).filter((branch) => branch !== "HEAD");
+  const counts = /* @__PURE__ */ new Map();
+  for (const branch of new Set(branches)) {
+    const slash = branch.indexOf("/");
+    if (slash < 1) continue;
+    const prefix = branch.slice(0, slash + 1);
+    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort(
+    ([leftPrefix, leftCount], [rightPrefix, rightCount]) => rightCount - leftCount || compareText(leftPrefix, rightPrefix)
+  );
+  if (ranked.length === 0) return null;
+  return ranked[0][0];
+}
+async function captureConventions({
+  repoDir
+}) {
+  const instructions = await captureInstructionFiles(repoDir);
+  return {
+    version: "1",
+    instructionFiles: instructions.files,
+    prTemplate: await readFirst(repoDir, pullRequestTemplates),
+    codeowners: await existingPath(repoDir, codeownersPaths),
+    formatter: await detectFormatter(repoDir),
+    commitConvention: await inferCommitConvention(repoDir),
+    branchPrefix: await inferBranchPrefix(repoDir),
+    warnings: instructions.warnings
+  };
+}
+
+// src/enrich/owners.ts
+import { execFile as execFile3 } from "node:child_process";
+import { access as access2, readFile as readFile6 } from "node:fs/promises";
+import { isAbsolute as isAbsolute2, join as join8, relative as relative6 } from "node:path";
+import { promisify as promisify3 } from "node:util";
+var execFileAsync3 = promisify3(execFile3);
+var maximumBlameOwners = 3;
+var maximumBlameConcurrency = 4;
+function repositoryPath(repoDir, filePath) {
+  const path = isAbsolute2(filePath) ? relative6(repoDir, filePath) : filePath;
+  return path.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, "");
+}
+async function findCodeowners(repoDir) {
+  for (const path of codeownersPaths) {
+    try {
+      await access2(join8(repoDir, path));
+      return path;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+function parseCodeowners(content) {
+  const rules = [];
+  for (const line of content.split(/\r?\n/)) {
+    const rule = line.split("#")[0].trim();
+    if (rule === "") continue;
+    const [pattern, ...owners] = rule.split(/\s+/);
+    rules.push({ pattern, owners });
+  }
+  return rules;
+}
+function escapeRegex3(character) {
+  return /[\\^$.*+?()[\]{}|]/.test(character) ? `\\${character}` : character;
+}
+function patternBody(pattern) {
+  let body = "";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+    if (character !== "*") {
+      body += character === "?" ? "[^/]" : escapeRegex3(character);
+      continue;
+    }
+    const next = pattern[index + 1];
+    if (next !== "*") {
+      body += "[^/]*";
+      continue;
+    }
+    while (pattern[index + 1] === "*") index += 1;
+    if (pattern[index + 1] === "/") {
+      index += 1;
+      body += "(?:.*/)?";
+    } else {
+      body += ".*";
+    }
+  }
+  return body;
+}
+function codeownersRegex(pattern) {
+  const anchored = pattern.startsWith("/") || pattern.replace(/\/$/, "").includes("/");
+  const directory = pattern.endsWith("/");
+  const normalized = pattern.replace(/^\//, "").replace(/\/$/, "");
+  const exactPath = !/[*?]/.test(normalized);
+  const prefix = anchored ? "^" : "(?:^|.*/)";
+  const descendants = directory || exactPath || pattern.endsWith("/**") || /^\*\*\/[^*?/]+$/.test(pattern) ? "(?:/.*)?" : "";
+  return new RegExp(`${prefix}${patternBody(normalized)}${descendants}$`);
+}
+function matchingRule(rules, filePath) {
+  let matched = null;
+  for (const rule of rules) {
+    if (rule.matcher.test(filePath)) matched = rule;
+  }
+  return matched;
+}
+function blameAuthors(output) {
+  const authors = /* @__PURE__ */ new Map();
+  let authorEmail = null;
+  let authorTime = 0;
+  let committerEmail = null;
+  let committerTime = 0;
+  for (const line of output.split(/\r?\n/)) {
+    if (line.startsWith("author-mail ")) {
+      authorEmail = line.slice("author-mail ".length).replace(/^<|>$/g, "");
+    } else if (line.startsWith("author-time ")) {
+      authorTime = Number.parseInt(line.slice("author-time ".length), 10) || 0;
+    } else if (line.startsWith("committer-mail ")) {
+      committerEmail = line.slice("committer-mail ".length).replace(/^<|>$/g, "");
+    } else if (line.startsWith("committer-time ")) {
+      committerTime = Number.parseInt(line.slice("committer-time ".length), 10) || 0;
+    } else if (line.startsWith("	")) {
+      const email3 = authorEmail ?? committerEmail;
+      const time3 = authorTime || committerTime;
+      if (email3 !== null) {
+        const author = authors.get(email3) ?? {
+          lines: 0,
+          latestAuthorTime: 0
+        };
+        author.lines += 1;
+        author.latestAuthorTime = Math.max(author.latestAuthorTime, time3);
+        authors.set(email3, author);
+      }
+      authorEmail = null;
+      authorTime = 0;
+      committerEmail = null;
+      committerTime = 0;
+    }
+  }
+  return [...authors.entries()].sort(
+    ([leftEmail, left], [rightEmail, right]) => right.latestAuthorTime - left.latestAuthorTime || right.lines - left.lines || compareText(leftEmail, rightEmail)
+  ).slice(0, maximumBlameOwners).map(([handle]) => ({ handle, source: "blame" }));
+}
+async function ownersFromBlame(repoDir, filePath) {
+  try {
+    const { stdout } = await execFileAsync3(
+      "git",
+      ["-C", repoDir, "blame", "--line-porcelain", "--", filePath],
+      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
+    );
+    return blameAuthors(stdout);
+  } catch {
+    return [];
+  }
+}
+async function resolveOwners({
+  repoDir,
+  filePaths
+}) {
+  const codeownersPath = await findCodeowners(repoDir);
+  const rules = codeownersPath === null ? [] : parseCodeowners(
+    await readFile6(join8(repoDir, codeownersPath), "utf8")
+  ).map((rule) => ({
+    ...rule,
+    matcher: codeownersRegex(rule.pattern)
+  }));
+  const paths = filePaths.map(
+    (inputPath) => repositoryPath(repoDir, inputPath)
+  );
+  const rulesByPath = new Map(
+    [...new Set(paths)].map(
+      (path) => [path, matchingRule(rules, path)]
+    )
+  );
+  const blamePaths = [...rulesByPath.entries()].filter(([, rule]) => rule === null).map(([path]) => path);
+  const blameOwnersByPath = /* @__PURE__ */ new Map();
+  let nextPath = 0;
+  async function blameWorker() {
+    while (nextPath < blamePaths.length) {
+      const path = blamePaths[nextPath++];
+      blameOwnersByPath.set(path, await ownersFromBlame(repoDir, path));
+    }
+  }
+  await Promise.all(
+    Array.from(
+      { length: Math.min(maximumBlameConcurrency, blamePaths.length) },
+      () => blameWorker()
+    )
+  );
+  return paths.map((path) => {
+    const rule = rulesByPath.get(path) ?? null;
+    if (rule !== null) {
+      return rule.owners.length === 0 ? {
+        path,
+        owners: [],
+        reason: "codeowners_rule_without_owners"
+      } : {
+        path,
+        owners: rule.owners.map((handle) => ({
+          handle,
+          source: "codeowners"
+        }))
+      };
+    }
+    const owners = blameOwnersByPath.get(path) ?? [];
+    return owners.length === 0 ? {
+      path,
+      owners,
+      reason: "no_codeowners_match_or_blame"
+    } : { path, owners };
+  });
+}
+
+// src/code-graph/context.ts
+var CALLER_RELATIONS = /* @__PURE__ */ new Set(["calls", "indirect_call"]);
+var CALLER_DEPTH = 2;
+var TEST_RELATIONS = /* @__PURE__ */ new Set([
+  "calls",
+  "indirect_call",
+  "references",
+  "imports",
+  "imports_from",
+  "dynamic_import",
+  "re_exports",
+  "inherits",
+  "extends",
+  "implements",
+  "uses",
+  "mixes_in",
+  "embeds",
+  "requires",
+  "contains",
+  "method"
+]);
+var TEST_DEPTH = 3;
+var IMPORT_RELATIONS = /* @__PURE__ */ new Set([
+  "imports",
+  "imports_from",
+  "dynamic_import",
+  "re_exports"
+]);
+var TEST_PATH = /(^|\/)(__tests__|tests?)\/|\.(test|spec)\.[^/]+$|(^|\/)test_[^/]*\.py$|_test\.(py|go)$/;
+var MANIFEST_PATH = /(^|\/)(package\.json|pyproject\.toml|requirements\.txt)$/;
+var KIND_ORDER = {
+  caller: 0,
+  test: 1,
+  owner: 2
+};
+function weaker(left, right) {
+  return provenanceRank[left] <= provenanceRank[right] ? left : right;
+}
+function stronger(left, right) {
+  return (provenanceRank[left.provenance] - provenanceRank[right.provenance] || left.score - right.score || right.hops - left.hops || compareText(right.path, left.path)) > 0;
+}
+function walk(seed, nodes, incoming, relations, depth) {
+  const visited = /* @__PURE__ */ new Set([seed.id]);
+  const hits = [];
+  let frontier = [{ id: seed.id, provenance: "EXTRACTED", score: 1 }];
+  for (let hops = 1; hops <= depth && frontier.length > 0; hops += 1) {
+    const next = [];
+    for (const parent of frontier) {
+      for (const edge of incoming.get(parent.id) ?? []) {
+        if (!relations.has(edge.relation) || visited.has(edge.source)) {
+          continue;
+        }
+        visited.add(edge.source);
+        const node = nodes.get(edge.source);
+        const provenance = weaker(parent.provenance, edge.provenance);
+        const score = Math.min(parent.score, edge.score);
+        hits.push({
+          node,
+          hops,
+          provenance,
+          score,
+          path: edge.path ?? node.path,
+          line: edge.line
+        });
+        next.push({ id: node.id, provenance, score });
+      }
+    }
+    frontier = next;
+  }
+  return hits;
+}
+function compareFindings(left, right) {
+  return KIND_ORDER[left.kind] - KIND_ORDER[right.kind] || left.hops - right.hops || compareText(left.path, right.path) || compareLines(left.line, right.line) || compareText(left.label, right.label);
+}
+function compareLines(left, right) {
+  if (left === right) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return left - right;
+}
+function append2(map2, key, value) {
+  const list = map2.get(key);
+  if (list === void 0) map2.set(key, [value]);
+  else list.push(value);
+}
+function graphifyId(name) {
+  return name.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+}
+async function readCodeContext(input) {
+  const loaded = await loadCodeGraph(input.graphPath, input.repoDir);
+  if ("issue" in loaded) {
+    return {
+      context: {
+        status: "unavailable",
+        graphPath: loaded.displayPath,
+        reason: loaded.issue.message
+      },
+      issues: [loaded.issue]
+    };
+  }
+  const { graph } = loaded;
+  const issues = [...loaded.issues];
+  const nodesByPath = /* @__PURE__ */ new Map();
+  for (const node of graph.nodes.values()) {
+    if (node.path !== null) append2(nodesByPath, node.path, node);
+  }
+  const incoming = /* @__PURE__ */ new Map();
+  for (const edge of graph.edges) append2(incoming, edge.target, edge);
+  for (const edges of incoming.values()) {
+    edges.sort(
+      (left, right) => compareText(left.source, right.source) || compareText(left.relation, right.relation)
+    );
+  }
+  const callSitePaths = new Set(input.callSites.map(({ path }) => path));
+  if (callSitePaths.size > 0 && ![...callSitePaths].some((path) => nodesByPath.has(path))) {
+    const issue3 = {
+      code: "code_graph_repo_mismatch",
+      message: `None of the ${callSitePaths.size} scanned call-site files appear in the code graph at ${graph.displayPath}, so it describes another repository or folder. Code context is omitted. Build the graph from the repository root with \`graphify update .\`.`
+    };
+    return {
+      context: {
+        status: "unavailable",
+        graphPath: graph.displayPath,
+        reason: issue3.message
+      },
+      issues: [...issues, issue3]
+    };
+  }
+  const stale = graph.builtAtCommit !== input.revision;
+  if (stale) {
+    issues.push({
+      code: "code_graph_stale",
+      message: `The code graph was built at ${graph.builtAtCommit?.slice(0, 12) ?? "an unrecorded commit"} but the scan is at ${input.revision.slice(0, 12)}, so code context is file-level only. Rebuild with \`graphify update .\` at the scanned commit, or rerun the scan.`
+    });
+  }
+  const callSites = [];
+  for (const callSite of input.callSites) {
+    const inPath = nodesByPath.get(callSite.path);
+    if (inPath === void 0) {
+      callSites.push({
+        ...callSite,
+        inGraph: false,
+        enclosingSymbol: null,
+        findings: []
+      });
+      continue;
+    }
+    const fileNode = inPath.find(
+      ({ label }) => label === basename(callSite.path)
+    );
+    const enclosing = stale ? void 0 : inPath.filter(
+      (node) => node !== fileNode && node.line !== null && node.line <= callSite.line
+    ).sort(
+      (left, right) => right.line - left.line || compareText(left.id, right.id)
+    )[0];
+    const seed = enclosing ?? fileNode;
+    const findings = [];
+    const hitFinding = (kind, label, hit) => {
+      if (hit.path === null) return;
+      findings.push({
+        kind,
+        label,
+        path: hit.path,
+        line: hit.line,
+        hops: hit.hops,
+        provenance: hit.provenance,
+        score: hit.score
+      });
+    };
+    if (enclosing !== void 0) {
+      for (const hit of walk(
+        enclosing,
+        graph.nodes,
+        incoming,
+        CALLER_RELATIONS,
+        CALLER_DEPTH
+      )) {
+        hitFinding("caller", hit.node.label, hit);
+      }
+    }
+    if (seed !== void 0) {
+      const testFiles = /* @__PURE__ */ new Set();
+      for (const hit of walk(
+        seed,
+        graph.nodes,
+        incoming,
+        TEST_RELATIONS,
+        TEST_DEPTH
+      )) {
+        const file2 = hit.node.path;
+        if (file2 === null || !TEST_PATH.test(file2) || testFiles.has(file2)) {
+          continue;
+        }
+        testFiles.add(file2);
+        hitFinding("test", file2, { ...hit, path: file2 });
+      }
+    }
+    const surfaced = [...new Set(findings.map(({ path }) => path))];
+    if (surfaced.length > 0) {
+      const resolutions = await resolveOwners({
+        repoDir: input.repoDir,
+        filePaths: surfaced
+      });
+      const strongest = /* @__PURE__ */ new Map();
+      resolutions.forEach(({ owners }, index) => {
+        const sources = findings.filter(({ path }) => path === surfaced[index]);
+        for (const { handle } of owners) {
+          for (const source of sources) {
+            const current = strongest.get(handle);
+            if (current === void 0 || stronger(source, current)) {
+              strongest.set(handle, source);
+            }
+          }
+        }
+      });
+      for (const [handle, source] of strongest) {
+        findings.push({
+          kind: "owner",
+          label: handle,
+          path: source.path,
+          line: null,
+          hops: source.hops,
+          provenance: source.provenance,
+          score: source.score
+        });
+      }
+    }
+    callSites.push({
+      ...callSite,
+      inGraph: true,
+      enclosingSymbol: enclosing?.label ?? null,
+      findings: findings.sort(compareFindings)
+    });
+  }
+  const jsIds = new Set(
+    input.sdkModules.filter(({ language }) => language === "javascript").map(({ name }) => `ref_${graphifyId(name)}`)
+  );
+  const pythonIds = input.sdkModules.filter(({ language }) => language === "python").map(({ name }) => graphifyId(name));
+  const imports = /* @__PURE__ */ new Map();
+  for (const edge of graph.edges) {
+    const target = graph.nodes.get(edge.target);
+    if (!IMPORT_RELATIONS.has(edge.relation) || target.fileType !== "concept" || !(jsIds.has(target.id) || pythonIds.some(
+      (id) => target.id === id || target.id.startsWith(`${id}_`)
+    )) || edge.path === null || MANIFEST_PATH.test(edge.path) || TEST_PATH.test(edge.path) || input.scannedPaths.has(edge.path)) {
+      continue;
+    }
+    const key = `${edge.path}\0${target.label}`;
+    const current = imports.get(key);
+    if (current === void 0 || compareLines(edge.line, current.line) < 0) {
+      imports.set(key, {
+        path: edge.path,
+        line: edge.line,
+        module: target.label,
+        provenance: edge.provenance,
+        score: edge.score
+      });
+    }
+  }
+  return {
+    context: {
+      status: "ok",
+      graphPath: graph.displayPath,
+      sha256: graph.sha256,
+      builtAtCommit: graph.builtAtCommit,
+      revision: input.revision,
+      stale,
+      nodes: graph.nodes.size,
+      edges: graph.edges.length,
+      ignoredNodes: graph.ignoredNodes,
+      ignoredEdges: graph.ignoredEdges,
+      callSites,
+      unconfirmedImports: [...imports.values()].sort(
+        (left, right) => compareText(left.path, right.path) || compareLines(left.line, right.line)
+      )
+    },
+    issues
+  };
+}
+
+// src/report/format.ts
+function percent(value) {
+  return `${(value * 100).toFixed(1)}%`;
+}
+function escapeCell(value) {
+  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
+}
+function formatUsdPerCase(value) {
+  return value === null ? "n/a" : `$${value.toFixed(6)}`;
+}
+function formatDeltaPct(value) {
+  return value === null ? "n/a" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+function formatLatencyMs(value) {
+  return value === null ? "n/a" : `${Math.round(value)} ms`;
+}
+
+// src/code-graph/render.ts
+function provenanceText(provenance, score) {
+  switch (provenance) {
+    case "EXTRACTED":
+      return `EXTRACTED ${score.toFixed(2)}`;
+    case "INFERRED":
+      return `INFERRED ${score.toFixed(2)}, verify`;
+    case "AMBIGUOUS":
+      return `AMBIGUOUS ${score.toFixed(2)}, verify`;
+    default:
+      return provenance;
+  }
+}
+function location(path, line) {
+  return `\`${path}${line === null ? "" : `:${line}`}\``;
+}
+function findingCell(finding) {
+  if (finding.kind === "owner") return "owner, listed only";
+  return finding.hops > 1 ? `${finding.kind} (${finding.hops} hops)` : finding.kind;
+}
+function row(cells) {
+  return `| ${cells.map(escapeCell).join(" | ")} |`;
+}
+function renderCodeContext(context2) {
+  const lines = [
+    "## Code context (Graphify)",
+    "",
+    "Static code context from a Graphify graph. Graph edges are not replay trials, runtime proof, or quality evidence. They never change a verdict, a gate, confirmation, the proposed swap, or who is asked to review.",
+    ""
+  ];
+  if (context2.status === "unavailable") {
+    lines.push(`Not shown: ${context2.reason}`);
+    return lines;
+  }
+  const ignored = context2.ignoredEdges + context2.ignoredNodes > 0 ? `, ${context2.ignoredEdges} edges and ${context2.ignoredNodes} nodes ignored` : "";
+  const built = context2.builtAtCommit === null ? "an unrecorded commit" : `\`${context2.builtAtCommit.slice(0, 12)}\``;
+  const freshness = context2.stale ? `Stale: built at ${built}, but the scan is at \`${context2.revision.slice(0, 12)}\`. Line-level resolution is off, so enclosing symbols and callers are not shown. Rebuild with \`graphify update .\` at the scanned commit.` : `Built at ${built}, the scanned revision.`;
+  lines.push(
+    `Graph \`${context2.graphPath}\`, sha256 \`${context2.sha256.slice(0, 12)}\`, ${context2.nodes} nodes, ${context2.edges} edges${ignored}. ${freshness}`,
+    "",
+    "| Call site | Family | Finding | Item | Where | Provenance |",
+    "| --- | --- | --- | --- | --- | --- |"
+  );
+  for (const callSite of context2.callSites) {
+    const site = `${location(callSite.path, callSite.line)}${callSite.enclosingSymbol === null ? "" : ` in \`${callSite.enclosingSymbol}\``}`;
+    if (callSite.findings.length === 0) {
+      lines.push(
+        row([
+          site,
+          callSite.family,
+          callSite.inGraph ? "none found" : "not in graph",
+          "",
+          "",
+          ""
+        ])
+      );
+      continue;
+    }
+    for (const finding of callSite.findings) {
+      lines.push(
+        row([
+          site,
+          callSite.family,
+          findingCell(finding),
+          `\`${finding.label}\``,
+          location(finding.path, finding.line),
+          provenanceText(finding.provenance, finding.score)
+        ])
+      );
+    }
+  }
+  if (context2.unconfirmedImports.length > 0) {
+    lines.push(
+      "",
+      "Unconfirmed SDK imports: the scanner found no model call site in these files, so they are not call sites and nothing in them was evaluated.",
+      "",
+      ...context2.unconfirmedImports.map(
+        (entry) => `- ${location(entry.path, entry.line)} imports \`${entry.module}\` (${provenanceText(entry.provenance, entry.score)}). If it calls a model you want evaluated, add a --matchers rule and rerun.`
+      )
+    );
+  }
+  lines.push(
+    "",
+    "EXTRACTED: explicit in source. INFERRED: resolved by inference, verify before relying on it. AMBIGUOUS: uncertain, verify. A multi-hop finding carries its weakest hop. An enclosing symbol is the nearest definition at or above the call line."
+  );
+  return lines;
+}
 
 // src/github/client.ts
 var BlockedError2 = class extends Error {
@@ -35134,9 +36549,10 @@ var pullRequestSchema = external_exports.object({
   title: external_exports.string(),
   body: external_exports.string().nullable(),
   draft: external_exports.boolean(),
-  merged: external_exports.boolean(),
+  merged: external_exports.boolean().optional(),
   merged_at: external_exports.string().nullable(),
   closed_at: external_exports.string().nullable(),
+  user: userSchema,
   head: external_exports.object({ ref: external_exports.string(), sha: external_exports.string() }),
   base: external_exports.object({ ref: external_exports.string(), sha: external_exports.string() }),
   requested_reviewers: external_exports.array(userSchema).default([]),
@@ -35234,7 +36650,7 @@ function redact2(value, token) {
 function pathPart(value) {
   return value.split("/").map(encodeURIComponent).join("/");
 }
-function repositoryPath(input) {
+function repositoryPath2(input) {
   return `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}`;
 }
 function retryAfterAt(response, now) {
@@ -35279,7 +36695,7 @@ function transientDelay(attempt) {
   return Math.random() * Math.min(maxRetryDelayMs, transientBaseDelayMs * 2 ** (attempt - 1));
 }
 function sleep2(milliseconds) {
-  return new Promise((resolve13) => setTimeout(resolve13, milliseconds));
+  return new Promise((resolve14) => setTimeout(resolve14, milliseconds));
 }
 function parseJson(text, label) {
   try {
@@ -35301,10 +36717,11 @@ function normalizePullRequest(raw) {
   return {
     number: raw.number,
     state: raw.state,
+    author: raw.user.login,
     title: raw.title,
     body: raw.body,
     draft: raw.draft,
-    merged: raw.merged,
+    merged: raw.merged ?? raw.merged_at !== null,
     mergedAt: raw.merged_at,
     closedAt: raw.closed_at,
     head: raw.head,
@@ -35404,7 +36821,7 @@ function createGithubClient(options) {
   return {
     async getRef(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/git/ref/${pathPart(input.ref)}`,
+        `${repositoryPath2(input)}/git/ref/${pathPart(input.ref)}`,
         {},
         refSchema,
         "GitHub reference response"
@@ -35413,7 +36830,7 @@ function createGithubClient(options) {
     },
     async compareCommits(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/compare/${pathPart(input.base)}...${pathPart(input.head)}`,
+        `${repositoryPath2(input)}/compare/${pathPart(input.base)}...${pathPart(input.head)}`,
         {},
         comparisonSchema,
         "GitHub comparison response"
@@ -35430,7 +36847,7 @@ function createGithubClient(options) {
     },
     async createRef(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/git/refs`,
+        `${repositoryPath2(input)}/git/refs`,
         {
           method: "POST",
           body: JSON.stringify({ ref: input.ref, sha: input.sha })
@@ -35442,7 +36859,7 @@ function createGithubClient(options) {
     },
     async getFileContent(input) {
       const result2 = await request(
-        `${repositoryPath(input)}/contents/${pathPart(input.path)}?ref=${encodeURIComponent(input.ref)}`
+        `${repositoryPath2(input)}/contents/${pathPart(input.path)}?ref=${encodeURIComponent(input.ref)}`
       );
       const value = parseJson(result2.text, "GitHub file-contents response");
       if (Array.isArray(value)) {
@@ -35472,7 +36889,7 @@ function createGithubClient(options) {
     },
     async createOrUpdateFile(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/contents/${pathPart(input.path)}`,
+        `${repositoryPath2(input)}/contents/${pathPart(input.path)}`,
         {
           method: "PUT",
           body: JSON.stringify({
@@ -35489,7 +36906,7 @@ function createGithubClient(options) {
     },
     async createPullRequest(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls`,
+        `${repositoryPath2(input)}/pulls`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -35513,7 +36930,7 @@ function createGithubClient(options) {
         per_page: "2"
       });
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls?${query.toString()}`,
+        `${repositoryPath2(input)}/pulls?${query.toString()}`,
         {},
         external_exports.array(pullRequestSchema),
         "GitHub pull-request list response"
@@ -35527,7 +36944,7 @@ function createGithubClient(options) {
     },
     async requestReviewers(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}/requested_reviewers`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}/requested_reviewers`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -35542,7 +36959,7 @@ function createGithubClient(options) {
     },
     async listReviews(input) {
       const raw = await listJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}/reviews`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}/reviews`,
         reviewSchema,
         "GitHub reviews response"
       );
@@ -35557,7 +36974,7 @@ function createGithubClient(options) {
     },
     async listReviewComments(input) {
       const raw = await listJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}/comments`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}/comments`,
         reviewCommentSchema,
         "GitHub review-comments response"
       );
@@ -35574,7 +36991,7 @@ function createGithubClient(options) {
     },
     async listIssueComments(input) {
       const raw = await listJson(
-        `${repositoryPath(input)}/issues/${input.issueNumber}/comments`,
+        `${repositoryPath2(input)}/issues/${input.issueNumber}/comments`,
         issueCommentSchema,
         "GitHub issue-comments response"
       );
@@ -35588,7 +37005,7 @@ function createGithubClient(options) {
     },
     async createIssueComment(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/issues/${input.issueNumber}/comments`,
+        `${repositoryPath2(input)}/issues/${input.issueNumber}/comments`,
         { method: "POST", body: JSON.stringify({ body: input.body }) },
         issueCommentSchema,
         "GitHub create-issue-comment response"
@@ -35603,7 +37020,7 @@ function createGithubClient(options) {
     },
     async getPullRequest(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}`,
         {},
         pullRequestSchema,
         "GitHub pull-request response"
@@ -35613,7 +37030,7 @@ function createGithubClient(options) {
     async listCheckRunsForRef(input) {
       const runs = [];
       let totalCount = 0;
-      let next = `${repositoryPath(input)}/commits/${pathPart(input.ref)}/check-runs?per_page=100`;
+      let next = `${repositoryPath2(input)}/commits/${pathPart(input.ref)}/check-runs?per_page=100`;
       while (next !== void 0) {
         const result2 = await request(next);
         const raw = parsed(
@@ -35640,7 +37057,7 @@ function createGithubClient(options) {
     },
     async getCombinedStatusForRef(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/commits/${pathPart(input.ref)}/status?per_page=100`,
+        `${repositoryPath2(input)}/commits/${pathPart(input.ref)}/status?per_page=100`,
         {},
         combinedStatusSchema,
         "GitHub combined-status response"
@@ -35657,18 +37074,9 @@ function createGithubClient(options) {
         }))
       };
     },
-    async getAuthenticatedUserLogin() {
-      const raw = await requestJson(
-        "/user",
-        {},
-        userSchema,
-        "GitHub user response"
-      );
-      return raw.login;
-    },
     async findCommitAuthorLogin(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/commits?author=${encodeURIComponent(input.email)}&per_page=1`,
+        `${repositoryPath2(input)}/commits?author=${encodeURIComponent(input.email)}&per_page=1`,
         {},
         external_exports.array(commitAuthorSchema),
         "GitHub commits response"
@@ -35677,7 +37085,7 @@ function createGithubClient(options) {
     },
     async closePullRequest(input) {
       const raw = await requestJson(
-        `${repositoryPath(input)}/pulls/${input.pullNumber}`,
+        `${repositoryPath2(input)}/pulls/${input.pullNumber}`,
         { method: "PATCH", body: JSON.stringify({ state: "closed" }) },
         pullRequestSchema,
         "GitHub close-pull-request response"
@@ -35688,7 +37096,7 @@ function createGithubClient(options) {
 }
 
 // src/apply/remediation.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 
 // src/contract-validation.ts
 var import__ = __toESM(require__(), 1);
@@ -36364,10 +37772,10 @@ var remediationLifecycleEventSchema = remediationLifecycleEventBodySchema.extend
   event_id: contentDigestSchema
 });
 function digestJson(value) {
-  return `sha256:${createHash4("sha256").update(canonicalJson(jsonValueSchema.parse(value))).digest("hex")}`;
+  return `sha256:${createHash5("sha256").update(canonicalJson(jsonValueSchema.parse(value))).digest("hex")}`;
 }
 function digestFileContent(content) {
-  return `sha256:${createHash4("sha256").update(content).digest("hex")}`;
+  return `sha256:${createHash5("sha256").update(content).digest("hex")}`;
 }
 function sortedUnique(values) {
   return [...new Set(values)].sort();
@@ -36546,26 +37954,9 @@ async function restoreBranch({
   }
 }
 
-// src/report/format.ts
-function percent(value) {
-  return `${(value * 100).toFixed(1)}%`;
-}
-function escapeCell(value) {
-  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
-}
-function formatUsdPerCase(value) {
-  return value === null ? "n/a" : `$${value.toFixed(6)}`;
-}
-function formatDeltaPct(value) {
-  return value === null ? "n/a" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
-function formatLatencyMs(value) {
-  return value === null ? "n/a" : `${Math.round(value)} ms`;
-}
-
 // src/apply/diff.ts
 import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join9 } from "node:path";
 
 // src/apply/lex.ts
 function regexStartsAt(content, index) {
@@ -36951,16 +38342,16 @@ function locateReplacement(content, candidate, request) {
     return null;
   }
   if (callOffset === null) return null;
-  const constants = constantSpans(
+  const constants2 = constantSpans(
     content,
     candidate.modelId,
     request.fromModel,
     callOffset,
     candidate.slug.startsWith("py-")
   );
-  if (constants === null) return null;
+  if (constants2 === null) return null;
   return {
-    ...constants[0],
+    ...constants2[0],
     from: request.fromModel,
     to: request.toModel
   };
@@ -36995,7 +38386,7 @@ function buildSwapDiff({
   for (const [path, fileSwaps] of grouped) {
     let before;
     try {
-      before = readFileSync4(join7(repoDir, path), "utf8");
+      before = readFileSync4(join9(repoDir, path), "utf8");
     } catch {
       results.push({ path, reason: "stale_location" });
       continue;
@@ -37332,19 +38723,19 @@ function lintSwapDiff({
 }
 
 // src/apply/format.ts
-import { execFile as execFile2 } from "node:child_process";
+import { execFile as execFile4 } from "node:child_process";
 import { existsSync, readFileSync as readFileSync5, writeFileSync } from "node:fs";
-import { mkdtemp as mkdtemp2, readFile as readFile4, rm as rm2 } from "node:fs/promises";
-import { basename, dirname as dirname3, join as join8 } from "node:path";
+import { mkdtemp as mkdtemp2, readFile as readFile7, rm as rm2 } from "node:fs/promises";
+import { basename as basename2, dirname as dirname4, join as join10 } from "node:path";
 function pinnedPrettierVersion(repoDir) {
-  const pnpmLock = join8(repoDir, "pnpm-lock.yaml");
+  const pnpmLock = join10(repoDir, "pnpm-lock.yaml");
   if (existsSync(pnpmLock)) {
     const match = /^  prettier@([^:\s(]+)(?:\([^\n]*)?:/m.exec(
       readFileSync5(pnpmLock, "utf8")
     );
     if (match !== null) return match[1];
   }
-  const packageLock = join8(repoDir, "package-lock.json");
+  const packageLock = join10(repoDir, "package-lock.json");
   if (existsSync(packageLock)) {
     const parsed2 = JSON.parse(readFileSync5(packageLock, "utf8"));
     if (typeof parsed2 === "object" && parsed2 !== null && "packages" in parsed2) {
@@ -37357,7 +38748,7 @@ function pinnedPrettierVersion(repoDir) {
       }
     }
   }
-  const yarnLock = join8(repoDir, "yarn.lock");
+  const yarnLock = join10(repoDir, "yarn.lock");
   if (existsSync(yarnLock)) {
     return /(?:^|\n)["']?prettier@[^\n]+:\n\s+version\s+["']([^"']+)["']/.exec(
       readFileSync5(yarnLock, "utf8")
@@ -37367,9 +38758,9 @@ function pinnedPrettierVersion(repoDir) {
 }
 function formatterCommand(repoDir, formatter) {
   const { kind, configPath } = formatter;
-  const configArgs = configPath === null ? [] : ["--config", join8(repoDir, configPath)];
+  const configArgs = configPath === null ? [] : ["--config", join10(repoDir, configPath)];
   if (kind === "prettier") {
-    const executable = join8(
+    const executable = join10(
       repoDir,
       "node_modules",
       ".bin",
@@ -37397,7 +38788,7 @@ function formatterCommand(repoDir, formatter) {
     };
   }
   if (kind === "ruff") {
-    const local = join8(
+    const local = join10(
       repoDir,
       ".venv",
       process.platform === "win32" ? "Scripts/ruff.exe" : "bin/ruff"
@@ -37418,14 +38809,14 @@ function formatterCommand(repoDir, formatter) {
   return null;
 }
 function runFormatter(command, filePath, cwd, input) {
-  return new Promise((resolve13, reject) => {
-    const child = execFile2(
+  return new Promise((resolve14, reject) => {
+    const child = execFile4(
       command.executable,
       command.args(filePath),
       { cwd, encoding: "utf8" },
       (error51, stdout) => {
         if (error51 !== null) reject(error51);
-        else resolve13(command.stdin ? stdout : null);
+        else resolve14(command.stdin ? stdout : null);
       }
     );
     if (command.stdin) child.stdin?.end(input);
@@ -37465,27 +38856,27 @@ async function formatWithHostFormatter({
   }
   const formattedFiles = [];
   for (const [fileIndex, file2] of files.entries()) {
-    const sourcePath = join8(repoDir, file2.path);
+    const sourcePath = join10(repoDir, file2.path);
     let temporaryDirectory = null;
     try {
       if (!command.stdin) {
         temporaryDirectory = await mkdtemp2(
-          join8(dirname3(sourcePath), ".rightmodeler-format-")
+          join10(dirname4(sourcePath), ".rightmodeler-format-")
         );
         writeFileSync(
-          join8(temporaryDirectory, basename(sourcePath)),
+          join10(temporaryDirectory, basename2(sourcePath)),
           file2.after,
           "utf8"
         );
       }
-      const temporaryPath = temporaryDirectory === null ? sourcePath : join8(temporaryDirectory, basename(sourcePath));
+      const temporaryPath = temporaryDirectory === null ? sourcePath : join10(temporaryDirectory, basename2(sourcePath));
       const stdout = await runFormatter(
         command,
         command.stdin ? sourcePath : temporaryPath,
         repoDir,
         file2.after
       );
-      const formatted = stdout === null ? await readFile4(temporaryPath, "utf8") : stdout;
+      const formatted = stdout === null ? await readFile7(temporaryPath, "utf8") : stdout;
       const touchedLines = new Set(file2.hunks.map(({ line }) => line));
       const conflictLine = firstOutsideTouchedLine(
         file2.after,
@@ -37557,9 +38948,11 @@ async function formatWithHostFormatter({
 }
 
 // src/apply/orchestrator.ts
-var execFileAsync2 = promisify2(execFile3);
+var execFileAsync4 = promisify4(execFile5);
 var projectId = "project";
 var reviewerLimit = 5;
+var codeContextFindingsPerKind = 5;
+var githubBodyLimit = 65536;
 var caseIdPattern = /^[0-9a-f]{64}$/;
 var ApplyServiceError = class extends Error {
   code;
@@ -37663,7 +39056,40 @@ function evidenceRow({
     caseIds: renderedCaseIds.join(", ")
   };
 }
-function evidenceBody(conventions, verdicts) {
+function pullRequestCodeContext(codeContext, verdicts) {
+  if (codeContext.status === "unavailable") {
+    return renderCodeContext(codeContext).join("\n");
+  }
+  const stepIds = new Set(
+    verdicts.flatMap(
+      ({ swaps }) => swaps.map(({ stepRecord }) => stepRecord.stepId)
+    )
+  );
+  let cut = false;
+  const callSites = codeContext.callSites.filter(({ stepId }) => stepIds.has(stepId)).map((callSite) => {
+    const shown = /* @__PURE__ */ new Map();
+    const findings = callSite.findings.filter(({ kind }) => {
+      const count = (shown.get(kind) ?? 0) + 1;
+      shown.set(kind, count);
+      if (count > codeContextFindingsPerKind) cut = true;
+      return count <= codeContextFindingsPerKind;
+    });
+    return { ...callSite, findings };
+  });
+  const lines = renderCodeContext({
+    ...codeContext,
+    callSites,
+    unconfirmedImports: []
+  });
+  if (cut) {
+    lines.push(
+      "",
+      "At most five findings of each kind are shown per call site. Run `rightmodeler report --code-graph <path>` for the full list."
+    );
+  }
+  return lines.join("\n");
+}
+function evidenceBody(conventions, verdicts, codeContext) {
   const evidence = verdicts[0].evidence;
   const table = [
     "## Rightmodeler evidence",
@@ -37674,8 +39100,8 @@ function evidenceBody(conventions, verdicts) {
     `| ${evidenceColumns.map(([heading]) => heading).join(" | ")} |`,
     `| ${evidenceColumns.map(() => "---").join(" | ")} |`,
     ...verdicts.map((entry) => {
-      const row = evidenceRow(entry);
-      return `| ${evidenceColumns.map(([, field]) => row[field]).join(" | ")} |`;
+      const row2 = evidenceRow(entry);
+      return `| ${evidenceColumns.map(([, field]) => row2[field]).join(" | ")} |`;
     }),
     "",
     "Costs are dollars per replayed case. `n/a` means the number is not in the store: the replayed case carries no recorded token usage, the catalog publishes no price for the incumbent model, or no attempt recorded a duration.",
@@ -37683,9 +39109,18 @@ function evidenceBody(conventions, verdicts) {
     ""
   ].join("\n");
   const template = conventions.prTemplate?.trimEnd();
-  return template === void 0 || template === null || template === "" ? table : `${template}
+  const body = template === void 0 || template === null || template === "" ? table : `${template}
 
 ${table}`;
+  if (codeContext === void 0) return body;
+  const withContext = `${body}
+${pullRequestCodeContext(codeContext, verdicts)}
+`;
+  return withContext.length <= githubBodyLimit ? withContext : `${body}
+## Code context (Graphify)
+
+Omitted: the section would push this pull request body past GitHub's 65,536-character limit. Run \`rightmodeler report --code-graph <path>\` to read it.
+`;
 }
 async function reviewersFor(githubClient, owner, repo, verdicts) {
   const owners = [
@@ -37736,8 +39171,8 @@ async function reviewersFor(githubClient, owner, repo, verdicts) {
     unresolvedOwners
   };
 }
-async function gitOutput(repoDir, args) {
-  const { stdout } = await execFileAsync2("git", ["-C", repoDir, ...args], {
+async function gitOutput2(repoDir, args) {
+  const { stdout } = await execFileAsync4("git", ["-C", repoDir, ...args], {
     encoding: "utf8"
   });
   return stdout.trim();
@@ -37746,7 +39181,7 @@ async function dirtySwapPaths(repoDir, paths) {
   const dirty = [];
   for (const path of paths) {
     try {
-      await execFileAsync2(
+      await execFileAsync4(
         "git",
         ["-C", repoDir, "diff", "--quiet", "HEAD", "--", path],
         { encoding: "utf8" }
@@ -37762,7 +39197,7 @@ async function dirtySwapPaths(repoDir, paths) {
   return dirty;
 }
 function committedBlobSha(repoDir, path) {
-  return gitOutput(repoDir, ["rev-parse", `HEAD:${path}`]);
+  return gitOutput2(repoDir, ["rev-parse", `HEAD:${path}`]);
 }
 async function resumedApplyUpdates({
   githubClient,
@@ -37848,11 +39283,11 @@ async function staleDigestPaths(repoDir, swaps) {
     ([left], [right]) => compareText(left, right)
   )) {
     try {
-      const content = (await readFile5(join9(repoDir, path), "utf8")).replaceAll(
+      const content = (await readFile8(join11(repoDir, path), "utf8")).replaceAll(
         "\r\n",
         "\n"
       );
-      const actual = createHash5("sha256").update(content).digest("hex");
+      const actual = createHash6("sha256").update(content).digest("hex");
       if (expected.size !== 1 || !expected.has(actual)) stale.push(path);
     } catch {
       stale.push(path);
@@ -37922,11 +39357,12 @@ async function ensureReviewRequested({
   repo,
   events,
   prNumber,
+  pullRequestAuthor,
   reviewerSet
 }) {
   const recorded = recordedReviewers(events, prNumber);
   if (recorded !== null) return recorded;
-  const author = await githubClient.getAuthenticatedUserLogin();
+  const author = pullRequestAuthor ?? (await githubClient.getPullRequest({ owner, repo, pullNumber: prNumber })).author;
   let reviewers = reviewerSet.reviewers.filter(
     (reviewer) => reviewer.toLowerCase() !== author.toLowerCase()
   );
@@ -38003,7 +39439,8 @@ async function applySwaps({
   repo,
   conventions,
   verdicts,
-  dryRun
+  dryRun,
+  codeContext
 }) {
   if (conventions.warnings.length > 0) {
     return refusal(
@@ -38104,7 +39541,7 @@ async function applySwaps({
       ...requestedReviewers2
     };
   }
-  const head = await gitOutput(repoDir, ["rev-parse", "HEAD"]);
+  const head = await gitOutput2(repoDir, ["rev-parse", "HEAD"]);
   if (head !== evidence.revision) {
     return refusal(
       "stale_evidence",
@@ -38112,7 +39549,7 @@ async function applySwaps({
       { evidenceRevision: evidence.revision, head, action: "re-prove" }
     );
   }
-  const base = await gitOutput(repoDir, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const base = await gitOutput2(repoDir, ["rev-parse", "--abbrev-ref", "HEAD"]);
   if (base === "HEAD") {
     return refusal(
       "detached_head",
@@ -38185,6 +39622,7 @@ async function applySwaps({
       runSpecDigest,
       branch,
       title,
+      body: evidenceBody(conventions, selected, codeContext),
       files: formatted.files.map(({ path }) => path),
       reviewers: reviewerSet.reviewers,
       teamReviewers: reviewerSet.teamReviewers
@@ -38296,7 +39734,7 @@ async function applySwaps({
       owner,
       repo,
       title,
-      body: evidenceBody(conventions, selected),
+      body: evidenceBody(conventions, selected, codeContext),
       head: branch,
       base,
       draft: true
@@ -38385,6 +39823,7 @@ async function applySwaps({
     repo,
     events: lifecycleEvents,
     prNumber: pullRequest.number,
+    pullRequestAuthor: pullRequest.author,
     reviewerSet
   });
   return {
@@ -38416,7 +39855,7 @@ function estimateReplayCost(input) {
       shortlistCostUsd += reservationCost(replayCase, candidate);
       shortlistExecutions += 1;
       if (input.judge !== void 0) {
-        judgeCostUsd += 2 * judgeCallCost(replayCase, input.judge);
+        judgeCostUsd += 2 * judgeCallCost(replayCase, input.judge(replayCase.stepId, candidate));
       }
     }
   }
@@ -38450,7 +39889,10 @@ function estimateReplayCost(input) {
         candidateCost += reservationCost(replayCase, candidate);
         candidateExecutions += 1;
         if (input.judge !== void 0) {
-          candidateJudgeCost += 2 * judgeCallCost(replayCase, input.judge);
+          candidateJudgeCost += 2 * judgeCallCost(
+            replayCase,
+            input.judge(replayCase.stepId, candidate)
+          );
         }
       }
       if (maximumFamily === void 0 || candidateCost > maximumFamily.cost) {
@@ -38511,11 +39953,11 @@ function requireStep(stepsById, stepId) {
 }
 
 // src/drift.ts
-import { mkdir as mkdir4, readFile as readFile6, writeFile as writeFile4 } from "node:fs/promises";
-import { dirname as dirname4, join as join11, resolve as resolve5 } from "node:path";
+import { mkdir as mkdir4, readFile as readFile9, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname as dirname5, join as join13, resolve as resolve6 } from "node:path";
 
 // src/state.ts
-import { join as join10, resolve as resolve4 } from "node:path";
+import { join as join12, resolve as resolve5 } from "node:path";
 var checkpointSchema = external_exports.strictObject({
   inputDigest: external_exports.string().min(1),
   outputKey: external_exports.string().min(1),
@@ -38527,7 +39969,7 @@ var setupStateSchema = external_exports.strictObject({
   stages: external_exports.record(external_exports.string(), checkpointSchema)
 });
 function resolveStoreRoot(repoDir, store) {
-  return resolve4(store ?? join10(repoDir, ".rightmodeler"));
+  return resolve5(store ?? join12(repoDir, ".rightmodeler"));
 }
 async function putImmutableJson(store, key, value) {
   await store.putImmutable(
@@ -38725,10 +40167,15 @@ async function readCorpusVersion(options, corpusVersionId) {
 async function runDrift(options) {
   const { store, storeRoot } = context(options);
   const parent = await loadActiveCorpus(store);
-  const traceText = await readFile6(resolve5(options.traces), "utf8");
+  const traceText = await readFile9(resolve6(options.traces), "utf8");
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
-  const runs = strictRuns(adapter.name, adaptWithReport(adapter, records));
+  const result2 = adaptWithReport(adapter, records);
+  const runs = strictRuns(adapter.name, result2);
+  const excluded = excludedStepsWarning(result2);
+  if (excluded !== void 0) {
+    options.warning?.("trace_steps_excluded", excluded);
+  }
   const candidateCorpus = buildCorpus(scrubRuns(runs).runs, {
     seed: parent.corpus.seed
   });
@@ -38764,8 +40211,8 @@ async function runDrift(options) {
   );
   const markdown = renderDriftProposal(proposal);
   await store.putImmutable(keys.report, Buffer.from(markdown, "utf8"));
-  const reportPath2 = join11(storeRoot, keys.report);
-  await mkdir4(dirname4(reportPath2), { recursive: true });
+  const reportPath2 = join13(storeRoot, keys.report);
+  await mkdir4(dirname5(reportPath2), { recursive: true });
   await writeFile4(reportPath2, markdown, "utf8");
   return {
     proposal,
@@ -38890,7 +40337,7 @@ async function publishDriftProposal(options) {
     if (error51 instanceof DriftServiceError) throw error51;
     throw new DriftServiceError(
       "drift_artifact_malformed",
-      `Drift artifacts failed integrity validation: ${errorMessage(error51)}`
+      `Drift artifacts failed integrity validation: ${errorMessage2(error51)}`
     );
   }
   validateProposalArtifact(
@@ -38979,7 +40426,7 @@ async function loadActiveCorpus(store) {
     } catch (error51) {
       throw new DriftServiceError(
         "active_corpus_malformed",
-        `Corpus checkpoint output is malformed: ${errorMessage(error51)}`
+        `Corpus checkpoint output is malformed: ${errorMessage2(error51)}`
       );
     }
     const body = Buffer.from(
@@ -39043,7 +40490,7 @@ async function loadCorpusVersion(store, corpusVersionId) {
     }
     throw new DriftServiceError(
       "active_corpus_malformed",
-      `Corpus version ${corpusVersionId} is malformed: ${errorMessage(error51)}`
+      `Corpus version ${corpusVersionId} is malformed: ${errorMessage2(error51)}`
     );
   }
 }
@@ -39257,7 +40704,7 @@ function promptValue(content) {
   });
 }
 function context(options) {
-  const repo = resolve5(options.repo);
+  const repo = resolve6(options.repo);
   const storeRoot = resolveStoreRoot(repo, options.store);
   return {
     store: new FsStore(storeRoot),
@@ -39336,7 +40783,7 @@ function parseArtifactEntry(body, label) {
   } catch (error51) {
     throw new DriftServiceError(
       "drift_artifact_malformed",
-      `${label} is malformed: ${errorMessage(error51)}`
+      `${label} is malformed: ${errorMessage2(error51)}`
     );
   }
 }
@@ -39349,7 +40796,7 @@ function validateProposalArtifact(schema, value, label) {
     if (error51 instanceof DriftServiceError) throw error51;
     throw new DriftServiceError(
       "drift_artifact_malformed",
-      `${label} is malformed: ${errorMessage(error51)}`
+      `${label} is malformed: ${errorMessage2(error51)}`
     );
   }
 }
@@ -39359,7 +40806,7 @@ function validateCandidateArtifact(value) {
   } catch (error51) {
     throw new DriftServiceError(
       "drift_artifact_malformed",
-      `Drift candidate is malformed: ${errorMessage(error51)}`
+      `Drift candidate is malformed: ${errorMessage2(error51)}`
     );
   }
 }
@@ -39372,470 +40819,15 @@ function parseActiveCorpusPointer(body) {
   } catch (error51) {
     throw new DriftServiceError(
       "active_corpus_malformed",
-      `Active corpus pointer is malformed: ${errorMessage(error51)}`
+      `Active corpus pointer is malformed: ${errorMessage2(error51)}`
     );
   }
 }
-function errorMessage(error51) {
+function errorMessage2(error51) {
   return error51 instanceof Error ? error51.message : String(error51);
 }
 function digestId(corpusVersionId) {
   return `sha256:${corpusVersionIdSchema.parse(corpusVersionId)}`;
-}
-
-// src/enrich/blast-radius.ts
-function addOwner(owners, owner) {
-  const current = owners.get(owner.handle);
-  if (current === void 0 || owner.source === "codeowners") {
-    owners.set(owner.handle, owner);
-  }
-}
-function blastRadius({
-  stepRecords,
-  verdicts,
-  owners: ownerResolutions
-}) {
-  const recordsById = new Map(
-    stepRecords.map((record2) => [record2.stepId, record2])
-  );
-  const ownersByPath = new Map(
-    ownerResolutions.map(
-      (resolution) => [resolution.path, resolution]
-    )
-  );
-  const recommendedFamilies = [
-    ...new Set(
-      verdicts.filter(({ decision }) => decision === "recommend").map(({ familyId }) => familyId)
-    )
-  ].sort(compareText);
-  return recommendedFamilies.map((familyId) => {
-    const roots = stepRecords.filter((record2) => record2.family === familyId);
-    const swappedFiles = new Set(roots.map((record2) => record2.callSite.path));
-    const downstreamFiles = /* @__PURE__ */ new Set();
-    const visited = new Set(roots.map((record2) => record2.stepId));
-    const queue = roots.flatMap((record2) => record2.downstreamStepIds);
-    const owners = /* @__PURE__ */ new Map();
-    for (const root of roots) {
-      for (const owner of ownersByPath.get(root.callSite.path)?.owners ?? []) {
-        addOwner(owners, owner);
-      }
-    }
-    while (queue.length > 0) {
-      const stepId = queue.shift();
-      if (visited.has(stepId)) continue;
-      visited.add(stepId);
-      const record2 = recordsById.get(stepId);
-      if (record2 === void 0) continue;
-      if (!swappedFiles.has(record2.callSite.path)) {
-        downstreamFiles.add(record2.callSite.path);
-      }
-      for (const owner of ownersByPath.get(record2.callSite.path)?.owners ?? []) {
-        addOwner(owners, owner);
-      }
-      queue.push(...record2.downstreamStepIds);
-    }
-    return {
-      familyId,
-      files: [...swappedFiles].sort(compareText),
-      downstreamFiles: [...downstreamFiles].sort(compareText),
-      owners: [...owners.values()].sort(
-        (left, right) => compareText(left.handle, right.handle)
-      )
-    };
-  });
-}
-
-// src/enrich/conventions.ts
-import { execFile as execFile4 } from "node:child_process";
-import { access, readFile as readFile7 } from "node:fs/promises";
-import { dirname as dirname5, join as join12, relative as relative4, resolve as resolve6 } from "node:path";
-import { promisify as promisify3 } from "node:util";
-
-// src/enrich/shared.ts
-var codeownersPaths = [
-  ".github/CODEOWNERS",
-  "CODEOWNERS",
-  "docs/CODEOWNERS"
-];
-
-// src/enrich/conventions.ts
-var execFileAsync3 = promisify3(execFile4);
-var pullRequestTemplates = [
-  ".github/PULL_REQUEST_TEMPLATE.md",
-  "docs/PULL_REQUEST_TEMPLATE.md",
-  "PULL_REQUEST_TEMPLATE.md"
-];
-var prettierConfigs = [
-  ".prettierrc",
-  ".prettierrc.json",
-  ".prettierrc.yaml",
-  ".prettierrc.yml",
-  ".prettierrc.toml",
-  ".prettierrc.js",
-  ".prettierrc.cjs",
-  ".prettierrc.mjs",
-  "prettier.config.js",
-  "prettier.config.cjs",
-  "prettier.config.mjs"
-];
-function posixPath(repoDir, absolutePath) {
-  return relative4(repoDir, absolutePath).replaceAll("\\", "/");
-}
-async function existingPath(repoDir, candidates) {
-  for (const path of candidates) {
-    try {
-      await access(join12(repoDir, path));
-      return path;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-async function nestedAgentFiles(repoDir) {
-  return (await gitOutput2(repoDir, ["ls-files", "--", "*AGENTS.md"])).split(/\r?\n/).filter((path) => path === "AGENTS.md" || path.endsWith("/AGENTS.md"));
-}
-function includeTargets(content) {
-  const targets = [];
-  for (const line of content.split(/\r?\n/)) {
-    const include = line.match(/^\s*@include\s+(.+?)\s*$/)?.[1];
-    if (include?.endsWith(".md")) {
-      targets.push(include);
-      continue;
-    }
-    const pointer = line.match(/^\s*@([^\s]+\.md)\s*$/)?.[1];
-    if (pointer !== void 0) targets.push(pointer);
-  }
-  return targets;
-}
-function includePath(repoDir, includedFrom, target) {
-  const absolute = target.startsWith("/") ? resolve6(repoDir, target.slice(1)) : resolve6(repoDir, dirname5(includedFrom), target);
-  return { absolute, relative: posixPath(repoDir, absolute) };
-}
-async function captureInstructionFiles(repoDir) {
-  const rootFiles = (await Promise.all(
-    ["AGENTS.md", "CLAUDE.md"].map(async (path) => {
-      try {
-        await access(join12(repoDir, path));
-        return path;
-      } catch {
-        return null;
-      }
-    })
-  )).filter((path) => path !== null);
-  const seeds = [
-    .../* @__PURE__ */ new Set([...rootFiles, ...await nestedAgentFiles(repoDir)])
-  ];
-  const files = /* @__PURE__ */ new Map();
-  const warnings = [];
-  const warningKeys = /* @__PURE__ */ new Set();
-  function warn(warning) {
-    const key = JSON.stringify(warning);
-    if (warningKeys.has(key)) return;
-    warningKeys.add(key);
-    warnings.push(warning);
-  }
-  async function capture(path, depth, stack, includedFrom) {
-    let content;
-    try {
-      content = await readFile7(join12(repoDir, path), "utf8");
-    } catch {
-      warn(
-        includedFrom === void 0 ? { name: "instruction_file_unreadable", path } : {
-          name: "instruction_include_unreadable",
-          path,
-          includedFrom
-        }
-      );
-      return;
-    }
-    files.set(path, content);
-    for (const target of includeTargets(content)) {
-      const included = includePath(repoDir, path, target);
-      if (stack.includes(included.relative) || included.relative === path) {
-        warn({
-          name: "instruction_include_cycle",
-          path: included.relative,
-          includedFrom: path
-        });
-        continue;
-      }
-      if (depth < 1) {
-        await capture(included.relative, depth + 1, [...stack, path], path);
-      }
-    }
-  }
-  for (const seed of seeds.sort(compareText)) {
-    await capture(seed, 0, []);
-  }
-  return {
-    files: [...files.entries()].sort(([left], [right]) => compareText(left, right)).map(([path, content]) => ({ path, content })),
-    warnings: warnings.sort(
-      (left, right) => compareText(left.name, right.name) || compareText(left.path, right.path) || compareText(left.includedFrom ?? "", right.includedFrom ?? "")
-    )
-  };
-}
-async function readFirst(repoDir, candidates) {
-  const path = await existingPath(repoDir, candidates);
-  return path === null ? null : readFile7(join12(repoDir, path), "utf8");
-}
-async function detectFormatter(repoDir) {
-  const prettier = await existingPath(repoDir, prettierConfigs);
-  if (prettier !== null) return { kind: "prettier", configPath: prettier };
-  const ruff = await existingPath(repoDir, ["ruff.toml", ".ruff.toml"]);
-  if (ruff !== null) return { kind: "ruff", configPath: ruff };
-  const pyproject = await existingPath(repoDir, ["pyproject.toml"]);
-  if (pyproject !== null && /^\s*\[tool\.ruff(?:\.[^\]]+)?\]\s*$/m.test(
-    await readFile7(join12(repoDir, pyproject), "utf8")
-  )) {
-    return { kind: "ruff", configPath: pyproject };
-  }
-  const goModule = await existingPath(repoDir, ["go.mod"]);
-  if (goModule !== null) return { kind: "gofmt", configPath: goModule };
-  return { kind: null, configPath: null };
-}
-async function gitOutput2(repoDir, args) {
-  try {
-    const { stdout } = await execFileAsync3("git", ["-C", repoDir, ...args], {
-      encoding: "utf8"
-    });
-    return stdout;
-  } catch {
-    return "";
-  }
-}
-async function inferCommitConvention(repoDir) {
-  const inferredFrom = (await gitOutput2(repoDir, ["log", "-30", "--format=%s"])).split(/\r?\n/).filter((subject) => subject !== "");
-  const conventional = inferredFrom.filter(
-    (subject) => /^(?:build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(?:\([^)]+\))?!?:\s+.+$/.test(
-      subject
-    )
-  ).length;
-  return {
-    style: inferredFrom.length > 0 && conventional > inferredFrom.length / 2 ? "conventional" : "plain",
-    inferredFrom
-  };
-}
-async function inferBranchPrefix(repoDir) {
-  const branches = (await gitOutput2(repoDir, [
-    "for-each-ref",
-    "--sort=-committerdate",
-    "--count=30",
-    "--format=%(refname)",
-    "refs/heads",
-    "refs/remotes"
-  ])).split(/\r?\n/).filter((branch) => branch !== "").map(
-    (branch) => branch.startsWith("refs/heads/") ? branch.slice("refs/heads/".length) : branch.replace(/^refs\/remotes\/[^/]+\//, "")
-  ).filter((branch) => branch !== "HEAD");
-  const counts = /* @__PURE__ */ new Map();
-  for (const branch of new Set(branches)) {
-    const slash = branch.indexOf("/");
-    if (slash < 1) continue;
-    const prefix = branch.slice(0, slash + 1);
-    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
-  }
-  const ranked = [...counts.entries()].sort(
-    ([leftPrefix, leftCount], [rightPrefix, rightCount]) => rightCount - leftCount || compareText(leftPrefix, rightPrefix)
-  );
-  if (ranked.length === 0) return null;
-  return ranked[0][0];
-}
-async function captureConventions({
-  repoDir
-}) {
-  const instructions = await captureInstructionFiles(repoDir);
-  return {
-    version: "1",
-    instructionFiles: instructions.files,
-    prTemplate: await readFirst(repoDir, pullRequestTemplates),
-    codeowners: await existingPath(repoDir, codeownersPaths),
-    formatter: await detectFormatter(repoDir),
-    commitConvention: await inferCommitConvention(repoDir),
-    branchPrefix: await inferBranchPrefix(repoDir),
-    warnings: instructions.warnings
-  };
-}
-
-// src/enrich/owners.ts
-import { execFile as execFile5 } from "node:child_process";
-import { access as access2, readFile as readFile8 } from "node:fs/promises";
-import { isAbsolute, join as join13, relative as relative5 } from "node:path";
-import { promisify as promisify4 } from "node:util";
-var execFileAsync4 = promisify4(execFile5);
-var maximumBlameOwners = 3;
-var maximumBlameConcurrency = 4;
-function repositoryPath2(repoDir, filePath) {
-  const path = isAbsolute(filePath) ? relative5(repoDir, filePath) : filePath;
-  return path.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, "");
-}
-async function findCodeowners(repoDir) {
-  for (const path of codeownersPaths) {
-    try {
-      await access2(join13(repoDir, path));
-      return path;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-function parseCodeowners(content) {
-  const rules = [];
-  for (const line of content.split(/\r?\n/)) {
-    const rule = line.split("#")[0].trim();
-    if (rule === "") continue;
-    const [pattern, ...owners] = rule.split(/\s+/);
-    rules.push({ pattern, owners });
-  }
-  return rules;
-}
-function escapeRegex3(character) {
-  return /[\\^$.*+?()[\]{}|]/.test(character) ? `\\${character}` : character;
-}
-function patternBody(pattern) {
-  let body = "";
-  for (let index = 0; index < pattern.length; index += 1) {
-    const character = pattern[index];
-    if (character !== "*") {
-      body += character === "?" ? "[^/]" : escapeRegex3(character);
-      continue;
-    }
-    const next = pattern[index + 1];
-    if (next !== "*") {
-      body += "[^/]*";
-      continue;
-    }
-    while (pattern[index + 1] === "*") index += 1;
-    if (pattern[index + 1] === "/") {
-      index += 1;
-      body += "(?:.*/)?";
-    } else {
-      body += ".*";
-    }
-  }
-  return body;
-}
-function codeownersRegex(pattern) {
-  const anchored = pattern.startsWith("/") || pattern.replace(/\/$/, "").includes("/");
-  const directory = pattern.endsWith("/");
-  const normalized = pattern.replace(/^\//, "").replace(/\/$/, "");
-  const exactPath = !/[*?]/.test(normalized);
-  const prefix = anchored ? "^" : "(?:^|.*/)";
-  const descendants = directory || exactPath || pattern.endsWith("/**") || /^\*\*\/[^*?/]+$/.test(pattern) ? "(?:/.*)?" : "";
-  return new RegExp(`${prefix}${patternBody(normalized)}${descendants}$`);
-}
-function matchingRule(rules, filePath) {
-  let matched = null;
-  for (const rule of rules) {
-    if (rule.matcher.test(filePath)) matched = rule;
-  }
-  return matched;
-}
-function blameAuthors(output) {
-  const authors = /* @__PURE__ */ new Map();
-  let authorEmail = null;
-  let authorTime = 0;
-  let committerEmail = null;
-  let committerTime = 0;
-  for (const line of output.split(/\r?\n/)) {
-    if (line.startsWith("author-mail ")) {
-      authorEmail = line.slice("author-mail ".length).replace(/^<|>$/g, "");
-    } else if (line.startsWith("author-time ")) {
-      authorTime = Number.parseInt(line.slice("author-time ".length), 10) || 0;
-    } else if (line.startsWith("committer-mail ")) {
-      committerEmail = line.slice("committer-mail ".length).replace(/^<|>$/g, "");
-    } else if (line.startsWith("committer-time ")) {
-      committerTime = Number.parseInt(line.slice("committer-time ".length), 10) || 0;
-    } else if (line.startsWith("	")) {
-      const email3 = authorEmail ?? committerEmail;
-      const time3 = authorTime || committerTime;
-      if (email3 !== null) {
-        const author = authors.get(email3) ?? {
-          lines: 0,
-          latestAuthorTime: 0
-        };
-        author.lines += 1;
-        author.latestAuthorTime = Math.max(author.latestAuthorTime, time3);
-        authors.set(email3, author);
-      }
-      authorEmail = null;
-      authorTime = 0;
-      committerEmail = null;
-      committerTime = 0;
-    }
-  }
-  return [...authors.entries()].sort(
-    ([leftEmail, left], [rightEmail, right]) => right.latestAuthorTime - left.latestAuthorTime || right.lines - left.lines || compareText(leftEmail, rightEmail)
-  ).slice(0, maximumBlameOwners).map(([handle]) => ({ handle, source: "blame" }));
-}
-async function ownersFromBlame(repoDir, filePath) {
-  try {
-    const { stdout } = await execFileAsync4(
-      "git",
-      ["-C", repoDir, "blame", "--line-porcelain", "--", filePath],
-      { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
-    );
-    return blameAuthors(stdout);
-  } catch {
-    return [];
-  }
-}
-async function resolveOwners({
-  repoDir,
-  filePaths
-}) {
-  const codeownersPath = await findCodeowners(repoDir);
-  const rules = codeownersPath === null ? [] : parseCodeowners(
-    await readFile8(join13(repoDir, codeownersPath), "utf8")
-  ).map((rule) => ({
-    ...rule,
-    matcher: codeownersRegex(rule.pattern)
-  }));
-  const paths = filePaths.map(
-    (inputPath) => repositoryPath2(repoDir, inputPath)
-  );
-  const rulesByPath = new Map(
-    [...new Set(paths)].map(
-      (path) => [path, matchingRule(rules, path)]
-    )
-  );
-  const blamePaths = [...rulesByPath.entries()].filter(([, rule]) => rule === null).map(([path]) => path);
-  const blameOwnersByPath = /* @__PURE__ */ new Map();
-  let nextPath = 0;
-  async function blameWorker() {
-    while (nextPath < blamePaths.length) {
-      const path = blamePaths[nextPath++];
-      blameOwnersByPath.set(path, await ownersFromBlame(repoDir, path));
-    }
-  }
-  await Promise.all(
-    Array.from(
-      { length: Math.min(maximumBlameConcurrency, blamePaths.length) },
-      () => blameWorker()
-    )
-  );
-  return paths.map((path) => {
-    const rule = rulesByPath.get(path) ?? null;
-    if (rule !== null) {
-      return rule.owners.length === 0 ? {
-        path,
-        owners: [],
-        reason: "codeowners_rule_without_owners"
-      } : {
-        path,
-        owners: rule.owners.map((handle) => ({
-          handle,
-          source: "codeowners"
-        }))
-      };
-    }
-    const owners = blameOwnersByPath.get(path) ?? [];
-    return owners.length === 0 ? {
-      path,
-      owners,
-      reason: "no_codeowners_match_or_blame"
-    } : { path, owners };
-  });
 }
 
 // src/evaluators/braintrust.ts
@@ -40059,7 +41051,7 @@ async function pollEvaluator(evaluator, providerRunId) {
     const remaining = EVALUATOR_POLL_BUDGET_MS - (Date.now() - startedAt);
     if (remaining <= 0) return "polling_exhausted";
     await new Promise(
-      (resolve13) => setTimeout(resolve13, Math.min(delay, remaining))
+      (resolve14) => setTimeout(resolve14, Math.min(delay, remaining))
     );
     delay = Math.min(delay * 2, maxPollDelayMs);
   }
@@ -40094,6 +41086,88 @@ function rubric(metadata, metricName, metricCount) {
 }
 function objectValue2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+}
+
+// src/family-binding.ts
+function traceStepKey(traceId, stepIndex) {
+  return `${traceId}\0${stepIndex}`;
+}
+var SPLITS = ["shortlist", "holdout"];
+function boundStepIds(bindingCase, bindings) {
+  return bindingCase.traceId === void 0 ? void 0 : bindings.get(traceStepKey(bindingCase.traceId, bindingCase.stepIndex));
+}
+function placedHoldoutCases(cases, caseSteps) {
+  return cases.filter(
+    ({ caseId, split }) => split === "holdout" && caseSteps.has(caseId)
+  ).length;
+}
+function bindFamily(input) {
+  const keyed = input.sites.filter(({ traceKey }) => traceKey === input.family);
+  const caseSteps = /* @__PURE__ */ new Map();
+  if (keyed.length === 0) {
+    const leftOut = { ambiguous: 0, unmatched: 0, unreplayable: 0 };
+    for (const bindingCase of input.cases) {
+      const bound = boundStepIds(bindingCase, input.bindings) ?? [];
+      if (bound.length === 0) {
+        leftOut.unmatched += 1;
+        continue;
+      }
+      const site = input.sites.find(({ stepId }) => stepId === bound[0]);
+      if (bound.length > 1 || site?.traceKey !== void 0 || input.sharedStepIds.has(bound[0])) {
+        leftOut.ambiguous += 1;
+      } else if (site?.replayable) {
+        caseSteps.set(bindingCase.caseId, bound[0]);
+      } else {
+        leftOut.unreplayable += 1;
+      }
+    }
+    const used2 = new Set(caseSteps.values());
+    return {
+      kind: "trace_match",
+      stepIds: input.sites.map(({ stepId }) => stepId).filter((stepId) => used2.has(stepId)),
+      caseSteps,
+      holdoutCases: placedHoldoutCases(input.cases, caseSteps),
+      leftOut,
+      requiredDistinctSteps: MIN_DISTINCT_STEPS
+    };
+  }
+  const keyedStepIds = new Set(keyed.map(({ stepId }) => stepId));
+  const replayable = keyed.filter((site) => site.replayable).map(({ stepId }) => stepId);
+  let unreplayableCases = 0;
+  for (const split of SPLITS) {
+    let next = 0;
+    for (const bindingCase of input.cases.filter(
+      (candidate) => candidate.split === split
+    )) {
+      const bound = boundStepIds(bindingCase, input.bindings);
+      const onlySite = bound?.length === 1 && keyedStepIds.has(bound[0]) ? bound[0] : void 0;
+      if (onlySite !== void 0) {
+        if (replayable.includes(onlySite)) {
+          caseSteps.set(bindingCase.caseId, onlySite);
+        } else {
+          unreplayableCases += 1;
+        }
+      } else if (replayable.length > 0) {
+        caseSteps.set(
+          bindingCase.caseId,
+          replayable[next % replayable.length]
+        );
+        next += 1;
+      } else {
+        unreplayableCases += 1;
+      }
+    }
+  }
+  const used = new Set(caseSteps.values());
+  const stepIds = replayable.filter((stepId) => used.has(stepId));
+  return {
+    kind: "trace_key",
+    stepIds,
+    caseSteps,
+    holdoutCases: placedHoldoutCases(input.cases, caseSteps),
+    leftOut: { ambiguous: 0, unmatched: 0, unreplayable: unreplayableCases },
+    requiredDistinctSteps: Math.min(MIN_DISTINCT_STEPS, stepIds.length)
+  };
 }
 
 // src/evaluators/shared.ts
@@ -40440,8 +41514,307 @@ function providerName(provider) {
   return provider === "langsmith" ? "LangSmith" : provider === "langfuse" ? "Langfuse" : "Braintrust";
 }
 
+// src/evaluators/promptfoo.ts
+import { execFile as execFile6 } from "node:child_process";
+import { createHash as createHash7 } from "node:crypto";
+import { mkdtemp as mkdtemp3, readFile as readFile10, realpath as realpath3, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname as dirname6, join as join14, relative as relative7, resolve as resolve7 } from "node:path";
+import { promisify as promisify5 } from "node:util";
+var PROMPTFOO_VERIFIED_VERSION = "0.123.1";
+var PROMPTFOO_EVAL_FLAGS = [
+  "--no-write",
+  "--no-share",
+  "--no-table",
+  "--no-progress-bar"
+];
+var PROMPTFOO_ENV = {
+  PROMPTFOO_DISABLE_UPDATE: "true",
+  PROMPTFOO_DISABLE_VAR_EXPANSION: "true",
+  PROMPTFOO_FAILED_TEST_EXIT_CODE: "100",
+  PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: "false",
+  PROMPTFOO_STRIP_GRADING_RESULT: "false",
+  PROMPTFOO_STRIP_RESPONSE_OUTPUT: "false",
+  PROMPTFOO_STRIP_TEST_VARS: "false"
+};
+var execFileAsync5 = promisify5(execFile6);
+var promptfooMetadataSchema = external_exports.object({
+  promptfooVersion: external_exports.string().min(1)
+});
+var promptfooResultsFileSchema = external_exports.object({
+  evalId: external_exports.string().nullable(),
+  metadata: promptfooMetadataSchema,
+  results: external_exports.object({
+    version: external_exports.literal(3),
+    results: external_exports.array(
+      external_exports.object({
+        testIdx: external_exports.number().int().nonnegative(),
+        failureReason: external_exports.number().int(),
+        vars: external_exports.object({ tags: external_exports.string().optional() }),
+        response: external_exports.object({ output: external_exports.unknown() }).nullable().optional(),
+        gradingResult: external_exports.object({
+          namedScores: external_exports.record(external_exports.string(), external_exports.number()).optional(),
+          componentResults: external_exports.array(
+            external_exports.object({
+              pass: external_exports.boolean(),
+              metadata: external_exports.object({ graderError: external_exports.unknown().optional() }).nullable().optional(),
+              assertion: external_exports.record(external_exports.string(), jsonValueSchema).nullable().optional()
+            })
+          ).optional()
+        }).nullable().optional()
+      })
+    )
+  })
+});
+function parsePromptfooResults(input) {
+  const file2 = parsePromptfooResultsFile(input.text);
+  const promptfooVersion = file2.metadata.promptfooVersion;
+  const rows = [...file2.results.results].sort(
+    (left, right) => left.testIdx - right.testIdx
+  );
+  const seen = /* @__PURE__ */ new Set();
+  for (const row2 of rows) {
+    if (row2.testIdx >= input.sent.length || seen.has(row2.testIdx) || row2.vars.tags !== input.sent[row2.testIdx].caseId) {
+      throw new Error(
+        `promptfoo's rows do not correspond one to one with the outputs sent (row testIdx ${row2.testIdx}); a repeat setting in a promptfooconfig next to the assertions file is the usual cause.`
+      );
+    }
+    seen.add(row2.testIdx);
+  }
+  const graded = [];
+  const cases = rows.flatMap((row2) => {
+    const { caseId, output } = input.sent[row2.testIdx];
+    const testIdx = row2.testIdx;
+    if (row2.failureReason !== 0 && row2.failureReason !== 1) {
+      return [
+        {
+          caseId,
+          testIdx,
+          metrics: [],
+          absentReason: "external_evaluator_error"
+        }
+      ];
+    }
+    if (row2.response?.output !== output.replace(/\n$/u, "")) {
+      return [
+        {
+          caseId,
+          testIdx,
+          metrics: [],
+          absentReason: "external_output_mismatch"
+        }
+      ];
+    }
+    const grading = row2.gradingResult;
+    const namedScores = grading?.namedScores;
+    if (namedScores === void 0) return [];
+    graded.push(namedScores);
+    const graderFailed = input.scorers.filter(
+      (scorer) => (grading?.componentResults ?? []).some(
+        ({ assertion, metadata }) => assertion?.metric === scorer && metadata?.graderError === true
+      )
+    );
+    const metrics = input.scorers.flatMap((scorer) => {
+      const score = namedScores[scorer];
+      const components = (grading?.componentResults ?? []).filter(
+        ({ assertion }) => assertion?.metric === scorer
+      );
+      if (score === void 0 || components.length === 0 || graderFailed.includes(scorer)) {
+        return [];
+      }
+      const digest2 = computeRunSpecDigest(
+        components.map(({ assertion }) => assertion)
+      ).slice(0, 16);
+      return [
+        {
+          metricName: scorer,
+          score,
+          passed: components.every(({ pass }) => pass),
+          rubricVersion: `promptfoo@${promptfooVersion}/${scorer}/${digest2}`
+        }
+      ];
+    });
+    return [
+      {
+        caseId,
+        testIdx,
+        metrics,
+        ...graderFailed.length === 0 ? {} : { absentReason: "external_evaluator_error" }
+      }
+    ];
+  });
+  const missing = graded.length === 0 ? void 0 : input.scorers.find(
+    (scorer) => graded.every((namedScores) => namedScores[scorer] === void 0)
+  );
+  if (missing !== void 0) {
+    throw new Error(
+      `promptfoo assertions produce no "${missing}" metric; add metric: ${missing} to an assertion in the --evaluator-config file, or drop --evaluator-scorer ${missing}, then rerun.`
+    );
+  }
+  return { evalId: file2.evalId, promptfooVersion, cases };
+}
+function parsePromptfooResultsFile(text) {
+  let json3;
+  try {
+    json3 = JSON.parse(text);
+  } catch {
+    json3 = void 0;
+  }
+  const parsed2 = promptfooResultsFileSchema.safeParse(json3);
+  if (parsed2.success) return parsed2.data;
+  const stated = external_exports.object({ metadata: promptfooMetadataSchema }).safeParse(json3);
+  const found = stated.success ? stated.data.metadata.promptfooVersion : "(version not stated in the file)";
+  throw new Error(
+    `promptfoo ${found} wrote a results file rightmodeler cannot read: expected the promptfoo ${PROMPTFOO_VERIFIED_VERSION} layout, results.version 3 with one row per model output in results.results and the version in metadata.promptfooVersion. Install promptfoo ${PROMPTFOO_VERIFIED_VERSION} (npm install -g promptfoo@${PROMPTFOO_VERIFIED_VERSION}) or pass its executable with --evaluator-command, then rerun.`
+  );
+}
+function resolvePromptfooEvaluatorConfig(config2) {
+  return {
+    command: requireText(config2.command, "Promptfoo evaluator command"),
+    assertionsPath: requireText(
+      config2.assertionsPath,
+      "Promptfoo evaluator assertionsPath"
+    ),
+    ...resolveScoringConfig(config2)
+  };
+}
+function createPromptfooEvaluator(input) {
+  const config2 = resolvePromptfooEvaluatorConfig(input);
+  const command = /[\\/]/u.test(config2.command) ? resolve7(config2.command) : config2.command;
+  const assertionsPath = resolve7(config2.assertionsPath);
+  const results = /* @__PURE__ */ new Map();
+  return {
+    id: "promptfoo",
+    async detectAvailability() {
+      return (await runPromptfoo(command, ["--version"], process.cwd())).code === 0;
+    },
+    async launch(input2) {
+      const providerRunId = createHash7("sha256").update(
+        JSON.stringify({
+          experimentName: input2.experimentName,
+          caseIds: input2.cases.map(({ caseId }) => caseId)
+        })
+      ).digest("hex");
+      const sent = input2.cases.map(({ caseId, output }) => ({
+        caseId,
+        output: typeof output === "string" ? output : JSON.stringify(output)
+      }));
+      const cwd = await realpath3(dirname6(assertionsPath));
+      const directory = await realpath3(
+        await mkdtemp3(join14(tmpdir(), "rightmodeler-promptfoo-"))
+      );
+      const modelOutputsPath = join14(directory, "model-outputs.json");
+      const resultsPath = join14(directory, "results.json");
+      try {
+        await writeFile5(
+          modelOutputsPath,
+          JSON.stringify(
+            sent.map(({ caseId, output: output2 }) => ({ output: output2, tags: [caseId] }))
+          ),
+          "utf8"
+        );
+        const { code, output } = await runPromptfoo(
+          command,
+          [
+            "eval",
+            "--assertions",
+            assertionsPath,
+            "--model-outputs",
+            relative7(cwd, modelOutputsPath),
+            "--output",
+            resultsPath,
+            ...PROMPTFOO_EVAL_FLAGS
+          ],
+          cwd
+        );
+        const outputTail = output.slice(-8192).trim();
+        if (code !== 0 && code !== 100) {
+          throw new Error(
+            `promptfoo eval exited ${String(code)}: ${outputTail}`
+          );
+        }
+        let text;
+        try {
+          text = await readFile10(resultsPath, "utf8");
+        } catch (error51) {
+          if (error51.code !== "ENOENT") throw error51;
+          throw new Error(
+            `promptfoo eval exited ${String(code)} without writing its results file: ${outputTail}`
+          );
+        }
+        results.set(
+          providerRunId,
+          parsePromptfooResults({ text, sent, scorers: config2.scorers })
+        );
+        return { providerRunId };
+      } finally {
+        await rm3(directory, { recursive: true, force: true });
+      }
+    },
+    async status(providerRunId) {
+      if (!results.has(providerRunId)) {
+        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
+      }
+      return "complete";
+    },
+    async collect(providerRunId) {
+      const run = results.get(providerRunId);
+      if (run === void 0) {
+        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
+      }
+      return run.cases.map(({ caseId, testIdx, metrics, absentReason }) => ({
+        caseId,
+        metrics,
+        ...absentReason === void 0 ? {} : { absentReason },
+        artifactRef: {
+          providerRunId,
+          evalId: run.evalId,
+          testIdx,
+          promptfooVersion: run.promptfooVersion
+        }
+      }));
+    }
+  };
+}
+async function readPromptfooConfigs(assertionsPath) {
+  const directory = dirname6(resolve7(assertionsPath));
+  const configs = await Promise.all(
+    ["yaml", "yml", "json", "cjs", "cts", "js", "mjs", "mts", "ts"].map(
+      async (extension) => {
+        const file2 = `promptfooconfig.${extension}`;
+        try {
+          return [{ file: file2, bytes: await readFile10(join14(directory, file2)) }];
+        } catch (error51) {
+          if (error51.code === "ENOENT") return [];
+          throw error51;
+        }
+      }
+    )
+  );
+  return configs.flat();
+}
+async function runPromptfoo(command, args, cwd) {
+  const running = execFileAsync5(command, [...args], {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, ...PROMPTFOO_ENV },
+    maxBuffer: 10 * 1024 * 1024
+  });
+  running.child.stdin?.end();
+  try {
+    const { stdout, stderr } = await running;
+    return { code: 0, output: `${stdout}${stderr}` };
+  } catch (error51) {
+    const failed = error51;
+    return {
+      code: failed.code,
+      output: `${failed.stdout ?? ""}${failed.stderr ?? ""}`
+    };
+  }
+}
+
 // src/evaluators/langfuse.ts
-import { createHash as createHash6 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 var healthSchema = external_exports.object({ status: external_exports.string().min(1) });
 var otelResponseSchema = external_exports.object({ partialSuccess: external_exports.unknown().optional() });
 var scoreSchema = external_exports.object({
@@ -40772,11 +42145,11 @@ function rubric2(score) {
   return rubricVersion === void 0 ? {} : { rubricVersion };
 }
 function hashHex(value) {
-  return createHash6("sha256").update(JSON.stringify(value)).digest("hex");
+  return createHash8("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 // src/evaluators/langsmith.ts
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 var sessionSchema = external_exports.object({ id: external_exports.string().min(1) });
 var feedbackEntrySchema = external_exports.object({
   score: external_exports.number().optional(),
@@ -41014,201 +42387,8 @@ function scorerRule(value) {
   return separator === -1 ? value : value.slice(separator + 1);
 }
 function stableUuid(value) {
-  const hex3 = createHash7("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32);
+  const hex3 = createHash9("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32);
   return `${hex3.slice(0, 8)}-${hex3.slice(8, 12)}-4${hex3.slice(13, 16)}-8${hex3.slice(17, 20)}-${hex3.slice(20)}`;
-}
-
-// src/evaluators/promptfoo.ts
-import { execFile as execFile6 } from "node:child_process";
-import { createHash as createHash8 } from "node:crypto";
-import { mkdtemp as mkdtemp3, readFile as readFile9, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join as join14 } from "node:path";
-import { promisify as promisify5 } from "node:util";
-var execFileAsync5 = promisify5(execFile6);
-var gradingResultSchema = external_exports.object({
-  pass: external_exports.boolean(),
-  score: external_exports.number(),
-  namedScores: external_exports.record(external_exports.string(), external_exports.number()).optional(),
-  metadata: external_exports.record(external_exports.string(), external_exports.unknown()).optional(),
-  componentResults: external_exports.array(
-    external_exports.object({
-      pass: external_exports.boolean(),
-      score: external_exports.number(),
-      metadata: external_exports.record(external_exports.string(), external_exports.unknown()).optional(),
-      assertion: external_exports.object({
-        metric: external_exports.string().min(1).optional(),
-        type: external_exports.string().min(1).optional()
-      }).optional()
-    })
-  ).optional()
-});
-var rowSchema = external_exports.object({
-  testIdx: external_exports.number().int().nonnegative(),
-  success: external_exports.boolean(),
-  score: external_exports.number(),
-  error: external_exports.string().optional(),
-  gradingResult: gradingResultSchema.nullable().optional()
-});
-var outputSchema = external_exports.object({
-  version: external_exports.literal(3),
-  evalId: external_exports.string().nullable().optional(),
-  results: external_exports.object({
-    outputs: external_exports.array(rowSchema)
-  })
-});
-function resolvePromptfooEvaluatorConfig(config2) {
-  return {
-    command: requireText(config2.command, "Promptfoo evaluator command"),
-    assertionsPath: requireText(
-      config2.assertionsPath,
-      "Promptfoo evaluator assertionsPath"
-    ),
-    ...resolveScoringConfig(config2)
-  };
-}
-function createPromptfooEvaluator(input) {
-  const config2 = resolvePromptfooEvaluatorConfig(input);
-  const results = /* @__PURE__ */ new Map();
-  return {
-    id: "promptfoo",
-    async detectAvailability() {
-      try {
-        await execFileAsync5(config2.command, ["--version"], {
-          encoding: "utf8",
-          maxBuffer: 1024 * 1024
-        });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    async launch(input2) {
-      const providerRunId = createHash8("sha256").update(
-        JSON.stringify({
-          experimentName: input2.experimentName,
-          caseIds: input2.cases.map(({ caseId }) => caseId)
-        })
-      ).digest("hex");
-      const directory = await mkdtemp3(
-        join14(tmpdir(), "rightmodeler-promptfoo-")
-      );
-      const modelOutputsPath = join14(directory, "model-outputs.json");
-      const resultsPath = join14(directory, "results.json");
-      try {
-        await writeFile5(
-          modelOutputsPath,
-          JSON.stringify(
-            input2.cases.map((item) => ({
-              output: typeof item.output === "string" ? item.output : JSON.stringify(item.output),
-              tags: [item.caseId]
-            }))
-          ),
-          "utf8"
-        );
-        await execFileAsync5(
-          config2.command,
-          [
-            "eval",
-            "--assertions",
-            config2.assertionsPath,
-            "--model-outputs",
-            modelOutputsPath,
-            "--output",
-            resultsPath
-          ],
-          { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }
-        );
-        const parsed2 = outputSchema.parse(
-          JSON.parse(await readFile9(resultsPath, "utf8"))
-        );
-        const rows = parsed2.results.outputs;
-        if (rows.some(({ testIdx }) => testIdx >= input2.cases.length)) {
-          throw new Error(
-            "Promptfoo evaluator output contains an unknown test index"
-          );
-        }
-        results.set(providerRunId, {
-          evalId: parsed2.evalId ?? null,
-          rows,
-          caseIds: input2.cases.map(({ caseId }) => caseId)
-        });
-        return { providerRunId };
-      } finally {
-        await rm3(directory, { recursive: true, force: true });
-      }
-    },
-    async status(providerRunId) {
-      const run = results.get(providerRunId);
-      if (run === void 0) {
-        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
-      }
-      return run.rows.some(({ error: error51 }) => error51 !== void 0) ? "failed" : "complete";
-    },
-    async collect(providerRunId) {
-      const run = results.get(providerRunId);
-      if (run === void 0) {
-        throw new Error(`Unknown Promptfoo evaluator run: ${providerRunId}`);
-      }
-      return run.rows.flatMap((row) => {
-        if (row.error !== void 0 || row.gradingResult === null) return [];
-        const metrics = promptfooMetrics(row, config2.scorers);
-        return metrics.length === 0 ? [] : [
-          {
-            caseId: run.caseIds[row.testIdx],
-            metrics,
-            artifactRef: {
-              providerRunId,
-              evalId: run.evalId,
-              testIdx: row.testIdx
-            }
-          }
-        ];
-      });
-    }
-  };
-}
-function promptfooMetrics(row, scorers) {
-  const grading = row.gradingResult;
-  if (grading === void 0 || grading === null) return [];
-  if (grading.namedScores !== void 0) {
-    return scorers.flatMap((metricName) => {
-      const score = grading.namedScores?.[metricName];
-      if (score === void 0) return [];
-      const component = grading.componentResults?.find(
-        (item) => item.assertion?.metric === metricName
-      );
-      const rubricVersion2 = metadataString(
-        component?.metadata ?? grading.metadata,
-        "rubricVersion",
-        "rubric_version"
-      );
-      return [
-        {
-          metricName,
-          score,
-          passed: component?.pass ?? metadataBoolean(grading.metadata, `${metricName}_passed`),
-          ...rubricVersion2 === void 0 ? {} : { rubricVersion: rubricVersion2 }
-        }
-      ];
-    });
-  }
-  if (scorers.length !== 1) {
-    throw new Error("Promptfoo evaluator output omits configured named scores");
-  }
-  const rubricVersion = metadataString(
-    grading.metadata,
-    "rubricVersion",
-    "rubric_version"
-  );
-  return [
-    {
-      metricName: scorers[0],
-      score: grading.score,
-      passed: grading.pass,
-      ...rubricVersion === void 0 ? {} : { rubricVersion }
-    }
-  ];
 }
 
 // src/evaluators/registry.ts
@@ -41430,6 +42610,7 @@ function assessmentMetadata(assessment) {
     evaluatorId: assessment.evaluatorId,
     passed: assessment.passed,
     rubricVersion: assessment.rubricVersion,
+    ...assessment.evaluatorIdentity === void 0 ? {} : { evaluatorIdentity: assessment.evaluatorIdentity },
     artifactRef: assessment.artifactRef
   };
 }
@@ -41507,13 +42688,13 @@ var Reporter = class {
     }
   }
   error(error51) {
-    const errorCode = typeof error51 === "object" && error51 !== null && "code" in error51 && typeof error51.code === "string" ? error51.code : void 0;
+    const errorCode2 = typeof error51 === "object" && error51 !== null && "code" in error51 && typeof error51.code === "string" ? error51.code : void 0;
     const protocol = error51 instanceof ProtocolError ? {
       code: error51.code,
       message: error51.message,
       remedy: error51.remedy
     } : {
-      code: errorCode ?? "runtime_error",
+      code: errorCode2 ?? "runtime_error",
       message: error51 instanceof Error ? error51.message : String(error51),
       remedy: "Fix the error and rerun the command."
     };
@@ -41662,10 +42843,10 @@ function derivePrState(events) {
 }
 
 // src/watch/watch.ts
-import { createHash as createHash10, randomUUID as randomUUID11 } from "node:crypto";
+import { createHash as createHash11, randomUUID as randomUUID11 } from "node:crypto";
 
 // src/watch/lock.ts
-import { createHash as createHash9, randomUUID as randomUUID10 } from "node:crypto";
+import { createHash as createHash10, randomUUID as randomUUID10 } from "node:crypto";
 var staleAfterMs = 5 * 60 * 1e3;
 var availableLockSchema = external_exports.strictObject({ status: external_exports.literal("available") });
 var heldLockSchema = external_exports.strictObject({
@@ -41682,7 +42863,7 @@ function encode4(value) {
   return Buffer.from(JSON.stringify(value), "utf8");
 }
 function lockKey(owner, repo, prNumber) {
-  const repository = createHash9("sha256").update(`${owner.toLowerCase()}/${repo.toLowerCase()}`).digest("hex");
+  const repository = createHash10("sha256").update(`${owner.toLowerCase()}/${repo.toLowerCase()}`).digest("hex");
   return `project/watch-locks/${repository}/pr-${prNumber}.json`;
 }
 function nextFence(value) {
@@ -41957,7 +43138,7 @@ async function markForReproof(store, verdicts, requestId) {
   }
 }
 function ciEventKey(prNumber, headSha, checkIdentities) {
-  const checks = createHash10("sha256").update(JSON.stringify(checkIdentities)).digest("hex");
+  const checks = createHash11("sha256").update(JSON.stringify(checkIdentities)).digest("hex");
   return `ci:${prNumber}:${headSha}:${checks}`;
 }
 function checkIdentity(check2) {
@@ -42039,7 +43220,7 @@ function action(type, detail) {
   return { type, detail };
 }
 function commentMarker(handledEventKey2) {
-  const digest2 = createHash10("sha256").update(handledEventKey2).digest("hex");
+  const digest2 = createHash11("sha256").update(handledEventKey2).digest("hex");
   return `${commentMarkerPrefix}${digest2} -->`;
 }
 async function changedPreApplyDigests(input, baseSha, preApplyDigests) {
@@ -42216,6 +43397,15 @@ ${marker}`
         owner: input.owner,
         repo: input.repo,
         ref: pull.head.sha
+      }).catch((error51) => {
+        if (!(error51 instanceof GithubHttpError) || error51.status !== 403) {
+          throw error51;
+        }
+        input.warning?.(
+          "github_checks_unavailable",
+          `GitHub refused to list check runs for pull request #${input.prNumber} (HTTP 403). This token cannot read check runs (fine-grained personal access tokens never can), so this pass reconciled reviews, comments, commit statuses, merges and base-branch changes without check-run results. To include check runs, use a GitHub App installation token with Checks: read or a classic token with the repo scope.`
+        );
+        return { totalCount: 0, checkRuns: [] };
       }),
       input.githubClient.getRef({
         owner: input.owner,
@@ -42324,7 +43514,7 @@ ${marker}`
       }
       const changed = preApplyDigests === void 0 ? void 0 : await changedPreApplyDigests(input, base.sha, preApplyDigests);
       if (changed === void 0 || changed.length > 0) {
-        const key = changed === void 0 ? `base:${input.prNumber}:${base.sha}` : `base:${input.prNumber}:${createHash10("sha256").update(canonicalJson(jsonValueSchema.parse(changed))).digest("hex")}`;
+        const key = changed === void 0 ? `base:${input.prNumber}:${base.sha}` : `base:${input.prNumber}:${createHash11("sha256").update(canonicalJson(jsonValueSchema.parse(changed))).digest("hex")}`;
         if (!handled.has(key)) {
           await renew();
           await markForReproof(input.store, prVerdicts, key);
@@ -42573,6 +43763,9 @@ var DEFAULT_QUALITY_FLOOR = 0.85;
 var AVAILABILITY_FLOOR = 0.7;
 var GATE_POLICY_BASE_VERSION = "phase-a-v3";
 var REPLAY_PROMPT_REVISION = "replay-prompt-v1";
+var SCAN_REVISION = "scan-trace-key-v1";
+var TRACE_BINDING_REVISION = "trace-match-v1";
+var TRACE_READER_REVISION = "ai-sdk-dialects-v1";
 var API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 function auditResultKey(projectId3) {
   return `${setupPrefix(projectId3)}audit-result.json`;
@@ -42592,7 +43785,15 @@ var reconcileOutputSchema = external_exports.strictObject({
   matchedCallSites: external_exports.number().int().nonnegative(),
   ambiguousCallSites: external_exports.number().int().nonnegative(),
   unmatchedCallSites: external_exports.number().int().nonnegative(),
-  ambiguityReasons: external_exports.array(external_exports.string())
+  ambiguityReasons: external_exports.array(external_exports.string()),
+  traceStepBindings: external_exports.array(
+    external_exports.strictObject({
+      traceId: external_exports.string().min(1),
+      stepIndex: external_exports.number().int().nonnegative(),
+      stepIds: external_exports.array(external_exports.string().min(1)),
+      via: external_exports.enum(["trajectory_position", "trace_key", "model"]).optional()
+    })
+  ).default([])
 });
 var ingestOutputSchema = external_exports.strictObject({
   format: external_exports.enum(traceAdapters.map(({ name }) => name)),
@@ -42652,12 +43853,17 @@ var familyPlanSchema = external_exports.strictObject({
   stepIds: external_exports.array(external_exports.string().min(1)),
   abstainReason: external_exports.strictObject({
     reason: external_exports.enum([
+      "ambiguous_call_site_binding",
+      "unmatched_call_site_binding",
+      "bound_call_sites_not_replayable",
       "holdout_below_floor_minimum",
       "insufficient_distinct_steps"
     ]),
     observed: external_exports.number().int().nonnegative(),
     required: external_exports.number().int().nonnegative()
-  }).optional()
+  }).optional(),
+  binding: external_exports.enum(["trace_key", "trace_match"]).optional(),
+  leftOutCases: external_exports.number().int().positive().optional()
 });
 var replayPlanSchema = external_exports.strictObject({
   top: external_exports.number().int().positive(),
@@ -42716,6 +43922,7 @@ var replayOutputSchema = external_exports.strictObject({
   evaluation: external_exports.strictObject({
     evaluatorKind: external_exports.string().min(1),
     gateMetric: external_exports.string().min(1),
+    evaluatorIdentity: external_exports.string().min(1).optional(),
     assessmentAbsences: external_exports.array(
       external_exports.strictObject({
         executionId: external_exports.string().min(1),
@@ -42923,13 +44130,13 @@ async function planStages(context2, options) {
   ) && result2.some(
     ({ stage, state: state2 }) => stage === "corpus" && state2 === "complete"
   ) && stages.includes("shortlist")) {
-    const records = (await loadReconcile(context2)).records;
+    const reconciled = await loadReconcile(context2);
     const corpus = await resolveCheckpointedPipelineCorpus(context2);
     const approved = context2.approvedRunSpecDigest === void 0 ? void 0 : await approvedSwapSetByDigest(context2, context2.approvedRunSpecDigest);
     return {
       stages: result2,
       policy: context2.release.effective,
-      familyPlans: await planFamilies(context2, corpus, records, approved)
+      familyPlans: (await planFamilies(context2, corpus, reconciled, approved)).map(({ plan }) => plan)
     };
   }
   return { stages: result2, policy: context2.release.effective };
@@ -43046,38 +44253,22 @@ async function estimateReplay(options) {
   );
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(context2.baseUrl, candidates);
-  const candidateFamily = candidates.flatMap(({ candidates: models }) => models).at(0)?.family;
-  const judge = context2.evaluator !== void 0 || candidateFamily === void 0 ? void 0 : (() => {
-    const stepIds = new Set(
-      candidates.filter(
-        ({ candidates: models }) => models.some(({ family }) => family === candidateFamily)
-      ).map(({ stepId }) => stepId)
-    );
-    const resolvedByStepId = new Map(
-      candidates.map(({ stepId, resolvedCurrentModelId }) => [
-        stepId,
-        resolvedCurrentModelId
-      ])
-    );
-    const referenceFamilies = new Set(
-      plan.steps.filter(({ stepId }) => stepIds.has(stepId)).map(
-        ({ stepId, currentModel }) => modelFamily(resolvedByStepId.get(stepId) ?? currentModel)
-      )
-    );
-    if (referenceFamilies.size !== 1) {
-      throw new Error(
-        `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`
-      );
-    }
+  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
+  const judges = /* @__PURE__ */ new Map();
+  const judge = context2.evaluator !== void 0 ? void 0 : (stepId, candidate) => {
+    const referenceFamily = referenceFamilyByStepId.get(stepId);
+    const key = JSON.stringify([candidate.family, referenceFamily]);
+    const known = judges.get(key);
+    if (known !== void 0) return known;
     const modelId = pickJudges(catalog, {
-      candidateFamily,
-      referenceFamily: [...referenceFamilies][0]
+      candidateFamily: candidate.family,
+      referenceFamily
     })[0];
     const entry = catalog.find(({ id }) => id === modelId);
     if (entry.pricing === null) {
       throw new Error(`Selected judge has no pricing: ${modelId}`);
     }
-    return {
+    const selected = {
       modelId,
       pricing: entry.pricing,
       maxOutputTokens: Math.min(
@@ -43085,7 +44276,9 @@ async function estimateReplay(options) {
         JUDGE_OUTPUT_TOKEN_CAP
       )
     };
-  })();
+    judges.set(key, selected);
+    return selected;
+  };
   return {
     ...estimateReplayCost({
       steps: plan.steps,
@@ -43102,12 +44295,7 @@ async function claimDetachedReplay(options) {
     throw missingProviderConfiguration();
   }
   const state = await readSetupState(context2.store, context2.projectId);
-  const traceIdentity = context2.traces === void 0 ? state.stages.ingest?.inputDigest : digest({
-    stage: "ingest",
-    traceSha256: sha256(
-      Buffer.concat([...await readTraceInput(context2.traces)])
-    )
-  });
+  const traceIdentity = await inputDigest("ingest", context2, state);
   if (traceIdentity === void 0) {
     throw new ProtocolError({
       exitCode: 2,
@@ -43223,11 +44411,14 @@ async function evaluatorRunIdentity(context2) {
   if (context2.evaluator.provider !== "promptfoo") {
     return jsonValue2(context2.evaluator);
   }
+  const assertionsPath = resolve8(context2.evaluator.assertionsPath);
+  const promptfooConfigs = (await readPromptfooConfigs(assertionsPath)).map(
+    ({ file: file2, bytes }) => ({ file: file2, sha256: sha256(bytes) })
+  );
   return jsonValue2({
     ...context2.evaluator,
-    assertionsSha256: sha256(
-      await readFile10(resolve7(context2.evaluator.assertionsPath))
-    )
+    assertionsSha256: sha256(await readFile11(assertionsPath)),
+    ...promptfooConfigs.length === 0 ? {} : { promptfooConfigs }
   });
 }
 function processIsAlive(pid) {
@@ -43361,6 +44552,18 @@ function isPipelineStage(value) {
 async function runApply(options) {
   const context2 = createHeadlessContext(options);
   const prepared = await prepareApply(context2);
+  const codeContext = await codeContextFor(
+    context2,
+    prepared.verdicts.flatMap(
+      ({ verdict, swaps }) => swaps.map(({ stepRecord }) => ({
+        stepId: stepRecord.stepId,
+        family: verdict.familyId,
+        path: stepRecord.callSite.path,
+        line: stepRecord.callSite.line
+      }))
+    ),
+    options.warning ?? (() => void 0)
+  );
   return applySwaps({
     store: context2.store,
     repoDir: context2.repo,
@@ -43369,7 +44572,8 @@ async function runApply(options) {
     repo: options.githubRepo,
     conventions: prepared.conventions,
     verdicts: prepared.verdicts,
-    dryRun: options.dryRun
+    dryRun: options.dryRun,
+    ...codeContext === void 0 ? {} : { codeContext }
   });
 }
 async function runWatch(options) {
@@ -43383,15 +44587,18 @@ async function runWatch(options) {
     repo: options.githubRepo,
     prNumber: options.prNumber,
     conventions: prepared.conventions,
-    verdicts: prepared.verdicts
+    verdicts: prepared.verdicts,
+    warning: options.warning
   });
 }
 async function listWatchablePullRequests(options) {
   const context2 = createHeadlessContext(options);
-  const ledger = await readPipelineLedger(context2);
-  const events = ledger.lifecycleEvents.filter(
-    ({ prNumber }) => prNumber !== null
+  return watchablePullRequests(
+    (await readPipelineLedger(context2)).lifecycleEvents
   );
+}
+function watchablePullRequests(lifecycleEvents) {
+  const events = lifecycleEvents.filter(({ prNumber }) => prNumber !== null);
   const numbers = [
     ...new Set(
       events.flatMap(({ prNumber }) => prNumber === null ? [] : [prNumber])
@@ -43563,7 +44770,17 @@ async function runResultExport(options) {
       "No execution trials are available to export"
     );
   }
-  const assessments = ledger.assessments;
+  const state = await readSetupState(context2.store, context2.projectId);
+  const currentIdentity = state.stages.replay === void 0 ? void 0 : (await loadReplayOutput(context2)).evaluation.evaluatorIdentity;
+  const gradeKey = (assessment) => `${assessment.executionId}\0${assessment.evaluatorId}\0${assessment.metricName}`;
+  const current = new Set(
+    ledger.assessments.flatMap(
+      (assessment) => currentIdentity !== void 0 && assessment.evaluatorIdentity === currentIdentity ? [gradeKey(assessment)] : []
+    )
+  );
+  const assessments = ledger.assessments.filter(
+    (assessment) => assessment.evaluatorIdentity === currentIdentity || !current.has(gradeKey(assessment))
+  );
   const verdicts = await readCurrentVerdicts(context2.store, context2.projectId);
   const exportDigest = digest({
     provider: options.config.provider,
@@ -43596,6 +44813,7 @@ function createHeadlessContext(options) {
   return createContext({
     repo: options.repo,
     store: options.store,
+    codeGraphPath: options.codeGraphPath,
     reporter: new Reporter("human", {
       stdout: () => void 0,
       stderr: () => void 0
@@ -43708,17 +44926,17 @@ function applyCascadeStatus(status) {
   return "blocked";
 }
 function createContext(options) {
-  const repo = resolve7(options.repo);
+  const repo = resolve8(options.repo);
   const storeRoot = resolveStoreRoot(repo, options.store);
-  const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve7(options.modeBConfigPath);
-  const pricingFilePath = options.pricingFilePath === void 0 ? void 0 : resolve7(options.pricingFilePath);
-  const policyFilePath = options.policyFilePath === void 0 ? void 0 : resolve7(options.policyFilePath);
+  const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve8(options.modeBConfigPath);
+  const pricingFilePath = options.pricingFilePath === void 0 ? void 0 : resolve8(options.pricingFilePath);
+  const policyFilePath = options.policyFilePath === void 0 ? void 0 : resolve8(options.policyFilePath);
   return {
     repo,
     storeRoot,
     store: new FsStore(storeRoot),
     projectId: PROJECT_ID2,
-    traces: options.traces === void 0 ? void 0 : resolve7(options.traces),
+    traces: options.traces === void 0 ? void 0 : resolve8(options.traces),
     baseUrl: options.baseUrl,
     apiKeyEnv: options.apiKeyEnv ?? API_KEY_ENV_DEFAULT,
     maxCostUsd: options.maxCostUsd,
@@ -43738,11 +44956,12 @@ function createContext(options) {
     },
     ...policyFilePath === void 0 ? {} : { policyFilePath },
     ...options.matchersPath === void 0 ? {} : {
-      matchersPath: resolve7(options.matchersPath),
-      matchers: loadMatchers(resolve7(options.matchersPath))
+      matchersPath: resolve8(options.matchersPath),
+      matchers: loadMatchers(resolve8(options.matchersPath))
     },
     ...options.existingRunId === void 0 ? {} : { existingRunId: options.existingRunId },
     ...options.approvedRunSpecDigest === void 0 ? {} : { approvedRunSpecDigest: options.approvedRunSpecDigest },
+    ...options.codeGraphPath === void 0 ? {} : { codeGraphPath: resolve8(options.codeGraphPath) },
     reporter: options.reporter,
     cache: { setupArtifacts: /* @__PURE__ */ new Map() }
   };
@@ -43783,7 +45002,7 @@ function readModeBConfig(path) {
     ...parsed2.data,
     appSpec: {
       ...parsed2.data.appSpec,
-      mountPath: resolve7(dirname6(path), parsed2.data.appSpec.mountPath)
+      mountPath: resolve8(dirname7(path), parsed2.data.appSpec.mountPath)
     }
   };
 }
@@ -43897,12 +45116,11 @@ async function scanArtifactDigest(context2, state) {
 }
 async function inputDigest(stage, context2, state) {
   if (stage === "scan") {
-    const repository = await contextRepositoryDigest(context2);
-    if (context2.matchersPath === void 0) return repository;
     return digest({
       stage,
-      repository,
-      matchers: sha256(await readFile10(context2.matchersPath))
+      repository: await contextRepositoryDigest(context2),
+      scanner: SCAN_REVISION,
+      ...context2.matchersPath === void 0 ? {} : { matchers: sha256(await readFile11(context2.matchersPath)) }
     });
   }
   if (stage === "ingest") {
@@ -43911,7 +45129,8 @@ async function inputDigest(stage, context2, state) {
       stage,
       traceSha256: sha256(
         Buffer.concat([...await readTraceInput(context2.traces)])
-      )
+      ),
+      reader: TRACE_READER_REVISION
     });
   }
   const previous = PIPELINE_STAGES[PIPELINE_STAGES.indexOf(stage) - 1];
@@ -43920,6 +45139,7 @@ async function inputDigest(stage, context2, state) {
   const extra = {};
   if (stage === "reconcile") {
     extra.scan = await scanArtifactDigest(context2, state);
+    extra.binding = TRACE_BINDING_REVISION;
     if (context2.modeBConfig !== void 0) {
       extra.stepMap = context2.modeBConfig.stepMap;
     }
@@ -43927,7 +45147,7 @@ async function inputDigest(stage, context2, state) {
   if (stage === "corpus") {
     extra.seed = CORPUS_SEED;
     const active = await context2.store.get(ACTIVE_CORPUS_KEY2);
-    extra.activeCorpus = active === null ? null : createHash11("sha256").update(active.body).digest("hex");
+    extra.activeCorpus = active === null ? null : createHash12("sha256").update(active.body).digest("hex");
   }
   if (stage === "audit-sample") extra.limit = AUDIT_SAMPLE_LIMIT;
   if (stage === "shortlist") {
@@ -43975,6 +45195,9 @@ async function inputDigest(stage, context2, state) {
       maxCostUsd: context2.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context2)
     });
+    if (context2.evaluator !== void 0) {
+      extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context2));
+    }
     extra.approvedRunSpecDigest = context2.approvedRunSpecDigest ?? null;
     if (context2.existingRunId !== void 0) {
       extra.catalog = digest(
@@ -44009,6 +45232,9 @@ async function inputDigest(stage, context2, state) {
         maxCostUsd: context2.maxCostUsd ?? null
       });
     }
+  }
+  if (stage === "report" && context2.codeGraphPath !== void 0) {
+    extra.codeGraph = await graphFileDigest(context2.codeGraphPath);
   }
   return digest({ stage, upstream: upstream.inputDigest, ...extra });
 }
@@ -44130,17 +45356,17 @@ function stageNotCompleted(stage, message2 = `${stage} has not completed`) {
 async function readTraceInput(path) {
   let metadata;
   try {
-    metadata = await stat2(path);
+    metadata = await stat3(path);
   } catch (error51) {
     if (!isMissing2(error51)) throw error51;
     throw missingTraceInput(path);
   }
-  if (!metadata.isDirectory()) return [await readFile10(path)];
+  if (!metadata.isDirectory()) return [await readFile11(path)];
   const names = (await readdir4(path, { withFileTypes: true })).filter(
     (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
   ).map(({ name }) => name).sort();
   if (names.length === 0) throw emptyTracesDirectory(path);
-  return Promise.all(names.map((name) => readFile10(join15(path, name))));
+  return Promise.all(names.map((name) => readFile11(join15(path, name))));
 }
 async function executeStage(stage, context2, inputDigestValue, runId) {
   switch (stage) {
@@ -44161,7 +45387,7 @@ async function executeStage(stage, context2, inputDigestValue, runId) {
     case "replay":
       return executeReplay(context2, inputDigestValue, runId);
     case "aggregate":
-      return executeAggregate(context2, inputDigestValue);
+      return executeAggregate(context2, inputDigestValue, runId);
     case "confirm":
       return executeConfirm(context2, inputDigestValue, runId);
     case "report": {
@@ -44223,7 +45449,20 @@ async function executeIngest(context2, inputDigestValue) {
   const names = [...new Set(detected.map(({ name }) => name))];
   if (names.length > 1) throw mixedTraceFormats(names);
   const adapter = detected[0];
-  const runs = adapter.adapt(texts.flatMap((text) => parseTraceRecords(text)));
+  const result2 = adapter.adaptWithReport(
+    texts.flatMap((text) => parseTraceRecords(text))
+  );
+  const runs = strictRuns(adapter.name, result2);
+  const excluded = excludedStepsWarning(result2);
+  if (excluded !== void 0) {
+    context2.reporter.warning("trace_steps_excluded", excluded);
+  }
+  if (runs.length === 0) {
+    throw new TraceAdaptError(
+      adapter.name,
+      `The ${adapter.name} trace input contains no model calls that can be read`
+    );
+  }
   const key = artifactKey(context2, "ingest", inputDigestValue);
   await putImmutableJson(context2.store, key, {
     format: adapter.name,
@@ -44259,7 +45498,11 @@ async function executeReconcile(context2, inputDigestValue) {
   })();
   const normalizedSteps = records.every(
     ({ currentModel }) => currentModel === null
-  ) ? ingestOutput.runs.filter(({ steps }) => steps.length === records.length).flatMap(({ steps }) => steps) : ingestOutput.runs.flatMap(({ steps }) => steps);
+  ) ? ingestOutput.runs.filter(({ steps }) => steps.length === records.length).flatMap(
+    ({ traceId, steps }) => steps.map((step) => ({ ...step, traceId }))
+  ) : ingestOutput.runs.flatMap(
+    ({ traceId, steps }) => steps.map((step) => ({ ...step, traceId }))
+  );
   const result2 = reconcile(normalizedSteps, records);
   const reconciledRecords = result2.callSites.map(
     ({ stepRecord }) => stepRecord
@@ -44290,7 +45533,15 @@ async function executeReconcile(context2, inputDigestValue) {
           ({ reason }) => reason === void 0 ? [] : [reason]
         )
       )
-    ]
+    ],
+    traceStepBindings: result2.traceSteps.map(
+      ({ normalizedStep, status, stepId, candidateStepIds, via }) => ({
+        traceId: normalizedStep.traceId,
+        stepIndex: normalizedStep.stepIndex,
+        stepIds: status === "matched" ? [stepId] : status === "ambiguous" ? [...candidateStepIds] : [],
+        ...via === void 0 ? {} : { via }
+      })
+    )
   });
   return key;
 }
@@ -44338,13 +45589,23 @@ async function executeAuditSample(context2, inputDigestValue) {
   await putImmutableJson(context2.store, key, worksheet);
   return key;
 }
-async function planFamilies(context2, corpus, records, approved) {
-  const replayableSteps = records.filter(
-    (record2) => !record2.capabilityRequirements.includes("tools") && !record2.capabilityRequirements.includes("structured_output")
-  );
+async function planFamilies(context2, corpus, reconciled, approved) {
+  const { records } = reconciled;
+  const replayable = (record2) => !record2.capabilityRequirements.includes("tools") && !record2.capabilityRequirements.includes("structured_output");
+  const replayableSteps = records.filter(replayable);
   if (replayableSteps.length === 0) {
     throw noReplayableCallSites();
   }
+  const sites = records.map((record2) => ({
+    stepId: record2.stepId,
+    ...record2.traceKey === void 0 ? {} : { traceKey: record2.traceKey },
+    replayable: replayable(record2)
+  }));
+  const bindings = new Map(
+    reconciled.traceStepBindings.map(
+      ({ traceId, stepIndex, stepIds }) => [traceStepKey(traceId, stepIndex), stepIds]
+    )
+  );
   const families = [
     ...new Set(corpus.cases.map(({ content }) => content.family))
   ].filter(
@@ -44362,40 +45623,63 @@ async function planFamilies(context2, corpus, records, approved) {
       ({ familyId, requestIds }) => [familyId, requestIds]
     )
   );
-  const unusedSteps = new Set(replayableSteps.map(({ stepId }) => stepId));
+  const keyedStepIds = new Set(
+    records.flatMap(
+      ({ stepId, traceKey }) => traceKey === void 0 ? [] : [stepId]
+    )
+  );
+  const keyedFamilies = new Set(
+    records.flatMap(
+      ({ traceKey }) => traceKey === void 0 ? [] : [traceKey]
+    )
+  );
+  const familiesByStep = /* @__PURE__ */ new Map();
+  for (const { content, observation } of corpus.cases) {
+    const bound = observation?.traceId === void 0 ? void 0 : bindings.get(traceStepKey(observation.traceId, content.stepIndex));
+    if (keyedFamilies.has(content.family) || bound?.length !== 1 || keyedStepIds.has(bound[0])) {
+      continue;
+    }
+    familiesByStep.set(
+      bound[0],
+      (familiesByStep.get(bound[0]) ?? /* @__PURE__ */ new Set()).add(content.family)
+    );
+  }
+  const sharedStepIds = new Set(
+    [...familiesByStep].filter(([, reached]) => reached.size > 1).map(([stepId]) => stepId)
+  );
   return families.map((family) => {
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family
     );
-    const unused = replayableSteps.filter(
-      (record2) => unusedSteps.has(record2.stepId)
-    );
-    const preferred = unused.filter(
-      (record2) => !record2.callSite.path.endsWith(".yaml") && !record2.callSite.path.endsWith(".yml")
-    );
-    const assignedRecords = approved === void 0 ? [
-      ...preferred,
-      ...unused.filter((record2) => !preferred.includes(record2))
-    ].slice(0, MIN_DISTINCT_STEPS) : approvedRecords(approved, family, unused);
-    if (approved !== void 0 && assignedRecords.length === 0) {
-      throw new Error(
-        `No distinct replayable call site remains for family ${family}`
-      );
-    }
-    const holdoutCases = familyCases.filter(
-      ({ split }) => split === "holdout"
-    ).length;
-    const abstainReason = approved !== void 0 ? void 0 : holdoutCases < context2.release.minimumHoldoutCases ? {
+    const binding = approved === void 0 ? bindFamily({
+      family,
+      cases: familyCases.map((corpusCase) => ({
+        caseId: corpusCase.caseId,
+        split: corpusCase.split,
+        traceId: corpusCase.observation?.traceId,
+        stepIndex: corpusCase.content.stepIndex
+      })),
+      sites,
+      sharedStepIds,
+      bindings
+    }) : void 0;
+    const placement = binding ?? approvedPlacement(approved, family, familyCases, replayableSteps);
+    const { leftOut } = placement;
+    const abstainReason = binding === void 0 ? void 0 : binding.caseSteps.size === 0 ? {
+      reason: leftOut.ambiguous > 0 ? "ambiguous_call_site_binding" : leftOut.unreplayable > 0 ? "bound_call_sites_not_replayable" : "unmatched_call_site_binding",
+      observed: 0,
+      required: familyCases.length
+    } : binding.holdoutCases < context2.release.minimumHoldoutCases ? {
       reason: "holdout_below_floor_minimum",
-      observed: holdoutCases,
+      observed: binding.holdoutCases,
       required: context2.release.minimumHoldoutCases
-    } : assignedRecords.length < MIN_DISTINCT_STEPS ? {
+    } : binding.stepIds.length < binding.requiredDistinctSteps ? {
       reason: "insufficient_distinct_steps",
-      observed: assignedRecords.length,
-      required: MIN_DISTINCT_STEPS
+      observed: binding.stepIds.length,
+      required: binding.requiredDistinctSteps
     } : void 0;
-    const stepIds = abstainReason === void 0 ? assignedRecords.map(({ stepId }) => stepId) : [];
-    stepIds.forEach((stepId) => unusedSteps.delete(stepId));
+    const stepIds = abstainReason === void 0 ? [...placement.stepIds] : [];
+    const leftOutCases = leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
     const reproofRequestIds = reproofRequests.get(family) ?? [];
     const evidenceQuestionId2 = evidenceQuestionIdentity({
       corpusVersionId: corpus.corpusVersionId,
@@ -44406,30 +45690,55 @@ async function planFamilies(context2, corpus, records, approved) {
       reproofRequestIds
     });
     return {
-      familyId: family,
-      evidenceQuestionId: evidenceQuestionId2,
-      cases: familyCases.length,
-      holdoutCases,
-      minimumHoldoutCases: context2.release.minimumHoldoutCases,
-      stepIds,
-      ...abstainReason === void 0 ? {} : { abstainReason }
+      plan: {
+        familyId: family,
+        evidenceQuestionId: evidenceQuestionId2,
+        cases: familyCases.length,
+        holdoutCases: placement.holdoutCases,
+        minimumHoldoutCases: context2.release.minimumHoldoutCases,
+        stepIds,
+        ...abstainReason === void 0 ? {} : { abstainReason },
+        ...binding !== void 0 ? { binding: binding.kind } : keyedFamilies.has(family) ? { binding: "trace_key" } : {},
+        ...leftOutCases > 0 ? { leftOutCases } : {}
+      },
+      caseSteps: placement.caseSteps,
+      leftOut
     };
   });
 }
 async function executeShortlist(context2, inputDigestValue) {
-  const records = (await loadReconcile(context2)).records;
+  const reconciled = await loadReconcile(context2);
+  const { records } = reconciled;
   const runs = (await loadScrub(context2)).runs;
   const corpus = await resolveCheckpointedPipelineCorpus(context2);
   const approved = context2.approvedRunSpecDigest === void 0 ? void 0 : await approvedSwapSetByDigest(context2, context2.approvedRunSpecDigest);
-  const familyPlans = await planFamilies(context2, corpus, records, approved);
+  const planned = await planFamilies(context2, corpus, reconciled, approved);
+  const familyPlans = planned.map(({ plan }) => plan);
   const recordById = new Map(records.map((record2) => [record2.stepId, record2]));
   const usageByCase = replayUsageByCase(runs);
   const steps = [];
   const cases = [];
   const sampleSizes = {};
-  for (const familyPlan of familyPlans) {
+  for (const { plan: familyPlan, caseSteps, leftOut } of planned) {
     const { familyId: family, evidenceQuestionId: evidenceQuestionId2, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
+    if (familyPlan.leftOutCases !== void 0 && caseSteps.size > 0) {
+      const causes = [
+        [
+          leftOut.ambiguous,
+          "could not be tied to a call site of this family alone"
+        ],
+        [leftOut.unmatched, "matched no scanned call site"],
+        [
+          leftOut.unreplayable,
+          "came from a call site that needs tools or structured output"
+        ]
+      ];
+      context2.reporter.warning(
+        "family_cases_left_out",
+        `Family ${family}: ${familyPlan.leftOutCases} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes.filter(([count]) => count > 0).map(([count, cause]) => `${count} ${cause}`).join(", ")}.`
+      );
+    }
     if (stepIds.length === 0) continue;
     const assignedRecords = stepIds.map((stepId) => recordById.get(stepId));
     const familyCases = corpus.cases.filter(
@@ -44440,8 +45749,10 @@ async function executeShortlist(context2, inputDigestValue) {
     );
     const recordedMaxOutputTokens = /* @__PURE__ */ new Map();
     for (const split of ["shortlist", "holdout"]) {
-      familyCases.filter((corpusCase) => corpusCase.split === split).forEach((corpusCase, index) => {
-        const step = assignedRecords[index % assignedRecords.length];
+      familyCases.filter((corpusCase) => corpusCase.split === split).forEach((corpusCase) => {
+        const stepId = caseSteps.get(corpusCase.caseId);
+        if (stepId === void 0) return;
+        const step = recordById.get(stepId);
         const contextTokens = requireReplayUsage(
           usageByCase,
           corpusCase
@@ -44538,6 +45849,28 @@ function requireReplayUsage(usage2, corpusCase) {
     });
   }
   return value;
+}
+function approvedPlacement(approved, family, familyCases, records) {
+  const stepIds = approvedRecords(approved, family, records).map(
+    ({ stepId }) => stepId
+  );
+  if (stepIds.length === 0) {
+    throw new Error(
+      `No distinct replayable call site remains for family ${family}`
+    );
+  }
+  const caseSteps = /* @__PURE__ */ new Map();
+  for (const split of ["shortlist", "holdout"]) {
+    familyCases.filter((corpusCase) => corpusCase.split === split).forEach(({ caseId }, index) => {
+      caseSteps.set(caseId, stepIds[index % stepIds.length]);
+    });
+  }
+  return {
+    stepIds,
+    caseSteps,
+    holdoutCases: familyCases.filter(({ split }) => split === "holdout").length,
+    leftOut: { ambiguous: 0, unmatched: 0, unreplayable: 0 }
+  };
 }
 function approvedRecords(approved, family, records) {
   const selected = [];
@@ -44710,12 +46043,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
   );
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(context2.baseUrl, candidates);
-  const resolvedByStepId = new Map(
-    candidates.map(({ stepId, resolvedCurrentModelId }) => [
-      stepId,
-      resolvedCurrentModelId
-    ])
-  );
+  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
   const currentPricingByStepId = new Map(
     plan.steps.map((step) => {
       const resolution = resolveCurrentModel(catalog, step.currentModel);
@@ -44726,7 +46054,9 @@ async function executeReplay(context2, inputDigestValue, runId) {
     })
   );
   let externalEvaluator;
+  let evaluatorIdentity;
   if (context2.evaluator !== void 0) {
+    evaluatorIdentity = digest(await evaluatorRunIdentity(context2));
     const configured = createEvaluator(context2.evaluator);
     externalEvaluator = await preferEvaluatorWhenReachable(
       configured,
@@ -44737,6 +46067,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
   const evaluation = () => ({
     evaluatorKind: externalEvaluator?.id ?? "judge",
     gateMetric: externalEvaluator === void 0 ? "replacement-quality" : context2.evaluator.gateMetric,
+    ...externalEvaluator === void 0 ? {} : { evaluatorIdentity },
     assessmentAbsences: [...assessmentAbsences.entries()].sort(([left], [right]) => compareText(left, right)).map(([executionId, reason]) => ({ executionId, reason }))
   });
   const budget = createBudget({
@@ -44749,48 +46080,39 @@ async function executeReplay(context2, inputDigestValue, runId) {
   let skipped = 0;
   const blockedCellsByFamily = /* @__PURE__ */ new Map();
   const runCells = async (split, assignments) => {
-    const candidateFamilies = [
-      ...new Set(
-        assignments.flatMap(
-          ({ candidates: candidates2 }) => candidates2.map(({ family }) => family)
-        )
-      )
-    ];
-    for (const candidateFamily of candidateFamilies) {
+    const groups = /* @__PURE__ */ new Map();
+    for (const { stepId, candidates: candidates2 } of assignments) {
+      for (const { family: candidateFamily } of candidates2) {
+        const group = externalEvaluator === void 0 ? {
+          candidateFamily,
+          referenceFamily: referenceFamilyByStepId.get(stepId)
+        } : { candidateFamily };
+        groups.set(JSON.stringify(group), group);
+      }
+    }
+    for (const { candidateFamily, referenceFamily } of groups.values()) {
       const familyAssignments = assignments.map((assignment) => ({
         ...assignment,
-        candidates: assignment.candidates.filter(
+        candidates: referenceFamily === void 0 || referenceFamilyByStepId.get(assignment.stepId) === referenceFamily ? assignment.candidates.filter(
           ({ family }) => family === candidateFamily
-        )
+        ) : []
       }));
       const stepIds = new Set(
         familyAssignments.filter(({ candidates: candidates2 }) => candidates2.length > 0).map(({ stepId }) => stepId)
       );
-      const judge = (() => {
-        if (externalEvaluator !== void 0) return void 0;
-        const referenceFamilies = new Set(
-          plan.steps.filter(({ stepId }) => stepIds.has(stepId)).map(
-            ({ stepId, currentModel }) => modelFamily(resolvedByStepId.get(stepId) ?? currentModel)
-          )
-        );
-        if (referenceFamilies.size !== 1) {
-          throw new Error(
-            `Replay candidates span multiple reference families: ${[...referenceFamilies].join(", ")}`
-          );
-        }
-        const rankedModels = pickJudges(catalog, {
+      const judge = referenceFamily === void 0 ? void 0 : {
+        rankedModels: pickJudges(catalog, {
           candidateFamily,
-          referenceFamily: [...referenceFamilies][0]
+          referenceFamily
         }).map((judgeModel) => ({
           judgeModel,
-          supportsStructuredOutput: catalog.find(({ id }) => id === judgeModel).supportsStructuredOutput
-        }));
-        return {
-          rankedModels,
-          warning: (code, message2) => context2.reporter.warning(code, message2),
-          chat: judgeChat(provider, catalog)
-        };
-      })();
+          supportsStructuredOutput: catalog.find(
+            ({ id }) => id === judgeModel
+          ).supportsStructuredOutput
+        })),
+        warning: (code, message2) => context2.reporter.warning(code, message2),
+        chat: judgeChat(provider, catalog)
+      };
       const result2 = await replayModeA({
         steps: replaySteps(split),
         cases: plan.cases,
@@ -44836,6 +46158,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
           context: context2,
           plan,
           evaluator: externalEvaluator,
+          evaluatorIdentity,
           split,
           stepIds,
           candidateIds: new Set(
@@ -44893,7 +46216,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
     })
   }));
   await runCells("holdout", holdoutCandidates);
-  const key = artifactKey(context2, "replay", inputDigestValue);
+  const key = artifactKey(context2, "replay", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context2.store, key, {
     completed,
     skipped,
@@ -44916,7 +46239,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
   });
   return key;
 }
-async function executeAggregate(context2, inputDigestValue) {
+async function executeAggregate(context2, inputDigestValue, runId) {
   const plan = await loadReplayPlan(context2);
   const replay = await loadReplayOutput(context2);
   const ceilings = await loadReferenceCeilings(context2, plan);
@@ -44942,7 +46265,7 @@ async function executeAggregate(context2, inputDigestValue) {
     context2.release.gate
   );
   await writeFamilyVerdicts(context2, families);
-  const key = artifactKey(context2, "aggregate", inputDigestValue);
+  const key = artifactKey(context2, "aggregate", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context2.store, key, { allVerdicts, families });
   return key;
 }
@@ -45289,13 +46612,7 @@ async function executeConfirm(context2, inputDigestValue, runId) {
         );
         continue;
       }
-      const referenceResolution = resolveCurrentModel(
-        catalog,
-        configuredRecords[0].currentModel
-      );
-      const referenceFamily = modelFamily(
-        referenceResolution.kind === "exact" || referenceResolution.kind === "resolved" ? referenceResolution.model.id : configuredRecords[0].currentModel
-      );
+      const referenceFamily = modelFamily(runtimeRecords.at(-1).currentModel);
       const judgeModel = pickJudges(catalog, {
         candidateFamily: selectedCatalogEntry.family,
         referenceFamily
@@ -45462,7 +46779,7 @@ async function executeConfirm(context2, inputDigestValue, runId) {
     };
   });
   await writeFamilyVerdicts(context2, families);
-  const key = artifactKey(context2, "confirm", inputDigestValue);
+  const key = artifactKey(context2, "confirm", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context2.store, key, {
     allVerdicts,
     families,
@@ -45600,13 +46917,19 @@ async function assessExternalExecutions(input) {
     throw new Error("External evaluator configuration is unavailable");
   }
   const ledger = await readPipelineLedger(input.context);
+  const gateGrades = ledger.assessments.filter(
+    (assessment) => assessment.evaluatorId === input.evaluator.id && assessment.metricName === config2.gateMetric
+  );
   const assessedGateExecutions = new Set(
-    ledger.assessments.flatMap(
-      (assessment) => assessment.evaluatorId === input.evaluator.id && assessment.metricName === config2.gateMetric ? [assessment.executionId] : []
+    gateGrades.flatMap(
+      (assessment) => assessment.evaluatorIdentity === input.evaluatorIdentity ? [assessment.executionId] : []
     )
   );
+  const evidenceQuestionIds = new Set(
+    input.plan.steps.map(({ evidenceQuestionId: evidenceQuestionId2 }) => evidenceQuestionId2)
+  );
   const executions = ledger.executions.filter(
-    (execution) => execution.corpusSplit === input.split && execution.terminalOutcome === "success" && execution.attribution === "ok" && input.stepIds.has(execution.stepId) && input.candidateIds.has(execution.candidateId) && !assessedGateExecutions.has(execution.executionId)
+    (execution) => evidenceQuestionIds.has(execution.evidenceQuestionId) && execution.corpusSplit === input.split && execution.terminalOutcome === "success" && execution.attribution === "ok" && input.stepIds.has(execution.stepId) && input.candidateIds.has(execution.candidateId) && !assessedGateExecutions.has(execution.executionId)
   );
   if (executions.length === 0) return [];
   const recordedCases = new Map(
@@ -45615,6 +46938,33 @@ async function assessExternalExecutions(input) {
       recordedCase
     ])
   );
+  const graded = new Set(gateGrades.map(({ executionId }) => executionId));
+  const recorded = new Set(
+    gateGrades.flatMap(
+      ({ executionId, evaluatorIdentity }) => evaluatorIdentity === void 0 ? [] : [executionId]
+    )
+  );
+  const causes = [
+    [
+      executions.filter(({ executionId }) => recorded.has(executionId)).length,
+      "were graded under a different evaluator configuration (an edited rubric file or a changed evaluator option)"
+    ],
+    [
+      executions.filter(
+        ({ executionId }) => graded.has(executionId) && !recorded.has(executionId)
+      ).length,
+      "were graded before rightmodeler recorded evaluator configurations"
+    ]
+  ];
+  const regraded = causes[0][0] + causes[1][0];
+  if (regraded > 0) {
+    input.context.reporter.warning(
+      "evaluator_regrade",
+      `Re-grading ${regraded} ${input.split} candidate outputs with ${input.evaluator.id}: ${causes.filter(([count]) => count > 0).map(([count, cause]) => `${count} ${cause}`).join(
+        ", "
+      )}. The stored outputs are reused; no model call is repeated.`
+    );
+  }
   const launched = await input.evaluator.launch({
     experimentName: `rightmodeler-${digest({
       evidenceQuestionIds: [
@@ -45623,7 +46973,8 @@ async function assessExternalExecutions(input) {
         )
       ].sort(compareText),
       candidateIds: [...input.candidateIds].sort(compareText),
-      split: input.split
+      split: input.split,
+      evaluatorIdentity: input.evaluatorIdentity
     }).slice(0, 24)}`,
     cases: executions.map((execution) => {
       const recordedCase = recordedCases.get(
@@ -45653,7 +47004,7 @@ async function assessExternalExecutions(input) {
   );
   const existingMetrics = new Set(
     ledger.assessments.flatMap(
-      (assessment) => assessment.evaluatorId === input.evaluator.id ? [`${assessment.executionId}\0${assessment.metricName}`] : []
+      (assessment) => assessment.evaluatorId === input.evaluator.id && assessment.evaluatorIdentity === input.evaluatorIdentity ? [`${assessment.executionId}\0${assessment.metricName}`] : []
     )
   );
   for (const result2 of results) {
@@ -45661,6 +47012,7 @@ async function assessExternalExecutions(input) {
       input.context,
       input.evaluator,
       config2,
+      input.evaluatorIdentity,
       launched.providerRunId,
       result2,
       existingMetrics
@@ -45674,12 +47026,12 @@ async function assessExternalExecutions(input) {
     return [
       {
         executionId: execution.executionId,
-        reason: status === "failed" ? "external_experiment_failed" : result2 === void 0 ? "external_event_missing" : "external_gate_metric_missing"
+        reason: result2?.absentReason ?? (status === "failed" ? "external_experiment_failed" : result2 === void 0 ? "external_event_missing" : "external_gate_metric_missing")
       }
     ];
   });
 }
-async function persistEvaluatorMetrics(context2, evaluator, config2, providerRunId, result2, existingMetrics) {
+async function persistEvaluatorMetrics(context2, evaluator, config2, evaluatorIdentity, providerRunId, result2, existingMetrics) {
   for (const metric of result2.metrics) {
     const key = `${result2.caseId}\0${metric.metricName}`;
     if (existingMetrics.has(key)) continue;
@@ -45704,6 +47056,7 @@ async function persistEvaluatorMetrics(context2, evaluator, config2, providerRun
       score: metric.score,
       passed: thresholdApplied ? metric.score >= config2.gateThreshold : metric.passed,
       rubricVersion,
+      evaluatorIdentity,
       artifactRef: {
         providerRunId,
         providerArtifact: result2.artifactRef ?? null
@@ -45747,6 +47100,9 @@ async function materializeAggregationFacts(context2, ledger, plan, candidates, e
   const selectedByStep = new Map(
     candidates.map((item) => [item.stepId, item.candidates])
   );
+  const traceBound = new Map(
+    plan.familyPlans.filter(({ binding }) => binding === "trace_key").map(({ familyId, stepIds }) => [familyId, stepIds.length])
+  );
   const expectedAssignments = (family, candidateId3, corpusSplit) => plan.cases.filter(
     (item) => item.family === family && item.corpusSplit === corpusSplit && selectedByStep.get(item.stepId)?.some(({ id }) => id === candidateId3)
   ).map((item) => ({
@@ -45760,7 +47116,7 @@ async function materializeAggregationFacts(context2, ledger, plan, candidates, e
       return [];
     }
     const gateAssessments = (assessments.get(execution.executionId) ?? []).filter(
-      (assessment2) => assessment2.metricName === evaluation.gateMetric && (evaluation.evaluatorKind === "judge" || assessment2.evaluatorId === evaluation.evaluatorKind)
+      (assessment2) => assessment2.metricName === evaluation.gateMetric && assessment2.evaluatorIdentity === evaluation.evaluatorIdentity && (evaluation.evaluatorKind === "judge" || assessment2.evaluatorId === evaluation.evaluatorKind)
     );
     if (gateAssessments.length > 1) {
       throw new Error(
@@ -45791,6 +47147,7 @@ async function materializeAggregationFacts(context2, ledger, plan, candidates, e
         evaluatorKind: evaluation.evaluatorKind,
         candidateCostUsd: blendedPrice(selected) ?? 0,
         referenceCeilingMultiplier: referenceCeilingFor(ceilings, family).multiplier,
+        ...traceBound.get(family) === void 0 ? {} : { traceBoundCallSites: traceBound.get(family) },
         unsafeSubstitution: false,
         evidenceCovered: true,
         expectedEvaluatorAssignments: expectedAssignments(
@@ -45859,6 +47216,20 @@ function judgeChat(provider, catalog) {
     });
   };
 }
+function referenceFamiliesByStep(plan, candidates) {
+  const resolvedByStepId = new Map(
+    candidates.map(({ stepId, resolvedCurrentModelId }) => [
+      stepId,
+      resolvedCurrentModelId
+    ])
+  );
+  return new Map(
+    plan.steps.map(({ stepId, currentModel }) => [
+      stepId,
+      modelFamily(resolvedByStepId.get(stepId) ?? currentModel)
+    ])
+  );
+}
 function modelFamily(modelId) {
   if (modelId === null) return "unknown";
   return modelId.split("/", 1)[0] ?? "unknown";
@@ -45873,6 +47244,58 @@ function modeBProviderBaseUrl(baseUrl) {
 function reportPath(context2) {
   return join15(context2.storeRoot, reportKey(context2.projectId, "report.md"));
 }
+async function codeContextFor(context2, callSites, warn) {
+  if (context2.codeGraphPath === void 0) {
+    const found = join15(context2.repo, "graphify-out", "graph.json");
+    if (await stat3(found).then(
+      (entry) => entry.isFile(),
+      () => false
+    )) {
+      const fromCwd = relative8(process.cwd(), found);
+      const shown = fromCwd.startsWith("..") ? found : fromCwd;
+      warn(
+        "code_graph_available",
+        `Found ${shown}. Pass --code-graph ${shown} to add static code context; it never changes the evidence.`
+      );
+    }
+    return void 0;
+  }
+  const scanOutput = await loadScan(context2);
+  const result2 = await readCodeContext({
+    graphPath: context2.codeGraphPath,
+    repoDir: context2.repo,
+    revision: scanOutput.revision,
+    callSites,
+    scannedPaths: new Set(
+      scanOutput.records.map(({ callSite }) => callSite.path)
+    ),
+    sdkModules: detectTech(context2.repo).aiDependencies
+  });
+  for (const issue3 of result2.issues) warn(issue3.code, issue3.message);
+  return result2.context;
+}
+function reportCodeContext(context2) {
+  context2.cache.codeContext ??= (async () => {
+    const [scanOutput, plan] = await Promise.all([
+      loadScan(context2),
+      loadReplayPlan(context2)
+    ]);
+    const familyByStep = new Map(
+      plan.steps.map(({ stepId, family }) => [stepId, family])
+    );
+    return codeContextFor(
+      context2,
+      scanOutput.records.map((record2) => ({
+        stepId: record2.stepId,
+        family: familyByStep.get(record2.stepId) ?? record2.family,
+        path: record2.callSite.path,
+        line: record2.callSite.line
+      })),
+      (code, message2) => context2.reporter.warning(code, message2)
+    );
+  })();
+  return context2.cache.codeContext;
+}
 async function executeReport(context2, inputDigestValue, ledger) {
   const report = await buildReport(context2, ledger);
   const jsonKey = reportKey(context2.projectId, "report.json");
@@ -45880,7 +47303,7 @@ async function executeReport(context2, inputDigestValue, ledger) {
   const markdown = renderReport(report);
   await putMutableJson(context2.store, jsonKey, jsonValue2(report));
   await putMutableText(context2.store, markdownKey, markdown);
-  await mkdir5(dirname6(reportPath(context2)), { recursive: true });
+  await mkdir5(dirname7(reportPath(context2)), { recursive: true });
   await writeFile6(reportPath(context2), markdown, "utf8");
   return jsonKey;
 }
@@ -45891,7 +47314,7 @@ async function checkpointOutputExists(context2, stage, checkpoint) {
     return false;
   }
   try {
-    await readFile10(reportPath(context2));
+    await readFile11(reportPath(context2));
     return true;
   } catch (error51) {
     if (isMissing2(error51)) return false;
@@ -45997,7 +47420,7 @@ function digest(value) {
   return computeRunSpecDigest(value);
 }
 function sha256(value) {
-  return createHash11("sha256").update(value).digest("hex");
+  return createHash12("sha256").update(value).digest("hex");
 }
 function contextRepositoryFiles(context2) {
   context2.cache.repositoryFiles ??= repositoryFiles(
@@ -46018,13 +47441,13 @@ async function repositoryFiles(repo, storeRoot) {
   const files = [];
   for (const path of paths) {
     const absolute = join15(repo, ...path.split("/"));
-    if (absolute === storeRoot || absolute.startsWith(`${storeRoot}${sep4}`)) {
+    if (absolute === storeRoot || absolute.startsWith(`${storeRoot}${sep5}`)) {
       continue;
     }
     if (path.split("/").some((segment) => IGNORED_DIRECTORIES.has(segment))) {
       continue;
     }
-    const stats = await stat2(absolute).catch(() => void 0);
+    const stats = await stat3(absolute).catch(() => void 0);
     if (stats?.isFile()) files.push({ absolute, path });
   }
   return files.sort((left, right) => compareText(left.path, right.path));
@@ -46057,7 +47480,7 @@ async function walkFiles(repo) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) await visit(absolute);
       } else if (entry.isFile()) {
-        files.push(relative6(repo, absolute).split(sep4).join("/"));
+        files.push(relative8(repo, absolute).split(sep5).join("/"));
       }
     }
   }
@@ -46073,7 +47496,7 @@ async function repositoryDigest(repo, storeRoot) {
       ...await Promise.all(
         files.slice(index, index + 16).map(async (file2) => ({
           path: file2.path,
-          sha256: sha256(await readFile10(file2.absolute))
+          sha256: sha256(await readFile11(file2.absolute))
         }))
       )
     );
@@ -46404,6 +47827,7 @@ async function buildReport(context2, ledger) {
     "audit-sample",
     auditWorksheetSchema
   );
+  const codeContext = await reportCodeContext(context2);
   return {
     verdicts,
     families: decisionOutput.families,
@@ -46451,7 +47875,8 @@ async function buildReport(context2, ledger) {
       const blocked = blockedFamilyDiagnosis(family, aggregationFacts);
       return blocked === void 0 ? [] : [blocked];
     }),
-    apply: lifecycleReport(ledger.lifecycleEvents)
+    apply: lifecycleReport(ledger.lifecycleEvents),
+    ...codeContext === void 0 ? {} : { codeContext }
   };
 }
 function renderReport(report) {
@@ -46575,6 +48000,8 @@ function renderReport(report) {
       ""
     );
   }
+  if (report.codeContext !== void 0)
+    lines.push(...renderCodeContext(report.codeContext), "");
   return lines.join("\n");
 }
 function reportText(value) {
@@ -46669,7 +48096,7 @@ async function runAuditTabulate(options) {
     })
   });
   const worksheet = options.worksheet ? auditWorksheetSchema.parse(
-    JSON.parse(await readFile10(resolve7(options.worksheet), "utf8"))
+    JSON.parse(await readFile11(resolve8(options.worksheet), "utf8"))
   ) : await loadCurrent(context2, "audit-sample", auditWorksheetSchema);
   const result2 = auditTabulate(worksheet);
   await putMutableJson(
@@ -46682,7 +48109,7 @@ async function runAuditTabulate(options) {
 async function readReport(options) {
   const context2 = createContext({
     ...options,
-    reporter: new Reporter("human", {
+    reporter: options.reporter ?? new Reporter("human", {
       stdout: () => void 0,
       stderr: () => void 0
     })
@@ -46749,7 +48176,8 @@ async function readStatus(options) {
     droppedFacts: ledger.droppedRows,
     spend: spendSummary(ledger.spendEvents),
     corpusVersion: corpus?.corpusVersionId ?? null,
-    lastRun: runs[0] ?? null
+    lastRun: runs[0] ?? null,
+    pullRequests: watchablePullRequests(ledger.lifecycleEvents)
   };
 }
 async function maybeLoadCorpus(context2) {
@@ -46760,7 +48188,7 @@ async function maybeLoadCorpus(context2) {
 }
 
 // src/apply/index.ts
-import { basename as basename2, resolve as resolve8 } from "node:path";
+import { basename as basename3, resolve as resolve9 } from "node:path";
 function applySwaps2(options) {
   return runApply({
     repo: options.repo,
@@ -46770,23 +48198,25 @@ function applySwaps2(options) {
       tokenEnv: options.githubTokenEnv
     }),
     owner: options.owner,
-    githubRepo: options.githubRepo ?? basename2(resolve8(options.repo)),
-    dryRun: options.dryRun ?? false
+    githubRepo: options.githubRepo ?? basename3(resolve9(options.repo)),
+    dryRun: options.dryRun ?? false,
+    ...options.codeGraphPath === void 0 ? {} : { codeGraphPath: options.codeGraphPath },
+    ...options.warning === void 0 ? {} : { warning: options.warning }
   });
 }
 
 // src/data/discover.ts
-import { open, readdir as readdir5, realpath as realpath3, stat as stat3 } from "node:fs/promises";
+import { open, readdir as readdir5, realpath as realpath4, stat as stat4 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute as isAbsolute2, join as join16, relative as relative7, resolve as resolve9 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join16, relative as relative9, resolve as resolve10 } from "node:path";
 var MAX_FILES = 50;
 var MAX_CODEX_EXAMINED = 300;
 var MAX_READ_BYTES = 64 * 1024;
 var MAX_SAMPLE_RECORDS = 20;
 var SOURCE_BUDGETS = { local: 20, claude: 15, codex: 15 };
 async function discoverTraces(options) {
-  const repo = resolve9(options.repo);
-  const homeDir = resolve9(options.homeDir ?? homedir());
+  const repo = resolve10(options.repo);
+  const homeDir = resolve10(options.homeDir ?? homedir());
   const candidates = await candidateFiles(repo, homeDir);
   const discovered = [];
   for (const candidate of candidates.slice(0, MAX_FILES)) {
@@ -46808,7 +48238,7 @@ async function discoverTraces(options) {
   ).map(({ sourceOrder: _sourceOrder, ...candidate }) => candidate);
 }
 function sanitizeClaudeProjectPath(repo) {
-  const absolute = resolve9(repo);
+  const absolute = resolve10(repo);
   const sanitized = absolute.replace(/[^a-zA-Z0-9]/g, "-");
   if (sanitized.length <= 200) return sanitized;
   let hash2 = 0;
@@ -46864,7 +48294,7 @@ async function codexCandidates(paths, repo) {
     }
     examined += 1;
     try {
-      const metadata = await stat3(path);
+      const metadata = await stat4(path);
       const head = await detectionHead(path, metadata.size);
       if (codexSessionCwd(head.text) !== repo) continue;
       files.push({
@@ -46884,7 +48314,7 @@ async function statCandidates(paths, source, sortNewest) {
   const files = (await Promise.all(
     selectedPaths.map(async (path) => {
       try {
-        const metadata = await stat3(path);
+        const metadata = await stat4(path);
         return {
           path,
           source,
@@ -46907,8 +48337,8 @@ async function statCandidates(paths, source, sortNewest) {
 async function localCandidatePaths(repo) {
   const tracesDirectory = join16(repo, "traces");
   const [realRepo, realTracesDirectory] = await Promise.all([
-    realpath3(repo).catch(() => void 0),
-    realpath3(tracesDirectory).catch(() => void 0)
+    realpath4(repo).catch(() => void 0),
+    realpath4(tracesDirectory).catch(() => void 0)
   ]);
   const nested = realRepo !== void 0 && realTracesDirectory !== void 0 && isWithin(realRepo, realTracesDirectory) ? (await jsonFiles(tracesDirectory, false)).sort(compareText) : [];
   const topLevel = (await jsonFiles(repo, false)).sort((left, right) => {
@@ -46937,8 +48367,8 @@ async function jsonFiles(root, recursive) {
   ).map((entry) => join16(entry.parentPath, entry.name));
 }
 function isWithin(root, path) {
-  const fromRoot = relative7(root, path);
-  return fromRoot === "" || !fromRoot.startsWith("..") && !isAbsolute2(fromRoot);
+  const fromRoot = relative9(root, path);
+  return fromRoot === "" || !fromRoot.startsWith("..") && !isAbsolute3(fromRoot);
 }
 async function detectionHead(path, fileSize) {
   const handle = await open(path, "r");
@@ -47020,7 +48450,7 @@ function codexSessionCwd(text) {
     if (line.trim() === "") continue;
     const record2 = parseWholeJson(line);
     if (isRecord(record2) && record2.type === "session_meta" && isRecord(record2.payload) && typeof record2.payload.cwd === "string") {
-      return resolve9(record2.payload.cwd);
+      return resolve10(record2.payload.cwd);
     }
   }
   return void 0;
@@ -47043,7 +48473,7 @@ function unique(values) {
 
 // src/guidance.ts
 import { createInterface } from "node:readline";
-import { isAbsolute as isAbsolute3, relative as relative8, resolve as resolve10 } from "node:path";
+import { isAbsolute as isAbsolute4, relative as relative10, resolve as resolve11 } from "node:path";
 async function promptForTracePath(options) {
   if (options.candidates.length === 0) {
     options.output.write(
@@ -47060,7 +48490,7 @@ async function promptForTracePath(options) {
       "Trace file path (leave empty to stop): "
     );
     const typed = asked2.answer.trim();
-    return asked2.cancelled || typed === "" ? void 0 : resolve10(options.repo, typed);
+    return asked2.cancelled || typed === "" ? void 0 : resolve11(options.repo, typed);
   }
   options.output.write("Found trace files:\n");
   const now = options.now ?? /* @__PURE__ */ new Date();
@@ -47095,7 +48525,7 @@ async function promptForTracePath(options) {
     const selected = options.candidates[Number(answer) - 1];
     if (selected !== void 0) return selected.path;
   }
-  return resolve10(options.repo, answer);
+  return resolve11(options.repo, answer);
 }
 async function promptForProviderBaseUrl(options) {
   options.output.write(
@@ -47141,9 +48571,10 @@ function question(streams, prompt, accept = () => true) {
     ask();
   });
 }
-function formatName(format9) {
+function formatName(format10) {
   const names = {
     "otel-genai": "OpenTelemetry GenAI export",
+    "ai-sdk": "AI SDK telemetry export",
     "openai-jsonl": "OpenAI log",
     langfuse: "Langfuse export",
     braintrust: "Braintrust export",
@@ -47154,15 +48585,15 @@ function formatName(format9) {
     "claude-code": "Claude Code session",
     codex: "Codex session"
   };
-  return names[format9];
+  return names[format10];
 }
 function shortPath(path, repo, homeDir) {
-  const fromRepo = relative8(resolve10(repo), path);
-  if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute3(fromRepo)) {
+  const fromRepo = relative10(resolve11(repo), path);
+  if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute4(fromRepo)) {
     return `./${fromRepo}`;
   }
-  const fromHome = relative8(resolve10(homeDir), path);
-  if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute3(fromHome)) {
+  const fromHome = relative10(resolve11(homeDir), path);
+  if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute4(fromHome)) {
     return `~/${fromHome}`;
   }
   return path;
@@ -47185,7 +48616,7 @@ function unit(label, value) {
 }
 
 // src/rollback.ts
-import { basename as basename3, resolve as resolve11 } from "node:path";
+import { basename as basename4, resolve as resolve12 } from "node:path";
 var projectId2 = "project";
 var RollbackServiceError = class extends Error {
   code;
@@ -47702,7 +49133,7 @@ async function rollbackPreparedSwaps({
   }
 }
 function rollbackSwaps(options) {
-  const repoDir = resolve11(options.repo);
+  const repoDir = resolve12(options.repo);
   return rollbackPreparedSwaps({
     store: new FsStore(resolveStoreRoot(repoDir, options.store)),
     githubClient: createGithubClient({
@@ -47710,7 +49141,7 @@ function rollbackSwaps(options) {
       tokenEnv: options.githubTokenEnv
     }),
     owner: options.owner,
-    repo: options.githubRepo ?? basename3(repoDir),
+    repo: options.githubRepo ?? basename4(repoDir),
     prNumber: options.prNumber
   });
 }
@@ -47747,7 +49178,7 @@ function createProgram(io = processIo, runtime = processRuntime) {
   let usageOutput = "";
   const program2 = new Command().name("rightmodeler").description("Find and prove safe model substitutions.").addHelpText(
     "after",
-    "\nExit codes are command-specific: apply and rollback use 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere, >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n"
+    "\nExit codes are command-specific: apply uses 0 success, 1 refused, 2 needs a completed run, >=10 runtime error; rollback uses 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere (result on stdout) or needs a completed run (error on stderr), >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n"
   ).version(version2).option("--repo <dir>", "repository to analyze", process.cwd()).option("--store <dir>", "store directory").addOption(
     new Option("--output <mode>", "output mode").choices(["human", "json", "jsonl"]).default("human")
   ).exitOverride().configureOutput({
@@ -47954,10 +49385,17 @@ function createProgram(io = processIo, runtime = processRuntime) {
   const apply = program2.command("apply").description("open a draft pull request for proven model swaps").requiredOption("--owner <owner>", "GitHub repository owner").option(
     "--github-repo <repo>",
     "GitHub repository name (default: the repository directory name)"
-  ).requiredOption("--github-base-url <url>", "GitHub API base URL").requiredOption(
+  ).option(
+    "--github-base-url <url>",
+    "GitHub API base URL",
+    "https://api.github.com"
+  ).requiredOption(
     "--github-token-env <name>",
     "environment variable containing the GitHub token"
-  ).option("--dry-run", "run all machine gates without writing GitHub state");
+  ).option("--dry-run", "run all machine gates without writing GitHub state").option(
+    "--code-graph <path>",
+    "Graphify graph.json for static code context in the pull request body; never evidence"
+  );
   run(apply, async (reporter, global) => {
     const local = apply.opts();
     const result2 = await applySwaps2({
@@ -47967,7 +49405,9 @@ function createProgram(io = processIo, runtime = processRuntime) {
       ...local.githubRepo === void 0 ? {} : { githubRepo: local.githubRepo },
       githubBaseUrl: local.githubBaseUrl,
       githubTokenEnv: local.githubTokenEnv,
-      dryRun: local.dryRun ?? false
+      dryRun: local.dryRun ?? false,
+      ...local.codeGraph === void 0 ? {} : { codeGraphPath: local.codeGraph },
+      warning: (code2, message2) => reporter.warning(code2, message2)
     });
     reporter.result(result2);
     return result2.status === "refused" ? 1 : 0;
@@ -47975,7 +49415,11 @@ function createProgram(io = processIo, runtime = processRuntime) {
   const rollback = program2.command("rollback").description("open a draft pull request restoring a prior model swap").requiredOption("--owner <owner>", "GitHub repository owner").option(
     "--github-repo <repo>",
     "GitHub repository name (default: the repository directory name)"
-  ).requiredOption("--pr <number>", "merged pull request number").requiredOption("--github-base-url <url>", "GitHub API base URL").requiredOption(
+  ).requiredOption("--pr <number>", "merged pull request number").option(
+    "--github-base-url <url>",
+    "GitHub API base URL",
+    "https://api.github.com"
+  ).requiredOption(
     "--github-token-env <name>",
     "environment variable containing the GitHub token"
   );
@@ -48011,7 +49455,8 @@ function createProgram(io = processIo, runtime = processRuntime) {
     const result2 = await runDrift({
       repo: global.repo,
       store: global.store,
-      traces
+      traces,
+      warning: (code2, message2) => reporter.warning(code2, message2)
     });
     reporter.result(result2);
     return 0;
@@ -48040,7 +49485,14 @@ function createProgram(io = processIo, runtime = processRuntime) {
     reporter.result(result2);
     return 0;
   });
-  const watch = program2.command("watch").description("reconcile one open model-swap pull request").requiredOption("--owner <owner>", "GitHub repository owner").requiredOption("--github-repo <repo>", "GitHub repository name").requiredOption("--pr <number>", "pull request number").requiredOption("--github-base-url <url>", "GitHub API base URL").requiredOption(
+  const watch = program2.command("watch").description("reconcile one open model-swap pull request").requiredOption("--owner <owner>", "GitHub repository owner").option(
+    "--github-repo <repo>",
+    "GitHub repository name (default: the repository directory name)"
+  ).requiredOption("--pr <number>", "pull request number").option(
+    "--github-base-url <url>",
+    "GitHub API base URL",
+    "https://api.github.com"
+  ).requiredOption(
     "--github-token-env <name>",
     "environment variable containing the GitHub token"
   );
@@ -48058,15 +49510,23 @@ function createProgram(io = processIo, runtime = processRuntime) {
         tokenEnv: local.githubTokenEnv
       }),
       owner: local.owner,
-      githubRepo: local.githubRepo,
-      prNumber
+      githubRepo: local.githubRepo ?? basename5(resolve13(global.repo)),
+      prNumber,
+      warning: (code2, message2) => reporter.warning(code2, message2)
     });
     reporter.result(result2);
     return result2.status === "lock_held" ? 2 : result2.status === "actions_taken" ? 1 : 0;
   });
-  const report = program2.command("report").description("write report.md and report.json");
+  const report = program2.command("report").description("write report.md and report.json").option(
+    "--code-graph <path>",
+    "Graphify graph.json for static code context in the report; never evidence"
+  );
   run(report, async (reporter, global) => {
-    const result2 = await readReport(global);
+    const result2 = await readReport({
+      ...global,
+      codeGraphPath: report.opts().codeGraph,
+      reporter
+    });
     reporter.result({ ...result2.report, reportPath: result2.reportPath });
     return result2.recommends ? 1 : 0;
   });
@@ -48150,6 +49610,9 @@ function addPipelineOptions(command, provider) {
       new Option("--through <stage>", "stop after this stage").choices([
         ...PIPELINE_STAGES
       ])
+    ).option(
+      "--code-graph <path>",
+      "Graphify graph.json for static code context in the report; never evidence"
     );
   }
   if (command.name() === "init" || command.name() === "estimate") {
@@ -48210,6 +49673,7 @@ function pipelineOptions(global, local, reporter) {
     },
     modeBConfigPath: local.modebConfig,
     approvedRunSpecDigest: local.approvedRun,
+    codeGraphPath: local.codeGraph,
     through: local.through,
     plan: local.plan,
     reporter
@@ -48237,7 +49701,7 @@ async function guidedPipelineOptions(global, local, reporter, runtime) {
   });
   const traces = local.yes ? candidates[0]?.path : interactive ? await promptForTracePath({
     candidates,
-    repo: resolve12(global.repo),
+    repo: resolve13(global.repo),
     homeDir: runtime.homeDir,
     now: runtime.now(),
     input: runtime.stdin,
@@ -48544,7 +50008,7 @@ function pipelineArgv(options) {
     appendCliOption(
       args,
       flag,
-      kind === "path" ? resolve12(value) : kind === "command" ? detachedCommand(value) : value
+      kind === "path" ? resolve13(value) : kind === "command" ? detachedCommand(value) : value
     );
   }
   return args;
@@ -48553,18 +50017,18 @@ async function startDetachedReplay(global, local, runId) {
   const args = [
     fileURLToPath2(import.meta.url),
     "--repo",
-    resolve12(global.repo),
+    resolve13(global.repo),
     "--output",
     "json"
   ];
   if (global.store !== void 0) {
-    args.push("--store", resolve12(global.store));
+    args.push("--store", resolve13(global.store));
   }
   args.push("replay", ...pipelineArgv(local));
   appendCliOption(args, "--internal-run-id", runId);
   await new Promise((resolveSpawn, rejectSpawn) => {
     const child = spawn(process.execPath, args, {
-      cwd: resolve12(global.repo),
+      cwd: resolve13(global.repo),
       detached: true,
       env: process.env,
       stdio: "ignore"
@@ -48578,7 +50042,7 @@ async function startDetachedReplay(global, local, runId) {
 }
 function detachedCommand(value) {
   if (value === void 0) return void 0;
-  return value.startsWith("./") || value.startsWith("../") || value.includes("/") || value.includes("\\") ? resolve12(value) : value;
+  return value.startsWith("./") || value.startsWith("../") || value.includes("/") || value.includes("\\") ? resolve13(value) : value;
 }
 function appendCliOption(args, flag, value) {
   if (value !== void 0) args.push(flag, value);

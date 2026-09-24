@@ -127,6 +127,9 @@ export function scanRepository(
             capabilityRequirements: capabilityRequirements(candidate),
             evaluatorLadder: [],
             currentModel: candidate.modelId ?? null,
+            ...(candidate.traceKey === undefined
+              ? {}
+              : { traceKey: candidate.traceKey }),
             observedCostUsd: 0,
             downstreamStepIds: [],
             candidates: [],

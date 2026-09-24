@@ -9,8 +9,9 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 - Trace input in a supported format.
 - An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for bare OpenAI or another unpriced endpoint, pass `--pricing-file`.
 
-Supported trace sources are OTel GenAI, OpenAI JSONL, Langfuse, Braintrust,
-LangSmith, OpenInference, Helicone, W&B Weave, Claude Code, and Codex.
+Supported trace sources are OTel GenAI, AI SDK telemetry, OpenAI JSONL,
+Langfuse, Braintrust, LangSmith, OpenInference, Helicone, W&B Weave, Claude
+Code, and Codex.
 
 ## Start with automatic discovery
 
@@ -42,6 +43,21 @@ npx rightmodeler init --through corpus --traces /path/to/traces.json --output js
 
 `--traces` accepts a single file or a directory. A directory is read non-recursively as its `.json` and `.jsonl` files in name order; every file must use the same trace format.
 
+Each family is replayed only against the call sites its own traces came from. Traced cases that cannot be tied to one such call site, because several call sites use the traced model or none matches it, are left out of the replay sample with a `family_cases_left_out` warning. A family with no case left abstains before any spend with `ambiguous_call_site_binding` or `unmatched_call_site_binding`. The AI SDK telemetry `functionId` (see below) is the way to tie an AI SDK call site to its family.
+
+## AI SDK telemetry
+
+The AI SDK emits telemetry in two dialects, and Rightmodeler reads both:
+
+- The `ai.*` dialect comes from AI SDK 5 and 6 with `experimental_telemetry: { isEnabled: true }` on each call, and from AI SDK 7 with `registerTelemetry(new LegacyOpenTelemetry())`. The AI SDK reader reads it.
+- The GenAI semantic conventions dialect comes from AI SDK 7 with `registerTelemetry(new OpenTelemetry())`. The OTel GenAI reader reads it and treats the agent, step and tool spans as structure, so each model call counts once.
+
+`registerTelemetry` comes from `ai`; `LegacyOpenTelemetry` and `OpenTelemetry` come from `@ai-sdk/otel`. Register only one of them: an export that holds both dialects is ambiguous. Keep `recordInputs` and `recordOutputs` on, which is the default, because a model call without its prompt or output cannot become a corpus case. Set a string-literal `functionId` on every call (`telemetry: { functionId: "summarize" }` in AI SDK 7, `experimental_telemetry: { isEnabled: true, functionId: "summarize" }` before it); it becomes the call's family.
+
+The scanner records that `functionId` on the call site, and a family binds to exactly the call sites whose `functionId` equals its name: its evidence and any swap stay on those call sites, and no other family borrows them. Two call sites that do the same job may share one `functionId`. A family bound to a single call site can still be recommended. The `functionId` must be a string literal in the call; a variable or a template literal is not read, and the call site then binds by model id only. Replay cannot run a call site that needs tools or structured output: its cases are left out of the family's replay sample with a `family_cases_left_out` warning, and a family whose traced cases all come from such call sites abstains with `bound_call_sites_not_replayable` before any spend.
+
+Export the spans through the OpenTelemetry NodeSDK or `@vercel/otel` to an OTLP collector, and pass the collector's file exporter output with `--traces`. A model call that ended without a finish reason, because it was aborted or errored, is left out of the corpus with a `trace_steps_excluded` warning, and the rest of the input is read. Token usage from AI SDK 4 exports (`ai.usage.promptTokens`) is not read, so those calls carry no usage.
+
 ## Run the complete pipeline
 
 ```sh
@@ -61,6 +77,22 @@ npx rightmodeler estimate --traces /path/to/traces.json --base-url https://provi
 
 Estimate projects candidate replay spend from recorded token usage and the current
 model catalog before paid model calls begin.
+
+## Static code context (Graphify)
+
+rightmodeler can read a code graph built by the open-source Graphify CLI (PyPI package `graphifyy`, Apache-2.0, tested with 0.9.65). Graphify builds it locally from your source, with no account and no model call.
+
+```sh
+uv tool install graphifyy
+graphify update .
+npx rightmodeler report --code-graph graphify-out/graph.json --repo .
+```
+
+`init --code-graph <path>` renders the same section at the end of a run. For each call site the scanner found, the section lists the enclosing symbol, its callers, the tests that reach it, and the owners of those files, which are listed only. It also lists files that import an AI SDK where the scanner found no call site.
+
+Graph edges are never replay trials, runtime proof, or quality evidence, and the flag never changes a stage before the report, a verdict, a gate, or confirmation. Each finding is labelled EXTRACTED, or INFERRED or AMBIGUOUS to verify, by its weakest hop. A graph built at another commit is shown file-level with a stale note. An unusable graph produces one warning, the section says why it is not shown, and the rest of the report is unchanged. The scan ignores `graphify-out/`, so building a graph never makes finished stages stale. Only `graphify update` and `graphify extract --code-only` are needed; other Graphify commands can call a language model.
+
+`apply --code-graph <path>` appends the same section to the draft pull request body, limited to the call sites the pull request swaps and to five findings of each kind per call site. Owners there are listed only and are never requested as reviewers; reviewers still come from CODEOWNERS and blame. The graph never changes the swap, its digest, or its reviewers. `apply --dry-run` prints the exact body it would post, with or without `--code-graph`.
 
 ## Release policy
 
@@ -109,5 +141,7 @@ cost.
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md`. The JSON report is kept inside the versioned store and is never written as a plain file, so read the final `result` event from `--output json` or `--output jsonl` for the machine-readable outcome.
 
 Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), and the [exit-code convention](exit-codes.md) before automating a full run.
+
+To open the draft pull request and keep it reconciled, read the [GitHub guide](github.md).
 
 Run `rightmodeler docs <name>` to print any of these documents from the installed package.

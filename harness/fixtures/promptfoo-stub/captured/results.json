@@ -1,0 +1,928 @@
+{
+  "evalId": "eval-9LZ-2026-09-22T21:09:13",
+  "results": {
+    "version": 3,
+    "timestamp": "2026-09-22T21:09:13.699Z",
+    "prompts": [
+      {
+        "id": "343155ae77c81fd6d016484b639909bc6f4e68f7730061d1d2a8d7e707456d32",
+        "raw": "{{output}}",
+        "label": "{{output}}",
+        "provider": "echo",
+        "metrics": {
+          "score": 2.5,
+          "testPassCount": 2,
+          "testFailCount": 2,
+          "testErrorCount": 1,
+          "assertPassCount": 5,
+          "assertFailCount": 3,
+          "totalLatencyMs": 3,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 4,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "namedScores": {
+            "output_similarity": 2,
+            "secondary_similarity": 3
+          },
+          "namedScoresCount": {
+            "output_similarity": 4,
+            "secondary_similarity": 4
+          },
+          "namedScoreWeights": {
+            "output_similarity": 4,
+            "secondary_similarity": 4
+          },
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "output_similarity": 1,
+            "secondary_similarity": 1
+          },
+          "namedScoreWeights": {
+            "output_similarity": 1,
+            "secondary_similarity": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "equals",
+                "value": "Paris",
+                "metric": "output_similarity"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "paris",
+                "metric": "secondary_similarity"
+              }
+            }
+          ]
+        },
+        "id": "3a952636-31fe-4d21-b3e3-dafdd0f01882",
+        "latencyMs": 1,
+        "namedScores": {
+          "output_similarity": 1,
+          "secondary_similarity": 1
+        },
+        "prompt": {
+          "raw": "Paris",
+          "label": "{{output}}",
+          "config": {}
+        },
+        "promptId": "343155ae77c81fd6d016484b639909bc6f4e68f7730061d1d2a8d7e707456d32",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Paris",
+          "raw": "Paris",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "vars": {
+            "output": "Paris",
+            "tags": "case-1"
+          },
+          "assert": [
+            {
+              "type": "equals",
+              "value": "Paris",
+              "metric": "output_similarity"
+            },
+            {
+              "type": "icontains",
+              "value": "paris",
+              "metric": "secondary_similarity"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "output": "Paris",
+          "tags": "case-1"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "error": "Expected output \"Parish\" to equal \"Paris\"",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.5,
+          "reason": "Expected output \"Parish\" to equal \"Paris\"",
+          "namedScores": {
+            "output_similarity": 0,
+            "secondary_similarity": 1
+          },
+          "namedScoreWeights": {
+            "output_similarity": 1,
+            "secondary_similarity": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output \"Parish\" to equal \"Paris\"",
+              "assertion": {
+                "type": "equals",
+                "value": "Paris",
+                "metric": "output_similarity"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "paris",
+                "metric": "secondary_similarity"
+              }
+            }
+          ]
+        },
+        "id": "6b3e6a6a-ad97-410e-975d-940f1ebe74eb",
+        "latencyMs": 1,
+        "namedScores": {
+          "output_similarity": 0,
+          "secondary_similarity": 1
+        },
+        "prompt": {
+          "raw": "Parish",
+          "label": "{{output}}",
+          "config": {}
+        },
+        "promptId": "343155ae77c81fd6d016484b639909bc6f4e68f7730061d1d2a8d7e707456d32",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Parish",
+          "raw": "Parish",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 0.5,
+        "success": false,
+        "testCase": {
+          "vars": {
+            "output": "Parish",
+            "tags": "case-2"
+          },
+          "assert": [
+            {
+              "type": "equals",
+              "value": "Paris",
+              "metric": "output_similarity"
+            },
+            {
+              "type": "icontains",
+              "value": "paris",
+              "metric": "secondary_similarity"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "output": "Parish",
+          "tags": "case-2"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "output_similarity": 1,
+            "secondary_similarity": 1
+          },
+          "namedScoreWeights": {
+            "output_similarity": 1,
+            "secondary_similarity": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "equals",
+                "value": "Paris",
+                "metric": "output_similarity"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "paris",
+                "metric": "secondary_similarity"
+              }
+            }
+          ]
+        },
+        "id": "05b36900-6545-49b3-8602-98173bb2bda8",
+        "latencyMs": 1,
+        "namedScores": {
+          "output_similarity": 1,
+          "secondary_similarity": 1
+        },
+        "prompt": {
+          "raw": "Paris",
+          "label": "{{output}}",
+          "config": {}
+        },
+        "promptId": "343155ae77c81fd6d016484b639909bc6f4e68f7730061d1d2a8d7e707456d32",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Paris",
+          "raw": "Paris",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "vars": {
+            "output": "Paris\n",
+            "tags": "case-3"
+          },
+          "assert": [
+            {
+              "type": "equals",
+              "value": "Paris",
+              "metric": "output_similarity"
+            },
+            {
+              "type": "icontains",
+              "value": "paris",
+              "metric": "secondary_similarity"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "output": "Paris\n",
+          "tags": "case-3"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "error": "Expected output to contain \"paris\"",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Expected output to contain \"paris\"",
+          "namedScores": {
+            "output_similarity": 0,
+            "secondary_similarity": 0
+          },
+          "namedScoreWeights": {
+            "output_similarity": 1,
+            "secondary_similarity": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output \"49\" to equal \"Paris\"",
+              "assertion": {
+                "type": "equals",
+                "value": "Paris",
+                "metric": "output_similarity"
+              }
+            },
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to contain \"paris\"",
+              "assertion": {
+                "type": "icontains",
+                "value": "paris",
+                "metric": "secondary_similarity"
+              }
+            }
+          ]
+        },
+        "id": "63a1ef1a-6af5-408e-b58c-da8c4c800298",
+        "latencyMs": 0,
+        "namedScores": {
+          "output_similarity": 0,
+          "secondary_similarity": 0
+        },
+        "prompt": {
+          "raw": "49",
+          "label": "{{output}}",
+          "config": {}
+        },
+        "promptId": "343155ae77c81fd6d016484b639909bc6f4e68f7730061d1d2a8d7e707456d32",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "49",
+          "raw": "49",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "vars": {
+            "output": "{{ 7 * 7 }}",
+            "tags": "case-4"
+          },
+          "assert": [
+            {
+              "type": "equals",
+              "value": "Paris",
+              "metric": "output_similarity"
+            },
+            {
+              "type": "icontains",
+              "value": "paris",
+              "metric": "secondary_similarity"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "output": "{{ 7 * 7 }}",
+          "tags": "case-4"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "Error: ENOENT: no such file or directory, open '/capture/run/rightmodeler-capture-missing.txt'\n    at async open (node:internal/fs/promises:640:25)\n    at async Object.readFile (node:internal/fs/promises:1287:14)\n    at async renderPrompt (file:///capture/npm-cache/_npx/55d1233f1980185b/node_modules/promptfoo/dist/src/evaluatorHelpers-BGZUsdbL.js:360:28)\n    at async renderRunEvalPrompt (file:///capture/npm-cache/_npx/55d1233f1980185b/node_modules/promptfoo/dist/src/evaluator-DlYW7Rgb.js:7641:25)\n    at async runEvalInternal (file:///capture/npm-cache/_npx/55d1233f1980185b/node_modules/promptfoo/dist/src/evaluator-DlYW7Rgb.js:8039:20)\n    at async Evaluator.runEvalStepAfterBeforeEach (file:///capture/npm-cache/_npx/55d1233f1980185b/node_modules/promptfoo/dist/src/evaluator-DlYW7Rgb.js:9127:16)\n    at async file:///capture/npm-cache/_npx/55d1233f1980185b/node_modules/promptfoo/dist/src/evaluator-DlYW7Rgb.js:9115:36\n    at async Evaluator.processEvalStep (file:///capture/npm-cache/_npx/55d1233f1980185b/node_modules/promptfoo/dist/src/evaluator-DlYW7Rgb.js:9114:10)\n    at async Evaluator.processEvalStepWithTimeout (file:///capture/npm-cache/_npx/55d1233f1980185b/node_modules/promptfoo/dist/src/evaluator-DlYW7Rgb.js:9194:30)\n    at async file:///capture/npm-cache/_npx/55d1233f1980185b/node_modules/promptfoo/dist/src/evaluator-DlYW7Rgb.js:9399:4",
+        "gradingResult": null,
+        "id": "cf3f17e8-aa48-4aac-896c-d20adef14149",
+        "latencyMs": 0,
+        "namedScores": {},
+        "prompt": {
+          "raw": "",
+          "label": "{{output}}",
+          "config": {}
+        },
+        "promptId": "343155ae77c81fd6d016484b639909bc6f4e68f7730061d1d2a8d7e707456d32",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "vars": {
+            "output": "file://rightmodeler-capture-missing.txt",
+            "tags": "case-5"
+          },
+          "assert": [
+            {
+              "type": "equals",
+              "value": "Paris",
+              "metric": "output_similarity"
+            },
+            {
+              "type": "icontains",
+              "value": "paris",
+              "metric": "secondary_similarity"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 4,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "output": "file://rightmodeler-capture-missing.txt",
+          "tags": "case-5"
+        },
+        "metadata": {
+          "errorContext": {
+            "providerId": "echo",
+            "providerLabel": ""
+          }
+        },
+        "failureReason": 2
+      }
+    ],
+    "stats": {
+      "successes": 2,
+      "failures": 2,
+      "errors": 1,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 4,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          }
+        }
+      },
+      "durationMs": 19,
+      "evaluationDurationMs": 19
+    }
+  },
+  "config": {
+    "prompts": ["{{output}}"],
+    "providers": ["echo"],
+    "tests": [
+      {
+        "vars": {
+          "output": "Paris",
+          "tags": "case-1"
+        },
+        "assert": [
+          {
+            "type": "equals",
+            "value": "Paris",
+            "metric": "output_similarity"
+          },
+          {
+            "type": "icontains",
+            "value": "paris",
+            "metric": "secondary_similarity"
+          }
+        ]
+      },
+      {
+        "vars": {
+          "output": "Parish",
+          "tags": "case-2"
+        },
+        "assert": [
+          {
+            "type": "equals",
+            "value": "Paris",
+            "metric": "output_similarity"
+          },
+          {
+            "type": "icontains",
+            "value": "paris",
+            "metric": "secondary_similarity"
+          }
+        ]
+      },
+      {
+        "vars": {
+          "output": "Paris\n",
+          "tags": "case-3"
+        },
+        "assert": [
+          {
+            "type": "equals",
+            "value": "Paris",
+            "metric": "output_similarity"
+          },
+          {
+            "type": "icontains",
+            "value": "paris",
+            "metric": "secondary_similarity"
+          }
+        ]
+      },
+      {
+        "vars": {
+          "output": "{{ 7 * 7 }}",
+          "tags": "case-4"
+        },
+        "assert": [
+          {
+            "type": "equals",
+            "value": "Paris",
+            "metric": "output_similarity"
+          },
+          {
+            "type": "icontains",
+            "value": "paris",
+            "metric": "secondary_similarity"
+          }
+        ]
+      },
+      {
+        "vars": {
+          "output": "file://rightmodeler-capture-missing.txt",
+          "tags": "case-5"
+        },
+        "assert": [
+          {
+            "type": "equals",
+            "value": "Paris",
+            "metric": "output_similarity"
+          },
+          {
+            "type": "icontains",
+            "value": "paris",
+            "metric": "secondary_similarity"
+          }
+        ]
+      }
+    ],
+    "outputPath": ["/capture/run/results.json"],
+    "extensions": []
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.123.1",
+    "nodeVersion": "v24.15.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2026-09-22T21:09:13.733Z",
+    "evaluationCreatedAt": "2026-09-22T21:09:13.699Z"
+  },
+  "vars": ["output", "tags"],
+  "runtimeOptions": {
+    "eventSource": "cli",
+    "showProgressBar": false,
+    "repeat": 1,
+    "maxConcurrency": 4,
+    "cache": true
+  }
+}

@@ -37,6 +37,6 @@ describe("matcher registry", () => {
 
     const registry = createMatcherRegistry([replacement]);
     expect(registry.getBySlug(replacement.slug)).toBe(replacement);
-    expect(registry.getAll()).toHaveLength(30);
+    expect(registry.getAll()).toHaveLength(31);
   });
 });

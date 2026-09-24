@@ -16,13 +16,20 @@ import {
   otlpSpans,
   requiredString,
   sampleRecords,
-  startValue,
+  strictRuns,
   textParts,
   tokenCount,
   type NamedTraceAdapter,
   type DroppedTraceRecord,
   type TraceAdaptResult,
 } from "./adapters/shared.js";
+import {
+  adaptSpans,
+  type SpanStep,
+  type SpanTree,
+  type TraceSpan,
+} from "./adapters/spans.js";
+import { aiSdkAdapter } from "./adapters/ai-sdk.js";
 import { braintrustAdapter } from "./adapters/braintrust.js";
 import { claudeCodeAdapter } from "./adapters/claude-code.js";
 import { codexAdapter } from "./adapters/codex.js";
@@ -33,6 +40,7 @@ import { openInferenceAdapter } from "./adapters/openinference.js";
 import { weaveAdapter } from "./adapters/weave.js";
 
 export * from "./adapters/shared.js";
+export { aiSdkAdapter } from "./adapters/ai-sdk.js";
 export { braintrustAdapter } from "./adapters/braintrust.js";
 export { claudeCodeAdapter } from "./adapters/claude-code.js";
 export { codexAdapter } from "./adapters/codex.js";
@@ -66,132 +74,138 @@ function otelConfidence(sample: unknown): number {
   return matching === 0 ? 0 : 0.7 + 0.3 * (matching / records.length);
 }
 
-function adaptOtel(records: unknown): NormalizedRun[] {
-  const format = "otel-genai";
-  if (!Array.isArray(records)) {
-    throw new TraceAdaptError(format, "OTel trace records must be a span list");
-  }
+const structuralOperations = new Set([
+  "agent_step",
+  "execute_tool",
+  "create_agent",
+  "embeddings",
+  "rerank",
+]);
 
-  const grouped = new Map<
-    string,
-    { record: Record<string, unknown>; sourceIndex: number }[]
-  >();
-  for (const [sourceIndex, candidate] of otelSpans(records).entries()) {
-    if (!isRecord(candidate)) {
-      throw new TraceAdaptError(
-        format,
-        `OTel span ${sourceIndex + 1} must be an object`,
-      );
-    }
-    const attributes = candidate.attributes;
-    if (!isRecord(attributes)) continue;
-    const operation = attributes["gen_ai.operation.name"];
-    if (typeof operation !== "string") continue;
-    if (
-      typeof attributes["gen_ai.request.model"] !== "string" &&
-      typeof attributes["gen_ai.response.model"] !== "string"
-    ) {
-      throw new TraceAdaptError(
-        format,
-        `OTel span ${sourceIndex + 1} is missing its request or response model`,
-      );
-    }
+function isInference(span: TraceSpan): boolean {
+  const operation = span.attributes["gen_ai.operation.name"];
+  return (
+    typeof operation === "string" &&
+    !structuralOperations.has(operation) &&
+    operation !== "invoke_agent"
+  );
+}
 
-    const traceId = requiredString(
-      candidate.traceId ?? candidate.trace_id,
-      `OTel span ${sourceIndex + 1} trace ID`,
-      format,
-    );
-    const group = grouped.get(traceId) ?? [];
-    group.push({ record: candidate, sourceIndex });
-    grouped.set(traceId, group);
-  }
-  if (grouped.size === 0) {
-    throw new TraceAdaptError(format, "No OTel GenAI inference spans found");
-  }
-
-  return [...grouped.entries()].map(([traceId, spans]) => {
-    if (
-      spans.length > 1 &&
-      spans.some(({ record }) => startValue(record) === undefined)
-    ) {
-      throw new TraceAdaptError(
-        format,
-        `OTel trajectory ${traceId} must provide a start time for every span`,
-      );
-    }
-    spans.sort(
-      (left, right) =>
-        compareStartValues(startValue(left.record), startValue(right.record)) ||
-        left.sourceIndex - right.sourceIndex,
-    );
-    const steps = spans.map(({ record }, stepIndex) => {
-      const attributes = record.attributes as Record<string, unknown>;
-      const model = requiredString(
-        attributes["gen_ai.request.model"] ??
-          attributes["gen_ai.response.model"],
-        `OTel trace ${traceId} model`,
-        format,
-      );
-      const usage = optionalUsage(
-        attributes["gen_ai.usage.input_tokens"],
-        attributes["gen_ai.usage.output_tokens"],
-        `OTel trace ${traceId}`,
-        format,
-      );
-      const messages = jsonEncodedValue(attributes["gen_ai.input.messages"]);
-      if (!Array.isArray(messages)) {
-        throw new TraceAdaptError(
-          format,
-          `OTel trace ${traceId} input messages must be an array`,
-        );
-      }
-      if (attributes["gen_ai.output.messages"] === undefined) {
-        throw new TraceAdaptError(
-          format,
-          `OTel trace ${traceId} is missing output messages`,
-        );
-      }
-
-      const step: NormalizedStep = {
-        stepIndex,
-        model,
-        messages: messages.map((message, index) =>
-          jsonValue(
-            message,
-            `OTel trace ${traceId} input message ${index + 1}`,
-            format,
-          ),
-        ),
-        output: jsonValue(
-          jsonEncodedValue(attributes["gen_ai.output.messages"]),
-          `OTel trace ${traceId} output messages`,
-          format,
-        ),
-        ...(usage === undefined ? {} : { usage }),
-        trajectoryId: traceId,
-      };
-      const systemPrompt = textParts(
-        jsonEncodedValue(attributes["gen_ai.system_instructions"]),
-      );
-      if (systemPrompt !== undefined) step.systemPrompt = systemPrompt;
-      // Family attribution is v0: prefer the explicit custom attribute, then the legacy heuristic.
-      const family =
-        optionalString(attributes["rightmodeler.family"]) ??
-        optionalString(attributes["gen_ai.prompt.name"]);
-      if (family !== undefined) step.family = family;
-      const timestamp = startValue(record);
-      if (timestamp !== undefined) step.timestamp = timestamp;
-      return step;
-    });
-
-    return normalizedRunSchema.parse({
-      version: "2",
-      traceId,
-      sourceFormat: format,
-      steps,
-    });
+function hasInferenceDescendant(
+  span: TraceSpan,
+  tree: SpanTree,
+  seen = new Set<TraceSpan>(),
+): boolean {
+  return tree.childrenOf(span).some((child) => {
+    if (seen.has(child)) return false;
+    seen.add(child);
+    return isInference(child) || hasInferenceDescendant(child, tree, seen);
   });
+}
+
+function agentName(span: TraceSpan, tree: SpanTree): string | undefined {
+  const seen = new Set<TraceSpan>();
+  for (
+    let parent = tree.parentOf(span);
+    parent !== undefined && !seen.has(parent);
+    parent = tree.parentOf(parent)
+  ) {
+    seen.add(parent);
+    if (parent.attributes["gen_ai.operation.name"] === "invoke_agent") {
+      return optionalString(parent.attributes["gen_ai.agent.name"]);
+    }
+  }
+  return undefined;
+}
+
+function otelStep(span: TraceSpan, tree: SpanTree): SpanStep {
+  const format = "otel-genai";
+  const { attributes, sourceIndex } = span;
+  const operation = attributes["gen_ai.operation.name"];
+  if (typeof operation !== "string" || structuralOperations.has(operation)) {
+    return { kind: "skip" };
+  }
+  if (operation === "invoke_agent" && hasInferenceDescendant(span, tree)) {
+    return { kind: "skip" };
+  }
+  if (
+    attributes["gen_ai.output.messages"] === undefined &&
+    attributes["gen_ai.response.finish_reasons"] === undefined
+  ) {
+    return { kind: "excluded", reason: "stream_incomplete" };
+  }
+  if (
+    typeof attributes["gen_ai.request.model"] !== "string" &&
+    typeof attributes["gen_ai.response.model"] !== "string"
+  ) {
+    throw new TraceAdaptError(
+      format,
+      `OTel span ${sourceIndex + 1} is missing its request or response model`,
+    );
+  }
+
+  const traceId = requiredString(
+    span.traceId,
+    `OTel span ${sourceIndex + 1} trace ID`,
+    format,
+  );
+  const model = requiredString(
+    attributes["gen_ai.request.model"] ?? attributes["gen_ai.response.model"],
+    `OTel trace ${traceId} model`,
+    format,
+  );
+  const usage = optionalUsage(
+    attributes["gen_ai.usage.input_tokens"],
+    attributes["gen_ai.usage.output_tokens"],
+    `OTel trace ${traceId}`,
+    format,
+  );
+  const messages = jsonEncodedValue(attributes["gen_ai.input.messages"]);
+  if (!Array.isArray(messages)) {
+    throw new TraceAdaptError(
+      format,
+      `OTel trace ${traceId} input messages must be an array`,
+    );
+  }
+  if (attributes["gen_ai.output.messages"] === undefined) {
+    throw new TraceAdaptError(
+      format,
+      `OTel trace ${traceId} is missing output messages`,
+    );
+  }
+  const systemPrompt = textParts(
+    jsonEncodedValue(attributes["gen_ai.system_instructions"]),
+  );
+  const family =
+    optionalString(attributes["rightmodeler.family"]) ??
+    optionalString(attributes["gen_ai.prompt.name"]) ??
+    optionalString(attributes["gen_ai.agent.name"]) ??
+    agentName(span, tree);
+  return {
+    kind: "step",
+    step: {
+      model,
+      messages: messages.map((message, index) =>
+        jsonValue(
+          message,
+          `OTel trace ${traceId} input message ${index + 1}`,
+          format,
+        ),
+      ),
+      output: jsonValue(
+        jsonEncodedValue(attributes["gen_ai.output.messages"]),
+        `OTel trace ${traceId} output messages`,
+        format,
+      ),
+      ...(usage === undefined ? {} : { usage }),
+      ...(systemPrompt === undefined ? {} : { systemPrompt }),
+      ...(family === undefined ? {} : { family }),
+    },
+  };
+}
+
+function adaptOtelWithReport(records: unknown): TraceAdaptResult {
+  return adaptSpans("otel-genai", "OTel", records, otelStep);
 }
 
 function openAiConfidence(sample: unknown): number {
@@ -361,14 +375,14 @@ function adaptOpenAi(records: unknown): NormalizedRun[] {
 
 function existingAdapterReport(
   records: unknown,
-  format: "otel-genai" | "openai-jsonl",
+  format: "openai-jsonl",
   adapt: (records: unknown) => NormalizedRun[],
 ): TraceAdaptResult {
   if (!Array.isArray(records)) {
     throw new TraceAdaptError(format, `${format} trace records must be a list`);
   }
 
-  let accepted: Array<{ record: unknown; recordIndex: number }> = [];
+  const accepted: Array<{ record: unknown; recordIndex: number }> = [];
   const droppedRecords: DroppedTraceRecord[] = [];
   for (const [recordIndex, record] of records.entries()) {
     try {
@@ -388,33 +402,6 @@ function existingAdapterReport(
     }
   }
 
-  if (format === "otel-genai") {
-    const traceCounts = new Map<string, number>();
-    for (const { record } of accepted) {
-      if (!isRecord(record)) continue;
-      const traceId = optionalString(record.traceId ?? record.trace_id);
-      if (traceId !== undefined) {
-        traceCounts.set(traceId, (traceCounts.get(traceId) ?? 0) + 1);
-      }
-    }
-    accepted = accepted.filter(({ record, recordIndex }) => {
-      if (!isRecord(record)) return true;
-      const traceId = optionalString(record.traceId ?? record.trace_id);
-      if (
-        traceId !== undefined &&
-        (traceCounts.get(traceId) ?? 0) > 1 &&
-        startValue(record) === undefined
-      ) {
-        droppedRecords.push({
-          recordIndex,
-          reason: `OTel trajectory ${traceId} is missing its start time`,
-        });
-        return false;
-      }
-      return true;
-    });
-  }
-
   return {
     runs:
       accepted.length === 0 ? [] : adapt(accepted.map(({ record }) => record)),
@@ -425,9 +412,17 @@ function existingAdapterReport(
 export const otelGenAiAdapter: NamedTraceAdapter = {
   name: "otel-genai",
   detect: otelConfidence,
-  adapt: adaptOtel,
-  adaptWithReport: (records) =>
-    existingAdapterReport(records, "otel-genai", adaptOtel),
+  adapt: (records) => {
+    const result = adaptOtelWithReport(records);
+    if (result.runs.length === 0 && result.droppedRecords.length === 0) {
+      throw new TraceAdaptError(
+        "otel-genai",
+        "No OTel GenAI inference spans found",
+      );
+    }
+    return strictRuns("otel-genai", result);
+  },
+  adaptWithReport: adaptOtelWithReport,
 };
 
 export const openAiJsonlAdapter: NamedTraceAdapter = {
@@ -440,6 +435,7 @@ export const openAiJsonlAdapter: NamedTraceAdapter = {
 
 export const traceAdapters = [
   otelGenAiAdapter,
+  aiSdkAdapter,
   openAiJsonlAdapter,
   langfuseAdapter,
   braintrustAdapter,

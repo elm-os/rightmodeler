@@ -26,13 +26,18 @@ export type {
 export { IGNORED_DIRECTORIES } from "./ignored-directories.js";
 export { MatcherRegistry } from "./matcher-registry.js";
 export { builtinMatchers } from "./matchers/builtins.js";
-export { AMBIGUOUS_MODEL_ID_REASON, reconcile } from "./reconcile.js";
+export {
+  AMBIGUOUS_MODEL_ID_REASON,
+  AMBIGUOUS_TRACE_KEY_REASON,
+  reconcile,
+} from "./reconcile.js";
 export type {
   CaseStepLink,
   ReconciledCallSite,
   ReconciledTraceStep,
   ReconciliationResult,
   ReconciliationStatus,
+  TraceBindingVia,
 } from "./reconcile.js";
 export { scan, scanRepository } from "./scan.js";
 export type { ScanResult, ScanSkip } from "./scan.js";
