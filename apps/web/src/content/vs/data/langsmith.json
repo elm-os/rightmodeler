@@ -1,20 +1,77 @@
 {
   "slug": "langsmith",
   "name": "LangSmith",
+  "website": "https://www.langchain.com/langsmith-platform",
+  "logo": "/integrations/logos/langsmith.svg",
   "category": "evals",
   "verdict": "different-job",
-  "verdictLabel": "Different job · rightmodeler reads its exports",
-  "title": "rightmodeler vs LangSmith: per-node model verdicts",
-  "description": "LangSmith watches, scores, and runs agents in production. rightmodeler reads its exported run trees and decides which model each step needs. Different job.",
+  "verdictLabel": "Different job · failure fixes vs model right-sizing",
+  "title": "rightmodeler vs LangSmith: which model each step needs",
+  "description": "LangSmith traces agents, and Engine proposes fixes for recurring failures. rightmodeler tests cheaper models per step on its exports, with evidence you approve.",
   "h1": "rightmodeler vs LangSmith",
-  "lede": "LangSmith watches, scores, and increasingly runs your agent. rightmodeler reads the run trees it already produced and answers the one question its dashboards leave open: which model belongs at each step.",
+  "lede": "LangSmith traces, evaluates, and deploys your agent, and its Engine now turns production traces into diagnosed issues and proposed fix pull requests. rightmodeler reads the runs LangSmith already recorded and settles a narrower question with evidence: can a cheaper model take this step without losing what you accepted?",
   "integrationSlug": "langsmith",
   "related": ["braintrust", "promptfoo", "litellm"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Different job, same traces. You hire LangSmith to watch your agent: step-by-step trace trees, dashboards and alerts, evaluator scores on live traffic, and increasingly to run the agent itself. You hire rightmodeler for one decision the platform does not make for you: which model belongs at each step. The rightmodeler CLI, free on npm and GitHub, replays the run trees you export from LangSmith through cheaper models, judges each candidate against the output you already accepted, and reports the evidence, sample size, and abstentions (steps where the evidence was too thin to call). Not observability. Not a runtime gateway."
+      "body": "Different job, same traces. You hire LangSmith to run the agent lifecycle: trace trees, dashboards and alerts, evaluators on production traces, deployment, and, as of 2026-09-22, Engine, which clusters recurring failures into issues, diagnoses each root cause against your traces and connected code, and proposes the fix as a pull request. You hire rightmodeler, a free MIT-licensed CLI, for model-cost substitution: it replays the LLM runs you export from LangSmith through cheaper candidates from your provider's live catalog, judges each one against the output you already accepted, and reports agreement, sample size, and abstentions per step. When a swap clears every gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, for a human to review and merge. Not observability. Not a runtime gateway."
+    },
+    {
+      "type": "prose",
+      "heading": "What LangSmith Engine does, as of 2026-09-22",
+      "paragraphs": [
+        "Per LangChain's docs, Engine is the LangSmith agent for agent engineering. It scans your tracing projects on a schedule, clusters recurring failures into prioritized issues, and diagnoses each root cause against your traces and, when you connect a GitHub repository, your source code. From an issue it opens a pull request with the proposed code or prompt fix in that repository, and its changelog for late August 2026 says those pull requests now open automatically. It keeps each issue current by attaching new traces that match the same failure pattern, reopens an issue when the failure comes back, and turns the traces behind an issue into ground-truth dataset examples so you can test the fix offline before it ships.",
+        "That is a full loop from production trace to reviewed fix, and for agent failures it is the right tool. Its scope is failures. Its documented issue categories run from Agent looping and Hallucination to Wrong tool and Tracing quality, and none of them is about which model a step should run on or whether a cheaper one would hold up there. You can tell Engine to prioritize Cost & Tokens, and its Context explosion category flags runaway token counts, but its docs describe no step replayed on other models. Engine's own reasoning runs on LangChain-managed inference, with no bring-your-own-key option, per its docs.",
+        "LangSmith also ships an LLM Gateway, in beta as of 2026-09-22 per its docs: one LangSmith key in front of several providers, with spend limits, rate limits, fallbacks, and redaction applied to live model calls. It governs the model you name. Which model to name at each step is still your call, and that call is the one rightmodeler gathers evidence for.",
+        "rightmodeler is narrower on purpose. It does not watch production, cluster failures, or edit prompts or code, and it cannot see a run until you export it. It answers one question per step with receipts, and its pull request changes model identifiers and nothing else."
+      ]
+    },
+    {
+      "type": "table",
+      "heading": "Side by side",
+      "intro": "One note on words: reference agreement means how closely a candidate's output matches the one you already shipped for that step.",
+      "caption": "langsmith vs rightmodeler",
+      "leftLabel": "LangSmith",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "starting point",
+          "theirs": "production traces streaming into your LangSmith project",
+          "ours": "LLM runs you export from LangSmith as JSON or JSONL"
+        },
+        {
+          "dimension": "question answered",
+          "theirs": "what keeps failing, why, and how to fix it (Engine)",
+          "ours": "which model each step needs, and whether a cheaper one holds up"
+        },
+        {
+          "dimension": "unit of work",
+          "theirs": "the issue: a cluster of traces sharing one failure pattern",
+          "ours": "the step family: every recorded LLM run that shares a run name"
+        },
+        {
+          "dimension": "evidence",
+          "theirs": "evaluator scores, feedback, and the traces linked to each issue",
+          "ours": "reference agreement, sample size, abstentions, and a floor re-cleared on held-out cases"
+        },
+        {
+          "dimension": "the pull request",
+          "theirs": "a proposed code or prompt fix in your connected repository",
+          "ours": "a draft that may change model identifiers only, with an evidence table in the body"
+        },
+        {
+          "dimension": "inference and keys",
+          "theirs": "Engine runs on LangChain-managed inference, no bring-your-own-key",
+          "ours": "replays run on your own provider key; no rightmodeler server, account, or telemetry"
+        },
+        {
+          "dimension": "seat at runtime",
+          "theirs": "tracing beside every run; Deployment and the LLM Gateway (beta) can host or carry it",
+          "ours": "none; it runs offline on files you exported"
+        }
+      ]
     },
     {
       "type": "scenarios",
@@ -22,49 +79,19 @@
       "intro": "Pick the row that sounds like your week. Each names the honest winner.",
       "scenarios": [
         {
-          "scenario": "Your agent failed in production overnight. You need the exact call that broke, what it cost, and why latency spiked.",
+          "scenario": "The same failed tool call keeps turning up across your production runs, and you need the root cause and a fix before it recurs.",
           "winner": "theirs",
-          "why": "This is live observability, and LangSmith is built for exactly it: walk the trace tree step by step, read cost and latency on every call, and set an alert so the next failure pages you. rightmodeler has no live view at all; it cannot see a run until you export it."
+          "why": "This is what Engine is built for, per its docs: it clusters the failing traces into one issue, diagnoses the root cause against your traces and connected code, proposes the fix as a pull request, reopens the issue if the failure comes back, and turns the evidence traces into dataset examples for testing the fix. rightmodeler has no live view and never touches prompts or code."
         },
         {
-          "scenario": "Your LangGraph agent runs every node on the frontier model. The bill hurts, and nobody can say which nodes actually need it.",
+          "scenario": "Your LangGraph agent runs every node on a frontier model. The bill keeps climbing, and nobody can say which nodes need that model.",
           "winner": "ours",
-          "why": "Because each LangGraph node arrives as its own step in the export, the verdict comes back per node, judged against outputs you already accepted: keep the frontier model where the evidence demands it, swap where it doesn't. A spend dashboard shows what each node costs, not which swap would survive."
+          "why": "Every model call lands in the export as its own LLM run, and the audit groups runs into step families by run name, so give each node's model call its own run_name to get a verdict per node. It replays those runs on cheaper candidates from your provider's live catalog, judges them against the outputs you accepted, and keeps the frontier model wherever the evidence says to. Only a swap that clears the quality floor again on held-out cases becomes a draft pull request."
         },
         {
-          "scenario": "Your team is happily instrumented on LangSmith and wants the bill down without ripping anything out.",
+          "scenario": "Your team already runs Engine on production traces and also wants the model bill down without adding risk.",
           "winner": "both",
-          "why": "Keep LangSmith observing. Export the run trees it already holds, run the audit, and approve the swaps that clear your quality floor (the minimum agreement score a candidate must hit before a swap is recommended). Then watch LangSmith's own cost dashboards confirm the new mix in production."
-        }
-      ]
-    },
-    {
-      "type": "table",
-      "heading": "Side by side",
-      "intro": "One note on words: reference agreement means how closely a candidate's output matches the one you already shipped.",
-      "caption": "langsmith vs rightmodeler",
-      "leftLabel": "LangSmith",
-      "rightLabel": "rightmodeler",
-      "rows": [
-        {
-          "dimension": "the seat",
-          "theirs": "a platform you work inside, in and around your production path",
-          "ours": "a report you run offline; never in your request path"
-        },
-        {
-          "dimension": "evidence",
-          "theirs": "evaluator scores over live traffic and datasets you curate",
-          "ours": "reference agreement, evidence, sample size, and abstentions"
-        },
-        {
-          "dimension": "unit of verdict",
-          "theirs": "the run and the experiment",
-          "ours": "the step; per node on LangGraph runs"
-        },
-        {
-          "dimension": "instrumentation cost",
-          "theirs": "instrument once, then every run streams in",
-          "ours": "zero; exported run trees are the whole input"
+          "why": "Keep Engine on failures and give the audit the cost question. Export the same project's LLM runs, and if you already grade with LangSmith scorers, pass --evaluator langsmith so those scorers, not a judge you did not write, decide each replay. Engine's fix pull requests and rightmodeler's model-only drafts arrive as separate reviews, so each change is judged on its own evidence."
         }
       ]
     },
@@ -73,32 +100,40 @@
       "left": {
         "heading": "LangSmith alone",
         "items": [
-          "Trace trees for step-by-step debugging, dashboards and alerts, and online evaluations scoring live traffic as it happens.",
-          "Offline experiments against datasets you curate, pairwise comparisons, and annotation queues for structured human review.",
-          "And increasingly a runtime: LangSmith deploys and runs agents."
+          "Trace trees, dashboards and alerts on cost, latency, and errors, plus LLM-as-judge, code, and multi-turn evaluators run on production traces.",
+          "Engine, as of 2026-09-22: recurring issues found on a schedule, root causes traced into your connected code, fixes proposed as pull requests, and dataset examples built from the failing traces.",
+          "Deployment to run agents, and an LLM Gateway, in beta, that applies spend limits, rate limits, and fallbacks to live model calls."
         ]
       },
       "right": {
-        "heading": "LangSmith with rightmodeler on top",
+        "heading": "LangSmith with rightmodeler beside it",
         "items": [
-          "Everything on the left stays. The audit reads the run trees LangSmith already holds and adds the verdict the platform does not issue: which model belongs at each step.",
-          "Cheaper candidates are judged against the output you accepted, by a judge from a different model family than either candidate, so the expensive model gets no home-field advantage.",
-          "You approve every swap. The report recommends a model, not a route, and LangSmith's own dashboards verify the new mix in production."
+          "Everything on the left stays. The audit reads the LLM runs LangSmith already recorded and adds a per-step answer to one question: does this step need the model it pays for?",
+          "Candidates come from your configured provider's live catalog and are judged against the output you accepted, either by a judge from a model family neither side belongs to or by your own LangSmith scorers.",
+          "A swap has to clear the quality floor again on held-out cases, multi-step swaps are confirmed end to end, and thin evidence ends in an abstention. What clears every gate becomes a draft pull request that a human reviews and merges."
         ]
       }
     },
     {
       "type": "stack",
-      "heading": "How the audit runs on your exports",
-      "intro": "No new instrumentation and no account access. The traces LangSmith already collected are the whole input.",
+      "heading": "How the audit runs on your LangSmith exports",
+      "intro": "No new instrumentation. Your LangSmith key is used to export runs, and by the CLI only if you choose LangSmith scorers or datasets.",
       "paragraphs": [
-        "Export run trees from your LangSmith project and save them anywhere on disk. The CLI autodetects the format, walks each tree, and reads files only: it never connects to your LangSmith account, and there is no rightmodeler server, no account with us, no telemetry.",
-        "What comes back is a per-step report: for each step, the cheaper candidates tried on your recorded inputs, the agreement each one earned against the output you accepted, and the sample size behind that score. Steps that call tools or loop are never judged from one replay; they are confirmed end to end in a throwaway sandbox so cascading failures surface before you swap. A candidate only becomes a recommendation when it clears the configurable floor. And when the sample is too small to call, the report records an abstention instead of a guess, so nothing sensitive gets swapped on thin evidence."
+        "Pull the LLM runs from your project with the LangSmith SDK, for example client.list_runs(project_name=..., run_type=\"llm\"), and save them as JSON or JSONL with one run per record. The CLI detects the format from the trace_id, run_type, and dotted_order keys, orders each trace by dotted_order, and takes the model from extra.metadata.ls_model_name. It reads files only: there is no rightmodeler server, no account with us, and no telemetry.",
+        "The run writes report.md with a verdict per step family: the candidates tried on your recorded inputs, the agreement each earned against the output you accepted, the sample size behind it, and an abstention with a named reason wherever the evidence is thin. rightmodeler report --output json prints the same report as JSON. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers only and requests review from the owners of the files it touches. It never merges."
       ],
       "commands": [
         {
-          "comment": "# export run trees from your project, then hand the folder to the CLI",
-          "command": "claude \"run the rightmodeler skill on ./exports/langsmith/\""
+          "comment": "# preview the pipeline against the export, without spending",
+          "command": "npx rightmodeler init --plan --traces ./traces/langsmith-run.json --repo ."
+        },
+        {
+          "comment": "# replay and judge on your own provider key",
+          "command": "npx rightmodeler init --traces ./traces/langsmith-run.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY"
+        },
+        {
+          "comment": "# or let your own LangSmith scorers grade the replays",
+          "command": "npx rightmodeler init --traces ./traces/langsmith-run.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --evaluator langsmith --evaluator-project-id $DATASET --evaluator-scorer correctness"
         }
       ]
     },
@@ -107,9 +142,9 @@
       "heading": "The words the report uses",
       "terms": [
         {
-          "term": "model downgrade audit",
-          "def": "The report the CLI produces: every step of a recorded run, replayed through cheaper candidates, with a per-step recommendation or an abstention.",
-          "slug": "model-downgrade-audit"
+          "term": "swap candidate",
+          "def": "A cheaper model shortlisted from your configured provider's live catalog and replayed on one step's recorded inputs.",
+          "slug": "swap-candidate"
         },
         {
           "term": "reference evidence",
@@ -118,12 +153,17 @@
         },
         {
           "term": "quality floor",
-          "def": "The minimum agreement score a candidate must clear before the audit will recommend a swap. Configurable, and anything below it is a no.",
+          "def": "The minimum agreement a candidate must clear, and clear again on held-out cases, before the audit will recommend a swap. Configurable, and anything below it is a no.",
           "slug": "quality-floor"
         },
         {
+          "term": "cascade risk",
+          "def": "The chance that a cheaper model at one step quietly degrades the later steps that build on its output. Swaps that could cascade are confirmed by running the pipeline end to end before they are recommended.",
+          "slug": "cascade-risk"
+        },
+        {
           "term": "abstain",
-          "def": "The audit's decision to make no recommendation when the sample is small or the evidence is mixed. The current model stays.",
+          "def": "The audit's decision to recommend nothing for a step when the sample is small or the evidence is mixed, with the reason named. The current model stays.",
           "slug": "abstain"
         }
       ]
@@ -132,20 +172,24 @@
       "type": "faq",
       "items": [
         {
-          "q": "Do I still need LangSmith if I run the audit?",
-          "a": "Yes. LangSmith is the seat you watch and increasingly run your agent from; rightmodeler is a report you run on the run trees you export from it. Nothing gets ripped out: the audit's whole input is data LangSmith already collected, and its output is a model recommendation you carry back to your own repo."
+          "q": "Doesn't LangSmith Engine already find cheaper models?",
+          "a": "Not per its docs as of 2026-09-22. Engine's documented issue categories cover agent failures such as looping, hallucination, wrong tools, and truncated responses, and none of them is about which model a step should run on. You can ask it to prioritize Cost & Tokens, and it flags context explosion, but its docs describe no step replayed on other models and no measurement of whether a cheaper one holds up. That measurement is the whole of what rightmodeler does."
+        },
+        {
+          "q": "Both open pull requests. What is different about rightmodeler's?",
+          "a": "Engine's pull request carries a proposed code or prompt fix for a diagnosed failure. rightmodeler apply opens a draft that may only change model identifiers: a diff check refuses anything else, the body carries the evidence table for each step family, and review is requested from the owners of the changed files. It opens only after the swap clears every release gate, and the CLI never merges; a person does."
         },
         {
           "q": "Can't LangSmith experiments already compare models?",
-          "a": "They can, honestly. Build a dataset, define evaluators, and an experiment will A/B models across it. rightmodeler starts one step earlier: the reference is the output you already accepted, so there is no dataset to curate and no evaluator to write, and the verdict comes back per step with sample size and abstentions attached."
-        },
-        {
-          "q": "How is this different from a runtime gateway routing model calls?",
-          "a": "A runtime gateway sits in your request path, proxying and metering live model calls. The audit never sits in the request path: it recommends a model, not a route, backs the recommendation with per-step evidence, and you approve every swap before anything changes."
+          "a": "They can, honestly. Build a dataset, define evaluators, and an experiment will compare models across it, and Engine can now seed that dataset from failing traces. rightmodeler starts from the outputs you already accepted, so no dataset is required, and the verdict comes back per step with sample size and abstentions attached. If you keep curated LangSmith datasets and scorers, the audit can use both: rightmodeler corpus import --from langsmith:<dataset> builds the corpus, and --evaluator langsmith lets your scorers grade."
         },
         {
           "q": "Does rightmodeler connect to my LangSmith account?",
-          "a": "No. It reads the files you export, and the audit runs on your machine with your own provider keys. Your instrumentation never notices the audit ran."
+          "a": "Only when you ask it to. The audit reads exported files on your machine, and replays run on your own provider key. The CLI calls the LangSmith API only on the evaluator path (--evaluator langsmith) or for corpus import, using the key in LANGSMITH_API_KEY unless you name another variable."
+        },
+        {
+          "q": "Is LangSmith open source?",
+          "a": "The platform is not. LangSmith, including Engine and the LLM Gateway, is a commercial product that LangChain hosts, and self-hosting it takes a license from LangChain, per its docs. Its client SDK is MIT-licensed, and that SDK is all the export step needs. LangChain's open-source work includes the frameworks: LangChain, LangGraph, and Deep Agents. The rightmodeler CLI is MIT-licensed."
         },
         {
           "q": "Does every audit end in recommended swaps?",

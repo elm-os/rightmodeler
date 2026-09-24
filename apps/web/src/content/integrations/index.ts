@@ -2,7 +2,7 @@
 // in ./data, typed against IntegrationData here (a wrong or missing field fails `pnpm check-types`);
 // the hub, the [slug] route, the sitemap, and llms.txt all resolve from this list. To add an
 // integration: create a JSON file and add one import + one entry below. Listed in hub display
-// order: trace sources first, then replay infrastructure, then roadmap.
+// order: trace sources first, then replay infrastructure, then coming soon.
 
 import type { IntegrationData } from "@/content/integrations/types";
 import langsmith from "@/content/integrations/data/langsmith.json";
@@ -18,6 +18,7 @@ import weave from "@/content/integrations/data/weave.json";
 import openrouter from "@/content/integrations/data/openrouter.json";
 import litellm from "@/content/integrations/data/litellm.json";
 import vercelAiGateway from "@/content/integrations/data/vercel-ai-gateway.json";
+import modaic from "@/content/integrations/data/modaic.json";
 
 const integrations: IntegrationData[] = [
   claudeCode,
@@ -33,6 +34,7 @@ const integrations: IntegrationData[] = [
   openrouter,
   litellm,
   vercelAiGateway,
+  modaic,
 ];
 
 export function getAllIntegrations(): IntegrationData[] {

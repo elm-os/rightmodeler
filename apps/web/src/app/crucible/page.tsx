@@ -12,9 +12,9 @@ import { Reveal } from "@/components/reveal";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
-  title: "Crucible (coming soon)",
+  title: "Crucible (in development)",
   description:
-    "Crucible tracks AI agent cost, speed, and failures by layer, then helps keep your model stack right-sized. Join the waitlist.",
+    "Crucible, in development, will track AI agent cost, speed, and failures by layer and help keep your model stack right-sized. Join the waitlist.",
   path: "/crucible",
   image: "/social/crucible.png",
 });
@@ -22,7 +22,7 @@ export const metadata: Metadata = pageMetadata({
 const FAQ: FaqItem[] = [
   {
     q: "What is Crucible?",
-    a: "Crucible is the analytics and optimization suite for AI agents, by rightmodeler. It shows what every layer of your agent system costs, how fast it runs, and where it fails, and it runs the rightmodeler proof loop continuously so your model stack stays right-sized as new traces arrive.",
+    a: "Crucible is the analytics and optimization suite for AI agents that rightmodeler is building. It is designed to show what every layer of your agent system costs, how fast it runs, and where it fails, and to run the rightmodeler proof loop continuously so your model stack stays right-sized as new traces arrive.",
   },
   {
     q: "When can I use it?",
@@ -30,11 +30,11 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How does it connect?",
-    a: "Over MCP, using the tracing you already emit, with no new SDK. You keep your own API keys and can route through OpenRouter, the Vercel AI Gateway, or LiteLLM.",
+    a: "It is designed to connect over MCP, using the tracing you already emit, with no new SDK. You will keep your own API keys and can route through OpenRouter, the Vercel AI Gateway, or LiteLLM.",
   },
   {
     q: "Is it a gateway?",
-    a: "No. Crucible reads your traces passively and never sits in your request path. Your traffic keeps flowing through your own keys and routes; Crucible watches, measures, and reports.",
+    a: "No. Crucible is designed to read your traces passively and never sit in your request path. Your traffic keeps flowing through your own keys and routes; Crucible will watch, measure, and report.",
   },
 ];
 
@@ -44,14 +44,14 @@ export default function CruciblePage() {
       <JsonLd data={breadcrumbLd("Crucible", "/crucible")} />
 
       <PageHero
-        eyebrow="Coming soon · by rightmodeler"
+        eyebrow="In development · by rightmodeler"
         title="Crucible: every layer, measured and right-sized."
-        lede="The analytics and optimization suite for your AI agents. See what every layer costs, how fast it runs, and where it fails, while Crucible keeps your model stack right-sized, continuously."
+        lede="The analytics and optimization suite we are building for your AI agents: what every layer costs, how fast it runs, and where it fails, with your model stack kept right-sized, continuously."
       >
         <div className="max-w-md">
           <WaitlistForm />
           <p className="mt-3 font-mono text-caption text-fog">
-            Get early access. One note when it opens, no spam.
+            Join the waitlist. One note when it opens, no spam.
           </p>
         </div>
       </PageHero>
@@ -62,12 +62,12 @@ export default function CruciblePage() {
         <div className="mx-auto max-w-3xl px-6 pt-16 sm:px-10 sm:pt-20">
           <Reveal>
             <Tldr>
-              Crucible watches your agents in production: cost per layer, speed
-              per step,{" "}
+              Crucible is being built to watch your agents in production: cost
+              per layer, speed per step,{" "}
               <span className="text-midnight-ink">failures as they happen</span>
-              . And because it runs the rightmodeler proof loop continuously, it
-              does not just show you problems, it right-sizes the stack that
-              caused them.
+              . It will run the rightmodeler proof loop continuously, so the
+              step behind a cost spike comes with measured evidence for the
+              model it could run on.
             </Tldr>
           </Reveal>
         </div>
@@ -85,11 +85,11 @@ export default function CruciblePage() {
           <Reveal delay={0.1}>
             <div className="rounded-2xl border border-ash-border bg-warm-sand p-6 sm:p-8">
               <p className="font-mono text-caption uppercase text-fog">
-                Available today
+                Available today: the CLI
               </p>
               <p className="mt-3 max-w-xl text-body text-driftwood">
-                Crucible is in active development. The engine behind it, the
-                rightmodeler CLI, is on npm and GitHub now.
+                Crucible itself is in active development. The engine behind it,
+                the rightmodeler CLI, is on npm and GitHub now.
               </p>
               <div className="mt-6">
                 <GithubButton />

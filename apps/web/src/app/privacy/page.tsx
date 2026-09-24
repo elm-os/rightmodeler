@@ -33,7 +33,7 @@ export default function PrivacyPage() {
       <section className="bg-parchment-white py-16 sm:py-20">
         <Prose>
           <p className="font-mono text-caption uppercase text-fog">
-            Last updated July 10, 2026
+            Last updated September 22, 2026
           </p>
 
           <Lead>
@@ -53,9 +53,9 @@ export default function PrivacyPage() {
           <P>Two kinds of information, both small.</P>
           <UL>
             <LI>
-              Information you give us. If you join the Crucible or rightmodeler
-              agent waitlist, we collect your email address. If you send
-              feedback, we collect your email address and your message.
+              Information you give us. If you join the Crucible or hosted
+              rightmodeler agent waitlist, we collect your email address. If you
+              send feedback, we collect your email address and your message.
             </LI>
             <LI>
               Information collected automatically. We use Vercel Analytics to

@@ -1,6 +1,8 @@
 {
   "slug": "braintrust",
   "name": "Braintrust",
+  "website": "https://www.braintrust.dev",
+  "logo": "/integrations/logos/braintrust.svg",
   "category": "evals",
   "verdict": "complement",
   "verdictLabel": "Complement · your evals stay the bar",
@@ -9,7 +11,7 @@
   "h1": "rightmodeler vs Braintrust",
   "lede": "Braintrust grades your agent against a bar you authored: datasets, scorers, rubrics. rightmodeler grades cheaper models against the outputs you accepted, and asks one question Braintrust does not: which model belongs at each step?",
   "integrationSlug": "braintrust",
-  "related": ["langsmith", "promptfoo", "litellm"],
+  "related": ["langsmith", "promptfoo", "litellm", "vals-ai"],
   "cta": "github",
   "blocks": [
     {

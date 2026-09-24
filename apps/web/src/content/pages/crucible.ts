@@ -5,17 +5,17 @@ import { REPO_URL } from "@/lib/site";
 
 export const markdown = `# Crucible: every layer, measured and right-sized.
 
-Coming soon · by rightmodeler
+In development · by rightmodeler
 
-The analytics and optimization suite for your AI agents. See what every layer costs, how fast it runs, and where it fails, while Crucible keeps your model stack right-sized, continuously.
+The analytics and optimization suite we are building for your AI agents: what every layer costs, how fast it runs, and where it fails, with your model stack kept right-sized, continuously.
 
-Join the waitlist with your email address to get early access. One note when it opens, no spam.
+Join the waitlist with your email address. One note when it opens, no spam.
 
 ## TL;DR
 
-Crucible watches your agents in production: cost per layer, speed per step, failures as they happen. And because it runs the rightmodeler proof loop continuously, it does not just show you problems, it right-sizes the stack that caused them.
+Crucible is being built to watch your agents in production: cost per layer, speed per step, failures as they happen. It will run the rightmodeler proof loop continuously, so the step behind a cost spike comes with measured evidence for the model it could run on.
 
-## What Crucible gives you
+## What Crucible will give you
 
 ### The instruments
 
@@ -35,9 +35,9 @@ Crucible watches your agents in production: cost per layer, speed per step, fail
 - **Continuously right-sized**
   Every new trace is audited as it arrives, and each audit reports its own evidence, sample size, and abstentions.
 
-## Available today
+## Available today: the CLI
 
-Crucible is in active development. The engine behind it, the rightmodeler CLI, is on npm and GitHub now.
+Crucible itself is in active development. The engine behind it, the rightmodeler CLI, is on npm and GitHub now.
 
 View on GitHub: ${REPO_URL}
 
@@ -45,7 +45,7 @@ View on GitHub: ${REPO_URL}
 
 ### What is Crucible?
 
-Crucible is the analytics and optimization suite for AI agents, by rightmodeler. It shows what every layer of your agent system costs, how fast it runs, and where it fails, and it runs the rightmodeler proof loop continuously so your model stack stays right-sized as new traces arrive.
+Crucible is the analytics and optimization suite for AI agents that rightmodeler is building. It is designed to show what every layer of your agent system costs, how fast it runs, and where it fails, and to run the rightmodeler proof loop continuously so your model stack stays right-sized as new traces arrive.
 
 ### When can I use it?
 
@@ -53,9 +53,9 @@ Crucible is in active development. Join the waitlist and we'll send an early-acc
 
 ### How does it connect?
 
-Over MCP, using the tracing you already emit, with no new SDK. You keep your own API keys and can route through OpenRouter, the Vercel AI Gateway, or LiteLLM.
+It is designed to connect over MCP, using the tracing you already emit, with no new SDK. You will keep your own API keys and can route through OpenRouter, the Vercel AI Gateway, or LiteLLM.
 
 ### Is it a gateway?
 
-No. Crucible reads your traces passively and never sits in your request path. Your traffic keeps flowing through your own keys and routes; Crucible watches, measures, and reports.
+No. Crucible is designed to read your traces passively and never sit in your request path. Your traffic keeps flowing through your own keys and routes; Crucible will watch, measure, and report.
 `;

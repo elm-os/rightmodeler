@@ -1,0 +1,127 @@
+{
+  "slug": "codag",
+  "name": "Codag",
+  "website": "https://codag.ai",
+  "logo": "/vs/logos/codag.svg",
+  "category": "spend",
+  "verdict": "complement",
+  "verdictLabel": "Complement · fewer tokens, then the right model",
+  "title": "rightmodeler vs Codag: fewer tokens vs a cheaper model",
+  "description": "Codag shrinks the tool output coding agents read and leaves the model alone. rightmodeler checks whether each step needs its model. They stack, in order.",
+  "h1": "rightmodeler vs Codag",
+  "lede": "Codag cuts what a coding agent reads: large tool results are reduced before the model sees them, and the model stays the same. rightmodeler leaves the input alone and works the other half of the bill: does each step need the model it pays for?",
+  "integrationSlug": "",
+  "related": ["mentlio", "vercel-ai-gateway", "litellm"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Complements, with one ordering rule. You hire Codag to shrink the input: per its site, one setup command attaches it to Claude Code and Codex, and large eligible tool results (logs, test and build output, search results, file listings) are cut to the evidence the agent needs, while source code, diffs, and configuration pass through unchanged. Codag says it never changes your model, agent, or prompts. You hire rightmodeler, the MIT-licensed CLI, for the one thing Codag leaves alone: it replays your recorded traces through cheaper candidates offline, judges each against the output you accepted, and opens a draft pull request that changes only model identifiers. Fewer tokens and a lower price per token multiply, so the two can stack. The rule: if compression changes what the model reads, rebuild the evaluation corpus from post-compression traces before you make a model decision."
+    },
+    {
+      "type": "positioning",
+      "left": {
+        "heading": "What Codag changes",
+        "items": [
+          "The input. Large eligible tool results are cut down to failures, matches, and signal lines before the agent reads them; its homepage advertises about 75% compression.",
+          "Nothing else, by its own account: same agent, same model, same prompts, same provider account. Model traffic runs through a local proxy on your machine straight to your provider.",
+          "Omitted bytes stay encrypted on your machine for seven days, capped at 1 GiB, and the agent can pull any section back exactly, by line range, JSON path, or group."
+        ]
+      },
+      "right": {
+        "heading": "What rightmodeler changes",
+        "items": [
+          "The model identifier, and only that. A swap reaches your code as a draft pull request whose diff may touch model identifiers only, and a human reviews and merges it.",
+          "Nothing at runtime. The CLI works offline on recorded traces and is never in the request path. There is no rightmodeler server, account, or telemetry.",
+          "Every recommendation carries reference agreement with the output you accepted, the sample size behind it, and any abstentions. A candidate must re-clear the quality floor on held-out cases, and a multi-step swap must be confirmed end to end before a pull request opens."
+        ]
+      }
+    },
+    {
+      "type": "scenarios",
+      "heading": "Pick by what drives the bill",
+      "intro": "Three situations, and the honest call in each.",
+      "scenarios": [
+        {
+          "scenario": "Your developers run Claude Code and Codex all day, and most of what the agent reads is test output, build logs, and search results it skims once and throws away.",
+          "winner": "theirs",
+          "why": "That is exactly the tax Codag targets: one setup command, no change to how anyone works, and large results reduced before the model reads them, with the exact bytes retrievable locally. rightmodeler does not shrink a single token and never touches a live session."
+        },
+        {
+          "scenario": "Your agent's tool results are large and every step runs on a frontier model, so both levers are on the table.",
+          "winner": "both",
+          "why": "Stack them, in order. Attach the reducer first, because it changes what the model reads. Then record fresh traces and build the rightmodeler corpus from those, so every candidate is judged on the reduced inputs production actually sends. A model verdict earned on pre-compression inputs answers a question you no longer ask."
+        },
+        {
+          "scenario": "Your team's agent pins one frontier model on every step in code, its inputs are already short, and you want to know which steps can hold a cheaper model.",
+          "winner": "ours",
+          "why": "When inputs are small, compression has little left to cut, and the price per token is the lever. rightmodeler replays each step through cheaper candidates shortlisted from your provider's live catalog, judges them against the outputs you accepted, abstains where the evidence is thin, and hands you a draft pull request to review."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Order matters when they stack",
+      "paragraphs": [
+        "A rightmodeler verdict is evidence about one exact set of inputs: the recorded inputs of each step, and the outputs you accepted for them. A reducer changes those inputs. A cheaper model that matched your accepted outputs while reading a full test log has not been tested on the short summary a reducer hands it instead, and the reverse can happen too: a small model that stumbled over a huge log may cope with the reduced version.",
+        "So if compression changes the model input, rebuild the evaluation corpus from post-compression traces before any model decision. Check where your traces are written, too: a log captured before a reducer runs records what the tool printed, not what the model read. rightmodeler does not detect a reducer for you. The same care runs the other way: if you swap a model first and attach a reducer later, the evidence behind the swap came from unreduced inputs, so rerun the audit on fresh traces once the reducer is in place.",
+        "Credit where due. Codag works live, inside the session, with no traces to collect and nothing to review, and per its docs it fails open: timeouts, unknown tools, and an exhausted quota all hand the agent the original bytes. rightmodeler works after the fact and needs recorded traces with enough distinct trajectories to say anything. In the current release it replays plain text model steps only; call sites that declare tools or structured output are found by the scan but not replayed, so tool-heavy steps can end with no verdict at all."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page uses",
+      "terms": [
+        {
+          "term": "trace",
+          "def": "The recorded log of an agent run: each step's inputs, outputs, and tool calls. rightmodeler's raw material. If a reducer sits between the tool and the model, it matters which side of it the log was written on.",
+          "slug": "trace"
+        },
+        {
+          "term": "tool-output reduction",
+          "def": "Cutting a large tool result down to the part the agent needs before the model reads it. Codag's job. It changes the input, not the model."
+        },
+        {
+          "term": "swap candidate",
+          "def": "A cheaper model whose output agrees closely enough with the accepted output to merit review. Evidence of agreement with shipped output, not proof of correctness.",
+          "slug": "swap-candidate"
+        },
+        {
+          "term": "quality floor",
+          "def": "The configurable minimum agreement score a candidate must clear, including on held-out cases, before the audit recommends it. Below it, the current model stays.",
+          "slug": "quality-floor"
+        },
+        {
+          "term": "abstain",
+          "def": "What the audit does when a step's evidence is too thin: it recommends nothing rather than guessing, and names the reason.",
+          "slug": "abstain"
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does Codag change which model my agent uses?",
+          "a": "No, by its own account. Codag's site says you keep the same agent, model, prompts, and provider account, and that it only changes how large tool results reach the agent. That is why the two do not overlap: Codag changes the input, and rightmodeler changes only the model identifier."
+        },
+        {
+          "q": "Can I run both on the same agent?",
+          "a": "Yes, and the order matters. Attach the reducer, record fresh traces, then run the audit on those, so candidates are judged on the inputs the model actually receives. If a model swap came first, rerun the audit after the reducer goes in. rightmodeler has no Codag integration; the two never talk to each other."
+        },
+        {
+          "q": "Is Codag open source?",
+          "a": "Partly, as of 2026-09-22. Codag's open-source page lists codag-drain (an MIT-licensed Rust library and CLI that groups raw log lines into templates with counts, no model involved), codag-sdk (MIT clients for its hosted API), and codag-visualizer (a VS Code extension that draws AI workflows). The reducer its product attaches to Claude Code and Codex is a signed, closed-source binary backed by Codag's hosted service. If you want only the part you can run yourself, codag-drain is that piece. The rightmodeler CLI is MIT licensed."
+        },
+        {
+          "q": "What leaves my machine with each?",
+          "a": "Per Codag's privacy docs, model traffic goes from a local proxy straight to your provider, and eligible tool output plus minimal task context is sent to Codag's service, processed transiently, and not retained; source code, diffs, and configuration are never sent. rightmodeler has no server, account, or telemetry, but its replays send each step's recorded inputs to the model provider you configure, under your own key."
+        },
+        {
+          "q": "Are Codag's savings numbers verified?",
+          "a": "Not by us. As of 2026-09-22, Codag's homepage advertises about 75% compression, its pricing page labels dollar savings as estimates from public model prices, and its Y Combinator profile says 20 to 30% lower token spend. Those are vendor figures. rightmodeler's reports are measured on your own traces and show their sample sizes and abstentions, and agreement with an accepted output is evidence, not proof of correctness."
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 {
   "slug": "promptfoo",
   "name": "promptfoo",
+  "website": "https://www.promptfoo.dev",
+  "logo": "/integrations/logos/promptfoo.svg",
   "category": "evals",
   "verdict": "different-job",
   "verdictLabel": "Different job · pre-ship tests vs post-ship audit",
@@ -9,7 +11,7 @@
   "h1": "rightmodeler vs promptfoo",
   "lede": "promptfoo evaluates what you are about to ship against test cases you author. rightmodeler audits what you already shipped against the outputs you accepted, so the real line between them is where the test set comes from.",
   "integrationSlug": "",
-  "related": ["braintrust", "langsmith", "not-diamond"],
+  "related": ["braintrust", "langsmith", "not-diamond", "modaic"],
   "cta": "github",
   "blocks": [
     {

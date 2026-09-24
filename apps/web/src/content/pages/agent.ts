@@ -8,11 +8,11 @@ export const markdown = `# The last model migration you do by hand.
 
 Open source · by rightmodeler
 
-A new model ships. rightmodeler agent replays it against your real traces, prices the swap, and opens a pull request with the evidence attached. You review it like any other change. It lives in the open-source repo today; a hosted version is on the way.
+A new model ships. rightmodeler agent flags it in its weekly catalog check and prices the swap. Give the word and it replays the model against your real traces, then opens a pull request with the evidence attached. You review it like any other change. Self-host it today from the MIT-licensed repo; the hosted version has a waitlist.
 
-Waitlist: enter your email address (you@company.com) and submit "Get early access".
+Hosted version waitlist: enter your email address (you@company.com) and submit "Get early access".
 
-Get hosted early access. One note when it opens, no spam.
+Join the hosted version waitlist. One note when it opens, no spam.
 
 ## How it decides
 
@@ -41,7 +41,7 @@ The pull request the agent opens, as rendered on the page. The title bar stamps 
 
 ### TL;DR
 
-rightmodeler agent watches every model release, measures candidates against outputs you accepted, and opens the evidence and proposed model edit as a pull request in your repo. Model changes become code review.
+rightmodeler agent rechecks the provider catalog every week, measures candidates against outputs you accepted, and opens the evidence and proposed model edit as a pull request in your repo. Model changes become code review.
 
 ### The loop
 
@@ -53,7 +53,7 @@ A weekly schedule rechecks the provider catalog and recalculates the shortlist, 
 
 ### Replay
 
-Candidates rerun your real traces end to end in a sandboxed worktree, so cascade failures surface early.
+Candidates replay your recorded calls, and swaps that could cascade are confirmed end to end in a container, so cascade failures surface early.
 
 ### Judge
 
@@ -101,11 +101,11 @@ View on GitHub: ${REPO_URL}
 
 ### What is rightmodeler agent?
 
-An autonomous agent that keeps every step of your AI stack on the right model. It watches new model releases, replays them against your real traces, judges each output against what you already shipped, and opens a pull request in your repo when a swap clears your quality floor and preferences.
+An autonomous agent that keeps every step of your AI stack on the right model. Every week it rechecks the provider catalog for new and repriced models; once you give the word, it replays candidates against your real traces, judges each output against what you already shipped, and opens a draft pull request in your repo when a swap clears your quality floor and preferences.
 
 ### When can I use it?
 
-Today, if you self-host: the agent ships in the open-source repo and runs on your own infrastructure with your own GitHub and model credentials. Join the waitlist for the hosted version and we will send one note when early access opens.
+Today, if you self-host: the agent is in the MIT-licensed repo, and you clone it, build it, and run it on a long-lived Node 24 host with your own GitHub App and model credentials. The hosted version has a waitlist; join it and we will send one note when early access opens.
 
 ### Does it merge changes on its own?
 
@@ -117,5 +117,5 @@ Your own traces and the outputs you already shipped, not public benchmarks. Judg
 
 ### How is it different from running the CLI myself?
 
-Same proof loop, different cadence. The CLI is an audit you run when you want it. The agent runs that loop on a schedule: it re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and turns each result into a pull request you review.
+Same proof loop, different cadence. The CLI is an audit you run when you want it. The agent runs that loop on a schedule: it re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and opens a draft pull request when a replay clears every gate.
 `;

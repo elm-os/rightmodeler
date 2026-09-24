@@ -1,0 +1,159 @@
+{
+  "slug": "open-frontier",
+  "name": "The Open Frontier",
+  "website": "https://www.theopenfrontier.com",
+  "logo": "/vs/logos/open-frontier.svg",
+  "category": "benchmarks",
+  "verdict": "different-job",
+  "verdictLabel": "Different job · a public scoreboard vs your traffic",
+  "title": "rightmodeler vs The Open Frontier: scoreboard vs audit",
+  "description": "The Open Frontier, built by Together AI, shows Artificial Analysis scores and prices for open models. rightmodeler tests cheaper models on your own traces.",
+  "h1": "rightmodeler vs The Open Frontier",
+  "lede": "The Open Frontier is a free-to-read site, built by Together AI, that republishes Artificial Analysis scores and published prices for open models, use case by use case. rightmodeler reads no public scores: it replays your own recorded traces through cheaper models and reports, step by step, which ones held up.",
+  "integrationSlug": "",
+  "related": ["vals-ai", "openrouter", "not-diamond"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Different jobs at different moments. The Open Frontier answers a market question: per its own pages, which open model looks best for a use case, what it costs, and how it compares with closed models, using Artificial Analysis scores and providers' published prices, refreshed daily by script. It says plainly that it grades nothing itself. rightmodeler answers a question about your stack: the free, MIT-licensed CLI replays your recorded traces through cheaper models from your provider's live catalog, judges each against the output you accepted, and turns an approved swap into a draft pull request a human merges. Browse the boards to see which open models are worth a look; run the audit to learn whether any of them can take a step of your agent."
+    },
+    {
+      "type": "prose",
+      "heading": "What The Open Frontier is, by its own account",
+      "intro": "Everything in this section is attributed to the site itself, as of its 2026-09-16 data refresh.",
+      "paragraphs": [
+        "Its page description calls it a Together AI benchmarking showcase, and its footer says it is built by Together AI. Its methodology page adds that Together runs inference and appears in the comparisons, and that competitors are always selectable and are shown winning where they win.",
+        "It grades nothing: \"We do not grade models,\" its methodology page says. Every score is Artificial Analysis's, from AA Intelligence Index v4.3 and AA's capability indexes. Prices are providers' published serverless rates, Together's for the models Together serves, and a daily script rewrites the data so nobody edits a number by hand.",
+        "Its own rules are stated too. The field is every model AA has scored on the full index with a published price, 71 of the 215 AA tracks. The value pick is the cheapest open model that keeps 70% of the open leader's score. A missing result stays a gap, never a zero. Where Together serves a model and AA has measured that endpoint, Together's speed is the one shown.",
+        "What it shows: use-case boards from Intelligence and Coding to Legal and Finance, each with an open pick, a best-value pick, and a closed model to beat; a ranked leaderboard with each model's license; and a calculator that sets your token volume on an open model on Together against a closed API. As of its 2026-09-16 data, Artificial Analysis scores as shown on The Open Frontier put GLM-5.3 8.5 points behind Claude Fable 5.1 on the Intelligence Index, holding 84% of the top score."
+      ]
+    },
+    {
+      "type": "table",
+      "heading": "Same models, different evidence",
+      "intro": "What each one looks at before it calls a model good enough.",
+      "caption": "open-frontier vs rightmodeler",
+      "leftLabel": "The Open Frontier",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "question",
+          "theirs": "which open model looks best for a use case, and what it costs",
+          "ours": "which steps of your agent a cheaper model can hold"
+        },
+        {
+          "dimension": "scores",
+          "theirs": "Artificial Analysis's, republished; the site runs no evals",
+          "ours": "measured on replays of your own recorded traces"
+        },
+        {
+          "dimension": "reference",
+          "theirs": "AA's public evaluations, one harness for every model",
+          "ours": "the output your agent shipped and you accepted"
+        },
+        {
+          "dimension": "cost",
+          "theirs": "published per-token prices and AA's cost to run its index",
+          "ours": "cost per case on your replays, next to the current model's"
+        },
+        {
+          "dimension": "field",
+          "theirs": "the 71 models AA has fully scored and priced, as of 2026-09-16",
+          "ours": "cheaper models in your configured provider's live catalog"
+        },
+        {
+          "dimension": "what you get",
+          "theirs": "boards, a leaderboard, and a cost calculator, nothing to install",
+          "ours": "a per-step report and, once you approve, a draft pull request"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one do you open?",
+      "intro": "Three situations, each with the honest call.",
+      "scenarios": [
+        {
+          "scenario": "You are starting a new coding feature and want a quick, attributed shortlist of open models with prices before writing any code.",
+          "winner": "theirs",
+          "why": "There are no traces yet, so the audit has nothing to replay. The Open Frontier's Coding board names an open pick, a best-value pick, and the closed model to beat, from Artificial Analysis scores, and it costs nothing to open."
+        },
+        {
+          "scenario": "Your agent has run in production on a closed frontier model for months, and you want to know which steps a cheaper model could take without changing what users get.",
+          "winner": "ours",
+          "why": "An index averages public evaluations; your steps are your prompts and your accepted outputs. The CLI replays each recorded step through cheaper candidates, judges them against what you shipped, abstains where the evidence is thin, confirms multi-step swaps end to end, and proposes only model identifier changes, in a draft pull request a human merges."
+        },
+        {
+          "scenario": "An open model near the top of a board costs less than what one of your steps runs, and your provider lists it.",
+          "winner": "both",
+          "why": "The board is a fine place to find it. Add its ID, spelled the way your provider's catalog spells it, to the allowModels list in your audit policy file, and the CLI tests it on your own traces. The board says it scores well on public evaluations; the audit says whether it matches the outputs you accepted."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "The Open Frontier shows the whole field on one attributed index, closed models included, with licenses and prices, and there is nothing to install. rightmodeler only ever sees the candidates your configured provider lists, and only the ones cheaper than what a step runs today.",
+        "It is useful before you have traffic. rightmodeler needs recorded traces and has nothing to say about a system that has not run yet.",
+        "rightmodeler ranks no models and publishes no scores. A verdict on your traces says nothing about anyone else's, and it measures agreement with the output you shipped, not correctness."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page uses",
+      "terms": [
+        {
+          "term": "Artificial Analysis Intelligence Index",
+          "def": "A composite of ten public evaluations weighted across agents, coding, scientific reasoning, and general, per The Open Frontier's methodology page, which carries v4.3. It is Artificial Analysis's score; the site republishes it."
+        },
+        {
+          "term": "swap candidate",
+          "slug": "swap-candidate",
+          "def": "A cheaper model the audit is testing for one step of your agent, drawn from your configured provider's live catalog."
+        },
+        {
+          "term": "reference evidence",
+          "slug": "reference-evidence",
+          "def": "Agreement between a candidate's answer and the output you accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness."
+        },
+        {
+          "term": "quality floor",
+          "slug": "quality-floor",
+          "def": "The configurable minimum a candidate's worst-case agreement must clear, on the cases it was chosen on and again on held-out cases, before the audit recommends it."
+        },
+        {
+          "term": "abstain",
+          "slug": "abstain",
+          "def": "What the audit does when a step's sample is too small or its evidence incomplete: it recommends nothing rather than guessing."
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does The Open Frontier benchmark models itself?",
+          "a": "No, by its own account. Its methodology page says \"We do not grade models\" and \"We never run an eval or assign a score.\" Every score is Artificial Analysis's, read by a daily script, so cite those numbers as Artificial Analysis scores as shown on The Open Frontier, with the date of its data."
+        },
+        {
+          "q": "Who is behind The Open Frontier?",
+          "a": "Its page description calls it a Together AI benchmarking showcase, and its footer says it is built by Together AI. Its methodology page notes that Together runs inference and appears in the comparisons, and states that competitors are always selectable and are shown winning where they win."
+        },
+        {
+          "q": "Can rightmodeler test a model I found on The Open Frontier?",
+          "a": "Yes, if the provider you configure lists it with a price and it costs less than the model a step runs today. Add its catalog ID to allowModels in a policy file passed with --policy. There is no integration: rightmodeler never reads The Open Frontier's data, and the board's scores play no part in the verdict."
+        },
+        {
+          "q": "Is The Open Frontier's cost the same as the cost the audit reports?",
+          "a": "No. The Open Frontier shows published per-token prices and Artificial Analysis's cost to run its index, and its calculator sets a token volume you choose on an open model on Together against a closed API. The audit measures cost per case on replays of your own traces, next to what the current model cost on the same cases."
+        },
+        {
+          "q": "Does rightmodeler replace The Open Frontier?",
+          "a": "No. The Open Frontier is a map of the field: which open models score well on public evaluations and what they cost to run. rightmodeler is a check on your own agent: which of its steps a cheaper model can take without drifting from the outputs you accepted. Many teams will want the map first and the check second."
+        }
+      ]
+    }
+  ]
+}
