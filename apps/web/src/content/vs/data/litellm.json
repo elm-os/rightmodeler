@@ -1,6 +1,8 @@
 {
   "slug": "litellm",
   "name": "LiteLLM",
+  "website": "https://www.litellm.ai",
+  "logo": "/integrations/logos/litellm.png",
   "category": "gateway",
   "verdict": "complement",
   "verdictLabel": "Complement · different clock, same stack",

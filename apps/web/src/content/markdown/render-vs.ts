@@ -102,7 +102,16 @@ function block(item: VsBlock, name: string): string[] {
 }
 
 export function renderVsMarkdown(data: VsPageData): string {
-  const lines = [`# ${data.h1}`, "", data.lede, "", data.verdictLabel, ""];
+  const lines = [
+    `# ${data.h1}`,
+    "",
+    data.lede,
+    "",
+    data.verdictLabel,
+    "",
+    `Official site: ${data.website}`,
+    "",
+  ];
   for (const entry of data.blocks) lines.push(...block(entry, data.name));
   return lines
     .join("\n")

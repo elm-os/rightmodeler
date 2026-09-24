@@ -28,7 +28,7 @@ export function renderVsIndexMarkdown(): string {
   return [
     "# Different question, different tool",
     "",
-    `Honest comparisons with routers, gateways, and eval platforms: what each tool decides, what it measures, and when to use which.`,
+    `Honest comparisons with gateways, eval platforms, routers, spend meters, model trainers, and benchmarks: what each tool decides, what it measures, and when to use which.`,
     "",
     ...getAllComparisons().map((comparison) =>
       link(
@@ -44,7 +44,7 @@ export function renderIntegrationsIndexMarkdown(): string {
   return [
     "# Works with the traces you already have",
     "",
-    "Every tool rightmodeler works with: the trace formats it reads and the infrastructure it replays through.",
+    "Every tool rightmodeler works with: the trace formats it reads, the infrastructure it replays through, and what is coming next.",
     "",
     ...getAllIntegrations().map((integration) =>
       link(

@@ -53,7 +53,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How do I stay in the loop?",
-    a: "Watch the repository for releases, or follow the accounts linked above. The waitlists on the agent and Crucible pages send one note when early access opens, and nothing else.",
+    a: "Watch the repository for releases, or follow the accounts linked above. The waitlists for the hosted agent and for Crucible each send one note when early access opens, and nothing else.",
   },
 ];
 

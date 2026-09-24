@@ -50,7 +50,7 @@ The per-step report shown on the card, mid-scroll. The figures are stamped illus
 
 ## Then make it continuous
 
-The agent will open evidence-backed model-change pull requests, and Crucible keeps every layer watched. Both are on the way.
+Self-host the agent today and it rechecks prices on a schedule, then opens evidence-backed model-change pull requests once you give the word; the hosted version has a waitlist. Crucible, which will keep every layer watched, is in development.
 
 - [Meet the agent](/agent)
 - [Meet Crucible](/crucible)

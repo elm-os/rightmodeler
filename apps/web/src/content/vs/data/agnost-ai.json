@@ -1,0 +1,147 @@
+{
+  "slug": "agnost-ai",
+  "name": "Agnost AI",
+  "website": "https://agnost.ai",
+  "logo": "/vs/logos/agnost-ai.svg",
+  "category": "training",
+  "verdict": "different-job",
+  "verdictLabel": "Different job · train a model vs pick one",
+  "title": "rightmodeler vs Agnost AI: pick a model or train one",
+  "description": "Agnost AI monitors agents in production and, per its YC profile, trains custom models from those conversations. rightmodeler picks cheaper existing models.",
+  "h1": "rightmodeler vs Agnost AI",
+  "lede": "Agnost AI watches your agent's production conversations for silent failures and, per its YC profile, turns that data into custom models. rightmodeler trains nothing: it replays the traces you already have through cheaper models your provider already serves, and shows step by step which ones held up against the outputs you accepted.",
+  "integrationSlug": "",
+  "related": ["thirdbrain-labs", "riften", "braintrust"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Different interventions, and not mutually exclusive. As of 2026-09-22, Agnost AI's own site sells monitoring for chat and voice agents: it reads real production conversations to find silent failures, frustrated users, and policy violations, then proposes prompt, tool, and workflow fixes your team approves. Its YC profile adds the other half of the plan: turning that same conversation data into custom models that run the agent \"better, faster & cheaper than frontier models\" (their claim). On agnost.ai that half appears as Fine-tuned SLMs on the Enterprise plan. rightmodeler trains nothing. The MIT-licensed CLI replays the traces you already recorded through cheaper models your configured provider already serves, judges each one against the output you accepted, and opens a draft pull request that changes only model identifiers once a candidate clears the bar. Training a model and picking a better rented one both answer a model bill, with very different commitments: training data, a training run, hosting, and upkeep on one side; a reviewed change to a model identifier on the other."
+    },
+    {
+      "type": "prose",
+      "heading": "Two descriptions, both theirs",
+      "intro": "What Agnost AI says on its own site, and what its YC profile adds.",
+      "paragraphs": [
+        "On its homepage, docs, and llms.txt, as of 2026-09-22, Agnost AI is monitoring for AI agents in production. You connect an agent through its SDKs or OpenTelemetry and send production conversations and traces. Agnost then groups what it finds: recurring intents, user frustration, quality and policy violations, and silent failures such as an agent saying it sent a PDF that never arrived (their example). Its Auto Improve workflow investigates a finding, gathers repository context, and prepares a change. The homepage says you check the replay results and approve the suggested fix; the docs say to review the diff and run your tests like any other contribution.",
+        "The YC profile, for the Summer 2026 batch, goes further. Its one-liner says Agnost finds where AI agents fail and then trains better models to run them, and the long description says the same conversation data becomes custom models. Its YC launch post sketches the process: identify the recurring workflows in your traces, build an eval set from held-out production traces, train a specialist model, and benchmark it against your current model on success, latency, and cost, switching only when the specialist wins. It reports one early customer's result on a single workload, as its own figure. On agnost.ai the training half shows up in one place: Fine-tuned SLMs (small language models), listed on the custom-priced Enterprise plan beside self-hosted VPC deployments. The self-serve plans, the docs, and llms.txt describe prompt, tool, and workflow improvements, not training. We take both descriptions at face value; we have not used the training offer.",
+        "Credit where due. Agnost looks at something rightmodeler never does: whether the person in the conversation actually got what they needed. A trace can report success on a conversation that failed its user, and Agnost reads the conversation to catch that, continuously, on live traffic, with alerts. rightmodeler only asks whether a cheaper model would have produced the answer you already accepted. It has no view of user frustration, and an audit will never tell you your agent is failing people."
+      ]
+    },
+    {
+      "type": "table",
+      "heading": "What each path asks of you",
+      "intro": "A custom model is a new thing to own. A model swap is a change to a string. The rows below are where that difference lands.",
+      "caption": "agnost-ai vs rightmodeler",
+      "leftLabel": "Agnost AI",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "the change",
+          "theirs": "prompt, tool, and workflow fixes (site); custom models from your conversations (YC profile)",
+          "ours": "a model identifier, swapped for a cheaper model your provider already serves"
+        },
+        {
+          "dimension": "training",
+          "theirs": "per its YC launch post: find the recurring workflows in your traces, build an eval set from held-out production traces, train a specialist model, and benchmark it against your current one",
+          "ours": "none; nothing is trained, tuned, or distilled"
+        },
+        {
+          "dimension": "deployment",
+          "theirs": "a trained model has to be served somewhere; hosting terms are not published on their site",
+          "ours": "nothing new to host; the approved model runs where your current one does"
+        },
+        {
+          "dimension": "model ownership",
+          "theirs": "who holds the weights is not stated on their site as of 2026-09-22",
+          "ours": "no weights change hands; you keep renting from the provider you already use"
+        },
+        {
+          "dimension": "where your data goes",
+          "theirs": "the conversations you send to Agnost's hosted service, or a self-hosted VPC on Enterprise; its conversation SDKs are MIT licensed",
+          "ours": "it stays on your machine; replays run through the provider you configure, on your own key"
+        },
+        {
+          "dimension": "when it runs",
+          "theirs": "continuously, on production traffic, with alerts",
+          "ours": "when you run it, on traces you already recorded"
+        },
+        {
+          "dimension": "human gate",
+          "theirs": "you approve the suggested fix; the docs say review the diff and run your tests",
+          "ours": "a draft pull request that changes only model identifiers; a human reviews and merges"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one fits the job",
+      "intro": "Three situations, and the honest call in each.",
+      "scenarios": [
+        {
+          "scenario": "Your support agent's dashboards look healthy, yet users keep asking the same question twice and leaving, and nobody has filed a bug.",
+          "winner": "theirs",
+          "why": "Finding silent failures in real conversations is Agnost AI's core product as of 2026-09-22: it groups frustration, repeated requests, and violations, counts the users affected, and proposes a fix you approve. rightmodeler never reads conversations for user outcomes; it only compares models against answers you already accepted."
+        },
+        {
+          "scenario": "The agent works and users are happy, but every step runs on the same premium model, and you want a cheaper setup this quarter without training or hosting anything new.",
+          "winner": "ours",
+          "why": "The CLI shortlists cheaper models from your provider's live catalog, replays each step of your recorded traces through them, and judges each against the output you accepted. A winner must clear the quality floor again on held-out cases, and multi-step swaps are confirmed end to end before `rightmodeler apply` opens a draft pull request that changes only model identifiers. Where the evidence is thin, it abstains."
+        },
+        {
+          "scenario": "One narrow, high-volume step is still expensive, and you are weighing a custom model trained on your own conversations.",
+          "winner": "both",
+          "why": "Run the audit first. If a cheaper model your provider already serves holds that step, the change is a model identifier and nothing needs training. If no candidate clears the floor, you have evidence that off-the-shelf models do not fit, which is the case a specialized model is built for. Per its YC profile that is where Agnost AI is heading, and on its site it sits on the Enterprise plan. Price in the training data, hosting, and upkeep before you commit."
+        }
+      ]
+    },
+    {
+      "type": "fork",
+      "left": {
+        "heading": "Reach for Agnost AI when",
+        "items": [
+          "You need to know where users are failing, not only where the bill is: frustration, repeated asks, violations, silent failures.",
+          "You run chat or voice agents and want continuous monitoring, with alerts, on real traffic.",
+          "You are ready to own a specialized model, with the training data, hosting, and upkeep that come with it; per its YC profile, that is the direction Agnost AI is building toward."
+        ]
+      },
+      "right": {
+        "heading": "Reach for rightmodeler when",
+        "items": [
+          "The agent already does its job, and the question is whether each step pays for more model than it needs.",
+          "You want the change to stay small: a cheaper model from the provider you already use, swapped through a reviewed pull request, with nothing trained or hosted.",
+          "You would rather not send conversations to another hosted service. The CLI runs locally, with no rightmodeler server, account, or telemetry, and replays run through the provider you configure, on your own key."
+        ]
+      }
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace Agnost AI?",
+          "a": "No. They make different changes and can run on the same agent. Agnost AI watches production conversations for failures users feel and proposes fixes; per its YC profile it also trains custom models from that data. rightmodeler asks one narrower question, offline: which existing model does each step need? It changes only model identifiers, so using one does not rule out the other."
+        },
+        {
+          "q": "Is Agnost AI a monitoring tool or a model-training company?",
+          "a": "It depends where you read. As of 2026-09-22, agnost.ai, its docs, and its llms.txt present monitoring for AI agents with reviewed prompt, tool, and workflow fixes, and list Fine-tuned SLMs only on the Enterprise plan. Its YC profile leads with training better models to run the agent. We report both and have not used the training offer."
+        },
+        {
+          "q": "What does a custom model ask of my team that a model swap does not?",
+          "a": "A trained model is a new thing to own. It needs training data (here, your production conversations), a training run, somewhere to serve it, and retraining as your agent and your users change. As of 2026-09-22, Agnost AI has not published how it handles hosting or who holds the weights, so ask. A rightmodeler swap asks for none of that: the approved model is one your provider already serves, and the change is a model identifier in a draft pull request that a human reviews and merges."
+        },
+        {
+          "q": "Can rightmodeler read my Agnost AI data?",
+          "a": "No integration ships: there is no Agnost AI trace adapter, and the audit does not read Agnost's dashboard. The CLI reads the traces your own logging already writes, such as OpenTelemetry GenAI exports or Langfuse, Braintrust, and LangSmith exports."
+        },
+        {
+          "q": "Where does my data go with each?",
+          "a": "With Agnost AI, you send the conversations and traces you choose to its hosted service; Enterprise lists self-hosted VPC deployments. Per its site, data is encrypted in transit and at rest and is not used to train third-party models, and its FAQ says it does not redact PII for you, so redact before sending. With rightmodeler, traces stay on your machine: there is no rightmodeler server, account, or telemetry, and replays run through the provider you configure, on your own key."
+        },
+        {
+          "q": "Is there an open-source version of Agnost AI?",
+          "a": "Not of the product, as of 2026-09-22. Its conversation SDKs on npm and PyPI are MIT licensed, but the analysis runs in Agnost's hosted service, with a free tier of 1,000 events a month and self-hosted VPC deployments on Enterprise. The rightmodeler CLI is MIT licensed and runs on your machine; you start it with `npx rightmodeler init`."
+        }
+      ]
+    }
+  ]
+}

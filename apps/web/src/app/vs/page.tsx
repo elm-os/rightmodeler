@@ -12,23 +12,9 @@ import { SITE_URL } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "rightmodeler vs alternatives",
   description:
-    "Where rightmodeler ends and routers, gateways, and eval platforms begin: honest side-by-side pages on what each tool decides, what it measures, and when to use which.",
+    "Where rightmodeler ends and gateways, eval platforms, routers, spend meters, model trainers, and benchmarks begin: honest side-by-side pages on what each tool decides and when to use which.",
   path: "/vs",
 });
-
-// Official vendor marks. The five shared with /integrations are referenced in place; only the
-// marks with no integration sibling live in public/vs/logos. The map keeps the mixed paths and
-// extensions in one place, as the integrations hub does.
-const LOGOS: Record<string, string> = {
-  openrouter: "/integrations/logos/openrouter.svg",
-  litellm: "/integrations/logos/litellm.png",
-  "vercel-ai-gateway": "/integrations/logos/vercel-ai-gateway.svg",
-  braintrust: "/integrations/logos/braintrust.svg",
-  langsmith: "/integrations/logos/langsmith.svg",
-  promptfoo: "/vs/logos/promptfoo.svg",
-  "not-diamond": "/vs/logos/not-diamond.svg",
-  martian: "/vs/logos/martian.svg",
-};
 
 // The catalog bands: grouping is presentation only — the ItemList JSON-LD below stays flat so
 // every comparison keeps its own entry. Bands with no registered entries simply don't render.
@@ -50,6 +36,24 @@ const BANDS: { title: string; intro: string; category: string }[] = [
     intro:
       "They predict the right model per request, at runtime. rightmodeler measures it per step, at release time.",
     category: "router",
+  },
+  {
+    title: "The meters",
+    intro:
+      "They show where AI spend goes, or trim what each call carries. rightmodeler asks whether each step needs the model it pays for.",
+    category: "spend",
+  },
+  {
+    title: "The trainers",
+    intro:
+      "They train a custom model on your data. rightmodeler measures the models you can already call, step by step, against outputs you accepted.",
+    category: "training",
+  },
+  {
+    title: "The scorekeepers",
+    intro:
+      "They rank models on shared test sets. rightmodeler scores candidates on your own traces, step by step.",
+    category: "benchmarks",
   },
 ];
 
@@ -76,7 +80,7 @@ export default function VsPage() {
       <PageHero
         eyebrow="Comparisons"
         title="Different question, different tool."
-        lede="rightmodeler is an offline audit that measures cheaper models against outputs you already accepted. It is not a router, a gateway, or an eval platform, but it reads their traces and rides their rails. Each page draws the line."
+        lede="rightmodeler is an offline audit that measures cheaper models against outputs you already accepted. Gateways, eval platforms, routers, spend meters, model trainers, and benchmarks each answer a different question; rightmodeler reads traces from some and replays through others. Each page draws the line."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
@@ -115,7 +119,7 @@ export default function VsPage() {
                         {/* Official mark, unboxed per the design brief; the link text names the tool. */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={LOGOS[comparison.slug]}
+                          src={comparison.logo}
                           alt=""
                           aria-hidden
                           loading="lazy"

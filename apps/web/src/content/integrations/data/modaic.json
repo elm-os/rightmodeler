@@ -1,0 +1,95 @@
+{
+  "slug": "modaic",
+  "name": "Modaic",
+  "website": "https://www.modaic.dev",
+  "logo": "/integrations/logos/modaic.png",
+  "category": "coming-soon",
+  "categoryLabel": "Coming soon · evaluator",
+  "title": "Modaic integration: planned evaluator, not built yet",
+  "description": "Not built yet: a planned rightmodeler evaluator will let a judge in your Modaic account grade replays via Modaic's hosted API. What works now, what is planned.",
+  "h1": "rightmodeler + Modaic",
+  "lede": "Modaic helps teams make judgment calls consistent, with a confidence score on each decision and alignment from expert feedback. A planned rightmodeler evaluator will let a judge you keep in Modaic grade the replayed candidates through Modaic's hosted API. It is not available yet.",
+  "tldr": "Not available yet. rightmodeler has no Modaic integration today, and none of the steps below exist in the CLI. The plan calls Modaic's hosted API with your own Modaic account, because that is where Modaic's judges, confidence scores, and alignment run; its open-source SDK cannot run them on your machine. Building is waiting on Modaic confirming its canonical API. Until then, run Modaic alongside rightmodeler and grade the replays with the built-in judge or with Braintrust, Langfuse, or LangSmith through --evaluator.",
+  "steps": [
+    {
+      "label": "01 · Define",
+      "title": "You will keep the judge in Modaic",
+      "body": "Planned: you will define and align the judge in your Modaic account, the way Modaic works today, and pin the exact version the audit should use."
+    },
+    {
+      "label": "02 · Replay",
+      "title": "Replays will run exactly as they do today",
+      "body": "Planned: nothing about shortlisting or replay will change. rightmodeler will still pick cheaper candidates from your provider's live catalog and rerun each recorded step through them on your own key."
+    },
+    {
+      "label": "03 · Grade",
+      "title": "Your Modaic judge will grade each candidate",
+      "body": "Planned: rightmodeler will send each case's input, the output you accepted, and the candidate's output to Modaic's API, without naming the candidate model, and record the pinned judge version with every score, so a changed judge means a fresh replay rather than mixed evidence. A confidence number will never decide whether a candidate passes."
+    },
+    {
+      "label": "04 · Gate",
+      "title": "The same gates will decide",
+      "body": "Planned: the scores will face the release gates every evaluator faces today. A missing score or an incomplete cell will count against the candidate instead of being filled in, the winner will still have to clear the quality floor again on held-out cases, and the reference audit stays in force. rightmodeler apply will still open a draft pull request that a human reviews."
+    }
+  ],
+  "setup": {
+    "intro": "There is nothing Modaic-specific to set up yet. Both commands below work today: the first grades the replays with the built-in judge, the second with Langfuse scores through an evaluator the CLI already supports.",
+    "commands": [
+      {
+        "comment": "# today: replay and grade with the built-in judge",
+        "command": "npx rightmodeler init --traces ./traces.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY"
+      },
+      {
+        "comment": "# today: grade with a supported evaluator; numeric scores need a pass threshold",
+        "command": "npx rightmodeler init --traces ./traces.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --evaluator langfuse --evaluator-scorer correctness --evaluator-gate-threshold 0.8"
+      }
+    ]
+  },
+  "reads": [],
+  "detection": "",
+  "useCases": [
+    {
+      "title": "Grade the audit with a judge your team already aligned",
+      "body": "Once the integration exists, a team that keeps its judgment calls in Modaic will be able to point the audit at one of those judges instead of the judge rightmodeler picks. Until then the built-in judge, or an evaluator you already run, grades the replays."
+    },
+    {
+      "title": "Keep Modaic on its own job today",
+      "body": "No wiring is needed to use both. Modaic keeps making and calibrating the decisions your product runs; rightmodeler audits, offline, which model each step of your agent needs, and proposes swaps as draft pull requests."
+    },
+    {
+      "title": "See which judge graded a swap",
+      "body": "When it ships, every Modaic score will carry the pinned judge version that produced it, so whoever reviews the swap pull request can see what graded the evidence, not only the verdict."
+    }
+  ],
+  "limits": [
+    "There is no Modaic integration today. The CLI has no Modaic evaluator and no Modaic code, and the steps above describe planned behavior only. The setup commands are the exception: they use options that work today.",
+    "The integration will need a Modaic account and key, and each graded case will go to Modaic's hosted service. Modaic's judges, confidence scores, and alignment run only there, so there is no local or open-source Modaic path.",
+    "Modaic's charges will sit outside rightmodeler's cost estimate and spend cap. Budget for them in your Modaic plan.",
+    "Any judge is a model grading a model. The reference audit, the sample-size minimums, and abstentions stay in force, and a pass means agreement with the output you shipped, not proof that either answer was correct.",
+    "There is no release date. Building waits on Modaic confirming its canonical API, and the design may change."
+  ],
+  "faq": [
+    {
+      "q": "Can I use Modaic with rightmodeler today?",
+      "a": "Side by side, yes; as an evaluator, no. The CLI has no Modaic evaluator yet. Modaic can keep running the decisions it calibrates while rightmodeler audits your agent's models offline. To grade replays today, use the built-in judge or pass --evaluator braintrust, langfuse, or langsmith."
+    },
+    {
+      "q": "Why Modaic's hosted API and not its open-source SDK?",
+      "a": "Because that is where Modaic's judging happens. Per its code, the open-source SDK requests Modaic's judge runs and confidence scores from Modaic's hosted service, and alignment runs only there; on its own, it is a DSPy program without those features. The plan calls the hosted API with your Modaic account so the grade comes from the judge you actually keep in Modaic."
+    },
+    {
+      "q": "Will Modaic's confidence scores count toward a pass?",
+      "a": "No. Confidence will be recorded as context next to each score and never treated as correctness. Modaic's own docs describe confidence as a ranking and thresholding signal, not a substitute for measuring agreement against labeled examples."
+    },
+    {
+      "q": "What happens if the judge fails on some cases?",
+      "a": "They will count against the candidate. That is how every supported evaluator works today: a missing score is recorded with a named reason and counted as a failure in the worst-case bound, and a family with missing cells abstains. The Modaic evaluator is planned to follow the same rules rather than fill the gaps in."
+    },
+    {
+      "q": "What is the integration waiting on?",
+      "a": "Modaic confirming its canonical API. As of 2026-09-22, Modaic's docs describe one set of endpoints, its published SDK calls another, and the documented endpoints returned Not Found at the documented address. The evaluator gets built against whichever API Modaic confirms."
+    }
+  ],
+  "related": ["braintrust", "langfuse", "langsmith"],
+  "cta": "github"
+}

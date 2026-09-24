@@ -1,6 +1,8 @@
 {
   "slug": "braintrust",
   "name": "Braintrust",
+  "website": "https://www.braintrust.dev",
+  "logo": "/integrations/logos/braintrust.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "Braintrust integration: replay spans on cheaper models",
@@ -27,7 +29,7 @@
     {
       "label": "04 · Report + apply",
       "title": "A report, then a pull request you review",
-      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. Where the evidence is thin the family abstains with a named reason. When one clears every release gate, rightmodeler apply opens a draft pull request that touches model identifiers and nothing else, and rollback restores the pre-apply files, refusing unless every restored digest matches. rightmodeler export --to braintrust pushes the trials and verdicts back into the project you already review."
+      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Where the evidence is thin the family abstains with a named reason. When one clears every release gate, rightmodeler apply opens a draft pull request that touches model identifiers and nothing else, and rollback restores the pre-apply files, refusing unless every restored digest matches. rightmodeler export --to braintrust pushes the trials and verdicts back into the project you already review."
     }
   ],
   "setup": {

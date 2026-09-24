@@ -1,6 +1,8 @@
 {
   "slug": "martian",
   "name": "Martian",
+  "website": "https://withmartian.com",
+  "logo": "/vs/logos/martian.svg",
   "category": "router",
   "verdict": "different-job",
   "verdictLabel": "Different job · complement at the gateway",
@@ -9,7 +11,7 @@
   "h1": "rightmodeler vs Martian",
   "lede": "Martian in 2026 is an interpretability research lab whose live product is a gateway: one key, a large catalog, and you name the model on every call. rightmodeler is the offline audit that reads your own traces and tells you, step by step, what that model should be.",
   "integrationSlug": "",
-  "related": ["openrouter", "not-diamond", "vercel-ai-gateway"],
+  "related": ["openrouter", "not-diamond", "vercel-ai-gateway", "conifer"],
   "cta": "github",
   "blocks": [
     {

@@ -1,6 +1,8 @@
 {
   "slug": "vercel-ai-gateway",
   "name": "Vercel AI Gateway",
+  "website": "https://vercel.com/ai-gateway",
+  "logo": "/integrations/logos/vercel-ai-gateway.svg",
   "category": "replay-engine",
   "categoryLabel": "Replay engine",
   "title": "Vercel AI Gateway integration: replay on your key",

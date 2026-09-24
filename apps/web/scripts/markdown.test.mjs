@@ -282,6 +282,7 @@ test("the vs twin spells out scenario verdicts and the hero verdict the way the 
     h1: "rightmodeler vs Acme",
     lede: "Lede.",
     verdictLabel: "Complement · rightmodeler runs on top",
+    website: "https://acme.example",
     blocks: [
       {
         type: "scenarios",
@@ -307,5 +308,11 @@ test("the vs twin spells out scenario verdicts and the hero verdict the way the 
   assert.ok(
     verdictAt < markdown.indexOf("## Scenarios"),
     "the verdict label must sit under the h1, before the first section",
+  );
+  assert.ok(
+    markdown.includes(
+      "Complement · rightmodeler runs on top\n\nOfficial site: https://acme.example\n\n## Scenarios",
+    ),
+    "the official site line must follow the verdict label, as the hero link follows the chip",
   );
 });

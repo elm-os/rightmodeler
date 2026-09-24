@@ -38,11 +38,11 @@ const POLICY: { key: string; value: string }[] = [
 const FAQ: FaqItem[] = [
   {
     q: "What is rightmodeler agent?",
-    a: "An autonomous agent that keeps every step of your AI stack on the right model. It watches new model releases, replays them against your real traces, judges each output against what you already shipped, and opens a pull request in your repo when a swap clears your quality floor and preferences.",
+    a: "An autonomous agent that keeps every step of your AI stack on the right model. Every week it rechecks the provider catalog for new and repriced models; once you give the word, it replays candidates against your real traces, judges each output against what you already shipped, and opens a draft pull request in your repo when a swap clears your quality floor and preferences.",
   },
   {
     q: "When can I use it?",
-    a: "Today, if you self-host: the agent ships in the open-source repo and runs on your own infrastructure with your own GitHub and model credentials. Join the waitlist for the hosted version and we will send one note when early access opens.",
+    a: "Today, if you self-host: the agent is in the MIT-licensed repo, and you clone it, build it, and run it on a long-lived Node 24 host with your own GitHub App and model credentials. The hosted version has a waitlist; join it and we will send one note when early access opens.",
   },
   {
     q: "Does it merge changes on its own?",
@@ -54,7 +54,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How is it different from running the CLI myself?",
-    a: "Same proof loop, different cadence. The CLI is an audit you run when you want it. The agent runs that loop on a schedule: it re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and turns each result into a pull request you review.",
+    a: "Same proof loop, different cadence. The CLI is an audit you run when you want it. The agent runs that loop on a schedule: it re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and opens a draft pull request when a replay clears every gate.",
   },
 ];
 
@@ -66,12 +66,12 @@ export default function AgentPage() {
       <PageHero
         eyebrow="Open source · by rightmodeler"
         title="The last model migration you do by hand."
-        lede="A new model ships. rightmodeler agent replays it against your real traces, prices the swap, and opens a pull request with the evidence attached. You review it like any other change. It lives in the open-source repo today; a hosted version is on the way."
+        lede="A new model ships. rightmodeler agent flags it in its weekly catalog check and prices the swap. Give the word and it replays the model against your real traces, then opens a pull request with the evidence attached. You review it like any other change. Self-host it today from the MIT-licensed repo; the hosted version has a waitlist."
       >
         <div className="max-w-md">
           <WaitlistForm product="agent" />
           <p className="mt-3 font-mono text-caption text-fog">
-            Get hosted early access. One note when it opens, no spam.
+            Join the hosted version waitlist. One note when it opens, no spam.
           </p>
         </div>
       </PageHero>

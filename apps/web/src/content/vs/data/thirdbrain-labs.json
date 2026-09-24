@@ -1,0 +1,165 @@
+{
+  "slug": "thirdbrain-labs",
+  "name": "ThirdBrain Labs",
+  "website": "https://thirdbrainlabs.ai",
+  "logo": "/vs/logos/thirdbrain-labs.png",
+  "category": "training",
+  "verdict": "different-job",
+  "verdictLabel": "Different job · own a model vs rent the right one",
+  "title": "rightmodeler vs ThirdBrain Labs: right-size or own",
+  "description": "ThirdBrain Labs helps domain experts train models they own. rightmodeler checks which rented model each step needs, from your traces. Adjacent, not a swap.",
+  "h1": "rightmodeler vs ThirdBrain Labs",
+  "lede": "ThirdBrain Labs helps domain experts train models they own, pitched as a way off rented black-box APIs. rightmodeler stays with the models you rent and checks, step by step against the outputs you accepted, which cheaper one each step actually needs.",
+  "integrationSlug": "",
+  "related": ["agnost-ai", "riften", "modaic"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "An adjacent alternative, not a drop-in replacement. ThirdBrain Labs, from a16z speedrun's cohort 006, helps domain experts train custom models and own them. Per its site, it captures training signals from expert work inside your workflow and trains and deploys domain-specific models; its speedrun profile calls this end-to-end post-training infrastructure applied on top of base models. rightmodeler keeps you on the models you already rent and makes each one earn its place: the MIT-licensed CLI replays the traces you already recorded through cheaper models your provider already serves, judges each against the output you accepted, and opens a draft pull request that changes only model identifiers. One path ends in weights you own and have to serve and keep current. The other ends in a reviewed change to a model identifier."
+    },
+    {
+      "type": "positioning",
+      "left": {
+        "heading": "ThirdBrain Labs: own the model",
+        "items": [
+          "Starts from expertise. Per its site, expert decisions become training signals, captured as people work; its speedrun profile describes post-training infrastructure that applies those decisions on top of base models.",
+          "Ends in a model you own: domain-specific models its site says it can train and deploy in weeks, not months, with your data, weights, and IP staying yours (their claim)."
+        ]
+      },
+      "right": {
+        "heading": "rightmodeler: right-size what you rent",
+        "items": [
+          "Starts from traces: the steps your agent already ran, with the outputs you already accepted as the reference. No new data to collect and no training set to build.",
+          "Ends in a reviewed pull request: a cheaper model your provider already serves, recommended per step only after it clears a quality floor on held-out cases, with abstentions wherever the evidence is thin."
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "heading": "What each path asks of you",
+      "intro": "Owning a model and choosing a rented one are both answers to model spend. They ask for very different things.",
+      "caption": "thirdbrain-labs vs rightmodeler",
+      "leftLabel": "ThirdBrain Labs",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "what you bring",
+          "theirs": "domain experts and their decisions, captured in your workflow (per its site)",
+          "ours": "traces your agent already recorded"
+        },
+        {
+          "dimension": "what you get",
+          "theirs": "domain-specific models, with data, weights, and IP you own (their claim)",
+          "ours": "a per-step report and a draft pull request that changes model identifiers"
+        },
+        {
+          "dimension": "training",
+          "theirs": "post-training on top of base models (speedrun profile)",
+          "ours": "none; the CLI never trains or tunes a model"
+        },
+        {
+          "dimension": "deployment",
+          "theirs": "train and deploy in weeks, not months (their claim); hosting details are not published",
+          "ours": "nothing new to deploy; the approved model is one your provider already serves"
+        },
+        {
+          "dimension": "rented APIs",
+          "theirs": "built to remove the dependency, per its site",
+          "ours": "kept; the audit decides which rented model each step uses"
+        },
+        {
+          "dimension": "how to start",
+          "theirs": "book a demo; no public docs, pricing, or code found as of 2026-09-22",
+          "ours": "`npx rightmodeler init`; MIT licensed, runs on your machine"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which path fits",
+      "intro": "Three situations, with the honest call in each.",
+      "scenarios": [
+        {
+          "scenario": "A team of domain specialists makes judgment calls that general models keep getting wrong, and leadership wants a model that encodes that judgment and belongs to the company.",
+          "winner": "theirs",
+          "why": "That is the job ThirdBrain Labs describes: turning expert decisions into training signal and domain-specific models you own. rightmodeler cannot make any model better at your domain. Its ceiling is the best cheaper model your provider already serves."
+        },
+        {
+          "scenario": "Your agent runs on provider APIs, works well, and you are comfortable renting models. You want to know which steps pay for more model than they need.",
+          "winner": "ours",
+          "why": "The CLI shortlists cheaper models from your provider's live catalog, replays each step of your recorded traces through them, and judges each against the output you accepted. A winner has to clear the quality floor again on held-out cases, multi-step swaps are confirmed end to end, and thin evidence ends in an abstention. Nothing is trained, and nothing new is hosted."
+        },
+        {
+          "scenario": "You are deciding whether to fund a model-training program at all.",
+          "winner": "both",
+          "why": "Run the audit first; it needs only traces you already have and provider calls on your own key. Steps where a cheaper rented model holds need no training. Steps where nothing cheaper clears the floor are where owning a specialized model makes its clearest case, and that is the conversation to take to a vendor like ThirdBrain Labs."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "ThirdBrain Labs aims at something rightmodeler will never do: produce a model. Capturing expert feedback continuously and turning it into weights is research and infrastructure work, and if your domain has truly outgrown general models, no amount of choosing between rented ones closes that gap.",
+        "It is also early. As of 2026-09-22 the public product surface is one landing page and a speedrun profile: no docs, pricing, public code, or named customers, and the call to action is booking a demo. Every capability on this page is their description, not something we have run.",
+        "Owning a model moves work to your side of the line: collecting the expert signal, evaluating each new version, serving it, and keeping it current as your domain shifts. Their site says the team brings automated evals and testing infrastructure, and that no heavy manual labor or external data vendors are required. Ask how hosting, evaluation, and retraining work before you compare costs.",
+        "And the audit's own limits, stated plainly: a passing score means a candidate agreed with the output you shipped, not that either answer was right. Thin evidence ends in an abstention, not a guess."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page uses",
+      "terms": [
+        {
+          "term": "post-training",
+          "def": "Further training applied to an existing base model, for example on your own examples or feedback, to specialize it. ThirdBrain Labs' speedrun profile describes its infrastructure this way; rightmodeler does none."
+        },
+        {
+          "term": "weights",
+          "def": "The learned parameters that make up a model. Owning the weights means you can run, move, and keep the model yourself; renting an API means you call a model the provider runs."
+        },
+        {
+          "term": "reference evidence",
+          "def": "Agreement between a cheaper candidate's answer and the output you already accepted for the same step. Evidence of agreement with shipped output, not proof of correctness.",
+          "slug": "reference-evidence"
+        },
+        {
+          "term": "quality floor",
+          "def": "The configurable minimum a candidate must clear, on the cases it was shortlisted on and again on held-out cases, before the audit recommends it.",
+          "slug": "quality-floor"
+        },
+        {
+          "term": "abstain",
+          "def": "What the audit does when a step's evidence is too thin: it recommends nothing rather than guessing.",
+          "slug": "abstain"
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Is ThirdBrain Labs a replacement for rightmodeler?",
+          "a": "No, and the reverse holds too. ThirdBrain Labs builds models you own from domain expertise; rightmodeler picks which existing, rented model each step of your agent needs. They sit side by side in a decision about model spend, but neither does the other's job, and neither drops into the other's place."
+        },
+        {
+          "q": "Should we train our own model or move to a cheaper existing one?",
+          "a": "Measure before you train. The audit shows, per step, whether a cheaper model your provider already serves agrees with the outputs you accepted, with sample sizes and abstentions attached. Where one does, a swap is the smaller change. Where none clears the quality floor, a specialized model is worth pricing out, along with the hosting, evaluation, and retraining it brings."
+        },
+        {
+          "q": "Does rightmodeler train, fine-tune, or distill models?",
+          "a": "No. It never changes a model; it changes which model a step calls. If your domain needs a model that does not exist yet, that is post-training work, the kind ThirdBrain Labs describes."
+        },
+        {
+          "q": "Can rightmodeler evaluate a model ThirdBrain Labs trains for us?",
+          "a": "Not as a shipped feature. There is no ThirdBrain Labs integration, and candidates come only from the configured provider's live catalog, priced below the model a step uses today. Judging a newly trained model belongs to the vendor's evals and your own."
+        },
+        {
+          "q": "What does ThirdBrain Labs cost, and is any of it open source?",
+          "a": "As of 2026-09-22 its site publishes no pricing, docs, or self-serve signup, and we found no public code; the only call to action is booking a demo. rightmodeler is an MIT-licensed CLI you start with `npx rightmodeler init`. What it spends is the provider calls it makes for replays and judging, on your own key, and `--max-cost-usd` caps that."
+        }
+      ]
+    }
+  ]
+}

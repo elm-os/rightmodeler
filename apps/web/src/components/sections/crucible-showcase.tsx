@@ -199,7 +199,7 @@ export function CrucibleShowcase() {
 
   return (
     <div>
-      <h2 className="sr-only">What Crucible gives you</h2>
+      <h2 className="sr-only">What Crucible will give you</h2>
 
       <div className="flex justify-center">
         <div

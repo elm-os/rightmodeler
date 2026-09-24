@@ -8,6 +8,8 @@
   "required": [
     "slug",
     "name",
+    "website",
+    "logo",
     "category",
     "verdict",
     "verdictLabel",
@@ -23,7 +25,14 @@
   "properties": {
     "slug": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
     "name": { "type": "string", "minLength": 1 },
-    "category": { "enum": ["gateway", "evals", "router"] },
+    "website": { "type": "string", "pattern": "^https://" },
+    "logo": {
+      "type": "string",
+      "pattern": "^/(vs|integrations)/logos/[a-z0-9-]+\\.(svg|png)$"
+    },
+    "category": {
+      "enum": ["gateway", "evals", "router", "spend", "training", "benchmarks"]
+    },
     "verdict": { "enum": ["complement", "competitor", "different-job"] },
     "verdictLabel": { "type": "string", "minLength": 1 },
     "title": { "type": "string", "minLength": 1 },

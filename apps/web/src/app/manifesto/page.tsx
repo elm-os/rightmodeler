@@ -31,7 +31,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How is this different from observability?",
-    a: "Observability shows you what happened. It doesn't replay your steps through cheaper models, measure agreement with accepted outputs, or prepare a repo edit. rightmodeler reports the evidence and applies only the changes you approve.",
+    a: "It asks a narrower question: can this step run on a cheaper model? rightmodeler replays your recorded steps through cheaper candidates, measures agreement with the outputs you accepted, and reports the evidence, sample size, and abstentions. A swap that clears every gate becomes a draft pull request that changes only model identifiers, and the merge stays with you. It reads the traces you export, so your observability tool stays where it is.",
   },
   {
     q: "Is it safe to downgrade automatically?",
@@ -374,7 +374,7 @@ const CLAIMS: {
   },
   {
     title: "A category, not a feature.",
-    body: "Evidence-backed model downgrading: detect, measure, review. A report you run today, pull requests next, continuous with Crucible.",
+    body: "Evidence-backed model downgrading: detect, measure, review. A report and a draft pull request today, continuous with Crucible next.",
     Mockup: ReviewMockup,
   },
 ];
@@ -486,7 +486,7 @@ export default function ManifestoPage() {
             <RelatedLinks
               links={[
                 { href: "/how-it-works", label: "How it works" },
-                { href: "/crucible", label: "Crucible (coming soon)" },
+                { href: "/crucible", label: "Crucible (in development)" },
                 { href: "/glossary", label: "Glossary" },
               ]}
             />

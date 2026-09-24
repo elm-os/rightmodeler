@@ -12,28 +12,10 @@ import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Integrations",
-  description: `Every tool rightmodeler works with: the ${TRACE_SOURCES.length} trace formats it reads and the infrastructure it replays through.`,
+  description: `Every tool rightmodeler works with: the ${TRACE_SOURCES.length} trace formats it reads, the infrastructure it replays through, and what is coming next.`,
   path: "/integrations",
   image: "/social/integrations.png",
 });
-
-// Official vendor marks, downloaded to public/integrations/logos. Two ship as raster; the map
-// keeps the odd extensions in one place.
-const LOGOS: Record<string, string> = {
-  "claude-code": "/integrations/logos/claude-code.svg",
-  codex: "/integrations/logos/codex.svg",
-  langsmith: "/integrations/logos/langsmith.svg",
-  "openai-sdk": "/integrations/logos/openai-sdk.svg",
-  langfuse: "/integrations/logos/langfuse.svg",
-  braintrust: "/integrations/logos/braintrust.svg",
-  phoenix: "/integrations/logos/phoenix.png",
-  otel: "/integrations/logos/otel.svg",
-  helicone: "/integrations/logos/helicone.svg",
-  weave: "/integrations/logos/weave.svg",
-  openrouter: "/integrations/logos/openrouter.svg",
-  litellm: "/integrations/logos/litellm.png",
-  "vercel-ai-gateway": "/integrations/logos/vercel-ai-gateway.svg",
-};
 
 // The catalog bands: grouping is presentation only — the ItemList JSON-LD below stays flat so
 // every integration keeps its own entry. Bands with no registered entries simply don't render.
@@ -44,14 +26,33 @@ const BANDS: { title: string; intro: string; categories: string[] }[] = [
     categories: ["trace-source", "trace-source-generic"],
   },
   {
-    title: "Replays through",
-    intro: "Where the candidate calls actually run.",
-    categories: ["replay-engine", "replay-method"],
+    title: "Grades the replays",
+    intro:
+      "Scorers you already trust grade each replay, in place of the built-in judge.",
+    categories: ["evaluator"],
   },
   {
-    title: "On the roadmap",
-    intro: "Named integrations arriving with Crucible.",
-    categories: ["roadmap"],
+    title: "Replays through",
+    intro: "Where the candidate calls actually run.",
+    categories: ["replay-engine", "replay-method", "execution-backend"],
+  },
+  {
+    title: "Ships the change",
+    intro:
+      "Where an approved swap becomes a change you review. rightmodeler never merges it for you.",
+    categories: ["source-control", "ci-recipe"],
+  },
+  {
+    title: "Maps your code",
+    intro:
+      "Static context about the code around each swap, shown beside the evidence and never counted as evidence.",
+    categories: ["code-context"],
+  },
+  {
+    title: "Coming soon",
+    intro:
+      "Not built yet. Each page says exactly what exists today and what does not.",
+    categories: ["coming-soon"],
   },
 ];
 
@@ -117,7 +118,7 @@ export default function IntegrationsPage() {
                         {/* Official mark, unboxed per the design brief; the link text names the tool. */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={LOGOS[integration.slug]}
+                          src={integration.logo}
                           alt=""
                           aria-hidden
                           loading="lazy"

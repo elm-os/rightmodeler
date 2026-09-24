@@ -11,15 +11,26 @@ export type IntegrationData = {
   slug: string;
   /** Display name, e.g. "LangSmith". Feeds "rightmodeler + <name>", hub rows, and related links. */
   name: string;
+  /** The vendor's official site, linked from the hero and the Markdown twin. Must be https://. */
+  website: string;
   /**
-   * How the tool relates to rightmodeler; switches which sections render.
+   * Official mark shown on the hub card: a file under public/integrations/logos, e.g.
+   * "/integrations/logos/langsmith.svg".
+   */
+  logo: string;
+  /**
+   * How the tool relates to rightmodeler; switches which sections render and picks the hub band.
+   * scripts/check-integrations.test.mjs rejects any value not listed here.
    * One of: "trace-source" (dedicated ingest adapter) | "trace-source-generic" (autodetected,
    * generic adapter) | "replay-engine" (OpenRouter or Vercel AI Gateway) |
-   * "replay-method" (LiteLLM proxy) |
-   * "roadmap" (named future integration, e.g. Crucible routing).
+   * "replay-method" (LiteLLM proxy) | "execution-backend" (where confirmation runs your
+   * pipeline) | "evaluator" (external scorers that grade the replays) | "source-control" (where
+   * the swap pull request opens) | "ci-recipe" (running the audit from CI) | "code-context"
+   * (static code context beside the evidence) | "coming-soon" (not built yet; the page says
+   * exactly what exists today).
    */
   category: string;
-  /** Mono kicker under the eyebrow, e.g. "Trace source · dedicated adapter", "Roadmap · Crucible". */
+  /** Mono kicker under the eyebrow, e.g. "Trace source · dedicated adapter", "Replay engine". */
   categoryLabel: string;
   /** <title> (the layout appends "· rightmodeler"). Keyword-rich, ≈45–55 chars; may differ from H1. */
   title: string;

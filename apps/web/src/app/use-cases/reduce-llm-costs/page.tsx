@@ -299,9 +299,11 @@ export default function ReduceLlmCostsPage() {
                     Then make it continuous
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
-                    The agent will open evidence-backed model-change pull
-                    requests, and Crucible keeps every layer watched. Both are
-                    on the way.
+                    Self-host the agent today and it rechecks prices on a
+                    schedule, then opens evidence-backed model-change pull
+                    requests once you give the word; the hosted version has a
+                    waitlist. Crucible, which will keep every layer watched, is
+                    in development.
                   </p>
                   <div className="mt-5 flex flex-wrap gap-2.5">
                     <Link href="/agent" className={pillPrimary}>

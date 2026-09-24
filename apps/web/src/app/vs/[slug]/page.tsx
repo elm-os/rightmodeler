@@ -8,6 +8,7 @@ import { JsonLd } from "@/components/json-ld";
 import { Reveal } from "@/components/reveal";
 import { FaqAccordion } from "@/components/sections/faq-accordion";
 import { GithubButton } from "@/components/sections/github-button";
+import { OfficialSiteLink } from "@/components/sections/official-site-link";
 import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
@@ -297,9 +298,12 @@ export default async function VsDetailPage({
         title={data.h1}
         lede={data.lede}
       >
-        <span className="inline-flex items-center rounded-md border border-ash-border bg-warm-sand px-3 py-1.5 font-mono text-caption text-midnight-ink">
-          {data.verdictLabel}
-        </span>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <span className="inline-flex items-center rounded-md border border-ash-border bg-warm-sand px-3 py-1.5 font-mono text-caption text-midnight-ink">
+            {data.verdictLabel}
+          </span>
+          <OfficialSiteLink href={data.website} name={data.name} />
+        </div>
       </PageHero>
 
       {data.blocks.map((block, i) => (
@@ -322,8 +326,9 @@ export default async function VsDetailPage({
                     Continuous optimization arrives with Crucible
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
-                    Crucible is the analytics and optimization suite on the way.
-                    Join the waitlist and it will meet your stack where it runs.
+                    Crucible is the analytics and optimization suite in
+                    development. Join the waitlist and it will meet your stack
+                    where it runs.
                   </p>
                   <div className="mt-5">
                     <Link href="/crucible" className={pillPrimary}>

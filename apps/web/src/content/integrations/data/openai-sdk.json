@@ -1,6 +1,8 @@
 {
   "slug": "openai-sdk",
   "name": "the OpenAI SDK",
+  "website": "https://developers.openai.com/api/docs/libraries",
+  "logo": "/integrations/logos/openai-sdk.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "OpenAI SDK integration: replay logs on cheaper models",
@@ -32,7 +34,7 @@
     {
       "label": "05 · Report + apply",
       "title": "A per-step report, then a pull request",
-      "body": "The run writes report.md and report.json with a verdict per step family and streams JSONL events as it works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
+      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {

@@ -2,7 +2,8 @@
 // ./data, validated against ./vs-page.schema.json by scripts/check-vs.test.mjs and typed against
 // VsPageData here (a wrong or missing field fails `pnpm check-types`); the hub, the [slug] route,
 // the sitemap, and llms.txt all resolve from this list. To add a comparison: create a JSON file
-// and add one import + one entry below. Listed in hub display order: rails, graders, routers.
+// and add one import + one entry below. Listed in hub display order: rails, graders, routers,
+// meters, trainers, scorekeepers.
 
 import type { VsPageData } from "@/content/vs/types";
 import openrouter from "@/content/vs/data/openrouter.json";
@@ -11,8 +12,17 @@ import vercelAiGateway from "@/content/vs/data/vercel-ai-gateway.json";
 import braintrust from "@/content/vs/data/braintrust.json";
 import langsmith from "@/content/vs/data/langsmith.json";
 import promptfoo from "@/content/vs/data/promptfoo.json";
+import modaic from "@/content/vs/data/modaic.json";
 import notDiamond from "@/content/vs/data/not-diamond.json";
 import martian from "@/content/vs/data/martian.json";
+import riften from "@/content/vs/data/riften.json";
+import conifer from "@/content/vs/data/conifer.json";
+import codag from "@/content/vs/data/codag.json";
+import mentlio from "@/content/vs/data/mentlio.json";
+import agnostAi from "@/content/vs/data/agnost-ai.json";
+import thirdbrainLabs from "@/content/vs/data/thirdbrain-labs.json";
+import valsAi from "@/content/vs/data/vals-ai.json";
+import openFrontier from "@/content/vs/data/open-frontier.json";
 
 const comparisons: VsPageData[] = [
   openrouter,
@@ -21,8 +31,17 @@ const comparisons: VsPageData[] = [
   braintrust,
   langsmith,
   promptfoo,
+  modaic,
   notDiamond,
   martian,
+  riften,
+  conifer,
+  codag,
+  mentlio,
+  agnostAi,
+  thirdbrainLabs,
+  valsAi,
+  openFrontier,
 ];
 
 export function getAllComparisons(): VsPageData[] {

@@ -67,7 +67,7 @@ export function organizationLd() {
     logo: `${SITE_URL}/icon.png`,
     email: CONTACT_EMAIL,
     description:
-      "rightmodeler measures candidate models against accepted outputs on real traces, opens evidence-backed model-change pull requests, and watches every layer with Crucible.",
+      "rightmodeler measures candidate models against accepted outputs on real traces, opens evidence-backed model-change pull requests, and is building Crucible to watch every layer.",
     contactPoint: [
       {
         "@type": "ContactPoint",
@@ -117,6 +117,9 @@ export function socialImage(url: string, alt: string) {
 // Page metadata in the house style: the layout template appends "· rightmodeler" to `title`; the
 // OG/Twitter cards carry the fully-branded title and a large social image. `path` is the canonical
 // route (e.g. "/how-it-works"); lower-priority pages fall back to the site-wide social card.
+// `image: null` leaves the card to the route's own opengraph-image file: Next only applies a
+// file-based image when openGraph.images is absent (the twitter card then inherits it), so the key
+// is left out entirely rather than defaulted.
 export function pageMetadata({
   title,
   description,
@@ -126,14 +129,15 @@ export function pageMetadata({
   title: string;
   description: string;
   path: string;
-  image?: string;
+  image?: string | null;
 }): Metadata {
   const branded = `${title} · ${SITE_NAME}`;
   const imageAlt =
     image === DEFAULT_SOCIAL_IMAGE
       ? "Keep your agents on the right model: rightmodeler"
       : `${branded} social preview`;
-  const preview = socialImage(image, imageAlt);
+  const images =
+    image === null ? {} : { images: [socialImage(image, imageAlt)] };
   return {
     title,
     description,
@@ -144,13 +148,13 @@ export function pageMetadata({
       description,
       url: `${SITE_URL}${path}`,
       siteName: SITE_NAME,
-      images: [preview],
+      ...images,
     },
     twitter: {
       card: "summary_large_image",
       title: branded,
       description,
-      images: [preview],
+      ...images,
     },
   };
 }

@@ -43,7 +43,7 @@ The claim carries a figure of the audit's decision tree: a trace comes in, the c
 
 ## A category, not a feature.
 
-Evidence-backed model downgrading: detect, measure, review. A report you run today, pull requests next, continuous with Crucible.
+Evidence-backed model downgrading: detect, measure, review. A report and a draft pull request today, continuous with Crucible next.
 
 The claim carries an illustrative figure: a review panel headed "Review the evidence" and stamped ${ILLUSTRATIVE_SCORECARD.label}. The agent's finding reads:
 
@@ -77,7 +77,7 @@ Reviewing a cheaper candidate only after measuring its output against the output
 
 ### How is this different from observability?
 
-Observability shows you what happened. It doesn't replay your steps through cheaper models, measure agreement with accepted outputs, or prepare a repo edit. rightmodeler reports the evidence and applies only the changes you approve.
+It asks a narrower question: can this step run on a cheaper model? rightmodeler replays your recorded steps through cheaper candidates, measures agreement with the outputs you accepted, and reports the evidence, sample size, and abstentions. A swap that clears every gate becomes a draft pull request that changes only model identifiers, and the merge stays with you. It reads the traces you export, so your observability tool stays where it is.
 
 ### Is it safe to downgrade automatically?
 

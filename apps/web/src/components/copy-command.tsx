@@ -38,7 +38,9 @@ export function CopyCommand({
       <span aria-hidden className="select-none font-mono text-[13px] text-fog">
         $
       </span>
-      <code className="font-mono text-[13px] text-midnight-ink">{command}</code>
+      <code className="font-mono text-[13px] text-midnight-ink wrap-anywhere">
+        {command}
+      </code>
       <span className="ml-1 text-driftwood transition-colors duration-150 group-hover:text-midnight-ink">
         {copied ? (
           <CheckIcon className="h-4 w-4" />

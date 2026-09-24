@@ -53,8 +53,9 @@ export const config = {
       // posts to /_vercel/insights/view, which has no dot and would otherwise be proxied on every
       // pageview); the markdown handler itself; and any path containing a dot, which covers the
       // .md siblings plus robots.txt, sitemap.xml, manifest.webmanifest, llms*.txt, humans.txt,
-      // and every asset under public/.
-      source: "/((?!_next/|_vercel/|api/|md/|.*\\.).*)",
+      // and every asset under public/. Also the generated opengraph-image routes, which have no
+      // dot: an image fetcher that sends only `Accept: image/*` would otherwise get the 406.
+      source: "/((?!_next/|_vercel/|api/|md/|.*\\.|.*opengraph-image).*)",
       // Keep RSC navigation, prefetch, and PPR resume traffic off the proxy entirely: same
       // behaviour as before this file existed, no extra invocations, and no chance of
       // negotiating a Flight response. next-resume comes from routes-manifest ppr.chain.headers.
