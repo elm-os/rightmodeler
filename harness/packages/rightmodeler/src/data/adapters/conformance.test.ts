@@ -205,7 +205,7 @@ const fixtures: FixtureCase[] = [
     format: "openinference",
     filename: "openinference.jsonl",
     adapter: openInferenceAdapter,
-    traceId: "0a0b0c0d0e0f10111213141516171819",
+    traceId: "oi-session-1",
     model: "acme/large-1",
     trajectoryIds: ["oi-session-1", "oi-session-1"],
     usage: [

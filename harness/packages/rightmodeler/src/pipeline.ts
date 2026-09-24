@@ -231,7 +231,7 @@ const GATE_POLICY_BASE_VERSION = "phase-a-v3";
 const REPLAY_PROMPT_REVISION = "replay-prompt-v1";
 const SCAN_REVISION = "scan-trace-key-v1";
 const TRACE_BINDING_REVISION = "sendable-cases-v1";
-const TRACE_READER_REVISION = "ai-sdk-dialects-v1";
+const TRACE_READER_REVISION = "gateway-exclusions-v1";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 
 function auditResultKey(projectId: string): string {

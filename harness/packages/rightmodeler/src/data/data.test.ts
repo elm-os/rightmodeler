@@ -226,6 +226,32 @@ describe("trace adapters", () => {
     expect(run?.steps[0]?.family).toBe("fallback-family");
   });
 
+  it("leaves an OTel GenAI span tagged as rightmodeler replay traffic out by name", async () => {
+    const records = parseTraceRecords(await fixture(otelFixtureUrl));
+    const source = records[0] as Record<string, unknown>;
+    const replay = {
+      ...source,
+      traceId: "trace-replay-01",
+      attributes: {
+        ...(source.attributes as Record<string, unknown>),
+        "rightmodeler.replay": "1",
+      },
+    };
+
+    const result = otelGenAiAdapter.adaptWithReport([...records, replay]);
+
+    expect(result.droppedRecords).toEqual([]);
+    expect(result.excludedSteps).toEqual([
+      {
+        recordIndex: records.length,
+        traceId: "trace-replay-01",
+        reason: "replay_traffic",
+      },
+    ]);
+    expect(result.runs).toHaveLength(75);
+    expect(result.runs.flatMap(({ steps }) => steps)).toHaveLength(77);
+  });
+
   it("adapts captured OpenAI request-response pairs", async () => {
     const runs = openAiJsonlAdapter.adapt(
       parseTraceRecords(await fixture(openAiFixtureUrl)),

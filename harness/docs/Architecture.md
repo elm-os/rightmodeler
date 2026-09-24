@@ -563,7 +563,10 @@ reviews.
 Ingest ships OTel GenAI and OpenAI JSONL first, because OTel GenAI is the vendor-neutral format
 that several platforms emit, and the rest follow behind the same contract. The AI SDK's own `ai.*`
 span dialect has a dedicated reader, and its GenAI dialect is read by the OTel GenAI reader, which
-treats agent, step and tool spans as structure.
+treats agent, step and tool spans as structure. The OpenInference reader reads the request body
+when a span carries it, groups spans by session, and leaves failed, replay-tagged and
+content-hidden calls out by name, which makes a gateway's span export (Envoy AI Gateway) a trace
+source.
 
 ## 14. Skill packs
 

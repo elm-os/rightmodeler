@@ -58,6 +58,10 @@ The scanner records that `functionId` on the call site, and a family binds to ex
 
 Export the spans through the OpenTelemetry NodeSDK or `@vercel/otel` to an OTLP collector, and pass the collector's file exporter output with `--traces`. A model call that ended without a finish reason, because it was aborted or errored, is left out of the corpus with a `trace_steps_excluded` warning, and the rest of the input is read. Token usage from AI SDK 4 exports (`ai.usage.promptTokens`) is not read, so those calls carry no usage.
 
+## OpenInference spans
+
+When an OpenInference span carries the request body in `input.value` (Envoy AI Gateway, and the OpenAI instrumentation), rightmodeler reads the model your application asked for and the conversation exactly as sent from it, and the output from `output.value`. Spans that share a `session.id` form one run ordered by start time. A `rightmodeler.family` attribute names the family; otherwise the span name does. Failed calls, calls tagged `rightmodeler.replay`, and calls whose content was hidden are left out with a `trace_steps_excluded` warning.
+
 ## Run the complete pipeline
 
 ```sh

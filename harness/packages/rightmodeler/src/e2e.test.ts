@@ -1121,6 +1121,36 @@ describe("built CLI pipeline", () => {
     expect(ingest.runs).toHaveLength(144);
   });
 
+  it("names Envoy's failed and replay-tagged calls and keeps ingesting", async () => {
+    const { repo } = await fixtureCopy("envoy-exclusions");
+    const result = await runCli([
+      "init",
+      "--through",
+      "ingest",
+      "--traces",
+      join(traceFixturesDir, "envoy-openinference.jsonl"),
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    const warning = JSON.parse(result.stderr) as Record<string, unknown>;
+    expect(warning).toMatchObject({ code: "trace_steps_excluded" });
+    expect(warning.message).toContain("1 call_failed");
+    expect(warning.message).toContain("1 replay_traffic");
+    const ingest = await readStageArtifact(
+      join(repo, ".rightmodeler"),
+      "ingest",
+    );
+    expect(
+      (ingest.runs as Array<{ steps: unknown[] }>).flatMap(
+        ({ steps }) => steps,
+      ),
+    ).toHaveLength(7);
+  });
+
   it("ingests a trace directory like the equivalent single file", async () => {
     const records = JSON.parse(await readFile(tracesPath, "utf8")) as unknown[];
     const tracesDirectory = await mkdtemp(
@@ -1187,7 +1217,7 @@ describe("built CLI pipeline", () => {
         traceSha256: createHash("sha256")
           .update(await readFile(tracesPath))
           .digest("hex"),
-        reader: "ai-sdk-dialects-v1",
+        reader: "gateway-exclusions-v1",
       }),
     );
   });

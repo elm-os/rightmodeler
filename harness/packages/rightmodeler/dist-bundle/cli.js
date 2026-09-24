@@ -33656,10 +33656,22 @@ function strictRuns(format10, result2) {
   }
   return result2.runs;
 }
+var exclusionMeanings = {
+  stream_incomplete: "ended without a finish reason because it was aborted or errored",
+  call_failed: "the call failed and has no accepted output",
+  replay_traffic: "rightmodeler's own replay calls, tagged by a replay header",
+  content_hidden: "the gateway did not record the prompt or the output"
+};
 function excludedStepsWarning(result2) {
-  const count = result2.excludedSteps?.length ?? 0;
-  if (count === 0) return void 0;
-  return `${count} traced model call(s) ended without a finish reason and were left out of the corpus (stream_incomplete: the call was aborted or errored before it finished). The rest of the trace input was read.`;
+  const excluded = result2.excludedSteps ?? [];
+  if (excluded.length === 0) return void 0;
+  const clauses = Object.entries(exclusionMeanings).flatMap(
+    ([reason, meaning]) => {
+      const count = excluded.filter((step) => step.reason === reason).length;
+      return count === 0 ? [] : [`${count} ${reason} (${meaning})`];
+    }
+  );
+  return `${excluded.length} traced model call(s) were left out of the corpus: ${clauses.join(", ")}. The rest of the trace input was read.`;
 }
 function requiredString(value, label, format10) {
   if (typeof value !== "string" || value.length === 0) {
@@ -34159,6 +34171,7 @@ function createRowAdapter(options) {
     const source = recordList(records, options.format, options.label);
     const mapped = [];
     const droppedRecords = [];
+    const excludedSteps = [];
     for (const [recordIndex, candidate] of source.entries()) {
       if (!isRecord(candidate)) {
         droppedRecords.push({
@@ -34168,14 +34181,23 @@ function createRowAdapter(options) {
         continue;
       }
       try {
-        const steps = options.mapRecord(candidate, recordIndex);
-        if (steps.length === 0) {
+        const entries = options.mapRecord(candidate, recordIndex);
+        if (entries.length === 0) {
           droppedRecords.push({
             recordIndex,
             reason: "record does not contain a mappable model call"
           });
-        } else {
-          mapped.push(...steps.map((step) => ({ ...step, recordIndex })));
+        }
+        for (const entry of entries) {
+          if ("excluded" in entry) {
+            excludedSteps.push({
+              recordIndex,
+              traceId: entry.traceId,
+              reason: entry.excluded
+            });
+          } else {
+            mapped.push({ ...entry, recordIndex });
+          }
         }
       } catch (error51) {
         droppedRecords.push({
@@ -34186,7 +34208,8 @@ function createRowAdapter(options) {
     }
     return {
       runs: buildRuns(options.format, mapped),
-      droppedRecords
+      droppedRecords,
+      ...excludedSteps.length === 0 ? {} : { excludedSteps }
     };
   };
   return {
@@ -34941,6 +34964,7 @@ var langsmithAdapter = createRowAdapter({
 
 // src/data/adapters/openinference.ts
 var format8 = "openinference";
+var redacted = "__REDACTED__";
 function confidence7(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
@@ -34969,6 +34993,35 @@ function toolDefinitions(spanAttributes) {
     ([key, value]) => /^llm\.tools\.\d+\.tool\.json_schema$/.test(key) ? [jsonEncodedValue(value)] : []
   );
 }
+function exclusion(span, spanAttributes, inputMessages, outputMessages) {
+  if (optionalString(spanAttributes["rightmodeler.replay"]) !== void 0) {
+    return "replay_traffic";
+  }
+  const statusCode = isRecord(span.status) ? span.status.code : void 0;
+  if (statusCode === 2 || statusCode === "STATUS_CODE_ERROR" || Array.isArray(span.events) && span.events.some(
+    (event) => isRecord(event) && event.name === "exception"
+  )) {
+    return "call_failed";
+  }
+  if (spanAttributes["input.value"] === redacted && inputMessages.length === 0 || spanAttributes["output.value"] === redacted && outputMessages.length === 0) {
+    return "content_hidden";
+  }
+  return void 0;
+}
+function requestBody(spanAttributes) {
+  const body = jsonEncodedValue(spanAttributes["input.value"]);
+  if (!isRecord(body) || !Array.isArray(body.messages)) return void 0;
+  const model = optionalString(body.model);
+  return model === void 0 ? void 0 : { model, messages: body.messages };
+}
+function responseMessage(spanAttributes) {
+  const response = jsonEncodedValue(spanAttributes["output.value"]);
+  if (!isRecord(response) || !Array.isArray(response.choices) || response.choices.length === 0) {
+    return void 0;
+  }
+  const choice = response.choices[0];
+  return isRecord(choice) ? choice.message : void 0;
+}
 var openInferenceAdapter = createRowAdapter({
   format: format8,
   label: "OpenInference OTLP file export",
@@ -34978,37 +35031,61 @@ var openInferenceAdapter = createRowAdapter({
     for (const [spanIndex, span] of otlpSpans(record2).entries()) {
       const spanAttributes = otlpAttributes(span);
       if (spanAttributes["openinference.span.kind"] !== "LLM") continue;
-      const traceId = requiredString(
+      const spanTraceId = requiredString(
         span.traceId,
         `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} traceId`,
         format8
       );
-      const model = requiredString(
-        spanAttributes["llm.model_name"],
-        `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} model`,
-        format8
-      );
-      let rawMessages = indexedMessages(
+      const traceId = optionalString(spanAttributes["session.id"]) ?? spanTraceId;
+      const inputMessages = indexedMessages(
         spanAttributes,
         "llm.input_messages"
       );
-      if (rawMessages.length === 0 && spanAttributes["input.value"] !== void 0) {
-        const input = jsonEncodedValue(spanAttributes["input.value"]);
-        rawMessages = Array.isArray(input) ? input : [input];
-      }
-      const tools = toolDefinitions(spanAttributes);
-      if (tools.length > 0) rawMessages.push({ tools });
       const outputMessages = indexedMessages(
         spanAttributes,
         "llm.output_messages"
       );
-      const output = outputMessages.length > 0 ? outputMessages : jsonEncodedValue(spanAttributes["output.value"]);
+      const excluded = exclusion(
+        span,
+        spanAttributes,
+        inputMessages,
+        outputMessages
+      );
+      if (excluded !== void 0) {
+        mapped.push({ traceId, excluded });
+        continue;
+      }
+      const recordedOutput = outputMessages.length > 0 ? outputMessages : jsonEncodedValue(spanAttributes["output.value"]);
+      const request = requestBody(spanAttributes);
+      let model;
+      let rawMessages;
+      let output;
+      if (request === void 0) {
+        model = requiredString(
+          spanAttributes["llm.model_name"],
+          `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} model`,
+          format8
+        );
+        rawMessages = inputMessages;
+        if (rawMessages.length === 0 && spanAttributes["input.value"] !== void 0) {
+          const input = jsonEncodedValue(spanAttributes["input.value"]);
+          rawMessages = Array.isArray(input) ? input : [input];
+        }
+        const tools = toolDefinitions(spanAttributes);
+        if (tools.length > 0) rawMessages.push({ tools });
+        output = recordedOutput;
+      } else {
+        model = request.model;
+        rawMessages = request.messages;
+        output = responseMessage(spanAttributes) ?? recordedOutput;
+      }
       const usage2 = optionalUsage(
         spanAttributes["llm.token_count.prompt"],
         spanAttributes["llm.token_count.completion"],
         `OpenInference record ${recordIndex + 1}`,
         format8
       );
+      const family = optionalString(spanAttributes["rightmodeler.family"]) ?? optionalString(span.name);
       mapped.push({
         traceId,
         sortValue: optionalString(span.startTimeUnixNano),
@@ -35028,8 +35105,8 @@ var openInferenceAdapter = createRowAdapter({
             format8
           ),
           ...usage2 === void 0 ? {} : { usage: usage2 },
-          trajectoryId: optionalString(spanAttributes["session.id"]) ?? traceId,
-          ...optionalString(span.name) === void 0 ? {} : { family: optionalString(span.name) },
+          trajectoryId: traceId,
+          ...family === void 0 ? {} : { family },
           ...optionalString(span.startTimeUnixNano) === void 0 ? {} : { timestamp: optionalString(span.startTimeUnixNano) }
         }
       });
@@ -35162,6 +35239,9 @@ function otelStep(span, tree) {
   }
   if (operation === "invoke_agent" && hasInferenceDescendant(span, tree)) {
     return { kind: "skip" };
+  }
+  if (optionalString(attributes["rightmodeler.replay"]) !== void 0) {
+    return { kind: "excluded", reason: "replay_traffic" };
   }
   if (attributes["gen_ai.output.messages"] === void 0 && attributes["gen_ai.response.finish_reasons"] === void 0) {
     return { kind: "excluded", reason: "stream_incomplete" };
@@ -41542,7 +41622,7 @@ function environmentSecret(name, label) {
 }
 function redactSecrets(value, secrets) {
   return secrets.reduce(
-    (redacted, secret) => secret.length === 0 ? redacted : redacted.replaceAll(secret, "[redacted]"),
+    (redacted2, secret) => secret.length === 0 ? redacted2 : redacted2.replaceAll(secret, "[redacted]"),
     value
   );
 }
@@ -44093,7 +44173,7 @@ var GATE_POLICY_BASE_VERSION = "phase-a-v3";
 var REPLAY_PROMPT_REVISION = "replay-prompt-v1";
 var SCAN_REVISION = "scan-trace-key-v1";
 var TRACE_BINDING_REVISION = "sendable-cases-v1";
-var TRACE_READER_REVISION = "ai-sdk-dialects-v1";
+var TRACE_READER_REVISION = "gateway-exclusions-v1";
 var API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 function auditResultKey(projectId3) {
   return `${setupPrefix(projectId3)}audit-result.json`;

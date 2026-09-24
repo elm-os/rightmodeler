@@ -108,6 +108,15 @@ describe("response provenance", () => {
     });
   });
 
+  it("flags Envoy's priority fallback and leaves its plain answer fresh", () => {
+    expect(
+      responseSubstitution(fixture<GatewayResponse>("envoy/fallback.json")),
+    ).toMatchObject({ kind: "model" });
+    expect(
+      responseSubstitution(fixture<GatewayResponse>("envoy/plain.json")),
+    ).toBeUndefined();
+  });
+
   it("reads every Bifrost marker", () => {
     const expected: Record<string, unknown> = {
       "bifrost-prefix-stripped": undefined,

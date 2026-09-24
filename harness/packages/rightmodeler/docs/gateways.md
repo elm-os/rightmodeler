@@ -30,3 +30,39 @@ npx rightmodeler init --traces ./traces.jsonl --repo . \
 - Rightmodeler sends no `x-portkey-config`, so fallbacks, load balancing, retries, caching and guardrail or mutator hooks stay off. If you pass one with `--header`, a replayed response whose model differs (`override_params`, targets), that reports `x-portkey-cache-status: HIT`, or whose hook results show `transformed: true` is left out as `attribution_substituted`.
 - Bind the container to 127.0.0.1, or start it headless (`docker run ... portkeyai/gateway:1.15.2 run start:node -- --headless`): the 1.15.2 console and live log stream are served without authentication and show provider keys.
 - Portkey 1.15.2 keeps no traces or logs that rightmodeler can read. Export traces from your application: OpenTelemetry GenAI, AI SDK telemetry, or the OpenAI SDK JSONL shape.
+
+## Envoy AI Gateway (Agent Router)
+
+Envoy AI Gateway was renamed Agent Router on 2026-09-09; its resources, `aigw` CLI and images keep their names. Verified on v1.1.0 (Apache 2.0) running standalone with `aigw run` (`envoyproxy/ai-gateway-cli:v1.1.0`); always use a release tag, because the `latest` image follows the development branch.
+
+As a replay route:
+
+- Declare each replay model as an `Exact` `x-ai-eg-model` match under the upstream's own id, one `backendRef`, no `modelNameOverride`, no priority fallback and no `BackendTrafficPolicy` retries on the replay route. A fallback or an override answers with another model, so a replayed response it answers is left out as `attribution_substituted`.
+- Raise the Gateway's `ClientTrafficPolicy` `bufferLimit` (Envoy Gateway's 32 KiB default is too small for real prompts) and the route's `timeouts.request` for slow models.
+- The gateway lists only the declared ids at `/v1/models`, so pass `--catalog-reference` with the upstream's public list.
+- The gateway replaces `Authorization` with the route's key, so `--api-key-env` may name any non-empty variable.
+
+```sh
+docker run --rm -p 127.0.0.1:1975:1975 -e AI_GATEWAY_API_KEY \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318 \
+  -e 'OTEL_AIGW_SPAN_REQUEST_HEADER_ATTRIBUTES=agent-session-id:session.id,x-rightmodeler-family:rightmodeler.family,x-rightmodeler-replay:rightmodeler.replay' \
+  -v "$PWD/aigw.yaml:/config.yaml:ro" envoyproxy/ai-gateway-cli:v1.1.0 run /config.yaml
+export AIGW_CLIENT_KEY=unused
+npx rightmodeler init --traces ./spans.jsonl --repo . \
+  --base-url http://127.0.0.1:1975/v1 --api-key-env AIGW_CLIENT_KEY \
+  --catalog-reference https://ai-gateway.vercel.sh/v1/models \
+  --header 'x-rightmodeler-replay: 1' --max-cost-usd 25
+```
+
+As a trace source, rightmodeler reads the gateway's default OpenInference spans from an OpenTelemetry collector's file export:
+
+- Set `OTEL_EXPORTER_OTLP_ENDPOINT`. Map headers to span attributes with `OTEL_AIGW_SPAN_REQUEST_HEADER_ATTRIBUTES` as comma-separated `header:attribute` pairs; setting it replaces the default `agent-session-id:session.id`, so repeat that pair.
+- Send `agent-session-id` from your application so the steps of one conversation form one ordered run, and `x-rightmodeler-family: <name>` so each call has its family. Send `x-rightmodeler-replay: 1` with rightmodeler's replays (`--header`) so a later export leaves them out.
+- Each span's request body gives the model your application asked for and the conversation as sent; the response gives the output; the token counts give usage.
+- Failed calls, replay-tagged calls, and calls whose prompt or output the gateway hid (`OPENINFERENCE_HIDE_INPUTS`, `OPENINFERENCE_HIDE_OUTPUTS`) are left out of the corpus with a `trace_steps_excluded` warning that names each reason.
+- A span records the model that answered but not whether a priority fallback chose it (a `modelNameOverride` alias looks the same), so a call that fell back is read as an answer to the model your application asked for, with the fallback's output and usage. Keep fallback routes off the traffic you export, or expect those answers among the recorded outputs rightmodeler compares candidates against.
+- Steps whose recorded conversation contains tool calls are read but not replayed yet (`recorded_messages_not_replayable`).
+- With `AI_GATEWAY_TRACING_SEMCONV=gen_ai`, the spans are read by the OTel GenAI reader instead: they are grouped by trace (propagate `traceparent` from your client), carry no `response_format` or `tool_choice`, and record images by type only.
+- Access logs carry no message content and are not a trace source.
+
+On Kubernetes (Kubernetes 1.32 or newer, Envoy Gateway 1.8.1 or newer, Helm charts `ai-gateway-crds-helm` and `ai-gateway-helm` v1.1.0), the same resources apply; set `OTEL_EXPORTER_OTLP_ENDPOINT` through the `ai-gateway-helm` chart's `extProc.extraEnvVars` and the header mapping through its `controller.spanRequestHeaderAttributes`. Mode B on the cloud backend cannot reach an in-cluster gateway.

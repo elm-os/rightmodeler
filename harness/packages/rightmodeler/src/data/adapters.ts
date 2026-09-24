@@ -128,6 +128,9 @@ function otelStep(span: TraceSpan, tree: SpanTree): SpanStep {
   if (operation === "invoke_agent" && hasInferenceDescendant(span, tree)) {
     return { kind: "skip" };
   }
+  if (optionalString(attributes["rightmodeler.replay"]) !== undefined) {
+    return { kind: "excluded", reason: "replay_traffic" };
+  }
   if (
     attributes["gen_ai.output.messages"] === undefined &&
     attributes["gen_ai.response.finish_reasons"] === undefined
