@@ -10,7 +10,7 @@
   "description": "promptfoo tests what you ship next against cases you author. rightmodeler audits what you shipped against accepted outputs. Different stages of the same loop.",
   "h1": "rightmodeler vs promptfoo",
   "lede": "promptfoo evaluates what you are about to ship against test cases you author. rightmodeler audits what you already shipped against the outputs you accepted, so the real line between them is where the test set comes from.",
-  "integrationSlug": "",
+  "integrationSlug": "promptfoo",
   "related": ["braintrust", "langsmith", "not-diamond", "modaic"],
   "cta": "github",
   "blocks": [

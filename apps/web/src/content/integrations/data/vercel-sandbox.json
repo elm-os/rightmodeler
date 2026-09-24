@@ -1,0 +1,108 @@
+{
+  "slug": "vercel-sandbox",
+  "name": "Vercel Sandbox",
+  "website": "https://vercel.com/sandbox",
+  "logo": "/integrations/logos/vercel-ai-gateway.svg",
+  "category": "execution-backend",
+  "categoryLabel": "Execution backend · cloud confirmation",
+  "title": "Vercel Sandbox integration: confirm swaps in the cloud",
+  "description": "Run rightmodeler's confirm stage in Vercel Sandbox: each case runs your app in a fresh microVM in your Vercel project, and the model key never enters it.",
+  "h1": "rightmodeler + Vercel Sandbox",
+  "lede": "Some swaps have to be proven end to end, by running your own pipeline with the cheaper model in place. The cloud backend runs each of those cases in a short-lived Vercel Sandbox microVM in your own Vercel project instead of a local Docker container.",
+  "tldr": "Vercel Sandbox is where rightmodeler's confirm stage can run your app, not a replay route. Set \"backend\": \"cloud\" in the --modeb-config file and each confirmation case runs in a fresh, non-persistent Vercel Sandbox microVM that is deleted after the case. The model credential named by --api-key-env is attached by the sandbox platform's egress firewall and never enters the VM, a metering proxy inside the sandbox records every model call against the run's budget, and every case is judged on the machine running rightmodeler, never in the sandbox. It is separate from the Vercel AI Gateway. Verified live: three smoke runs of the confirmation driver passed in real Vercel Sandbox microVMs through the Vercel AI Gateway, at $0.000005 each.",
+  "steps": [
+    {
+      "label": "01 · Authorize",
+      "title": "Let rightmodeler create sandboxes",
+      "body": "Link a Vercel project and pull a development token: vercel link, then vercel env pull, writes a VERCEL_OIDC_TOKEN to .env.local that is valid for 12 hours. In CI, set VERCEL_TOKEN, VERCEL_TEAM_ID, and VERCEL_PROJECT_ID instead. These variables only let rightmodeler create sandboxes; the model credential is always the variable you name with --api-key-env."
+    },
+    {
+      "label": "02 · Configure",
+      "title": "Point the Mode B config at the cloud",
+      "body": "In the --modeb-config file, set \"backend\": \"cloud\" and an image the platform can start: a Vercel Container Registry reference or a managed image such as vercel/sandbox/node:24. appSpec.command runs your app for one case, and stepMap ties each step rightmodeler found to the x-rm-step header your app sends with its model calls. The provider base URL has to be HTTPS, because the firewall recognizes the provider host by its TLS server name."
+    },
+    {
+      "label": "03 · Run",
+      "title": "Each case gets a fresh microVM",
+      "body": "For every confirmation case, rightmodeler creates a non-persistent sandbox, copies your app to /rightmodeler/app read-only, and runs appSpec.command under a 60 second deadline that includes appSpec.installCommand. Your app calls OPENAI_BASE_URL with a placeholder key; that address is rightmodeler's proxy inside the sandbox, which swaps in the candidate for the step being tested, meters each call, and forwards it straight to the provider; the platform's egress firewall attaches the real credential on the way out. The sandbox is deleted when the case ends."
+    },
+    {
+      "label": "04 · Judge",
+      "title": "Scored on your machine, never in the sandbox",
+      "body": "The sandbox hands back only the candidate's final output, on the last line of standard output. rightmodeler judges every case on the machine it runs on and records every attempt and its cost. A case with any lost request is recorded as a lost execution rather than a pass, and a request the case's budget cannot cover is answered with HTTP 402 and the case is retried on the next run."
+    }
+  ],
+  "setup": {
+    "intro": "npx rightmodeler installs @vercel/sandbox as an optional dependency, so there is no SDK to add. You need a Vercel project to create sandboxes in, a --modeb-config file with \"backend\": \"cloud\", and an HTTPS provider base URL. The live runs used the Vercel AI Gateway as that provider.",
+    "commands": [
+      {
+        "comment": "# link a Vercel project and pull a 12-hour VERCEL_OIDC_TOKEN into .env.local",
+        "command": "vercel link && vercel env pull"
+      },
+      {
+        "comment": "# export it to the shell that runs the audit",
+        "command": "set -a && . ./.env.local && set +a"
+      },
+      {
+        "comment": "# print the Mode B config reference, including the cloud backend fields",
+        "command": "npx rightmodeler docs modeb"
+      },
+      {
+        "comment": "# run the audit; swaps that need confirmation run your app in Vercel Sandbox",
+        "command": "npx rightmodeler init --traces ./traces/spans.json --base-url https://ai-gateway.vercel.sh/v1 --api-key-env AI_GATEWAY_API_KEY --modeb-config ./modeb.json --max-cost-usd 25"
+      }
+    ]
+  },
+  "reads": [],
+  "detection": "",
+  "useCases": [
+    {
+      "title": "Confirm swaps without Docker on the machine",
+      "body": "The cloud backend never needs a Docker daemon, so a laptop or CI runner without one can still run the confirm stage. Swaps whose output feeds later model-authored steps get their end-to-end check instead of being reported as recommend (unconfirmed)."
+    },
+    {
+      "title": "Keep the model key out of the code under test",
+      "body": "Your pipeline runs with a placeholder key, and the proxy inside the sandbox drops whatever authorization header the app sends. The real credential is added by the platform firewall on the way to the provider host, so nothing the app runs can read it."
+    },
+    {
+      "title": "Start every case from a clean machine",
+      "body": "Each case gets its own non-persistent microVM that is deleted when the case ends, so nothing one case writes can leak into the next. A sandbox lives for the case deadline plus 60 seconds at most, which also bounds how long an interrupted run can leave one running."
+    }
+  ],
+  "limits": [
+    "Only the confirm stage runs here. Shortlisting, replay, and judging stay on the machine running rightmodeler, and sandboxes never score, so moving confirmation to the cloud does not change what counts as evidence.",
+    "This is credential brokering, not an egress allowlist. The firewall attaches the credential only to requests for the provider host, and every other host stays reachable from inside the sandbox.",
+    "The image has to be a Vercel Container Registry reference or a managed image. A Docker Hub name does not work, a custom image's entrypoint and command do not run, and commands run as the image's default non-root user. Every case starts a fresh microVM within a 60 second deadline, so bake dependencies into the image rather than installing them per case.",
+    "The provider base URL has to be HTTPS and reachable from the internet. A proxy on your own machine, such as a local LiteLLM gateway, fits the Docker backend instead.",
+    "Sandbox usage counts against your Vercel plan: Hobby includes a monthly allotment and pauses sandbox creation once it is used up, and Pro usage is charged at Vercel's rates. rightmodeler's estimate and --max-cost-usd cover model calls only, not sandbox compute.",
+    "The live smoke runs drove the confirmation driver directly, with a managed Node image, an OIDC token, and the Vercel AI Gateway. A full init or confirm run on the cloud backend, custom images, access-token credentials, and other providers have not been run live on this backend yet."
+  ],
+  "faq": [
+    {
+      "q": "Is this the same as the Vercel AI Gateway?",
+      "a": "No. The Vercel AI Gateway is a model route: it serves the replay and judge calls when you pass its base URL. Vercel Sandbox is where the confirm stage runs your app. You can use them together, as the live runs did, or pair the sandbox with any HTTPS, OpenAI-compatible provider."
+    },
+    {
+      "q": "Does my model API key enter the sandbox?",
+      "a": "No. The host puts the credential only in the sandbox's network policy, and the platform firewall adds it to requests for the provider host on their way out. Your app sends a placeholder key, which the proxy inside the sandbox drops before forwarding."
+    },
+    {
+      "q": "Which Vercel credentials does it need?",
+      "a": "It needs either a VERCEL_OIDC_TOKEN, which vercel env pull writes after vercel link and which expires after 12 hours, or all of VERCEL_TOKEN, VERCEL_TEAM_ID, and VERCEL_PROJECT_ID. Use the access token in CI, as Vercel recommends for external CI systems."
+    },
+    {
+      "q": "When does confirmation run at all?",
+      "a": "Confirmation runs only for a recommended swap whose output can feed later model-authored steps. Other swaps are decided on replay evidence alone. Without a --modeb-config file, the swaps that need confirmation are reported as recommend (unconfirmed) with the note Missing --modeb-config for cascade confirmation, and they are not treated as recommendations until a confirmation run confirms them."
+    },
+    {
+      "q": "What happens if the SDK or the credentials are missing?",
+      "a": "The run stops before any case starts with modeb_cloud_unavailable and says what is missing, for example after installing with --omit=optional or when the variable named by --api-key-env is empty. Install the optional package and set the credentials, or set \"backend\": \"docker\", then rerun. An image the platform cannot start blocks only its own case, and a rerun retries it."
+    },
+    {
+      "q": "Has the cloud backend been run for real?",
+      "a": "Yes, through the confirmation driver. Three live smoke runs passed in real Vercel Sandbox microVMs through the Vercel AI Gateway, at $0.000005 each, with inclusionai/ling-3.0-flash as the candidate and alibaba/qwen3.7-flash as the incumbent, and the smoke Vercel project was deleted afterwards. The runs exercised sandbox launch, the metering proxy, credential brokering at the firewall, metered answers from the provider, and cleanup of every sandbox. A full init run on the cloud backend has not been run live yet."
+    }
+  ],
+  "related": ["vercel-ai-gateway", "openrouter", "litellm"],
+  "cta": "github"
+}

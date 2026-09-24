@@ -1,0 +1,108 @@
+{
+  "slug": "promptfoo",
+  "name": "promptfoo",
+  "website": "https://www.promptfoo.dev",
+  "logo": "/integrations/logos/promptfoo.svg",
+  "category": "evaluator",
+  "categoryLabel": "Evaluator · your assertions",
+  "title": "promptfoo integration: grade replays with assertions",
+  "description": "Grade rightmodeler replays with promptfoo: your assertions and named metrics decide which cheaper candidates pass, run locally on the real promptfoo CLI.",
+  "h1": "rightmodeler + promptfoo",
+  "lede": "Your promptfoo assertions already say what a good output looks like. rightmodeler can hand them every candidate output from a replay, so the checks your team maintains, not a judge model you did not write, decide which cheaper models pass.",
+  "tldr": "promptfoo is a rightmodeler evaluator. Pass --evaluator promptfoo with your assertions file as --evaluator-config and an --evaluator-scorer for each named metric you want graded, and rightmodeler runs the real promptfoo CLI on your machine against each batch of candidate outputs. A metric passes only when every assertion carrying it passes, and that decision feeds the release gates. promptfoo sees candidate outputs only, never the input or the output you shipped. A case promptfoo could not grade, or whose output it changed before grading, is recorded absent with a named reason and never counts as a pass. Editing the assertions re-grades the stored outputs without calling a candidate model again. Verified against promptfoo 0.123.1.",
+  "steps": [
+    {
+      "label": "01 · Write",
+      "title": "Tag each assertion with a metric",
+      "body": "Keep your assertions in a YAML file in a directory of its own and add metric: <name> to every assertion that should feed a scorer. The same assertions apply to every candidate output, because promptfoo receives the output alone: deterministic types such as is-json, regex, or contains check it directly, and model-graded types such as llm-rubric call the grading provider your promptfoo setup names."
+    },
+    {
+      "label": "02 · Run",
+      "title": "The real promptfoo CLI, run for you",
+      "body": "For each batch, rightmodeler writes the candidate outputs and their execution ids to a temporary file and runs promptfoo eval --assertions with your file and --model-outputs with that one, from the assertions file's directory. It adds --no-write and --no-share, closes standard input, and pins the promptfoo settings that would otherwise stop grading early or strip fields, so every output is graded exactly once against every assertion. The command is promptfoo on your PATH unless --evaluator-command names another executable."
+    },
+    {
+      "label": "03 · Read",
+      "title": "Named scores become pass decisions",
+      "body": "Each metric's score is promptfoo's named score for it, and the metric passes only when every assertion carrying it passes. With several scorers, --evaluator-gate-metric picks the one the release gates use. Every grade records a rubric version of the form promptfoo@<version>/<metric>/<digest>, taken from the assertions behind that metric, so an edited assertion or a different promptfoo release shows up next to the grade."
+    },
+    {
+      "label": "04 · Gate",
+      "title": "Nothing ungraded counts as a pass",
+      "body": "promptfoo renders {{ }} templates in an output and follows a file:// path or package: module it names before grading. When the output it graded differs from the one rightmodeler sent by more than one trailing newline, the case is recorded absent as external_output_mismatch, because the grade is not of the candidate's output. A case promptfoo could not grade at all, such as one naming a file:// path that does not exist, or whose gate metric's grader failed, is recorded absent as external_evaluator_error. The other cases in the batch keep their grades, absent cases count against the candidate in the worst-case bound, and promptfoo's verdicts are kept separate from the built-in judge's."
+    }
+  ],
+  "setup": {
+    "intro": "promptfoo runs on your machine, so there is no promptfoo key or project to pass. Install the verified release as a command on your PATH, keep the assertions file in a directory of its own, and name each metric you want graded with --evaluator-scorer.",
+    "commands": [
+      {
+        "comment": "# install the promptfoo release rightmodeler is verified against",
+        "command": "npm install -g promptfoo@0.123.1"
+      },
+      {
+        "comment": "# grade the replays with your assertions; each scorer is a metric the file names",
+        "command": "npx rightmodeler init --traces ./traces/spans.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --evaluator promptfoo --evaluator-config ./rubric/assertions.yaml --evaluator-scorer accuracy"
+      },
+      {
+        "comment": "# grade several metrics and name the one the release gates use",
+        "command": "npx rightmodeler init --traces ./traces/spans.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --evaluator promptfoo --evaluator-config ./rubric/assertions.yaml --evaluator-scorer accuracy --evaluator-scorer format --evaluator-gate-metric accuracy"
+      }
+    ]
+  },
+  "reads": [],
+  "detection": "",
+  "useCases": [
+    {
+      "title": "Let the checks you already maintain decide",
+      "body": "If your team keeps promptfoo assertions for required fields, banned phrasing, or tone, the same file can decide whether a cheaper candidate passed. The pass decision comes from rules you wrote and can read, rather than from a judge model rightmodeler picked."
+    },
+    {
+      "title": "Hold structured steps to an exact format",
+      "body": "Deterministic assertions such as is-json or regex give a plain pass or fail for every output. A cheaper model that drops a field or breaks the format fails the metric outright, with no model opinion involved in the grade."
+    },
+    {
+      "title": "Tighten the rubric without paying for replays again",
+      "body": "Edit the assertions and rerun. rightmodeler re-grades every stored candidate output under the new rubric and warns with evaluator_regrade, counting what it re-grades; no candidate model is called again. The earlier grades stay in the store, but no verdict or report uses them."
+    },
+    {
+      "title": "Keep grading on your own machine",
+      "body": "promptfoo runs locally with --no-write and --no-share, so the batch is neither saved to promptfoo's history nor shared. Assertions that check the output in place, such as is-json or regex, keep it on your machine; model-graded ones send it to the grading provider you configured."
+    }
+  ],
+  "limits": [
+    "promptfoo receives each candidate output and its execution id, nothing else. The input, the messages, and the output you accepted are never sent, so assertions cannot compare a candidate with what you shipped. With promptfoo deciding, a pass means the output met your assertions, not that it agreed with the output you shipped.",
+    "rightmodeler is verified against promptfoo 0.123.1. Another release works as long as it writes the same results layout; one that does not stops the run with an error naming its version. A missing promptfoo executable counts as unreachable, so the run warns and grades with the built-in judge instead.",
+    "promptfoo also loads a promptfooconfig.* and a .env file from the directory it runs in. A defaultTest there adds its assertions to every case, and a defaultTest transform turns every case into external_output_mismatch, which is why the assertions file belongs in a directory of its own.",
+    "A re-grade follows the changes rightmodeler can see: the assertions file and any promptfooconfig.* beside it. A file an assertion loads with file://, a .env beside the assertions, or a promptfoo upgrade behind the same command does not trigger one; edit the assertions file to force it.",
+    "Model-graded assertions such as llm-rubric call the provider your promptfoo configuration names, under your own promptfoo credentials. That spend sits outside rightmodeler's estimate and outside --max-cost-usd.",
+    "The live tests ran the real promptfoo 0.123.1 CLI with deterministic assertions, including a re-grade after an assertions edit, with replays served by a local stub model endpoint. Model-graded assertions have not been run live with rightmodeler."
+  ],
+  "faq": [
+    {
+      "q": "How do I make promptfoo the evaluator?",
+      "a": "Pass --evaluator promptfoo, --evaluator-config with the path to your assertions file, and at least one --evaluator-scorer naming a metric the file carries. Add --evaluator-gate-metric when you configure more than one scorer, and --evaluator-command when promptfoo is not on your PATH under that name. The API, key, and project options are rejected with promptfoo, because it runs locally."
+    },
+    {
+      "q": "Can I use npx promptfoo as the command?",
+      "a": "No. --evaluator-command takes one path or one command on your PATH, so npx promptfoo does not fit. Install it with npm install -g promptfoo@0.123.1, or pass the path to a project-local binary such as ./node_modules/.bin/promptfoo."
+    },
+    {
+      "q": "What does promptfoo see from my traces?",
+      "a": "promptfoo sees only the candidate outputs and their execution ids, written to a temporary file that is deleted after the batch. The recorded input, the messages, and the output you accepted stay out of it. promptfoo's own telemetry follows your promptfoo setting, and per promptfoo's docs it never includes prompts or model outputs; PROMPTFOO_DISABLE_TELEMETRY=1 turns it off."
+    },
+    {
+      "q": "What happens when I edit the assertions?",
+      "a": "The next init or replay re-grades every stored candidate output that was graded under the old file, reusing the outputs instead of replaying them, and an evaluator_regrade warning says how many and why. Changing --evaluator-scorer, --evaluator-gate-metric, or --evaluator-gate-threshold is different: those change the question the evidence answers, so the candidates are replayed again."
+    },
+    {
+      "q": "What if promptfoo is missing or fails?",
+      "a": "A missing executable counts as unreachable: the run warns and grades with the built-in judge. Any other promptfoo failure, such as a broken promptfooconfig beside the assertions file, stops the run with promptfoo's own message. Replayed outputs stay in the store, so rerunning after the fix does not repeat any model call."
+    },
+    {
+      "q": "Does this replace my promptfoo test suite?",
+      "a": "No. Your suite keeps testing what you are about to ship against cases you author. Here promptfoo only grades the candidate outputs rightmodeler replays; it is not a trace source rightmodeler reads or a route it replays through."
+    }
+  ],
+  "related": ["braintrust", "langsmith", "langfuse"],
+  "cta": "github"
+}
