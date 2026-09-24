@@ -4,8 +4,11 @@ import type { NormalizedStepInput } from "./types.js";
 
 export const AMBIGUOUS_MODEL_ID_REASON =
   "multiple_call_sites_share_model_id" as const;
+export const AMBIGUOUS_TRACE_KEY_REASON =
+  "multiple_call_sites_share_trace_key" as const;
 
 export type ReconciliationStatus = "matched" | "ambiguous" | "unmatched";
+export type TraceBindingVia = "trajectory_position" | "trace_key" | "model";
 
 export interface ReconciledTraceStep<T extends NormalizedStepInput> {
   readonly normalizedStep: T;
@@ -13,14 +16,17 @@ export interface ReconciledTraceStep<T extends NormalizedStepInput> {
   readonly status: ReconciliationStatus;
   readonly stepId?: string;
   readonly candidateStepIds?: readonly string[];
-  readonly reason?: typeof AMBIGUOUS_MODEL_ID_REASON;
+  readonly reason?:
+    typeof AMBIGUOUS_MODEL_ID_REASON | typeof AMBIGUOUS_TRACE_KEY_REASON;
+  readonly via?: TraceBindingVia;
 }
 
 export interface ReconciledCallSite {
   readonly stepRecord: StepRecord;
   readonly status: ReconciliationStatus;
   readonly traceIndexes: readonly number[];
-  readonly reason?: typeof AMBIGUOUS_MODEL_ID_REASON;
+  readonly reason?:
+    typeof AMBIGUOUS_MODEL_ID_REASON | typeof AMBIGUOUS_TRACE_KEY_REASON;
 }
 
 export interface CaseStepLink {
@@ -160,93 +166,132 @@ function enrichCallSites<T extends NormalizedStepInput>(
   );
 }
 
+function append<V>(groups: Map<string, V[]>, key: string, value: V): void {
+  const group = groups.get(key);
+  if (group === undefined) groups.set(key, [value]);
+  else group.push(value);
+}
+
+function groupBy(
+  records: readonly StepRecord[],
+  key: (record: StepRecord) => string | null | undefined,
+): Map<string, StepRecord[]> {
+  const groups = new Map<string, StepRecord[]>();
+  for (const record of records) {
+    const value = key(record);
+    if (value !== null && value !== undefined) append(groups, value, record);
+  }
+  return groups;
+}
+
+function joinCandidates<T extends NormalizedStepInput>(
+  normalizedStep: T,
+  traceIndex: number,
+  candidates: readonly StepRecord[],
+  reason: typeof AMBIGUOUS_MODEL_ID_REASON | typeof AMBIGUOUS_TRACE_KEY_REASON,
+  via: TraceBindingVia,
+): ReconciledTraceStep<T> {
+  if (candidates.length === 1) {
+    return {
+      normalizedStep,
+      traceIndex,
+      status: "matched",
+      stepId: candidates[0]!.stepId,
+      via,
+    };
+  }
+  return {
+    normalizedStep,
+    traceIndex,
+    status: "ambiguous",
+    candidateStepIds: candidates.map(({ stepId }) => stepId).sort(),
+    reason,
+    via,
+  };
+}
+
 export function reconcile<T extends NormalizedStepInput>(
   normalizedSteps: readonly T[],
   stepRecords: readonly StepRecord[],
 ): ReconciliationResult<T> {
-  const sitesByModel = new Map<string, StepRecord[]>();
-  for (const record of stepRecords) {
-    if (record.currentModel === null) continue;
-    const records = sitesByModel.get(record.currentModel) ?? [];
-    records.push(record);
-    sitesByModel.set(record.currentModel, records);
-  }
-
-  const tracesByModel = new Map<string, number[]>();
-  for (const [traceIndex, step] of normalizedSteps.entries()) {
-    const indexes = tracesByModel.get(step.model) ?? [];
-    indexes.push(traceIndex);
-    tracesByModel.set(step.model, indexes);
-  }
+  const sitesByModel = groupBy(stepRecords, (record) => record.currentModel);
+  const sitesByTraceKey = groupBy(stepRecords, (record) => record.traceKey);
 
   const joinByTrajectoryPosition = canJoinByTrajectoryPosition(
     normalizedSteps,
     stepRecords,
   );
 
-  const traceSteps = normalizedSteps.map((normalizedStep, traceIndex) => {
-    if (joinByTrajectoryPosition) {
-      return {
+  const traceSteps = normalizedSteps.map(
+    (normalizedStep, traceIndex): ReconciledTraceStep<T> => {
+      if (joinByTrajectoryPosition) {
+        return {
+          normalizedStep,
+          traceIndex,
+          status: "matched",
+          stepId: stepRecords[normalizedStep.stepIndex!]!.stepId,
+          via: "trajectory_position",
+        };
+      }
+      const keyed =
+        normalizedStep.family === undefined
+          ? []
+          : (sitesByTraceKey.get(normalizedStep.family) ?? []);
+      if (keyed.length > 0) {
+        const sameModel = keyed.filter(
+          ({ currentModel }) => currentModel === normalizedStep.model,
+        );
+        return joinCandidates(
+          normalizedStep,
+          traceIndex,
+          sameModel.length > 0 ? sameModel : keyed,
+          AMBIGUOUS_TRACE_KEY_REASON,
+          "trace_key",
+        );
+      }
+      const candidates = sitesByModel.get(normalizedStep.model) ?? [];
+      if (candidates.length === 0) {
+        return { normalizedStep, traceIndex, status: "unmatched" };
+      }
+      return joinCandidates(
         normalizedStep,
         traceIndex,
-        status: "matched" as const,
-        stepId: stepRecords[normalizedStep.stepIndex!]!.stepId,
-      };
+        candidates,
+        AMBIGUOUS_MODEL_ID_REASON,
+        "model",
+      );
+    },
+  );
+
+  const matchedIndexes = new Map<string, number[]>();
+  const ambiguousSteps = new Map<string, ReconciledTraceStep<T>[]>();
+  for (const traceStep of traceSteps) {
+    if (traceStep.status === "matched") {
+      append(matchedIndexes, traceStep.stepId!, traceStep.traceIndex);
+    } else if (traceStep.status === "ambiguous") {
+      for (const stepId of traceStep.candidateStepIds!) {
+        append(ambiguousSteps, stepId, traceStep);
+      }
     }
-    const candidates = sitesByModel.get(normalizedStep.model) ?? [];
-    if (candidates.length === 1) {
-      return {
-        normalizedStep,
-        traceIndex,
-        status: "matched" as const,
-        stepId: candidates[0]!.stepId,
-      };
-    }
-    if (candidates.length > 1) {
-      return {
-        normalizedStep,
-        traceIndex,
-        status: "ambiguous" as const,
-        candidateStepIds: candidates.map(({ stepId }) => stepId).sort(),
-        reason: AMBIGUOUS_MODEL_ID_REASON,
-      };
-    }
-    return { normalizedStep, traceIndex, status: "unmatched" as const };
-  });
+  }
 
   const enrichedByStepId = enrichCallSites(traceSteps, stepRecords);
-  const callSites = stepRecords.map((original) => {
+  const callSites = stepRecords.map((original): ReconciledCallSite => {
     const stepRecord = enrichedByStepId.get(original.stepId)!;
-    if (joinByTrajectoryPosition) {
+    const matched = matchedIndexes.get(original.stepId);
+    if (matched !== undefined) {
+      return { stepRecord, status: "matched", traceIndexes: matched };
+    }
+    const ambiguous = ambiguousSteps.get(original.stepId);
+    if (ambiguous !== undefined) {
       return {
         stepRecord,
-        status: "matched" as const,
-        traceIndexes: traceSteps.flatMap((traceStep) =>
-          traceStep.stepId === original.stepId ? [traceStep.traceIndex] : [],
-        ),
+        status: "ambiguous",
+        traceIndexes: ambiguous.map(({ traceIndex }) => traceIndex),
+        reason: ambiguous[0]!.reason!,
       };
     }
-
-    const traceIndexes =
-      original.currentModel === null
-        ? []
-        : (tracesByModel.get(original.currentModel) ?? []);
-    const modelSites =
-      original.currentModel === null
-        ? []
-        : (sitesByModel.get(original.currentModel) ?? []);
-    if (traceIndexes.length > 0 && modelSites.length > 1) {
-      return {
-        stepRecord,
-        status: "ambiguous" as const,
-        traceIndexes,
-        reason: AMBIGUOUS_MODEL_ID_REASON,
-      };
-    }
-    if (traceIndexes.length > 0) {
-      return { stepRecord, status: "matched" as const, traceIndexes };
-    }
-    return { stepRecord, status: "unmatched" as const, traceIndexes: [] };
+    return { stepRecord, status: "unmatched", traceIndexes: [] };
   });
 
   const caseStepLinks = traceSteps.flatMap((step) =>

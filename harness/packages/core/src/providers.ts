@@ -30,6 +30,7 @@ export interface EvaluatorCaseResult {
   readonly caseId: string;
   readonly metrics: readonly EvaluatorMetric[];
   readonly artifactRef?: JsonValue;
+  readonly absentReason?: string;
 }
 
 export interface EvaluatorProvider {

@@ -73,6 +73,7 @@ export const assessmentSchema = z
     score: z.number(),
     passed: z.boolean(),
     rubricVersion: requiredStringSchema,
+    evaluatorIdentity: requiredStringSchema.optional(),
     artifactRef: jsonValueSchema,
   })
   .readonly();

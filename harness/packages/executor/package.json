@@ -28,6 +28,6 @@
     "vitest": "^3"
   },
   "optionalDependencies": {
-    "@vercel/sandbox": "^3.0.0"
+    "@vercel/sandbox": "^3.3.0"
   }
 }

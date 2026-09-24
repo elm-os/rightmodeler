@@ -27,6 +27,7 @@ export const stepRecordSchema = z.strictObject({
   capabilityRequirements: z.array(z.string()),
   evaluatorLadder: z.array(z.string()),
   currentModel: z.string().min(1).nullable(),
+  traceKey: z.string().min(1).optional(),
   observedCostUsd: z.number().nonnegative(),
   downstreamStepIds: z.array(z.string().min(1)),
   candidates: z.array(z.json()),

@@ -56,6 +56,14 @@ dimension, pooled with measured judge-agreement carried as extra variance. A par
 that includes every dimension fragments a 24 case family below every minimum and abstains
 forever, which is a different way to be wrong.
 
+An external evaluator's configuration is not part of the key either: its options and, for
+promptfoo, the bytes of its rubric files. Each grade it produces records that configuration as
+`evaluatorIdentity`, and a replay under a changed one re-grades the stored outputs instead of
+replaying the candidates. The ledger keeps the earlier grades, but only grades made under the
+configuration in force are scored, and an export leaves out any grade a re-grade superseded.
+The evaluator plan (kind, scorers, gate metric, pass threshold) stays in the key, so changing
+it asks a new question.
+
 `computeEvidenceQuestionId` in `core/src/identity.ts` hashes exactly those six fields. The
 pipeline's `evidenceQuestionIdentity` binds `promptRevision` to the replay prompt revision and
 `replayMode` to `single_shot`, and folds the family, its step ids and any reproof request ids
@@ -68,6 +76,20 @@ before `corpus` or any paid stage. Otherwise early evidence is keyed by provider
 fallback identifiers, and can never be joined to scanner call sites without invalidating
 everything already paid for.
 
+A trace step joins a call site by trajectory position when every call site's model is unknown,
+otherwise by trace key (the literal AI SDK telemetry `functionId` the scanner records on the
+call site), otherwise by model id. A family whose name is a trace key is planned on exactly the
+call sites that carry that key, and those call sites are never assigned to another family.
+
+A family without a trace key is planned only on the call sites its own trace steps matched, by
+trajectory position or by a model id that one call site alone pins. A call site belongs to one
+family: a site that another family's key claims, or that several families' traces matched, is
+never used. Cases that cannot be tied to a call site of the family alone are left out of the
+replay sample, and a family with none abstains before any spend, with
+`ambiguous_call_site_binding` or `unmatched_call_site_binding`, or with
+`bound_call_sites_not_replayable` when every call site its traces matched needs tools or
+structured output. Nothing is assigned by path order.
+
 ## 3. State
 
 ### Typed facts, not one row type
@@ -78,12 +100,12 @@ re-judgements, and spend. Two position-swapped judge calls plus a later re-judge
 
 The ledger stores immutable typed facts linked by identifiers.
 
-| Fact             | Grain                                 | Key fields                                                                                                                                                |
-| ---------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Execution`      | one logical candidate run of one case | `executionId`, `evidenceQuestionId`, `caseId`, `stepId`, `candidateId`, `trajectoryId`, `corpusSplit`, `selectionStage`, `terminalOutcome`, `finalOutput` |
-| `RequestAttempt` | one physical HTTP request             | `attemptId`, `logicalCallId`, `executionId`, `streamOutcome`, `usage`, `costUsd`, `costIsEstimate`                                                        |
-| `Assessment`     | one evaluator judgement               | `assessmentId`, `executionId`, `evaluatorId`, `metricName`, `score`, `passed`, `rubricVersion`, `artifactRef`                                             |
-| `SpendEvent`     | any paid action by any actor          | `actor`, `phase`, `costUsd`, `provider`, `reconcilableTo`                                                                                                 |
+| Fact             | Grain                                 | Key fields                                                                                                                                                    |
+| ---------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Execution`      | one logical candidate run of one case | `executionId`, `evidenceQuestionId`, `caseId`, `stepId`, `candidateId`, `trajectoryId`, `corpusSplit`, `selectionStage`, `terminalOutcome`, `finalOutput`     |
+| `RequestAttempt` | one physical HTTP request             | `attemptId`, `logicalCallId`, `executionId`, `streamOutcome`, `usage`, `costUsd`, `costIsEstimate`                                                            |
+| `Assessment`     | one evaluator judgement               | `assessmentId`, `executionId`, `evaluatorId`, `metricName`, `score`, `passed`, `rubricVersion`, `evaluatorIdentity` (external evaluators only), `artifactRef` |
+| `SpendEvent`     | any paid action by any actor          | `actor`, `phase`, `costUsd`, `provider`, `reconcilableTo`                                                                                                     |
 
 An `Execution` materializes into exactly one outcome. Every attempt is charged. Exactly one is
 scored.
@@ -191,7 +213,8 @@ fire cannot be registered.
 
 The initial set covers the shapes that account for the overwhelming majority of real
 repositories: OpenAI SDK, Anthropic SDK, AI SDK (`generateText`, `streamText`,
-`generateObject`), LangChain for JavaScript and Python, LangGraph, LiteLLM, and model pins in
+`generateObject`, `streamObject`, matched only in files that import them from `ai` or bind
+them by name), LangChain for JavaScript and Python, LangGraph, LiteLLM, and model pins in
 configuration. Breadth arrives through the declarative compiler, which is the actual leverage,
 rather than through a target count. A false call site pollutes the spend map, and the spend map
 is the one artifact a human reads before authorizing spend.
@@ -325,7 +348,10 @@ twenty trajectories presents as `n = 100` and behaves closer to `n = 33`.
 `MIN_DISTINCT_TRAJECTORIES`. The legacy constant counted steps; silently reusing it for
 executions would let one call site across ten cases clear a bar that previously required ten
 call sites. The three minimums are fixed at 10 review trials, 2 distinct steps and 5 distinct
-trajectories, and are not configurable.
+trajectories, and are not configurable. The one structural exception is the distinct-step
+minimum for a family bound by trace key: it is `min(2, bound call sites)`, because that
+family's evidence covers every call site that produced it. The review-trial and trajectory
+minimums never relax.
 
 **Exclusions gate.** A candidate whose call sequence diverges from the recorded one is a
 case-level failure, not a dropped row. Refuse `recommend` above a configured excluded fraction,
@@ -383,11 +409,13 @@ under the remaining lease exceed it together, and cutting them mid-stream preser
 only by manufacturing invalid executions.
 
 Worst-case cost is **reserved before forwarding**, computed from context size, maximum output,
-and pinned pricing. Concurrency is capped against available reservation. The unused remainder is
-refunded on completion. The host holds authorized totals in `budget/<runId>.json`; the proxy
-enforces; re-leasing is a host round trip. Judge spend is metered and charged against the same
-ledger after the call, not reserved before it, so a judge can carry the ledger past the
-authorized total until the next execution reservation refuses.
+and pinned pricing. In Mode B the proxy receives prices only for the models the case's steps
+call, so a request for any other model is refused before it is forwarded instead of being paid
+for and then discarded by the host. Concurrency is capped against available reservation. The
+unused remainder is refunded on completion. The host holds authorized totals in
+`budget/<runId>.json`; the proxy enforces; re-leasing is a host round trip. Judge spend is
+metered and charged against the same ledger after the call, not reserved before it, so a judge
+can carry the ledger past the authorized total until the next execution reservation refuses.
 
 Caps are opt-in bounds, not defaults.
 
@@ -403,9 +431,13 @@ non-empty.
 family, or a dropped shard, is printed and carried onto the verdict.
 
 **Generous defaults.** Sampling above the minimums. `confirm` by default for coupled or
-model-authored-prefix steps. One judge runs per cell; a judge that fails three consecutive
-terminal calls is marked unusable and the next-ranked neutral-family model re-judges the
-affected cells. Cheaper settings exist and are opt-in.
+model-authored-prefix steps. One judge runs per cell, from a model family that is neither the
+cell's candidate's nor the family of the model that wrote its reference: the call site's current
+model in replay, and in `confirm` the final step's model, whose output is the recorded
+reference. A family whose call sites use models of several vendors is judged per call site,
+never refused. A judge that fails three consecutive terminal calls is marked unusable and the
+next-ranked neutral-family model re-judges the affected cells. Cheaper settings exist and are
+opt-in.
 
 **Rate limits are throughput to discover, not a ceiling to hide under.** A per-provider adaptive
 concurrency controller ramps while requests succeed and backs off multiplicatively on 429 or
@@ -465,9 +497,11 @@ check in the egress listener. The cloud backend is selected with `"backend": "cl
 Mode B config file and fails closed with `modeb_cloud_unavailable` before any case runs when the
 sandbox SDK or its credentials are absent. Its network policy attaches the model credential to
 one host by header transform and keeps a wildcard entry that preserves other egress, so it is
-credential brokering rather than an allowlist. Mode B **refuses** rather than degrading onto a
-host with real egress and a real environment, which would silently falsify the security claim
-on the default path.
+credential brokering rather than an allowlist. With no host listener in that path, the
+in-sandbox proxy itself asks the provider for uncompressed responses, keeps the provider base
+path, and attributes every HTTP answer to the provider. Mode B **refuses** rather than degrading
+onto a host with real egress and a real environment, which would silently falsify the security
+claim on the default path.
 
 `.rightmodeler/` is the store root inside the client repository and is excluded from scanning.
 Isolating it as its own workspace root, with an empty workspace file and a pinned package
@@ -479,17 +513,18 @@ Every integration is a package behind a declared contract with its own conforman
 A registry built from a plugin list is planned, not shipped: the unwired one was deleted, and
 each contract is reached from a fixed call site today.
 
-| Kind                | Contract                                 | Merge     | Status  |
-| ------------------- | ---------------------------------------- | --------- | ------- |
-| Trace adapter       | `detect(sample)`, `adapt(records)`       | additive  | shipped |
-| Evaluator provider  | `launch`, `status`, `collect`            | additive  | shipped |
-| Model provider      | `listModels`, `chat`, cost authority     | additive  | shipped |
-| Matcher             | `match(content, path)` plus `examples[]` | additive  | shipped |
-| Harness reference   | the `_template.md` question set          | additive  | shipped |
-| Agent adapter       | `AsyncGenerator<Progress, Result>`       | additive  | planned |
-| Notifier / exporter | `notify(params)`                         | additive  | planned |
-| Executor            | `launch`, `collect`, `status`            | last wins | shipped |
-| Ownership / people  | provider lookups                         | last wins | planned |
+| Kind                     | Contract                                      | Merge     | Status  |
+| ------------------------ | --------------------------------------------- | --------- | ------- |
+| Trace adapter            | `detect(sample)`, `adapt(records)`            | additive  | shipped |
+| Evaluator provider       | `launch`, `status`, `collect`                 | additive  | shipped |
+| Model provider           | `listModels`, `chat`, cost authority          | additive  | shipped |
+| Matcher                  | `match(content, path)` plus `examples[]`      | additive  | shipped |
+| Harness reference        | the `_template.md` question set               | additive  | shipped |
+| Code graph (report, PRs) | Graphify `graph.json`, read by `--code-graph` | additive  | shipped |
+| Agent adapter            | `AsyncGenerator<Progress, Result>`            | additive  | planned |
+| Notifier / exporter      | `notify(params)`                              | additive  | planned |
+| Executor                 | `launch`, `collect`, `status`                 | last wins | shipped |
+| Ownership / people       | provider lookups                              | last wins | planned |
 
 A CLI extension point and an integration listing on `status` are planned. `status` today
 summarizes the store.
@@ -509,7 +544,9 @@ which raises the reference correctness ceiling reported alongside every family v
 reviews.
 
 Ingest ships OTel GenAI and OpenAI JSONL first, because OTel GenAI is the vendor-neutral format
-that several platforms emit, and the rest follow behind the same contract.
+that several platforms emit, and the rest follow behind the same contract. The AI SDK's own `ai.*`
+span dialect has a dedicated reader, and its GenAI dialect is read by the OTel GenAI reader, which
+treats agent, step and tool spans as structure.
 
 ## 14. Skill packs
 
@@ -689,14 +726,14 @@ evidence; no realized delta is measured after merge.
 Because the run is unattended, the pre-pull-request path must never be able to park. Approval
 helpers are absent from every pre-pull-request tool by construction, and an eval asserts it.
 
-| Event                                     | Behavior                                                                                                                                                                                                                                          |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| review comment, review submitted, mention | answers with the stored evidence behind the number being questioned                                                                                                                                                                               |
-| changes requested                         | flags the affected verdicts for re-proof and acknowledges the request naming them; re-proof happens when the pipeline runs again                                                                                                                  |
-| CI failure                                | reads completed check runs and combined commit statuses on the head commit, comments the diagnosis on the first failure, and closes the pull request only when a check of the same name fails again under a different check id on the same commit |
-| base branch moved                         | refetches each swapped file at the new base and flags for re-proof only when a pre-apply digest changed                                                                                                                                           |
-| merged                                    | terminal lifecycle event, watch ends                                                                                                                                                                                                              |
-| closed unmerged                           | records the rejection so the swap is not re-proposed without new data                                                                                                                                                                             |
+| Event                                     | Behavior                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| review comment, review submitted, mention | answers with the stored evidence behind the number being questioned                                                                                                                                                                                                                                                                                                      |
+| changes requested                         | flags the affected verdicts for re-proof and acknowledges the request naming them; re-proof happens when the pipeline runs again                                                                                                                                                                                                                                         |
+| CI failure                                | reads completed check runs and combined commit statuses on the head commit, comments the diagnosis on the first failure, and closes the pull request only when a check of the same name fails again under a different check id on the same commit; when the token cannot read check runs (HTTP 403), it uses commit statuses alone and warns `github_checks_unavailable` |
+| base branch moved                         | refetches each swapped file at the new base and flags for re-proof only when a pre-apply digest changed                                                                                                                                                                                                                                                                  |
+| merged                                    | terminal lifecycle event, watch ends                                                                                                                                                                                                                                                                                                                                     |
+| closed unmerged                           | records the rejection so the swap is not re-proposed without new data                                                                                                                                                                                                                                                                                                    |
 
 Every paid invocation writes a forensic artifact containing raw responses, both position-swapped
 verdicts, repair attempts, and reconciliation diagnostics. Without it, the only way to answer

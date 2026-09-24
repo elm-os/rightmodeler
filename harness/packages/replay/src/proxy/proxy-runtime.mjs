@@ -254,6 +254,7 @@ function requestHeaders(headers, bodyLength) {
     if (
       value !== undefined &&
       !hopByHopHeaders.has(name) &&
+      name !== "accept-encoding" &&
       name !== "authorization" &&
       name !== "host" &&
       name !== "content-length"
@@ -261,6 +262,7 @@ function requestHeaders(headers, bodyLength) {
       forwarded[name] = value;
     }
   }
+  forwarded["accept-encoding"] = "identity";
   forwarded["content-length"] = String(bodyLength);
   return forwarded;
 }
@@ -314,7 +316,11 @@ function requestUpstream(
   return new Promise((resolve, reject) => {
     const request = send(
       url,
-      { method, path: requestTarget, headers },
+      {
+        method,
+        path: `${url.pathname.replace(/\/$/, "")}${requestTarget}`,
+        headers,
+      },
       (response) => {
         clearTimeout(deadline);
         resolve(response);
@@ -779,11 +785,10 @@ async function main() {
           streamHardDeadlineMs,
         );
         const status = upstream.statusCode ?? 502;
-        const declaredSource = upstream.headers[egressSourceHeader];
         const upstreamSource =
-          declaredSource === "provider" || declaredSource === "egress"
-            ? declaredSource
-            : null;
+          upstream.headers[egressSourceHeader] === "egress"
+            ? "egress"
+            : "provider";
         const forwarded =
           rewritten.stream === true && status < 400
             ? await forwardStreaming(upstream, outgoing, status, {

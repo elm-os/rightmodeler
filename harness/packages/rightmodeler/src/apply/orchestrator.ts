@@ -17,6 +17,7 @@ import {
 } from "@rightmodeler/core";
 import type { FamilyVerdict, GateResult } from "@rightmodeler/kernel";
 
+import { renderCodeContext, type CodeContext } from "../code-graph/index.js";
 import type {
   CapturedConventions,
   FamilyBlastRadius,
@@ -55,6 +56,8 @@ import {
 const execFileAsync = promisify(execFile);
 const projectId = "project";
 const reviewerLimit = 5;
+const codeContextFindingsPerKind = 5;
+const githubBodyLimit = 65_536;
 
 export type ApplyCascadeStatus =
   "confirmed" | "not-required" | "blocked" | "isolated" | "inconclusive";
@@ -119,6 +122,7 @@ export type ApplyResult =
       readonly runSpecDigest: string;
       readonly branch: string;
       readonly title: string;
+      readonly body: string;
       readonly files: readonly string[];
       readonly reviewers: readonly string[];
       readonly teamReviewers: readonly string[];
@@ -303,9 +307,49 @@ function evidenceRow({
   };
 }
 
+function pullRequestCodeContext(
+  codeContext: CodeContext,
+  verdicts: readonly ApplyVerdict[],
+): string {
+  if (codeContext.status === "unavailable") {
+    return renderCodeContext(codeContext).join("\n");
+  }
+  const stepIds = new Set(
+    verdicts.flatMap(({ swaps }) =>
+      swaps.map(({ stepRecord }) => stepRecord.stepId),
+    ),
+  );
+  let cut = false;
+  const callSites = codeContext.callSites
+    .filter(({ stepId }) => stepIds.has(stepId))
+    .map((callSite) => {
+      const shown = new Map<string, number>();
+      const findings = callSite.findings.filter(({ kind }) => {
+        const count = (shown.get(kind) ?? 0) + 1;
+        shown.set(kind, count);
+        if (count > codeContextFindingsPerKind) cut = true;
+        return count <= codeContextFindingsPerKind;
+      });
+      return { ...callSite, findings };
+    });
+  const lines = renderCodeContext({
+    ...codeContext,
+    callSites,
+    unconfirmedImports: [],
+  });
+  if (cut) {
+    lines.push(
+      "",
+      "At most five findings of each kind are shown per call site. Run `rightmodeler report --code-graph <path>` for the full list.",
+    );
+  }
+  return lines.join("\n");
+}
+
 function evidenceBody(
   conventions: CapturedConventions,
   verdicts: readonly ApplyVerdict[],
+  codeContext?: CodeContext,
 ): string {
   const evidence = verdicts[0]!.evidence;
   const table = [
@@ -326,9 +370,15 @@ function evidenceBody(
     "",
   ].join("\n");
   const template = conventions.prTemplate?.trimEnd();
-  return template === undefined || template === null || template === ""
-    ? table
-    : `${template}\n\n${table}`;
+  const body =
+    template === undefined || template === null || template === ""
+      ? table
+      : `${template}\n\n${table}`;
+  if (codeContext === undefined) return body;
+  const withContext = `${body}\n${pullRequestCodeContext(codeContext, verdicts)}\n`;
+  return withContext.length <= githubBodyLimit
+    ? withContext
+    : `${body}\n## Code context (Graphify)\n\nOmitted: the section would push this pull request body past GitHub's 65,536-character limit. Run \`rightmodeler report --code-graph <path>\` to read it.\n`;
 }
 
 async function reviewersFor(
@@ -672,6 +722,7 @@ async function ensureReviewRequested({
   repo,
   events,
   prNumber,
+  pullRequestAuthor,
   reviewerSet,
 }: {
   readonly githubClient: GithubClient;
@@ -684,12 +735,16 @@ async function ensureReviewRequested({
   readonly repo: string;
   readonly events: readonly LifecycleEvent[];
   readonly prNumber: number;
+  readonly pullRequestAuthor?: string;
   readonly reviewerSet: ReviewerSet & { readonly unresolvedOwners: number };
 }): Promise<ReviewerSet> {
   const recorded = recordedReviewers(events, prNumber);
   if (recorded !== null) return recorded;
 
-  const author = await githubClient.getAuthenticatedUserLogin();
+  const author =
+    pullRequestAuthor ??
+    (await githubClient.getPullRequest({ owner, repo, pullNumber: prNumber }))
+      .author;
   let reviewers = reviewerSet.reviewers.filter(
     (reviewer) => reviewer.toLowerCase() !== author.toLowerCase(),
   );
@@ -773,6 +828,7 @@ export async function applySwaps({
   conventions,
   verdicts,
   dryRun,
+  codeContext,
 }: {
   readonly store: Store;
   readonly repoDir: string;
@@ -782,6 +838,7 @@ export async function applySwaps({
   readonly conventions: CapturedConventions;
   readonly verdicts: readonly ApplyVerdict[];
   readonly dryRun: boolean;
+  readonly codeContext?: CodeContext;
 }): Promise<ApplyResult> {
   if (conventions.warnings.length > 0) {
     return refusal(
@@ -984,6 +1041,7 @@ export async function applySwaps({
       runSpecDigest,
       branch,
       title,
+      body: evidenceBody(conventions, selected, codeContext),
       files: formatted.files.map(({ path }) => path),
       reviewers: reviewerSet.reviewers,
       teamReviewers: reviewerSet.teamReviewers,
@@ -1108,7 +1166,7 @@ export async function applySwaps({
         owner,
         repo,
         title,
-        body: evidenceBody(conventions, selected),
+        body: evidenceBody(conventions, selected, codeContext),
         head: branch,
         base,
         draft: true,
@@ -1201,6 +1259,7 @@ export async function applySwaps({
     repo,
     events: lifecycleEvents,
     prNumber: pullRequest.number,
+    pullRequestAuthor: pullRequest.author,
     reviewerSet,
   });
 

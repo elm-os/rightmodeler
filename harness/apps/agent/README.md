@@ -10,7 +10,11 @@ The agent routes through the Vercel AI Gateway, so a production launch needs `AI
 
 The GitHub channel reads `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, and `GITHUB_APP_SLUG` lazily when a webhook reaches `/eve/v1/github`. `RIGHTMODELER_GITHUB_BOT_NAME` overrides the invocation token. Only comments from `COLLABORATOR`, `MEMBER`, or `OWNER` actors that mention the bot dispatch; agent replies carry an ignore marker.
 
+`GITHUB_APP_PRIVATE_KEY` is the text of the App's downloaded PEM file; a single line with literal `\n` sequences also works. `GITHUB_APP_SLUG` is the App's slug and the default name people @mention. `RIGHTMODELER_GITHUB_INSTALLATION_ID` is the number at the end of the installation's settings URL and is used only for scheduled report delivery.
+
 The mounted GitHub tools read `GITHUB_TOKEN` for outbound API calls. The GitHub App variables authenticate the channel only and do not supply this token.
+
+`GITHUB_TOKEN` here is an environment variable the agent reads, not the GitHub Actions token. `open_swap_pr` runs the harness's `apply` and `pr-watch` runs the CLI's `watch` with the variable named by `RIGHTMODELER_GITHUB_TOKEN_ENV` (default `GITHUB_TOKEN`), so the token rules in the [GitHub guide](../../packages/rightmodeler/docs/github.md) apply: a fine-grained token makes each watch pass warn that check runs are unavailable.
 
 Schedules use these shared variables:
 
@@ -21,7 +25,11 @@ Schedules use these shared variables:
 - Optional `RIGHTMODELER_GITHUB_API_BASE_URL` and `RIGHTMODELER_GITHUB_TOKEN_ENV` for `pr-watch`; with `RIGHTMODELER_GITHUB_OWNER`, these also default `open_swap_pr` and webhook-triggered watches. The variable named by `RIGHTMODELER_GITHUB_TOKEN_ENV` must contain the GitHub token. Watched pull requests are derived from the append-only lifecycle store
 - `RIGHTMODELER_AGENT_STORE` is required for `replay-watch` and `approved-regression`; they record each handoff exactly once and skip loudly without it
 
-Subscribe the GitHub App to `issue_comment`, `pull_request_review_comment`, `pull_request`, `check_suite`, and `workflow_run`. Add a second webhook URL at `/eve/v1/github-review` subscribed to `pull_request_review`. Both routes verify `GITHUB_WEBHOOK_SECRET`.
+Set the GitHub App's webhook URL to `https://<host>/eve/v1/github` and put the App's webhook secret in `GITHUB_WEBHOOK_SECRET`. Subscribe the App to `issue_comment`, `pull_request_review_comment`, `pull_request`, `check_suite`, and `workflow_run`. A GitHub App has one webhook URL and the channel does not handle review events, so `/eve/v1/github-review` must be a separate repository or organization webhook with content type JSON, the same secret, and the "Pull request reviews" event. Both routes verify `GITHUB_WEBHOOK_SECRET`.
+
+Give the channel's App these repository permissions: Issues read and write, Pull requests read and write, Contents read, Checks read, Actions read, and Metadata read. Each subscribed event needs its permission: `issue_comment` needs Issues, `pull_request` and `pull_request_review_comment` need Pull requests, `check_suite` needs Checks, and `workflow_run` needs Actions.
+
+`open_swap_pr` accepts `dryRun` to run every gate without writing to GitHub. The agent never merges: `mergePullRequest` is excluded from the mounted GitHub tools (`agent/extensions/github.ts`). `pr-watch` runs hourly and on the webhook events above, making one watch pass per open or terminal-unended pull request, and a watch pass can close a pull request whose CI failure repeats.
 
 Set `RIGHTMODELER_AGENT_STORE` to persist supplemental append-only audit and agent-cost records under `<store>/agent/`. Agent-cost hooks record only model calls for which the provider reports `costUsd`; provider-boundary replay spend remains authoritative in the harness ledger.
 

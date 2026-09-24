@@ -1,0 +1,8 @@
+{
+  "name": "code-graph-app",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "openai": "*"
+  }
+}

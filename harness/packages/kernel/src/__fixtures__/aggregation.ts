@@ -34,6 +34,7 @@ export interface FactOverrides {
   stratumId?: string;
   trajectoryId?: string;
   terminalOutcome?: Execution["terminalOutcome"];
+  traceBoundCallSites?: number;
   unsafeSubstitution?: boolean;
 }
 
@@ -81,6 +82,9 @@ export function aggregationFact(
     evaluatorKind: overrides.evaluatorKind ?? "judge",
     candidateCostUsd: overrides.candidateCostUsd ?? 0.1,
     referenceCeilingMultiplier: overrides.referenceCeilingMultiplier ?? 1,
+    ...(overrides.traceBoundCallSites === undefined
+      ? {}
+      : { traceBoundCallSites: overrides.traceBoundCallSites }),
     unsafeSubstitution: overrides.unsafeSubstitution ?? false,
     evidenceCovered: overrides.evidenceCovered ?? true,
     expectedEvaluatorAssignments: overrides.expectedEvaluatorAssignments ?? [],

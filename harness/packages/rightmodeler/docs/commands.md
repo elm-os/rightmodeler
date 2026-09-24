@@ -38,7 +38,7 @@ Commands:
   rollback [options]   open a draft pull request restoring a prior model swap
   drift [options]      detect drift against the active replay corpus
   watch [options]      reconcile one open model-swap pull request
-  report               write report.md and report.json
+  report [options]     write report.md and report.json
   status [options]     summarize the current store
   docs [name]          print documentation packaged with this CLI
   help [command]       display help for command
@@ -92,6 +92,8 @@ Options:
                                       "ingest", "reconcile", "scrub", "corpus",
                                       "audit-sample", "shortlist", "replay",
                                       "aggregate", "confirm", "report")
+  --code-graph <path>                 Graphify graph.json for static code
+                                      context in the report; never evidence
   --yes                               accept the newest discovered trace without
                                       prompting
   -h, --help                          display help for command
@@ -441,9 +443,12 @@ Options:
   --owner <owner>            GitHub repository owner
   --github-repo <repo>       GitHub repository name (default: the repository
                              directory name)
-  --github-base-url <url>    GitHub API base URL
+  --github-base-url <url>    GitHub API base URL (default:
+                             "https://api.github.com")
   --github-token-env <name>  environment variable containing the GitHub token
   --dry-run                  run all machine gates without writing GitHub state
+  --code-graph <path>        Graphify graph.json for static code context in the
+                             pull request body; never evidence
   -h, --help                 display help for command
 ```
 
@@ -459,7 +464,8 @@ Options:
   --github-repo <repo>       GitHub repository name (default: the repository
                              directory name)
   --pr <number>              merged pull request number
-  --github-base-url <url>    GitHub API base URL
+  --github-base-url <url>    GitHub API base URL (default:
+                             "https://api.github.com")
   --github-token-env <name>  environment variable containing the GitHub token
   -h, --help                 display help for command
 ```
@@ -515,9 +521,11 @@ reconcile one open model-swap pull request
 
 Options:
   --owner <owner>            GitHub repository owner
-  --github-repo <repo>       GitHub repository name
+  --github-repo <repo>       GitHub repository name (default: the repository
+                             directory name)
   --pr <number>              pull request number
-  --github-base-url <url>    GitHub API base URL
+  --github-base-url <url>    GitHub API base URL (default:
+                             "https://api.github.com")
   --github-token-env <name>  environment variable containing the GitHub token
   -h, --help                 display help for command
 ```
@@ -530,7 +538,9 @@ Usage: rightmodeler report [options]
 write report.md and report.json
 
 Options:
-  -h, --help  display help for command
+  --code-graph <path>  Graphify graph.json for static code context in the
+                       report; never evidence
+  -h, --help           display help for command
 ```
 
 ## `rightmodeler status`
@@ -554,7 +564,8 @@ print documentation packaged with this CLI
 
 Arguments:
   name        packaged document name (choices: "commands", "evaluators",
-              "exit-codes", "getting-started", "modeb")
+              "exit-codes", "getting-started", "github", "github-actions",
+              "modeb")
 
 Options:
   -h, --help  display help for command

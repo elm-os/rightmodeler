@@ -29,6 +29,9 @@ const stubModuleUrl = new URL(
   "../../../fixtures/stub-provider/server.mjs",
   import.meta.url,
 ).href;
+const executorManifestPath = fileURLToPath(
+  new URL("../../executor/package.json", import.meta.url),
+);
 const temporaryDirectories: string[] = [];
 const execFileAsync = promisify(execFile);
 
@@ -47,6 +50,23 @@ interface ChildResult {
   stderr: string;
 }
 
+// The registry test needs the network; locally it skips when the registry is unreachable, in CI
+// it always runs so an outage fails loudly instead of passing silently.
+const registryReachable = await execFileAsync(
+  "npm",
+  ["view", "--prefer-online", "@vercel/sandbox@^3.3.0", "version"],
+  { env: withoutColor(process.env), timeout: 20_000 },
+).then(
+  () => true,
+  () => false,
+);
+const skipRegistryTest = !registryReachable && process.env.CI !== "true";
+if (skipRegistryTest) {
+  console.warn(
+    "[bundle registry] SKIPPED: the npm registry is unreachable (CI=true requires it)",
+  );
+}
+
 afterAll(async () => {
   await Promise.all(
     temporaryDirectories.map((directory) =>
@@ -55,15 +75,34 @@ afterAll(async () => {
   );
 });
 
+// `pnpm pack` runs the prepack bundle, which rewrites dist-bundle/ and dist/publish/ in place, so
+// the file packs once and both tests install the same tarball.
+let packed: Promise<string> | undefined;
+function packOnce(): Promise<string> {
+  packed ??= (async () => {
+    const packDirectory = await mkdtemp(join(tmpdir(), "rightmodeler-pack-"));
+    temporaryDirectories.push(packDirectory);
+    await execFileAsync("pnpm", ["pack", "--pack-destination", packDirectory], {
+      cwd: packageRoot,
+      env: withoutColor(process.env),
+      maxBuffer: 20 * 1024 * 1024,
+    });
+    const tarballs = (await readdir(packDirectory)).filter((name) =>
+      name.endsWith(".tgz"),
+    );
+    expect(tarballs).toHaveLength(1);
+    return join(packDirectory, tarballs[0]!);
+  })();
+  return packed;
+}
+
 describe("packed CLI bundle", () => {
   it("installs the tarball and drives the complete pipeline from the installed binary", async () => {
     const root = await mkdtemp(join(tmpdir(), "rightmodeler-bundle-"));
     temporaryDirectories.push(root);
-    const packDirectory = join(root, "pack");
     const project = join(root, "project");
     const repo = join(root, "demo-app");
     await Promise.all([
-      mkdir(packDirectory, { recursive: true }),
       mkdir(project, { recursive: true }),
       cp(demoAppPath, repo, { recursive: true }),
     ]);
@@ -93,21 +132,14 @@ describe("packed CLI bundle", () => {
       "Seed fixture",
     ]);
 
-    await execFileAsync("pnpm", ["pack", "--pack-destination", packDirectory], {
-      cwd: packageRoot,
-      env: withoutColor(process.env),
-      maxBuffer: 20 * 1024 * 1024,
-    });
-    const tarballs = (await readdir(packDirectory)).filter((name) =>
-      name.endsWith(".tgz"),
-    );
-    expect(tarballs).toHaveLength(1);
-    const tarball = join(packDirectory, tarballs[0]!);
+    const tarball = await packOnce();
 
     await writeFile(
       join(project, "package.json"),
       `${JSON.stringify({ name: "installed-cli-test", private: true })}\n`,
     );
+    // `--omit=optional` alone still fetches the optional SDK's registry metadata, which retries
+    // for minutes without a network; `--offline` keeps this install hermetic.
     await execFileAsync(
       "npm",
       [
@@ -116,6 +148,8 @@ describe("packed CLI bundle", () => {
         "--no-audit",
         "--no-fund",
         "--package-lock=false",
+        "--offline",
+        "--omit=optional",
         tarball,
       ],
       {
@@ -147,10 +181,28 @@ describe("packed CLI bundle", () => {
       await readFile(join(installedRoot, "package.json"), "utf8"),
     ) as {
       dependencies?: unknown;
+      optionalDependencies?: unknown;
       engines?: { node?: string };
       exports?: { "."?: { types?: string } };
     };
     expect(installedPackage.dependencies).toBeUndefined();
+    const executorManifest = JSON.parse(
+      await readFile(executorManifestPath, "utf8"),
+    ) as { optionalDependencies: { "@vercel/sandbox": string } };
+    expect(installedPackage.optionalDependencies).toEqual({
+      "@vercel/sandbox":
+        executorManifest.optionalDependencies["@vercel/sandbox"],
+    });
+    const installedCli = await readFile(
+      join(installedRoot, "dist-bundle/cli.js"),
+      "utf8",
+    );
+    expect(
+      installedCli.match(/import\("@vercel\/sandbox"\)/g) ?? [],
+    ).toHaveLength(1);
+    await expect(
+      access(join(project, "node_modules/@vercel/sandbox")),
+    ).rejects.toThrow();
     expect(installedPackage.engines?.node).toBe(">=24");
     expect(installedPackage.exports?.["."]?.types).toBe("./dist/cli.d.ts");
 
@@ -239,6 +291,62 @@ describe("packed CLI bundle", () => {
 
     await access(join(repo, ".rightmodeler/project/reports/report.md"));
   }, 180_000);
+
+  it.skipIf(skipRegistryTest)(
+    "installs the SDK with the published package and loads it beside the bundled CLI",
+    async () => {
+      const tarball = await packOnce();
+      const project = await mkdtemp(join(tmpdir(), "rightmodeler-registry-"));
+      temporaryDirectories.push(project);
+      await writeFile(
+        join(project, "package.json"),
+        `${JSON.stringify({ name: "registry-cli-test", private: true })}\n`,
+      );
+      await execFileAsync(
+        "npm",
+        [
+          "install",
+          "--ignore-scripts",
+          "--no-audit",
+          "--no-fund",
+          "--package-lock=false",
+          "--prefer-online",
+          tarball,
+        ],
+        {
+          cwd: project,
+          env: withoutColor(process.env),
+          maxBuffer: 20 * 1024 * 1024,
+        },
+      );
+
+      // A probe beside cli.js resolves @vercel/sandbox exactly as the CLI's dynamic import does.
+      const probe = join(
+        project,
+        "node_modules/rightmodeler/dist-bundle/probe.mjs",
+      );
+      await writeFile(
+        probe,
+        'const sdk = await import("@vercel/sandbox"); process.stdout.write(typeof sdk.Sandbox.create);\n',
+      );
+      const { stdout } = await execFileAsync(process.execPath, [probe], {
+        cwd: project,
+        env: withoutColor(process.env),
+      });
+      expect(stdout).toBe("function");
+
+      const { version } = JSON.parse(
+        await readFile(
+          join(project, "node_modules/@vercel/sandbox/package.json"),
+          "utf8",
+        ),
+      ) as { version: string };
+      const minor = /^3\.(\d+)\./.exec(version)?.[1];
+      expect(minor, version).toBeDefined();
+      expect(Number(minor)).toBeGreaterThanOrEqual(3);
+    },
+    180_000,
+  );
 });
 
 async function startStub(): Promise<StubProvider> {
@@ -294,6 +402,8 @@ async function assertPackedDocumentation(
     "docs/evaluators.md",
     "docs/exit-codes.md",
     "docs/getting-started.md",
+    "docs/github-actions.md",
+    "docs/github.md",
     "docs/modeb.md",
   ]);
 
@@ -328,6 +438,8 @@ async function assertPackedDocumentation(
     "evaluators",
     "exit-codes",
     "getting-started",
+    "github",
+    "github-actions",
     "modeb",
   ]) {
     expect(await runInstalled(binary, ["docs", name], cwd)).toEqual({

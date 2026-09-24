@@ -25,6 +25,7 @@ export interface GithubFileContent {
 export interface GithubPullRequest {
   readonly number: number;
   readonly state: "open" | "closed";
+  readonly author: string;
   readonly title: string;
   readonly body: string | null;
   readonly draft: boolean;
@@ -191,7 +192,6 @@ export interface GithubClient {
   getCombinedStatusForRef(
     input: GithubRepository & { readonly ref: string },
   ): Promise<GithubCombinedStatus>;
-  getAuthenticatedUserLogin(): Promise<string>;
   findCommitAuthorLogin(
     input: GithubRepository & { readonly email: string },
   ): Promise<string | null>;
@@ -264,9 +264,10 @@ const pullRequestSchema = z.object({
   title: z.string(),
   body: z.string().nullable(),
   draft: z.boolean(),
-  merged: z.boolean(),
+  merged: z.boolean().optional(),
   merged_at: z.string().nullable(),
   closed_at: z.string().nullable(),
+  user: userSchema,
   head: z.object({ ref: z.string(), sha: z.string() }),
   base: z.object({ ref: z.string(), sha: z.string() }),
   requested_reviewers: z.array(userSchema).default([]),
@@ -470,10 +471,11 @@ function normalizePullRequest(
   return {
     number: raw.number,
     state: raw.state,
+    author: raw.user.login,
     title: raw.title,
     body: raw.body,
     draft: raw.draft,
-    merged: raw.merged,
+    merged: raw.merged ?? raw.merged_at !== null,
     mergedAt: raw.merged_at,
     closedAt: raw.closed_at,
     head: raw.head,
@@ -882,16 +884,6 @@ export function createGithubClient(
           updatedAt: status.updated_at,
         })),
       };
-    },
-
-    async getAuthenticatedUserLogin() {
-      const raw = await requestJson(
-        "/user",
-        {},
-        userSchema,
-        "GitHub user response",
-      );
-      return raw.login;
     },
 
     async findCommitAuthorLogin(input) {

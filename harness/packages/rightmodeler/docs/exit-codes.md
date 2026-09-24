@@ -14,6 +14,15 @@ Rightmodeler reserves exit codes `0` through `3` for machine-readable outcomes. 
 
 - `0`: changes were applied, or a dry run was clean.
 - `1`: the change was refused by a machine gate.
+- `2`: no completed run in the store (for example `stage_not_completed`); the JSON error on standard error names the remedy.
+- `10` or greater: runtime failure.
+
+See [GitHub](github.md) for tokens, reviewers and refusal codes.
+
+## Rollback
+
+- `0`: the rollback pull request was opened, or already exists.
+- `1`: the rollback was refused by a machine gate.
 - `10` or greater: runtime failure.
 
 ## Drift
@@ -26,7 +35,7 @@ Rightmodeler reserves exit codes `0` through `3` for machine-readable outcomes. 
 
 - `0`: no action was required.
 - `1`: review or continuous-integration actions were taken.
-- `2`: another watcher holds the lock.
+- `2`: another watcher holds the lock, or the store has no completed run. A held lock prints a result with `"status":"lock_held"` on standard output; a missing run prints an error such as `stage_not_completed` on standard error and nothing on standard output.
 - `10` or greater: runtime failure.
 
 Use `--output json` for one result object or `--output jsonl` for stage events followed by the result. Errors use the selected machine-readable mode on standard error. See [Commands](commands.md) for command-specific options.

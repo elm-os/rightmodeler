@@ -1,3 +1,5 @@
+import {generateText} from "ai"
+
 export const metadata={owner:"platform",retries:2}
 
 export async function misformatted(prompt:string) {

@@ -212,6 +212,7 @@ describe("GitHub client conformance", () => {
       base: "main",
       draft: true,
     });
+    expect(pull.author).toBe("rightmodeler-bot");
     expect(pull).toMatchObject({
       number: 1,
       state: "open",
@@ -225,7 +226,11 @@ describe("GitHub client conformance", () => {
         head: "rightmodeler/change",
         base: "main",
       }),
-    ).resolves.toMatchObject({ number: pull.number });
+    ).resolves.toMatchObject({
+      number: pull.number,
+      merged: false,
+      author: "rightmodeler-bot",
+    });
 
     const requested = await github.requestReviewers({
       ...repository,
@@ -371,7 +376,6 @@ describe("GitHub client conformance", () => {
       "createRef",
       "findCommitAuthorLogin",
       "findOpenPullRequest",
-      "getAuthenticatedUserLogin",
       "getCombinedStatusForRef",
       "getFileContent",
       "getPullRequest",
@@ -391,9 +395,33 @@ describe("GitHub client conformance", () => {
     ]);
   });
 
-  it("reads combined commit status and the authenticated user", async () => {
+  it("sends an API version GitHub supports", async () => {
     process.env[tokenEnv] = token;
-    const stub = await startStub({ tokenLogin: "octocat" });
+    const stub = await startStub();
+    const seeded = await seed(stub);
+
+    await expect(
+      client(stub).getRef({ ...repository, ref: "heads/main" }),
+    ).resolves.toMatchObject({ sha: seeded.sha });
+    const unsupported = await fetch(
+      `${baseUrl(stub)}/repos/acme/demo/git/ref/heads/main`,
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-github-api-version": "2099-01-01",
+        },
+      },
+    );
+    expect(unsupported.status).toBe(400);
+    const body = (await unsupported.json()) as { errors: string };
+    expect(body.errors).toContain('"2099-01-01"');
+    expect(body.errors).toContain('"2026-03-10" (most recent)');
+    expect(body.errors).toContain('"2022-11-28"');
+  });
+
+  it("reads combined commit status", async () => {
+    process.env[tokenEnv] = token;
+    const stub = await startStub();
     const seeded = await seed(stub);
     await control(stub, "/__test/commit-statuses", {
       ...repository,
@@ -426,7 +454,6 @@ describe("GitHub client conformance", () => {
         },
       ],
     });
-    await expect(github.getAuthenticatedUserLogin()).resolves.toBe("octocat");
   });
 
   it("paginates reviews, comments, and check runs while preserving event authors and states", async () => {

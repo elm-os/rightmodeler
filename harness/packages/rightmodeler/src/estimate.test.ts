@@ -41,7 +41,7 @@ describe("estimateReplayCost", () => {
         replayCase("holdout", "step-2", 100, 10),
       ],
       candidates,
-      judge,
+      judge: () => judge,
     });
 
     expect(estimate.shortlistCostUsd).toBeCloseTo(0.525);
@@ -66,6 +66,31 @@ describe("estimateReplayCost", () => {
         },
       ],
     });
+  });
+
+  it("prices each cell's judge calls at that cell's own judge", () => {
+    const otherJudge = {
+      modelId: "other/judge",
+      pricing: { input: 0.001, output: 0.002 },
+      maxOutputTokens: 100,
+    };
+    const estimate = estimateReplayCost({
+      steps: [
+        { family: "family", stepId: "step-1" },
+        { family: "family", stepId: "step-2" },
+      ],
+      cases: [
+        replayCase("shortlist", "step-1", 100, 10),
+        replayCase("shortlist", "step-2", 50, 5),
+        replayCase("holdout", "step-1", 200, 20),
+        replayCase("holdout", "step-2", 100, 10),
+      ],
+      candidates,
+      judge: (stepId) => (stepId === "step-1" ? judge : otherJudge),
+    });
+
+    expect(estimate.judgeCostUsd).toBeCloseTo(1.8);
+    expect(estimate.judgeCalls).toBe(12);
   });
 
   it("fails loudly when a case references an unknown step", () => {

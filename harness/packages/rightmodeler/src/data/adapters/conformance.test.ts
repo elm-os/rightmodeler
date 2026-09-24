@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   adaptWithReport,
+  aiSdkAdapter,
   braintrustAdapter,
   claudeCodeAdapter,
   codexAdapter,
@@ -74,6 +75,43 @@ const fixtures: FixtureCase[] = [
         "gen_ai.usage.output_tokens",
       ),
     }),
+  },
+  {
+    format: "ai-sdk",
+    filename: "ai-sdk-v7-legacy.jsonl",
+    adapter: aiSdkAdapter,
+    traceId: "00000000000000000000000000000002",
+    model: "acme/large-1",
+    trajectoryIds: [
+      "00000000000000000000000000000002",
+      "00000000000000000000000000000002",
+    ],
+    usage: [
+      { inputTokens: 21, outputTokens: 7 },
+      { inputTokens: 44, outputTokens: 8 },
+    ],
+    malformedRecord: {
+      traceId: "ai-sdk-trace-bad",
+      spanId: "ai-sdk-span-bad",
+      attributes: {
+        "ai.operationId": "ai.generateText.doGenerate",
+        "ai.model.id": "acme/large-1",
+        "ai.response.finishReason": "stop",
+        "ai.response.text": "x",
+      },
+    },
+    withoutUsage: (record) =>
+      JSON.parse(JSON.stringify(record), (key, value: unknown) =>
+        key === "attributes" && Array.isArray(value)
+          ? value.filter((attribute) => {
+              const name = String((attribute as Record<string, unknown>).key);
+              return (
+                !name.startsWith("ai.usage.") &&
+                !name.startsWith("gen_ai.usage.")
+              );
+            })
+          : value,
+      ) as Record<string, unknown>,
   },
   {
     format: "openai-jsonl",
@@ -323,7 +361,7 @@ async function fixtureText(filename: string): Promise<string> {
 }
 
 describe("trace adapter conformance", () => {
-  it("runs the 10 adapter by 10 fixture detection matrix", async () => {
+  it("runs the 11 adapter by 11 fixture detection matrix", async () => {
     expect(traceAdapters).toHaveLength(fixtures.length);
     for (const fixture of fixtures) {
       const text = await fixtureText(fixture.filename);

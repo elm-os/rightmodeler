@@ -11,6 +11,7 @@ export interface CandidateMatch {
   needsTools: boolean;
   needsStructuredOutput: boolean;
   modelId?: string;
+  traceKey?: string;
   /** Display metadata only. This value must never participate in identity. */
   line: number;
 }
@@ -33,4 +34,5 @@ export interface NormalizedStepInput {
   readonly trajectoryId?: string;
   readonly stepIndex?: number;
   readonly caseId?: string;
+  readonly family?: string;
 }

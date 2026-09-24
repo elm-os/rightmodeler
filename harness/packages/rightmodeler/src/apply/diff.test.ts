@@ -75,11 +75,12 @@ describe("buildSwapDiff", () => {
       "src/constant.ts",
       'SUMMARY_MODEL = "acme/small-1"',
       "model: SUMMARY_MODEL",
+      3,
     ],
-    ["src/constant.py", 'SUMMARY_LLM = "acme/small-1"', "model=SUMMARY_LLM"],
+    ["src/constant.py", 'SUMMARY_LLM = "acme/small-1"', "model=SUMMARY_LLM", 1],
   ])(
     "replaces a model constant assignment instead of its call-site reference in %s",
-    async (path, assignment, reference) => {
+    async (path, assignment, reference, line) => {
       const root = await copyFixture();
       const stepRecord = scan(root, createMatcherRegistry(), "project").find(
         ({ callSite }) => callSite.path === path,
@@ -97,7 +98,7 @@ describe("buildSwapDiff", () => {
 
       expect(file.after).toContain(assignment);
       expect(file.after).toContain(reference);
-      expect(file.hunks[0]?.line).toBe(1);
+      expect(file.hunks[0]?.line).toBe(line);
     },
   );
 
@@ -124,7 +125,7 @@ describe("buildSwapDiff", () => {
     );
 
     expect(file.after).toContain("// inserted later");
-    expect(file.hunks[0]?.line).toBe(3);
+    expect(file.hunks[0]?.line).toBe(5);
   });
 
   it("threads the project id into fresh fingerprint matching", async () => {
@@ -188,7 +189,7 @@ describe("buildSwapDiff", () => {
     const path = join(root, "src/red-herring.ts");
     await writeFile(
       path,
-      `export function redHerring(prompt: string) { return ${call}; }\n`,
+      `import { generateText } from "ai";\nexport function redHerring(prompt: string) { return ${call}; }\n`,
     );
     const stepRecord = scan(root, createMatcherRegistry(), "project").find(
       ({ callSite }) => callSite.path === "src/red-herring.ts",
@@ -217,7 +218,7 @@ describe("buildSwapDiff", () => {
     const path = join(root, "src/structured-red-herring.ts");
     await writeFile(
       path,
-      `export function redHerring(prompt: string) { return ${call}; }\n`,
+      `import { generateText } from "ai";\nexport function redHerring(prompt: string) { return ${call}; }\n`,
     );
     const stepRecord = scan(root, createMatcherRegistry(), "project").find(
       ({ callSite }) => callSite.path === "src/structured-red-herring.ts",
@@ -246,7 +247,7 @@ describe("buildSwapDiff", () => {
     const path = join(root, "src/same-line.ts");
     await writeFile(
       path,
-      'export function calls(prompt: string, messages: string[]) { generateText({ model: "acme/large-1", prompt }); return generateText({ model: "acme/large-1", messages }); }\n',
+      'import { generateText } from "ai";\nexport function calls(prompt: string, messages: string[]) { generateText({ model: "acme/large-1", prompt }); return generateText({ model: "acme/large-1", messages }); }\n',
     );
     const records = scan(root, createMatcherRegistry(), "project").filter(
       ({ callSite }) => callSite.path === "src/same-line.ts",
@@ -270,7 +271,7 @@ describe("buildSwapDiff", () => {
     const path = join(root, "src/quoted-key.ts");
     await writeFile(
       path,
-      'export function quoted(prompt: string) { return generateText({ "model": "acme/large-1", prompt }); }\n',
+      'import { generateText } from "ai";\nexport function quoted(prompt: string) { return generateText({ "model": "acme/large-1", prompt }); }\n',
     );
     const stepRecord = scan(root, createMatcherRegistry(), "project").find(
       ({ callSite }) => callSite.path === "src/quoted-key.ts",
@@ -310,7 +311,7 @@ describe("buildSwapDiff", () => {
     const path = join(root, "src/camel-constant.ts");
     await writeFile(
       path,
-      'const summaryModel = "acme/large-1";\nexport function camel(prompt: string) { return generateText({ model: summaryModel, prompt }); }\n',
+      'import { generateText } from "ai";\nconst summaryModel = "acme/large-1";\nexport function camel(prompt: string) { return generateText({ model: summaryModel, prompt }); }\n',
     );
     const stepRecord = scan(root, createMatcherRegistry(), "project").find(
       ({ callSite }) => callSite.path === "src/camel-constant.ts",
@@ -331,7 +332,7 @@ describe("buildSwapDiff", () => {
   it.each([
     [
       "src/typed-constant.ts",
-      'const DEPLOYMENT: string = "acme/large-1";\nexport function typed(prompt: string) { return generateText({ model: DEPLOYMENT, prompt }); }\n',
+      'import { generateText } from "ai";\nconst DEPLOYMENT: string = "acme/large-1";\nexport function typed(prompt: string) { return generateText({ model: DEPLOYMENT, prompt }); }\n',
       'DEPLOYMENT: string = "acme/small-1"',
     ],
     [
@@ -366,7 +367,7 @@ describe("buildSwapDiff", () => {
     const path = join(root, "src/shadowed.ts");
     await writeFile(
       path,
-      'const summaryModel = "acme/large-1";\nexport function shadow(prompt: string) { const summaryModel = "acme/current"; return generateText({ model: summaryModel, prompt }); }\n',
+      'import { generateText } from "ai";\nconst summaryModel = "acme/large-1";\nexport function shadow(prompt: string) { const summaryModel = "acme/current"; return generateText({ model: summaryModel, prompt }); }\n',
     );
     const stepRecord = scan(root, createMatcherRegistry(), "project").find(
       ({ callSite }) => callSite.path === "src/shadowed.ts",
@@ -388,7 +389,7 @@ describe("buildSwapDiff", () => {
     const path = join(root, "src/parameter-shadow.ts");
     await writeFile(
       path,
-      'const summaryModel = "acme/large-1";\nexport function shadow(summaryModel: string, prompt: string) { return generateText({ model: summaryModel, prompt }); }\n',
+      'import { generateText } from "ai";\nconst summaryModel = "acme/large-1";\nexport function shadow(summaryModel: string, prompt: string) { return generateText({ model: summaryModel, prompt }); }\n',
     );
     const stepRecord = scan(root, createMatcherRegistry(), "project").find(
       ({ callSite }) => callSite.path === "src/parameter-shadow.ts",
@@ -410,7 +411,7 @@ describe("buildSwapDiff", () => {
     const path = join(root, "src/shared-constant.ts");
     await writeFile(
       path,
-      'const MODEL = "acme/large-1";\nexport function first(prompt: string) { return generateText({ model: MODEL, prompt }); }\nexport function second(prompt: string) { return generateText({ model: MODEL, prompt }); }\n',
+      'import { generateText } from "ai";\nconst MODEL = "acme/large-1";\nexport function first(prompt: string) { return generateText({ model: MODEL, prompt }); }\nexport function second(prompt: string) { return generateText({ model: MODEL, prompt }); }\n',
     );
     const stepRecord = scan(root, createMatcherRegistry(), "project").find(
       ({ callSite }) => callSite.path === "src/shared-constant.ts",
@@ -432,7 +433,7 @@ describe("buildSwapDiff", () => {
     const path = join(root, "src/wrong-scope.ts");
     await writeFile(
       path,
-      'function owner() { const MODEL = "acme/large-1"; return MODEL; }\nexport function caller(prompt: string) { return generateText({ model: MODEL, prompt }); }\n',
+      'import { generateText } from "ai";\nfunction owner() { const MODEL = "acme/large-1"; return MODEL; }\nexport function caller(prompt: string) { return generateText({ model: MODEL, prompt }); }\n',
     );
     const stepRecord = scan(root, createMatcherRegistry(), "project").find(
       ({ callSite }) => callSite.path === "src/wrong-scope.ts",
@@ -459,7 +460,7 @@ describe("buildSwapDiff", () => {
       const path = join(root, "src/not-constant.ts");
       await writeFile(
         path,
-        `${assignment}\nexport function notConstant(prompt: string) { return generateText({ model: activeModel, prompt }); }\n`,
+        `import { generateText } from "ai";\n${assignment}\nexport function notConstant(prompt: string) { return generateText({ model: activeModel, prompt }); }\n`,
       );
       const stepRecord = scan(root, createMatcherRegistry(), "project").find(
         ({ callSite }) => callSite.path === "src/not-constant.ts",
