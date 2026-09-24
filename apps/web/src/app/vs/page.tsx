@@ -12,7 +12,7 @@ import { SITE_URL } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "rightmodeler vs alternatives",
   description:
-    "Where rightmodeler ends and gateways, eval platforms, routers, spend meters, model trainers, and benchmarks begin: honest side-by-side pages on what each tool decides and when to use which.",
+    "Where rightmodeler ends and gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, and benchmarks begin.",
   path: "/vs",
 });
 
@@ -26,9 +26,15 @@ const BANDS: { title: string; intro: string; category: string }[] = [
     category: "gateway",
   },
   {
+    title: "The observers",
+    intro:
+      "They trace, evaluate, and improve your agent where it runs. rightmodeler reads the traces they keep and decides which model each step should call.",
+    category: "observability",
+  },
+  {
     title: "The graders",
     intro:
-      "They score outputs against bars you define. rightmodeler asks which steps overpay to clear them, on the same traces.",
+      "They grade outputs with what you assemble: metrics, assertions, datasets, calibrated judges. rightmodeler asks which steps overpay to clear that bar, on the traces you already have.",
     category: "evals",
   },
   {
@@ -44,6 +50,12 @@ const BANDS: { title: string; intro: string; category: string }[] = [
     category: "spend",
   },
   {
+    title: "The coaches",
+    intro:
+      "They improve what your agent sees at runtime, with context learned from its past runs. rightmodeler changes which model each step calls, not what it sees.",
+    category: "context",
+  },
+  {
     title: "The trainers",
     intro:
       "They train a custom model on your data. rightmodeler measures the models you can already call, step by step, against outputs you accepted.",
@@ -52,7 +64,7 @@ const BANDS: { title: string; intro: string; category: string }[] = [
   {
     title: "The scorekeepers",
     intro:
-      "They rank models on shared test sets. rightmodeler scores candidates on your own traces, step by step.",
+      "They rank models on benchmark test sets, shared or your own. rightmodeler decides which model each step in your code calls and proposes the change as a pull request you review.",
     category: "benchmarks",
   },
 ];
@@ -80,7 +92,7 @@ export default function VsPage() {
       <PageHero
         eyebrow="Comparisons"
         title="Different question, different tool."
-        lede="rightmodeler is an offline audit that measures cheaper models against outputs you already accepted. Gateways, eval platforms, routers, spend meters, model trainers, and benchmarks each answer a different question; rightmodeler reads traces from some and replays through others. Each page draws the line."
+        lede="rightmodeler is an offline audit that measures cheaper models against outputs you already accepted. Gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, and benchmarks each answer a different question; rightmodeler reads traces from some and replays through others. Each page draws the line."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />

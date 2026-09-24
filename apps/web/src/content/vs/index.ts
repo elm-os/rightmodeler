@@ -2,8 +2,8 @@
 // ./data, validated against ./vs-page.schema.json by scripts/check-vs.test.mjs and typed against
 // VsPageData here (a wrong or missing field fails `pnpm check-types`); the hub, the [slug] route,
 // the sitemap, and llms.txt all resolve from this list. To add a comparison: create a JSON file
-// and add one import + one entry below. Listed in hub display order: rails, graders, routers,
-// meters, trainers, scorekeepers.
+// and add one import + one entry below. Listed in hub display order: rails, observers, graders,
+// routers, meters, coaches, trainers, scorekeepers.
 
 import type { VsPageData } from "@/content/vs/types";
 import openrouter from "@/content/vs/data/openrouter.json";

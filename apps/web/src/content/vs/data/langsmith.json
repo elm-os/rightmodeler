@@ -3,7 +3,7 @@
   "name": "LangSmith",
   "website": "https://www.langchain.com/langsmith-platform",
   "logo": "/integrations/logos/langsmith.svg",
-  "category": "evals",
+  "category": "observability",
   "verdict": "different-job",
   "verdictLabel": "Different job · failure fixes vs model right-sizing",
   "title": "rightmodeler vs LangSmith: which model each step needs",
