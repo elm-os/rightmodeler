@@ -302,6 +302,20 @@ Both are wrong.
 `logicalCallId` is assigned before entering the SDK. Every physical attempt receives its own
 `attemptId`. Every attempt is charged. Exactly one terminal execution is scored.
 
+### Which model answered
+
+A gateway can answer with another model, from a cache, or after changing the request. Every
+response's `model` is compared with the requested id (equal, a dropped gateway provider prefix,
+or an added dated snapshot), and gateway cache and request markers are read from the headers and
+body. A mismatch is recorded on the attempt as `servedModel` and `substitution`, the execution as
+`attribution: "substituted"`, and the kernel excludes it as `attribution_substituted`; a
+substituted judge response is a judge failure, and in replay the first one whose model differs
+retires that judge at once: no new call to it starts and its calls still waiting for budget are
+cancelled. A catalog id `<id>-fast` whose `<id>` is also listed is that model's fast service
+tier, which Vercel AI Gateway answers as `<id>`, so it is never ranked as a judge or shortlisted
+as a candidate. Only swapped steps are checked in Mode B: the rest are the application's own
+environment.
+
 ### Fallbacks
 
 SDKs that pin their own base URL are detected during `scan`. The fallback is TLS interception
@@ -413,9 +427,12 @@ and pinned pricing. In Mode B the proxy receives prices only for the models the 
 call, so a request for any other model is refused before it is forwarded instead of being paid
 for and then discarded by the host. Concurrency is capped against available reservation. The
 unused remainder is refunded on completion. The host holds authorized totals in
-`budget/<runId>.json`; the proxy enforces; re-leasing is a host round trip. Judge spend is
-metered and charged against the same ledger after the call, not reserved before it, so a judge
-can carry the ledger past the authorized total until the next execution reservation refuses.
+`budget/<runId>.json`; the proxy enforces; re-leasing is a host round trip. Judge calls reserve
+the same way: each call reserves the judge's worst case (catalog pricing, the output cap the
+judge request asks for, and an input estimate) before it is sent and books its actual cost when
+it returns, so no judge call can carry the ledger past the authorized total. A judge call the
+cap cannot cover is never sent: in replay the run stops with the next required cap, and in
+confirmation the case is recorded as `judge_evidence_incomplete`.
 
 Caps are opt-in bounds, not defaults.
 
@@ -435,9 +452,9 @@ model-authored-prefix steps. One judge runs per cell, from a model family that i
 cell's candidate's nor the family of the model that wrote its reference: the call site's current
 model in replay, and in `confirm` the final step's model, whose output is the recorded
 reference. A family whose call sites use models of several vendors is judged per call site,
-never refused. A judge that fails three consecutive terminal calls is marked unusable and the
-next-ranked neutral-family model re-judges the affected cells. Cheaper settings exist and are
-opt-in.
+never refused. A judge that fails three consecutive terminal calls, or once answers as another
+model, is marked unusable and the next-ranked neutral-family model re-judges the affected cells.
+Cheaper settings exist and are opt-in.
 
 **Rate limits are throughput to discover, not a ceiling to hide under.** A per-provider adaptive
 concurrency controller ramps while requests succeed and backs off multiplicatively on 429 or
@@ -546,7 +563,11 @@ reviews.
 Ingest ships OTel GenAI and OpenAI JSONL first, because OTel GenAI is the vendor-neutral format
 that several platforms emit, and the rest follow behind the same contract. The AI SDK's own `ai.*`
 span dialect has a dedicated reader, and its GenAI dialect is read by the OTel GenAI reader, which
-treats agent, step and tool spans as structure.
+treats agent, step and tool spans as structure. The OpenInference reader reads the request body
+when a span carries it, groups spans by session, and leaves failed, replay-tagged and
+content-hidden calls out by name, which makes a gateway's span export (Envoy AI Gateway) a trace
+source. Bifrost's request log export has its own reader, and three-segment gateway ids
+(`vercel/openai/gpt-4o-mini`) take their family from the vendor segment.
 
 ## 14. Skill packs
 

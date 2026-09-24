@@ -8,10 +8,16 @@ import {
   otlpSpans,
   requiredString,
   sampleRecords,
+  type TraceExclusionReason,
 } from "./shared.js";
-import { createRowAdapter, type MappedTraceStep } from "./row-adapter.js";
+import {
+  createRowAdapter,
+  type ExcludedTraceEntry,
+  type MappedTraceStep,
+} from "./row-adapter.js";
 
 const format = "openinference";
+const redacted = "__REDACTED__";
 
 function confidence(sample: unknown): number {
   const records = sampleRecords(sample).filter(isRecord);
@@ -54,52 +60,131 @@ function toolDefinitions(spanAttributes: Record<string, unknown>): unknown[] {
   );
 }
 
+function exclusion(
+  span: Record<string, unknown>,
+  spanAttributes: Record<string, unknown>,
+  inputMessages: readonly unknown[],
+  outputMessages: readonly unknown[],
+): TraceExclusionReason | undefined {
+  if (optionalString(spanAttributes["rightmodeler.replay"]) !== undefined) {
+    return "replay_traffic";
+  }
+  const statusCode = isRecord(span.status) ? span.status.code : undefined;
+  if (
+    statusCode === 2 ||
+    statusCode === "STATUS_CODE_ERROR" ||
+    (Array.isArray(span.events) &&
+      span.events.some(
+        (event) => isRecord(event) && event.name === "exception",
+      ))
+  ) {
+    return "call_failed";
+  }
+  if (
+    (spanAttributes["input.value"] === redacted &&
+      inputMessages.length === 0) ||
+    (spanAttributes["output.value"] === redacted && outputMessages.length === 0)
+  ) {
+    return "content_hidden";
+  }
+  return undefined;
+}
+
+function requestBody(
+  spanAttributes: Record<string, unknown>,
+): { model: string; messages: unknown[] } | undefined {
+  const body = jsonEncodedValue(spanAttributes["input.value"]);
+  if (!isRecord(body) || !Array.isArray(body.messages)) return undefined;
+  const model = optionalString(body.model);
+  return model === undefined ? undefined : { model, messages: body.messages };
+}
+
+function responseMessage(spanAttributes: Record<string, unknown>): unknown {
+  const response = jsonEncodedValue(spanAttributes["output.value"]);
+  if (
+    !isRecord(response) ||
+    !Array.isArray(response.choices) ||
+    response.choices.length === 0
+  ) {
+    return undefined;
+  }
+  const choice: unknown = response.choices[0];
+  return isRecord(choice) ? choice.message : undefined;
+}
+
 export const openInferenceAdapter = createRowAdapter({
   format,
   label: "OpenInference OTLP file export",
   detect: confidence,
   mapRecord(record, recordIndex) {
-    const mapped: MappedTraceStep[] = [];
+    const mapped: Array<MappedTraceStep | ExcludedTraceEntry> = [];
     for (const [spanIndex, span] of otlpSpans(record).entries()) {
       const spanAttributes = otlpAttributes(span);
       if (spanAttributes["openinference.span.kind"] !== "LLM") continue;
-      const traceId = requiredString(
+      const spanTraceId = requiredString(
         span.traceId,
         `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} traceId`,
         format,
       );
-      const model = requiredString(
-        spanAttributes["llm.model_name"],
-        `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} model`,
-        format,
-      );
-      let rawMessages: unknown[] = indexedMessages(
+      const traceId =
+        optionalString(spanAttributes["session.id"]) ?? spanTraceId;
+      const inputMessages = indexedMessages(
         spanAttributes,
         "llm.input_messages",
       );
-      if (
-        rawMessages.length === 0 &&
-        spanAttributes["input.value"] !== undefined
-      ) {
-        const input = jsonEncodedValue(spanAttributes["input.value"]);
-        rawMessages = Array.isArray(input) ? input : [input];
-      }
-      const tools = toolDefinitions(spanAttributes);
-      if (tools.length > 0) rawMessages.push({ tools });
       const outputMessages = indexedMessages(
         spanAttributes,
         "llm.output_messages",
       );
-      const output =
+      const excluded = exclusion(
+        span,
+        spanAttributes,
+        inputMessages,
+        outputMessages,
+      );
+      if (excluded !== undefined) {
+        mapped.push({ traceId, excluded });
+        continue;
+      }
+      const recordedOutput =
         outputMessages.length > 0
           ? outputMessages
           : jsonEncodedValue(spanAttributes["output.value"]);
+      const request = requestBody(spanAttributes);
+      let model: string;
+      let rawMessages: unknown[];
+      let output: unknown;
+      if (request === undefined) {
+        model = requiredString(
+          spanAttributes["llm.model_name"],
+          `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} model`,
+          format,
+        );
+        rawMessages = inputMessages;
+        if (
+          rawMessages.length === 0 &&
+          spanAttributes["input.value"] !== undefined
+        ) {
+          const input = jsonEncodedValue(spanAttributes["input.value"]);
+          rawMessages = Array.isArray(input) ? input : [input];
+        }
+        const tools = toolDefinitions(spanAttributes);
+        if (tools.length > 0) rawMessages.push({ tools });
+        output = recordedOutput;
+      } else {
+        model = request.model;
+        rawMessages = request.messages;
+        output = responseMessage(spanAttributes) ?? recordedOutput;
+      }
       const usage = optionalUsage(
         spanAttributes["llm.token_count.prompt"],
         spanAttributes["llm.token_count.completion"],
         `OpenInference record ${recordIndex + 1}`,
         format,
       );
+      const family =
+        optionalString(spanAttributes["rightmodeler.family"]) ??
+        optionalString(span.name);
       mapped.push({
         traceId,
         sortValue: optionalString(span.startTimeUnixNano),
@@ -119,10 +204,8 @@ export const openInferenceAdapter = createRowAdapter({
             format,
           ),
           ...(usage === undefined ? {} : { usage }),
-          trajectoryId: optionalString(spanAttributes["session.id"]) ?? traceId,
-          ...(optionalString(span.name) === undefined
-            ? {}
-            : { family: optionalString(span.name) }),
+          trajectoryId: traceId,
+          ...(family === undefined ? {} : { family }),
           ...(optionalString(span.startTimeUnixNano) === undefined
             ? {}
             : { timestamp: optionalString(span.startTimeUnixNano) }),

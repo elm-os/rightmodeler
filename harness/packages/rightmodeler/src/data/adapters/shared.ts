@@ -15,14 +15,20 @@ export type TraceFormat =
   | "helicone"
   | "weave"
   | "claude-code"
-  | "codex";
+  | "codex"
+  | "bifrost";
 
 export interface DroppedTraceRecord {
   recordIndex: number;
   reason: string;
 }
 
-export type TraceExclusionReason = "stream_incomplete";
+export type TraceExclusionReason =
+  | "stream_incomplete"
+  | "call_failed"
+  | "replay_traffic"
+  | "content_hidden"
+  | "fallback_answer";
 
 export interface ExcludedTraceStep {
   recordIndex: number;
@@ -288,12 +294,28 @@ export function strictRuns(
   return result.runs;
 }
 
+const exclusionMeanings: Record<TraceExclusionReason, string> = {
+  stream_incomplete:
+    "ended without a finish reason because it was aborted or errored",
+  call_failed: "the call failed and has no accepted output",
+  replay_traffic: "rightmodeler's own replay calls, tagged by a replay header",
+  content_hidden: "the gateway did not record the prompt or the output",
+  fallback_answer:
+    "answered by a configured fallback, not the model the application asked for",
+};
+
 export function excludedStepsWarning(
   result: TraceAdaptResult,
 ): string | undefined {
-  const count = result.excludedSteps?.length ?? 0;
-  if (count === 0) return undefined;
-  return `${count} traced model call(s) ended without a finish reason and were left out of the corpus (stream_incomplete: the call was aborted or errored before it finished). The rest of the trace input was read.`;
+  const excluded = result.excludedSteps ?? [];
+  if (excluded.length === 0) return undefined;
+  const clauses = Object.entries(exclusionMeanings).flatMap(
+    ([reason, meaning]) => {
+      const count = excluded.filter((step) => step.reason === reason).length;
+      return count === 0 ? [] : [`${count} ${reason} (${meaning})`];
+    },
+  );
+  return `${excluded.length} traced model call(s) were left out of the corpus: ${clauses.join(", ")}. The rest of the trace input was read.`;
 }
 
 export function requiredString(

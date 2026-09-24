@@ -70,6 +70,7 @@ describe("aggregate", () => {
         "attribution_ambiguous",
         "attribution_lost",
         "judge_evidence_incomplete",
+        "attribution_substituted",
       ]),
     );
   });
@@ -311,6 +312,22 @@ describe("aggregate", () => {
         observed: 0.08,
         required: EXCLUDED_FRACTION_MAX,
       },
+    });
+  });
+
+  it("names substituted executions as attribution_substituted", () => {
+    const facts = aggregationFacts(100, (index) => ({
+      attribution: index < 6 ? "substituted" : "ok",
+    }));
+
+    expect(aggregate(facts, options)[0]).toMatchObject({
+      excludedExecutions: 6,
+      assessmentAbsentReasons: [
+        { reason: "attribution_substituted", count: 6 },
+      ],
+      decision: "abstain",
+      abstainReason: { reason: "excluded_fraction_exceeded" },
+      availability: { availableExecutions: 100 },
     });
   });
 

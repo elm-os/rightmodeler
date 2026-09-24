@@ -70,6 +70,10 @@ const twoCaseIsolationPolicy: ReleaseGatePolicy = {
   passFraction: releaseGatePolicy.passFraction,
 };
 const confirmationCaseCount = 17;
+const unpricedJudgeLimits = {
+  pricing: { input: 0, output: 0 },
+  maxOutputTokens: 512,
+};
 
 const catalog: ModelCatalogEntry[] = [
   {
@@ -210,6 +214,7 @@ interface FakeRunner {
 
 function fakeRunner(
   fails: (members: ReadonlySet<string>) => boolean,
+  substituted = false,
 ): FakeRunner {
   let calls = 0;
   let kill = false;
@@ -248,9 +253,9 @@ function fakeRunner(
           trajectoryId: recordedCase.trajectoryId,
           corpusSplit: recordedCase.corpusSplit,
           selectionStage: "confirm",
-          terminalOutcome: "success",
+          terminalOutcome: substituted ? "abstain" : "success",
           finalOutput: fails(members) ? "degraded" : "accepted",
-          attribution: "ok",
+          attribution: substituted ? "substituted" : "ok",
         });
         await writeReplayFact(
           input.store,
@@ -271,6 +276,15 @@ function fakeRunner(
         rejectedRows: 0,
         lostReasons: {},
         executions,
+        substituted: substituted
+          ? executions.map((execution) => ({
+              candidateId: execution.candidateId,
+              substitution: {
+                kind: "model" as const,
+                evidence: `served acme/large-1 for requested ${execution.candidateId}`,
+              },
+            }))
+          : [],
       };
     },
   };
@@ -340,6 +354,7 @@ async function testContext(
           chat: judgeChat(),
           judgeModel: "neutral/judge",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
         },
         runner: runner.run,
       },
@@ -489,6 +504,7 @@ async function realModeBContext(
           chat: judgeChat(),
           judgeModel: "neutral/judge",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
           providerId: "deterministic-test-judge",
         },
       },
@@ -676,6 +692,7 @@ describe.skipIf(skipDocker)("confirmSwapSet", () => {
                 }),
               judgeModel: "zeta/judge-1",
               supportsStructuredOutput: true,
+              ...unpricedJudgeLimits,
               providerId: provider.providerId,
             },
           },
@@ -789,6 +806,124 @@ describe.skipIf(skipDocker)("confirmSwapSet", () => {
     expect(second).toMatchObject({ verdict: "confirmed", runSetsUsed: 1 });
     expect(runner.calls()).toBe(1);
     expect(assessments).toHaveLength(17);
+  });
+
+  it("holds confirm judge spend inside the cap and names the refused case judge_evidence_incomplete", async () => {
+    const runner = fakeRunner(() => false);
+    const context = await testContext(runner, 1);
+    const budget = createBudget({
+      store: context.store,
+      projectId,
+      runId: "judge-budget-cap",
+      authorizedTotalUsd: 0.001,
+    });
+    const delegate = judgeChat();
+
+    const result = await confirmSwapSet({
+      ...context.input,
+      modeB: {
+        ...context.input.modeB,
+        judge: {
+          ...context.input.modeB.judge,
+          chat: async (request) => ({
+            ...(await delegate(request)),
+            costUsd: 0.0004,
+          }),
+          pricing: { input: 0.00001, output: 0.00001 },
+          maxOutputTokens: 512,
+        },
+      },
+      budget: { modeB: budget, maxRunSets: 1 },
+    });
+    const storedFacts = await facts(context.store);
+
+    expect((await budget.state()).spentUsd).toBeLessThanOrEqual(0.001);
+    expect(result.verdict).toBe("inconclusive");
+    expect(storedFacts.filter((fact) => "assessmentId" in fact)).toEqual([]);
+    expect(storedFacts).toContainEqual(
+      expect.objectContaining({
+        actor: "judge",
+        reconcilableTo: expect.objectContaining({
+          assessmentAbsentReason: "judge_evidence_incomplete",
+          judgeFailureKind: "budget",
+          errorDetail: expect.objectContaining({
+            message: expect.stringContaining("raise it to at least"),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("treats a substituted execution as incomplete, never as a failure", async () => {
+    const runner = fakeRunner(() => false, true);
+    const context = await testContext(runner);
+
+    const result = await confirmSwapSet(context.input);
+    const plan = await readPlan(context.store);
+
+    expect(result.verdict).toBe("inconclusive");
+    expect(
+      result.members.every(
+        ({ cascadeStatus }) => cascadeStatus !== "confirmed",
+      ),
+    ).toBe(true);
+    expect(plan.queue.length).toBeGreaterThan(0);
+    expect(
+      plan.queue.every(({ status }) => status !== "pass" && status !== "fail"),
+    ).toBe(true);
+    expect(result.substituted.length).toBeGreaterThan(0);
+    expect(
+      (await facts(context.store)).filter((fact) => "assessmentId" in fact),
+    ).toEqual([]);
+  });
+
+  it("ends a case whose confirm judge answer was substituted as judge_evidence_incomplete", async () => {
+    const runner = fakeRunner(() => false);
+    const context = await testContext(runner);
+    const delegate = judgeChat();
+
+    const result = await confirmSwapSet({
+      ...context.input,
+      modeB: {
+        ...context.input.modeB,
+        judge: {
+          ...context.input.modeB.judge,
+          chat: async (request) => ({
+            ...(await delegate(request)),
+            substitution: {
+              kind: "model",
+              evidence: "served acme/large-1 for requested neutral/judge",
+            },
+          }),
+        },
+      },
+    });
+    const storedFacts = await facts(context.store);
+
+    expect(result.verdict).toBe("inconclusive");
+    expect(storedFacts.filter((fact) => "assessmentId" in fact)).toEqual([]);
+    expect(storedFacts).toContainEqual(
+      expect.objectContaining({
+        actor: "judge",
+        costUsd: 0,
+        reconcilableTo: expect.objectContaining({
+          assessmentAbsentReason: "judge_evidence_incomplete",
+          judgeFailureKind: "provider_error",
+          errorDetail: expect.objectContaining({
+            message: expect.stringContaining(
+              "Judge response was substituted (model)",
+            ),
+          }),
+        }),
+      }),
+    );
+    expect(storedFacts).toContainEqual(
+      expect.objectContaining({
+        actor: "judge",
+        costUsd: 0.000001,
+        reconcilableTo: expect.objectContaining({ costUnavailable: false }),
+      }),
+    );
   });
 
   it("writes the swap set candidate on the cascade finding", async () => {
