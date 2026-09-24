@@ -48,6 +48,9 @@ export default async function Image({
   const { slug } = await params;
   const integration = getIntegration(slug);
   if (!integration) notFound();
+  // At 95px a name longer than about 20 characters, such as "Agent Router (formerly Envoy AI
+  // Gateway)", wraps to three lines and runs into the tagline; 72px fits three above it.
+  const longName = integration.name.length > 20;
 
   return new ImageResponse(
     <div
@@ -135,8 +138,8 @@ export default async function Image({
           flexDirection: "column",
           fontFamily: "DM Sans",
           fontWeight: 300,
-          fontSize: 95,
-          lineHeight: "98px",
+          fontSize: longName ? 72 : 95,
+          lineHeight: longName ? "74px" : "98px",
           letterSpacing: "-0.0375em",
         }}
       >
