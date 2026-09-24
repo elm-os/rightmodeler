@@ -393,6 +393,40 @@ describe("direct stream parser behavior", () => {
     expect(result).toMatchObject({ outcome: "provider_error", reason: "http" });
   });
 
+  it("reports the first model a stream names", async () => {
+    const chunk = (model: string | undefined, content: string) =>
+      `data: ${JSON.stringify({
+        ...(model === undefined ? {} : { model }),
+        choices: [{ index: 0, delta: { content }, finish_reason: null }],
+      })}\n\n`;
+    const options = {
+      format: "openai-chat-completions",
+      idleTimeoutMs: 100,
+      hardDeadlineMs: 1_000,
+    } as const;
+
+    await expect(
+      classifyStream(
+        directStream([
+          chunk("a/one", "first"),
+          chunk("a/two", "second"),
+          "data: [DONE]\n\n",
+        ]),
+        options,
+      ),
+    ).resolves.toMatchObject({
+      outcome: "completed",
+      content: "firstsecond",
+      model: "a/one",
+    });
+    const unnamed = await classifyStream(
+      directStream([chunk(undefined, "only"), "data: [DONE]\n\n"]),
+      options,
+    );
+    expect(unnamed.outcome).toBe("completed");
+    expect(unnamed.model).toBeUndefined();
+  });
+
   it("marks finish_reason followed by EOF as finished without a sentinel", async () => {
     const chunk = JSON.stringify({
       choices: [

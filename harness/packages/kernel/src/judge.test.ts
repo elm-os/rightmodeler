@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ModelCatalogEntry } from "@rightmodeler/core";
+import { catalogFamily, type ModelCatalogEntry } from "@rightmodeler/core";
 
 import {
   judgeExecution,
@@ -106,6 +106,45 @@ describe("pickJudge", () => {
     ).toEqual(["vendor/model"]);
   });
 
+  it("never ranks a -fast service tier whose base model is listed", () => {
+    const catalog: ModelCatalogEntry[] = [
+      {
+        id: "vendor/model-fast",
+        family: "vendor",
+        contextLength: 100,
+        pricing: { input: 2, output: 2 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 10,
+      },
+      {
+        id: "vendor/model",
+        family: "vendor",
+        contextLength: 100,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 10,
+      },
+      {
+        id: "solo/model-fast",
+        family: "solo",
+        contextLength: 50,
+        pricing: { input: 0.5, output: 0.5 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 5,
+      },
+    ];
+
+    expect(
+      pickJudges(catalog, {
+        candidateFamily: "candidate",
+        referenceFamily: "reference",
+      }),
+    ).toEqual(["vendor/model", "solo/model-fast"]);
+  });
+
   it("ranks eligible models by summed signal percentiles", () => {
     const catalog: ModelCatalogEntry[] = [
       {
@@ -179,6 +218,39 @@ describe("pickJudge", () => {
     ).toEqual(["neutral/text"]);
   });
 
+  it("never ranks a model without catalog pricing as a judge", () => {
+    const unpriced: ModelCatalogEntry = {
+      id: "neutral/unpriced",
+      family: "neutral-unpriced",
+      contextLength: 1_000,
+      pricing: null,
+      supportsTools: false,
+      supportsStructuredOutput: true,
+      releasedAt: 100,
+    };
+    const catalog: ModelCatalogEntry[] = [
+      unpriced,
+      {
+        id: "neutral/priced",
+        family: "neutral-priced",
+        contextLength: 10,
+        pricing: { input: 1, output: 1 },
+        supportsTools: false,
+        supportsStructuredOutput: true,
+        releasedAt: 1,
+      },
+    ];
+    const families = {
+      candidateFamily: "candidate",
+      referenceFamily: "reference",
+    };
+
+    expect(pickJudges(catalog, families)).toEqual(["neutral/priced"]);
+    expect(() => pickJudges([unpriced], families)).toThrow(
+      "No neutral third-family judge is available: the catalog needs a priced model",
+    );
+  });
+
   it("prefers a non-reasoning model over its reasoning twin", () => {
     const catalog: ModelCatalogEntry[] = [
       {
@@ -248,6 +320,29 @@ describe("pickJudge", () => {
         referenceFamily: "reference",
       }),
     ).toEqual(["neutral/z", "neutral/a", "neutral/older"]);
+  });
+
+  it("keeps a judge neutral for three-segment gateway ids", () => {
+    const catalog: ModelCatalogEntry[] = [
+      "vercel/openai/a",
+      "vercel/anthropic/b",
+      "vercel/google/c",
+    ].map((id) => ({
+      id,
+      family: catalogFamily(id),
+      contextLength: 100,
+      pricing: { input: 1, output: 1 },
+      supportsTools: false,
+      supportsStructuredOutput: true,
+      releasedAt: 10,
+    }));
+
+    expect(
+      pickJudges(catalog, {
+        candidateFamily: "openai",
+        referenceFamily: "anthropic",
+      }),
+    ).toEqual(["vercel/google/c"]);
   });
 });
 

@@ -7,11 +7,11 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 - Node.js 24 or newer.
 - A Git repository to analyze.
 - Trace input in a supported format.
-- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for bare OpenAI or another unpriced endpoint, pass `--pricing-file`.
+- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for a gateway that lists bare model ids, pass `--catalog-reference`; for bare OpenAI or another unpriced endpoint, pass `--pricing-file`.
 
 Supported trace sources are OTel GenAI, AI SDK telemetry, OpenAI JSONL,
-Langfuse, Braintrust, LangSmith, OpenInference, Helicone, W&B Weave, Claude
-Code, and Codex.
+Langfuse, Braintrust, LangSmith, OpenInference, Helicone, Bifrost, W&B Weave,
+Claude Code, and Codex.
 
 ## Start with automatic discovery
 
@@ -58,6 +58,10 @@ The scanner records that `functionId` on the call site, and a family binds to ex
 
 Export the spans through the OpenTelemetry NodeSDK or `@vercel/otel` to an OTLP collector, and pass the collector's file exporter output with `--traces`. A model call that ended without a finish reason, because it was aborted or errored, is left out of the corpus with a `trace_steps_excluded` warning, and the rest of the input is read. Token usage from AI SDK 4 exports (`ai.usage.promptTokens`) is not read, so those calls carry no usage.
 
+## OpenInference spans
+
+When an OpenInference span carries the request body in `input.value` (Envoy AI Gateway, and the OpenAI instrumentation), rightmodeler reads the model your application asked for and the conversation exactly as sent from it, and the output from `output.value`. Spans that share a `session.id` form one run ordered by start time. A `rightmodeler.family` attribute names the family; otherwise the span name does. Failed calls, calls tagged `rightmodeler.replay`, and calls whose content was hidden are left out with a `trace_steps_excluded` warning.
+
 ## Run the complete pipeline
 
 ```sh
@@ -69,6 +73,8 @@ npx rightmodeler init --traces /path/to/traces.json --base-url https://provider.
 `--api-key-env <name>` to use a different exported variable. The CLI does not ask
 for a secret value.
 
+Replay resends each recorded conversation as text. A recorded case whose conversation contains tool calls, non-text parts, or tool definitions is left out of the replay sample with a `recorded_messages_not_replayable` warning; the family's other cases replay, and a family left with too few cases abstains under the usual sample-size reasons.
+
 ## Estimate replay spend
 
 ```sh
@@ -77,6 +83,8 @@ npx rightmodeler estimate --traces /path/to/traces.json --base-url https://provi
 
 Estimate projects candidate replay spend from recorded token usage and the current
 model catalog before paid model calls begin.
+`--max-cost-usd` caps candidate replays and judge calls together: each call reserves
+its worst case before it is sent, and a call the cap cannot cover is not sent.
 
 ## Static code context (Graphify)
 
@@ -109,13 +117,35 @@ Graph edges are never replay trials, runtime proof, or quality evidence, and the
 
 `qualityFloor` must be greater than 0.8 and less than 1, and `shortlistTop` must be a positive integer. Changing the policy changes the stamped gate policy version, so shortlist and replay run again instead of pooling evidence gathered under the old policy.
 
-## Catalogs without pricing
+## Catalogs without pricing or capabilities
 
 Rightmodeler reads per-token pricing from the model catalog. When every catalog
 entry has null pricing and no `--pricing-file` is set, it requests LiteLLM
 `GET /model/info` on the same host. Use `--pricing-file` for bare OpenAI
 endpoints or when `/model/info` has no usable per-token costs; file entries
 override provider pricing.
+
+Some gateways answer `/v1/models` with bare model ids: Envoy AI Gateway lists
+the models a route declares, and Bifrost lists custom providers with ids and
+context only. Pass `--catalog-reference <url|path>` to name the upstream's own
+model list, for example `https://ai-gateway.vercel.sh/v1/models` or
+`https://openrouter.ai/api/v1/models`. Rightmodeler reads it without your key or
+headers and joins it to the gateway's entries by id, or by the reference id a
+gateway id ends with (`openai/gpt-4o-mini` for `vercel/openai/gpt-4o-mini`). A
+gateway entry takes from its match only what it does not declare itself (price,
+context window, output ceiling, tool and structured-output support); a match
+that is not a language model removes the entry; `--pricing-file` values win over
+both. Entries still unpriced after the join are named in a
+`catalog_reference_unmatched` warning, and a reference that cannot be read stops
+the run with `invalid_catalog_reference`.
+
+The release date is the one field where the reference wins over the gateway:
+when the matched reference entry has a release date, it replaces the date the
+gateway declares, and the gateway's date is kept only when the reference gives
+none. Rightmodeler ranks judges partly by how recent a model is, and a gateway
+can give every model the same placeholder date (Bifrost does for Vercel AI
+Gateway's models), which would leave context and price to rank the judges and
+favor the most expensive.
 
 ```sh
 npx rightmodeler estimate --base-url https://provider.example/v1 --pricing-file /path/to/pricing.json --repo /path/to/repository
@@ -134,13 +164,26 @@ include the model's output ceiling:
 }
 ```
 
-Without usable pricing from the catalog, LiteLLM `/model/info`, or a pricing
-file, the run refuses with `no_priced_candidates` instead of reporting zero
-cost.
+Without usable pricing from the catalog, a catalog reference, LiteLLM
+`/model/info`, or a pricing file, the run refuses with `no_priced_candidates`
+instead of reporting zero cost. The judge must be priced too, so price at least
+one model from a family other than the current model's and the candidate's.
+
+## Which model answered
+
+Rightmodeler checks every replay and judge response, and in Mode B every response to a step whose model it sets, before it counts. It records the model the response names, and it leaves a response out of the evidence when that model is not the one it asked for, when a gateway reports that it answered from its cache (Portkey's `x-portkey-cache-status: HIT`, Bifrost's `cache_debug.cache_hit`), or when a gateway reports that it changed the request (a Portkey hook with `transformed: true`, Bifrost's compat plugin dropping parameters). Such a response is recorded with `attribution: "substituted"`, is never graded, and counts as `attribution_substituted`; more than 5% of a family's replays substituted abstains the family. A `replay_responses_substituted` warning counts them.
+
+A response names the requested model when it echoes it, when it drops a gateway provider prefix (`openai/gpt-4o-mini` for `vercel/openai/gpt-4o-mini`), or when it adds a dated snapshot (`gpt-4o-mini-2024-07-18` for `gpt-4o-mini`). An alias whose answering model has another name counts as substituted, so name replay models by their upstream ids and turn off fallbacks, model aliases, response caching and request plugins for the replay route. Completed replay cells are reused, so after fixing the route rerun with a fresh store (`--store <directory>`). For streamed Mode B calls only the model a stream names and the response headers are checked.
+
+A judge whose response names another model is retired at that first response: rightmodeler starts no new call to it, cancels its calls still waiting for budget, and re-judges the affected replays with the next-ranked judge once the calls already under way return; the `judge_unusable` warning names the model that answered. Some catalogs also list a faster service tier of a model under its own id, which the gateway answers as the base model: on Vercel AI Gateway, `<id>-fast` is `<id>` at its fast tier. Rightmodeler never ranks such an id as a judge or shortlists it as a candidate while `<id>` is in the catalog too; an id that ends in `-fast` with no base model listed, such as `morph/morph-v3-fast`, is treated like any other model.
+
+## Gateways that route by header
+
+Some gateways choose the upstream, the cache policy, or a trace tag from request headers. Pass each one with `--header 'name: value'`; repeat the option for more. Rightmodeler sends them with every request it makes to the provider base URL: the model catalog, candidate replays, judge calls, and the calls Mode B makes from your application, where a configured header replaces one your application sends. `authorization` comes only from `--api-key-env`, and `content-type`, `content-length` and `host` are set by rightmodeler, so none of them can be passed as a header. Completed replay cells are reused when the headers change, so after changing the route rerun with a fresh store (`--store <directory>`). A detached replay run is keyed to the header values by their SHA-256 digests; the values themselves are passed to the detached worker on its command line and are not written to the store. Do not put secrets in headers.
 
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md`. The JSON report is kept inside the versioned store and is never written as a plain file, so read the final `result` event from `--output json` or `--output jsonl` for the machine-readable outcome.
 
-Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), and the [exit-code convention](exit-codes.md) before automating a full run.
+Read the generated [command reference](commands.md), the [evaluator guide](evaluators.md), [Mode B configuration](modeb.md), the [gateway guide](gateways.md), and the [exit-code convention](exit-codes.md) before automating a full run.
 
 To open the draft pull request and keep it reconciled, read the [GitHub guide](github.md).
 

@@ -121,6 +121,9 @@ function parseEvent(data) {
         usage: value.usage === undefined || value.usage === null
             ? null
             : parseUsage(value.usage),
+        ...(typeof value.model === "string" && value.model.length > 0
+            ? { model: value.model }
+            : {}),
     };
 }
 function eventData(event) {
@@ -144,6 +147,7 @@ export async function classifyStream(byteStream, options) {
     const collector = new ContentCollector(options.spoolSink, processingController.signal);
     let chunks = 0;
     let usage = null;
+    let model;
     let sawFinish = false;
     let selectedResult;
     const result = (outcome, reason, finishedWithoutSentinel = false) => {
@@ -154,6 +158,7 @@ export async function classifyStream(byteStream, options) {
             usage,
             chunks,
             ...(finishedWithoutSentinel ? { finishedWithoutSentinel: true } : {}),
+            ...(model === undefined ? {} : { model }),
         };
         return selectedResult;
     };
@@ -283,6 +288,7 @@ export async function classifyStream(byteStream, options) {
                     throw error;
                 }
                 usage = event.usage ?? usage;
+                model ??= event.model;
                 sawFinish ||= event.finished;
             }
         }

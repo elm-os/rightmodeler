@@ -32,7 +32,7 @@ export {
   detectCloudAvailability,
 } from "@rightmodeler/executor/cloud-sandbox";
 
-import type { Budget } from "./budget.js";
+import { BudgetRefusalError, reserveWhenFree, type Budget } from "./budget.js";
 import {
   replayModeB,
   type ModeBCase,
@@ -41,7 +41,13 @@ import {
   type ReplayModeBResult,
 } from "./driver-modeb.js";
 import { writeReplayFact } from "./driver.js";
-import { ProviderConfigurationError } from "./provider.js";
+import type { SubstitutedResponse } from "./provenance.js";
+import {
+  estimateInputTokens,
+  ProviderConfigurationError,
+  ProviderResponseError,
+  type ModelPricing,
+} from "./provider.js";
 import type { ReplayStep } from "./shortlist.js";
 
 type PlanItemStatus = "pending" | "running" | "pass" | "fail";
@@ -85,6 +91,8 @@ export interface ConfirmModeB {
     readonly chat: JudgeChat;
     readonly judgeModel: string;
     readonly supportsStructuredOutput: boolean;
+    readonly pricing: ModelPricing;
+    readonly maxOutputTokens: number;
     readonly providerId?: string;
   };
   readonly runner?: (input: ReplayModeBInput) => Promise<ReplayModeBResult>;
@@ -122,6 +130,7 @@ export interface ConfirmSwapSetResult {
   readonly runSetsUsed: number;
   readonly log: readonly DeltaDebugLogEntry<string>[];
   readonly lostReasons: Readonly<Record<string, number>>;
+  readonly substituted: readonly SubstitutedResponse[];
   readonly infrastructureBlocks: readonly {
     readonly reason: string;
     readonly message: string;
@@ -568,17 +577,39 @@ async function assessExecution(
   if (matches[0] !== undefined) return matches[0];
 
   let invocation = 0;
-  let judgeFailureKind: "response_malformed" | "provider_error" =
+  let judgeFailureKind: "response_malformed" | "provider_error" | "budget" =
     "response_malformed";
   let judgePersistenceFailure: unknown;
+  const judgeRefunds = new Set<Promise<void>>();
   let judged;
   try {
     judged = await judgeExecution({
       chat: async (request) => {
         let judgeResponse: JudgeChatResult | undefined;
         invocation += 1;
+        const reservation = await reserveWhenFree(
+          input.budget.modeB,
+          {
+            contextTokens: estimateInputTokens(request.messages),
+            maxOutputTokens: input.modeB.judge.maxOutputTokens,
+            pricing: input.modeB.judge.pricing,
+          },
+          judgeRefunds,
+        );
+        let resolveRefund = (): void => undefined;
+        const refundComplete = new Promise<void>((resolve) => {
+          resolveRefund = resolve;
+        });
+        judgeRefunds.add(refundComplete);
         try {
           judgeResponse = await input.modeB.judge.chat(request);
+          if (judgeResponse.substitution !== undefined) {
+            const { kind, evidence } = judgeResponse.substitution;
+            throw new ProviderResponseError(
+              `Judge response was substituted (${kind}): ${evidence}`,
+              { status: 200, bodyExcerpt: evidence },
+            );
+          }
           return judgeResponse;
         } catch (error) {
           if (error instanceof ProviderConfigurationError) throw error;
@@ -609,12 +640,13 @@ async function assessExecution(
                 },
               }),
             );
-            if (judgeResponse !== undefined && judgeResponse.costUsd > 0) {
-              await input.budget.modeB.charge(judgeResponse.costUsd);
-            }
+            await reservation.refund(judgeResponse?.costUsd ?? 0);
           } catch (persistenceError) {
             judgePersistenceFailure = persistenceError;
             throw persistenceError;
+          } finally {
+            judgeRefunds.delete(refundComplete);
+            resolveRefund();
           }
         }
       },
@@ -637,6 +669,7 @@ async function assessExecution(
     ) {
       throw error;
     }
+    if (error instanceof BudgetRefusalError) judgeFailureKind = "budget";
     const failureId = randomUUID();
     await writeReplayFact(
       input.store,
@@ -720,6 +753,10 @@ async function outcomeFromFacts(
   }> = [];
   for (const recordedCase of input.cases) {
     const execution = executions.get(recordedCase.caseId)!;
+    if (execution.attribution === "substituted") {
+      incomplete = true;
+      continue;
+    }
     if (
       execution.attribution === "lost" ||
       execution.attribution === "ambiguous"
@@ -808,6 +845,7 @@ export async function confirmSwapSet(
   const planKey = confirmPlanKey(input.budget.modeB.projectId, familyId);
   await ensurePlan(input.store, planKey, familyId, inputDigest);
   const lostReasons: Record<string, number> = {};
+  const substituted: SubstitutedResponse[] = [];
   const infrastructureBlocks: { reason: string; message: string }[] = [];
 
   const runSubset = async (
@@ -871,6 +909,7 @@ export async function confirmSwapSet(
     for (const [reason, count] of Object.entries(result.lostReasons)) {
       lostReasons[reason] = (lostReasons[reason] ?? 0) + count;
     }
+    substituted.push(...result.substituted);
     for (const block of result.blocked) {
       if (block.kind === "infrastructure") {
         infrastructureBlocks.push({
@@ -999,6 +1038,7 @@ export async function confirmSwapSet(
     runSetsUsed: result.runSetsUsed,
     log: result.log,
     lostReasons,
+    substituted,
     infrastructureBlocks,
     ...(capped ? { requiredMaxRunSets: input.budget.maxRunSets + 1 } : {}),
   };

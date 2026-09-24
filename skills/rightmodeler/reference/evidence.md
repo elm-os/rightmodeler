@@ -106,6 +106,8 @@ The exported `EVIDENCE_EXCLUSION_REASONS` values name malformed or absent execut
   cannot be assigned to one logical call.
 - `attribution_lost`: no attempt could be attributed to the execution, so there is no request
   evidence behind its outcome.
+- `attribution_substituted`: the response came from another model, from a gateway cache, or
+  from a request the gateway changed, so it is not evidence about the requested candidate.
 - `assessment_evidence_missing`: an attributable non-judge execution has no assessment and no
   more specific named absence.
 - `judge_evidence_incomplete`: judge evidence is absent or its assessment lacks the required

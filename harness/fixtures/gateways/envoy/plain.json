@@ -1,0 +1,98 @@
+{
+  "requestedModel": "amazon/nova-micro",
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": {
+    "id": "gen_01M38GRBZ13DKN3PEK322Z0ZP2",
+    "object": "chat.completion",
+    "created": 1790213632,
+    "model": "amazon/nova-micro",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "The parcel departed the depot this morning and is expected to arrive by Friday.",
+          "provider_metadata": {
+            "bedrock": {
+              "stopSequence": null
+            },
+            "gateway": {
+              "routing": {
+                "originalModelId": "amazon/nova-micro",
+                "resolvedProvider": "bedrock",
+                "fallbacksAvailable": [],
+                "planningReasoning": "System credentials planned for: bedrock. Total execution order: bedrock(system)",
+                "canonicalSlug": "amazon/nova-micro",
+                "finalProvider": "bedrock",
+                "modelAttemptCount": 1,
+                "modelAttempts": [
+                  {
+                    "canonicalSlug": "amazon/nova-micro",
+                    "success": true,
+                    "providerAttemptCount": 1,
+                    "providerAttempts": [
+                      {
+                        "provider": "bedrock",
+                        "credentialType": "system",
+                        "success": true,
+                        "startTime": 1790213632012,
+                        "endTime": 1790213632720,
+                        "providerRequestId": "1cca5de7-d6de-4fb3-89ee-6ae7f3a20071",
+                        "statusCode": 200
+                      }
+                    ]
+                  }
+                ],
+                "totalProviderAttemptCount": 1,
+                "affinity": {
+                  "outcome": "not_cache_capable"
+                },
+                "clientSessionId": "4c877036ec6edd347fa062f4e0779429",
+                "clientSessionIdSource": "fingerprint"
+              },
+              "cost": "0.00000294",
+              "marketCost": "0.00000294",
+              "surchargeCost": "0",
+              "gatewayCost": "0.00000294",
+              "inferenceCost": "0.00000294",
+              "inputInferenceCost": "0.0000007",
+              "outputInferenceCost": "0.00000224",
+              "generationId": "gen_01M38GRBZ13DKN3PEK322Z0ZP2"
+            }
+          }
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 20,
+      "completion_tokens": 16,
+      "total_tokens": 36,
+      "cost": 0.00000294,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": null,
+        "upstream_inference_prompt_cost": 0,
+        "upstream_inference_completions_cost": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "market_cost": 0.00000294,
+      "gateway_cost": 0.00000294
+    },
+    "system_fingerprint": "fp_7qylr979e2",
+    "generationId": "gen_01M38GRBZ13DKN3PEK322Z0ZP2"
+  }
+}

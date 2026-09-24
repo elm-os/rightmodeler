@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   adaptWithReport,
   aiSdkAdapter,
+  bifrostAdapter,
   braintrustAdapter,
   claudeCodeAdapter,
   codexAdapter,
@@ -205,7 +206,7 @@ const fixtures: FixtureCase[] = [
     format: "openinference",
     filename: "openinference.jsonl",
     adapter: openInferenceAdapter,
-    traceId: "0a0b0c0d0e0f10111213141516171819",
+    traceId: "oi-session-1",
     model: "acme/large-1",
     trajectoryIds: ["oi-session-1", "oi-session-1"],
     usage: [
@@ -351,6 +352,29 @@ const fixtures: FixtureCase[] = [
         : record;
     },
   },
+  {
+    format: "bifrost",
+    filename: "bifrost.jsonl",
+    adapter: bifrostAdapter,
+    traceId: "bf-s2",
+    model: "vercel/amazon/nova-micro",
+    trajectoryIds: ["bf-s2", "bf-s2"],
+    usage: [
+      { inputTokens: 423, outputTokens: 22 },
+      { inputTokens: 491, outputTokens: 38 },
+    ],
+    malformedRecord: {
+      id: "bf-bad",
+      object: "chat_completion",
+      provider: "vercel",
+      status: "success",
+      fallback_index: 0,
+      number_of_retries: 0,
+      input_history: [{ role: "user", content: "Hello" }],
+      output_message: { role: "assistant", content: "Hi" },
+    },
+    withoutUsage: (record) => without(record, "token_usage"),
+  },
 ];
 
 async function fixtureText(filename: string): Promise<string> {
@@ -361,7 +385,7 @@ async function fixtureText(filename: string): Promise<string> {
 }
 
 describe("trace adapter conformance", () => {
-  it("runs the 11 adapter by 11 fixture detection matrix", async () => {
+  it("runs the 12 adapter by 12 fixture detection matrix", async () => {
     expect(traceAdapters).toHaveLength(fixtures.length);
     for (const fixture of fixtures) {
       const text = await fixtureText(fixture.filename);

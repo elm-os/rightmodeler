@@ -10,8 +10,10 @@ import {
   recordList,
   strictRuns,
   type DroppedTraceRecord,
+  type ExcludedTraceStep,
   type NamedTraceAdapter,
   type TraceAdaptResult,
+  type TraceExclusionReason,
   type TraceFormat,
 } from "./shared.js";
 
@@ -21,6 +23,11 @@ export interface MappedTraceStep {
   step: NormalizedStep;
 }
 
+export interface ExcludedTraceEntry {
+  traceId: string;
+  excluded: TraceExclusionReason;
+}
+
 interface RowAdapterOptions {
   format: TraceFormat;
   label: string;
@@ -28,7 +35,7 @@ interface RowAdapterOptions {
   mapRecord(
     record: Record<string, unknown>,
     recordIndex: number,
-  ): MappedTraceStep[];
+  ): Array<MappedTraceStep | ExcludedTraceEntry>;
 }
 
 function buildRuns(
@@ -71,6 +78,7 @@ export function createRowAdapter(
     const source = recordList(records, options.format, options.label);
     const mapped: Array<MappedTraceStep & { recordIndex: number }> = [];
     const droppedRecords: DroppedTraceRecord[] = [];
+    const excludedSteps: ExcludedTraceStep[] = [];
 
     for (const [recordIndex, candidate] of source.entries()) {
       if (!isRecord(candidate)) {
@@ -81,14 +89,23 @@ export function createRowAdapter(
         continue;
       }
       try {
-        const steps = options.mapRecord(candidate, recordIndex);
-        if (steps.length === 0) {
+        const entries = options.mapRecord(candidate, recordIndex);
+        if (entries.length === 0) {
           droppedRecords.push({
             recordIndex,
             reason: "record does not contain a mappable model call",
           });
-        } else {
-          mapped.push(...steps.map((step) => ({ ...step, recordIndex })));
+        }
+        for (const entry of entries) {
+          if ("excluded" in entry) {
+            excludedSteps.push({
+              recordIndex,
+              traceId: entry.traceId,
+              reason: entry.excluded,
+            });
+          } else {
+            mapped.push({ ...entry, recordIndex });
+          }
         }
       } catch (error) {
         droppedRecords.push({
@@ -101,6 +118,7 @@ export function createRowAdapter(
     return {
       runs: buildRuns(options.format, mapped),
       droppedRecords,
+      ...(excludedSteps.length === 0 ? {} : { excludedSteps }),
     };
   };
 
