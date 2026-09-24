@@ -29,3 +29,8 @@ export function withoutFastTiers(
     ({ id }) => !id.endsWith("-fast") || !ids.has(id.slice(0, -"-fast".length)),
   );
 }
+
+export function catalogFamily(modelId: string): string {
+  const segments = modelId.split("/");
+  return segments.length < 2 ? modelId : segments[segments.length - 2]!;
+}

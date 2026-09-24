@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 
-import type {
-  JsonValue,
-  ModelCatalogEntry,
-  ModelPricing,
-  Substitution,
+import {
+  catalogFamily,
+  type JsonValue,
+  type ModelCatalogEntry,
+  type ModelPricing,
+  type Substitution,
 } from "@rightmodeler/core";
 
 import { responseSubstitution, servedModel } from "./provenance.js";
@@ -425,10 +426,13 @@ function normalizeModel(
   ) {
     throw new Error(`models[${index}].output modalities must contain strings`);
   }
+  if (outputModalities.length > 0 && !outputModalities.includes("text")) {
+    return null;
+  }
 
   const entry: ModelCatalogEntry = {
     id: model.id,
-    family: model.id.split("/", 1)[0]!,
+    family: catalogFamily(model.id),
     contextLength,
     pricing: (() => {
       const input = price(
@@ -983,7 +987,13 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         usageObject.cost_details === null
           ? {}
           : objectValue(usageObject.cost_details, "usage.cost_details");
-      const billedCost = responsePrice(usageObject.cost, "usage.cost");
+      const billedCost =
+        typeof usageObject.cost === "object" && usageObject.cost !== null
+          ? responsePrice(
+              objectValue(usageObject.cost, "usage.cost").total_cost,
+              "usage.cost.total_cost",
+            )
+          : responsePrice(usageObject.cost, "usage.cost");
       const marketCost = responsePrice(
         usageObject.market_cost,
         "usage.market_cost",

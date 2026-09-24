@@ -85,6 +85,14 @@ const aiGatewayFastTiersFixtureUrl = new URL(
   "../../../fixtures/catalogs/ai-gateway-fast-tiers.json",
   import.meta.url,
 );
+const bifrostModelsFixtureUrl = new URL(
+  "../../../fixtures/catalogs/bifrost-models.json",
+  import.meta.url,
+);
+const bifrostChatFixtureUrl = new URL(
+  "../../../fixtures/gateways/bifrost/chat.json",
+  import.meta.url,
+);
 
 const projectId = "replay-test";
 const runId = "run-1";
@@ -867,7 +875,7 @@ describe("AI Gateway catalog", () => {
 
     expect(prefixed).toMatchObject({
       id: "vercel/openai/gpt-4o-mini",
-      family: "vercel",
+      family: "openai",
       contextLength: 128_000,
       pricing: { input: 0.00000015, output: 0.0000006 },
       supportsTools: true,
@@ -895,6 +903,70 @@ describe("AI Gateway catalog", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it("takes a three-segment id's family from its vendor segment", async () => {
+    const catalog = await listFixtureModels(
+      await readFile(bifrostModelsFixtureUrl, "utf8"),
+    );
+
+    for (const [id, family] of [
+      ["vercel/amazon/nova-micro", "amazon"],
+      ["vercel/openai/gpt-4o-mini", "openai"],
+      ["openrouter/openai/gpt-4o-mini", "openai"],
+    ] as const) {
+      expect(catalog.find((model) => model.id === id)?.family, id).toBe(family);
+    }
+  });
+
+  it("never offers a model whose declared output is not text", async () => {
+    const fixture = JSON.parse(
+      await readFile(bifrostModelsFixtureUrl, "utf8"),
+    ) as { data: Array<Record<string, unknown>> };
+    const embedding = fixture.data.find(({ architecture }) =>
+      (
+        architecture as { output_modalities?: string[] } | undefined
+      )?.output_modalities?.includes("embeddings"),
+    );
+    fixture.data.push({
+      id: "openrouter/google/gemini-2.5-flash-image",
+      context_length: 32_768,
+      architecture: { output_modalities: ["text", "image"] },
+      pricing: { prompt: "0.0000003", completion: "0.0000025" },
+    });
+
+    const ids = (await listFixtureModels(JSON.stringify(fixture))).map(
+      ({ id }) => id,
+    );
+
+    expect(embedding?.id).toBe("openrouter/baai/bge-base-en-v1.5");
+    expect(ids).not.toContain(embedding?.id);
+    expect(ids).toContain("openrouter/google/gemini-2.5-flash-image");
+  });
+
+  it("joins Bifrost's custom-provider ids to the upstream's catalog by suffix", async () => {
+    const catalog = await listWithReference(
+      await readFile(bifrostModelsFixtureUrl, "utf8"),
+      fileURLToPath(aiGatewayFixtureUrl),
+    );
+
+    expect(
+      catalog.find(({ id }) => id === "vercel/openai/gpt-4o-mini"),
+    ).toMatchObject({
+      family: "openai",
+      contextLength: 128_000,
+      pricing: { input: 0.00000015, output: 0.0000006 },
+      supportsTools: true,
+      supportsStructuredOutput: false,
+    });
+    expect(
+      catalog.find(({ id }) => id === "openrouter/openai/gpt-4o-mini"),
+    ).toMatchObject({
+      family: "openai",
+      pricing: { input: 0.00000015, output: 0.0000006 },
+      supportsTools: true,
+      supportsStructuredOutput: true,
+    });
   });
 
   it("never overwrites what the gateway declares", async () => {
@@ -1114,6 +1186,51 @@ describe("AI Gateway chat", () => {
       providerResponseId: "gen_01KZYSK582PZST0T79EP0DJ1FJ",
       servedModel: "openai/gpt-4o-mini",
     });
+  });
+
+  it("reads a Bifrost usage.cost object as the billed cost", async () => {
+    const captured = JSON.parse(
+      await readFile(bifrostChatFixtureUrl, "utf8"),
+    ) as {
+      requestedModel: string;
+      body: { usage: { cost: { total_cost: number } } };
+    };
+    const catalogBody = await readFile(bifrostModelsFixtureUrl, "utf8");
+    const chat = (body: unknown) => {
+      vi.restoreAllMocks();
+      vi.spyOn(globalThis, "fetch").mockImplementation(
+        async (input) =>
+          new Response(
+            String(input).endsWith("/models")
+              ? catalogBody
+              : JSON.stringify(body),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      );
+      return createProvider({
+        providerId: "bifrost",
+        baseUrl: "https://bifrost.example/v1",
+        apiKeyEnv: "REPLAY_TEST_API_KEY",
+      }).chat({
+        model: captured.requestedModel,
+        messages: [{ role: "user", content: "Say the single word OK." }],
+        maxOutputTokens: 64,
+        estimatedInputTokens: 8,
+      });
+    };
+
+    const response = await chat(captured.body);
+    expect(response).toMatchObject({
+      costUsd: captured.body.usage.cost.total_cost,
+      costIsEstimate: false,
+    });
+    expect(response.costUsd).toBeGreaterThan(0);
+    await expect(
+      chat({
+        ...captured.body,
+        usage: { ...captured.body.usage, cost: { total_cost: "abc" } },
+      }),
+    ).rejects.toThrow(/^Invalid chat response: usage\.cost\.total_cost /);
   });
 
   it("records the served model and flags a response that names another model", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ModelCatalogEntry } from "@rightmodeler/core";
+import { catalogFamily, type ModelCatalogEntry } from "@rightmodeler/core";
 
 import {
   judgeExecution,
@@ -320,6 +320,29 @@ describe("pickJudge", () => {
         referenceFamily: "reference",
       }),
     ).toEqual(["neutral/z", "neutral/a", "neutral/older"]);
+  });
+
+  it("keeps a judge neutral for three-segment gateway ids", () => {
+    const catalog: ModelCatalogEntry[] = [
+      "vercel/openai/a",
+      "vercel/anthropic/b",
+      "vercel/google/c",
+    ].map((id) => ({
+      id,
+      family: catalogFamily(id),
+      contextLength: 100,
+      pricing: { input: 1, output: 1 },
+      supportsTools: false,
+      supportsStructuredOutput: true,
+      releasedAt: 10,
+    }));
+
+    expect(
+      pickJudges(catalog, {
+        candidateFamily: "openai",
+        referenceFamily: "anthropic",
+      }),
+    ).toEqual(["vercel/google/c"]);
   });
 });
 

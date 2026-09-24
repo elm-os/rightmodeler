@@ -10,6 +10,7 @@ import {
   assessmentSchema,
   blendedPrice,
   callSiteInventoryKey,
+  catalogFamily,
   canonicalJson,
   compareText,
   completeRun,
@@ -4959,8 +4960,7 @@ function referenceFamiliesByStep(
 }
 
 function modelFamily(modelId: string | null): string {
-  if (modelId === null) return "unknown";
-  return modelId.split("/", 1)[0] ?? "unknown";
+  return modelId === null ? "unknown" : catalogFamily(modelId);
 }
 
 function modeBProviderBaseUrl(baseUrl: string): string {

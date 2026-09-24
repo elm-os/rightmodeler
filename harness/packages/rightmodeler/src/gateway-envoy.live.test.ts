@@ -7,15 +7,16 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
-import { FsStore, setupStateKey } from "@rightmodeler/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   assertNoSecretIn,
   discoverLiveModels,
-  ledgerOf,
+  ingestArtifact,
   liveGatewayGate,
   makeAcceptanceRepo,
+  protocolLines,
+  recordLeg,
   removeLeftoverContainers,
   runBuiltCli,
   runCapture,
@@ -34,36 +35,8 @@ const headerAttributes =
 const replayTag = ["--header", "x-rightmodeler-replay: 1"];
 const execFileAsync = promisify(execFile);
 
-interface ProtocolLine {
-  readonly code?: string;
-  readonly message?: string;
-}
-
-function protocolLines(stderr: string): ProtocolLine[] {
-  return stderr
-    .split("\n")
-    .filter((line) => line.startsWith("{"))
-    .map((line) => JSON.parse(line) as ProtocolLine);
-}
-
 async function docker(args: readonly string[]): Promise<string> {
   return (await execFileAsync("docker", args)).stdout.trim();
-}
-
-async function ingestArtifact(storeRoot: string): Promise<{
-  format: unknown;
-  runs: Array<{ steps: Array<{ model: string; family?: string }> }>;
-}> {
-  const store = new FsStore(storeRoot);
-  const text = async (key: string) =>
-    Buffer.from((await store.get(key))!.body).toString("utf8");
-  const state = JSON.parse(await text(setupStateKey("project"))) as {
-    stages: Record<string, { outputKey: string }>;
-  };
-  return JSON.parse(await text(state.stages.ingest!.outputKey)) as {
-    format: unknown;
-    runs: Array<{ steps: Array<{ model: string; family?: string }> }>;
-  };
 }
 
 describe.skipIf(!gate.run)(
@@ -170,69 +143,6 @@ describe.skipIf(!gate.run)(
       "--store",
       store,
     ];
-
-    const record = async (
-      leg: string,
-      repo: string,
-      store: string,
-      result: { readonly code: number; readonly stderr: string },
-      extra: Record<string, unknown> = {},
-    ) => {
-      const ledger = await ledgerOf(store);
-      const status = await runBuiltCli([
-        "status",
-        "--output",
-        "json",
-        "--repo",
-        repo,
-        "--store",
-        store,
-      ]);
-      const spend =
-        status.code === 0
-          ? (
-              JSON.parse(status.stdout) as {
-                spend: {
-                  totalCostUsd: number;
-                  byActor: Record<string, { events: number; costUsd: number }>;
-                };
-              }
-            ).spend
-          : undefined;
-      console.info(
-        `[envoy live] ${leg} leg: ${JSON.stringify({
-          models,
-          exitCode: result.code,
-          stderr: protocolLines(result.stderr).map(
-            ({ code, message }) => `${code}: ${message}`,
-          ),
-          candidates: [
-            ...new Set(ledger.executions.map(({ candidateId }) => candidateId)),
-          ],
-          judgesTried: [
-            ...new Set(
-              ledger.spendEvents
-                .filter(({ actor }) => actor === "judge")
-                .map(
-                  ({ reconcilableTo }) =>
-                    (reconcilableTo as { judgeModel?: unknown }).judgeModel,
-                ),
-            ),
-          ],
-          judges: [
-            ...new Set(
-              ledger.assessments.map(({ evaluatorId }) => evaluatorId),
-            ),
-          ],
-          executions: ledger.executions.length,
-          requestAttempts: ledger.requestAttempts.length,
-          assessments: ledger.assessments.length,
-          spend: spend ?? status.stderr,
-          ...extra,
-        })}`,
-      );
-      return { ledger, spend };
-    };
 
     beforeAll(async () => {
       root = await mkdtemp(join(tmpdir(), "rightmodeler-envoy-live-"));
@@ -371,7 +281,12 @@ describe.skipIf(!gate.run)(
         pipeline(gateway!, repo, store, policy, "0.25"),
         { AIGW_CLIENT_KEY: "unused" },
       );
-      const { ledger, spend } = await record("positive", repo, store, result);
+      const { ledger, spend } = await recordLeg("envoy", "positive", {
+        models,
+        repo,
+        store,
+        result,
+      });
       const codes = protocolLines(result.stderr).map(({ code }) => code);
       expect(
         result.code === 0 ||
@@ -493,8 +408,12 @@ describe.skipIf(!gate.run)(
         pipeline(fallbackGateway, repo, store, fallbackPolicy, "0.10"),
         { AIGW_CLIENT_KEY: "unused" },
       );
-      const { ledger, spend } = await record("fallback", repo, store, result, {
-        mockHits,
+      const { ledger, spend } = await recordLeg("envoy", "fallback", {
+        models,
+        repo,
+        store,
+        result,
+        extra: { mockHits },
       });
       expect(result.code, result.stderr).toBe(0);
       expect(

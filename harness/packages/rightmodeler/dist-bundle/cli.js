@@ -7746,10 +7746,10 @@ var require_core = __commonJS({
         return this;
       }
       // Add format
-      addFormat(name, format10) {
-        if (typeof format10 == "string")
-          format10 = new RegExp(format10);
-        this.formats[name] = format10;
+      addFormat(name, format11) {
+        if (typeof format11 == "string")
+          format11 = new RegExp(format11);
+        this.formats[name] = format11;
         return this;
       }
       errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
@@ -7867,9 +7867,9 @@ var require_core = __commonJS({
     }
     function addInitialFormats() {
       for (const name in this.opts.formats) {
-        const format10 = this.opts.formats[name];
-        if (format10)
-          this.addFormat(name, format10);
+        const format11 = this.opts.formats[name];
+        if (format11)
+          this.addFormat(name, format11);
       }
     }
     function addInitialKeywords(defs) {
@@ -9871,18 +9871,18 @@ var require_format = __commonJS({
           });
           const fDef = gen.const("fDef", (0, codegen_1._)`${fmts}[${schemaCode}]`);
           const fType = gen.let("fType");
-          const format10 = gen.let("format");
-          gen.if((0, codegen_1._)`typeof ${fDef} == "object" && !(${fDef} instanceof RegExp)`, () => gen.assign(fType, (0, codegen_1._)`${fDef}.type || "string"`).assign(format10, (0, codegen_1._)`${fDef}.validate`), () => gen.assign(fType, (0, codegen_1._)`"string"`).assign(format10, fDef));
+          const format11 = gen.let("format");
+          gen.if((0, codegen_1._)`typeof ${fDef} == "object" && !(${fDef} instanceof RegExp)`, () => gen.assign(fType, (0, codegen_1._)`${fDef}.type || "string"`).assign(format11, (0, codegen_1._)`${fDef}.validate`), () => gen.assign(fType, (0, codegen_1._)`"string"`).assign(format11, fDef));
           cxt.fail$data((0, codegen_1.or)(unknownFmt(), invalidFmt()));
           function unknownFmt() {
             if (opts.strictSchema === false)
               return codegen_1.nil;
-            return (0, codegen_1._)`${schemaCode} && !${format10}`;
+            return (0, codegen_1._)`${schemaCode} && !${format11}`;
           }
           function invalidFmt() {
-            const callFormat = schemaEnv.$async ? (0, codegen_1._)`(${fDef}.async ? await ${format10}(${data}) : ${format10}(${data}))` : (0, codegen_1._)`${format10}(${data})`;
-            const validData = (0, codegen_1._)`(typeof ${format10} == "function" ? ${callFormat} : ${format10}.test(${data}))`;
-            return (0, codegen_1._)`${format10} && ${format10} !== true && ${fType} === ${ruleType} && !${validData}`;
+            const callFormat = schemaEnv.$async ? (0, codegen_1._)`(${fDef}.async ? await ${format11}(${data}) : ${format11}(${data}))` : (0, codegen_1._)`${format11}(${data})`;
+            const validData = (0, codegen_1._)`(typeof ${format11} == "function" ? ${callFormat} : ${format11}.test(${data}))`;
+            return (0, codegen_1._)`${format11} && ${format11} !== true && ${fType} === ${ruleType} && !${validData}`;
           }
         }
         function validateFormat() {
@@ -9893,7 +9893,7 @@ var require_format = __commonJS({
           }
           if (formatDef === true)
             return;
-          const [fmtType, format10, fmtRef] = getFormat(formatDef);
+          const [fmtType, format11, fmtRef] = getFormat(formatDef);
           if (fmtType === ruleType)
             cxt.pass(validCondition());
           function unknownFormat() {
@@ -9920,7 +9920,7 @@ var require_format = __commonJS({
                 throw new Error("async format in sync schema");
               return (0, codegen_1._)`await ${fmtRef}(${data})`;
             }
-            return typeof format10 == "function" ? (0, codegen_1._)`${fmtRef}(${data})` : (0, codegen_1._)`${fmtRef}.test(${data})`;
+            return typeof format11 == "function" ? (0, codegen_1._)`${fmtRef}(${data})` : (0, codegen_1._)`${fmtRef}.test(${data})`;
           }
         }
       }
@@ -9935,8 +9935,8 @@ var require_format2 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var format_1 = require_format();
-    var format10 = [format_1.default];
-    exports.default = format10;
+    var format11 = [format_1.default];
+    exports.default = format11;
   }
 });
 
@@ -10485,7 +10485,7 @@ var require_json_schema_2020_12 = __commonJS({
     var unevaluated = require_unevaluated2();
     var content = require_content();
     var core = require_core3();
-    var format10 = require_format_annotation();
+    var format11 = require_format_annotation();
     var metadata = require_meta_data();
     var validation = require_validation2();
     var META_SUPPORT_DATA = ["/properties"];
@@ -10497,7 +10497,7 @@ var require_json_schema_2020_12 = __commonJS({
         unevaluated,
         content,
         core,
-        with$data(this, format10),
+        with$data(this, format11),
         metadata,
         with$data(this, validation)
       ].forEach((sch) => this.addMetaSchema(sch, void 0, false));
@@ -10607,6 +10607,10 @@ function blendedPrice(model) {
 function withoutFastTiers(catalog) {
   const ids = new Set(catalog.map(({ id }) => id));
   return catalog.filter(({ id }) => !id.endsWith("-fast") || !ids.has(id.slice(0, -"-fast".length)));
+}
+function catalogFamily(modelId) {
+  const segments = modelId.split("/");
+  return segments.length < 2 ? modelId : segments[segments.length - 2];
 }
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
@@ -22001,13 +22005,13 @@ function _stringbool(Classes, _params) {
   return codec2;
 }
 // @__NO_SIDE_EFFECTS__
-function _stringFormat(Class2, format10, fnOrRegex, _params = {}) {
+function _stringFormat(Class2, format11, fnOrRegex, _params = {}) {
   const params = normalizeParams(_params);
   const def = {
     ...normalizeParams(_params),
     check: "string_format",
     type: "string",
-    format: format10,
+    format: format11,
     fn: typeof fnOrRegex === "function" ? fnOrRegex : (val) => fnOrRegex.test(val),
     ...params
   };
@@ -22389,16 +22393,16 @@ var formatMap = {
 var stringProcessor = (schema, ctx, _json, _params) => {
   const json3 = _json;
   json3.type = "string";
-  const { minimum, maximum, format: format10, patterns, contentEncoding } = schema._zod.bag;
+  const { minimum, maximum, format: format11, patterns, contentEncoding } = schema._zod.bag;
   if (typeof minimum === "number")
     json3.minLength = minimum;
   if (typeof maximum === "number")
     json3.maxLength = maximum;
-  if (format10) {
-    json3.format = formatMap[format10] ?? format10;
+  if (format11) {
+    json3.format = formatMap[format11] ?? format11;
     if (json3.format === "")
       delete json3.format;
-    if (format10 === "time") {
+    if (format11 === "time") {
       delete json3.format;
     }
   }
@@ -22420,8 +22424,8 @@ var stringProcessor = (schema, ctx, _json, _params) => {
 };
 var numberProcessor = (schema, ctx, _json, _params) => {
   const json3 = _json;
-  const { minimum, maximum, format: format10, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
-  if (typeof format10 === "string" && format10.includes("int"))
+  const { minimum, maximum, format: format11, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
+  if (typeof format11 === "string" && format11.includes("int"))
     json3.type = "integer";
   else
     json3.type = "number";
@@ -23720,8 +23724,8 @@ var ZodCustomStringFormat = /* @__PURE__ */ $constructor("ZodCustomStringFormat"
   $ZodCustomStringFormat.init(inst, def);
   ZodStringFormat.init(inst, def);
 });
-function stringFormat(format10, fnOrRegex, _params = {}) {
-  return _stringFormat(ZodCustomStringFormat, format10, fnOrRegex, _params);
+function stringFormat(format11, fnOrRegex, _params = {}) {
+  return _stringFormat(ZodCustomStringFormat, format11, fnOrRegex, _params);
 }
 function hostname2(_params) {
   return _stringFormat(ZodCustomStringFormat, "hostname", regexes_exports.hostname, _params);
@@ -23731,11 +23735,11 @@ function hex2(_params) {
 }
 function hash(alg, params) {
   const enc = params?.enc ?? "hex";
-  const format10 = `${alg}_${enc}`;
-  const regex = regexes_exports[format10];
+  const format11 = `${alg}_${enc}`;
+  const regex = regexes_exports[format11];
   if (!regex)
-    throw new Error(`Unrecognized hash format: ${format10}`);
-  return _stringFormat(ZodCustomStringFormat, format10, regex, params);
+    throw new Error(`Unrecognized hash format: ${format11}`);
+  return _stringFormat(ZodCustomStringFormat, format11, regex, params);
 }
 var ZodNumber = /* @__PURE__ */ $constructor("ZodNumber", (inst, def) => {
   $ZodNumber.init(inst, def);
@@ -24807,52 +24811,52 @@ function convertBaseSchema(schema, ctx) {
     case "string": {
       let stringSchema = z.string();
       if (schema.format) {
-        const format10 = schema.format;
-        if (format10 === "email") {
+        const format11 = schema.format;
+        if (format11 === "email") {
           stringSchema = stringSchema.check(z.email());
-        } else if (format10 === "uri" || format10 === "uri-reference") {
+        } else if (format11 === "uri" || format11 === "uri-reference") {
           stringSchema = stringSchema.check(z.url());
-        } else if (format10 === "uuid" || format10 === "guid") {
+        } else if (format11 === "uuid" || format11 === "guid") {
           stringSchema = stringSchema.check(z.uuid());
-        } else if (format10 === "date-time") {
+        } else if (format11 === "date-time") {
           stringSchema = stringSchema.check(z.iso.datetime());
-        } else if (format10 === "date") {
+        } else if (format11 === "date") {
           stringSchema = stringSchema.check(z.iso.date());
-        } else if (format10 === "time") {
+        } else if (format11 === "time") {
           stringSchema = stringSchema.check(z.iso.time());
-        } else if (format10 === "duration") {
+        } else if (format11 === "duration") {
           stringSchema = stringSchema.check(z.iso.duration());
-        } else if (format10 === "ipv4") {
+        } else if (format11 === "ipv4") {
           stringSchema = stringSchema.check(z.ipv4());
-        } else if (format10 === "ipv6") {
+        } else if (format11 === "ipv6") {
           stringSchema = stringSchema.check(z.ipv6());
-        } else if (format10 === "mac") {
+        } else if (format11 === "mac") {
           stringSchema = stringSchema.check(z.mac());
-        } else if (format10 === "cidr") {
+        } else if (format11 === "cidr") {
           stringSchema = stringSchema.check(z.cidrv4());
-        } else if (format10 === "cidr-v6") {
+        } else if (format11 === "cidr-v6") {
           stringSchema = stringSchema.check(z.cidrv6());
-        } else if (format10 === "base64") {
+        } else if (format11 === "base64") {
           stringSchema = stringSchema.check(z.base64());
-        } else if (format10 === "base64url") {
+        } else if (format11 === "base64url") {
           stringSchema = stringSchema.check(z.base64url());
-        } else if (format10 === "e164") {
+        } else if (format11 === "e164") {
           stringSchema = stringSchema.check(z.e164());
-        } else if (format10 === "jwt") {
+        } else if (format11 === "jwt") {
           stringSchema = stringSchema.check(z.jwt());
-        } else if (format10 === "emoji") {
+        } else if (format11 === "emoji") {
           stringSchema = stringSchema.check(z.emoji());
-        } else if (format10 === "nanoid") {
+        } else if (format11 === "nanoid") {
           stringSchema = stringSchema.check(z.nanoid());
-        } else if (format10 === "cuid") {
+        } else if (format11 === "cuid") {
           stringSchema = stringSchema.check(z.cuid());
-        } else if (format10 === "cuid2") {
+        } else if (format11 === "cuid2") {
           stringSchema = stringSchema.check(z.cuid2());
-        } else if (format10 === "ulid") {
+        } else if (format11 === "ulid") {
           stringSchema = stringSchema.check(z.ulid());
-        } else if (format10 === "xid") {
+        } else if (format11 === "xid") {
           stringSchema = stringSchema.check(z.xid());
-        } else if (format10 === "ksuid") {
+        } else if (format11 === "ksuid") {
           stringSchema = stringSchema.check(z.ksuid());
         }
       }
@@ -26169,7 +26173,7 @@ import { randomUUID as randomUUID9 } from "node:crypto";
 var MIN_REVIEW_TRIALS = 10;
 var MIN_DISTINCT_STEPS = 2;
 var MIN_DISTINCT_TRAJECTORIES = 5;
-function wilson(passes, n, { confidence: confidence9 = 0.95, comparisons = 1 } = {}) {
+function wilson(passes, n, { confidence: confidence10 = 0.95, comparisons = 1 } = {}) {
   if (!Number.isSafeInteger(passes) || passes < 0) {
     throw new RangeError("passes must be a non-negative safe integer");
   }
@@ -26179,7 +26183,7 @@ function wilson(passes, n, { confidence: confidence9 = 0.95, comparisons = 1 } =
   if (passes > n) {
     throw new RangeError("passes must not exceed n");
   }
-  if (!Number.isFinite(confidence9) || confidence9 <= 0 || confidence9 >= 1) {
+  if (!Number.isFinite(confidence10) || confidence10 <= 0 || confidence10 >= 1) {
     throw new RangeError("confidence must be between 0 and 1");
   }
   if (!Number.isSafeInteger(comparisons) || comparisons < 1) {
@@ -26188,20 +26192,20 @@ function wilson(passes, n, { confidence: confidence9 = 0.95, comparisons = 1 } =
   if (n === 0) {
     return { point: 0, lower: 0, upper: 1 };
   }
-  return wilsonForPoint(passes / n, n, confidence9, comparisons);
+  return wilsonForPoint(passes / n, n, confidence10, comparisons);
 }
-function minimumTrialsForFloor(floor, comparisons, confidence9 = 0.95) {
+function minimumTrialsForFloor(floor, comparisons, confidence10 = 0.95) {
   if (!Number.isFinite(floor) || floor <= 0 || floor >= 1) {
     throw new RangeError("floor must be between 0 and 1");
   }
   let trials = 1;
-  while (wilson(trials, trials, { confidence: confidence9, comparisons }).lower < floor) {
+  while (wilson(trials, trials, { confidence: confidence10, comparisons }).lower < floor) {
     trials += 1;
   }
   return trials;
 }
-function wilsonForPoint(point, n, confidence9, comparisons) {
-  const alpha = (1 - confidence9) / comparisons;
+function wilsonForPoint(point, n, confidence10, comparisons) {
+  const alpha = (1 - confidence10) / comparisons;
   const quantileProbability = 1 - alpha / 2;
   if (quantileProbability >= 1) {
     throw new RangeError("confidence and comparisons exceed numeric precision");
@@ -26217,14 +26221,14 @@ function wilsonForPoint(point, n, confidence9, comparisons) {
     upper: point === 1 ? 1 : Math.min(1, center + margin)
   };
 }
-function clusterBootstrap(executionsByTrajectory, { resamples, seed, confidence: confidence9 = 0.95, comparisons = 1 }) {
+function clusterBootstrap(executionsByTrajectory, { resamples, seed, confidence: confidence10 = 0.95, comparisons = 1 }) {
   if (!Number.isSafeInteger(resamples) || resamples < 1) {
     throw new RangeError("resamples must be a positive safe integer");
   }
   if (!Number.isSafeInteger(seed)) {
     throw new RangeError("seed must be a safe integer");
   }
-  if (!Number.isFinite(confidence9) || confidence9 <= 0 || confidence9 >= 1) {
+  if (!Number.isFinite(confidence10) || confidence10 <= 0 || confidence10 >= 1) {
     throw new RangeError("confidence must be between 0 and 1");
   }
   if (!Number.isSafeInteger(comparisons) || comparisons < 1) {
@@ -26260,9 +26264,9 @@ function clusterBootstrap(executionsByTrajectory, { resamples, seed, confidence:
     bootstrapPoints.push(sampledPasses / sampledExecutions);
   }
   bootstrapPoints.sort((left, right) => left - right);
-  const alpha = (1 - confidence9) / comparisons;
+  const alpha = (1 - confidence10) / comparisons;
   const point = totalPasses / totalExecutions;
-  const finiteSampleInterval = wilsonForPoint(point, trajectories.length, confidence9, comparisons);
+  const finiteSampleInterval = wilsonForPoint(point, trajectories.length, confidence10, comparisons);
   const percentileLower = percentile(bootstrapPoints, alpha / 2);
   const percentileUpper = percentile(bootstrapPoints, 1 - alpha / 2);
   const lower = Math.min(percentileLower, finiteSampleInterval.lower);
@@ -28953,9 +28957,12 @@ function normalizeModel(value, index) {
   if (!Array.isArray(outputModalities) || !outputModalities.every((modality) => typeof modality === "string")) {
     throw new Error(`models[${index}].output modalities must contain strings`);
   }
+  if (outputModalities.length > 0 && !outputModalities.includes("text")) {
+    return null;
+  }
   const entry = {
     id: model.id,
-    family: model.id.split("/", 1)[0],
+    family: catalogFamily(model.id),
     contextLength,
     pricing: (() => {
       const input = price(rawPricing.prompt ?? rawPricing.input, `models[${index}].pricing.input`);
@@ -29349,7 +29356,7 @@ function createProvider(options) {
         outputTokens: 0
       };
       const costDetails = usageObject.cost_details === void 0 || usageObject.cost_details === null ? {} : objectValue(usageObject.cost_details, "usage.cost_details");
-      const billedCost = responsePrice(usageObject.cost, "usage.cost");
+      const billedCost = typeof usageObject.cost === "object" && usageObject.cost !== null ? responsePrice(objectValue(usageObject.cost, "usage.cost").total_cost, "usage.cost.total_cost") : responsePrice(usageObject.cost, "usage.cost");
       const marketCost = responsePrice(usageObject.market_cost, "usage.market_cost");
       const upstreamCost = responsePrice(costDetails.upstream_inference_cost, "usage.cost_details.upstream_inference_cost");
       let costUsd;
@@ -33481,18 +33488,18 @@ var TraceParseError = class extends Error {
 };
 var TraceAdaptError = class extends Error {
   format;
-  constructor(format10, message2, options) {
+  constructor(format11, message2, options) {
     super(message2, options);
     this.name = "TraceAdaptError";
-    this.format = format10;
+    this.format = format11;
   }
 };
 var TraceRecordsDroppedError = class extends TraceAdaptError {
   result;
-  constructor(format10, result2) {
+  constructor(format11, result2) {
     super(
-      format10,
-      `${format10} dropped ${result2.droppedRecords.length} unmappable record(s): ${result2.droppedRecords.map(
+      format11,
+      `${format11} dropped ${result2.droppedRecords.length} unmappable record(s): ${result2.droppedRecords.map(
         ({ recordIndex, reason }) => `record ${recordIndex + 1}: ${reason}`
       ).join("; ")}`
     );
@@ -33504,7 +33511,7 @@ var FormatDetectionError = class extends Error {
   reason;
   candidates;
   constructor(reason, candidates) {
-    const scores = candidates.map(({ name, confidence: confidence9 }) => `${name}=${confidence9.toFixed(2)}`).join(", ");
+    const scores = candidates.map(({ name, confidence: confidence10 }) => `${name}=${confidence10.toFixed(2)}`).join(", ");
     super(`Trace format ${reason.replace("_", " ")}: ${scores}`);
     this.name = "FormatDetectionError";
     this.reason = reason;
@@ -33635,9 +33642,9 @@ function detectFormat(sample, adapters) {
   );
   const first = scored[0];
   const second = scored[1];
-  const candidates = scored.map(({ name, confidence: confidence9 }) => ({
+  const candidates = scored.map(({ name, confidence: confidence10 }) => ({
     name,
-    confidence: confidence9
+    confidence: confidence10
   }));
   if (first.confidence < minimumConfidence) {
     throw new FormatDetectionError("below_threshold", candidates);
@@ -33650,9 +33657,9 @@ function detectFormat(sample, adapters) {
 function adaptWithReport(adapter, records) {
   return adapter.adaptWithReport(records);
 }
-function strictRuns(format10, result2) {
+function strictRuns(format11, result2) {
   if (result2.droppedRecords.length > 0) {
-    throw new TraceRecordsDroppedError(format10, result2);
+    throw new TraceRecordsDroppedError(format11, result2);
   }
   return result2.runs;
 }
@@ -33660,7 +33667,8 @@ var exclusionMeanings = {
   stream_incomplete: "ended without a finish reason because it was aborted or errored",
   call_failed: "the call failed and has no accepted output",
   replay_traffic: "rightmodeler's own replay calls, tagged by a replay header",
-  content_hidden: "the gateway did not record the prompt or the output"
+  content_hidden: "the gateway did not record the prompt or the output",
+  fallback_answer: "answered by a configured fallback, not the model the application asked for"
 };
 function excludedStepsWarning(result2) {
   const excluded = result2.excludedSteps ?? [];
@@ -33673,50 +33681,50 @@ function excludedStepsWarning(result2) {
   );
   return `${excluded.length} traced model call(s) were left out of the corpus: ${clauses.join(", ")}. The rest of the trace input was read.`;
 }
-function requiredString(value, label, format10) {
+function requiredString(value, label, format11) {
   if (typeof value !== "string" || value.length === 0) {
-    throw new TraceAdaptError(format10, `${label} must be a non-empty string`);
+    throw new TraceAdaptError(format11, `${label} must be a non-empty string`);
   }
   return value;
 }
 function optionalString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
-function tokenCount2(value, label, format10) {
+function tokenCount2(value, label, format11) {
   if (value === void 0) return 0;
   if (!Number.isInteger(value) || value < 0) {
     throw new TraceAdaptError(
-      format10,
+      format11,
       `${label} must be a non-negative integer`
     );
   }
   return value;
 }
-function optionalTokenCount(value, label, format10) {
+function optionalTokenCount(value, label, format11) {
   if (value === void 0 || value === null) return void 0;
-  return tokenCount2(value, label, format10);
+  return tokenCount2(value, label, format11);
 }
-function optionalUsage(input, output, label, format10) {
-  const inputTokens = optionalTokenCount(input, `${label} input usage`, format10);
+function optionalUsage(input, output, label, format11) {
+  const inputTokens = optionalTokenCount(input, `${label} input usage`, format11);
   const outputTokens = optionalTokenCount(
     output,
     `${label} output usage`,
-    format10
+    format11
   );
   if (inputTokens === void 0 || outputTokens === void 0) return void 0;
   return { inputTokens, outputTokens };
 }
-function optionalNonnegativeNumber(value, label, format10) {
+function optionalNonnegativeNumber(value, label, format11) {
   if (value === void 0 || value === null) return void 0;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new TraceAdaptError(format10, `${label} must be a non-negative number`);
+    throw new TraceAdaptError(format11, `${label} must be a non-negative number`);
   }
   return value;
 }
-function jsonValue(value, label, format10) {
+function jsonValue(value, label, format11) {
   const parsed2 = normalizedJsonValue(value);
   if (parsed2 === void 0) {
-    throw new TraceAdaptError(format10, `${label} must be valid JSON data`);
+    throw new TraceAdaptError(format11, `${label} must be valid JSON data`);
   }
   return parsed2;
 }
@@ -33796,9 +33804,9 @@ function compareStartValues(left, right) {
   }
   return left < right ? -1 : left > right ? 1 : 0;
 }
-function recordList(records, format10, label) {
+function recordList(records, format11, label) {
   if (!Array.isArray(records)) {
-    throw new TraceAdaptError(format10, `${label} must be a list`);
+    throw new TraceAdaptError(format11, `${label} must be a list`);
   }
   return records;
 }
@@ -33852,8 +33860,8 @@ function spanTree(spans) {
 function errorMessage(error51) {
   return error51 instanceof Error ? error51.message : String(error51);
 }
-function adaptSpans(format10, label, records, classify) {
-  const list = recordList(records, format10, `${label} trace records`);
+function adaptSpans(format11, label, records, classify) {
+  const list = recordList(records, format11, `${label} trace records`);
   const dropped = /* @__PURE__ */ new Map();
   for (const [recordIndex, record2] of list.entries()) {
     if (!isRecord(record2)) {
@@ -33871,7 +33879,7 @@ function adaptSpans(format10, label, records, classify) {
       const traceId = requiredString(
         span.traceId,
         `${label} span ${span.sourceIndex + 1} trace ID`,
-        format10
+        format11
       );
       if (result2.kind === "excluded") {
         excludedSteps.push({
@@ -33922,7 +33930,7 @@ function adaptSpans(format10, label, records, classify) {
       return normalizedRunSchema.parse({
         version: "2",
         traceId,
-        sourceFormat: format10,
+        sourceFormat: format11,
         steps: group.map(({ span, step }, stepIndex) => {
           const timestamp3 = startValue(span.span);
           return {
@@ -34143,7 +34151,7 @@ var aiSdkAdapter = {
 };
 
 // src/data/adapters/row-adapter.ts
-function buildRuns(format10, mapped) {
+function buildRuns(format11, mapped) {
   const grouped = /* @__PURE__ */ new Map();
   for (const item of mapped) {
     const group = grouped.get(item.traceId) ?? [];
@@ -34161,7 +34169,7 @@ function buildRuns(format10, mapped) {
     return normalizedRunSchema.parse({
       version: "2",
       traceId,
-      sourceFormat: format10,
+      sourceFormat: format11,
       steps
     });
   });
@@ -34229,9 +34237,111 @@ function createRowAdapter(options) {
   };
 }
 
-// src/data/adapters/braintrust.ts
-var format2 = "braintrust";
+// src/data/adapters/bifrost.ts
+var format2 = "bifrost";
+var chatObjects = /* @__PURE__ */ new Set(["chat_completion", "chat_completion_stream"]);
 function confidence(sample) {
+  const records = sampleRecords(sample).filter(isRecord);
+  if (records.length === 0) return 0;
+  const matching = records.filter(
+    (record2) => Array.isArray(record2.input_history) && typeof record2.provider === "string" && typeof record2.model === "string" && typeof record2.fallback_index === "number" && typeof record2.number_of_retries === "number"
+  ).length;
+  return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
+}
+var bifrostAdapter = createRowAdapter({
+  format: format2,
+  label: "Bifrost log export",
+  detect: confidence,
+  mapRecord(record2, recordIndex) {
+    const id = requiredString(
+      record2.id,
+      `Bifrost record ${recordIndex + 1} id`,
+      format2
+    );
+    const label = `Bifrost log ${id}`;
+    if (typeof record2.object !== "string" || !chatObjects.has(record2.object)) {
+      throw new Error(
+        `${label} is not a chat completion (object ${String(record2.object)}); export chat completions only (objects=chat_completion,chat_completion_stream)`
+      );
+    }
+    const traceId = optionalString(record2.session_id) ?? id;
+    const metadata = isRecord(record2.metadata) ? record2.metadata : {};
+    if (metadata.rightmodeler === "replay") {
+      return [{ traceId, excluded: "replay_traffic" }];
+    }
+    if (record2.status === "processing") {
+      return [{ traceId, excluded: "stream_incomplete" }];
+    }
+    if (record2.status !== "success") {
+      return [{ traceId, excluded: "call_failed" }];
+    }
+    if (typeof record2.fallback_index === "number" && record2.fallback_index > 0) {
+      return [{ traceId, excluded: "fallback_answer" }];
+    }
+    if (record2.content_hidden === true) {
+      return [{ traceId, excluded: "content_hidden" }];
+    }
+    const provider = requiredString(
+      record2.provider,
+      `${label} provider`,
+      format2
+    );
+    const model = requiredString(record2.model, `${label} model`, format2);
+    if (!Array.isArray(record2.input_history)) {
+      throw new Error(`${label} input_history must be a list`);
+    }
+    const tokenUsage = isRecord(record2.token_usage) ? record2.token_usage : {};
+    const usage2 = optionalUsage(
+      tokenUsage.prompt_tokens,
+      tokenUsage.completion_tokens,
+      label,
+      format2
+    );
+    const costUsd = optionalNonnegativeNumber(
+      record2.cost,
+      `${label} cost`,
+      format2
+    );
+    const durationMs = optionalNonnegativeNumber(
+      record2.latency,
+      `${label} latency`,
+      format2
+    );
+    const timestamp3 = optionalString(record2.timestamp);
+    const family = optionalString(metadata["rightmodeler-family"]);
+    return [
+      {
+        traceId,
+        sortValue: timestamp3,
+        step: {
+          stepIndex: 0,
+          model: `${provider}/${optionalString(record2.alias) ?? model}`,
+          messages: record2.input_history.map(
+            (message2, index) => jsonValue(message2, `${label} input ${index + 1}`, format2)
+          ),
+          output: jsonValue(record2.output_message, `${label} output`, format2),
+          ...usage2 === void 0 ? {} : { usage: usage2 },
+          ...costUsd === void 0 ? {} : { costUsd },
+          ...durationMs === void 0 ? {} : { durationMs },
+          ...record2.number_of_retries === void 0 ? {} : {
+            retryCount: tokenCount2(
+              record2.number_of_retries,
+              `${label} number_of_retries`,
+              format2
+            )
+          },
+          trajectoryId: traceId,
+          ...timestamp3 === void 0 ? {} : { timestamp: timestamp3 },
+          ...family === void 0 ? {} : { family }
+        }
+      }
+    ];
+  }
+});
+
+// src/data/adapters/braintrust.ts
+var format3 = "braintrust";
+function confidence2(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
   const matching = records.filter(
@@ -34240,23 +34350,23 @@ function confidence(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var braintrustAdapter = createRowAdapter({
-  format: format2,
+  format: format3,
   label: "Braintrust span export",
-  detect: confidence,
+  detect: confidence2,
   mapRecord(record2, recordIndex) {
     const attributes = isRecord(record2.span_attributes) ? record2.span_attributes : void 0;
     if (attributes?.type !== "llm") return [];
     const traceId = requiredString(
       record2.root_span_id,
       `Braintrust record ${recordIndex + 1} root_span_id`,
-      format2
+      format3
     );
     const metadata = isRecord(record2.metadata) ? record2.metadata : {};
     const metrics = isRecord(record2.metrics) ? record2.metrics : {};
     const model = requiredString(
       metadata.model,
       `Braintrust record ${recordIndex + 1} metadata.model`,
-      format2
+      format3
     );
     const rawMessages = Array.isArray(record2.input) ? record2.input : [record2.input];
     const timestamp3 = optionalString(record2.created);
@@ -34264,7 +34374,7 @@ var braintrustAdapter = createRowAdapter({
       metrics.prompt_tokens,
       metrics.completion_tokens,
       `Braintrust record ${recordIndex + 1}`,
-      format2
+      format3
     );
     return [
       {
@@ -34277,13 +34387,13 @@ var braintrustAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `Braintrust record ${recordIndex + 1} input ${index + 1}`,
-              format2
+              format3
             )
           ),
           output: jsonValue(
             record2.output,
             `Braintrust record ${recordIndex + 1} output`,
-            format2
+            format3
           ),
           ...usage2 === void 0 ? {} : { usage: usage2 },
           trajectoryId: traceId,
@@ -34296,8 +34406,8 @@ var braintrustAdapter = createRowAdapter({
 });
 
 // src/data/adapters/claude-code.ts
-var format3 = "claude-code";
-function confidence2(sample) {
+var format4 = "claude-code";
+function confidence3(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
   const matching = records.filter(
@@ -34332,29 +34442,29 @@ function claudeUsage(usage2, label) {
   const input = optionalTokenCount(
     usage2.input_tokens,
     `${label} input usage`,
-    format3
+    format4
   );
   const output = optionalTokenCount(
     usage2.output_tokens,
     `${label} output usage`,
-    format3
+    format4
   );
   if (input === void 0 || output === void 0) return void 0;
   return {
     inputTokens: input + (optionalTokenCount(
       usage2.cache_read_input_tokens,
       `${label} cache read usage`,
-      format3
+      format4
     ) ?? 0) + (optionalTokenCount(
       usage2.cache_creation_input_tokens,
       `${label} cache creation usage`,
-      format3
+      format4
     ) ?? 0),
     outputTokens: output
   };
 }
 function adaptWithReport3(records) {
-  const source = recordList(records, format3, "Claude Code transcript");
+  const source = recordList(records, format4, "Claude Code transcript");
   const droppedRecords = [];
   const recordsByUuid = /* @__PURE__ */ new Map();
   const groups = /* @__PURE__ */ new Map();
@@ -34387,12 +34497,12 @@ function adaptWithReport3(records) {
       const sessionId = requiredString(
         candidate.sessionId,
         `Claude Code record ${recordIndex + 1} sessionId`,
-        format3
+        format4
       );
       const parentUuid = requiredString(
         candidate.parentUuid,
         `Claude Code record ${recordIndex + 1} parentUuid`,
-        format3
+        format4
       );
       const message2 = candidate.message;
       if (!isRecord(message2) || !Array.isArray(message2.content)) {
@@ -34403,12 +34513,12 @@ function adaptWithReport3(records) {
       const messageId = requiredString(
         message2.id,
         `Claude Code record ${recordIndex + 1} message.id`,
-        format3
+        format4
       );
       const model = requiredString(
         message2.model,
         `Claude Code record ${recordIndex + 1} message.model`,
-        format3
+        format4
       );
       claudeUsage(message2.usage, `Claude Code record ${recordIndex + 1}`);
       const key = `${sessionId}:${messageId}`;
@@ -34471,7 +34581,7 @@ function adaptWithReport3(records) {
         (input, index) => jsonValue(
           input.message,
           `Claude Code message ${group.messageId} input ${index + 1}`,
-          format3
+          format4
         )
       ),
       output: jsonValue(
@@ -34481,7 +34591,7 @@ function adaptWithReport3(records) {
           ...toolResults.length === 0 ? {} : { toolResults }
         },
         `Claude Code message ${group.messageId} output`,
-        format3
+        format4
       ),
       ...usage2 === void 0 ? {} : { usage: usage2 },
       trajectoryId: trajectoryId(group, recordsByUuid),
@@ -34497,7 +34607,7 @@ function adaptWithReport3(records) {
       return normalizedRunSchema.parse({
         version: "2",
         traceId,
-        sourceFormat: format3,
+        sourceFormat: format4,
         steps: ordered.map(({ step }, stepIndex) => ({ ...step, stepIndex }))
       });
     }
@@ -34505,24 +34615,24 @@ function adaptWithReport3(records) {
   return { runs, droppedRecords };
 }
 var claudeCodeAdapter = {
-  name: format3,
-  detect: confidence2,
+  name: format4,
+  detect: confidence3,
   adapt(records) {
     const result2 = adaptWithReport3(records);
     if (result2.runs.length === 0 && result2.droppedRecords.length === 0) {
       throw new TraceAdaptError(
-        format3,
+        format4,
         "No Claude Code assistant messages found"
       );
     }
-    return strictRuns(format3, result2);
+    return strictRuns(format4, result2);
   },
   adaptWithReport: adaptWithReport3
 };
 
 // src/data/adapters/codex.ts
-var format4 = "codex";
-function confidence3(sample) {
+var format5 = "codex";
+function confidence4(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   const meta3 = records.some(
     (record2) => record2.type === "session_meta" && isRecord(record2.payload) && typeof record2.payload.id === "string" && typeof record2.payload.cwd === "string" && typeof record2.payload.cli_version === "string" && typeof record2.payload.model_provider === "string"
@@ -34544,7 +34654,7 @@ function usageDelta(final, baseline) {
   return typeof baseline === "number" ? Math.max(0, final - baseline) : final;
 }
 function adaptWithReport4(records) {
-  const source = recordList(records, format4, "Codex rollout");
+  const source = recordList(records, format5, "Codex rollout");
   const droppedRecords = [];
   const turns = /* @__PURE__ */ new Map();
   const pendingInputs = /* @__PURE__ */ new Map();
@@ -34570,7 +34680,7 @@ function adaptWithReport4(records) {
         const id = requiredString(
           payload.id ?? payload.session_id,
           `Codex record ${recordIndex + 1} session id`,
-          format4
+          format5
         );
         if (traceId === void 0) traceId = id;
       } catch (error51) {
@@ -34586,12 +34696,12 @@ function adaptWithReport4(records) {
         const turnId2 = requiredString(
           payload.turn_id,
           `Codex record ${recordIndex + 1} turn_id`,
-          format4
+          format5
         );
         const model = requiredString(
           payload.model,
           `Codex record ${recordIndex + 1} model`,
-          format4
+          format5
         );
         activeTurn = {
           turnId: turnId2,
@@ -34624,12 +34734,12 @@ function adaptWithReport4(records) {
             optionalTokenCount(
               candidateUsage.input_tokens,
               `Codex record ${recordIndex + 1} input usage`,
-              format4
+              format5
             );
             optionalTokenCount(
               candidateUsage.output_tokens,
               `Codex record ${recordIndex + 1} output usage`,
-              format4
+              format5
             );
           }
           if (total !== void 0) {
@@ -34691,7 +34801,7 @@ function adaptWithReport4(records) {
         final === void 0 ? selected.input_tokens : usageDelta(final.input_tokens, baseline?.input_tokens),
         final === void 0 ? selected.output_tokens : usageDelta(final.output_tokens, baseline?.output_tokens),
         `Codex turn ${turn.turnId}`,
-        format4
+        format5
       );
       return {
         stepIndex,
@@ -34700,13 +34810,13 @@ function adaptWithReport4(records) {
           (message2, index) => jsonValue(
             message2,
             `Codex turn ${turn.turnId} input ${index + 1}`,
-            format4
+            format5
           )
         ),
         output: jsonValue(
           turn.outputs,
           `Codex turn ${turn.turnId} output`,
-          format4
+          format5
         ),
         ...stepUsage === void 0 ? {} : { usage: stepUsage },
         trajectoryId: turn.turnId,
@@ -34718,7 +34828,7 @@ function adaptWithReport4(records) {
         normalizedRunSchema.parse({
           version: "2",
           traceId,
-          sourceFormat: format4,
+          sourceFormat: format5,
           steps
         })
       );
@@ -34727,21 +34837,21 @@ function adaptWithReport4(records) {
   return { runs, droppedRecords };
 }
 var codexAdapter = {
-  name: format4,
-  detect: confidence3,
+  name: format5,
+  detect: confidence4,
   adapt(records) {
     const result2 = adaptWithReport4(records);
     if (result2.runs.length === 0 && result2.droppedRecords.length === 0) {
-      throw new TraceAdaptError(format4, "No Codex model turns found");
+      throw new TraceAdaptError(format5, "No Codex model turns found");
     }
-    return strictRuns(format4, result2);
+    return strictRuns(format5, result2);
   },
   adaptWithReport: adaptWithReport4
 };
 
 // src/data/adapters/helicone.ts
-var format5 = "helicone";
-function confidence4(sample) {
+var format6 = "helicone";
+function confidence5(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
   const matching = records.filter(
@@ -34750,14 +34860,14 @@ function confidence4(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var heliconeAdapter = createRowAdapter({
-  format: format5,
+  format: format6,
   label: "Helicone request export",
-  detect: confidence4,
+  detect: confidence5,
   mapRecord(record2, recordIndex) {
     const requestId = requiredString(
       record2.request_id,
       `Helicone record ${recordIndex + 1} request_id`,
-      format5
+      format6
     );
     const request = jsonEncodedValue(record2.request_body);
     const response = jsonEncodedValue(record2.response_body);
@@ -34774,7 +34884,7 @@ var heliconeAdapter = createRowAdapter({
     const model = requiredString(
       record2.model ?? record2.response_model ?? record2.request_model ?? request.model ?? schemaRequest.model,
       `Helicone record ${recordIndex + 1} model`,
-      format5
+      format6
     );
     const properties = isRecord(record2.request_properties) ? record2.request_properties : isRecord(record2.properties) ? record2.properties : {};
     const trajectoryId2 = optionalString(properties["Helicone-Session-Id"]) ?? requestId;
@@ -34783,7 +34893,7 @@ var heliconeAdapter = createRowAdapter({
       record2.prompt_tokens,
       record2.completion_tokens,
       `Helicone record ${recordIndex + 1}`,
-      format5
+      format6
     );
     return [
       {
@@ -34796,13 +34906,13 @@ var heliconeAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `Helicone record ${recordIndex + 1} input ${index + 1}`,
-              format5
+              format6
             )
           ),
           output: jsonValue(
             response,
             `Helicone record ${recordIndex + 1} response`,
-            format5
+            format6
           ),
           ...usage2 === void 0 ? {} : { usage: usage2 },
           trajectoryId: trajectoryId2,
@@ -34814,8 +34924,8 @@ var heliconeAdapter = createRowAdapter({
 });
 
 // src/data/adapters/langfuse.ts
-var format6 = "langfuse";
-function confidence5(sample) {
+var format7 = "langfuse";
+function confidence6(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
   const matching = records.filter(
@@ -34824,20 +34934,20 @@ function confidence5(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var langfuseAdapter = createRowAdapter({
-  format: format6,
+  format: format7,
   label: "Langfuse observation export",
-  detect: confidence5,
+  detect: confidence6,
   mapRecord(record2, recordIndex) {
     if (record2.type !== "GENERATION") return [];
     const traceId = requiredString(
       record2.trace_id,
       `Langfuse record ${recordIndex + 1} trace_id`,
-      format6
+      format7
     );
     const model = requiredString(
       record2.provided_model_name,
       `Langfuse record ${recordIndex + 1} provided_model_name`,
-      format6
+      format7
     );
     const input = jsonEncodedValue(record2.input);
     const output = jsonEncodedValue(record2.output);
@@ -34847,7 +34957,7 @@ var langfuseAdapter = createRowAdapter({
       (message2, index) => jsonValue(
         message2,
         `Langfuse record ${recordIndex + 1} input ${index + 1}`,
-        format6
+        format7
       )
     );
     if (record2.tool_definitions !== void 0) {
@@ -34855,7 +34965,7 @@ var langfuseAdapter = createRowAdapter({
         jsonValue(
           { tool_definitions: record2.tool_definitions },
           `Langfuse record ${recordIndex + 1} tool definitions`,
-          format6
+          format7
         )
       );
     }
@@ -34865,7 +34975,7 @@ var langfuseAdapter = createRowAdapter({
       usage2.input,
       usage2.output,
       `Langfuse record ${recordIndex + 1}`,
-      format6
+      format7
     );
     const step = {
       stepIndex: 0,
@@ -34874,13 +34984,13 @@ var langfuseAdapter = createRowAdapter({
       output: jsonValue(
         toolCalls2.length === 0 ? output : { value: output, toolCalls: toolCalls2 },
         `Langfuse record ${recordIndex + 1} output`,
-        format6
+        format7
       ),
       ...stepUsage === void 0 ? {} : { usage: stepUsage },
       trajectoryId: optionalString(record2.session_id) ?? requiredString(
         record2.trace_id,
         `Langfuse record ${recordIndex + 1} trajectory`,
-        format6
+        format7
       ),
       ...optionalString(record2.prompt_name ?? record2.name) === void 0 ? {} : { family: optionalString(record2.prompt_name ?? record2.name) },
       ...optionalString(record2.start_time) === void 0 ? {} : { timestamp: optionalString(record2.start_time) }
@@ -34890,8 +35000,8 @@ var langfuseAdapter = createRowAdapter({
 });
 
 // src/data/adapters/langsmith.ts
-var format7 = "langsmith";
-function confidence6(sample) {
+var format8 = "langsmith";
+function confidence7(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
   const matching = records.filter(
@@ -34900,15 +35010,15 @@ function confidence6(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var langsmithAdapter = createRowAdapter({
-  format: format7,
+  format: format8,
   label: "LangSmith bulk run export",
-  detect: confidence6,
+  detect: confidence7,
   mapRecord(record2, recordIndex) {
     if (record2.run_type !== "llm") return [];
     const traceId = requiredString(
       record2.trace_id,
       `LangSmith record ${recordIndex + 1} trace_id`,
-      format7
+      format8
     );
     const inputs = isRecord(record2.inputs) ? record2.inputs : void 0;
     const outputs = isRecord(record2.outputs) ? record2.outputs : void 0;
@@ -34921,7 +35031,7 @@ var langsmithAdapter = createRowAdapter({
     const model = requiredString(
       metadata.ls_model_name ?? invocation.model,
       `LangSmith record ${recordIndex + 1} model`,
-      format7
+      format8
     );
     const rawMessages = Array.isArray(inputs.messages) ? inputs.messages : [inputs];
     const timestamp3 = optionalString(record2.start_time);
@@ -34929,7 +35039,7 @@ var langsmithAdapter = createRowAdapter({
       record2.prompt_tokens,
       record2.completion_tokens,
       `LangSmith record ${recordIndex + 1}`,
-      format7
+      format8
     );
     return [
       {
@@ -34942,13 +35052,13 @@ var langsmithAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `LangSmith record ${recordIndex + 1} input ${index + 1}`,
-              format7
+              format8
             )
           ),
           output: jsonValue(
             outputs,
             `LangSmith record ${recordIndex + 1} outputs`,
-            format7
+            format8
           ),
           ...usage2 === void 0 ? {} : { usage: usage2 },
           trajectoryId: optionalString(
@@ -34963,9 +35073,9 @@ var langsmithAdapter = createRowAdapter({
 });
 
 // src/data/adapters/openinference.ts
-var format8 = "openinference";
+var format9 = "openinference";
 var redacted = "__REDACTED__";
-function confidence7(sample) {
+function confidence8(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
   const matching = records.filter(
@@ -35023,9 +35133,9 @@ function responseMessage(spanAttributes) {
   return isRecord(choice) ? choice.message : void 0;
 }
 var openInferenceAdapter = createRowAdapter({
-  format: format8,
+  format: format9,
   label: "OpenInference OTLP file export",
-  detect: confidence7,
+  detect: confidence8,
   mapRecord(record2, recordIndex) {
     const mapped = [];
     for (const [spanIndex, span] of otlpSpans(record2).entries()) {
@@ -35034,7 +35144,7 @@ var openInferenceAdapter = createRowAdapter({
       const spanTraceId = requiredString(
         span.traceId,
         `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} traceId`,
-        format8
+        format9
       );
       const traceId = optionalString(spanAttributes["session.id"]) ?? spanTraceId;
       const inputMessages = indexedMessages(
@@ -35064,7 +35174,7 @@ var openInferenceAdapter = createRowAdapter({
         model = requiredString(
           spanAttributes["llm.model_name"],
           `OpenInference record ${recordIndex + 1} span ${spanIndex + 1} model`,
-          format8
+          format9
         );
         rawMessages = inputMessages;
         if (rawMessages.length === 0 && spanAttributes["input.value"] !== void 0) {
@@ -35083,7 +35193,7 @@ var openInferenceAdapter = createRowAdapter({
         spanAttributes["llm.token_count.prompt"],
         spanAttributes["llm.token_count.completion"],
         `OpenInference record ${recordIndex + 1}`,
-        format8
+        format9
       );
       const family = optionalString(spanAttributes["rightmodeler.family"]) ?? optionalString(span.name);
       mapped.push({
@@ -35096,13 +35206,13 @@ var openInferenceAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `OpenInference record ${recordIndex + 1} input ${index + 1}`,
-              format8
+              format9
             )
           ),
           output: jsonValue(
             output,
             `OpenInference record ${recordIndex + 1} output`,
-            format8
+            format9
           ),
           ...usage2 === void 0 ? {} : { usage: usage2 },
           trajectoryId: traceId,
@@ -35116,8 +35226,8 @@ var openInferenceAdapter = createRowAdapter({
 });
 
 // src/data/adapters/weave.ts
-var format9 = "weave";
-function confidence8(sample) {
+var format10 = "weave";
+function confidence9(sample) {
   const records = sampleRecords(sample).filter(isRecord);
   if (records.length === 0) return 0;
   const matching = records.filter(
@@ -35126,21 +35236,21 @@ function confidence8(sample) {
   return matching === 0 ? 0 : 0.75 + 0.25 * (matching / records.length);
 }
 var weaveAdapter = createRowAdapter({
-  format: format9,
+  format: format10,
   label: "W&B Weave call export",
-  detect: confidence8,
+  detect: confidence9,
   mapRecord(record2, recordIndex) {
     const traceId = requiredString(
       record2.trace_id,
       `Weave record ${recordIndex + 1} trace_id`,
-      format9
+      format10
     );
     const inputs = isRecord(record2.inputs) ? record2.inputs : void 0;
     if (inputs === void 0) throw new Error("Weave inputs must be an object");
     const model = requiredString(
       inputs.model,
       `Weave record ${recordIndex + 1} inputs.model`,
-      format9
+      format10
     );
     const rawMessages = Array.isArray(inputs.messages) ? [...inputs.messages] : [inputs];
     if (Array.isArray(inputs.tools)) rawMessages.push({ tools: inputs.tools });
@@ -35151,7 +35261,7 @@ var weaveAdapter = createRowAdapter({
       usage2.prompt_tokens ?? usage2.input_tokens,
       usage2.completion_tokens ?? usage2.output_tokens,
       `Weave record ${recordIndex + 1}`,
-      format9
+      format10
     );
     const timestamp3 = optionalString(record2.started_at);
     const family = optionalString(record2.display_name ?? record2.op_name);
@@ -35166,13 +35276,13 @@ var weaveAdapter = createRowAdapter({
             (message2, index) => jsonValue(
               message2,
               `Weave record ${recordIndex + 1} input ${index + 1}`,
-              format9
+              format10
             )
           ),
           output: jsonValue(
             record2.output,
             `Weave record ${recordIndex + 1} output`,
-            format9
+            format10
           ),
           ...stepUsage === void 0 ? {} : { usage: stepUsage },
           trajectoryId: traceId,
@@ -35231,7 +35341,7 @@ function agentName(span, tree) {
   return void 0;
 }
 function otelStep(span, tree) {
-  const format10 = "otel-genai";
+  const format11 = "otel-genai";
   const { attributes, sourceIndex } = span;
   const operation = attributes["gen_ai.operation.name"];
   if (typeof operation !== "string" || structuralOperations.has(operation)) {
@@ -35248,36 +35358,36 @@ function otelStep(span, tree) {
   }
   if (typeof attributes["gen_ai.request.model"] !== "string" && typeof attributes["gen_ai.response.model"] !== "string") {
     throw new TraceAdaptError(
-      format10,
+      format11,
       `OTel span ${sourceIndex + 1} is missing its request or response model`
     );
   }
   const traceId = requiredString(
     span.traceId,
     `OTel span ${sourceIndex + 1} trace ID`,
-    format10
+    format11
   );
   const model = requiredString(
     attributes["gen_ai.request.model"] ?? attributes["gen_ai.response.model"],
     `OTel trace ${traceId} model`,
-    format10
+    format11
   );
   const usage2 = optionalUsage(
     attributes["gen_ai.usage.input_tokens"],
     attributes["gen_ai.usage.output_tokens"],
     `OTel trace ${traceId}`,
-    format10
+    format11
   );
   const messages = jsonEncodedValue(attributes["gen_ai.input.messages"]);
   if (!Array.isArray(messages)) {
     throw new TraceAdaptError(
-      format10,
+      format11,
       `OTel trace ${traceId} input messages must be an array`
     );
   }
   if (attributes["gen_ai.output.messages"] === void 0) {
     throw new TraceAdaptError(
-      format10,
+      format11,
       `OTel trace ${traceId} is missing output messages`
     );
   }
@@ -35293,13 +35403,13 @@ function otelStep(span, tree) {
         (message2, index) => jsonValue(
           message2,
           `OTel trace ${traceId} input message ${index + 1}`,
-          format10
+          format11
         )
       ),
       output: jsonValue(
         jsonEncodedValue(attributes["gen_ai.output.messages"]),
         `OTel trace ${traceId} output messages`,
-        format10
+        format11
       ),
       ...usage2 === void 0 ? {} : { usage: usage2 },
       ...systemPrompt === void 0 ? {} : { systemPrompt },
@@ -35319,29 +35429,29 @@ function openAiConfidence(sample) {
   return matching === 0 ? 0 : 0.7 + 0.3 * (matching / records.length);
 }
 function adaptOpenAi(records) {
-  const format10 = "openai-jsonl";
+  const format11 = "openai-jsonl";
   if (!Array.isArray(records)) {
-    throw new TraceAdaptError(format10, "OpenAI trace records must be a list");
+    throw new TraceAdaptError(format11, "OpenAI trace records must be a list");
   }
   const grouped = /* @__PURE__ */ new Map();
   for (const [index, candidate] of records.entries()) {
     if (!isRecord(candidate)) {
       throw new TraceAdaptError(
-        format10,
+        format11,
         `OpenAI record ${index + 1} must be an object`
       );
     }
     const trajectoryId2 = requiredString(
       candidate.case_id,
       `OpenAI record ${index + 1} case_id`,
-      format10
+      format11
     );
     const group = grouped.get(trajectoryId2) ?? [];
     group.push({ record: candidate, sourceIndex: index });
     grouped.set(trajectoryId2, group);
   }
   if (grouped.size === 0) {
-    throw new TraceAdaptError(format10, "OpenAI trace contains no records");
+    throw new TraceAdaptError(format11, "OpenAI trace contains no records");
   }
   return [...grouped.entries()].map(([traceId, group]) => {
     group.sort(
@@ -35353,35 +35463,35 @@ function adaptOpenAi(records) {
     const steps = group.map(({ record: record2 }, stepIndex) => {
       if (!Array.isArray(record2.messages)) {
         throw new TraceAdaptError(
-          format10,
+          format11,
           `OpenAI trace ${traceId} messages must be an array`
         );
       }
       const response = record2.response;
       if (!isRecord(response) || !Array.isArray(response.choices)) {
         throw new TraceAdaptError(
-          format10,
+          format11,
           `OpenAI trace ${traceId} response choices must be an array`
         );
       }
       const choice = response.choices[0];
       if (!isRecord(choice) || !isRecord(choice.message)) {
         throw new TraceAdaptError(
-          format10,
+          format11,
           `OpenAI trace ${traceId} is missing its first response message`
         );
       }
       const model = requiredString(
         record2.model ?? response.model,
         `OpenAI trace ${traceId} model`,
-        format10
+        format11
       );
       const usage2 = isRecord(record2.usage) ? record2.usage : isRecord(response.usage) ? response.usage : {};
       const stepUsage = optionalUsage(
         usage2.prompt_tokens,
         usage2.completion_tokens,
         `OpenAI trace ${traceId}`,
-        format10
+        format11
       );
       const systemMessages = record2.messages.filter(
         (message2) => isRecord(message2) && message2.role === "system"
@@ -35396,13 +35506,13 @@ function adaptOpenAi(records) {
           (message2, index) => jsonValue(
             message2,
             `OpenAI trace ${traceId} input message ${index + 1}`,
-            format10
+            format11
           )
         ),
         output: jsonValue(
           choice.message,
           `OpenAI trace ${traceId} response message`,
-          format10
+          format11
         ),
         ...stepUsage === void 0 ? {} : { usage: stepUsage },
         trajectoryId: traceId
@@ -35416,34 +35526,34 @@ function adaptOpenAi(records) {
       const costUsd = optionalNonnegativeNumber(
         record2.cost_usd ?? response.cost_usd,
         `OpenAI trace ${traceId} cost_usd`,
-        format10
+        format11
       );
       if (costUsd !== void 0) step.costUsd = costUsd;
       const durationMs = optionalNonnegativeNumber(
         record2.duration_ms ?? response.duration_ms ?? record2.latency_ms,
         `OpenAI trace ${traceId} duration_ms`,
-        format10
+        format11
       );
       if (durationMs !== void 0) step.durationMs = durationMs;
       if (record2.evaluator !== void 0) {
         step.evaluator = jsonValue(
           record2.evaluator,
           `OpenAI trace ${traceId} evaluator`,
-          format10
+          format11
         );
       }
       if (record2.evaluator_version !== void 0) {
         step.evaluatorVersion = jsonValue(
           record2.evaluator_version,
           `OpenAI trace ${traceId} evaluator version`,
-          format10
+          format11
         );
       }
       if (record2.retry_count !== void 0) {
         step.retryCount = tokenCount2(
           record2.retry_count,
           `OpenAI trace ${traceId} retry count`,
-          format10
+          format11
         );
       }
       return step;
@@ -35451,14 +35561,14 @@ function adaptOpenAi(records) {
     return normalizedRunSchema.parse({
       version: "2",
       traceId,
-      sourceFormat: format10,
+      sourceFormat: format11,
       steps
     });
   });
 }
-function existingAdapterReport(records, format10, adapt) {
+function existingAdapterReport(records, format11, adapt) {
   if (!Array.isArray(records)) {
-    throw new TraceAdaptError(format10, `${format10} trace records must be a list`);
+    throw new TraceAdaptError(format11, `${format11} trace records must be a list`);
   }
   const accepted = [];
   const droppedRecords = [];
@@ -35516,7 +35626,8 @@ var traceAdapters = [
   heliconeAdapter,
   weaveAdapter,
   claudeCodeAdapter,
-  codexAdapter
+  codexAdapter,
+  bifrostAdapter
 ];
 
 // src/data/corpus.ts
@@ -36007,9 +36118,9 @@ async function loadCodeGraph(path, repoDir) {
     const edge = edgeSchema.safeParse(value);
     if (!edge.success) {
       ignoredEdges += 1;
-      const confidence9 = value?.confidence;
-      if (typeof confidence9 === "string" && !Object.hasOwn(tierScores, confidence9) && unknownConfidences.size < 3) {
-        unknownConfidences.add(confidence9);
+      const confidence10 = value?.confidence;
+      if (typeof confidence10 === "string" && !Object.hasOwn(tierScores, confidence10) && unknownConfidences.size < 3) {
+        unknownConfidences.add(confidence10);
       }
       continue;
     }
@@ -47717,8 +47828,7 @@ function referenceFamiliesByStep(plan, candidates) {
   );
 }
 function modelFamily(modelId) {
-  if (modelId === null) return "unknown";
-  return modelId.split("/", 1)[0] ?? "unknown";
+  return modelId === null ? "unknown" : catalogFamily(modelId);
 }
 function modeBProviderBaseUrl(baseUrl) {
   const url2 = new URL(baseUrl);
@@ -48390,9 +48500,9 @@ function renderReport(report) {
     const evaluatorRates = verdict.evaluatorKinds.map(
       (kind) => `${kind.evaluatorKind}: ${kind.passes}/${kind.trials} (${formatRate2(kind.passRate)})`
     ).join("; ");
-    const confidence9 = verdict.naiveInterval ? `${formatRate2(verdict.naiveInterval.lower)} to ${formatRate2(verdict.naiveInterval.upper)}` : `${formatRate2(verdict.clusterBootstrapLow ?? 0)} lower`;
+    const confidence10 = verdict.naiveInterval ? `${formatRate2(verdict.naiveInterval.lower)} to ${formatRate2(verdict.naiveInterval.upper)}` : `${formatRate2(verdict.clusterBootstrapLow ?? 0)} lower`;
     lines.push(
-      `| ${verdict.familyId} | ${family.decisionDisplay} | ${evaluatorRates} | ${verdict.availability.availableExecutions}/${verdict.availability.executions} (${formatRate2(verdict.availability.rate)}) | ${verdict.excludedExecutions}/${verdict.nExecutions} (${formatRate2(verdict.excludedFraction)}) | ${formatRate2(verdict.worstCaseBound)} | ${confidence9} | ${verdict.abstainReason === void 0 ? "" : formatAbstention(verdict.abstainReason)} |`
+      `| ${verdict.familyId} | ${family.decisionDisplay} | ${evaluatorRates} | ${verdict.availability.availableExecutions}/${verdict.availability.executions} (${formatRate2(verdict.availability.rate)}) | ${verdict.excludedExecutions}/${verdict.nExecutions} (${formatRate2(verdict.excludedFraction)}) | ${formatRate2(verdict.worstCaseBound)} | ${confidence10} | ${verdict.abstainReason === void 0 ? "" : formatAbstention(verdict.abstainReason)} |`
     );
   }
   lines.push(
@@ -49068,7 +49178,7 @@ function question(streams, prompt, accept = () => true) {
     ask();
   });
 }
-function formatName(format10) {
+function formatName(format11) {
   const names = {
     "otel-genai": "OpenTelemetry GenAI export",
     "ai-sdk": "AI SDK telemetry export",
@@ -49080,9 +49190,10 @@ function formatName(format10) {
     helicone: "Helicone export",
     weave: "Weave export",
     "claude-code": "Claude Code session",
-    codex: "Codex session"
+    codex: "Codex session",
+    bifrost: "Bifrost log export"
   };
-  return names[format10];
+  return names[format11];
 }
 function shortPath(path, repo, homeDir) {
   const fromRepo = relative10(resolve11(repo), path);

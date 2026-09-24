@@ -30,6 +30,7 @@ import {
   type TraceSpan,
 } from "./adapters/spans.js";
 import { aiSdkAdapter } from "./adapters/ai-sdk.js";
+import { bifrostAdapter } from "./adapters/bifrost.js";
 import { braintrustAdapter } from "./adapters/braintrust.js";
 import { claudeCodeAdapter } from "./adapters/claude-code.js";
 import { codexAdapter } from "./adapters/codex.js";
@@ -41,6 +42,7 @@ import { weaveAdapter } from "./adapters/weave.js";
 
 export * from "./adapters/shared.js";
 export { aiSdkAdapter } from "./adapters/ai-sdk.js";
+export { bifrostAdapter } from "./adapters/bifrost.js";
 export { braintrustAdapter } from "./adapters/braintrust.js";
 export { claudeCodeAdapter } from "./adapters/claude-code.js";
 export { codexAdapter } from "./adapters/codex.js";
@@ -448,4 +450,5 @@ export const traceAdapters = [
   weaveAdapter,
   claudeCodeAdapter,
   codexAdapter,
+  bifrostAdapter,
 ] as const satisfies readonly NamedTraceAdapter[];

@@ -15,7 +15,8 @@ export type TraceFormat =
   | "helicone"
   | "weave"
   | "claude-code"
-  | "codex";
+  | "codex"
+  | "bifrost";
 
 export interface DroppedTraceRecord {
   recordIndex: number;
@@ -23,7 +24,11 @@ export interface DroppedTraceRecord {
 }
 
 export type TraceExclusionReason =
-  "stream_incomplete" | "call_failed" | "replay_traffic" | "content_hidden";
+  | "stream_incomplete"
+  | "call_failed"
+  | "replay_traffic"
+  | "content_hidden"
+  | "fallback_answer";
 
 export interface ExcludedTraceStep {
   recordIndex: number;
@@ -295,6 +300,8 @@ const exclusionMeanings: Record<TraceExclusionReason, string> = {
   call_failed: "the call failed and has no accepted output",
   replay_traffic: "rightmodeler's own replay calls, tagged by a replay header",
   content_hidden: "the gateway did not record the prompt or the output",
+  fallback_answer:
+    "answered by a configured fallback, not the model the application asked for",
 };
 
 export function excludedStepsWarning(

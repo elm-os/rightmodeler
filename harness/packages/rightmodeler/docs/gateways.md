@@ -66,3 +66,44 @@ As a trace source, rightmodeler reads the gateway's default OpenInference spans 
 - Access logs carry no message content and are not a trace source.
 
 On Kubernetes (Kubernetes 1.32 or newer, Envoy Gateway 1.8.1 or newer, Helm charts `ai-gateway-crds-helm` and `ai-gateway-helm` v1.1.0), the same resources apply; set `OTEL_EXPORTER_OTLP_ENDPOINT` through the `ai-gateway-helm` chart's `extProc.extraEnvVars` and the header mapping through its `controller.spanRequestHeaderAttributes`. Mode B on the cloud backend cannot reach an in-cluster gateway.
+
+## Bifrost
+
+Verified on the open-source Bifrost gateway transports/v2.2.1 (Apache 2.0, `maximhq/bifrost:v2.2.1`); pin the image, because releases arrive weekly. Enterprise features are a separate image and are not covered here.
+
+As a replay route:
+
+- Model ids are `<provider>/<upstream id>`, for example `vercel/openai/gpt-4o-mini` for Vercel AI Gateway configured as an OpenAI-typed custom provider. Bifrost answers with the upstream id, which rightmodeler accepts as the requested model.
+- Set every `compat` flag to `false` in the `client` block: a `client` block that omits them turns them all on, and the compat plugin can drop parameters such as `response_format` while answering 200.
+- Configure no key `aliases` or routing rules for replay models; an alias answers with another model and is left out as `attribution_substituted`.
+- A custom provider lists ids and context only, so pass `--catalog-reference` with the upstream's public list. Bifrost's own pricing sheet is not used.
+- The billed cost comes from the upstream through Bifrost's `usage.cost.total_cost`.
+- Send `x-bf-cache-no-store: true` and `x-bf-dim-rightmodeler: replay` with rightmodeler's replays (`--header`): the first keeps replays out of a semantic cache (a cache hit is still detected and left out), the second tags them so a later log export leaves them out.
+
+```sh
+docker volume create bifrost-data
+docker create --name bifrost -p 127.0.0.1:8080:8080 -e AI_GATEWAY_API_KEY -v bifrost-data:/app/data maximhq/bifrost:v2.2.1
+docker cp config.json bifrost:/app/data/config.json && docker start bifrost
+export BIFROST_KEY=unused
+npx rightmodeler init --traces ./bifrost-logs.jsonl --repo . \
+  --base-url http://127.0.0.1:8080/v1 --api-key-env BIFROST_KEY \
+  --catalog-reference https://ai-gateway.vercel.sh/v1/models \
+  --header 'x-bf-cache-no-store: true' --header 'x-bf-dim-rightmodeler: replay' \
+  --max-cost-usd 25
+```
+
+As a trace source, rightmodeler reads Bifrost's own request logs, exported from its management API (add credentials once an admin exists):
+
+```sh
+curl -s 'http://127.0.0.1:8080/api/logs?objects=chat_completion,chat_completion_stream&limit=1000&offset=0' | jq -r '.logs[].id' \
+  | while read -r id; do curl -s "http://127.0.0.1:8080/api/logs/$id"; echo; done > bifrost-logs.jsonl
+```
+
+Repeat with `offset=1000`, `2000` and so on until a page returns fewer than 1000 rows. Do not pass `roots_only=true`: it hides fallback rows.
+
+- Send `x-bf-session-id` from your application so the steps of one conversation form one ordered run, and `x-bf-dim-rightmodeler-family: <name>` so each call has its family.
+- Each row gives the model the application asked for (`provider/model`, or the alias it sent), the conversation as sent (`input_history`), the output (`output_message`), usage, cost, latency and retries.
+- Failed calls, answers from a configured fallback, rightmodeler's own replays and calls whose content was not logged are left out of the corpus with a `trace_steps_excluded` warning that names each reason. Steps whose conversation contains tool calls are read but not replayed yet.
+- Bifrost's OpenTelemetry plugin export reads through the OTel GenAI reader, but it summarizes messages and loses tool-call ids: use the log export for anything but plain text calls.
+- Streamed calls through Mode B are checked on the stream's model and headers only; Bifrost reports a semantic-cache hit only in the response body, so such a hit on a streamed Mode B call is not detected.
+- Rightmodeler records every replay's latency through Bifrost, gateway hop included, and does not separate Bifrost's own overhead. Bifrost's published benchmark reports 11 microseconds of overhead on a t3.xlarge at 5,000 requests per second, excluding JSON marshalling and the HTTP call; measure it on your own traffic.

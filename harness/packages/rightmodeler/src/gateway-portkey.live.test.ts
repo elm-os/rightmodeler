@@ -4,15 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { FsStore, setupStateKey } from "@rightmodeler/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   assertNoSecretIn,
   discoverLiveModels,
-  ledgerOf,
+  ingestArtifact,
   liveGatewayGate,
   makeAcceptanceRepo,
+  protocolLines,
+  recordLeg,
   removeLeftoverContainers,
   runBuiltCli,
   runCapture,
@@ -29,32 +30,6 @@ const route = [
   "--header",
   "x-portkey-custom-host: https://ai-gateway.vercel.sh/v1",
 ];
-
-interface ProtocolLine {
-  readonly code?: string;
-  readonly message?: string;
-}
-
-function protocolLines(stderr: string): ProtocolLine[] {
-  return stderr
-    .split("\n")
-    .filter((line) => line.startsWith("{"))
-    .map((line) => JSON.parse(line) as ProtocolLine);
-}
-
-async function ingestFormat(storeRoot: string): Promise<unknown> {
-  const store = new FsStore(storeRoot);
-  const text = async (key: string) =>
-    Buffer.from((await store.get(key))!.body).toString("utf8");
-  const state = JSON.parse(await text(setupStateKey("project"))) as {
-    stages: Record<string, { outputKey: string }>;
-  };
-  return (
-    JSON.parse(await text(state.stages.ingest!.outputKey)) as {
-      format: unknown;
-    }
-  ).format;
-}
 
 describe.skipIf(!gate.run)(`Portkey 1.15.2 live (${gate.reason})`, () => {
   let root: string;
@@ -85,65 +60,6 @@ describe.skipIf(!gate.run)(`Portkey 1.15.2 live (${gate.reason})`, () => {
     "--store",
     store,
   ];
-
-  const record = async (
-    leg: string,
-    repo: string,
-    store: string,
-    result: { readonly code: number; readonly stderr: string },
-  ) => {
-    const ledger = await ledgerOf(store);
-    const status = await runBuiltCli([
-      "status",
-      "--output",
-      "json",
-      "--repo",
-      repo,
-      "--store",
-      store,
-    ]);
-    const spend =
-      status.code === 0
-        ? (
-            JSON.parse(status.stdout) as {
-              spend: {
-                totalCostUsd: number;
-                byActor: Record<string, { events: number; costUsd: number }>;
-              };
-            }
-          ).spend
-        : undefined;
-    console.info(
-      `[portkey live] ${leg} leg: ${JSON.stringify({
-        models,
-        exitCode: result.code,
-        stderr: protocolLines(result.stderr).map(
-          ({ code, message }) => `${code}: ${message}`,
-        ),
-        candidates: [
-          ...new Set(ledger.executions.map(({ candidateId }) => candidateId)),
-        ],
-        judgesTried: [
-          ...new Set(
-            ledger.spendEvents
-              .filter(({ actor }) => actor === "judge")
-              .map(
-                ({ reconcilableTo }) =>
-                  (reconcilableTo as { judgeModel?: unknown }).judgeModel,
-              ),
-          ),
-        ],
-        judges: [
-          ...new Set(ledger.assessments.map(({ evaluatorId }) => evaluatorId)),
-        ],
-        executions: ledger.executions.length,
-        requestAttempts: ledger.requestAttempts.length,
-        assessments: ledger.assessments.length,
-        spend: spend ?? status.stderr,
-      })}`,
-    );
-    return { ledger, spend };
-  };
 
   beforeAll(async () => {
     root = await mkdtemp(join(tmpdir(), "rightmodeler-portkey-live-"));
@@ -208,14 +124,19 @@ describe.skipIf(!gate.run)(`Portkey 1.15.2 live (${gate.reason})`, () => {
     );
     const store = join(root, "positive-store");
     const result = await runBuiltCli(pipeline(repo, store, "0.25"));
-    const { ledger, spend } = await record("positive", repo, store, result);
+    const { ledger, spend } = await recordLeg("portkey", "positive", {
+      models,
+      repo,
+      store,
+      result,
+    });
     const codes = protocolLines(result.stderr).map(({ code }) => code);
     expect(
       result.code === 0 ||
         (result.code === 3 && codes.includes("budget_cap_refusal")),
       result.stderr,
     ).toBe(true);
-    expect(await ingestFormat(store)).toBe("openai-jsonl");
+    expect((await ingestArtifact(store)).format).toBe("openai-jsonl");
     expect(codes).not.toContain("catalog_pricing_unavailable");
     expect(codes).not.toContain("replay_responses_substituted");
 
@@ -252,7 +173,12 @@ describe.skipIf(!gate.run)(`Portkey 1.15.2 live (${gate.reason})`, () => {
         request_timeout: 120000,
       })}`,
     ]);
-    const { ledger, spend } = await record("negative", repo, store, result);
+    const { ledger, spend } = await recordLeg("portkey", "negative", {
+      models,
+      repo,
+      store,
+      result,
+    });
     expect(result.code, result.stderr).toBe(0);
     expect(
       protocolLines(result.stderr).filter(

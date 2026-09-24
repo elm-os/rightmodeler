@@ -10,8 +10,8 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 - An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for a gateway that lists bare model ids, pass `--catalog-reference`; for bare OpenAI or another unpriced endpoint, pass `--pricing-file`.
 
 Supported trace sources are OTel GenAI, AI SDK telemetry, OpenAI JSONL,
-Langfuse, Braintrust, LangSmith, OpenInference, Helicone, W&B Weave, Claude
-Code, and Codex.
+Langfuse, Braintrust, LangSmith, OpenInference, Helicone, Bifrost, W&B Weave,
+Claude Code, and Codex.
 
 ## Start with automatic discovery
 

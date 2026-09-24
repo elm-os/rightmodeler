@@ -10,6 +10,7 @@ import {
   compareText,
   FsStore,
   readLedger,
+  setupStateKey,
   type Ledger,
 } from "@rightmodeler/core";
 
@@ -323,11 +324,12 @@ export async function runBuiltCli(
 
 export async function runCapture(
   args: readonly string[],
+  env: NodeJS.ProcessEnv = {},
 ): Promise<{ sent: number; failed: number }> {
-  const result = await run(
-    [join(fixtureRoot, "capture.mjs"), ...args],
-    process.env,
-  );
+  const result = await run([join(fixtureRoot, "capture.mjs"), ...args], {
+    ...process.env,
+    ...env,
+  });
   if (result.code !== 0) {
     throw new Error(`capture.mjs exited ${result.code}: ${result.stderr}`);
   }
@@ -337,8 +339,109 @@ export async function runCapture(
   };
 }
 
-export async function ledgerOf(storeRoot: string): Promise<Ledger> {
+async function ledgerOf(storeRoot: string): Promise<Ledger> {
   return readLedger(new FsStore(storeRoot), "project");
+}
+
+export interface ProtocolLine {
+  readonly code?: string;
+  readonly message?: string;
+}
+
+export function protocolLines(stderr: string): ProtocolLine[] {
+  return stderr
+    .split("\n")
+    .filter((line) => line.startsWith("{"))
+    .map((line) => JSON.parse(line) as ProtocolLine);
+}
+
+export async function ingestArtifact(storeRoot: string): Promise<{
+  format: unknown;
+  runs: Array<{ steps: Array<{ model: string; family?: string }> }>;
+}> {
+  const store = new FsStore(storeRoot);
+  const text = async (key: string) =>
+    Buffer.from((await store.get(key))!.body).toString("utf8");
+  const state = JSON.parse(await text(setupStateKey("project"))) as {
+    stages: Record<string, { outputKey: string }>;
+  };
+  return JSON.parse(await text(state.stages.ingest!.outputKey)) as {
+    format: unknown;
+    runs: Array<{ steps: Array<{ model: string; family?: string }> }>;
+  };
+}
+
+export async function recordLeg(
+  gateway: string,
+  leg: string,
+  context: {
+    readonly models: LiveModels;
+    readonly repo: string;
+    readonly store: string;
+    readonly result: { readonly code: number; readonly stderr: string };
+    readonly extra?: Record<string, unknown>;
+  },
+): Promise<{
+  ledger: Ledger;
+  spend:
+    | {
+        totalCostUsd: number;
+        byActor: Record<string, { events: number; costUsd: number }>;
+      }
+    | undefined;
+}> {
+  const ledger = await ledgerOf(context.store);
+  const status = await runBuiltCli([
+    "status",
+    "--output",
+    "json",
+    "--repo",
+    context.repo,
+    "--store",
+    context.store,
+  ]);
+  const spend =
+    status.code === 0
+      ? (
+          JSON.parse(status.stdout) as {
+            spend: {
+              totalCostUsd: number;
+              byActor: Record<string, { events: number; costUsd: number }>;
+            };
+          }
+        ).spend
+      : undefined;
+  console.info(
+    `[${gateway} live] ${leg} leg: ${JSON.stringify({
+      models: context.models,
+      exitCode: context.result.code,
+      stderr: protocolLines(context.result.stderr).map(
+        ({ code, message }) => `${code}: ${message}`,
+      ),
+      candidates: [
+        ...new Set(ledger.executions.map(({ candidateId }) => candidateId)),
+      ],
+      judgesTried: [
+        ...new Set(
+          ledger.spendEvents
+            .filter(({ actor }) => actor === "judge")
+            .map(
+              ({ reconcilableTo }) =>
+                (reconcilableTo as { judgeModel?: unknown }).judgeModel,
+            ),
+        ),
+      ],
+      judges: [
+        ...new Set(ledger.assessments.map(({ evaluatorId }) => evaluatorId)),
+      ],
+      executions: ledger.executions.length,
+      requestAttempts: ledger.requestAttempts.length,
+      assessments: ledger.assessments.length,
+      spend: spend ?? status.stderr,
+      ...context.extra,
+    })}`,
+  );
+  return { ledger, spend };
 }
 
 export async function assertNoSecretIn(

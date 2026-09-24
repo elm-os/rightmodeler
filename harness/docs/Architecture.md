@@ -566,7 +566,8 @@ span dialect has a dedicated reader, and its GenAI dialect is read by the OTel G
 treats agent, step and tool spans as structure. The OpenInference reader reads the request body
 when a span carries it, groups spans by session, and leaves failed, replay-tagged and
 content-hidden calls out by name, which makes a gateway's span export (Envoy AI Gateway) a trace
-source.
+source. Bifrost's request log export has its own reader, and three-segment gateway ids
+(`vercel/openai/gpt-4o-mini`) take their family from the vendor segment.
 
 ## 14. Skill packs
 

@@ -155,6 +155,23 @@ describe("response provenance", () => {
     }
   });
 
+  it("treats Bifrost's prefix-stripped answer as the requested model", () => {
+    expect(
+      responseSubstitution(fixture<GatewayResponse>("bifrost/chat.json")),
+    ).toBeUndefined();
+  });
+
+  it("flags Bifrost's compat plugin dropping a parameter", () => {
+    expect(
+      responseSubstitution(
+        fixture<GatewayResponse>("bifrost/compat-drop.json"),
+      ),
+    ).toEqual({
+      kind: "request",
+      evidence: "bifrost dropped response_format",
+    });
+  });
+
   it("does not check a body that names no model", () => {
     expect(
       responseSubstitution({

@@ -1151,6 +1151,33 @@ describe("built CLI pipeline", () => {
     ).toHaveLength(7);
   });
 
+  it("names Bifrost's failed, fallback and replay rows and keeps ingesting", async () => {
+    const { repo } = await fixtureCopy("bifrost-exclusions");
+    const result = await runCli([
+      "init",
+      "--through",
+      "ingest",
+      "--traces",
+      join(traceFixturesDir, "bifrost.jsonl"),
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    const warning = JSON.parse(result.stderr) as Record<string, unknown>;
+    expect(warning).toMatchObject({ code: "trace_steps_excluded" });
+    expect(warning.message).toContain("1 call_failed");
+    expect(warning.message).toContain("1 fallback_answer");
+    expect(warning.message).toContain("1 replay_traffic");
+    const ingest = await readStageArtifact(
+      join(repo, ".rightmodeler"),
+      "ingest",
+    );
+    expect(ingest.format).toBe("bifrost");
+  });
+
   it("ingests a trace directory like the equivalent single file", async () => {
     const records = JSON.parse(await readFile(tracesPath, "utf8")) as unknown[];
     const tracesDirectory = await mkdtemp(

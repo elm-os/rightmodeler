@@ -145,6 +145,7 @@ function formatName(format: TraceFormat): string {
     weave: "Weave export",
     "claude-code": "Claude Code session",
     codex: "Codex session",
+    bifrost: "Bifrost log export",
   };
   return names[format];
 }
