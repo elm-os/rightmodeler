@@ -1,0 +1,84 @@
+{
+  "data": [
+    {
+      "id": "vercel/amazon/nova-micro",
+      "created": 1755815280,
+      "context_length": 128000,
+      "owned_by": "amazon"
+    },
+    {
+      "id": "vercel/openai/gpt-4o-mini",
+      "created": 1755815280,
+      "context_length": 128000,
+      "owned_by": "openai"
+    },
+    {
+      "id": "openrouter/openai/gpt-4o-mini",
+      "canonical_slug": "openai/gpt-4o-mini",
+      "name": "OpenAI: GPT-4o-mini",
+      "normalized_name": "Gpt 4O Mini",
+      "created": 1721260800,
+      "context_length": 128000,
+      "max_input_tokens": 128000,
+      "max_output_tokens": 16384,
+      "architecture": {
+        "modality": "text+image+file->text",
+        "tokenizer": "GPT",
+        "input_modalities": ["text", "image", "file"],
+        "output_modalities": ["text"]
+      },
+      "pricing": {
+        "prompt": "0.00000015",
+        "completion": "0.0000006",
+        "input_cache_read": "0.000000075"
+      },
+      "top_provider": {
+        "is_moderated": true,
+        "context_length": 128000,
+        "max_completion_tokens": 16384
+      },
+      "supported_parameters": [
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "max_completion_tokens",
+        "max_tokens",
+        "prediction",
+        "presence_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p",
+        "web_search_options"
+      ],
+      "default_parameters": {},
+      "description": "GPT-4o mini is OpenAI's newest model after [GPT-4 Omni](/models/openai/gpt-4o), supporting both text and image inputs with text outputs. As their most advanced small model, it is many multiples more affordable..."
+    },
+    {
+      "id": "openrouter/baai/bge-base-en-v1.5",
+      "canonical_slug": "baai/bge-base-en-v1.5-20251117",
+      "name": "BAAI: bge-base-en-v1.5",
+      "normalized_name": "Bge Base En V1.5",
+      "created": 1763431837,
+      "context_length": 512,
+      "max_input_tokens": 512,
+      "max_output_tokens": 460,
+      "architecture": {
+        "modality": "text->embeddings",
+        "tokenizer": "Other",
+        "input_modalities": ["text"],
+        "output_modalities": ["embeddings"]
+      },
+      "pricing": { "prompt": "0.000000005", "completion": "0" },
+      "top_provider": { "is_moderated": false, "context_length": 512 },
+      "default_parameters": {},
+      "hugging_face_id": "BAAI/bge-base-en-v1.5",
+      "description": "The bge-base-en-v1.5 embedding model converts English sentences and paragraphs into 768-dimensional dense vectors, delivering efficient, high-quality semantic embeddings optimized for retrieval, semantic search, and document-matching workflows. This version (v1.5) features..."
+    }
+  ]
+}

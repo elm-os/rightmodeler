@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   budgetKey,
@@ -16,7 +17,10 @@ import {
 } from "@rightmodeler/core";
 import {
   aggregate,
+  judgeExecution,
+  pickJudges,
   type JudgeChat,
+  type JudgeChatRequest,
   type JudgeChatResult,
 } from "@rightmodeler/kernel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,9 +29,11 @@ import {
   AdaptiveLimiter,
   BlockedError,
   BudgetRefusalError,
+  CatalogReferenceError,
   DEFAULT_RESERVATION_STALENESS_WINDOW_MS,
   createBudget,
   createProvider,
+  estimateInputTokens,
   ProviderRequestError,
   replayModeA,
   shortlist,
@@ -46,12 +52,17 @@ interface StubProvider {
   getRequests(): Array<Record<string, unknown>>;
 }
 
+interface StubOptions {
+  catalogPageSize?: number;
+  malformedJudgeModels?: string[];
+  servedModels?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
+}
+
 interface StubProviderModule {
-  startStubProvider(options: {
-    port: number;
-    catalogPageSize?: number;
-    malformedJudgeModels?: string[];
-  }): Promise<StubProvider>;
+  startStubProvider(
+    options: StubOptions & { port: number },
+  ): Promise<StubProvider>;
 }
 
 const stubModuleUrl = new URL(
@@ -66,14 +77,32 @@ const aiGatewayChatFixtureUrl = new URL(
   "../../../fixtures/catalogs/ai-gateway-chat-response.json",
   import.meta.url,
 );
+const envoyFixtureUrl = new URL(
+  "../../../fixtures/catalogs/envoy-models.json",
+  import.meta.url,
+);
+const aiGatewayFastTiersFixtureUrl = new URL(
+  "../../../fixtures/catalogs/ai-gateway-fast-tiers.json",
+  import.meta.url,
+);
+const bifrostModelsFixtureUrl = new URL(
+  "../../../fixtures/catalogs/bifrost-models.json",
+  import.meta.url,
+);
+const bifrostChatFixtureUrl = new URL(
+  "../../../fixtures/gateways/bifrost/chat.json",
+  import.meta.url,
+);
 
 const projectId = "replay-test";
 const runId = "run-1";
 const fakeKey = "fake-provider-key-never-persist";
+const unpricedJudgeLimits = {
+  pricing: { input: 0, output: 0 },
+  maxOutputTokens: 512,
+};
 
-async function startStub(
-  options: { catalogPageSize?: number; malformedJudgeModels?: string[] } = {},
-): Promise<StubProvider> {
+async function startStub(options: StubOptions = {}): Promise<StubProvider> {
   const fixture = (await import(stubModuleUrl)) as StubProviderModule;
   return fixture.startStubProvider({ port: 0, ...options });
 }
@@ -262,6 +291,73 @@ describe("provider client", () => {
     await expect(provider.listModels()).rejects.toThrow("REPLAY_TEST_API_KEY");
   });
 
+  it("sends configured headers on catalog, chat and model-info requests and keeps authorization last", async () => {
+    const sent: Array<{ url: string; headers: Headers }> = [];
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        sent.push({ url, headers: new Headers(init?.headers) });
+        const body = url.endsWith("/models")
+          ? { data: [{ id: "acme/small-1", context_length: 128_000 }] }
+          : url.endsWith("/model/info")
+            ? {
+                data: [
+                  {
+                    model_name: "acme/small-1",
+                    model_info: {
+                      input_cost_per_token: 0.000001,
+                      output_cost_per_token: 0.000002,
+                    },
+                  },
+                ],
+              }
+            : {
+                model: "acme/small-1",
+                choices: [
+                  {
+                    message: { role: "assistant", content: "ok" },
+                    finish_reason: "stop",
+                  },
+                ],
+                usage: { prompt_tokens: 4, completion_tokens: 1 },
+              };
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      });
+    try {
+      const provider = createProvider({
+        providerId: "header-gateway",
+        baseUrl: "https://gateway.example/v1",
+        apiKeyEnv: "REPLAY_TEST_API_KEY",
+        headers: {
+          "x-portkey-provider": "openai",
+          authorization: "must-not-win",
+        },
+      });
+      await provider.listModels();
+      await provider.chat({
+        model: "acme/small-1",
+        messages: [{ role: "user", content: "hello" }],
+        headers: { "x-portkey-provider": "recorded" },
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(sent.map(({ url }) => url)).toEqual([
+      "https://gateway.example/v1/models",
+      "https://gateway.example/model/info",
+      "https://gateway.example/v1/chat/completions",
+    ]);
+    for (const { headers } of sent) {
+      expect(headers.get("x-portkey-provider")).toBe("openai");
+      expect(headers.get("authorization")).toBe(`Bearer ${fakeKey}`);
+    }
+  });
+
   it("rejects internal parts arrays at the strict stub boundary", async () => {
     const response = await fetch(`${baseUrl(stub)}/chat/completions`, {
       method: "POST",
@@ -357,6 +453,69 @@ describe("AI Gateway catalog", () => {
     expect(
       catalog.some(({ id }) => id === "alibaba/qwen3-embedding-0.6b"),
     ).toBe(false);
+  });
+
+  it("never ranks a Vercel -fast service tier as a judge while its base model is listed", async () => {
+    const catalog = await listFixtureModels(
+      await readFile(aiGatewayFastTiersFixtureUrl, "utf8"),
+    );
+
+    expect(
+      pickJudges(catalog, {
+        candidateFamily: "inclusionai",
+        referenceFamily: "alibaba",
+      }),
+    ).toEqual([
+      "openai/gpt-6-astra",
+      "openai/gpt-6-sol",
+      "anthropic/claude-opus-5.5",
+      "zai/glm-5.3",
+      "spacexai/grok-4.1-fast-non-reasoning",
+      "openai/gpt-4.1-nano",
+      "morph/morph-v3-fast",
+    ]);
+  });
+
+  it("never shortlists a Vercel -fast service tier while its base model is listed", async () => {
+    const catalog = await listFixtureModels(
+      await readFile(aiGatewayFastTiersFixtureUrl, "utf8"),
+    );
+
+    const result = shortlist(
+      [step({ currentModel: "anthropic/claude-opus-5.5" })],
+      catalog,
+      { top: 20 },
+    );
+
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "inclusionai/ling-3.0-flash",
+      "alibaba/qwen3.7-flash",
+      "openai/gpt-4.1-nano",
+      "spacexai/grok-4.1-fast-non-reasoning",
+      "morph/morph-v3-fast",
+      "zai/glm-5.3",
+      "openai/gpt-6-sol",
+    ]);
+  });
+
+  it("still resolves a -fast current model and offers its base model", async () => {
+    const catalog = await listFixtureModels(
+      await readFile(aiGatewayFastTiersFixtureUrl, "utf8"),
+    );
+
+    const result = shortlist(
+      [step({ currentModel: "openai/gpt-4.1-nano-fast" })],
+      catalog,
+      { top: 20 },
+    );
+
+    expect(result[0]?.abstention).toBeUndefined();
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "inclusionai/ling-3.0-flash",
+      "alibaba/qwen3.7-flash",
+      "openai/gpt-4.1-nano",
+      "spacexai/grok-4.1-fast-non-reasoning",
+    ]);
   });
 
   it("normalizes AI Gateway output ceilings", async () => {
@@ -639,6 +798,398 @@ describe("AI Gateway catalog", () => {
     expect(warning).toHaveBeenCalledOnce();
   });
 
+  async function listWithReference(
+    gatewayBody: string,
+    catalogReference: string,
+    options: {
+      warning?: (code: string, message: string) => void;
+      pricingOverrides?: Record<string, { input: number; output: number }>;
+    } = {},
+  ): Promise<ModelCatalogEntry[]> {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(gatewayBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    return createProvider({
+      providerId: "envoy-ai-gateway",
+      baseUrl: "https://gateway.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      catalogReference,
+      ...options,
+    }).listModels();
+  }
+
+  it("fills an Envoy declared-id catalog from the upstream's catalog reference", async () => {
+    const warning = vi.fn();
+    const catalog = await listWithReference(
+      await readFile(envoyFixtureUrl, "utf8"),
+      fileURLToPath(aiGatewayFixtureUrl),
+      { warning },
+    );
+
+    expect(catalog.map(({ id }) => id)).toEqual([
+      "openai/gpt-4o",
+      "openai/gpt-4o-mini",
+      "my-fast-model",
+    ]);
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o-mini")).toEqual({
+      id: "openai/gpt-4o-mini",
+      family: "openai",
+      contextLength: 128_000,
+      pricing: { input: 0.00000015, output: 0.0000006 },
+      supportsTools: true,
+      supportsStructuredOutput: false,
+      releasedAt: 1_721_260_800,
+      maxOutputTokens: 16_384,
+      outputModalities: [],
+      requiresReasoning: false,
+    });
+    expect(
+      catalog.find(({ id }) => id === "my-fast-model")?.pricing,
+    ).toBeNull();
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledOnce();
+    expect(warning).toHaveBeenCalledWith(
+      "catalog_reference_unmatched",
+      "1 model(s) in the envoy-ai-gateway catalog have no price after joining the catalog reference, for example my-fast-model. Declare replay models under the ids the reference lists, or pass --pricing-file.",
+    );
+  });
+
+  it("joins a gateway id that adds a provider prefix to the reference id", async () => {
+    const gateway = JSON.stringify({
+      data: [
+        {
+          id: "vercel/openai/gpt-4o-mini",
+          context_length: 128_000,
+          owned_by: "openai",
+        },
+      ],
+    });
+    const [prefixed] = await listWithReference(
+      gateway,
+      fileURLToPath(aiGatewayFixtureUrl),
+    );
+
+    expect(prefixed).toMatchObject({
+      id: "vercel/openai/gpt-4o-mini",
+      family: "openai",
+      contextLength: 128_000,
+      pricing: { input: 0.00000015, output: 0.0000006 },
+      supportsTools: true,
+    });
+
+    vi.restoreAllMocks();
+    const directory = await mkdtemp(join(tmpdir(), "rightmodeler-reference-"));
+    try {
+      const reference = join(directory, "reference.json");
+      await writeFile(
+        reference,
+        JSON.stringify({
+          data: [
+            { id: "gpt-4o-mini", pricing: { input: "0.1", output: "0.2" } },
+            {
+              id: "openai/gpt-4o-mini",
+              pricing: { input: "0.3", output: "0.4" },
+            },
+          ],
+        }),
+      );
+      const [longest] = await listWithReference(gateway, reference);
+
+      expect(longest?.pricing).toEqual({ input: 0.3, output: 0.4 });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("takes a three-segment id's family from its vendor segment", async () => {
+    const catalog = await listFixtureModels(
+      await readFile(bifrostModelsFixtureUrl, "utf8"),
+    );
+
+    for (const [id, family] of [
+      ["vercel/amazon/nova-micro", "amazon"],
+      ["vercel/openai/gpt-4o-mini", "openai"],
+      ["openrouter/openai/gpt-4o-mini", "openai"],
+    ] as const) {
+      expect(catalog.find((model) => model.id === id)?.family, id).toBe(family);
+    }
+  });
+
+  it("never offers a model whose declared output is not text", async () => {
+    const fixture = JSON.parse(
+      await readFile(bifrostModelsFixtureUrl, "utf8"),
+    ) as { data: Array<Record<string, unknown>> };
+    const embedding = fixture.data.find(({ architecture }) =>
+      (
+        architecture as { output_modalities?: string[] } | undefined
+      )?.output_modalities?.includes("embeddings"),
+    );
+    fixture.data.push({
+      id: "openrouter/google/gemini-2.5-flash-image",
+      context_length: 32_768,
+      architecture: { output_modalities: ["text", "image"] },
+      pricing: { prompt: "0.0000003", completion: "0.0000025" },
+    });
+
+    const ids = (await listFixtureModels(JSON.stringify(fixture))).map(
+      ({ id }) => id,
+    );
+
+    expect(embedding?.id).toBe("openrouter/baai/bge-base-en-v1.5");
+    expect(ids).not.toContain(embedding?.id);
+    expect(ids).toContain("openrouter/google/gemini-2.5-flash-image");
+  });
+
+  it("joins Bifrost's custom-provider ids to the upstream's catalog by suffix", async () => {
+    const catalog = await listWithReference(
+      await readFile(bifrostModelsFixtureUrl, "utf8"),
+      fileURLToPath(aiGatewayFixtureUrl),
+    );
+
+    expect(
+      catalog.find(({ id }) => id === "vercel/openai/gpt-4o-mini"),
+    ).toMatchObject({
+      family: "openai",
+      contextLength: 128_000,
+      pricing: { input: 0.00000015, output: 0.0000006 },
+      supportsTools: true,
+      supportsStructuredOutput: false,
+    });
+    expect(
+      catalog.find(({ id }) => id === "openrouter/openai/gpt-4o-mini"),
+    ).toMatchObject({
+      family: "openai",
+      pricing: { input: 0.00000015, output: 0.0000006 },
+      supportsTools: true,
+      supportsStructuredOutput: true,
+    });
+  });
+
+  it("never overwrites a price, limit or capability the gateway declares", async () => {
+    const [declared] = await listWithReference(
+      JSON.stringify({
+        data: [
+          {
+            id: "openai/gpt-4o-mini",
+            pricing: { prompt: "0.000001", completion: "0.000002" },
+            context_length: 64_000,
+            max_tokens: 4_096,
+            supported_parameters: [],
+            reasoning: { mandatory: true },
+          },
+        ],
+      }),
+      fileURLToPath(aiGatewayFixtureUrl),
+    );
+
+    expect(declared).toMatchObject({
+      pricing: { input: 0.000001, output: 0.000002 },
+      contextLength: 64_000,
+      maxOutputTokens: 4_096,
+      supportsTools: false,
+      supportsStructuredOutput: false,
+      requiresReasoning: true,
+    });
+  });
+
+  it("takes a model's release date from the reference over the date the gateway declares", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "rightmodeler-reference-"));
+    try {
+      const reference = join(directory, "reference.json");
+      await writeFile(
+        reference,
+        JSON.stringify({
+          data: [
+            {
+              id: "openai/gpt-6-astra",
+              created: 1_755_815_280,
+              released: 1_788_480_000,
+              pricing: { input: "0.00001", output: "0.00005" },
+            },
+            {
+              id: "acme/undated",
+              pricing: { input: "0.000001", output: "0.000002" },
+            },
+          ],
+        }),
+      );
+      const catalog = await listWithReference(
+        JSON.stringify({
+          data: [
+            {
+              id: "vercel/openai/gpt-6-astra",
+              created: 1_755_815_280,
+              context_length: 1_050_000,
+            },
+            {
+              id: "vercel/acme/undated",
+              created: 1_721_260_800,
+              context_length: 8_192,
+            },
+          ],
+        }),
+        reference,
+      );
+
+      expect(catalog.map(({ id, releasedAt }) => [id, releasedAt])).toEqual([
+        ["vercel/openai/gpt-6-astra", 1_788_480_000],
+        ["vercel/acme/undated", 1_721_260_800],
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("ranks judges through a Bifrost catalog as it ranks them on the upstream", async () => {
+    const upstream = await readFile(aiGatewayFastTiersFixtureUrl, "utf8");
+    const families = {
+      candidateFamily: "inclusionai",
+      referenceFamily: "alibaba",
+    };
+    const direct = pickJudges(await listFixtureModels(upstream), families);
+    vi.restoreAllMocks();
+    const bifrost = JSON.stringify({
+      data: (
+        JSON.parse(upstream) as { data: Array<Record<string, unknown>> }
+      ).data.map(({ id, created, owned_by, context_window }) => ({
+        id: `vercel/${String(id)}`,
+        created,
+        owned_by,
+        context_length: context_window,
+      })),
+    });
+
+    const throughBifrost = pickJudges(
+      await listWithReference(
+        bifrost,
+        fileURLToPath(aiGatewayFastTiersFixtureUrl),
+      ),
+      families,
+    );
+
+    expect(throughBifrost).toEqual(direct.map((id) => `vercel/${id}`));
+  });
+
+  it("lets --pricing-file override the reference", async () => {
+    const warning = vi.fn();
+    const catalog = await listWithReference(
+      await readFile(envoyFixtureUrl, "utf8"),
+      fileURLToPath(aiGatewayFixtureUrl),
+      {
+        warning,
+        pricingOverrides: {
+          "openai/gpt-4o-mini": { input: 0.001, output: 0.002 },
+          "my-fast-model": { input: 0.0001, output: 0.0002 },
+        },
+      },
+    );
+
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o-mini")).toMatchObject(
+      { pricing: { input: 0.001, output: 0.002 }, contextLength: 128_000 },
+    );
+    expect(catalog.find(({ id }) => id === "my-fast-model")?.pricing).toEqual({
+      input: 0.0001,
+      output: 0.0002,
+    });
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  it("fetches a URL reference without the gateway's key or headers", async () => {
+    const referenceUrl = "https://reference.example/v1/models";
+    const referenceBody = await readFile(aiGatewayFixtureUrl, "utf8");
+    const gatewayBody = await readFile(envoyFixtureUrl, "utf8");
+    const sent: Array<{ url: string; headers: Headers }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      sent.push({ url, headers: new Headers(init?.headers) });
+      return new Response(url === referenceUrl ? referenceBody : gatewayBody, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    const catalog = await createProvider({
+      providerId: "portkey",
+      baseUrl: "https://gateway.example/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      headers: { "x-portkey-provider": "openai" },
+      catalogReference: referenceUrl,
+    }).listModels();
+
+    expect(sent.map(({ url }) => url)).toEqual([
+      "https://gateway.example/v1/models",
+      referenceUrl,
+    ]);
+    expect(sent[0]?.headers.get("authorization")).toBe(`Bearer ${fakeKey}`);
+    expect(sent[0]?.headers.get("x-portkey-provider")).toBe("openai");
+    expect([...sent[1]!.headers.keys()]).toEqual([]);
+    expect(catalog.find(({ id }) => id === "openai/gpt-4o")?.pricing).toEqual({
+      input: 0.0000025,
+      output: 0.00001,
+    });
+  });
+
+  it("stops with a named error when the reference cannot be read", async () => {
+    const gatewayBody = await readFile(envoyFixtureUrl, "utf8");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://down.example/")) {
+        throw new TypeError("fetch failed", {
+          cause: new Error("getaddrinfo ENOTFOUND down.example"),
+        });
+      }
+      return url.startsWith("https://gone.example/")
+        ? new Response("not found", { status: 404 })
+        : new Response(gatewayBody, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+    });
+    const directory = await mkdtemp(join(tmpdir(), "rightmodeler-reference-"));
+    try {
+      const missing = join(directory, "missing.json");
+      const malformed = join(directory, "malformed.json");
+      await writeFile(malformed, JSON.stringify({ models: [] }));
+
+      for (const [catalogReference, message] of [
+        [
+          "https://gone.example/v1/models",
+          "Catalog reference https://gone.example/v1/models answered HTTP 404",
+        ],
+        [
+          "https://down.example/v1/models",
+          "Catalog reference https://down.example/v1/models could not be fetched: fetch failed (getaddrinfo ENOTFOUND down.example)",
+        ],
+        [
+          missing,
+          `Catalog reference ${missing} could not be read: ENOENT: no such file or directory, open '${missing}'`,
+        ],
+        [
+          malformed,
+          `Catalog reference ${malformed} is not an OpenAI-compatible /models document: model catalog data must be an array`,
+        ],
+      ] as const) {
+        const rejection = createProvider({
+          providerId: "envoy-ai-gateway",
+          baseUrl: "https://gateway.example/v1",
+          apiKeyEnv: "REPLAY_TEST_API_KEY",
+          catalogReference,
+        }).listModels();
+        await expect(rejection).rejects.toBeInstanceOf(CatalogReferenceError);
+        await expect(rejection).rejects.toMatchObject({
+          name: "CatalogReferenceError",
+          message,
+        });
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("shortlists cheaper tool-capable chat models for a GPT-4o incumbent", async () => {
     const catalog = await listFixtureModels();
     const result = shortlist(
@@ -711,6 +1262,70 @@ describe("AI Gateway chat", () => {
       costIsEstimate: false,
       finishReason: "stop",
       providerResponseId: "gen_01KZYSK582PZST0T79EP0DJ1FJ",
+      servedModel: "openai/gpt-4o-mini",
+    });
+  });
+
+  it("reads a Bifrost usage.cost object as the billed cost", async () => {
+    const captured = JSON.parse(
+      await readFile(bifrostChatFixtureUrl, "utf8"),
+    ) as {
+      requestedModel: string;
+      body: { usage: { cost: { total_cost: number } } };
+    };
+    const catalogBody = await readFile(bifrostModelsFixtureUrl, "utf8");
+    const chat = (body: unknown) => {
+      vi.restoreAllMocks();
+      vi.spyOn(globalThis, "fetch").mockImplementation(
+        async (input) =>
+          new Response(
+            String(input).endsWith("/models")
+              ? catalogBody
+              : JSON.stringify(body),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      );
+      return createProvider({
+        providerId: "bifrost",
+        baseUrl: "https://bifrost.example/v1",
+        apiKeyEnv: "REPLAY_TEST_API_KEY",
+      }).chat({
+        model: captured.requestedModel,
+        messages: [{ role: "user", content: "Say the single word OK." }],
+        maxOutputTokens: 64,
+        estimatedInputTokens: 8,
+      });
+    };
+
+    const response = await chat(captured.body);
+    expect(response).toMatchObject({
+      costUsd: captured.body.usage.cost.total_cost,
+      costIsEstimate: false,
+    });
+    expect(response.costUsd).toBeGreaterThan(0);
+    await expect(
+      chat({
+        ...captured.body,
+        usage: { ...captured.body.usage, cost: { total_cost: "abc" } },
+      }),
+    ).rejects.toThrow(/^Invalid chat response: usage\.cost\.total_cost /);
+  });
+
+  it("records the served model and flags a response that names another model", async () => {
+    const fixture = JSON.parse(
+      await readFile(aiGatewayChatFixtureUrl, "utf8"),
+    ) as { model: string };
+    fixture.model = "openai/gpt-4.1-nano";
+
+    await expect(
+      chatFromFixture(JSON.stringify(fixture)),
+    ).resolves.toMatchObject({
+      content: "Ok!",
+      servedModel: "openai/gpt-4.1-nano",
+      substitution: {
+        kind: "model",
+        evidence: "served openai/gpt-4.1-nano for requested openai/gpt-4o-mini",
+      },
     });
   });
 
@@ -1706,6 +2321,22 @@ describe("toWireMessages", () => {
       ]),
     ).toEqual([{ role: "tool", tool_call_id: "call-1", content: "delivered" }]);
   });
+
+  it("refuses a recorded assistant message that carries tool calls", () => {
+    const toolCall = {
+      id: "call-1",
+      type: "function",
+      function: { name: "lookup", arguments: "{}" },
+    };
+    expect(() =>
+      toWireMessages([
+        { role: "assistant", content: "", tool_calls: [toolCall] },
+      ]),
+    ).toThrow(/carries tool calls/);
+    expect(
+      toWireMessages([{ role: "assistant", content: "", tool_calls: [] }]),
+    ).toEqual([{ role: "assistant", content: "" }]);
+  });
 });
 
 describe("Mode A replay", () => {
@@ -1738,18 +2369,24 @@ describe("Mode A replay", () => {
     judgeChat = judge(),
     concurrency = 2,
     judgeModel = "neutral/judge",
-    rankedModels = [{ judgeModel, supportsStructuredOutput: true }],
+    rankedModels = [
+      { judgeModel, supportsStructuredOutput: true, ...unpricedJudgeLimits },
+    ],
     warning?: (code: string, message: string) => void,
+    authorizedTotalUsd = 1,
+    wrapBudget = (budget: Budget) => budget,
   ) {
     const catalog = await provider.listModels();
     const candidate = catalog.find((model) => model.id === "acme/small-1");
     if (candidate === undefined) throw new Error("Missing stub candidate");
-    const budget = createBudget({
-      store,
-      projectId,
-      runId,
-      authorizedTotalUsd: 1,
-    });
+    const budget = wrapBudget(
+      createBudget({
+        store,
+        projectId,
+        runId,
+        authorizedTotalUsd,
+      }),
+    );
     return replayModeA({
       steps: [step()],
       cases,
@@ -1782,6 +2419,17 @@ describe("Mode A replay", () => {
       maxOutputTokens: 256,
       responseFormat: request.responseFormat as JsonValue,
     });
+
+  async function restartStub(options: StubOptions): Promise<void> {
+    await stub.close();
+    stub = await startStub(options);
+    provider = createProvider({
+      providerId: "stub-provider",
+      baseUrl: baseUrl(stub),
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      maxConcurrency: 4,
+    });
+  }
 
   it("records two attempts but one terminal execution after a one-time 429", async () => {
     const result = await run([
@@ -1867,6 +2515,74 @@ describe("Mode A replay", () => {
     });
   });
 
+  it("writes a candidate answered by another model as substituted and never judges it", async () => {
+    await restartStub({ servedModels: { "acme/small-1": "acme/large-1" } });
+    const counter = { calls: 0 };
+    const substitution = {
+      kind: "model",
+      evidence: "served acme/large-1 for requested acme/small-1",
+    };
+
+    const result = await run([recordedCase()], judge(counter));
+    const facts = await readFacts(store);
+    const executions = facts.filter(
+      (fact) => "executionId" in fact && "caseId" in fact,
+    );
+
+    expect(result).toMatchObject({
+      completed: 1,
+      blocked: [],
+      substituted: [{ candidateId: "acme/small-1", substitution }],
+    });
+    expect(result.substituted).toHaveLength(1);
+    expect(executions).toHaveLength(1);
+    expect(executions[0]).toMatchObject({
+      candidateId: "acme/small-1",
+      terminalOutcome: "abstain",
+      attribution: "substituted",
+      finalOutput: expect.stringMatching(/^Deterministic reply /),
+    });
+    expect(
+      facts.find(
+        (fact) => "attemptId" in fact && fact.streamOutcome === "completed",
+      ),
+    ).toMatchObject({ servedModel: "acme/large-1", substitution });
+    expect(counter.calls).toBe(0);
+    expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(0);
+  });
+
+  it("writes a cache hit as substituted", async () => {
+    await restartStub({
+      responseHeaders: { "x-portkey-cache-status": "HIT" },
+    });
+    const counter = { calls: 0 };
+
+    const result = await run([recordedCase()], judge(counter));
+    const facts = await readFacts(store);
+
+    expect(result.substituted).toEqual([
+      {
+        candidateId: "acme/small-1",
+        substitution: {
+          kind: "cache",
+          evidence: "x-portkey-cache-status: HIT",
+        },
+      },
+    ]);
+    expect(
+      facts.find((fact) => "executionId" in fact && "caseId" in fact),
+    ).toMatchObject({ terminalOutcome: "abstain", attribution: "substituted" });
+    expect(
+      facts.find(
+        (fact) => "attemptId" in fact && fact.streamOutcome === "completed",
+      ),
+    ).toMatchObject({
+      servedModel: "acme/small-1",
+      substitution: { kind: "cache" },
+    });
+    expect(counter.calls).toBe(0);
+  });
+
   it("stamps every completed attempt with a measured latency", async () => {
     await run([recordedCase()]);
     const facts = await readFacts(store);
@@ -1920,6 +2636,7 @@ describe("Mode A replay", () => {
       {
         judgeModel: "zeta/judge-1",
         supportsStructuredOutput: true,
+        ...unpricedJudgeLimits,
       },
     ]);
 
@@ -2006,10 +2723,12 @@ describe("Mode A replay", () => {
         {
           judgeModel: "zeta/judge-1",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "yotta/judge-2",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
       ],
       warning,
@@ -2092,10 +2811,12 @@ describe("Mode A replay", () => {
         {
           judgeModel: "zeta/judge-1",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "yotta/judge-2",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
       ],
       warning,
@@ -2116,6 +2837,78 @@ describe("Mode A replay", () => {
       judgeModels.filter((model) => model === "yotta/judge-2"),
     ).toHaveLength(8);
     expect(warning).toHaveBeenCalledOnce();
+  });
+
+  it("fails over from a judge whose responses name another model", async () => {
+    await restartStub({ servedModels: { "zeta/judge-1": "acme/large-1" } });
+    const warning = vi.fn();
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    const result = await run(
+      cases,
+      providerJudge,
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
+        },
+      ],
+      warning,
+    );
+    const facts = await readFacts(store);
+    const assessments = facts.filter((fact) => "assessmentId" in fact);
+    const substitutedJudgeSpend = facts.filter(
+      (fact) =>
+        "actor" in fact &&
+        fact.actor === "judge" &&
+        typeof fact.reconcilableTo === "object" &&
+        fact.reconcilableTo !== null &&
+        !Array.isArray(fact.reconcilableTo) &&
+        fact.reconcilableTo.judgeModel === "zeta/judge-1" &&
+        fact.reconcilableTo.invocation !== undefined,
+    );
+
+    expect(result).toMatchObject({
+      completed: 4,
+      blocked: [],
+      substituted: [],
+    });
+    expect(warning).toHaveBeenCalledWith(
+      "judge_unusable",
+      expect.stringContaining("zeta/judge-1"),
+    );
+    expect(assessments).toHaveLength(4);
+    expect(
+      assessments.every((fact) => fact.evaluatorId === "yotta/judge-2"),
+    ).toBe(true);
+    expect(substitutedJudgeSpend.length).toBeGreaterThanOrEqual(1);
+    expect(
+      substitutedJudgeSpend.every(
+        (fact) => "costUsd" in fact && fact.costUsd > 0,
+      ),
+    ).toBe(true);
+    expect(
+      facts.filter(
+        (fact) =>
+          "attemptId" in fact &&
+          fact.streamOutcome === "provider_error" &&
+          fact.errorDetail?.bodyExcerpt ===
+            "served acme/large-1 for requested zeta/judge-1",
+      ).length,
+    ).toBe(substitutedJudgeSpend.length);
   });
 
   it("tries at most four systematically malformed judges", async () => {
@@ -2140,22 +2933,27 @@ describe("Mode A replay", () => {
         {
           judgeModel: "zeta/judge-1",
           supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "yotta/judge-2",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "xray/judge-3",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "whiskey/judge-4",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
         {
           judgeModel: "unused/judge-5",
           supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
         },
       ],
       warning,
@@ -2770,6 +3568,7 @@ describe("Mode A replay", () => {
           {
             judgeModel: "neutral/judge",
             supportsStructuredOutput: true,
+            ...unpricedJudgeLimits,
           },
         ],
       },
@@ -2783,6 +3582,402 @@ describe("Mode A replay", () => {
       spentUsd: 0.002004,
       reservedUsd: 0,
     });
+  });
+
+  const pricedJudge = {
+    judgeModel: "neutral/judge",
+    supportsStructuredOutput: true,
+    pricing: { input: 0.00001, output: 0.00001 },
+    maxOutputTokens: 512,
+  };
+  const ledgerState = () => createBudget({ store, projectId, runId }).state();
+
+  it("holds judge spend inside the cap and blocks the judge cells the cap cannot cover", async () => {
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    const result = await run(
+      cases,
+      async (request) => ({ ...(await judge()(request)), costUsd: 0.003 }),
+      2,
+      pricedJudge.judgeModel,
+      [pricedJudge],
+      undefined,
+      0.01,
+    );
+    const facts = await readFacts(store);
+
+    expect((await ledgerState()).spentUsd).toBeLessThanOrEqual(0.01);
+    expect(result.blocked.length).toBeGreaterThan(0);
+    for (const blocked of result.blocked) {
+      expect(blocked).toMatchObject({
+        kind: "budget",
+        message: expect.stringMatching(/raise it to at least/),
+      });
+    }
+    expect(
+      facts.filter((fact) => "caseId" in fact && "terminalOutcome" in fact),
+    ).toHaveLength(4);
+    expect(facts.filter((fact) => "assessmentId" in fact).length).toBeLessThan(
+      4,
+    );
+    expect(
+      facts.some(
+        (fact) =>
+          "actor" in fact &&
+          typeof fact.reconcilableTo === "object" &&
+          fact.reconcilableTo !== null &&
+          !Array.isArray(fact.reconcilableTo) &&
+          fact.reconcilableTo.judgeFailureKind !== undefined,
+      ),
+    ).toBe(false);
+  });
+
+  it("books the judge's actual cost when its reservation is refunded", async () => {
+    await run(
+      [recordedCase()],
+      async (request) => ({ ...(await judge()(request)), costUsd: 0.0004 }),
+      2,
+      pricedJudge.judgeModel,
+      [pricedJudge],
+    );
+    const candidateCostUsd = (await readFacts(store))
+      .filter((fact) => "actor" in fact)
+      .filter((event) => event.actor === "replay-driver")
+      .reduce((total, event) => total + event.costUsd, 0);
+    const state = await ledgerState();
+
+    expect(candidateCostUsd).toBeGreaterThan(0);
+    expect(state.spentUsd).toBeCloseTo(candidateCostUsd + 2 * 0.0004, 12);
+    expect(state.reservedUsd).toBe(0);
+  });
+
+  it("waits for an in-flight judge reservation instead of refusing", async () => {
+    const delegate = provider;
+    provider = {
+      providerId: delegate.providerId,
+      listModels: () => delegate.listModels(),
+      chat: async (request) => {
+        const response = {
+          content: "candidate output",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          costUsd: 0.000001,
+          costIsEstimate: true,
+        };
+        await request.onAttempt?.({ outcome: "completed", ...response });
+        return response;
+      },
+    };
+    const captured: JudgeChatRequest[] = [];
+    await judgeExecution({
+      chat: async (request) => {
+        captured.push(request);
+        return judge()(request);
+      },
+      judgeModel: pricedJudge.judgeModel,
+      supportsStructuredOutput: true,
+      task: recordedCase().task,
+      reference: "Accepted summary",
+      candidate: "candidate output",
+    });
+    const inputTokens = estimateInputTokens(captured[0]!.messages);
+    const cap =
+      (inputTokens * pricedJudge.pricing.input +
+        pricedJudge.maxOutputTokens * pricedJudge.pricing.output) *
+      1.5;
+    const calls: { inputTokens: number; start: number; end: number }[] = [];
+
+    const result = await run(
+      [recordedCase()],
+      async (request) => {
+        const start = performance.now();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        calls.push({
+          inputTokens: estimateInputTokens(request.messages),
+          start,
+          end: performance.now(),
+        });
+        return judge()(request);
+      },
+      2,
+      pricedJudge.judgeModel,
+      [pricedJudge],
+      undefined,
+      cap,
+    );
+    const facts = await readFacts(store);
+
+    expect(result.blocked).toEqual([]);
+    expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(1);
+    expect(calls.map((call) => call.inputTokens)).toEqual([
+      inputTokens,
+      inputTokens,
+    ]);
+    expect(calls[1]!.start).toBeGreaterThanOrEqual(calls[0]!.end);
+  });
+
+  it("never counts a budget refusal toward judge failover", async () => {
+    const warning = vi.fn();
+    const judgeModels: string[] = [];
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    const result = await run(
+      cases,
+      async (request) => {
+        judgeModels.push(request.model);
+        return judge()(request);
+      },
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          pricing: { input: 1, output: 1 },
+          maxOutputTokens: 512,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
+        },
+      ],
+      warning,
+      0.01,
+    );
+
+    expect(result.blocked.length).toBeGreaterThan(0);
+    expect(result.blocked.every(({ kind }) => kind === "budget")).toBe(true);
+    expect(warning).not.toHaveBeenCalledWith(
+      "judge_unusable",
+      expect.anything(),
+    );
+    expect(judgeModels).not.toContain("yotta/judge-2");
+  });
+
+  it("sends a judge nothing more after its first model substitution and cancels its calls waiting for budget", async () => {
+    await restartStub({
+      servedModels: { "zeta/judge-1": "zeta/judge-1-base" },
+    });
+    const warning = vi.fn();
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+    let zetaReservations = 0;
+
+    const result = await run(
+      cases,
+      providerJudge,
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          pricing: { input: 0, output: 0.001 },
+          maxOutputTokens: 512,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          pricing: { input: 0, output: 0.0009 },
+          maxOutputTokens: 512,
+        },
+      ],
+      warning,
+      0.8,
+      (budget) => ({
+        ...budget,
+        reserveExecution: async (reservation) => {
+          const granted = await budget.reserveExecution(reservation);
+          if (reservation.pricing.output === 0.001) zetaReservations += 1;
+          return granted;
+        },
+      }),
+    );
+    const facts = await readFacts(store);
+    const judgeNotes = facts.flatMap((fact) =>
+      "actor" in fact &&
+      fact.actor === "judge" &&
+      typeof fact.reconcilableTo === "object" &&
+      fact.reconcilableTo !== null &&
+      !Array.isArray(fact.reconcilableTo)
+        ? [{ costUsd: fact.costUsd, reconcilableTo: fact.reconcilableTo }]
+        : [],
+    );
+    const zetaFailures = judgeNotes.filter(
+      ({ reconcilableTo }) =>
+        reconcilableTo.judgeModel === "zeta/judge-1" &&
+        reconcilableTo.judgeFailureKind !== undefined,
+    );
+    const unusableNotes = judgeNotes.filter(
+      ({ reconcilableTo }) => reconcilableTo.judgeStatus === "unusable",
+    );
+    const assessments = facts.filter((fact) => "assessmentId" in fact);
+    const requestedModels = stub.getRequests().map(({ model }) => model);
+
+    expect(
+      requestedModels.filter((model) => model === "zeta/judge-1"),
+    ).toHaveLength(1);
+    expect(
+      requestedModels.filter((model) => model === "yotta/judge-2"),
+    ).toHaveLength(8);
+    expect(zetaReservations).toBe(1);
+    expect(zetaFailures.length).toBeLessThanOrEqual(1);
+    expect(
+      zetaFailures.every(
+        ({ reconcilableTo }) =>
+          reconcilableTo.judgeFailureKind === "provider_error",
+      ),
+    ).toBe(true);
+    expect(result).toMatchObject({ completed: 4, blocked: [] });
+    expect(assessments).toHaveLength(4);
+    expect(
+      assessments.every((fact) => fact.evaluatorId === "yotta/judge-2"),
+    ).toBe(true);
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning).toHaveBeenCalledWith(
+      "judge_unusable",
+      "Judge zeta/judge-1 is unusable: it answered as another model (served zeta/judge-1-base for requested zeta/judge-1); switching to yotta/judge-2.",
+    );
+    expect(unusableNotes).toHaveLength(1);
+    expect(unusableNotes[0]).toMatchObject({
+      costUsd: 0,
+      reconcilableTo: {
+        judgeModel: "zeta/judge-1",
+        judgeStatus: "unusable",
+        note: "model_substituted",
+        substitution: "served zeta/judge-1-base for requested zeta/judge-1",
+      },
+    });
+    expect((await ledgerState()).reservedUsd).toBe(0);
+  });
+
+  it("never sends a judge call whose reservation is granted after its judge was retired", async () => {
+    await restartStub({
+      servedModels: { "zeta/judge-1": "zeta/judge-1-base" },
+    });
+    let releaseGate = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    let judgeReservations = 0;
+    let gatedGranted = false;
+
+    await run(
+      [recordedCase()],
+      async (request) => {
+        const response = await providerJudge(request);
+        if (request.model === "zeta/judge-1") setTimeout(releaseGate, 20);
+        return response;
+      },
+      2,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
+        },
+      ],
+      undefined,
+      1,
+      (budget) => ({
+        ...budget,
+        reserveExecution: async (reservation) => {
+          const gated =
+            reservation.maxOutputTokens ===
+              unpricedJudgeLimits.maxOutputTokens && ++judgeReservations === 2;
+          if (!gated) return budget.reserveExecution(reservation);
+          await gate;
+          const granted = await budget.reserveExecution(reservation);
+          gatedGranted = true;
+          return granted;
+        },
+      }),
+    );
+    const requestedModels = stub.getRequests().map(({ model }) => model);
+
+    expect(gatedGranted).toBe(true);
+    expect(
+      requestedModels.filter((model) => model === "zeta/judge-1"),
+    ).toHaveLength(1);
+    expect(
+      requestedModels.filter((model) => model === "yotta/judge-2"),
+    ).toHaveLength(2);
+    expect(
+      (await readFacts(store))
+        .filter((fact) => "assessmentId" in fact)
+        .map((fact) => fact.evaluatorId),
+    ).toEqual(["yotta/judge-2"]);
+    expect((await ledgerState()).reservedUsd).toBe(0);
+  });
+
+  it("keeps a judge whose response came from a cache, which is not a model substitution", async () => {
+    const warning = vi.fn();
+    const judgeModels: string[] = [];
+    let cacheHitSent = false;
+    const cases = Array.from({ length: 4 }, (_, index) =>
+      recordedCase({
+        caseId: `case-${index}`,
+        trajectoryId: `trajectory-${index}`,
+      }),
+    );
+
+    await run(
+      cases,
+      async (request) => {
+        judgeModels.push(request.model);
+        const response = await judge()(request);
+        if (cacheHitSent) return response;
+        cacheHitSent = true;
+        return {
+          ...response,
+          substitution: {
+            kind: "cache",
+            evidence: "x-portkey-cache-status: HIT",
+          },
+        };
+      },
+      4,
+      "zeta/judge-1",
+      [
+        {
+          judgeModel: "zeta/judge-1",
+          supportsStructuredOutput: true,
+          ...unpricedJudgeLimits,
+        },
+        {
+          judgeModel: "yotta/judge-2",
+          supportsStructuredOutput: false,
+          ...unpricedJudgeLimits,
+        },
+      ],
+      warning,
+    );
+
+    expect(warning).not.toHaveBeenCalled();
+    expect(judgeModels).not.toContain("yotta/judge-2");
+    expect(
+      judgeModels.filter((model) => model === "zeta/judge-1"),
+    ).toHaveLength(8);
   });
 
   it("converts the recorded request to provider wire messages with only the model swapped", async () => {

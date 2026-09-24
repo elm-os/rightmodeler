@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
 import { hopByHopHeaders } from "./headers.js";
+import { responseSubstitution, servedModel } from "../provenance.js";
 import { classifyStream } from "../transport/stream.js";
 
 const maxRequestBytes = 10 * 1024 * 1024;
@@ -113,6 +114,21 @@ function parseConfig() {
     throw new Error("RM_EGRESS_URL must use http or https");
   }
 
+  const requestHeaders =
+    process.env.RM_REQUEST_HEADERS === undefined
+      ? {}
+      : jsonEnv("RM_REQUEST_HEADERS");
+  if (
+    !isObject(requestHeaders) ||
+    Object.entries(requestHeaders).some(
+      ([name, value]) => name.length === 0 || typeof value !== "string",
+    )
+  ) {
+    throw new Error(
+      "RM_REQUEST_HEADERS must map header names to string values",
+    );
+  }
+
   return {
     runId: requiredEnv("RM_RUN_ID"),
     caseId: requiredEnv("RM_CASE_ID"),
@@ -125,6 +141,7 @@ function parseConfig() {
     pricingTable,
     defaultMaxOutputTokens,
     lease,
+    requestHeaders,
   };
 }
 
@@ -248,7 +265,7 @@ function responseHeaders(headers) {
   return forwarded;
 }
 
-function requestHeaders(headers, bodyLength) {
+function requestHeaders(headers, bodyLength, configured) {
   const forwarded = {};
   for (const [name, value] of Object.entries(headers)) {
     if (
@@ -262,6 +279,7 @@ function requestHeaders(headers, bodyLength) {
       forwarded[name] = value;
     }
   }
+  Object.assign(forwarded, configured);
   forwarded["accept-encoding"] = "identity";
   forwarded["content-length"] = String(bodyLength);
   return forwarded;
@@ -469,6 +487,7 @@ async function forwardStreaming(upstream, outgoing, status, spoolSink) {
     spoolPath: result.spoolPath ?? null,
     finishedWithoutSentinel: result.finishedWithoutSentinel === true,
     upstreamFailed,
+    model: result.model ?? null,
   };
 }
 
@@ -521,6 +540,7 @@ async function forwardNonStreaming(upstream, outgoing, status) {
       streamOutcome: "completed",
       usage: isObject(body) ? (body.usage ?? null) : null,
       upstreamFailed: false,
+      body,
     };
   } catch {
     return { streamOutcome: "truncated", usage: null, upstreamFailed: false };
@@ -679,6 +699,7 @@ async function main() {
       return;
     }
 
+    const swapped = stepId in config.swapPolicy;
     const model = config.swapPolicy[stepId] ?? parsed.model;
     const rewritten = {
       ...parsed,
@@ -775,12 +796,17 @@ async function main() {
         upstreamSource: null,
         upstreamFailed: false,
       };
+      let provenance = {};
       try {
         const upstream = await requestUpstream(
           config.egressUrl,
           incoming.url ?? "/",
           incoming.method ?? "POST",
-          requestHeaders(incoming.headers, forwardedBody.length),
+          requestHeaders(
+            incoming.headers,
+            forwardedBody.length,
+            config.requestHeaders,
+          ),
           forwardedBody,
           streamHardDeadlineMs,
         );
@@ -803,6 +829,23 @@ async function main() {
           upstreamStatus: status,
           upstreamSource: forwarded.upstreamFailed ? "egress" : upstreamSource,
         };
+        if (swapped && status < 400) {
+          const answered =
+            forwarded.body ??
+            (typeof forwarded.model === "string"
+              ? { model: forwarded.model }
+              : undefined);
+          const served = servedModel(answered);
+          const substitution = responseSubstitution({
+            requestedModel: model,
+            headers: upstream.headers,
+            body: answered,
+          });
+          provenance = {
+            ...(served === undefined ? {} : { servedModel: served }),
+            ...(substitution === undefined ? {} : { substitution }),
+          };
+        }
       } catch {
         if (!outgoing.headersSent) {
           sendJson(outgoing, 502, { error: "Egress request failed." });
@@ -838,6 +881,7 @@ async function main() {
         ...(result.finishedWithoutSentinel
           ? { finishedWithoutSentinel: true }
           : {}),
+        ...provenance,
         usage,
         responseSpoolPath: result.spoolPath,
         costUsd: leaseChargeUsd,

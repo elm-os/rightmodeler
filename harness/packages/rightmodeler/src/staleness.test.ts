@@ -384,7 +384,7 @@ describe("pipeline staleness", { timeout: 120_000 }, () => {
     );
   });
 
-  it("recomputes reconcile checkpoints written under trace-key-only binding", async () => {
+  it("recomputes reconcile checkpoints written before unsendable cases were left out", async () => {
     const root = await mkdtemp(join(tmpdir(), "rightmodeler-staleness-"));
     temporaryDirectories.push(root);
     const repo = await makeGitFixture(root, demoAppPath, "demo-app");
@@ -415,7 +415,7 @@ describe("pipeline staleness", { timeout: 120_000 }, () => {
         stage: "reconcile",
         upstream: stages.ingest!.inputDigest,
         scan: sha256(scanArtifact!.body),
-        binding: "trace-key-v1",
+        binding: "trace-match-v1",
       }),
     });
 

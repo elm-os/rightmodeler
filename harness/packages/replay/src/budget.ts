@@ -22,6 +22,7 @@ interface ReservationLedgerEntry {
 }
 
 export const DEFAULT_RESERVATION_STALENESS_WINDOW_MS = 10 * 60 * 1_000;
+const RESERVATION_RETRY_CAP_MS = 1_000;
 
 export interface BudgetState {
   authorizedTotalUsd?: number;
@@ -46,7 +47,6 @@ export interface Budget {
   readonly projectId: string;
   readonly runId: string;
   reserveExecution(input: ReserveExecutionInput): Promise<BudgetReservation>;
-  charge(costUsd: number): Promise<void>;
   state(): Promise<BudgetState>;
 }
 
@@ -77,6 +77,33 @@ export class BudgetRefusalError extends Error {
     this.requiredCapUsd = requiredCapUsd;
     this.authorizedTotalUsd = authorizedTotalUsd;
     this.causedByReservations = causedByReservations;
+  }
+}
+
+export async function reserveWhenFree(
+  budget: Budget,
+  input: ReserveExecutionInput,
+  inFlight: ReadonlySet<Promise<void>>,
+  signal?: AbortSignal,
+): Promise<BudgetReservation> {
+  let retryMs = 25;
+  for (;;) {
+    signal?.throwIfAborted();
+    try {
+      return await budget.reserveExecution(input);
+    } catch (error) {
+      if (error instanceof BudgetRefusalError && error.causedByReservations) {
+        const refunds = [...inFlight];
+        if (refunds.length > 0) {
+          await Promise.race(refunds);
+        } else {
+          await new Promise<void>((resolve) => setTimeout(resolve, retryMs));
+          retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
+        }
+        continue;
+      }
+      throw error;
+    }
   }
 }
 
@@ -377,34 +404,11 @@ export function createBudget(options: CreateBudgetOptions): Budget {
     };
   }
 
-  async function charge(costUsd: number): Promise<void> {
-    assertAmount(costUsd, "costUsd");
-    if (costUsd === 0) return;
-    for (;;) {
-      const latest = await load(false);
-      const charged: BudgetLedger = {
-        ...latest.ledger,
-        spentUsd: latest.ledger.spentUsd + costUsd,
-      };
-      if (
-        await options.store.compareAndSwap(
-          key,
-          latest.version,
-          encode(charged),
-          latest.fenceToken,
-        )
-      ) {
-        return;
-      }
-    }
-  }
-
   return {
     store: options.store,
     projectId: options.projectId,
     runId: options.runId,
     reserveExecution,
-    charge,
     state,
   };
 }

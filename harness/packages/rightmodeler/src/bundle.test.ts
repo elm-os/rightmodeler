@@ -76,7 +76,7 @@ afterAll(async () => {
 });
 
 // `pnpm pack` runs the prepack bundle, which rewrites dist-bundle/ and dist/publish/ in place, so
-// the file packs once and both tests install the same tarball.
+// the file packs once and every test reads the same tarball.
 let packed: Promise<string> | undefined;
 function packOnce(): Promise<string> {
   packed ??= (async () => {
@@ -169,7 +169,7 @@ describe("packed CLI bundle", () => {
     await assertPackedDocumentation(installedRoot, installedBinary, project);
     await Promise.all(
       [
-        "dist/cli.d.ts",
+        "dist-bundle/provenance.js",
         "dist-bundle/proxy/container-supervisor.mjs",
         "dist-bundle/proxy/headers.js",
         "dist-bundle/proxy/proxy-runtime.mjs",
@@ -183,7 +183,6 @@ describe("packed CLI bundle", () => {
       dependencies?: unknown;
       optionalDependencies?: unknown;
       engines?: { node?: string };
-      exports?: { "."?: { types?: string } };
     };
     expect(installedPackage.dependencies).toBeUndefined();
     const executorManifest = JSON.parse(
@@ -204,7 +203,6 @@ describe("packed CLI bundle", () => {
       access(join(project, "node_modules/@vercel/sandbox")),
     ).rejects.toThrow();
     expect(installedPackage.engines?.node).toBe(">=24");
-    expect(installedPackage.exports?.["."]?.types).toBe("./dist/cli.d.ts");
 
     const help = await runInstalled(installedBinary, ["--help"], project);
     expect(help).toMatchObject({ code: 0, stderr: "" });
@@ -290,6 +288,46 @@ describe("packed CLI bundle", () => {
     }
 
     await access(join(repo, ".rightmodeler/project/reports/report.md"));
+  }, 180_000);
+
+  it("packs only what the CLI runs: no type declarations, and exports that point at the bundle", async () => {
+    const tarball = await packOnce();
+    const { stdout: listing } = await execFileAsync("tar", ["-tzf", tarball], {
+      maxBuffer: 20 * 1024 * 1024,
+    });
+    const packed = listing
+      .split("\n")
+      .filter((entry) => entry.length > 0)
+      .map((entry) => entry.replace(/^package\//, ""))
+      .sort();
+    const docs = (await readdir(join(packageRoot, "docs"))).map(
+      (name) => `docs/${name}`,
+    );
+    expect(packed).toEqual(
+      [
+        "LICENSE",
+        "README.md",
+        "dist-bundle/cli.js",
+        "dist-bundle/provenance.js",
+        "dist-bundle/proxy/container-supervisor.mjs",
+        "dist-bundle/proxy/headers.js",
+        "dist-bundle/proxy/proxy-runtime.mjs",
+        "dist-bundle/transport/stream.js",
+        ...docs,
+        "package.json",
+      ].sort(),
+    );
+    const { stdout: manifest } = await execFileAsync("tar", [
+      "-xzOf",
+      tarball,
+      "package/package.json",
+    ]);
+    const packedManifest = JSON.parse(manifest) as {
+      exports?: unknown;
+      types?: unknown;
+    };
+    expect(packedManifest.exports).toBe("./dist-bundle/cli.js");
+    expect(packedManifest.types).toBeUndefined();
   }, 180_000);
 
   it.skipIf(skipRegistryTest)(
@@ -401,6 +439,7 @@ async function assertPackedDocumentation(
     "docs/commands.md",
     "docs/evaluators.md",
     "docs/exit-codes.md",
+    "docs/gateways.md",
     "docs/getting-started.md",
     "docs/github-actions.md",
     "docs/github.md",
@@ -437,6 +476,7 @@ async function assertPackedDocumentation(
     "commands",
     "evaluators",
     "exit-codes",
+    "gateways",
     "getting-started",
     "github",
     "github-actions",

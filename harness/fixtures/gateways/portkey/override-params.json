@@ -1,0 +1,33 @@
+{
+  "requestedModel": "stub/requested",
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "x-portkey-cache-status": "DISABLED",
+    "x-portkey-last-used-option-index": "config",
+    "x-portkey-provider": "openai",
+    "x-portkey-retry-attempt-count": "0",
+    "x-portkey-trace-id": ""
+  },
+  "body": {
+    "id": "chatcmpl-echo",
+    "object": "chat.completion",
+    "created": 1790118087,
+    "model": "stub/override",
+    "choices": [
+      {
+        "index": 0,
+        "finish_reason": "stop",
+        "message": {
+          "role": "assistant",
+          "content": "echo 48"
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 11,
+      "completion_tokens": 2,
+      "total_tokens": 13
+    }
+  }
+}

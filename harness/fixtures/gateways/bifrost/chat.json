@@ -1,0 +1,59 @@
+{
+  "requestedModel": "vercel/amazon/nova-micro",
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "x-bifrost-original-model": "amazon/nova-micro",
+    "x-bifrost-provider": "vercel",
+    "x-bifrost-request-type": "chat_completion",
+    "x-bifrost-resolved-model": "amazon/nova-micro",
+    "x-bifrost-routing-info-key": "vercel-1",
+    "x-bifrost-routing-info-model": "amazon/nova-micro",
+    "x-bifrost-routing-info-provider": "vercel",
+    "x-bifrost-trace-id": "3bdfb813b75447c980760d0b1f92bcf3",
+    "x-bifrost-upstream-latency-ms": "379.753"
+  },
+  "body": {
+    "id": "gen_01M38PR9KGRWB90M4VV97C9F8W",
+    "choices": [
+      {
+        "index": 0,
+        "finish_reason": "stop",
+        "logprobs": null,
+        "message": { "role": "assistant", "content": "OK" }
+      }
+    ],
+    "created": 1790219921,
+    "model": "amazon/nova-micro",
+    "object": "chat.completion",
+    "system_fingerprint": "fp_grlg9yh06j",
+    "usage": {
+      "prompt_tokens": 8,
+      "prompt_tokens_details": { "cached_tokens": 0, "cache_write_tokens": 0 },
+      "completion_tokens": 2,
+      "completion_tokens_details": { "image_tokens": 0 },
+      "total_tokens": 10,
+      "cost": { "total_cost": 5.6e-7 }
+    },
+    "extra_fields": {
+      "request_type": "chat_completion",
+      "routing_info": {
+        "provider": "vercel",
+        "model": "amazon/nova-micro",
+        "key": "vercel-1"
+      },
+      "provider": "vercel",
+      "original_model_requested": "amazon/nova-micro",
+      "resolved_model_used": "amazon/nova-micro",
+      "latency": 379,
+      "upstream_latency": 379,
+      "chunk_index": 0,
+      "provider_response_headers": {
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        "X-Matched-Path": "/v1/chat/completions",
+        "X-Vercel-Cache": "MISS",
+        "X-Vercel-Id": "sfo1::cle1::km4sw-1790219920973-92f62ba94709"
+      }
+    }
+  }
+}

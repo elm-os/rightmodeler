@@ -1,0 +1,65 @@
+{
+  "requestedModel": "openrouter/amazon/nova-micro-v1",
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "x-bifrost-original-model": "amazon/nova-micro-v1",
+    "x-bifrost-provider": "openrouter",
+    "x-bifrost-request-type": "chat_completion",
+    "x-bifrost-resolved-model": "amazon/nova-micro-v1",
+    "x-bifrost-routing-info-key": "openrouter-1",
+    "x-bifrost-routing-info-model": "amazon/nova-micro-v1",
+    "x-bifrost-routing-info-provider": "openrouter",
+    "x-bifrost-trace-id": "bd781c741b5e48488af73dc5b4eee828",
+    "x-bifrost-upstream-latency-ms": "441.790"
+  },
+  "body": {
+    "id": "gen-1790219932-8J6NzKhH2oZoX9uqUAD7",
+    "choices": [
+      {
+        "index": 0,
+        "finish_reason": "stop",
+        "logprobs": null,
+        "message": {
+          "role": "assistant",
+          "content": "The city mentioned in the note is Lisbon."
+        }
+      }
+    ],
+    "created": 1790219932,
+    "model": "amazon/nova-micro-v1",
+    "object": "chat.completion",
+    "system_fingerprint": "",
+    "usage": {
+      "prompt_tokens": 15,
+      "prompt_tokens_details": { "cached_tokens": 0, "cache_write_tokens": 0 },
+      "completion_tokens": 10,
+      "completion_tokens_details": { "image_tokens": 0 },
+      "total_tokens": 25,
+      "cost": { "total_cost": 0.000001925 }
+    },
+    "extra_fields": {
+      "request_type": "chat_completion",
+      "routing_info": {
+        "provider": "openrouter",
+        "model": "amazon/nova-micro-v1",
+        "key": "openrouter-1"
+      },
+      "provider": "openrouter",
+      "original_model_requested": "amazon/nova-micro-v1",
+      "resolved_model_used": "amazon/nova-micro-v1",
+      "latency": 441,
+      "upstream_latency": 441,
+      "chunk_index": 0,
+      "dropped_compat_plugin_params": ["response_format"],
+      "provider_response_headers": {
+        "Cf-Ray": "a3fea4f509402083-SJC",
+        "Permissions-Policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+        "Referrer-Policy": "no-referrer, strict-origin-when-cross-origin",
+        "Server-Timing": "cfEdge;dur=4,cfOrigin;dur=0,cfWorker;dur=349",
+        "X-Content-Type-Options": "nosniff",
+        "X-Generation-Id": "gen-1790219932-8J6NzKhH2oZoX9uqUAD7"
+      }
+    }
+  }
+}

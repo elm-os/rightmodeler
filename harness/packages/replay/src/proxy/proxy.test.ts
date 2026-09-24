@@ -28,10 +28,23 @@ interface StubProvider {
   port: number;
   close(): Promise<void>;
   getHitCount(): number;
+  getRequestHeaders(): Array<{
+    method: string;
+    path: string;
+    headers: Record<string, string>;
+    model?: string;
+  }>;
+}
+
+interface StubOptions {
+  servedModels?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
 }
 
 interface StubProviderModule {
-  startStubProvider(options: { port: number }): Promise<StubProvider>;
+  startStubProvider(
+    options: StubOptions & { port: number },
+  ): Promise<StubProvider>;
 }
 
 interface Runtime {
@@ -63,6 +76,7 @@ interface RuntimeOptions {
   maxUsd?: number;
   streamIdleTimeoutMs?: number;
   streamHardDeadlineMs?: number;
+  requestHeaders?: Record<string, string>;
 }
 
 const stubModuleUrl = new URL(
@@ -76,6 +90,9 @@ const transportPath = fileURLToPath(
   new URL("../transport/stream.ts", import.meta.url),
 );
 const headersPath = fileURLToPath(new URL("./headers.ts", import.meta.url));
+const provenancePath = fileURLToPath(
+  new URL("../provenance.ts", import.meta.url),
+);
 const apiKeyEnv = "REPLAY_PROXY_TEST_API_KEY";
 const credential = "credential-sentinel-that-must-never-persist";
 const runId = "run-proxy-1";
@@ -142,6 +159,9 @@ function runtimeEnv(options: RuntimeOptions): NodeJS.ProcessEnv {
     ...(options.streamHardDeadlineMs === undefined
       ? {}
       : { RM_STREAM_HARD_DEADLINE_MS: String(options.streamHardDeadlineMs) }),
+    ...(options.requestHeaders === undefined
+      ? {}
+      : { RM_REQUEST_HEADERS: JSON.stringify(options.requestHeaders) }),
   };
 }
 
@@ -224,8 +244,12 @@ async function createRuntimeBundle(): Promise<string> {
   const headers = transpileModule(await readFile(headersPath, "utf8"), {
     compilerOptions,
   });
+  const provenance = transpileModule(await readFile(provenancePath, "utf8"), {
+    compilerOptions,
+  });
   await writeFile(join(transportDirectory, "stream.js"), transport.outputText);
   await writeFile(join(proxyDirectory, "headers.js"), headers.outputText);
+  await writeFile(join(root, "provenance.js"), provenance.outputText);
   return join(proxyDirectory, "proxy-runtime.mjs");
 }
 
@@ -242,9 +266,9 @@ async function stopRuntime(
   await exited;
 }
 
-async function startStub(): Promise<StubProvider> {
+async function startStub(options: StubOptions = {}): Promise<StubProvider> {
   const fixture = (await import(stubModuleUrl)) as StubProviderModule;
-  const stub = await fixture.startStubProvider({ port: 0 });
+  const stub = await fixture.startStubProvider({ port: 0, ...options });
   stubs.push(stub);
   return stub;
 }
@@ -260,11 +284,12 @@ async function startEgress(stub: StubProvider): Promise<EgressListener> {
 
 async function startPair(
   options: Omit<RuntimeOptions, "scratch" | "egressUrl"> = {},
+  stubOptions: StubOptions = {},
 ): Promise<Pair> {
   process.env[apiKeyEnv] = credential;
   const scratch = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-"));
   scratchDirectories.push(scratch);
-  const stub = await startStub();
+  const stub = await startStub(stubOptions);
   const egress = await startEgress(stub);
   const env = runtimeEnv({
     ...options,
@@ -612,6 +637,102 @@ describe("Mode B proxy and host egress", () => {
         costIsEstimate: attempts[0]?.costIsEstimate,
       }),
     ).toBeDefined();
+  });
+
+  it("records the served model and a model substitution on a swapped step only", async () => {
+    const pair = await startPair(
+      { swapPolicy: { "step-rewrite": "acme/lite-1" } },
+      {
+        servedModels: {
+          "acme/lite-1": "acme/large-1",
+          "acme/large-1": "acme/max-1",
+        },
+      },
+    );
+
+    for (const [stepId, logicalCallId] of [
+      ["step-rewrite", "logical-rewrite"],
+      ["step-pass-through", "logical-pass-through"],
+    ] as const) {
+      const response = await callProxy(pair.runtime, stepId, logicalCallId);
+      expect(response.status).toBe(200);
+      await response.arrayBuffer();
+    }
+
+    const [rewritten, passThrough] = await attemptsUntil(
+      spoolPath(pair.scratch),
+      2,
+    );
+    expect(rewritten).toMatchObject({
+      stepId: "step-rewrite",
+      model: "acme/lite-1",
+      servedModel: "acme/large-1",
+      substitution: {
+        kind: "model",
+        evidence: "served acme/large-1 for requested acme/lite-1",
+      },
+    });
+    expect(passThrough).toMatchObject({
+      stepId: "step-pass-through",
+      model: "acme/large-1",
+    });
+    expect(passThrough).not.toHaveProperty("servedModel");
+    expect(passThrough).not.toHaveProperty("substitution");
+  });
+
+  it("records a cache hit header on a swapped step", async () => {
+    const pair = await startPair(
+      { swapPolicy: { "step-rewrite": "acme/lite-1" } },
+      { responseHeaders: { "x-portkey-cache-status": "HIT" } },
+    );
+
+    const response = await callProxy(
+      pair.runtime,
+      "step-rewrite",
+      "logical-rewrite",
+    );
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+
+    const [attempt] = await attemptsUntil(spoolPath(pair.scratch), 1);
+    expect(attempt).toMatchObject({
+      stepId: "step-rewrite",
+      servedModel: "acme/lite-1",
+      substitution: {
+        kind: "cache",
+        evidence: "x-portkey-cache-status: HIT",
+      },
+    });
+  });
+
+  it("reads the served model from a swapped stream", async () => {
+    const pair = await startPair(
+      { swapPolicy: { "step-rewrite": "acme/lite-1" } },
+      {
+        servedModels: {
+          "acme/lite-1": "acme/large-1",
+          "acme/large-1": "acme/max-1",
+        },
+      },
+    );
+
+    const response = await callProxy(
+      pair.runtime,
+      "step-rewrite",
+      "logical-stream",
+      chatBody({ stream: true }),
+      { "x-stub-enable-streaming": "1" },
+    );
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+
+    const [attempt] = await attemptsUntil(spoolPath(pair.scratch), 1);
+    expect(attempt).toMatchObject({
+      stepId: "step-rewrite",
+      streamOutcome: "completed",
+      servedModel: "acme/large-1",
+      substitution: { kind: "model" },
+    });
   });
 
   it("asks streams for usage and meters the trailing chunk, else charges the reservation", async () => {
@@ -1306,6 +1427,34 @@ describe("Mode B proxy and host egress", () => {
     ]);
   });
 
+  it("forwards configured headers over the application's own", async () => {
+    const { runtime, stub } = await startPair({
+      requestHeaders: {
+        "x-portkey-provider": "openai",
+        "x-bf-cache-no-store": "true",
+      },
+    });
+
+    const response = await callProxy(
+      runtime,
+      "step-headers",
+      "logical-headers",
+      chatBody(),
+      { "x-portkey-provider": "app" },
+    );
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+
+    const chats = stub
+      .getRequestHeaders()
+      .filter(({ path }) => path === "/v1/chat/completions");
+    expect(chats).toHaveLength(1);
+    expect(chats[0]!.headers).toMatchObject({
+      "x-portkey-provider": "openai",
+      "x-bf-cache-no-store": "true",
+    });
+  });
+
   it("injects credentials at forward time and redacts provider errors", async () => {
     delete process.env[apiKeyEnv];
     const scratch = await mkdtemp(join(tmpdir(), "rightmodeler-proxy-secret-"));
@@ -1465,5 +1614,24 @@ describe("Mode B proxy and host egress", () => {
         await createRuntimeBundle(),
       ),
     ).rejects.toThrow("attempt spool has malformed JSON on line 1");
+  });
+
+  it("fails startup on a malformed RM_REQUEST_HEADERS", async () => {
+    const scratch = await mkdtemp(
+      join(tmpdir(), "rightmodeler-proxy-request-headers-"),
+    );
+    scratchDirectories.push(scratch);
+
+    await expect(
+      startRuntime(
+        {
+          ...runtimeEnv({ scratch, egressUrl: "http://127.0.0.1:9" }),
+          RM_REQUEST_HEADERS: JSON.stringify(["x-portkey-provider: openai"]),
+        },
+        await createRuntimeBundle(),
+      ),
+    ).rejects.toThrow(
+      "RM_REQUEST_HEADERS must map header names to string values",
+    );
   });
 });

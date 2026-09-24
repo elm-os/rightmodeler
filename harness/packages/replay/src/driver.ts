@@ -25,23 +25,26 @@ import {
 
 import {
   BudgetRefusalError,
+  reserveWhenFree,
   type Budget,
   type BudgetReservation,
 } from "./budget.js";
 import {
   BlockedError,
+  estimateInputTokens,
   type ChatMessage,
   type ModelCatalogEntry,
+  type ModelPricing,
   ProviderConfigurationError,
   ProviderRequestError,
   ProviderResponseError,
   type ProviderAttempt,
   type ProviderClient,
 } from "./provider.js";
+import type { SubstitutedResponse } from "./provenance.js";
 import type { ReplayStep, StepShortlist } from "./shortlist.js";
 
 const BUDGET_HEARTBEAT_INTERVAL_MS = 30_000;
-const RESERVATION_RETRY_CAP_MS = 1_000;
 const JUDGE_CONCURRENCY = 8;
 
 export interface RecordedCase {
@@ -72,6 +75,8 @@ export interface ReplayModeAInput {
     rankedModels: readonly {
       judgeModel: string;
       supportsStructuredOutput: boolean;
+      pricing: ModelPricing;
+      maxOutputTokens: number;
     }[];
     warning?: (code: string, message: string) => void;
   };
@@ -95,6 +100,7 @@ export interface ReplayModeAResult {
   completed: number;
   skipped: number;
   blocked: BlockedCell[];
+  substituted: SubstitutedResponse[];
 }
 
 interface ReplayCell {
@@ -255,6 +261,11 @@ export function toWireMessages(
     ) {
       throw new Error(`Recorded message ${index + 1}.role is unsupported`);
     }
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      throw new Error(
+        `Recorded message ${index + 1} carries tool calls, which replay does not send yet`,
+      );
+    }
     const content = (() => {
       if (typeof message.content === "string") return message.content;
       if (!Array.isArray(message.parts)) {
@@ -307,7 +318,12 @@ export async function replayModeA(
   );
   const existing = replayState.completed;
   const cells = cellsFor(input);
-  const result: ReplayModeAResult = { completed: 0, skipped: 0, blocked: [] };
+  const result: ReplayModeAResult = {
+    completed: 0,
+    skipped: 0,
+    blocked: [],
+    substituted: [],
+  };
   const activeRefunds = new Set<Promise<void>>();
   let nextCell = 0;
   let failure: unknown;
@@ -325,7 +341,11 @@ export async function replayModeA(
   let judgeFailurePending: JudgeCell[] = [];
   const judgeQueue: JudgeCell[] = [];
   const judgeJobs = new Set<Promise<void>>();
-  let judgeSwitchTrigger: JudgeCell | null = null;
+  let judgeSwitchTrigger: {
+    readonly job: JudgeCell;
+    readonly substitution?: string;
+  } | null = null;
+  let judgeRetirement = new AbortController();
 
   async function completeWithAssessment(
     job: JudgeCell,
@@ -398,7 +418,9 @@ export async function replayModeA(
     | {
         readonly status: "failure";
       }
+    | { readonly status: "blocked"; readonly message: string }
   > {
+    const retirement = judgeRetirement.signal;
     let judgeInvocation = 0;
     let judgeFailureKind: "response_malformed" | "provider_error" =
       "response_malformed";
@@ -409,8 +431,38 @@ export async function replayModeA(
           let judgeResponse: JudgeChatResult | undefined;
           judgeInvocation += 1;
           const judgeLogicalCallId = randomUUID();
+          const reservation = await reserveWhenFree(
+            input.budget,
+            {
+              contextTokens: estimateInputTokens(request.messages),
+              maxOutputTokens: judge.maxOutputTokens,
+              pricing: judge.pricing,
+            },
+            activeRefunds,
+            retirement,
+          );
+          if (retirement.aborted) {
+            await reservation.refund(0);
+            throw retirement.reason;
+          }
+          let resolveRefund = (): void => undefined;
+          const refundComplete = new Promise<void>((resolve) => {
+            resolveRefund = resolve;
+          });
+          activeRefunds.add(refundComplete);
           try {
             judgeResponse = await input.judge!.chat(request);
+            if (judgeResponse.substitution !== undefined) {
+              const { kind, evidence } = judgeResponse.substitution;
+              if (kind === "model") {
+                judgeSwitchTrigger ??= { job, substitution: evidence };
+                judgeRetirement.abort();
+              }
+              throw new ProviderResponseError(
+                `Judge response was substituted (${kind}): ${evidence}`,
+                { status: 200, bodyExcerpt: evidence },
+              );
+            }
             return judgeResponse;
           } catch (error) {
             if (error instanceof ProviderConfigurationError) throw error;
@@ -460,12 +512,13 @@ export async function replayModeA(
                   },
                 }),
               );
-              if (judgeResponse !== undefined && judgeResponse.costUsd > 0) {
-                await input.budget.charge(judgeResponse.costUsd);
-              }
+              await reservation.refund(judgeResponse?.costUsd ?? 0);
             } catch (persistenceError) {
               judgePersistenceFailure = persistenceError;
               throw persistenceError;
+            } finally {
+              activeRefunds.delete(refundComplete);
+              resolveRefund();
             }
           }
         },
@@ -486,6 +539,12 @@ export async function replayModeA(
       ) {
         throw error;
       }
+      if (error instanceof BudgetRefusalError) {
+        return { status: "blocked", message: error.message };
+      }
+      if (retirement.aborted && error === retirement.reason) {
+        return { status: "failure" };
+      }
       await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error);
       return { status: "failure" };
     }
@@ -496,12 +555,17 @@ export async function replayModeA(
     nextJudge: (typeof judges)[number] | undefined,
     trigger: JudgeCell,
     consecutiveAssessments: number,
+    substitution: string | undefined,
   ): Promise<void> {
+    const cause =
+      substitution === undefined
+        ? " after three consecutive terminal failures"
+        : `: it answered as another model (${substitution})`;
     input.judge!.warning?.(
       "judge_unusable",
       nextJudge === undefined
-        ? `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; no eligible fallback judge remains.`
-        : `Judge ${judge.judgeModel} is unusable after three consecutive terminal failures; switching to ${nextJudge.judgeModel}.`,
+        ? `Judge ${judge.judgeModel} is unusable${cause}; no eligible fallback judge remains.`
+        : `Judge ${judge.judgeModel} is unusable${cause}; switching to ${nextJudge.judgeModel}.`,
     );
     const noteId = randomUUID();
     await writeReplayFact(
@@ -517,8 +581,12 @@ export async function replayModeA(
         reconcilableTo: {
           judgeModel: judge.judgeModel,
           judgeStatus: "unusable",
-          note: "three_consecutive_terminal_failures",
-          consecutiveAssessments,
+          ...(substitution === undefined
+            ? {
+                note: "three_consecutive_terminal_failures",
+                consecutiveAssessments,
+              }
+            : { note: "model_substituted", substitution }),
         },
       }),
     );
@@ -536,10 +604,20 @@ export async function replayModeA(
       await completeWithAssessment(job, outcome.assessment);
       return;
     }
+    if (outcome.status === "blocked") {
+      result.blocked.push({
+        stepId: job.cell.step.stepId,
+        caseId: job.cell.recordedCase.caseId,
+        candidateId: job.cell.candidate.id,
+        kind: "budget",
+        message: outcome.message,
+      });
+      return;
+    }
     judgeFailurePending.push(job);
     if (judgeSwitchTrigger !== null) return;
     consecutiveJudgeFailures += 1;
-    if (consecutiveJudgeFailures >= 3) judgeSwitchTrigger = job;
+    if (consecutiveJudgeFailures >= 3) judgeSwitchTrigger = { job };
   }
 
   function startJudgeJob(work: () => Promise<void>): void {
@@ -558,17 +636,24 @@ export async function replayModeA(
     if (failure !== undefined) return;
     if (judgeSwitchTrigger !== null) {
       if (judgeJobs.size > 0) return;
-      const trigger = judgeSwitchTrigger;
+      const { job: trigger, substitution } = judgeSwitchTrigger;
       const judge = judges[activeJudgeIndex]!;
       const nextJudge = judges[activeJudgeIndex + 1];
       const consecutiveAssessments = consecutiveJudgeFailures;
       judgeSwitchTrigger = null;
       activeJudgeIndex += 1;
+      judgeRetirement = new AbortController();
       judgeQueue.unshift(...judgeFailurePending);
       judgeFailurePending = [];
       consecutiveJudgeFailures = 0;
       startJudgeJob(() =>
-        recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments),
+        recordUnusableJudge(
+          judge,
+          nextJudge,
+          trigger,
+          consecutiveAssessments,
+          substitution,
+        ),
       );
       return;
     }
@@ -612,6 +697,12 @@ export async function replayModeA(
           ...(attempt.latencyMs === undefined
             ? {}
             : { latencyMs: attempt.latencyMs }),
+          ...(attempt.servedModel === undefined
+            ? {}
+            : { servedModel: attempt.servedModel }),
+          ...(attempt.substitution === undefined
+            ? {}
+            : { substitution: attempt.substitution }),
         }),
       );
       const spendId = randomUUID();
@@ -665,38 +756,28 @@ export async function replayModeA(
       );
     }
     let reservation: BudgetReservation;
-    let retryMs = 25;
-    for (;;) {
-      try {
-        reservation = await input.budget.reserveExecution({
+    try {
+      reservation = await reserveWhenFree(
+        input.budget,
+        {
           contextTokens: cell.recordedCase.contextTokens,
           maxOutputTokens: cell.recordedCase.maxOutputTokens,
           pricing: cell.candidate.pricing,
+        },
+        activeRefunds,
+      );
+    } catch (error) {
+      if (error instanceof BudgetRefusalError) {
+        result.blocked.push({
+          stepId: cell.step.stepId,
+          caseId: cell.recordedCase.caseId,
+          candidateId: cell.candidate.id,
+          kind: "budget",
+          message: error.message,
         });
-        break;
-      } catch (error) {
-        if (error instanceof BudgetRefusalError && error.causedByReservations) {
-          const refunds = [...activeRefunds];
-          if (refunds.length > 0) {
-            await Promise.race(refunds);
-          } else {
-            await new Promise<void>((resolve) => setTimeout(resolve, retryMs));
-            retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
-          }
-          continue;
-        }
-        if (error instanceof BudgetRefusalError) {
-          result.blocked.push({
-            stepId: cell.step.stepId,
-            caseId: cell.recordedCase.caseId,
-            candidateId: cell.candidate.id,
-            kind: "budget",
-            message: error.message,
-          });
-          return;
-        }
-        throw error;
+        return;
       }
+      throw error;
     }
 
     let resolveRefund = (): void => undefined;
@@ -776,6 +857,33 @@ export async function replayModeA(
       }
       if (heartbeatFailure !== undefined) throw heartbeatFailure;
 
+      const { substitution } = response;
+      if (substitution !== undefined) {
+        await writeReplayFact(
+          input.store,
+          input.budget.projectId,
+          executionId,
+          executionSchema.parse({
+            executionId,
+            evidenceQuestionId: cell.step.evidenceQuestionId,
+            caseId: cell.recordedCase.caseId,
+            stepId: cell.step.stepId,
+            candidateId: cell.candidate.id,
+            trajectoryId: cell.recordedCase.trajectoryId,
+            corpusSplit: cell.recordedCase.corpusSplit,
+            selectionStage: cell.step.selectionStage ?? cell.step.corpusSplit,
+            terminalOutcome: "abstain",
+            finalOutput: response.content,
+            attribution: "substituted",
+          }),
+        );
+        result.substituted.push({
+          candidateId: cell.candidate.id,
+          substitution,
+        });
+        result.completed += 1;
+        return;
+      }
       const silentFailure =
         response.content.trim().length === 0 &&
         response.usage.outputTokens === 0;

@@ -106,6 +106,9 @@ npx skills add . --skill rightmodeler --agent codex --yes --copy
 
 1. Branch off `main`.
 2. Run `pnpm format` and `pnpm check` before pushing. Both must pass.
+   `pnpm check` rebuilds the committed CLI bundle in
+   `harness/packages/rightmodeler/dist-bundle/`; commit it with your change,
+   because CI fails when it differs from a fresh build.
 3. Use conventional commits, scoped to the package you touched:
 
    ```

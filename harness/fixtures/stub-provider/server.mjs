@@ -79,6 +79,8 @@ export async function startStubProvider({
   omitCatalogModels = [],
   rateLimitedModels = [],
   rateLimitMessageIncludes,
+  servedModels = {},
+  responseHeaders: chatResponseHeaders = {},
 }) {
   const errorBodyKeys = new Set();
   const rateLimitedKeys = new Set();
@@ -93,6 +95,7 @@ export async function startStubProvider({
   let inFlight = 0;
   let maxInFlight = 0;
   const requests = [];
+  const requestHeaders = [];
   const server = createServer(async (request, response) => {
     inFlight += 1;
     maxInFlight = Math.max(maxInFlight, inFlight);
@@ -100,6 +103,12 @@ export async function startStubProvider({
       inFlight -= 1;
     });
     const url = new URL(request.url, "http://127.0.0.1");
+    const received = {
+      method: request.method,
+      path: url.pathname,
+      headers: { ...request.headers },
+    };
+    requestHeaders.push(received);
     if (request.method === "GET" && url.pathname === "/v1/models") {
       const offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10);
       const page =
@@ -122,7 +131,10 @@ export async function startStubProvider({
 
     if (request.method === "POST" && request.url === "/v1/chat/completions") {
       hitCount += 1;
-      const hitHeaders = { "x-stub-hit-count": String(hitCount) };
+      const hitHeaders = {
+        ...chatResponseHeaders,
+        "x-stub-hit-count": String(hitCount),
+      };
       let body;
       try {
         body = await readJson(request);
@@ -138,6 +150,7 @@ export async function startStubProvider({
         return;
       }
       requests.push(body);
+      if (typeof body?.model === "string") received.model = body.model;
 
       if (!Array.isArray(body.messages)) {
         json(
@@ -330,6 +343,7 @@ export async function startStubProvider({
         );
         return;
       }
+      const answeredModel = servedModels[body.model] ?? body.model;
       const promptTokens = Math.max(8, Math.ceil(messageText.length / 4));
       const empty = request.headers["x-stub-empty"] !== undefined;
       const completionTokens = empty ? 0 : 12;
@@ -379,7 +393,7 @@ export async function startStubProvider({
             `data: ${JSON.stringify({
               id: `stub-${digest}`,
               object: "chat.completion.chunk",
-              model: body.model,
+              model: answeredModel,
               choices: [
                 {
                   index: 0,
@@ -412,7 +426,7 @@ export async function startStubProvider({
           `data: ${JSON.stringify({
             id: `stub-${digest}`,
             object: "chat.completion.chunk",
-            model: body.model,
+            model: answeredModel,
             choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
             usage: {
               prompt_tokens: promptTokens,
@@ -440,7 +454,7 @@ export async function startStubProvider({
       const responseBody = {
         id: `stub-${digest}`,
         object: "chat.completion",
-        model: body.model,
+        model: answeredModel,
         choices: [
           {
             index: 0,
@@ -496,6 +510,7 @@ export async function startStubProvider({
     getHitCount: () => hitCount,
     getMaxInFlight: () => maxInFlight,
     getRequests: () => requests.map((request) => structuredClone(request)),
+    getRequestHeaders: () => structuredClone(requestHeaders),
     close: () =>
       new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -519,9 +534,18 @@ async function selftest() {
     };
     const first = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-route": "selftest" },
       body: JSON.stringify(request),
     }).then((response) => response.json());
+    const recorded = stub.getRequestHeaders().at(-1);
+    if (
+      recorded?.headers["x-route"] !== "selftest" ||
+      recorded.model !== request.model
+    ) {
+      throw new Error(
+        "Expected the chat request headers and model to be recorded.",
+      );
+    }
     const second = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -577,6 +601,30 @@ async function selftest() {
       }
     } finally {
       await faultStub.close();
+    }
+
+    const substitutingStub = await startStubProvider({
+      port: 0,
+      servedModels: { "acme/small-1": "acme/large-1" },
+      responseHeaders: { "x-portkey-cache-status": "HIT" },
+    });
+    try {
+      const substituted = await fetch(
+        `http://127.0.0.1:${substitutingStub.port}/v1/chat/completions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request),
+        },
+      );
+      if ((await substituted.json()).model !== "acme/large-1") {
+        throw new Error("Expected the configured served model.");
+      }
+      if (substituted.headers.get("x-portkey-cache-status") !== "HIT") {
+        throw new Error("Expected the configured response header.");
+      }
+    } finally {
+      await substitutingStub.close();
     }
     console.log("ok");
   } finally {

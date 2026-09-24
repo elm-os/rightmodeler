@@ -52,7 +52,10 @@ interface StubProvider {
 }
 
 interface StubProviderModule {
-  startStubProvider(options: { port: number }): Promise<StubProvider>;
+  startStubProvider(options: {
+    port: number;
+    servedModels?: Record<string, string>;
+  }): Promise<StubProvider>;
 }
 
 interface TraceSpan {
@@ -163,9 +166,11 @@ afterAll(() => {
   delete process.env[apiKeyEnv];
 });
 
-async function startStub(): Promise<StubProvider> {
+async function startStub(
+  servedModels: Record<string, string> = {},
+): Promise<StubProvider> {
   const fixture = (await import(stubModuleUrl)) as StubProviderModule;
-  return fixture.startStubProvider({ port: 0 });
+  return fixture.startStubProvider({ port: 0, servedModels });
 }
 
 async function startSelectiveAnswerProvider(
@@ -1128,6 +1133,67 @@ describe.skipIf(skipDocker)("Mode B replay", () => {
             );
           }),
         ).toBe(true);
+      } finally {
+        await context.close();
+      }
+    },
+    testTimeoutMs,
+  );
+
+  it(
+    "writes a swapped step answered by another model as substituted, never as a grade",
+    async () => {
+      const [recordedCase] = await recordedCases();
+      const context = await createContext([recordedCase!], {
+        concurrency: 1,
+        stub: await startStub({ "acme/small-1": "acme/large-1" }),
+      });
+      try {
+        const result = await replayModeB(context.input);
+        const facts = parsedFacts(await readFacts(context.store));
+        const stepByAttempt = new Map(
+          facts.spend.map((event) => {
+            const metadata = spendMetadata(event.reconcilableTo);
+            return [metadata.attemptId, metadata.stepId];
+          }),
+        );
+        const swapped = facts.attempts.filter(
+          ({ attemptId }) => stepByAttempt.get(attemptId) === "lookup",
+        );
+        const substitution = {
+          kind: "model",
+          evidence: "served acme/large-1 for requested acme/small-1",
+        };
+
+        expect(result).toMatchObject({ completed: 1, blocked: [] });
+        expect(facts.executions).toEqual([
+          expect.objectContaining({
+            candidateId: "acme/small-1",
+            terminalOutcome: "abstain",
+            attribution: "substituted",
+          }),
+        ]);
+        expect(swapped.length).toBeGreaterThan(0);
+        for (const attempt of swapped) {
+          expect(attempt).toMatchObject({
+            servedModel: "acme/large-1",
+            substitution,
+          });
+        }
+        expect(
+          facts.attempts
+            .filter(
+              ({ attemptId }) => stepByAttempt.get(attemptId) !== "lookup",
+            )
+            .every(
+              (attempt) =>
+                attempt.servedModel === undefined &&
+                attempt.substitution === undefined,
+            ),
+        ).toBe(true);
+        expect(result.substituted).toEqual(
+          swapped.map(() => ({ candidateId: "acme/small-1", substitution })),
+        );
       } finally {
         await context.close();
       }

@@ -24,6 +24,7 @@ export interface StreamResult {
   chunks: number;
   spoolPath?: string;
   finishedWithoutSentinel?: true;
+  model?: string;
 }
 
 export interface StreamSpoolSink {
@@ -51,6 +52,7 @@ interface OpenAIStreamEvent {
   finished: boolean;
   providerError: boolean;
   usage: StreamUsage | null;
+  model?: string;
 }
 
 class StreamParseError extends Error {}
@@ -196,6 +198,9 @@ function parseEvent(data: string): OpenAIStreamEvent {
       value.usage === undefined || value.usage === null
         ? null
         : parseUsage(value.usage),
+    ...(typeof value.model === "string" && value.model.length > 0
+      ? { model: value.model }
+      : {}),
   };
 }
 
@@ -229,6 +234,7 @@ export async function classifyStream(
   );
   let chunks = 0;
   let usage: StreamUsage | null = null;
+  let model: string | undefined;
   let sawFinish = false;
   let selectedResult: StreamResult | undefined;
   const result = (
@@ -243,6 +249,7 @@ export async function classifyStream(
       usage,
       chunks,
       ...(finishedWithoutSentinel ? { finishedWithoutSentinel: true } : {}),
+      ...(model === undefined ? {} : { model }),
     };
     return selectedResult;
   };
@@ -385,6 +392,7 @@ export async function classifyStream(
           throw error;
         }
         usage = event.usage ?? usage;
+        model ??= event.model;
         sawFinish ||= event.finished;
       }
     }

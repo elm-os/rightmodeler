@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "id": "openai/gpt-4o",
+      "created": 1721260800,
+      "object": "model",
+      "owned_by": "vercel-ai-gateway"
+    },
+    {
+      "id": "openai/gpt-4o-mini",
+      "created": 1721260800,
+      "object": "model",
+      "owned_by": "vercel-ai-gateway"
+    },
+    {
+      "id": "alibaba/qwen3-embedding-0.6b",
+      "created": 1721260800,
+      "object": "model",
+      "owned_by": "vercel-ai-gateway"
+    },
+    {
+      "id": "my-fast-model",
+      "created": -62135596800,
+      "object": "model",
+      "owned_by": "vercel-ai-gateway"
+    }
+  ],
+  "object": "list"
+}

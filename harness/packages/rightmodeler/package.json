@@ -1,6 +1,6 @@
 {
   "name": "@rightmodeler/cli",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Find and prove safe model substitutions from the agent traces you already have.",
   "homepage": "https://www.rightmodeler.com",
   "type": "module",
@@ -15,14 +15,14 @@
   },
   "files": [
     "dist-bundle",
-    "dist",
     "docs"
   ],
   "engines": {
     "node": ">=24"
   },
   "publishConfig": {
-    "directory": "dist/publish"
+    "directory": "dist/publish",
+    "linkDirectory": false
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && pnpm run bundle",

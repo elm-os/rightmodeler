@@ -10,6 +10,7 @@ import {
   assessmentSchema,
   blendedPrice,
   callSiteInventoryKey,
+  catalogFamily,
   canonicalJson,
   compareText,
   completeRun,
@@ -62,6 +63,7 @@ import {
 } from "@rightmodeler/kernel";
 import {
   BudgetRefusalError,
+  CatalogReferenceError,
   confirmSwapSet,
   createBudget,
   createCloudExecutor,
@@ -72,12 +74,15 @@ import {
   replayModeA,
   resolveCurrentModel,
   shortlist,
+  toWireMessages,
   type ModelCatalogEntry,
+  type ModelPricing,
   type ModeBCase,
   type ProviderClient,
   type RecordedCase,
   type ReplayStep,
   type StepShortlist,
+  type SubstitutedResponse,
 } from "@rightmodeler/replay";
 import {
   createMatcherRegistry,
@@ -226,8 +231,8 @@ const AVAILABILITY_FLOOR = 0.7;
 const GATE_POLICY_BASE_VERSION = "phase-a-v3";
 const REPLAY_PROMPT_REVISION = "replay-prompt-v1";
 const SCAN_REVISION = "scan-trace-key-v1";
-const TRACE_BINDING_REVISION = "trace-match-v1";
-const TRACE_READER_REVISION = "ai-sdk-dialects-v1";
+const TRACE_BINDING_REVISION = "sendable-cases-v1";
+const TRACE_READER_REVISION = "gateway-exclusions-v1";
 const API_KEY_ENV_DEFAULT = "RIGHTMODELER_API_KEY";
 
 function auditResultKey(projectId: string): string {
@@ -592,6 +597,8 @@ interface PipelineContext {
   modeBConfigPath?: string;
   pricingOverrides?: z.infer<typeof pricingFileSchema>;
   pricingFilePath?: string;
+  requestHeaders?: Readonly<Record<string, string>>;
+  catalogReference?: string;
   policyFilePath?: string;
   release: ReleasePolicyResolution;
   matchers?: readonly DeclarativeMatcher[];
@@ -615,6 +622,8 @@ export interface PipelineOptions {
   evaluator?: EvaluatorConfig;
   modeBConfigPath?: string;
   pricingFilePath?: string;
+  requestHeaders?: Readonly<Record<string, string>>;
+  catalogReference?: string;
   policyFilePath?: string;
   matchersPath?: string;
   approvedRunSpecDigest?: string;
@@ -968,10 +977,12 @@ export async function estimateReplay(
     maxConcurrency: context.maxConcurrency,
     warning: (code, message) => context.reporter.warning(code, message),
     pricingOverrides: context.pricingOverrides,
+    headers: context.requestHeaders,
+    catalogReference: context.catalogReference,
   });
   const catalog =
     context.existingRunId === undefined
-      ? await provider.listModels()
+      ? await providerCatalog(provider)
       : await readDetachedReplayCatalog(context, context.existingRunId);
   const candidates =
     context.approvedRunSpecDigest === undefined
@@ -998,18 +1009,7 @@ export async function estimateReplay(
             candidateFamily: candidate.family,
             referenceFamily,
           })[0]!;
-          const entry = catalog.find(({ id }) => id === modelId)!;
-          if (entry.pricing === null) {
-            throw new Error(`Selected judge has no pricing: ${modelId}`);
-          }
-          const selected = {
-            modelId,
-            pricing: entry.pricing,
-            maxOutputTokens: Math.min(
-              entry.maxOutputTokens ?? JUDGE_OUTPUT_TOKEN_CAP,
-              JUDGE_OUTPUT_TOKEN_CAP,
-            ),
-          };
+          const selected = { modelId, ...judgeLimits(catalog, modelId) };
           judges.set(key, selected);
           return selected;
         };
@@ -1043,14 +1043,18 @@ export async function claimDetachedReplay(
     });
   }
   const catalogIdentity = (
-    await createProvider({
-      providerId: "configured-provider",
-      baseUrl: context.baseUrl,
-      apiKeyEnv: context.apiKeyEnv,
-      maxConcurrency: context.maxConcurrency,
-      warning: (code, message) => context.reporter.warning(code, message),
-      pricingOverrides: context.pricingOverrides,
-    }).listModels()
+    await providerCatalog(
+      createProvider({
+        providerId: "configured-provider",
+        baseUrl: context.baseUrl,
+        apiKeyEnv: context.apiKeyEnv,
+        maxConcurrency: context.maxConcurrency,
+        warning: (code, message) => context.reporter.warning(code, message),
+        pricingOverrides: context.pricingOverrides,
+        headers: context.requestHeaders,
+        catalogReference: context.catalogReference,
+      }),
+    )
   ).sort((left, right) => compareText(left.id, right.id));
   const targetPhase = options.through ?? "replay";
   if (!isPipelineStage(targetPhase)) {
@@ -1071,6 +1075,12 @@ export async function claimDetachedReplay(
       apiKeyEnv: context.apiKeyEnv,
       maxCostUsd: context.maxCostUsd ?? null,
       includeFreeModels: context.includeFreeModels,
+      ...(context.requestHeaders === undefined
+        ? {}
+        : { headers: requestHeaderIdentity(context.requestHeaders) }),
+      ...(context.catalogReference === undefined
+        ? {}
+        : { catalogReference: context.catalogReference }),
     },
     evaluator: await evaluatorRunIdentity(context),
     modeBConfig:
@@ -1163,6 +1173,14 @@ export async function readActiveDetachedReplay(options: {
     return null;
   }
   return readRunStatus({ ...options, runId: worker.runId });
+}
+
+export function requestHeaderIdentity(
+  headers: Readonly<Record<string, string>>,
+): [string, string][] {
+  return Object.entries(headers)
+    .sort(([left], [right]) => compareText(left, right))
+    .map(([name, value]) => [name, sha256(value)]);
 }
 
 async function evaluatorRunIdentity(
@@ -1900,6 +1918,16 @@ function createContext(options: PipelineOptions): PipelineContext {
           pricingFilePath,
           pricingOverrides: readPricingFile(pricingFilePath),
         }),
+    ...(options.requestHeaders === undefined
+      ? {}
+      : { requestHeaders: options.requestHeaders }),
+    ...(options.catalogReference === undefined
+      ? {}
+      : {
+          catalogReference: /^https?:\/\//iu.test(options.catalogReference)
+            ? options.catalogReference
+            : resolve(options.catalogReference),
+        }),
     ...(policyFilePath === undefined ? {} : { policyFilePath }),
     ...(options.matchersPath === undefined
       ? {}
@@ -2208,6 +2236,12 @@ async function inputDigest(
       apiKeyEnv: context.apiKeyEnv,
       maxCostUsd: context.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context),
+      ...(context.requestHeaders === undefined
+        ? {}
+        : { headers: requestHeaderIdentity(context.requestHeaders) }),
+      ...(context.catalogReference === undefined
+        ? {}
+        : { catalogReference: context.catalogReference }),
     });
     if (context.evaluator !== undefined) {
       extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context));
@@ -2369,6 +2403,29 @@ function invalidPricingFile(message: string): ProtocolError {
     remedy:
       'Use a JSON object mapping each model id to { "input": <non-negative USD per token>, "output": <non-negative USD per token>, "maxOutputTokens": <optional positive integer> }.',
   });
+}
+
+function invalidCatalogReference(message: string): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "invalid_catalog_reference",
+    message,
+    remedy:
+      "Pass --catalog-reference an http(s) URL or a readable file that returns an OpenAI-compatible /models document, or remove it, then rerun.",
+  });
+}
+
+async function providerCatalog(
+  provider: ProviderClient,
+): Promise<ModelCatalogEntry[]> {
+  try {
+    return await provider.listModels();
+  } catch (error) {
+    if (error instanceof CatalogReferenceError) {
+      throw invalidCatalogReference(error.message);
+    }
+    throw error;
+  }
 }
 
 function invalidPolicyFile(message: string): ProtocolError {
@@ -2717,6 +2774,7 @@ async function planFamilies(
     plan: FamilyPlan;
     caseSteps: ReadonlyMap<string, string>;
     leftOut: FamilyBinding["leftOut"];
+    unsendable: readonly string[];
   }>
 > {
   const { records } = reconciled;
@@ -2798,11 +2856,16 @@ async function planFamilies(
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family,
     );
+    const reasons = familyCases.map(unsendableReason);
+    const sendableCases = familyCases.filter(
+      (_, index) => reasons[index] === undefined,
+    );
+    const unsendable = reasons.filter((reason) => reason !== undefined);
     const binding =
       approved === undefined
         ? bindFamily({
             family,
-            cases: familyCases.map((corpusCase) => ({
+            cases: sendableCases.map((corpusCase) => ({
               caseId: corpusCase.caseId,
               split: corpusCase.split,
               traceId: corpusCase.observation?.traceId,
@@ -2815,12 +2878,14 @@ async function planFamilies(
         : undefined;
     const placement =
       binding ??
-      approvedPlacement(approved!, family, familyCases, replayableSteps);
+      approvedPlacement(approved!, family, sendableCases, replayableSteps);
     const { leftOut } = placement;
+    const bindingLeftOut =
+      leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
     const abstainReason: FamilyPlan["abstainReason"] =
       binding === undefined
         ? undefined
-        : binding.caseSteps.size === 0
+        : binding.caseSteps.size === 0 && bindingLeftOut > 0
           ? {
               reason:
                 leftOut.ambiguous > 0
@@ -2845,8 +2910,7 @@ async function planFamilies(
                 }
               : undefined;
     const stepIds = abstainReason === undefined ? [...placement.stepIds] : [];
-    const leftOutCases =
-      leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
+    const leftOutCases = bindingLeftOut + unsendable.length;
     const reproofRequestIds = reproofRequests.get(family) ?? [];
     const evidenceQuestionId = evidenceQuestionIdentity({
       corpusVersionId: corpus.corpusVersionId,
@@ -2874,8 +2938,23 @@ async function planFamilies(
       },
       caseSteps: placement.caseSteps,
       leftOut,
+      unsendable,
     };
   });
+}
+
+function unsendableReason(
+  corpusCase: Corpus["cases"][number],
+): string | undefined {
+  try {
+    toWireMessages(
+      corpusCase.content.messages,
+      corpusCase.content.systemPrompt,
+    );
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 }
 
 async function executeShortlist(
@@ -2897,10 +2976,12 @@ async function executeShortlist(
   const steps: Array<Omit<ReplayStep, "corpusSplit"> & { family: string }> = [];
   const cases: Array<RecordedCase & { family: string }> = [];
   const sampleSizes: Record<string, number> = {};
-  for (const { plan: familyPlan, caseSteps, leftOut } of planned) {
+  for (const { plan: familyPlan, caseSteps, leftOut, unsendable } of planned) {
     const { familyId: family, evidenceQuestionId, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
-    if (familyPlan.leftOutCases !== undefined && caseSteps.size > 0) {
+    const bindingLeftOut =
+      leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
+    if (bindingLeftOut > 0 && caseSteps.size > 0) {
       const causes = [
         [
           leftOut.ambiguous,
@@ -2914,10 +2995,16 @@ async function executeShortlist(
       ] as const;
       context.reporter.warning(
         "family_cases_left_out",
-        `Family ${family}: ${familyPlan.leftOutCases} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes
+        `Family ${family}: ${bindingLeftOut} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes
           .filter(([count]) => count > 0)
           .map(([count, cause]) => `${count} ${cause}`)
           .join(", ")}.`,
+      );
+    }
+    if (unsendable.length > 0) {
+      context.reporter.warning(
+        "recorded_messages_not_replayable",
+        `Family ${family}: ${unsendable.length} of ${familyPlan.cases} recorded cases carry messages the replay cannot send yet and were left out of the replay sample (first: ${unsendable[0]}). Tool calls, non-text parts and tool definitions in a recorded conversation are not replayed.`,
       );
     }
     if (stepIds.length === 0) continue;
@@ -3222,7 +3309,7 @@ function assertPricedCandidates(
       code: "no_priced_candidates",
       message: `The model catalog at ${baseUrl} publishes no per-token pricing, so no candidate can be priced.`,
       remedy:
-        "Point --base-url at a catalog that publishes pricing, or pass --pricing-file <path> mapping each model id to its input and output USD per token.",
+        "Point --base-url at a catalog that publishes pricing, pass --catalog-reference <url> naming the upstream's public model list, or pass --pricing-file <path> mapping each model id to its input and output USD per token.",
     });
   }
 }
@@ -3304,10 +3391,12 @@ async function executeReplay(
     maxConcurrency: context.maxConcurrency,
     warning: (code, message) => context.reporter.warning(code, message),
     pricingOverrides: context.pricingOverrides,
+    headers: context.requestHeaders,
+    catalogReference: context.catalogReference,
   });
   const catalog =
     context.existingRunId === undefined
-      ? await provider.listModels()
+      ? await providerCatalog(provider)
       : await readDetachedReplayCatalog(context, context.existingRunId);
   const replaySteps = (split: "shortlist" | "holdout"): ReplayStep[] =>
     plan.steps.map((step) => ({
@@ -3368,6 +3457,7 @@ async function executeReplay(
   });
   let completed = 0;
   let skipped = 0;
+  const substituted: SubstitutedResponse[] = [];
   const blockedCellsByFamily = new Map<string, Set<string>>();
   const runCells = async (
     split: "shortlist" | "holdout",
@@ -3417,6 +3507,7 @@ async function executeReplay(
                 supportsStructuredOutput: catalog.find(
                   ({ id }) => id === judgeModel,
                 )!.supportsStructuredOutput,
+                ...judgeLimits(catalog, judgeModel),
               })),
               warning: (code: string, message: string) =>
                 context.reporter.warning(code, message),
@@ -3432,6 +3523,7 @@ async function executeReplay(
         budget,
         concurrency: context.maxConcurrency ?? 4,
       });
+      substituted.push(...result.substituted);
       const budgetBlock = result.blocked.find(({ kind }) => kind === "budget");
       if (budgetBlock !== undefined) {
         const requiredCap = requiredCapFromMessage(budgetBlock.message);
@@ -3486,54 +3578,58 @@ async function executeReplay(
     }
   };
 
-  await runCells("shortlist", candidates);
-  const ledger = await readPipelineLedger(context);
-  const shortlistVerdicts = aggregate(
-    await materializeAggregationFacts(
-      context,
-      ledger,
-      plan,
-      candidates,
-      evaluation(),
-      ceilings,
-    ),
-    aggregateOptions(context.release.gate),
-  ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
-  const shortlistSelections = new Map(
-    Object.keys(plan.sampleSizes).map((family) => {
-      const familyVerdicts = shortlistVerdicts.filter(
-        (verdict) => verdict.familyId === family,
-      );
-      const selectionGap = selectionEvidenceGap(
-        familyVerdicts,
-        familyCandidates(plan, candidates, family),
-      );
-      return [
-        family,
-        blockedCellsByFamily.has(family) || selectionGap !== undefined
-          ? noShortlistSelection()
-          : selectWinner(
-              verdictsByCandidate(familyVerdicts),
-              context.release.gate,
-            ),
-      ];
-    }),
-  );
-  const holdoutCandidates = candidates.map((assignment) => ({
-    ...assignment,
-    candidates: assignment.candidates.filter((candidate) => {
-      const family = plan.steps.find(
-        ({ stepId }) => stepId === assignment.stepId,
-      )?.family;
-      if (family === undefined) return false;
-      const selection = shortlistSelections.get(family);
-      return (
-        selection?.status === "confirmation_required" &&
-        selection.confirmedCandidateId === candidate.id
-      );
-    }),
-  }));
-  await runCells("holdout", holdoutCandidates);
+  try {
+    await runCells("shortlist", candidates);
+    const ledger = await readPipelineLedger(context);
+    const shortlistVerdicts = aggregate(
+      await materializeAggregationFacts(
+        context,
+        ledger,
+        plan,
+        candidates,
+        evaluation(),
+        ceilings,
+      ),
+      aggregateOptions(context.release.gate),
+    ).filter(({ corpusSplit }) => corpusSplit === "shortlist");
+    const shortlistSelections = new Map(
+      Object.keys(plan.sampleSizes).map((family) => {
+        const familyVerdicts = shortlistVerdicts.filter(
+          (verdict) => verdict.familyId === family,
+        );
+        const selectionGap = selectionEvidenceGap(
+          familyVerdicts,
+          familyCandidates(plan, candidates, family),
+        );
+        return [
+          family,
+          blockedCellsByFamily.has(family) || selectionGap !== undefined
+            ? noShortlistSelection()
+            : selectWinner(
+                verdictsByCandidate(familyVerdicts),
+                context.release.gate,
+              ),
+        ];
+      }),
+    );
+    const holdoutCandidates = candidates.map((assignment) => ({
+      ...assignment,
+      candidates: assignment.candidates.filter((candidate) => {
+        const family = plan.steps.find(
+          ({ stepId }) => stepId === assignment.stepId,
+        )?.family;
+        if (family === undefined) return false;
+        const selection = shortlistSelections.get(family);
+        return (
+          selection?.status === "confirmation_required" &&
+          selection.confirmedCandidateId === candidate.id
+        );
+      }),
+    }));
+    await runCells("holdout", holdoutCandidates);
+  } finally {
+    warnSubstitutedResponses(context, substituted);
+  }
   const key = artifactKey(context, "replay", `${inputDigestValue}-${runId}`);
   await putImmutableJson(context.store, key, {
     completed,
@@ -3950,8 +4046,10 @@ async function executeConfirm(
       maxConcurrency: context.maxConcurrency,
       warning: (code, message) => context.reporter.warning(code, message),
       pricingOverrides: context.pricingOverrides,
+      headers: context.requestHeaders,
+      catalogReference: context.catalogReference,
     });
-    const catalog = await provider.listModels();
+    const catalog = await providerCatalog(provider);
     const configuredRecords = configuredStepRecords(config, reconciled.records);
     const orderedRecords = topologicalRecords(configuredRecords);
     const runtimeByCanonical = config.stepMap;
@@ -3980,6 +4078,7 @@ async function executeConfirm(
       authorizedTotalUsd: context.maxCostUsd,
     });
 
+    const substituted: SubstitutedResponse[] = [];
     for (const familyId of [...needsConfirmation].sort(compareText)) {
       const family = initial.families.find(
         (candidate) => candidate.familyId === familyId,
@@ -4096,6 +4195,9 @@ async function executeConfirm(
               providerBaseUrl: modeBProviderBaseUrl(context.baseUrl),
               apiKeyEnv: context.apiKeyEnv,
               catalog,
+              ...(context.requestHeaders === undefined
+                ? {}
+                : { requestHeaders: context.requestHeaders }),
             },
             image: config.image,
             appSpec: {
@@ -4118,6 +4220,7 @@ async function executeConfirm(
           judge: {
             judgeModel,
             supportsStructuredOutput: judgeSupportsStructuredOutput,
+            ...judgeLimits(catalog, judgeModel),
             providerId: provider.providerId,
             chat: judgeChat(provider, catalog),
           },
@@ -4126,6 +4229,7 @@ async function executeConfirm(
         budget: { modeB: budget, maxRunSets },
         policy: context.release.gate,
       });
+      substituted.push(...result.substituted);
       confirmedFamilies += 1;
       const lostReasonEntries = Object.entries(result.lostReasons).sort(
         ([left], [right]) => compareText(left, right),
@@ -4159,6 +4263,7 @@ async function executeConfirm(
           : { requiredMaxRunSets: result.requiredMaxRunSets }),
       });
     }
+    warnSubstitutedResponses(context, substituted);
   }
 
   const ledger = await readPipelineLedger(context);
@@ -4797,6 +4902,23 @@ function effectiveVerdict(
 
 const JUDGE_OUTPUT_TOKEN_CAP = 512;
 
+function judgeLimits(
+  catalog: readonly ModelCatalogEntry[],
+  judgeModel: string,
+): { readonly pricing: ModelPricing; readonly maxOutputTokens: number } {
+  const entry = catalog.find(({ id }) => id === judgeModel)!;
+  if (entry.pricing === null) {
+    throw new Error(`Selected judge has no pricing: ${judgeModel}`);
+  }
+  return {
+    pricing: entry.pricing,
+    maxOutputTokens: Math.min(
+      entry.maxOutputTokens ?? JUDGE_OUTPUT_TOKEN_CAP,
+      JUDGE_OUTPUT_TOKEN_CAP,
+    ),
+  };
+}
+
 function judgeChat(
   provider: ProviderClient,
   catalog: readonly ModelCatalogEntry[],
@@ -4838,8 +4960,7 @@ function referenceFamiliesByStep(
 }
 
 function modelFamily(modelId: string | null): string {
-  if (modelId === null) return "unknown";
-  return modelId.split("/", 1)[0] ?? "unknown";
+  return modelId === null ? "unknown" : catalogFamily(modelId);
 }
 
 function modeBProviderBaseUrl(baseUrl: string): string {
@@ -5287,6 +5408,22 @@ function judgeMetadata(assessment: Assessment):
 
 function requiredCapFromMessage(message: string): string | undefined {
   return /raise it to at least \$([0-9.]+)/.exec(message)?.[1];
+}
+
+function warnSubstitutedResponses(
+  context: PipelineContext,
+  responses: readonly SubstitutedResponse[],
+): void {
+  if (responses.length === 0) return;
+  const count = (kind: SubstitutedResponse["substitution"]["kind"]) =>
+    responses.filter(({ substitution }) => substitution.kind === kind).length;
+  const examples = [
+    ...new Set(responses.map(({ substitution }) => substitution.evidence)),
+  ].slice(0, 3);
+  context.reporter.warning(
+    "replay_responses_substituted",
+    `${responses.length} replayed response(s) did not come fresh from the requested model (model ${count("model")}, cache ${count("cache")}, request ${count("request")}), for example: ${examples.join("; ")}. They were left out of the evidence as attribution_substituted. Name replay models by their upstream ids (rename custom aliases) and turn off fallbacks, response caching and request plugins for the replay route, then rerun with a fresh store (--store <directory>), because completed replay cells are reused. See "Which model answered" in rightmodeler docs getting-started.`,
+  );
 }
 
 function normalizePipelineError(

@@ -51,6 +51,16 @@ jobs:
       - name: Check
         run: pnpm check
 
+      - name: Refuse a stale committed CLI bundle
+        # Check built the CLI, so the committed bundle must equal that build byte for byte.
+        run: |
+          stale="$(git status --porcelain -- harness/packages/rightmodeler/dist-bundle)"
+          if [ -n "${stale}" ]; then
+            printf '%s\n' "${stale}" >&2
+            echo "harness/packages/rightmodeler/dist-bundle differs from a fresh build. Run pnpm exec turbo run build --filter=@rightmodeler/cli and commit the result." >&2
+            exit 1
+          fi
+
   unprivileged-artifacts:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest

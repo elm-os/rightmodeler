@@ -7,6 +7,7 @@ import { basename, resolve } from "node:path";
 import { Writable, type Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import { hopByHopHeaders } from "@rightmodeler/replay";
 import { Argument, Command, CommanderError, Option } from "commander";
 
 import {
@@ -86,6 +87,8 @@ interface PipelineCommandOptions {
   maxCostUsd?: string;
   maxConcurrency?: string;
   pricingFile?: string;
+  header?: string[];
+  catalogReference?: string;
   policy?: string;
   includeFree?: boolean;
   modebConfig?: string;
@@ -727,6 +730,15 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         "JSON map from model id to per-token input and output USD, for catalogs without pricing",
       )
       .option(
+        "--header <header>",
+        "extra HTTP header for every provider request, as 'name: value' (repeatable)",
+        collectOption,
+      )
+      .option(
+        "--catalog-reference <url-or-path>",
+        "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks",
+      )
+      .option(
         "--policy <path>",
         "release policy JSON file: quality floor, shortlist size, model allow and deny lists",
       )
@@ -860,6 +872,48 @@ function pipelineOptions(
       `At least one --evaluator-scorer is required with --evaluator ${local.evaluator}`,
     );
   }
+  const requestHeaders = new Map<string, string>();
+  for (const raw of local.header ?? []) {
+    const colon = raw.indexOf(":");
+    const name = colon === -1 ? "" : raw.slice(0, colon).trim().toLowerCase();
+    if (name.length === 0) {
+      throw invalidOption(`--header must be 'name: value'; got ${raw}`);
+    }
+    if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/u.test(name)) {
+      throw invalidOption(
+        `--header name ${name} is not a valid HTTP header name`,
+      );
+    }
+    if (name === "authorization") {
+      throw invalidOption(
+        "--header cannot set authorization; pass the key's environment variable with --api-key-env",
+      );
+    }
+    if (
+      name === "content-type" ||
+      name === "content-length" ||
+      name === "host"
+    ) {
+      throw invalidOption(
+        `--header cannot set ${name}; rightmodeler sets it on every request`,
+      );
+    }
+    if (hopByHopHeaders.has(name)) {
+      throw invalidOption(
+        `--header cannot set ${name}; hop-by-hop headers do not reach the provider`,
+      );
+    }
+    if (requestHeaders.has(name)) {
+      throw invalidOption(`--header ${name} is given more than once`);
+    }
+    const value = raw.slice(colon + 1).trim();
+    if (!/^[\t\x20-\x7e\x80-\xff]*$/u.test(value)) {
+      throw invalidOption(
+        `--header ${name} has a value HTTP cannot carry; remove line breaks, control characters and characters outside Latin-1`,
+      );
+    }
+    requestHeaders.set(name, value);
+  }
   return {
     repo: global.repo,
     store: global.store,
@@ -870,6 +924,10 @@ function pipelineOptions(
     maxCostUsd,
     maxConcurrency,
     pricingFilePath: local.pricingFile,
+    ...(requestHeaders.size === 0
+      ? {}
+      : { requestHeaders: Object.fromEntries(requestHeaders) }),
+    catalogReference: local.catalogReference,
     policyFilePath: local.policy,
     includeFreeModels: local.includeFree,
     ...(local.evaluator === undefined
@@ -1220,6 +1278,8 @@ const PIPELINE_ARG_OPTIONS = [
   { flag: "--max-cost-usd", key: "maxCostUsd", kind: "value" },
   { flag: "--max-concurrency", key: "maxConcurrency", kind: "value" },
   { flag: "--pricing-file", key: "pricingFile", kind: "path" },
+  { flag: "--header", key: "header", kind: "repeated" },
+  { flag: "--catalog-reference", key: "catalogReference", kind: "reference" },
   { flag: "--policy", key: "policy", kind: "path" },
   { flag: "--include-free", key: "includeFree", kind: "flag" },
   { flag: "--approved-run", key: "approvedRun", kind: "value" },
@@ -1272,7 +1332,7 @@ const PIPELINE_ARG_OPTIONS = [
 ] as const satisfies readonly {
   flag: string;
   key: keyof PipelineCommandOptions;
-  kind: "value" | "path" | "command" | "flag" | "repeated";
+  kind: "value" | "path" | "reference" | "command" | "flag" | "repeated";
 }[];
 
 export function pipelineArgv(options: PipelineCommandOptions): string[] {
@@ -1293,7 +1353,7 @@ export function pipelineArgv(options: PipelineCommandOptions): string[] {
     appendCliOption(
       args,
       flag,
-      kind === "path"
+      kind === "path" || (kind === "reference" && !/^https?:\/\//iu.test(value))
         ? resolve(value)
         : kind === "command"
           ? detachedCommand(value)

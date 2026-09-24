@@ -1,0 +1,218 @@
+[
+  {
+    "name": "portkey-cache-hit",
+    "source": "Portkey-AI/gateway@v1.15.2 src/middlewares/cache/index.ts:5-12",
+    "requestedModel": "openai/gpt-4o-mini",
+    "headers": { "x-portkey-cache-status": "HIT" },
+    "body": {
+      "id": "chatcmpl-source-derived",
+      "object": "chat.completion",
+      "model": "openai/gpt-4o-mini",
+      "choices": [
+        {
+          "index": 0,
+          "message": { "role": "assistant", "content": "cached answer" },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 11,
+        "completion_tokens": 2,
+        "total_tokens": 13
+      }
+    }
+  },
+  {
+    "name": "portkey-semantic-cache-hit",
+    "source": "Portkey-AI/gateway@v1.15.2 src/middlewares/cache/index.ts:5-12",
+    "requestedModel": "openai/gpt-4o-mini",
+    "headers": { "x-portkey-cache-status": "SEMANTIC HIT" },
+    "body": {
+      "id": "chatcmpl-source-derived",
+      "object": "chat.completion",
+      "model": "openai/gpt-4o-mini",
+      "choices": [
+        {
+          "index": 0,
+          "message": { "role": "assistant", "content": "cached answer" },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 11,
+        "completion_tokens": 2,
+        "total_tokens": 13
+      }
+    }
+  },
+  {
+    "name": "bifrost-prefix-stripped",
+    "source": "maximhq/bifrost@transports/v2.2.1 core/schemas/bifrost.go:1762-1837",
+    "requestedModel": "vercel/openai/gpt-4o-mini",
+    "headers": {},
+    "body": {
+      "id": "gen-source-derived",
+      "object": "chat.completion",
+      "model": "openai/gpt-4o-mini",
+      "choices": [
+        {
+          "index": 0,
+          "message": { "role": "assistant", "content": "Hello, how are you?" },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 22,
+        "completion_tokens": 7,
+        "total_tokens": 29,
+        "cost": { "total_cost": 0.0000075 }
+      },
+      "extra_fields": {
+        "request_type": "chat_completion",
+        "routing_info": { "provider": "vercel", "model": "openai/gpt-4o-mini" }
+      }
+    }
+  },
+  {
+    "name": "bifrost-cache-hit",
+    "source": "maximhq/bifrost@transports/v2.2.1 core/schemas/bifrost.go:1797, 1853-1860",
+    "requestedModel": "vercel/openai/gpt-4o-mini",
+    "headers": {},
+    "body": {
+      "id": "gen-source-derived",
+      "object": "chat.completion",
+      "model": "openai/gpt-4o-mini",
+      "choices": [
+        {
+          "index": 0,
+          "message": { "role": "assistant", "content": "cached answer" },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 22,
+        "completion_tokens": 7,
+        "total_tokens": 29
+      },
+      "extra_fields": {
+        "request_type": "chat_completion",
+        "cache_debug": { "cache_hit": true, "hit_type": "semantic" }
+      }
+    }
+  },
+  {
+    "name": "bifrost-dropped-params",
+    "source": "maximhq/bifrost@transports/v2.2.1 core/schemas/bifrost.go:1802",
+    "requestedModel": "vercel/openai/gpt-4o-mini",
+    "headers": {},
+    "body": {
+      "id": "gen-source-derived",
+      "object": "chat.completion",
+      "model": "openai/gpt-4o-mini",
+      "choices": [
+        {
+          "index": 0,
+          "message": { "role": "assistant", "content": "plain text answer" },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 22,
+        "completion_tokens": 7,
+        "total_tokens": 29
+      },
+      "extra_fields": {
+        "request_type": "chat_completion",
+        "dropped_compat_plugin_params": ["response_format"]
+      }
+    }
+  },
+  {
+    "name": "bifrost-dropped-tools",
+    "source": "maximhq/bifrost@transports/v2.2.1 core/schemas/bifrost.go:1803-1807",
+    "requestedModel": "vercel/openai/gpt-4o-mini",
+    "headers": {},
+    "body": {
+      "id": "gen-source-derived",
+      "object": "chat.completion",
+      "model": "openai/gpt-4o-mini",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "answer without search"
+          },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 22,
+        "completion_tokens": 7,
+        "total_tokens": 29
+      },
+      "extra_fields": {
+        "request_type": "chat_completion",
+        "dropped_unsupported_tools": ["web_search"]
+      }
+    }
+  },
+  {
+    "name": "bifrost-converted-request",
+    "source": "maximhq/bifrost@transports/v2.2.1 core/schemas/bifrost.go:1801",
+    "requestedModel": "vercel/openai/gpt-4o-mini",
+    "headers": {},
+    "body": {
+      "id": "gen-source-derived",
+      "object": "chat.completion",
+      "model": "openai/gpt-4o-mini",
+      "choices": [
+        {
+          "index": 0,
+          "message": { "role": "assistant", "content": "converted answer" },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 22,
+        "completion_tokens": 7,
+        "total_tokens": 29
+      },
+      "extra_fields": {
+        "request_type": "chat_completion",
+        "converted_request_type": "responses"
+      }
+    }
+  },
+  {
+    "name": "bifrost-server-side-fallback",
+    "source": "maximhq/bifrost@transports/v2.2.1 core/schemas/bifrost.go:1827-1836",
+    "requestedModel": "anthropic/claude-sonnet-4.5",
+    "headers": {},
+    "body": {
+      "id": "gen-source-derived",
+      "object": "chat.completion",
+      "model": "anthropic/claude-sonnet-4.5",
+      "choices": [
+        {
+          "index": 0,
+          "message": { "role": "assistant", "content": "fallback answer" },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 22,
+        "completion_tokens": 7,
+        "total_tokens": 29
+      },
+      "extra_fields": {
+        "request_type": "chat_completion",
+        "routing_info": {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4.5",
+          "server_side_fallback_model": "anthropic/claude-haiku-4.5"
+        }
+      }
+    }
+  }
+]

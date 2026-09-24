@@ -68,6 +68,11 @@ Options:
   --pricing-file <path>               JSON map from model id to per-token input
                                       and output USD, for catalogs without
                                       pricing
+  --header <header>                   extra HTTP header for every provider
+                                      request, as 'name: value' (repeatable)
+  --catalog-reference <url-or-path>   upstream /models URL or file that fills
+                                      pricing, context and capabilities the
+                                      provider catalog lacks
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -123,6 +128,11 @@ Options:
   --pricing-file <path>               JSON map from model id to per-token input
                                       and output USD, for catalogs without
                                       pricing
+  --header <header>                   extra HTTP header for every provider
+                                      request, as 'name: value' (repeatable)
+  --catalog-reference <url-or-path>   upstream /models URL or file that fills
+                                      pricing, context and capabilities the
+                                      provider catalog lacks
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -248,6 +258,11 @@ Options:
   --pricing-file <path>               JSON map from model id to per-token input
                                       and output USD, for catalogs without
                                       pricing
+  --header <header>                   extra HTTP header for every provider
+                                      request, as 'name: value' (repeatable)
+  --catalog-reference <url-or-path>   upstream /models URL or file that fills
+                                      pricing, context and capabilities the
+                                      provider catalog lacks
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -312,6 +327,11 @@ Options:
   --pricing-file <path>               JSON map from model id to per-token input
                                       and output USD, for catalogs without
                                       pricing
+  --header <header>                   extra HTTP header for every provider
+                                      request, as 'name: value' (repeatable)
+  --catalog-reference <url-or-path>   upstream /models URL or file that fills
+                                      pricing, context and capabilities the
+                                      provider catalog lacks
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -564,8 +584,8 @@ print documentation packaged with this CLI
 
 Arguments:
   name        packaged document name (choices: "commands", "evaluators",
-              "exit-codes", "getting-started", "github", "github-actions",
-              "modeb")
+              "exit-codes", "gateways", "getting-started", "github",
+              "github-actions", "modeb")
 
 Options:
   -h, --help  display help for command

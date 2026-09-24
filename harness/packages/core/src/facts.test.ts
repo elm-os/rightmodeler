@@ -170,6 +170,7 @@ describe("fact schemas", () => {
       "ambiguous",
       "lost",
       "silent-failure",
+      "substituted",
     ]);
     expect(cascadeFindingVerdictSchema.options).toEqual([
       "confirmed",
@@ -246,6 +247,32 @@ describe("fact schemas", () => {
       requestAttemptSchema.safeParse({ ...requestAttempt, latencyMs: -1 })
         .success,
     ).toBe(false);
+  });
+
+  it("accepts an optional served model and substitution on an attempt", () => {
+    const substitution = {
+      kind: "model",
+      evidence: "served acme/large-1 for requested acme/small-1",
+    } as const;
+    expect(
+      requestAttemptSchema.parse({
+        ...requestAttempt,
+        servedModel: "acme/large-1",
+        substitution,
+      }),
+    ).toMatchObject({ servedModel: "acme/large-1", substitution });
+    expect(requestAttemptSchema.safeParse(requestAttempt).success).toBe(true);
+    for (const invalid of [
+      { servedModel: "" },
+      { substitution: { ...substitution, evidence: "" } },
+      { substitution: { ...substitution, evidence: "e".repeat(201) } },
+      { substitution: { ...substitution, kind: "other" } },
+    ]) {
+      expect(
+        requestAttemptSchema.safeParse({ ...requestAttempt, ...invalid })
+          .success,
+      ).toBe(false);
+    }
   });
 
   it("keeps an assessment's evaluator identity optional and never empty", () => {

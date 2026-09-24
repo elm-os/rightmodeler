@@ -1,0 +1,98 @@
+{
+  "requestedModel": "fallback-demo",
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": {
+    "id": "gen_01M38GRHG54E3S5K120FDGQCB0",
+    "object": "chat.completion",
+    "created": 1790213638,
+    "model": "amazon/nova-micro",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "The town council approved the installation of new benches in the main square.",
+          "provider_metadata": {
+            "bedrock": {
+              "stopSequence": null
+            },
+            "gateway": {
+              "routing": {
+                "originalModelId": "amazon/nova-micro",
+                "resolvedProvider": "bedrock",
+                "fallbacksAvailable": [],
+                "planningReasoning": "System credentials planned for: bedrock. Total execution order: bedrock(system)",
+                "canonicalSlug": "amazon/nova-micro",
+                "finalProvider": "bedrock",
+                "modelAttemptCount": 1,
+                "modelAttempts": [
+                  {
+                    "canonicalSlug": "amazon/nova-micro",
+                    "success": true,
+                    "providerAttemptCount": 1,
+                    "providerAttempts": [
+                      {
+                        "provider": "bedrock",
+                        "credentialType": "system",
+                        "success": true,
+                        "startTime": 1790213637658,
+                        "endTime": 1790213638083,
+                        "providerRequestId": "2e526335-c442-4eef-b0c6-0d807fcaa7a9",
+                        "statusCode": 200
+                      }
+                    ]
+                  }
+                ],
+                "totalProviderAttemptCount": 1,
+                "affinity": {
+                  "outcome": "not_cache_capable"
+                },
+                "clientSessionId": "69370db0e8050211a6cb560e90387f9f",
+                "clientSessionIdSource": "fingerprint"
+              },
+              "cost": "0.00000273",
+              "marketCost": "0.00000273",
+              "surchargeCost": "0",
+              "gatewayCost": "0.00000273",
+              "inferenceCost": "0.00000273",
+              "inputInferenceCost": "0.00000063",
+              "outputInferenceCost": "0.0000021",
+              "generationId": "gen_01M38GRHG54E3S5K120FDGQCB0"
+            }
+          }
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 18,
+      "completion_tokens": 15,
+      "total_tokens": 33,
+      "cost": 0.00000273,
+      "is_byok": false,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0,
+        "video_tokens": 0
+      },
+      "cost_details": {
+        "upstream_inference_cost": null,
+        "upstream_inference_prompt_cost": 0,
+        "upstream_inference_completions_cost": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "image_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "market_cost": 0.00000273,
+      "gateway_cost": 0.00000273
+    },
+    "system_fingerprint": "fp_zqdxipsp37",
+    "generationId": "gen_01M38GRHG54E3S5K120FDGQCB0"
+  }
+}
