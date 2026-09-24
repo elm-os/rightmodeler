@@ -112,7 +112,7 @@
         },
         {
           "q": "Is Not Diamond Code generally available?",
-          "a": "No. As of August 2026 it is in early access behind a gated waitlist, per their docs. Its launch post claims 20%+ cost reduction without quality degradation, plus benchmark wins on Poly-SWE-Bench and LongCodeQA; those are vendor-run numbers that have not been independently reproduced."
+          "a": "No. As of August 2026 it is in early access behind a gated waitlist, per their docs. Its launch post claims 20%+ cost reduction without quality degradation, plus benchmark wins on Poly-SWE-Bench and LongCodeQA; those are Not Diamond's own numbers."
         },
         {
           "q": "Can rightmodeler tell me whether a router would pay off on my pipeline?",
@@ -120,7 +120,7 @@
         },
         {
           "q": "Does Not Diamond see my prompts and code?",
-          "a": "Per their docs, no: the Not Diamond Code proxy computes derived metadata about the session, sends only that to their optimization service, and the model call itself runs through your configured provider or gateway. We have not independently verified this. rightmodeler's answer to the same worry is structural: there is no rightmodeler server, no account with us, no telemetry; the CLI runs on your machine against your own traces."
+          "a": "Per their docs, no: the Not Diamond Code proxy computes derived metadata about the session, sends only that to their optimization service, and the model call itself runs through your configured provider or gateway. rightmodeler's answer to the same worry is structural: there is no rightmodeler server, no account with us, no telemetry; the CLI runs on your machine against your own traces."
         }
       ]
     }
