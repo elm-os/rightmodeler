@@ -21,13 +21,13 @@ const [baseUrl, out] = process.argv.slice(2);
 if (baseUrl === undefined || out === undefined) fail(usage);
 const base = baseUrl.replace(/\/+$/, "");
 
-const ids = [];
+const ids = new Set();
 for (let offset = 0; ; offset += pageSize) {
   const { logs } = await getJson(
-    `${base}/api/logs?objects=chat_completion,chat_completion_stream&limit=${pageSize}&offset=${offset}`,
+    `${base}/api/logs?objects=chat_completion,chat_completion_stream&order=asc&limit=${pageSize}&offset=${offset}`,
   );
   if (!Array.isArray(logs)) fail("GET /api/logs did not return a logs list");
-  ids.push(...logs.map(({ id }) => id));
+  for (const { id } of logs) ids.add(id);
   if (logs.length < pageSize) break;
 }
 

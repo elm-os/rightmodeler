@@ -95,11 +95,11 @@ npx rightmodeler init --traces ./bifrost-logs.jsonl --repo . \
 As a trace source, rightmodeler reads Bifrost's own request logs, exported from its management API (add credentials once an admin exists):
 
 ```sh
-curl -s 'http://127.0.0.1:8080/api/logs?objects=chat_completion,chat_completion_stream&limit=1000&offset=0' | jq -r '.logs[].id' \
+curl -s 'http://127.0.0.1:8080/api/logs?objects=chat_completion,chat_completion_stream&order=asc&limit=1000&offset=0' | jq -r '.logs[].id' \
   | while read -r id; do curl -s "http://127.0.0.1:8080/api/logs/$id"; echo; done > bifrost-logs.jsonl
 ```
 
-Repeat with `offset=1000`, `2000` and so on until a page returns fewer than 1000 rows. Do not pass `roots_only=true`: it hides fallback rows.
+With more than 1000 rows, repeat with `offset=1000`, `2000` and so on, appending (`>>`) to the same file, until a page returns fewer than 1000 rows; `order=asc` keeps earlier pages in place while new calls are logged. Do not pass `roots_only=true`: it hides fallback rows.
 
 - Send `x-bf-session-id` from your application so the steps of one conversation form one ordered run, and `x-bf-dim-rightmodeler-family: <name>` so each call has its family.
 - Each row gives the model the application asked for (`provider/model`, or the alias it sent), the conversation as sent (`input_history`), the output (`output_message`), usage, cost, latency and retries.
