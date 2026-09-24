@@ -969,7 +969,7 @@ describe("AI Gateway catalog", () => {
     });
   });
 
-  it("never overwrites what the gateway declares", async () => {
+  it("never overwrites a price, limit or capability the gateway declares", async () => {
     const [declared] = await listWithReference(
       JSON.stringify({
         data: [
@@ -994,6 +994,84 @@ describe("AI Gateway catalog", () => {
       supportsStructuredOutput: false,
       requiresReasoning: true,
     });
+  });
+
+  it("takes a model's release date from the reference over the date the gateway declares", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "rightmodeler-reference-"));
+    try {
+      const reference = join(directory, "reference.json");
+      await writeFile(
+        reference,
+        JSON.stringify({
+          data: [
+            {
+              id: "openai/gpt-6-astra",
+              created: 1_755_815_280,
+              released: 1_788_480_000,
+              pricing: { input: "0.00001", output: "0.00005" },
+            },
+            {
+              id: "acme/undated",
+              pricing: { input: "0.000001", output: "0.000002" },
+            },
+          ],
+        }),
+      );
+      const catalog = await listWithReference(
+        JSON.stringify({
+          data: [
+            {
+              id: "vercel/openai/gpt-6-astra",
+              created: 1_755_815_280,
+              context_length: 1_050_000,
+            },
+            {
+              id: "vercel/acme/undated",
+              created: 1_721_260_800,
+              context_length: 8_192,
+            },
+          ],
+        }),
+        reference,
+      );
+
+      expect(catalog.map(({ id, releasedAt }) => [id, releasedAt])).toEqual([
+        ["vercel/openai/gpt-6-astra", 1_788_480_000],
+        ["vercel/acme/undated", 1_721_260_800],
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("ranks judges through a Bifrost catalog as it ranks them on the upstream", async () => {
+    const upstream = await readFile(aiGatewayFastTiersFixtureUrl, "utf8");
+    const families = {
+      candidateFamily: "inclusionai",
+      referenceFamily: "alibaba",
+    };
+    const direct = pickJudges(await listFixtureModels(upstream), families);
+    vi.restoreAllMocks();
+    const bifrost = JSON.stringify({
+      data: (
+        JSON.parse(upstream) as { data: Array<Record<string, unknown>> }
+      ).data.map(({ id, created, owned_by, context_window }) => ({
+        id: `vercel/${String(id)}`,
+        created,
+        owned_by,
+        context_length: context_window,
+      })),
+    });
+
+    const throughBifrost = pickJudges(
+      await listWithReference(
+        bifrost,
+        fileURLToPath(aiGatewayFastTiersFixtureUrl),
+      ),
+      families,
+    );
+
+    expect(throughBifrost).toEqual(direct.map((id) => `vercel/${id}`));
   });
 
   it("lets --pricing-file override the reference", async () => {

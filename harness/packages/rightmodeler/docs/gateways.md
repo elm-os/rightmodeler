@@ -76,7 +76,7 @@ As a replay route:
 - Model ids are `<provider>/<upstream id>`, for example `vercel/openai/gpt-4o-mini` for Vercel AI Gateway configured as an OpenAI-typed custom provider. Bifrost answers with the upstream id, which rightmodeler accepts as the requested model.
 - Set every `compat` flag to `false` in the `client` block: a `client` block that omits them turns them all on, and the compat plugin can drop parameters such as `response_format` while answering 200.
 - Configure no key `aliases` or routing rules for replay models; an alias answers with another model and is left out as `attribution_substituted`.
-- A custom provider lists ids and context only, so pass `--catalog-reference` with the upstream's public list. Bifrost's own pricing sheet is not used.
+- Pass `--catalog-reference` with the upstream's public list. A custom provider lists ids and context only, with no prices or capabilities, and through Vercel AI Gateway every model carries the same `created` date: Bifrost copies Vercel's `created`, one placeholder for all models, and drops the real `released` date. Rightmodeler ranks judges partly by release date, and the reference's release dates win over the gateway's, so judges rank as they do on Vercel itself instead of the most expensive first. Bifrost's own pricing sheet is not used.
 - The billed cost comes from the upstream through Bifrost's `usage.cost.total_cost`.
 - Send `x-bf-cache-no-store: true` and `x-bf-dim-rightmodeler: replay` with rightmodeler's replays (`--header`): the first keeps replays out of a semantic cache (a cache hit is still detected and left out), the second tags them so a later log export leaves them out.
 

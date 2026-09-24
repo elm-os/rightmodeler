@@ -139,6 +139,14 @@ both. Entries still unpriced after the join are named in a
 `catalog_reference_unmatched` warning, and a reference that cannot be read stops
 the run with `invalid_catalog_reference`.
 
+The release date is the one field where the reference wins over the gateway:
+when the matched reference entry has a release date, it replaces the date the
+gateway declares, and the gateway's date is kept only when the reference gives
+none. Rightmodeler ranks judges partly by how recent a model is, and a gateway
+can give every model the same placeholder date (Bifrost does for Vercel AI
+Gateway's models), which would leave context and price to rank the judges and
+favor the most expensive.
+
 ```sh
 npx rightmodeler estimate --base-url https://provider.example/v1 --pricing-file /path/to/pricing.json --repo /path/to/repository
 ```

@@ -573,7 +573,7 @@ function joinCatalogReference(
       requiresReasoning: declaresReasoning
         ? entry.requiresReasoning
         : match.requiresReasoning,
-      releasedAt: entry.releasedAt ?? match.releasedAt,
+      releasedAt: match.releasedAt ?? entry.releasedAt,
     });
   }
   return joined;

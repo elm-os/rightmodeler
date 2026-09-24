@@ -29061,7 +29061,7 @@ function joinCatalogReference(models, reference) {
       },
       outputModalities: entry.outputModalities?.length === 0 ? match.outputModalities : entry.outputModalities,
       requiresReasoning: declaresReasoning ? entry.requiresReasoning : match.requiresReasoning,
-      releasedAt: entry.releasedAt ?? match.releasedAt
+      releasedAt: match.releasedAt ?? entry.releasedAt
     });
   }
   return joined;
