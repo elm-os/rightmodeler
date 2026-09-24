@@ -1,0 +1,161 @@
+{
+  "slug": "bifrost",
+  "name": "Bifrost",
+  "website": "https://github.com/maximhq/bifrost",
+  "logo": "/integrations/logos/bifrost.png",
+  "category": "replay-method",
+  "categoryLabel": "Replay route · trace source",
+  "title": "Bifrost integration: replay and read its request logs",
+  "description": "Replay and judge through the open-source Bifrost gateway and read its request logs as traces. An answer from another model or from its cache is never graded.",
+  "h1": "rightmodeler + Bifrost",
+  "lede": "Bifrost is an Apache 2.0 AI gateway written in Go. Its open-source build can keep every call in a log store that rightmodeler reads as traces, and the same gateway can be the route the audit replays and judges through.",
+  "tldr": "rightmodeler reads Bifrost's request logs, exported from its management API, as one ordered run per session: the model your application asked for, the conversation as sent, the output, usage, cost, latency and retries. The same gateway is a replay route: model ids are <provider>/<upstream id>, the billed cost comes from usage.cost.total_cost, and --catalog-reference fills the pricing a custom provider does not list. Turn every compat flag off and configure no aliases for replay models; a response from another model, a semantic-cache hit, or a request the compat plugin changed is left out of the evidence instead of graded. Bifrost advertises sub-millisecond overhead and runs by other gateway makers measured milliseconds, so test it on your own traffic: rightmodeler records each replay's latency through your gateway. Verified on the open-source build, v2.2.1.",
+  "steps": [
+    {
+      "label": "01 · Configure",
+      "title": "Run a replay-safe gateway",
+      "body": "Run maximhq/bifrost:v2.2.1 with a config.json whose client block sets every compat flag to false and keeps request logging on, and that gives replay models no key aliases or routing rules. A client block that omits the compat flags turns them all on, and the compat plugin can drop parameters such as response_format while still answering 200. Vercel AI Gateway works as an OpenAI-typed custom provider, so vercel/openai/gpt-4o-mini reaches openai/gpt-4o-mini upstream."
+    },
+    {
+      "label": "02 · Export",
+      "title": "Export the request logs",
+      "body": "From your application, send x-bf-session-id so the calls of one conversation form one run, and x-bf-dim-rightmodeler-family: <name> to name each call's family. Export chat completions from GET /api/logs oldest first, write one GET /api/logs/{id} detail per line, and pass the file with --traces. The Bifrost reader is picked automatically."
+    },
+    {
+      "label": "03 · Ingest",
+      "title": "Only production answers become cases",
+      "body": "Each row gives the model the application asked for (provider/model, or provider/alias when it sent an alias), the conversation from input_history, the output from output_message, and its token usage, cost, latency and retries. Failed calls, answers from a configured fallback, rightmodeler's own tagged replays, calls still running at export, and calls whose content was not logged are left out with a trace_steps_excluded warning that names each reason."
+    },
+    {
+      "label": "04 · Replay + check",
+      "title": "Replayed through Bifrost, graded only when fresh",
+      "body": "Pass --catalog-reference with the upstream's public model list, and send x-bf-cache-no-store: true and x-bf-dim-rightmodeler: replay with --header. Candidates replay through POST /v1/chat/completions, the billed cost is read from usage.cost.total_cost, a gateway id such as vercel/openai/gpt-4o-mini takes its family from the vendor segment, and catalog entries that do not output text are dropped. A response that names another model, reports a server-side fallback or a cache hit, or reports that the compat plugin dropped parameters or converted the request is recorded as substituted and never graded."
+    }
+  ],
+  "setup": {
+    "intro": "Put a replay-safe config.json (every compat flag false, logging on, no aliases for replay models; rightmodeler docs gateways lists the rules) in a named volume, export the logs, then replay through the same gateway. The example uses Vercel AI Gateway as a custom provider.",
+    "commands": [
+      {
+        "comment": "# the upstream key, which config.json reads as env.AI_GATEWAY_API_KEY",
+        "command": "export AI_GATEWAY_API_KEY=..."
+      },
+      {
+        "comment": "# a named volume for config.json and the log store",
+        "command": "docker volume create bifrost-data"
+      },
+      {
+        "comment": "# the open-source image, reachable from this machine only",
+        "command": "docker create --name bifrost -p 127.0.0.1:8080:8080 -e AI_GATEWAY_API_KEY -v bifrost-data:/app/data maximhq/bifrost:v2.2.1"
+      },
+      {
+        "comment": "# copy in the replay-safe config and start the gateway",
+        "command": "docker cp config.json bifrost:/app/data/config.json && docker start bifrost"
+      },
+      {
+        "comment": "# export chat completions oldest first; past 1000 rows, repeat with offset=1000 and append",
+        "command": "curl -s 'http://127.0.0.1:8080/api/logs?objects=chat_completion,chat_completion_stream&order=asc&limit=1000&offset=0' | jq -r '.logs[].id' | while read -r id; do curl -s \"http://127.0.0.1:8080/api/logs/$id\"; echo; done > bifrost-logs.jsonl"
+      },
+      {
+        "comment": "# Bifrost holds the upstream key, so this only has to be non-empty",
+        "command": "export BIFROST_KEY=unused"
+      },
+      {
+        "comment": "# replay through Bifrost: replays skip its cache and are tagged for the next export",
+        "command": "npx rightmodeler init --traces ./bifrost-logs.jsonl --base-url http://127.0.0.1:8080/v1 --api-key-env BIFROST_KEY --catalog-reference https://ai-gateway.vercel.sh/v1/models --header 'x-bf-cache-no-store: true' --header 'x-bf-dim-rightmodeler: replay' --max-cost-usd 25"
+      }
+    ]
+  },
+  "reads": [
+    {
+      "field": "trajectory",
+      "source": "session_id, else id"
+    },
+    {
+      "field": "step family",
+      "source": "metadata.rightmodeler-family"
+    },
+    {
+      "field": "model",
+      "source": "provider/alias, else provider/model"
+    },
+    {
+      "field": "input messages",
+      "source": "input_history"
+    },
+    {
+      "field": "output",
+      "source": "output_message"
+    },
+    {
+      "field": "token usage",
+      "source": "token_usage.prompt/completion_tokens"
+    },
+    {
+      "field": "cost",
+      "source": "cost"
+    },
+    {
+      "field": "latency",
+      "source": "latency"
+    },
+    {
+      "field": "retries",
+      "source": "number_of_retries"
+    },
+    {
+      "field": "ordering",
+      "source": "timestamp"
+    }
+  ],
+  "detection": "input_history · provider · model · fallback_index · number_of_retries",
+  "useCases": [
+    {
+      "title": "Traces without instrumenting every app",
+      "body": "With logging on, every call through Bifrost lands in its log store as the application sent it, with cost and latency beside it. Export that store and the audit has its corpus, whatever language each service is written in."
+    },
+    {
+      "title": "Keep fallback answers out of the corpus",
+      "body": "Bifrost logs a fallback attempt as its own row, so rightmodeler can tell a fallback's answer from the requested model's. Those rows, and the failed primary calls before them, are left out by name instead of becoming references a candidate is measured against."
+    },
+    {
+      "title": "Time the gateway on your own traffic",
+      "body": "Bifrost's own overhead benchmark and the competing runs that disagree with it were all measured against mock upstreams. Every replay rightmodeler sends through your Bifrost records its latency, gateway hop included, next to the model and the billed cost, so you see how long real calls take through the gateway on your prompts and upstreams. rightmodeler does not separate Bifrost's own share."
+    }
+  ],
+  "limits": [
+    "Bifrost advertises sub-millisecond overhead: its own benchmark, on mocked OpenAI calls, reports 11 microseconds on a t3.xlarge at 5,000 requests per second, excluding JSON marshalling and the HTTP call. Runs by two other gateway makers measured milliseconds. BerriAI, which makes LiteLLM, reported 4.5 ms added at p99 on Bifrost v1.6.4 against a local mock (2026-07-22), and ENTERPILOT, which makes GoModel, reported 4.30 ms at p50 and 20.50 ms at p99 on v2.2.1 against a zero-latency mock (2026-09-18). rightmodeler records each replay's latency through your gateway, hop included, but does not separate Bifrost's share.",
+    "Through Vercel AI Gateway as a custom provider, every entry in Bifrost's catalog carries the same created date: Bifrost copies Vercel's created, one placeholder for all models, and drops the release dates Vercel lists separately. rightmodeler keeps the gateway's date over the reference's release dates, and the judge ranking weighs release date, context window and price, so release dates tie and the ranking falls to context and price, which favors the priciest models: in the live run the judge was vercel/openai/gpt-5.4-pro, and its calls spent $0.159 of the $0.25 cap for a single assessment. Set --max-cost-usd with that in mind.",
+    "Set every compat flag to false and give replay models no key aliases or routing rules, or their replays are left out as substituted. A custom provider lists ids and context windows only, so pass --catalog-reference; Bifrost's own pricing sheet is not used.",
+    "The OpenTelemetry plugin's export reads through the OTel GenAI reader, but it summarizes messages and loses tool-call ids, so use the log export for anything beyond plain text calls. Steps whose conversation contains tool calls are read but not replayed yet.",
+    "Streamed calls through Mode B are checked on the stream's model and headers only. Bifrost reports a semantic-cache hit only in the response body, so such a hit on a streamed Mode B call is not detected. Mode B on the cloud backend cannot reach a gateway on localhost; use the Docker backend.",
+    "Verified live on 2026-09-23 on maximhq/bifrost:v2.2.1, pinned by digest, with Vercel AI Gateway as a custom provider: the log export read as one ordered run per session with a failed call and a fallback answer named, every replayed response came from the requested model at the billed cost, and a key alias that mapped the candidate to another model had every replay left out as substituted. Enterprise features ship in a separate image and were not tested; pin the open-source image, because releases arrive weekly."
+  ],
+  "faq": [
+    {
+      "q": "Does Bifrost really add only microseconds?",
+      "a": "That is Bifrost's own figure, measured on mocked calls excluding JSON marshalling and the HTTP call. Runs by two other gateway makers, BerriAI and ENTERPILOT, measured milliseconds against mock upstreams, and each of them makes a competing gateway. rightmodeler records every replay's latency through your Bifrost, so you can judge on your own traffic."
+    },
+    {
+      "q": "Why must the compat flags be off?",
+      "a": "The compat plugin can drop request parameters, such as response_format, or convert the request to another type, and still answer 200, so a candidate would be graded on a request it never saw. rightmodeler leaves any response that reports dropped parameters or a converted request out of the evidence, and a config with every compat flag false keeps that from happening."
+    },
+    {
+      "q": "How do I export Bifrost's logs?",
+      "a": "List chat completions with GET /api/logs?objects=chat_completion,chat_completion_stream&order=asc&limit=1000, then write each GET /api/logs/{id} detail as one line. Past 1000 rows, repeat with offset=1000, 2000 and so on, appending, until a page returns fewer rows; order=asc keeps earlier pages in place while new calls are logged. Do not pass roots_only=true, which hides fallback rows. Add credentials to the calls once your Bifrost has an admin."
+    },
+    {
+      "q": "Why does rightmodeler need --catalog-reference with Bifrost?",
+      "a": "An OpenAI-typed custom provider, which is how Bifrost reaches Vercel AI Gateway, lists ids and context windows without prices or capabilities. rightmodeler joins each gateway id to the upstream's public list by its suffix, so vercel/openai/gpt-4o-mini takes openai/gpt-4o-mini's price, reading the list without your key."
+    },
+    {
+      "q": "How are rightmodeler's own replays kept out of the next export?",
+      "a": "Pass --header 'x-bf-dim-rightmodeler: replay'. Bifrost stores it in the log row's metadata, and the next ingest leaves those rows out as replay_traffic. x-bf-cache-no-store: true keeps replays out of a semantic cache; a hit that still happens is detected and left out."
+    },
+    {
+      "q": "Does it work with Bifrost Enterprise?",
+      "a": "Only the open-source build has been tested, at v2.2.1. Enterprise features such as guardrails, adaptive load balancing and clustering ship in a separate image and are not covered here."
+    }
+  ],
+  "related": ["litellm", "portkey", "envoy-ai-gateway"],
+  "cta": "github"
+}

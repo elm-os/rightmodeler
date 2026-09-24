@@ -18,6 +18,9 @@ import helicone from "@/content/integrations/data/helicone.json";
 import weave from "@/content/integrations/data/weave.json";
 import openrouter from "@/content/integrations/data/openrouter.json";
 import litellm from "@/content/integrations/data/litellm.json";
+import portkey from "@/content/integrations/data/portkey.json";
+import envoyAiGateway from "@/content/integrations/data/envoy-ai-gateway.json";
+import bifrost from "@/content/integrations/data/bifrost.json";
 import vercelAiGateway from "@/content/integrations/data/vercel-ai-gateway.json";
 import vercelAiSdk from "@/content/integrations/data/vercel-ai-sdk.json";
 import promptfoo from "@/content/integrations/data/promptfoo.json";
@@ -42,6 +45,9 @@ const integrations: IntegrationData[] = [
   promptfoo,
   openrouter,
   litellm,
+  portkey,
+  envoyAiGateway,
+  bifrost,
   vercelAiGateway,
   vercelSandbox,
   github,

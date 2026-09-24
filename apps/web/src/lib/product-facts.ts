@@ -10,6 +10,7 @@ export const TRACE_SOURCES = [
   "Vercel AI SDK",
   "Helicone",
   "W&B Weave",
+  "Bifrost",
 ] as const;
 
 export const ILLUSTRATIVE_SCORECARD = {

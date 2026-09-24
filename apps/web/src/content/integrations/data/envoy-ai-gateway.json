@@ -1,0 +1,145 @@
+{
+  "slug": "envoy-ai-gateway",
+  "name": "Agent Router (formerly Envoy AI Gateway)",
+  "website": "https://theagentrouter.ai",
+  "logo": "/integrations/logos/envoy-ai-gateway.svg",
+  "category": "replay-method",
+  "categoryLabel": "Replay route · trace source",
+  "title": "Envoy AI Gateway, now Agent Router: replay and spans",
+  "description": "Replay and judge through Agent Router, formerly Envoy AI Gateway, and read its OpenInference spans as traces. Verified on v1.1.0 standalone and on Kubernetes.",
+  "h1": "rightmodeler + Agent Router (formerly Envoy AI Gateway)",
+  "lede": "Agent Router, the Apache 2.0 gateway built on Envoy and renamed from Envoy AI Gateway in September 2026, can serve both ends of the audit: the source of the traces rightmodeler replays, and the route it replays and judges through. It runs as Kubernetes resources for teams already on a cluster, or standalone with aigw run.",
+  "tldr": "rightmodeler reads the gateway's default OpenInference spans. From each span's request body it takes the model your application asked for and the conversation exactly as sent, groups calls into runs by agent-session-id, and names families from a header you map. The same gateway serves as the replay route: its /v1/models lists only the models your routes declare and carries no prices, so pass --catalog-reference with the upstream's public model list to fill pricing, context windows and capabilities. Declare each replay model under its upstream id with no fallback or override, and a response another model answered is left out of the evidence instead of graded. Verified live on v1.1.0: spans and replay standalone, and replay on a kind cluster with the Helm charts.",
+  "steps": [
+    {
+      "label": "01 · Trace",
+      "title": "Export the gateway's spans",
+      "body": "Set OTEL_EXPORTER_OTLP_ENDPOINT and the gateway emits an OpenInference span for every request, with the request body in input.value and the full response in output.value. Map request headers to span attributes with OTEL_AIGW_SPAN_REQUEST_HEADER_ATTRIBUTES: agent-session-id:session.id, x-rightmodeler-family:rightmodeler.family and x-rightmodeler-replay:rightmodeler.replay, repeating the session pair because setting the variable replaces the default. Pass the OpenTelemetry collector's file export with --traces."
+    },
+    {
+      "label": "02 · Ingest",
+      "title": "Read as sent, grouped by session",
+      "body": "The OpenInference reader is picked automatically. From each LLM span it takes the requested model and the messages from input.value, the output from the first choice in output.value, and token counts from llm.token_count. Spans that share a session.id form one run ordered by start time. Failed calls, calls tagged rightmodeler.replay, and calls whose prompt or output the gateway hid are left out with a trace_steps_excluded warning that names each reason."
+    },
+    {
+      "label": "03 · Route",
+      "title": "Declare replay models under upstream ids",
+      "body": "Declare each replay model as an Exact x-ai-eg-model match under the upstream's own id, with one backendRef, no modelNameOverride, no priority fallback and no BackendTrafficPolicy retries, and raise the ClientTrafficPolicy bufferLimit and the route's timeouts.request. Declare a priced model from a third vendor too: the gateway lists only declared models, so the judge is chosen from them. --api-key-env may name any non-empty variable, because the gateway replaces Authorization with the route's key."
+    },
+    {
+      "label": "04 · Replay + check",
+      "title": "Replay, judge, and check who answered",
+      "body": "Pass --catalog-reference https://ai-gateway.vercel.sh/v1/models, or OpenRouter's list; rightmodeler reads it without your key or headers and fills the pricing, context windows and capabilities the gateway's entries lack. Candidates replay through POST /v1/chat/completions, the upstream's billed cost passes through the gateway unchanged, and each response is checked: one that names another model, as a fallback or an override answers, is recorded as substituted and never graded. Send x-rightmodeler-replay: 1 with --header so the next span export leaves rightmodeler's own replay and judge calls out."
+    }
+  ],
+  "setup": {
+    "intro": "The gateway runs from a config file you write and an OpenTelemetry collector that writes its spans to a file; rightmodeler docs gateways lists the route rules. The example runs v1.1.0 standalone with Vercel AI Gateway as the upstream and a collector reachable as collector:4318. On Kubernetes, the same resources apply through the v1.1.0 Helm charts.",
+    "commands": [
+      {
+        "comment": "# print the gateway guide: route rules, span mapping, Kubernetes values",
+        "command": "npx rightmodeler docs gateways"
+      },
+      {
+        "comment": "# the upstream key, which aigw.yaml reads as ${AI_GATEWAY_API_KEY}",
+        "command": "export AI_GATEWAY_API_KEY=..."
+      },
+      {
+        "comment": "# run v1.1.0 standalone with spans on and the header mapping",
+        "command": "docker run --rm -p 127.0.0.1:1975:1975 -e AI_GATEWAY_API_KEY -e OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318 -e 'OTEL_AIGW_SPAN_REQUEST_HEADER_ATTRIBUTES=agent-session-id:session.id,x-rightmodeler-family:rightmodeler.family,x-rightmodeler-replay:rightmodeler.replay' -v \"$PWD/aigw.yaml:/config.yaml:ro\" envoyproxy/ai-gateway-cli:v1.1.0 run /config.yaml"
+      },
+      {
+        "comment": "# the gateway swaps in the route's key, so any non-empty value works",
+        "command": "export AIGW_CLIENT_KEY=unused"
+      },
+      {
+        "comment": "# replay the exported spans through the gateway, tagging the replays",
+        "command": "npx rightmodeler init --traces ./spans.jsonl --base-url http://127.0.0.1:1975/v1 --api-key-env AIGW_CLIENT_KEY --catalog-reference https://ai-gateway.vercel.sh/v1/models --header 'x-rightmodeler-replay: 1' --max-cost-usd 25"
+      }
+    ]
+  },
+  "reads": [
+    {
+      "field": "trajectory",
+      "source": "session.id, else span traceId"
+    },
+    {
+      "field": "step family",
+      "source": "rightmodeler.family, else span name"
+    },
+    {
+      "field": "model",
+      "source": "input.value model, as requested"
+    },
+    {
+      "field": "input messages",
+      "source": "input.value messages"
+    },
+    {
+      "field": "output",
+      "source": "output.value choices[0].message"
+    },
+    {
+      "field": "token usage",
+      "source": "llm.token_count.prompt/completion"
+    },
+    {
+      "field": "ordering",
+      "source": "startTimeUnixNano"
+    }
+  ],
+  "detection": "openinference.span.kind · llm.*",
+  "useCases": [
+    {
+      "title": "Traces from the gateway, not from every app",
+      "body": "Every call that passes through the gateway is recorded as your application sent it, so services written in different languages are traced the same way, without instrumenting each of them. The same gateway then carries the replays."
+    },
+    {
+      "title": "Audit on the cluster you already run",
+      "body": "On Kubernetes, the gateway's routes are resources your platform team already reviews. Set the tracing endpoint through the ai-gateway-helm chart's extProc.extraEnvVars and the header mapping through controller.spanRequestHeaderAttributes, and the replay route is declared like any other route."
+    },
+    {
+      "title": "Choose the judge by what you declare",
+      "body": "The gateway lists only the models your routes declare, so the judge pool is the priced models from a third vendor that you declare. In the live runs the judge was openai/gpt-4.1-nano, a cheap model declared for that purpose, and each run's ledger stayed under a cent."
+    },
+    {
+      "title": "Keep your own replays out of the next corpus",
+      "body": "With x-rightmodeler-replay mapped to a span attribute and sent on every replay and judge call, the next export of the gateway's spans leaves rightmodeler's own traffic out as replay_traffic, so earlier replays never become the recorded outputs the next audit compares candidates against."
+    }
+  ],
+  "limits": [
+    "A span records the model that answered, but not whether a priority fallback chose it, and a modelNameOverride alias looks the same. In traces, a call that fell back is read as an answer to the model your application asked for, with the fallback's output. Keep fallback routes off the traffic you export. On the replay route itself, such an answer is caught and left out as substituted.",
+    "Steps whose recorded conversation contains tool calls are read but not replayed yet: replay resends conversations as text, so those cases are left out with a recorded_messages_not_replayable warning. The request-body reader does not read tool definitions or request parameters.",
+    "With AI_GATEWAY_TRACING_SEMCONV=gen_ai, the spans go to the OTel GenAI reader instead, and OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true is required, because that convention records no messages without it. Those spans are grouped by trace only (propagate traceparent from your client), carry no response_format or tool_choice, and record images by type only. Access logs carry no message content and are not a trace source.",
+    "The gateway's model list carries no prices, context windows or capabilities, so a shortlist needs --catalog-reference. A declared model the reference does not list stays unpriced and is named in a catalog_reference_unmatched warning. When a route sets modelsCreatedAt, and on Kubernetes, where it defaults to the route's creation time, every model the route declares shares that date, so the judge ranking cannot tell them apart by release date and falls back to context window and price.",
+    "Verified live on 2026-09-23 on v1.1.0 (envoyproxy/ai-gateway-cli:v1.1.0, pinned by digest) with Vercel AI Gateway as the upstream. Standalone, the gateway's spans read as ordered sessions, every replayed response came from the requested model at the billed cost, re-reading the spans left rightmodeler's own calls out as replay_traffic, and a route whose priority fallback answered with another model had every replay left out as substituted. On a kind cluster with Envoy Gateway v1.8.1 and the v1.1.0 Helm charts, replays through the gateway came from the requested model at the billed cost too.",
+    "Always run a release tag: the latest image follows the development branch. Mode B on the cloud backend cannot reach a gateway on localhost or inside a cluster; use the Docker backend for a local gateway. Replay latency includes the gateway hop."
+  ],
+  "faq": [
+    {
+      "q": "Is Agent Router the same project as Envoy AI Gateway?",
+      "a": "Yes. The rename was announced on 2026-09-09, and on 2026-09-10 the project, until then an Envoy sub-project, joined the Agentic AI Foundation, with the same code, maintainers and Apache 2.0 license. It is still built on Envoy and Envoy Gateway, and nothing you deploy was renamed: the CRDs, the aigateway.envoyproxy.io API group, the aigw CLI, the envoy-ai-gateway-system namespace and the images keep their names."
+    },
+    {
+      "q": "Do I need Kubernetes?",
+      "a": "No. aigw run starts the gateway and Envoy in one container from a config file, which is how the standalone leg was verified. On Kubernetes 1.32 or newer, with Envoy Gateway 1.8.1 or newer and the ai-gateway-crds-helm and ai-gateway-helm v1.1.0 charts, the same resources apply; replay through that setup was verified on kind."
+    },
+    {
+      "q": "Why does rightmodeler need --catalog-reference here?",
+      "a": "The gateway answers /v1/models itself, listing the ids your routes declare with no price, context window or capabilities. The shortlist needs all of those, so rightmodeler joins each declared id to the upstream's public list, such as https://ai-gateway.vercel.sh/v1/models, reading it without your key and filling the pricing, context windows and capabilities the gateway leaves out."
+    },
+    {
+      "q": "Which spans does rightmodeler read?",
+      "a": "The gateway's default OpenInference spans, from an OpenTelemetry collector's file export. It reads LLM spans and takes the request from input.value and the response from output.value. The GenAI convention is read too, through the OTel GenAI reader, once message content capture is turned on."
+    },
+    {
+      "q": "What happens when a route falls back to another model?",
+      "a": "On the replay route, the response names the model that answered, so it is recorded as substituted, left out of the evidence, and counted in the replay_responses_substituted warning with the fix. In exported traces the fallback cannot be seen, which is why fallback routes should stay off the traffic you export."
+    },
+    {
+      "q": "How do I keep rightmodeler's calls out of my traces?",
+      "a": "Map x-rightmodeler-replay to the rightmodeler.replay span attribute in OTEL_AIGW_SPAN_REQUEST_HEADER_ATTRIBUTES and pass --header 'x-rightmodeler-replay: 1' to rightmodeler. Its replay and judge calls then carry the tag, and the next ingest leaves them out as replay_traffic."
+    }
+  ],
+  "related": ["phoenix", "otel", "bifrost"],
+  "cta": "github"
+}
