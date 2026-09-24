@@ -1,7 +1,8 @@
 // Build gate for the /vs comparison pages: every data file must validate against the JSON Schema
 // (content/vs/vs-page.schema.json is the real contract; content/vs/types.ts stays permissive
-// because JSON imports widen literals), stay registered, and keep the honesty rule that at least
-// one scenario per block names the other tool as the right hire. Runs with `pnpm test` next to
+// because JSON imports widen literals), stay registered, point at a real logo and real sibling
+// pages, and keep the honesty rule that at least one scenario per block names the other tool as
+// the right hire. Runs with `pnpm test` next to
 // check-content.test.mjs, so a bad data file fails `pnpm check` before the build.
 
 import assert from "node:assert/strict";
@@ -15,6 +16,10 @@ const contentDir = fileURLToPath(
   new URL("../src/content/vs/", import.meta.url),
 );
 const dataDir = path.join(contentDir, "data");
+const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
+const integrationDataDir = fileURLToPath(
+  new URL("../src/content/integrations/data/", import.meta.url),
+);
 
 const schema = JSON.parse(
   fs.readFileSync(path.join(contentDir, "vs-page.schema.json"), "utf8"),
@@ -73,6 +78,38 @@ test("every scenarios block lets the other tool win at least once", () => {
       assert.ok(
         block.scenarios.some((entry) => entry.winner === "theirs"),
         `${file}: a scenarios block never names ${page.name} as the right hire`,
+      );
+    }
+  }
+});
+
+test("every logo is a file under public/", () => {
+  for (const file of dataFiles) {
+    const page = readPage(file);
+    assert.ok(
+      fs
+        .statSync(path.join(publicDir, page.logo), { throwIfNoEntry: false })
+        ?.isFile(),
+      `${file}: logo ${page.logo} is not a file under public/`,
+    );
+  }
+});
+
+test("every integrationSlug and related slug resolves to a real page", () => {
+  for (const file of dataFiles) {
+    const page = readPage(file);
+    if (page.integrationSlug) {
+      assert.ok(
+        fs.existsSync(
+          path.join(integrationDataDir, `${page.integrationSlug}.json`),
+        ),
+        `${file}: integrationSlug "${page.integrationSlug}" has no content/integrations/data file`,
+      );
+    }
+    for (const slug of page.related) {
+      assert.ok(
+        fs.existsSync(path.join(dataDir, `${slug}.json`)),
+        `${file}: related slug "${slug}" has no content/vs/data file, so it would drop silently`,
       );
     }
   }

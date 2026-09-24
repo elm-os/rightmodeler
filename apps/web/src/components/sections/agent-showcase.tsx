@@ -31,7 +31,7 @@ const STEPS: {
   {
     Icon: ReplayLoopIcon,
     name: "Replay",
-    body: "Candidates rerun your real traces end to end in a sandboxed worktree, so cascade failures surface early.",
+    body: "Candidates replay your recorded calls, and swaps that could cascade are confirmed end to end in a container, so cascade failures surface early.",
   },
   {
     Icon: QualityFloorIcon,
@@ -87,9 +87,9 @@ export function AgentShowcase() {
             <div className="rounded-xl border border-ash-border bg-parchment-white p-5 sm:p-7">
               <p className="font-mono text-caption uppercase text-fog">TL;DR</p>
               <p className="mt-3 text-subheading text-driftwood">
-                rightmodeler agent watches every model release, measures
-                candidates against outputs you accepted, and opens the evidence
-                and proposed model edit as{" "}
+                rightmodeler agent rechecks the provider catalog every week,
+                measures candidates against outputs you accepted, and opens the
+                evidence and proposed model edit as{" "}
                 <span className="text-midnight-ink">
                   a pull request in your repo
                 </span>

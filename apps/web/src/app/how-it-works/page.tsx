@@ -278,7 +278,7 @@ export default function HowItWorksPage() {
                 Icon={ServerRackIcon}
                 grain="/how-it-works/autopilot-grain.jpg"
                 name="On autopilot, self-hosted"
-                body="Clone the repo, build it, and start the agent on a Node 24 host. New model releases, price drops, and drift arrive as pull requests with the evidence attached. A hosted version is on the waitlist."
+                body="Clone the repo, build it, and run the agent on a long-lived Node 24 host with your own GitHub App and model credentials. It rechecks prices and drift on a schedule; once you give the word, it replays and opens each swap that clears every gate as a draft pull request, evidence attached. The hosted version has a waitlist."
               >
                 <Link
                   href="/agent"
@@ -417,9 +417,13 @@ export default function HowItWorksPage() {
               Not observability. Not a runtime gateway.
             </p>
             <p className="mt-2 max-w-xl text-body text-driftwood">
-              Observability only shows you problems; a gateway hijacks live
-              traffic. rightmodeler measures candidates on runs you already
-              shipped, then applies only the edits you approve.
+              rightmodeler works offline on runs you already shipped. It
+              measures cheaper candidates step by step against the outputs you
+              accepted, and only a swap that clears every gate becomes a draft
+              pull request, which changes model identifiers and nothing else and
+              waits for you to review and merge. Your observability tool keeps
+              recording, any gateway keeps routing live traffic, and
+              rightmodeler never sits in the request path.
             </p>
           </Reveal>
 
@@ -432,7 +436,7 @@ export default function HowItWorksPage() {
               href="/crucible"
               className="text-body text-midnight-ink underline decoration-ash-border decoration-1 underline-offset-4 transition-colors duration-150 ease-out hover:decoration-midnight-ink focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white"
             >
-              Crucible (coming soon)
+              Crucible (in development)
             </Link>
           </Reveal>
 

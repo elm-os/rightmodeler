@@ -1,6 +1,8 @@
 {
   "slug": "openrouter",
   "name": "OpenRouter",
+  "website": "https://openrouter.ai",
+  "logo": "/integrations/logos/openrouter.svg",
   "category": "gateway",
   "verdict": "complement",
   "verdictLabel": "Complement · rightmodeler runs on top",

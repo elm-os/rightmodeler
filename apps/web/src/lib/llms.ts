@@ -20,7 +20,7 @@ import {
 // One-paragraph summary for the llms.txt blockquote. Stands alone: an LLM should grasp the whole
 // platform (skill, agent, Crucible) and the key caveat (the skill is a report, not a gateway).
 const SUMMARY =
-  "rightmodeler keeps AI agents on the right model at every step. The rightmodeler CLI, published on npm as rightmodeler, replays your real agent traces through cheaper models, measures each candidate against the output you accepted, reports the evidence, sample size, and abstentions, and ships approved swaps as a pull request you can roll back byte-exact. npx rightmodeler init finds the traces Claude Code and Codex already left on disk and runs free through shortlist; a coding-agent skill lets Claude Code and Codex-class agents drive the same CLI end to end. rightmodeler agent, open source in the same repo with a hosted version coming, watches prices, drift, and new model releases and opens evidence-backed model-change pull requests in your repo. Crucible, in early access, is the analytics and optimization suite that shows what every layer of your agent system costs, how fast it runs, and where it fails, and keeps your stack right-sized continuously. The CLI produces a report you run on your own traces, not a runtime gateway.";
+  "rightmodeler keeps AI agents on the right model at every step. The rightmodeler CLI, published on npm as rightmodeler, replays your real agent traces through cheaper models, measures each candidate against the output you accepted, reports the evidence, sample size, and abstentions, and ships approved swaps as a pull request you can roll back byte-exact. npx rightmodeler init finds the traces Claude Code and Codex already left on disk and runs free through shortlist; a coding-agent skill lets Claude Code and Codex-class agents drive the same CLI end to end. rightmodeler agent, MIT licensed in the same repo and self-hosted today (a hosted version has a waitlist), rechecks the provider catalog and prices weekly, watches approved swaps for drift, and opens evidence-backed model-change pull requests in your repo. Crucible, in development with a waitlist, is the analytics and optimization suite being built to show what every layer of your agent system costs, how fast it runs, and where it fails, and to keep your stack right-sized continuously. The CLI produces a report you run on your own traces, not a runtime gateway.";
 
 // Product overview in Markdown for llms-context.txt (indented code block avoids backticks here).
 const OVERVIEW = `## What it is
@@ -30,8 +30,8 @@ ${SITE_NAME} is the model layer for teams running multi-agent LLM systems. New m
 Three offerings:
 
 - The ${SITE_NAME} CLI (on npm as rightmodeler, available now): an audit you run on your own traces. npx rightmodeler init finds the traces Claude Code and Codex already left on disk, or asks for a file, and runs free through shortlist before any provider key is needed. It replays your real agent traces through cheaper candidate models, measures each output against what you already accepted, and produces a per-step recommendation report with reference agreement, evidence, sample size, and abstentions. Approved swaps ship as a pull request with the evidence attached; a rollback command restores the exact pre-swap state. It is a report and a PR, not a runtime gateway; it never sits in your request path. Bring-your-own evaluation is supported: Braintrust, Langfuse, LangSmith, or promptfoo can score the replays, curated datasets can seed the case set, and results can be exported back. A coding-agent skill (npx skills add elm-os/rightmodeler --skill rightmodeler) gives Claude Code and Codex-class agents the runbook to drive the same CLI end to end.
-- ${SITE_NAME} agent (open source now, hosted version coming): the same measurement loop, continuous. It runs on a schedule, re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and when a candidate clears your configured quality floor and preferences it opens a pull request in your repo with the evidence attached. It opens pull requests only and never merges. Model migrations become code review.
-- Crucible (early access): the analytics and optimization suite for your agents. Cost per layer, speed per step, failed tool calls and regressions as they happen, connected over MCP, while it keeps your model stack right-sized continuously.
+- ${SITE_NAME} agent (open source, MIT; self-hosted today; hosted version on a waitlist): the same measurement loop, continuous. You clone and build it from the repo and run it on a long-lived Node 24 host with your own GitHub App and model credentials. It runs on a schedule, re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and when a candidate clears your configured quality floor and preferences it opens a draft pull request in your repo with the evidence attached. It opens pull requests only and never merges. Model migrations become code review.
+- Crucible (in development; waitlist): the analytics and optimization suite being built for your agents. Planned: cost per layer, speed per step, failed tool calls and regressions as they happen, connected over MCP, with your model stack kept right-sized continuously.
 
 ## How the measurement works
 
@@ -83,13 +83,13 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/integrations",
     title: "Integrations",
     description:
-      "Every tool rightmodeler works with: the trace formats it reads and the infrastructure it replays through.",
+      "Every tool rightmodeler works with: the trace formats it reads, the infrastructure it replays through, and what is coming next.",
   },
   {
     path: "/vs",
     title: "rightmodeler vs alternatives",
     description:
-      "Honest comparisons with routers, gateways, and eval platforms: what each tool decides, what it measures, and when to use which.",
+      "Honest comparisons with gateways, eval platforms, routers, spend meters, model trainers, and benchmarks: what each tool decides, what it measures, and when to use which.",
   },
   {
     path: "/manifesto",
@@ -105,15 +105,15 @@ const PAGES: { path: string; title: string; description: string }[] = [
   },
   {
     path: "/agent",
-    title: "rightmodeler agent (coming soon)",
+    title: "rightmodeler agent (self-hosted today; hosted waitlist)",
     description:
-      "The autonomous agent that watches new model releases, replays them against your real traces, and opens evidence-backed model-swap pull requests in your repo.",
+      "The open-source autonomous agent that rechecks the provider catalog weekly, replays candidates against your real traces, and opens evidence-backed model-swap pull requests in your repo.",
   },
   {
     path: "/crucible",
-    title: "Crucible (coming soon)",
+    title: "Crucible (in development)",
     description:
-      "The analytics and optimization suite for AI agents: cost per layer, speed per step, failures as they happen, and continuous right-sizing, connected over MCP.",
+      "The analytics and optimization suite being built for AI agents: cost per layer, speed per step, failures as they happen, and continuous right-sizing, connected over MCP. Waitlist open.",
   },
   {
     path: "/about",
