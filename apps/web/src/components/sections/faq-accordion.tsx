@@ -19,7 +19,7 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
               Frequently asked questions
             </h2>
           </Reveal>
-          <div>
+          <div className="min-w-0 wrap-break-word">
             {items.map((item, i) => (
               <Reveal key={item.q} delay={i * 0.04}>
                 <details

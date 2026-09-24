@@ -83,7 +83,7 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/integrations",
     title: "Integrations",
     description:
-      "Every tool rightmodeler works with: the trace formats it reads, the infrastructure it replays through, and what is coming next.",
+      "Every tool rightmodeler works with: the trace formats it reads, where candidates run, what grades them, where changes ship, code context, and what is coming next.",
   },
   {
     path: "/vs",

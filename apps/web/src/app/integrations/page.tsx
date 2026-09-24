@@ -12,7 +12,7 @@ import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Integrations",
-  description: `Every tool rightmodeler works with: the ${TRACE_SOURCES.length} trace formats it reads, the infrastructure it replays through, and what is coming next.`,
+  description: `Every tool rightmodeler works with: the ${TRACE_SOURCES.length} trace formats it reads, where candidates run, what grades them, where changes ship, code context, and what is coming next.`,
   path: "/integrations",
   image: "/social/integrations.png",
 });
@@ -32,7 +32,7 @@ const BANDS: { title: string; intro: string; categories: string[] }[] = [
     categories: ["evaluator"],
   },
   {
-    title: "Replays through",
+    title: "Runs the candidates",
     intro: "Where the candidate calls actually run.",
     categories: ["replay-engine", "replay-method", "execution-backend"],
   },

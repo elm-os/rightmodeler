@@ -1,0 +1,153 @@
+{
+  "slug": "vercel-ai-sdk",
+  "name": "Vercel AI SDK",
+  "website": "https://ai-sdk.dev",
+  "logo": "/integrations/logos/vercel-ai-sdk.svg",
+  "category": "trace-source",
+  "categoryLabel": "Trace source · dedicated adapter",
+  "title": "Vercel AI SDK integration: replay on cheaper models",
+  "description": "Export Vercel AI SDK spans: rightmodeler binds each functionId to its call sites, replays text calls on cheaper models, and judges them against your output.",
+  "h1": "rightmodeler + Vercel AI SDK",
+  "lede": "With telemetry on, the AI SDK records each generateText and streamText call as OpenTelemetry spans. rightmodeler reads those spans in either telemetry dialect, ties each functionId to the call sites that produced it, and measures cheaper models against the outputs you shipped, call site by call site.",
+  "tldr": "rightmodeler has a dedicated AI SDK reader for the ai.* spans that AI SDK 5 and 6 emit with experimental_telemetry and AI SDK 7 emits through LegacyOpenTelemetry, and it reads the GenAI semantic-convention spans of AI SDK 7's OpenTelemetry integration through its OTel GenAI reader, counting each model call once. The telemetry functionId becomes the step family, and the scanner records the same literal functionId on every generateText, streamText, generateObject and streamObject call it finds, so a family binds to exactly those call sites. Plain text call sites are replayed against cheaper candidates; call sites that need tools or structured output are left out with a named warning instead of being replayed.",
+  "steps": [
+    {
+      "label": "01 · Instrument",
+      "title": "Give every call a functionId",
+      "body": "On AI SDK 7, call registerTelemetry from ai once at startup with an integration from @ai-sdk/otel, registerTelemetry(new LegacyOpenTelemetry()) or registerTelemetry(new OpenTelemetry()), and set telemetry: { functionId: \"summarize\" } on each call. On AI SDK 5 and 6, pass experimental_telemetry: { isEnabled: true, functionId: \"summarize\" }. Keep recordInputs and recordOutputs on, which is the default, because a call recorded without its prompt or output cannot become a replay case."
+    },
+    {
+      "label": "02 · Export",
+      "title": "Land the spans on disk",
+      "body": "Send the spans over OTLP, from the OpenTelemetry NodeSDK or @vercel/otel, to an OpenTelemetry Collector with its file exporter, and pass that file with --traces. Each line is an OTLP JSON document of resourceSpans. A folder of .json and .jsonl files also works, as long as every file uses the same dialect."
+    },
+    {
+      "label": "03 · Ingest + bind",
+      "title": "Detected by dialect, bound by functionId",
+      "body": "Spans carrying ai.operationId go to the AI SDK reader, which keeps the doGenerate and doStream spans of generateText, streamText, generateObject and streamObject and treats the rest as structure. Spans carrying gen_ai.operation.name go to the OTel GenAI reader, which skips the invoke_agent span that wraps each call, and the step and tool spans, so each model call counts once, and takes the family from that invoke_agent span's gen_ai.agent.name. The scanner records each call's literal functionId, and a family binds to exactly the call sites whose functionId matches its name."
+    },
+    {
+      "label": "04 · Replay + report",
+      "title": "Evidence per call site, a pull request on those call sites",
+      "body": "Cases from plain text call sites replay against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, and are judged against the recorded output. Cases from call sites that need tools or structured output are left out with a family_cases_left_out warning, and a family whose traced cases all come from such call sites abstains with bound_call_sites_not_replayable before any spend. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers on its bound call sites and nothing else."
+    }
+  ],
+  "setup": {
+    "intro": "Nothing to install for rightmodeler: npx runs the published CLI against the collector's file export. The stages through shortlist make no model call, so ingest and call-site binding can be checked before anything is billed. Export your AI Gateway key for the replay, or point --base-url at any other OpenAI-compatible endpoint.",
+    "commands": [
+      {
+        "comment": "# AI SDK 7: the OpenTelemetry integrations ship in @ai-sdk/otel",
+        "command": "npm install @ai-sdk/otel"
+      },
+      {
+        "comment": "# ingest the spans and bind families to call sites, with no model call",
+        "command": "npx rightmodeler init --through shortlist --traces ./spans.jsonl --repo ."
+      },
+      {
+        "comment": "# project the replay spend before any paid call",
+        "command": "npx rightmodeler estimate --traces ./spans.jsonl --base-url https://ai-gateway.vercel.sh/v1 --api-key-env AI_GATEWAY_API_KEY --repo ."
+      },
+      {
+        "comment": "# then replay, judge, and write the report",
+        "command": "npx rightmodeler init --traces ./spans.jsonl --base-url https://ai-gateway.vercel.sh/v1 --api-key-env AI_GATEWAY_API_KEY --repo ."
+      }
+    ]
+  },
+  "reads": [
+    {
+      "field": "trajectory",
+      "source": "traceId"
+    },
+    {
+      "field": "step family",
+      "source": "rightmodeler.family, else ai.telemetry.functionId"
+    },
+    {
+      "field": "model",
+      "source": "ai.model.id, else gen_ai.request.model"
+    },
+    {
+      "field": "input messages",
+      "source": "ai.prompt.messages"
+    },
+    {
+      "field": "system prompt",
+      "source": "system entries of ai.prompt.messages"
+    },
+    {
+      "field": "output",
+      "source": "ai.response.text, toolCalls, reasoning, object"
+    },
+    {
+      "field": "finish reason",
+      "source": "ai.response.finishReason"
+    },
+    {
+      "field": "token usage",
+      "source": "ai.usage.inputTokens/outputTokens"
+    },
+    {
+      "field": "ordering",
+      "source": "span start time"
+    },
+    {
+      "field": "family, GenAI dialect",
+      "source": "gen_ai.agent.name on invoke_agent"
+    }
+  ],
+  "detection": "ai.operationId · gen_ai.operation.name",
+  "useCases": [
+    {
+      "title": "Price each call site on its own evidence",
+      "body": "A family bound by functionId is replayed only on the call sites that carry its functionId, and no other family borrows them. The verdict and any swap stay on the code that produced the evidence, and a family bound to a single call site can still be recommended."
+    },
+    {
+      "title": "Pool call sites that do the same job",
+      "body": "Give a generateText call and a streamText call that both summarize the same functionId, and their traces form one family bound to both call sites. A swap proven for that family covers both of them, and no unrelated call site on the same model is touched."
+    },
+    {
+      "title": "See what is testable before anything is billed",
+      "body": "rightmodeler init --through shortlist ingests the spans and binds every family to its call sites with no model call. A family whose cases cannot be placed on a replayable call site is planned as an abstention at that stage, so the paid run never spends on it and the report names the reason; cases left out of a family that still replays are named in a warning."
+    },
+    {
+      "title": "Move to the GenAI conventions without renaming families",
+      "body": "The same AI SDK 7 calls exported through LegacyOpenTelemetry and through OpenTelemetry normalize to identical steps and families in the test suite, so switching integrations does not change which call sites a family binds to."
+    }
+  ],
+  "limits": [
+    "Replay runs plain text call sites only. A call with a tools key, a generateObject or streamObject call, or an output other than Output.text needs tools or structured output, so its cases are left out with a family_cases_left_out warning, and a family whose cases all come from such call sites abstains with bound_call_sites_not_replayable before any spend.",
+    "A model call that ended without a finish reason, because the stream was aborted or errored, is left out of the corpus with a trace_steps_excluded warning, and the rest of the input is still read.",
+    "The functionId has to be a string literal inside the call's telemetry option. A variable or a template literal is not read, and that call site then binds by model id alone, which leaves cases out whenever several call sites share a model.",
+    "The built-in scanner finds generateText, streamText, generateObject and streamObject calls in files that import them. A model call made another way, such as through an agent class, is not found as a call site, so its functionId binds nothing and its cases fall back to matching by model id.",
+    "A call recorded without its prompt or its output cannot be replayed, so ingest stops with an error that names the record. For the ai.* dialect the message also names the recordInputs or recordOutputs option to turn back on.",
+    "Verified live: real AI SDK 7 calls exported through an OpenTelemetry Collector, in the ai.* and GenAI dialects, were ingested and every step was bound to its call site by functionId, through the shortlist stage. Replay and judging on AI SDK traces run in the hermetic test suite against a stub provider; a live run on those captures has not completed through to a report."
+  ],
+  "faq": [
+    {
+      "q": "Which AI SDK versions does rightmodeler read?",
+      "a": "The dedicated AI SDK reader handles the ai.* spans that AI SDK 5 and 6 emit with experimental_telemetry and that AI SDK 7 emits through LegacyOpenTelemetry. The OTel GenAI reader handles the GenAI semantic-convention spans that AI SDK 7 emits through OpenTelemetry. The test suite holds real captures from AI SDK 6.0.288 and 7.0.110; AI SDK 5 uses the same ai.* spans according to its docs but has no capture of its own."
+    },
+    {
+      "q": "Why does every call need a functionId?",
+      "a": "It names the step family, and it is how a family finds its code. The scanner records the literal functionId on each call site, and a family binds to exactly the call sites whose functionId equals its name, so its evidence and any swap stay there. Without one, a call site binds by model id only, and cases are left out whenever several call sites share that model."
+    },
+    {
+      "q": "How do I get AI SDK spans into a file?",
+      "a": "Export them over OTLP, from the OpenTelemetry NodeSDK or @vercel/otel, to an OpenTelemetry Collector whose file exporter writes OTLP JSON lines, then pass that file with --traces. On AI SDK 7, register LegacyOpenTelemetry or OpenTelemetry but not both, because an export that holds both dialects is ambiguous."
+    },
+    {
+      "q": "Why was my tool-calling agent not replayed?",
+      "a": "Replay cannot run a call site that needs tools or structured output, so those cases are left out and counted in a family_cases_left_out warning. When every traced case of a family comes from such call sites, the family abstains with bound_call_sites_not_replayable before any model call is paid for."
+    },
+    {
+      "q": "Can a family bound to a single call site be recommended?",
+      "a": "Yes. For a family bound by functionId, the distinct call-site minimum becomes the smaller of two and the number of call sites it is bound to, so a single bound call site can pass. The other minimums do not relax: at least 10 assessed executions and at least five distinct trajectories."
+    },
+    {
+      "q": "Does rightmodeler sit in my AI SDK request path?",
+      "a": "No. It reads spans you exported, offline, and never wraps a model or adds middleware to your app. Replays send the recorded step inputs to candidate models through the endpoint you configure, under your own key, and nothing goes to a rightmodeler server."
+    }
+  ],
+  "related": ["otel", "vercel-ai-gateway", "graphify"],
+  "cta": "github"
+}

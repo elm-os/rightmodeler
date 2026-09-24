@@ -1,0 +1,109 @@
+{
+  "slug": "portkey",
+  "name": "Portkey",
+  "website": "https://github.com/Portkey-AI/gateway",
+  "logo": "/integrations/logos/portkey.svg",
+  "category": "replay-method",
+  "categoryLabel": "Replay route · your own gateway",
+  "title": "Portkey integration: replay through your own gateway",
+  "description": "Replay and judge through the open-source Portkey gateway: request headers pick the upstream, and an answer from another model or a cache is never graded.",
+  "h1": "rightmodeler + Portkey",
+  "lede": "If the open-source Portkey gateway already fronts your model calls, it can be the route rightmodeler replays and judges through. Portkey picks the upstream from request headers, so the audit needs the gateway's base URL and the headers Portkey reads, passed with --header.",
+  "tldr": "rightmodeler replays through any OpenAI-compatible base URL, and the MIT-licensed Portkey gateway is one: pass --base-url http://127.0.0.1:8787/v1, the upstream's key with --api-key-env, and x-portkey-provider: openai plus x-portkey-custom-host with --header. The catalog, the billed cost of each call, and rate-limit and credit errors come from the upstream through Portkey unchanged. rightmodeler sends no Portkey config, so fallbacks, retries, load balancing, caching and guardrail hooks stay off for replays, and a replayed response that names another model, reports a cache hit, or shows that a hook changed the request is left out of the evidence instead of graded. Verified on 1.15.2, the latest open-source tag as of 2026-09-23. Portkey keeps no traces rightmodeler can read, so it is a replay route only.",
+  "steps": [
+    {
+      "label": "01 · Run",
+      "title": "Start the gateway on your machine",
+      "body": "Run the open-source image bound to 127.0.0.1: docker run -d --name portkey -p 127.0.0.1:8787:8787 portkeyai/gateway:1.15.2. It needs no server configuration and has no key of its own. Portkey forwards the Authorization header to the upstream, so --api-key-env names the upstream's key, which rightmodeler reads at call time and never writes to the store."
+    },
+    {
+      "label": "02 · Route",
+      "title": "Pick the upstream with headers",
+      "body": "Portkey chooses the upstream for each request from its headers, so pass them with --header: 'x-portkey-provider: openai' and 'x-portkey-custom-host: https://ai-gateway.vercel.sh/v1', or the base URL of another OpenAI-compatible upstream such as OpenRouter or a LiteLLM proxy. rightmodeler sends them with the catalog request, every replay, every judge call, and the calls Mode B makes from your application. Use the openai provider with a custom host: Portkey's openrouter provider rewrites requests and does not serve the model catalog."
+    },
+    {
+      "label": "03 · Replay + judge",
+      "title": "The upstream's catalog, through Portkey",
+      "body": "GET /v1/models is passed through to the upstream's model list, so the shortlist is built from its prices, context windows and capability flags. Candidates replay the step's recorded inputs through POST /v1/chat/completions, and the cost each response reports reaches rightmodeler unchanged and is recorded as billed. The built-in judge makes two temperature-zero calls with the reference and candidate positions swapped, on a model from a family that is neither the candidate's nor the incumbent's."
+    },
+    {
+      "label": "04 · Check",
+      "title": "Only the requested model's answer counts",
+      "body": "Every replayed response is checked before it counts. One that names another model (a config's override_params or targets), reports x-portkey-cache-status: HIT, or carries a hook result with transformed: true is recorded as substituted, never graded, and counted as attribution_substituted; a family with more than 5% of its replays substituted abstains. The replay_responses_substituted warning names the requested and served models and the fix. A judge that answers as another model is retired, and the next-ranked judge takes over."
+    }
+  ],
+  "setup": {
+    "intro": "Nothing to install into your app. Run the open-source image, export the upstream's key, then pass the gateway's base URL and Portkey's provider headers. The example routes to Vercel AI Gateway; point x-portkey-custom-host at any OpenAI-compatible upstream.",
+    "commands": [
+      {
+        "comment": "# the open-source gateway, reachable from this machine only",
+        "command": "docker run -d --name portkey -p 127.0.0.1:8787:8787 portkeyai/gateway:1.15.2"
+      },
+      {
+        "comment": "# Portkey forwards this key to the upstream",
+        "command": "export AI_GATEWAY_API_KEY=..."
+      },
+      {
+        "comment": "# project the replay spend through Portkey first",
+        "command": "npx rightmodeler estimate --traces ./traces.jsonl --base-url http://127.0.0.1:8787/v1 --api-key-env AI_GATEWAY_API_KEY --header 'x-portkey-provider: openai' --header 'x-portkey-custom-host: https://ai-gateway.vercel.sh/v1'"
+      },
+      {
+        "comment": "# then run the pipeline under a hard spend cap",
+        "command": "npx rightmodeler init --traces ./traces.jsonl --base-url http://127.0.0.1:8787/v1 --api-key-env AI_GATEWAY_API_KEY --header 'x-portkey-provider: openai' --header 'x-portkey-custom-host: https://ai-gateway.vercel.sh/v1' --max-cost-usd 25"
+      }
+    ]
+  },
+  "reads": [],
+  "detection": "",
+  "useCases": [
+    {
+      "title": "Audit through the gateway you already host",
+      "body": "If Portkey already fronts your model traffic, the audit runs through the same gateway on the same upstream key. There is no second account to open and nothing new to operate."
+    },
+    {
+      "title": "Switch upstreams with a header",
+      "body": "Because Portkey routes each request by its headers, the same gateway can replay against Vercel AI Gateway, OpenRouter or your own LiteLLM proxy by changing x-portkey-custom-host. The shortlist comes from whichever upstream's catalog Portkey passes through."
+    },
+    {
+      "title": "Keep Portkey's routing out of the evidence",
+      "body": "Your production configs may fall back, retry or cache. Replays carry no config, so none of that runs for them, and if a config you pass does answer with another model or from its cache, the response is left out and named, so a fallback's output never passes as the candidate's."
+    }
+  ],
+  "limits": [
+    "Portkey 1.15.2 keeps no traces or logs rightmodeler can read: it has no OpenTelemetry export, and its only log is an in-memory live stream. Export traces from your application instead, as OpenTelemetry GenAI spans, AI SDK telemetry, or OpenAI SDK JSONL.",
+    "Verified on 1.15.2 (MIT, portkeyai/gateway:1.15.2), the latest open-source tag as of 2026-09-23. Palo Alto Networks completed its acquisition of Portkey on 2026-05-29, and a 2.0 pre-release branch exists without a tagged release. Neither the hosted gateway nor the 2.0 branch has been tested.",
+    "The 1.15.2 console and live log stream are served without authentication and show provider keys, so bind the container to 127.0.0.1, as the setup does, or start it headless as rightmodeler docs gateways shows.",
+    "The judge is ranked from the upstream's catalog by release date, context window and price, so it is usually a large, recent model whose calls cost far more than a cheap candidate's replays: in the live run the judge was openai/gpt-6-astra, and the run reached its $0.25 cap after nine assessments. --max-cost-usd caps replay and judge calls together, and a call the cap cannot cover is not sent.",
+    "Verified live on 2026-09-23 against the image pinned by digest, with Vercel AI Gateway as the upstream: every replayed response came from the requested model at the upstream's billed cost. A run whose x-portkey-config used override_params to change the model had every replay left out as substituted, with the warning and no grade.",
+    "Portkey refuses a custom host on a private address unless its TRUSTED_CUSTOM_HOSTS variable lists it. By default it allows localhost, 127.0.0.1, ::1 and host.docker.internal, so a LiteLLM proxy on the Docker host can be named host.docker.internal where Docker provides that name.",
+    "Replay latency through Portkey includes the gateway hop, and rightmodeler does not separate Portkey's share. Mode B on the cloud backend cannot reach a gateway on localhost; use the Docker backend for a local gateway."
+  ],
+  "faq": [
+    {
+      "q": "Which headers does Portkey need?",
+      "a": "x-portkey-provider: openai and x-portkey-custom-host set to the upstream's OpenAI-compatible base URL, each passed with --header. The key comes from --api-key-env; authorization cannot be passed as a header. Portkey has no server-side configuration for this, so the headers are the whole setup."
+    },
+    {
+      "q": "Why not use Portkey's openrouter provider?",
+      "a": "Because it rewrites requests and does not serve the model catalog, so the shortlist would have nothing to build from. Use x-portkey-provider: openai with x-portkey-custom-host: https://openrouter.ai/api/v1 instead, which passes the catalog through and forwards the request fields rightmodeler sends. The live acceptance used Vercel AI Gateway as the upstream."
+    },
+    {
+      "q": "What if my Portkey config falls back to another model?",
+      "a": "rightmodeler never sends a config, so replays do not fall back. If you pass one with --header and it answers with another model, from its cache, or through a hook that changed the request, that response is recorded as substituted and left out of the evidence. Remove the config, then rerun with a fresh store (--store <directory>), because completed replay cells are reused."
+    },
+    {
+      "q": "Can rightmodeler read Portkey's logs as traces?",
+      "a": "Not from the open-source 1.15.2 gateway, which has no OpenTelemetry export and no persistent logs. Record traces in your application instead: OpenTelemetry GenAI spans, AI SDK telemetry, and OpenAI SDK JSONL are all read directly."
+    },
+    {
+      "q": "Does it work with the hosted Portkey gateway?",
+      "a": "Only the open-source gateway has been tested, at 1.15.2. rightmodeler accepts any OpenAI-compatible base URL, but the hosted product, now sold by Palo Alto Networks, and the 2.0 pre-release branch have not been verified."
+    },
+    {
+      "q": "Do I need Portkey to use rightmodeler?",
+      "a": "No. rightmodeler needs an OpenAI-compatible base URL with a priced model catalog. Portkey is one route; OpenRouter, Vercel AI Gateway and a LiteLLM proxy work the same way. Use the gateway you already run."
+    }
+  ],
+  "related": ["litellm", "bifrost", "envoy-ai-gateway"],
+  "cta": "github"
+}

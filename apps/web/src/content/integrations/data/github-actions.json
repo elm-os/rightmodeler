@@ -1,0 +1,116 @@
+{
+  "slug": "github-actions",
+  "name": "GitHub Actions",
+  "website": "https://github.com/features/actions",
+  "logo": "/integrations/logos/github.svg",
+  "category": "ci-recipe",
+  "categoryLabel": "CI recipe · tested workflow",
+  "title": "GitHub Actions integration: a tested audit workflow",
+  "description": "A tested GitHub Actions workflow runs rightmodeler every week, opens the draft pull request only when a person dispatches apply, and watches it on GITHUB_TOKEN.",
+  "h1": "rightmodeler + GitHub Actions",
+  "lede": "The CLI ships a tested workflow for GitHub Actions. It audits your committed traces on a schedule, opens the draft pull request only when a person asks for it, and keeps that pull request reconciled, all on the job's own GITHUB_TOKEN with no GitHub App and no personal access token.",
+  "tldr": "rightmodeler docs github-actions prints a workflow pinned to the release you run. Its init job runs every Monday and on pushes to main that change traces/, its apply job runs only when a person dispatches the workflow with command=apply, and its watch job reconciles each swap pull request every 6 hours. Every job uses the built-in GITHUB_TOKEN with only the permissions its command needs, keeps the store in the Actions cache, and reads each command's exit code for what it means, so a found swap or a held lock never shows up as a failed run. Dispatched init, apply and watch runs were verified live.",
+  "steps": [
+    {
+      "label": "01 · Audit",
+      "title": "init runs on a schedule and on new traces",
+      "body": "At 05:17 UTC every Monday, and on any push to main that changes traces/, init reads the committed traces and replays them through the provider named by the RIGHTMODELER_PROVIDER_BASE_URL variable, with the key from the RIGHTMODELER_PROVIDER_API_KEY secret and RIGHTMODELER_MAX_COST_USD passed as --max-cost-usd. The report lands in the job summary and the output files are uploaded as an artifact. Exit 1 means a proven swap is ready, so the job succeeds and leaves a notice to dispatch apply."
+    },
+    {
+      "label": "02 · Propose",
+      "title": "apply waits for a person",
+      "body": "The draft opens only when someone runs the workflow with command=apply. The job runs apply --dry-run first and stops on any refusal, with an annotation per reason, before anything is written. Then it opens the draft with GITHUB_TOKEN under contents: write and pull-requests: write, and the owners of the swapped files are requested as reviewers. If main moved since init, apply refuses with stale_evidence, and the fix is another init."
+    },
+    {
+      "label": "03 · Watch",
+      "title": "Each swap pull request, every 6 hours",
+      "body": "status lists the pull requests still being watched, and the job runs watch on each with contents: read, pull-requests: write, checks: read and statuses: read. Exit 1 means watch acted, and the job leaves a notice. Exit 2 with a held lock is a warning the next run retries, while exit 2 because the store has no completed run fails the job, as does any exit of 10 or above."
+    },
+    {
+      "label": "04 · Persist",
+      "title": "The store rides in the Actions cache",
+      "body": "Each job restores the newest rightmodeler-store- cache entry into .rightmodeler/ and saves it under a new key when it finishes, even after a failure. All runs share a concurrency group that never cancels a running job, so jobs never write the store at the same time. GitHub evicts cache entries unused for 7 days, and the 6-hourly watch keeps the store in use."
+    }
+  ],
+  "setup": {
+    "intro": "The workflow is plain YAML you commit, printed by the CLI for the release you run. Around it you need the repository setting below, a provider URL and key, and traces committed under traces/. Change main in the workflow if your default branch has another name.",
+    "commands": [
+      {
+        "comment": "# print the workflow and its notes; save the YAML as .github/workflows/rightmodeler.yml",
+        "command": "npx rightmodeler docs github-actions"
+      },
+      {
+        "comment": "# the repository setting it needs: let GITHUB_TOKEN open pull requests",
+        "command": "gh api -X PUT repos/$OWNER/$REPO/actions/permissions/workflow -F can_approve_pull_request_reviews=true"
+      },
+      {
+        "comment": "# the replay route the audit calls",
+        "command": "gh variable set RIGHTMODELER_PROVIDER_BASE_URL --body \"$BASE_URL\""
+      },
+      {
+        "comment": "# its key, pasted at the prompt so it stays out of your shell history",
+        "command": "gh secret set RIGHTMODELER_PROVIDER_API_KEY"
+      },
+      {
+        "comment": "# after init reports a proven swap, open the draft",
+        "command": "gh workflow run rightmodeler.yml -f command=apply"
+      }
+    ]
+  },
+  "reads": [],
+  "detection": "",
+  "useCases": [
+    {
+      "title": "An audit that reruns when the traces change",
+      "body": "Commit a fresh trace export under traces/ and init runs on the push, with the weekly run as a backstop. The report lands in the job summary, where the team already looks, without anyone remembering to run the CLI."
+    },
+    {
+      "title": "A person decides when a change is proposed",
+      "body": "A proven swap produces a notice, not a pull request. Someone reads the report and dispatches apply, and the dry run checks every gate before anything is written to GitHub."
+    },
+    {
+      "title": "Review questions answered within hours",
+      "body": "Every 6 hours, watch answers new review questions with the stored evidence, marks families for re-proof when a reviewer requests changes or the base branch changes a swapped file, and comments on failing checks, so a draft does not sit on an unanswered question."
+    },
+    {
+      "title": "No new credentials to own",
+      "body": "GITHUB_TOKEN is issued per job and expires when the job finishes, and each job asks only for the permissions its command uses. A GitHub App token is an optional upgrade for when you want CI on the draft to start without approval."
+    }
+  ],
+  "limits": [
+    "Use it in private repositories. The store lives in the Actions cache and each job uploads its output files as an artifact, and anyone with read access to a repository can read its caches and artifacts, so a public repository would expose them.",
+    "CI on the draft waits for a person. GitHub creates the pull_request workflow runs for a pull request that GITHUB_TOKEN opened in an approval-required state, and someone with write access starts them with Approve workflows to run. A GitHub App installation token avoids that.",
+    "Schedules are best effort. GitHub can delay scheduled runs at busy times and may drop queued jobs under heavy load, and in a public repository it disables schedules after 60 days without activity.",
+    "Runs wait in line for the store, and only the newest waiting run is kept. If a run is already waiting, a newly queued run replaces it, so dispatch again if yours was replaced.",
+    "The cache is not durable storage. If no job touches the store for 7 days, GitHub evicts it and the next run starts from an empty store.",
+    "Verified live in a disposable repository with dispatched runs: init completed, apply opened drafts authored by github-actions[bot] and requested the CODEOWNERS owner, watch answered a review comment, and nothing was merged. Those runs used a packed build of the CLI and a stand-in model provider, so they prove the workflow and its GitHub side rather than a paid replay. The schedules, the push trigger and the GitHub App token variant have not run live."
+  ],
+  "faq": [
+    {
+      "q": "Do I need a GitHub App or a personal access token?",
+      "a": "No. Every job uses the built-in GITHUB_TOKEN, and the only repository setting is Allow GitHub Actions to create and approve pull requests, under Actions, General, Workflow permissions. In a repository owned by an organization, the organization has to allow it first. A GitHub App token is an optional upgrade that lets CI on the draft start without approval, and it has not been tested live."
+    },
+    {
+      "q": "Why does init not open the pull request itself?",
+      "a": "Because a person decides when a change is proposed. init exits 1 when a proven swap is ready, and the workflow treats that as success, adds the report to the job summary and leaves a notice to run the workflow with command=apply. apply then runs a dry run and stops on any refusal before it writes anything."
+    },
+    {
+      "q": "Why did CI not start on the draft pull request?",
+      "a": "GitHub creates the pull_request runs for a pull request that GITHUB_TOKEN opened in an approval-required state. Someone with write access starts them with Approve workflows to run on the pull request. To skip that step, open the draft with a GitHub App installation token instead, as the packaged guide describes."
+    },
+    {
+      "q": "Where does the store live between runs?",
+      "a": "In the Actions cache. Each job restores the newest rightmodeler-store- entry and saves the store under a new key when it finishes, even after a failure. GitHub removes entries unused for 7 days, which the 6-hourly watch prevents, and anyone with read access to the repository can read the cache, so keep the workflow in private repositories."
+    },
+    {
+      "q": "What does exit 2 from watch mean in the workflow?",
+      "a": "It depends on where the output goes. A result with status lock_held on standard output means another watcher holds the lock, so the job warns and the next run retries. An error with code stage_not_completed on standard error means the store has no completed run, so the job fails with the error's code and remedy as an annotation."
+    },
+    {
+      "q": "How do I upgrade the CLI the workflow runs?",
+      "a": "Change RIGHTMODELER_VERSION. Each rightmodeler step runs the CLI with --version first, so a version npm cannot install fails the step with npm's error instead of being read as a rightmodeler exit code. Each release's copy of the guide pins that release, and rightmodeler docs github-actions prints the copy for the version you run."
+    }
+  ],
+  "related": ["github", "openrouter", "vercel-ai-gateway"],
+  "cta": "github"
+}
