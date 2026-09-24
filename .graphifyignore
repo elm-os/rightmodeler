@@ -1,0 +1,13 @@
+harness/packages/rightmodeler/dist-bundle/
+apps/web/public/
+harness/fixtures/
+.claude/
+.agents/
+docs/pitch/
+lockup-full.png
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico

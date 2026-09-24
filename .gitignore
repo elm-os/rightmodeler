@@ -18,6 +18,7 @@ __pycache__/
 outputs/
 tmp/
 .playwright-mcp/
+graphify-out/
 .DS_Store
 .env
 .env.*
