@@ -1435,6 +1435,25 @@ describe("OpenAI direct catalog", () => {
     ]);
   });
 
+  it("sends anthropic-version to no host other than api.anthropic.com", async () => {
+    for (const baseUrl of [
+      "https://api.openai.com/v1",
+      "https://gateway.example/v1",
+      "https://anthropic.example.com/v1",
+    ]) {
+      vi.restoreAllMocks();
+      await listOpenAIModels(baseUrl);
+      const versions = vi
+        .mocked(globalThis.fetch)
+        .mock.calls.map(([, init]) =>
+          new Headers(init?.headers).get("anthropic-version"),
+        );
+
+      expect(versions.length, baseUrl).toBeGreaterThan(0);
+      expect(new Set(versions), baseUrl).toEqual(new Set([null]));
+    }
+  });
+
   it("asks api.openai.com for max_completion_tokens and every other host for max_tokens", async () => {
     const catalogBody = await readFile(openaiModelsFixtureUrl, "utf8");
     const chatBody = JSON.stringify({
