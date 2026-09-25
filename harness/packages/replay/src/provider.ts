@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import {
+  canonicalModelName,
   catalogFamily,
   type JsonValue,
   type ModelCatalogEntry,
@@ -264,6 +265,23 @@ function releaseDate(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function isoReleaseDate(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const seconds = Date.parse(value) / 1000;
+  return seconds > 0 ? seconds : null;
+}
+
+function hostVendor(baseUrl: string): string | undefined {
+  const hostname = URL.canParse(baseUrl)
+    ? new URL(baseUrl).hostname
+    : undefined;
+  return hostname === "api.openai.com"
+    ? "openai"
+    : hostname === "api.anthropic.com"
+      ? "anthropic"
+      : undefined;
+}
+
 function price(value: unknown, label: string): number | null {
   if (value === undefined || value === null || value === "") return null;
   const parsed = typeof value === "number" ? value : Number(value);
@@ -366,6 +384,7 @@ interface NormalizedCatalogModel {
 function normalizeModel(
   value: unknown,
   index: number,
+  vendor?: string,
 ): NormalizedCatalogModel | null {
   const model = objectValue(value, `models[${index}]`);
   if (typeof model.id !== "string" || model.id.length === 0) {
@@ -374,7 +393,13 @@ function normalizeModel(
   if (model.type !== undefined && typeof model.type !== "string") {
     throw new Error(`models[${index}].type must be a string`);
   }
-  if (model.type !== undefined && model.type !== "language") return null;
+  if (
+    model.type !== undefined &&
+    model.type !== "language" &&
+    model.type !== "model"
+  ) {
+    return null;
+  }
   const rawPricing = objectValue(
     model.pricing ?? {},
     `models[${index}].pricing`,
@@ -404,8 +429,14 @@ function normalizeModel(
     );
   }
   const contextField =
-    model.context_window === undefined ? "context_length" : "context_window";
-  const rawContext = model.context_window ?? model.context_length ?? 0;
+    model.context_window !== undefined
+      ? "context_window"
+      : model.context_length === undefined &&
+          model.max_input_tokens !== undefined
+        ? "max_input_tokens"
+        : "context_length";
+  const rawContext =
+    model.context_window ?? model.context_length ?? model.max_input_tokens ?? 0;
   const contextLength = tokenCount(
     rawContext,
     `models[${index}].${contextField}`,
@@ -432,7 +463,10 @@ function normalizeModel(
 
   const entry: ModelCatalogEntry = {
     id: model.id,
-    family: catalogFamily(model.id),
+    family:
+      vendor !== undefined && !model.id.includes("/")
+        ? vendor
+        : catalogFamily(model.id),
     contextLength,
     pricing: (() => {
       const input = price(
@@ -449,7 +483,10 @@ function normalizeModel(
     supportsStructuredOutput:
       supported.includes("response_format") ||
       supported.includes("structured_outputs"),
-    releasedAt: releaseDate(model.released ?? model.created),
+    releasedAt:
+      model.released === undefined && model.created === undefined
+        ? isoReleaseDate(model.created_at)
+        : releaseDate(model.released ?? model.created),
     maxOutputTokens,
     outputModalities,
     requiresReasoning: reasoning.mandatory === true,
@@ -542,12 +579,30 @@ function joinCatalogReference(
   models: readonly NormalizedCatalogModel[],
   reference: CatalogReference,
 ): ModelCatalogEntry[] {
+  const listed = (id: string): boolean =>
+    reference.models.has(id) || reference.excluded.has(id);
+  const idsByCanonicalName = new Map<string, string[]>();
+  for (const id of [...reference.models.keys(), ...reference.excluded]) {
+    const key = `${catalogFamily(id)}/${canonicalModelName(id)}`;
+    idsByCanonicalName.set(key, [...(idsByCanonicalName.get(key) ?? []), id]);
+  }
   const joined: ModelCatalogEntry[] = [];
   for (const { entry, declaresCapabilities, declaresReasoning } of models) {
-    const matchId = entry.id
-      .split("/")
-      .map((_, index, segments) => segments.slice(index).join("/"))
-      .find((id) => reference.models.has(id) || reference.excluded.has(id));
+    const vendorId = `${entry.family}/${entry.id}`;
+    const canonicalIds =
+      idsByCanonicalName.get(
+        `${entry.family}/${canonicalModelName(entry.id)}`,
+      ) ?? [];
+    const matchId =
+      entry.id
+        .split("/")
+        .map((_, index, segments) => segments.slice(index).join("/"))
+        .find(listed) ??
+      (!entry.id.includes("/") && entry.family !== entry.id && listed(vendorId)
+        ? vendorId
+        : canonicalIds.length === 1
+          ? canonicalIds[0]
+          : undefined);
     if (matchId === undefined) {
       joined.push(entry);
       continue;
@@ -600,6 +655,7 @@ export function estimateInputTokens(messages: unknown): number {
 
 export function createProvider(options: CreateProviderOptions): ProviderClient {
   const baseUrl = options.baseUrl.replace(/\/$/, "");
+  const vendor = hostVendor(baseUrl);
   const limiter = new AdaptiveLimiter(options.maxConcurrency ?? 8);
   let catalog: ModelCatalogEntry[] | undefined;
   let catalogRequest: Promise<ModelCatalogEntry[]> | undefined;
@@ -620,6 +676,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
   ): Promise<PhysicalResponse> {
     const key = apiKey();
     const headers = new Headers(init.headers);
+    if (vendor === "anthropic") headers.set("anthropic-version", "2023-06-01");
     for (const [name, value] of Object.entries(options.headers ?? {})) {
       headers.set(name, value);
     }
@@ -742,7 +799,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
           throw new Error("model catalog data must be an array");
         }
         for (const entry of envelope.data) {
-          const model = normalizeModel(entry, rawCount);
+          const model = normalizeModel(entry, rawCount, vendor);
           rawCount += 1;
           if (model !== null) models.push(model);
         }
@@ -764,6 +821,14 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
               next = resolved.href;
             else truncated = true;
           }
+        }
+        if (
+          next === undefined &&
+          envelope.has_more === true &&
+          typeof envelope.last_id === "string" &&
+          envelope.last_id.length > 0
+        ) {
+          next = `${baseUrl}/models?after_id=${encodeURIComponent(envelope.last_id)}&limit=1000`;
         }
       } catch (error) {
         throw new BlockedError({
@@ -874,6 +939,9 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
         );
       }
     }
+    if (vendor === "anthropic") {
+      for (const entry of entries) entry.supportsStructuredOutput = false;
+    }
     const unpriced = entries.flatMap(({ id, pricing }) =>
       pricing === null ? [id] : [],
     );
@@ -908,7 +976,7 @@ export function createProvider(options: CreateProviderOptions): ProviderClient {
       messages: request.messages,
       temperature: request.temperature,
       // AI Gateway rejects output limits below 16 even when the upstream model accepts them.
-      max_tokens: maxTokens,
+      [vendor === "openai" ? "max_completion_tokens" : "max_tokens"]: maxTokens,
       tools: request.tools,
       tool_choice: request.toolChoice,
       response_format: request.responseFormat,

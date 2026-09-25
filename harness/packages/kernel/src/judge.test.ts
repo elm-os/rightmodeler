@@ -4,6 +4,7 @@ import { catalogFamily, type ModelCatalogEntry } from "@rightmodeler/core";
 
 import {
   judgeExecution,
+  NoNeutralJudgeError,
   pickJudge,
   pickJudges,
   type JudgeChatRequest,
@@ -343,6 +344,68 @@ describe("pickJudge", () => {
         referenceFamily: "anthropic",
       }),
     ).toEqual(["vercel/google/c"]);
+  });
+
+  it("throws a typed error when no neutral judge exists", () => {
+    const unpriced: ModelCatalogEntry = {
+      id: "neutral/unpriced",
+      family: "neutral-unpriced",
+      contextLength: 1_000,
+      pricing: null,
+      supportsTools: false,
+      supportsStructuredOutput: true,
+      releasedAt: 100,
+    };
+    let thrown: unknown;
+    try {
+      pickJudges([unpriced], {
+        candidateFamily: "candidate",
+        referenceFamily: "reference",
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect((thrown as Error | undefined)?.name).toBe("NoNeutralJudgeError");
+    expect(thrown).toBeInstanceOf(NoNeutralJudgeError);
+    expect((thrown as Error).message).toBe(
+      "No neutral third-family judge is available: the catalog needs a priced model from a family other than the candidate's and the reference's",
+    );
+  });
+
+  it("never ranks a model whose id names no vendor as a judge", () => {
+    const model = (
+      id: string,
+      family: string,
+      rank: number,
+    ): ModelCatalogEntry => ({
+      id,
+      family,
+      contextLength: 100 * rank,
+      pricing: { input: rank, output: rank },
+      supportsTools: false,
+      supportsStructuredOutput: true,
+      releasedAt: 10 * rank,
+    });
+    const vendorless = model("claude-y", "claude-y", 3);
+    const families = {
+      candidateFamily: "openai",
+      referenceFamily: "anthropic",
+    };
+
+    expect(
+      pickJudges(
+        [
+          vendorless,
+          model("gemini-x", "google", 2),
+          model("zeta/judge", "zeta", 1),
+        ],
+        families,
+      ),
+    ).toEqual(["gemini-x", "zeta/judge"]);
+    expect(() => pickJudges([vendorless], families)).toThrow(
+      NoNeutralJudgeError,
+    );
   });
 });
 

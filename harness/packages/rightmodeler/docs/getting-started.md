@@ -7,7 +7,7 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 - Node.js 24 or newer.
 - A Git repository to analyze.
 - Trace input in a supported format.
-- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for a gateway that lists bare model ids, pass `--catalog-reference`; for bare OpenAI or another unpriced endpoint, pass `--pricing-file`.
+- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for a gateway that lists bare model ids or a direct OpenAI or Anthropic key, pass `--catalog-reference`; for another unpriced endpoint, pass `--pricing-file`.
 
 Supported trace sources are OTel GenAI, AI SDK telemetry, OpenAI JSONL,
 Langfuse, Braintrust, LangSmith, OpenInference, Helicone, Bifrost, W&B Weave,
@@ -121,9 +121,8 @@ Graph edges are never replay trials, runtime proof, or quality evidence, and the
 
 Rightmodeler reads per-token pricing from the model catalog. When every catalog
 entry has null pricing and no `--pricing-file` is set, it requests LiteLLM
-`GET /model/info` on the same host. Use `--pricing-file` for bare OpenAI
-endpoints or when `/model/info` has no usable per-token costs; file entries
-override provider pricing.
+`GET /model/info` on the same host. Use `--pricing-file` when `/model/info` has
+no usable per-token costs; file entries override provider pricing.
 
 Some gateways answer `/v1/models` with bare model ids: Envoy AI Gateway lists
 the models a route declares, and Bifrost lists custom providers with ids and
@@ -168,6 +167,32 @@ Without usable pricing from the catalog, a catalog reference, LiteLLM
 `/model/info`, or a pricing file, the run refuses with `no_priced_candidates`
 instead of reporting zero cost. The judge must be priced too, so price at least
 one model from a family other than the current model's and the candidate's.
+
+### Direct OpenAI and Anthropic keys
+
+Point `--base-url` at `https://api.openai.com/v1` or
+`https://api.anthropic.com/v1` and name the variable that holds the key with
+`--api-key-env`. Neither vendor's model list publishes prices, so also pass
+`--catalog-reference https://ai-gateway.vercel.sh/v1/models`. Rightmodeler takes
+the vendor from these two hosts: their bare ids are that vendor's models and
+join the reference as `openai/<id>` or `anthropic/<id>`. Dated and dotted forms
+of a name match within one vendor, in the reference and in your traces, so
+`claude-haiku-4-5-20251001` matches `anthropic/claude-haiku-4.5`. For Anthropic,
+rightmodeler sends `anthropic-version: 2023-06-01` (a
+`--header 'anthropic-version: ...'` value wins), reads every page of the model
+list, and never asks for structured output, which Anthropic's OpenAI-compatible
+endpoint ignores. For OpenAI, rightmodeler caps a reply's length with
+`max_completion_tokens`, which OpenAI's chat reference names in place of the
+deprecated `max_tokens`; every other host still gets `max_tokens`.
+
+The built-in judge must come from a vendor other than both the candidate's and
+the recorded model's, and rightmodeler checks this before any paid call, also
+when an unreachable `--evaluator` falls back to the built-in judge. One vendor's
+key lists only that vendor's models, so a run on it alone stops with
+`no_neutral_judge` unless your own evaluator grades the replays. Bare ids from
+any other host name no vendor, and a run on them stops with
+`judge_family_unknown`; use a gateway whose ids carry their vendor
+(`vendor/model`), or `--evaluator`.
 
 ## Which model answered
 

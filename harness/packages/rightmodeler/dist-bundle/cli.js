@@ -10612,6 +10612,9 @@ function catalogFamily(modelId) {
   const segments = modelId.split("/");
   return segments.length < 2 ? modelId : segments[segments.length - 2];
 }
+function canonicalModelName(modelId) {
+  return modelId.split("/").at(-1).toLowerCase().replace(/-\d{8}$/u, "").replaceAll(".", "-");
+}
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -27469,12 +27472,20 @@ var SYSTEM_PROMPT = [
   "Return only a JSON object with exactly verdict, score, and justification.",
   "verdict must be equivalent, minor_drift, or divergent; score must be between 0 and 1; justification must be one line."
 ].join(" ");
+var NoNeutralJudgeError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "NoNeutralJudgeError";
+  }
+};
 function pickJudges(catalog, options) {
   if (!options.candidateFamily || !options.referenceFamily || options.candidateFamily === "unknown" || options.referenceFamily === "unknown") {
     throw new Error("Candidate and reference model families must be known");
   }
   const eligible = withoutFastTiers(catalog).filter((model) => {
     if (model.id.includes(":"))
+      return false;
+    if (!model.id.includes("/") && model.family === model.id)
       return false;
     const outputModalities = model.outputModalities ?? [];
     if (outputModalities.length > 0 && !outputModalities.includes("text")) {
@@ -27485,7 +27496,7 @@ function pickJudges(catalog, options) {
     return Boolean(model.family) && model.family !== "unknown" && model.family !== options.candidateFamily && model.family !== options.referenceFamily;
   });
   if (eligible.length === 0) {
-    throw new Error("No neutral third-family judge is available: the catalog needs a priced model from a family other than the candidate's and the reference's");
+    throw new NoNeutralJudgeError("No neutral third-family judge is available: the catalog needs a priced model from a family other than the candidate's and the reference's");
   }
   const rawSignals = eligible.map((model) => ({
     id: model.id,
@@ -28855,6 +28866,16 @@ function releaseDate(value) {
   const parsed2 = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed2) && parsed2 >= 0 ? parsed2 : null;
 }
+function isoReleaseDate(value) {
+  if (typeof value !== "string")
+    return null;
+  const seconds = Date.parse(value) / 1e3;
+  return seconds > 0 ? seconds : null;
+}
+function hostVendor(baseUrl) {
+  const hostname5 = URL.canParse(baseUrl) ? new URL(baseUrl).hostname : void 0;
+  return hostname5 === "api.openai.com" ? "openai" : hostname5 === "api.anthropic.com" ? "anthropic" : void 0;
+}
 function price(value, label) {
   if (value === void 0 || value === null || value === "")
     return null;
@@ -28929,7 +28950,7 @@ function chatErrorBody(text) {
   const choice = envelope.choices[0];
   return typeof choice === "object" && choice !== null && !Array.isArray(choice) && choice.finish_reason === "error";
 }
-function normalizeModel(value, index) {
+function normalizeModel(value, index, vendor) {
   const model = objectValue(value, `models[${index}]`);
   if (typeof model.id !== "string" || model.id.length === 0) {
     throw new Error(`models[${index}].id must be a non-empty string`);
@@ -28937,8 +28958,9 @@ function normalizeModel(value, index) {
   if (model.type !== void 0 && typeof model.type !== "string") {
     throw new Error(`models[${index}].type must be a string`);
   }
-  if (model.type !== void 0 && model.type !== "language")
+  if (model.type !== void 0 && model.type !== "language" && model.type !== "model") {
     return null;
+  }
   const rawPricing = objectValue(model.pricing ?? {}, `models[${index}].pricing`);
   const topProvider = objectValue(model.top_provider ?? {}, `models[${index}].top_provider`);
   const architecture = objectValue(model.architecture ?? {}, `models[${index}].architecture`);
@@ -28948,8 +28970,8 @@ function normalizeModel(value, index) {
   if (!supported.every((parameter) => typeof parameter === "string")) {
     throw new Error(`models[${index}].supported_parameters must contain strings`);
   }
-  const contextField = model.context_window === void 0 ? "context_length" : "context_window";
-  const rawContext = model.context_window ?? model.context_length ?? 0;
+  const contextField = model.context_window !== void 0 ? "context_window" : model.context_length === void 0 && model.max_input_tokens !== void 0 ? "max_input_tokens" : "context_length";
+  const rawContext = model.context_window ?? model.context_length ?? model.max_input_tokens ?? 0;
   const contextLength = tokenCount(rawContext, `models[${index}].${contextField}`);
   const rawMaxOutputTokens = model.max_tokens ?? topProvider.max_completion_tokens;
   const maxOutputTokens = rawMaxOutputTokens === void 0 || rawMaxOutputTokens === null || rawMaxOutputTokens === 0 ? null : tokenCount(rawMaxOutputTokens, `models[${index}].max output tokens`);
@@ -28962,7 +28984,7 @@ function normalizeModel(value, index) {
   }
   const entry = {
     id: model.id,
-    family: catalogFamily(model.id),
+    family: vendor !== void 0 && !model.id.includes("/") ? vendor : catalogFamily(model.id),
     contextLength,
     pricing: (() => {
       const input = price(rawPricing.prompt ?? rawPricing.input, `models[${index}].pricing.input`);
@@ -28971,7 +28993,7 @@ function normalizeModel(value, index) {
     })(),
     supportsTools: supported.includes("tools"),
     supportsStructuredOutput: supported.includes("response_format") || supported.includes("structured_outputs"),
-    releasedAt: releaseDate(model.released ?? model.created),
+    releasedAt: model.released === void 0 && model.created === void 0 ? isoReleaseDate(model.created_at) : releaseDate(model.released ?? model.created),
     maxOutputTokens,
     outputModalities,
     requiresReasoning: reasoning.mandatory === true
@@ -29040,9 +29062,17 @@ async function readCatalogReference(reference) {
   return { models, excluded };
 }
 function joinCatalogReference(models, reference) {
+  const listed = (id) => reference.models.has(id) || reference.excluded.has(id);
+  const idsByCanonicalName = /* @__PURE__ */ new Map();
+  for (const id of [...reference.models.keys(), ...reference.excluded]) {
+    const key = `${catalogFamily(id)}/${canonicalModelName(id)}`;
+    idsByCanonicalName.set(key, [...idsByCanonicalName.get(key) ?? [], id]);
+  }
   const joined = [];
   for (const { entry, declaresCapabilities, declaresReasoning } of models) {
-    const matchId = entry.id.split("/").map((_, index, segments) => segments.slice(index).join("/")).find((id) => reference.models.has(id) || reference.excluded.has(id));
+    const vendorId = `${entry.family}/${entry.id}`;
+    const canonicalIds = idsByCanonicalName.get(`${entry.family}/${canonicalModelName(entry.id)}`) ?? [];
+    const matchId = entry.id.split("/").map((_, index, segments) => segments.slice(index).join("/")).find(listed) ?? (!entry.id.includes("/") && entry.family !== entry.id && listed(vendorId) ? vendorId : canonicalIds.length === 1 ? canonicalIds[0] : void 0);
     if (matchId === void 0) {
       joined.push(entry);
       continue;
@@ -29084,6 +29114,7 @@ function estimateInputTokens(messages) {
 }
 function createProvider(options) {
   const baseUrl = options.baseUrl.replace(/\/$/, "");
+  const vendor = hostVendor(baseUrl);
   const limiter = new AdaptiveLimiter(options.maxConcurrency ?? 8);
   let catalog;
   let catalogRequest;
@@ -29097,6 +29128,8 @@ function createProvider(options) {
   async function physicalFetch(url2, init) {
     const key = apiKey();
     const headers = new Headers(init.headers);
+    if (vendor === "anthropic")
+      headers.set("anthropic-version", "2023-06-01");
     for (const [name, value] of Object.entries(options.headers ?? {})) {
       headers.set(name, value);
     }
@@ -29200,7 +29233,7 @@ function createProvider(options) {
           throw new Error("model catalog data must be an array");
         }
         for (const entry of envelope.data) {
-          const model = normalizeModel(entry, rawCount);
+          const model = normalizeModel(entry, rawCount, vendor);
           rawCount += 1;
           if (model !== null)
             models.push(model);
@@ -29217,6 +29250,9 @@ function createProvider(options) {
             else
               truncated = true;
           }
+        }
+        if (next === void 0 && envelope.has_more === true && typeof envelope.last_id === "string" && envelope.last_id.length > 0) {
+          next = `${baseUrl}/models?after_id=${encodeURIComponent(envelope.last_id)}&limit=1000`;
         }
       } catch (error51) {
         throw new BlockedError({
@@ -29289,6 +29325,10 @@ function createProvider(options) {
         options.warning?.("catalog_pricing_unavailable", `Provider ${options.providerId} catalog does not publish per-token pricing`);
       }
     }
+    if (vendor === "anthropic") {
+      for (const entry of entries)
+        entry.supportsStructuredOutput = false;
+    }
     const unpriced = entries.flatMap(({ id, pricing }) => pricing === null ? [id] : []);
     if (options.catalogReference !== void 0 && unpriced.length > 0) {
       const examples = unpriced.slice(0, 5).join(", ");
@@ -29315,7 +29355,7 @@ function createProvider(options) {
       messages: request.messages,
       temperature: request.temperature,
       // AI Gateway rejects output limits below 16 even when the upstream model accepts them.
-      max_tokens: maxTokens,
+      [vendor === "openai" ? "max_completion_tokens" : "max_tokens"]: maxTokens,
       tools: request.tools,
       tool_choice: request.toolChoice,
       response_format: request.responseFormat,
@@ -31734,7 +31774,10 @@ function resolveCurrentModel(catalog, currentModel) {
     return { kind: "exact", model: exact };
   if (currentModel === null)
     return { kind: "absent" };
-  const matches = catalog.filter(({ id }) => id.endsWith(`/${currentModel}`)).map(({ id }) => id);
+  const suffixMatches = catalog.filter(({ id }) => id.endsWith(`/${currentModel}`)).map(({ id }) => id);
+  const key = canonicalModelName(currentModel);
+  const vendor = currentModel.includes("/") ? catalogFamily(currentModel) : void 0;
+  const matches = suffixMatches.length > 0 ? suffixMatches : catalog.filter(({ id, family }) => canonicalModelName(id) === key && (vendor === void 0 || family === vendor)).map(({ id }) => id);
   if (matches.length === 1) {
     return {
       kind: "resolved",
@@ -44774,7 +44817,14 @@ async function estimateReplay(options) {
   );
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(context2.baseUrl, candidates);
-  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
+  const referenceFamilyByStepId = referenceFamiliesByStep(
+    plan,
+    candidates,
+    catalog
+  );
+  if (context2.evaluator === void 0) {
+    assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId);
+  }
   const judges = /* @__PURE__ */ new Map();
   const judge = context2.evaluator !== void 0 ? void 0 : (stepId, candidate) => {
     const referenceFamily = referenceFamilyByStepId.get(stepId);
@@ -46539,6 +46589,51 @@ function assertPricedCandidates(baseUrl, candidates) {
     });
   }
 }
+var noNeutralJudgeRemedy = "List or price a model from a third vendor (a multi-vendor gateway, --catalog-reference or --pricing-file), or grade with your own evaluator (--evaluator).";
+function assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId) {
+  const vendorless = /* @__PURE__ */ new Set();
+  const pairs = /* @__PURE__ */ new Map();
+  for (const { stepId, candidates: stepCandidates } of candidates) {
+    if (stepCandidates.length === 0) continue;
+    const step = plan.steps.find((candidate) => candidate.stepId === stepId);
+    const resolution = resolveCurrentModel(catalog, step.currentModel);
+    const referenceFamily = referenceFamilyByStepId.get(stepId);
+    for (const { id, family } of [
+      ...resolution.kind === "exact" || resolution.kind === "resolved" ? [resolution.model] : [],
+      ...stepCandidates
+    ]) {
+      if (!id.includes("/") && family === id) vendorless.add(id);
+    }
+    for (const { family: candidateFamily } of stepCandidates) {
+      pairs.set(JSON.stringify([candidateFamily, referenceFamily]), {
+        candidateFamily,
+        referenceFamily
+      });
+    }
+  }
+  if (vendorless.size > 0) {
+    const ids = [...vendorless].sort(compareText).slice(0, 3).join(", ");
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "judge_family_unknown",
+      message: `The judge's vendor cannot be checked: model ids ${ids} name no vendor, so the built-in judge could come from the same vendor as a candidate or the recorded model.`,
+      remedy: "Use a gateway whose model ids carry their vendor (vendor/model), or grade with your own evaluator (--evaluator)."
+    });
+  }
+  for (const { candidateFamily, referenceFamily } of pairs.values()) {
+    try {
+      pickJudges(catalog, { candidateFamily, referenceFamily });
+    } catch (error51) {
+      if (!(error51 instanceof NoNeutralJudgeError)) throw error51;
+      throw new ProtocolError({
+        exitCode: 2,
+        code: "no_neutral_judge",
+        message: `No judge is available: the candidates come from ${candidateFamily} and the recorded model from ${referenceFamily}, and the built-in judge must come from another vendor, but the catalog has no priced model from one.`,
+        remedy: noNeutralJudgeRemedy
+      });
+    }
+  }
+}
 async function approvedReplayCandidates(context2, plan, catalog, runSpecDigest) {
   const approved = await approvedSwapSetByDigest(context2, runSpecDigest);
   const modelByFamily = /* @__PURE__ */ new Map();
@@ -46613,7 +46708,11 @@ async function executeReplay(context2, inputDigestValue, runId) {
   );
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(context2.baseUrl, candidates);
-  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
+  const referenceFamilyByStepId = referenceFamiliesByStep(
+    plan,
+    candidates,
+    catalog
+  );
   const currentPricingByStepId = new Map(
     plan.steps.map((step) => {
       const resolution = resolveCurrentModel(catalog, step.currentModel);
@@ -46632,6 +46731,9 @@ async function executeReplay(context2, inputDigestValue, runId) {
       configured,
       (code, message2) => context2.reporter.warning(code, message2)
     );
+  }
+  if (externalEvaluator === void 0) {
+    assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId);
   }
   const assessmentAbsences = /* @__PURE__ */ new Map();
   const evaluation = () => ({
@@ -47813,7 +47915,7 @@ function judgeChat(provider, catalog) {
     });
   };
 }
-function referenceFamiliesByStep(plan, candidates) {
+function referenceFamiliesByStep(plan, candidates, catalog) {
   const resolvedByStepId = new Map(
     candidates.map(({ stepId, resolvedCurrentModelId }) => [
       stepId,
@@ -47821,10 +47923,13 @@ function referenceFamiliesByStep(plan, candidates) {
     ])
   );
   return new Map(
-    plan.steps.map(({ stepId, currentModel }) => [
-      stepId,
-      modelFamily(resolvedByStepId.get(stepId) ?? currentModel)
-    ])
+    plan.steps.map(({ stepId, currentModel }) => {
+      const modelId = resolvedByStepId.get(stepId) ?? currentModel;
+      return [
+        stepId,
+        catalog.find(({ id }) => id === modelId)?.family ?? modelFamily(modelId)
+      ];
+    })
   );
 }
 function modelFamily(modelId) {
@@ -48202,6 +48307,14 @@ function normalizePipelineError(error51, context2) {
       code: "budget_cap_refusal",
       message: error51.message,
       remedy: `Rerun with --max-cost-usd ${error51.requiredCapUsd}.`
+    });
+  }
+  if (error51 instanceof NoNeutralJudgeError) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "no_neutral_judge",
+      message: error51.message,
+      remedy: noNeutralJudgeRemedy
     });
   }
   return error51;

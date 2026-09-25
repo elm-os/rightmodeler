@@ -39,11 +39,13 @@ import {
 } from "@rightmodeler/kernel";
 import { createProvider } from "@rightmodeler/replay";
 import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import {
+  estimateReplay,
   listApprovedSwapSets,
   resolveCheckpointedPipelineCorpus,
+  runPipeline,
   topologicalRecords,
 } from "./pipeline.js";
 import { Reporter } from "./protocol.js";
@@ -69,6 +71,9 @@ const tracesPath = fileURLToPath(
 );
 const demoGraphPath = fileURLToPath(
   new URL("../../../fixtures/code-graph/demo-app.graph.json", import.meta.url),
+);
+const openaiModelsPath = fileURLToPath(
+  new URL("../../../fixtures/catalogs/openai-models.json", import.meta.url),
 );
 const aiSdkAppPath = fileURLToPath(
   new URL("../../../fixtures/ai-sdk-app", import.meta.url),
@@ -127,6 +132,75 @@ describe("machine error protocol", () => {
   });
 });
 
+describe("direct vendor keys", () => {
+  it("stops a direct OpenAI key before any chat when only OpenAI models could judge", async () => {
+    const { root, repo, traces } = await renamedModelFixture(
+      "direct-openai-judge",
+      "gpt-6-sol",
+    );
+    const catalogReference = join(root, "reference.json");
+    await writeFile(
+      catalogReference,
+      JSON.stringify({
+        data: [
+          {
+            id: "openai/gpt-6-sol",
+            type: "language",
+            context_window: 1_050_000,
+            pricing: { input: "0.000002", output: "0.000012" },
+          },
+          {
+            id: "openai/gpt-6-luna",
+            type: "language",
+            context_window: 1_050_000,
+            pricing: { input: "0.0000001", output: "0.0000005" },
+          },
+          { id: "openai/text-embedding-3-small", type: "embedding" },
+        ],
+      }),
+    );
+    const apiKeyEnv = "RIGHTMODELER_DIRECT_OPENAI_KEY";
+    const options = {
+      repo,
+      traces,
+      reporter: new Reporter("json", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      }),
+      baseUrl: "https://api.openai.com/v1",
+      apiKeyEnv,
+      catalogReference,
+    };
+    const catalogBody = await readFile(openaiModelsPath, "utf8");
+    const requested: string[] = [];
+    process.env[apiKeyEnv] = secret;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        requested.push(String(input));
+        return new Response(catalogBody, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      });
+    try {
+      await runPipeline({ ...options, through: "shortlist" });
+
+      await expect(estimateReplay(options)).rejects.toMatchObject({
+        exitCode: 2,
+        code: "no_neutral_judge",
+        message: expect.stringContaining(
+          "the candidates come from openai and the recorded model from openai",
+        ),
+      });
+      expect(requested).toEqual(["https://api.openai.com/v1/models"]);
+    } finally {
+      fetchSpy.mockRestore();
+      delete process.env[apiKeyEnv];
+    }
+  }, 60_000);
+});
+
 interface StubProvider {
   port: number;
   close(): Promise<void>;
@@ -146,6 +220,7 @@ interface RecordingStubProvider extends StubProvider {
 interface StubProviderModule {
   startStubProvider(options: {
     port: number;
+    bareModelIds?: boolean;
     catalogTotalCount?: number;
     errorModels?: string[];
     includeFreeModel?: boolean;
@@ -312,6 +387,44 @@ async function fixtureCopy(
   await cp(demoAppPath, repo, { recursive: true });
   await initializeFixtureRepository(repo);
   return { root, repo };
+}
+
+async function renamedModelFixture(
+  label: string,
+  model: string,
+): Promise<{ root: string; repo: string; traces: string }> {
+  const { root, repo } = await fixtureCopy(label);
+  await Promise.all(
+    [
+      "summarize.ts",
+      "summarize-stream.ts",
+      "extract.ts",
+      "triage.py",
+      "support.py",
+    ].map(async (name) => {
+      const path = join(repo, "src", name);
+      await writeFile(
+        path,
+        (await readFile(path, "utf8")).replaceAll("acme/large-1", model),
+      );
+    }),
+  );
+  const traces = join(root, "otel-genai.json");
+  await writeFile(
+    traces,
+    (await readFile(tracesPath, "utf8")).replaceAll("acme/large-1", model),
+  );
+  return { root, repo, traces };
+}
+
+function lastStderrEvent(result: ChildResult): {
+  code?: string;
+  message?: string;
+} {
+  return JSON.parse(result.stderr.trim().split("\n").at(-1)!) as {
+    code?: string;
+    message?: string;
+  };
 }
 
 async function aiSdkFixtureCopy(
@@ -605,6 +718,7 @@ function jsonOutput(result: ChildResult): Record<string, unknown> {
 
 async function startStub(
   options: {
+    bareModelIds?: boolean;
     catalogTotalCount?: number;
     errorModels?: string[];
     includeFreeModel?: boolean;
@@ -683,7 +797,9 @@ async function startUnpricedCatalogStub(
   };
 }
 
-async function startCatalogDriftStub(): Promise<StubProvider> {
+async function startCatalogDriftStub(
+  keep: (id: string) => boolean = (id) => id.startsWith("zeta/"),
+): Promise<StubProvider> {
   const upstream = await startStub();
   let hitCount = 0;
   let catalogRequests = 0;
@@ -708,7 +824,7 @@ async function startCatalogDriftStub(): Promise<StubProvider> {
       const data =
         catalogRequests === 1
           ? catalog.data
-          : catalog.data.filter(({ id }) => id.startsWith("zeta/"));
+          : catalog.data.filter(({ id }) => keep(id));
       response.writeHead(200, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
@@ -2950,6 +3066,134 @@ describe("built CLI pipeline", () => {
     }
   }, 60_000);
 
+  it("stops before any spend when bare model ids cannot name the judge's vendor", async () => {
+    const { repo, traces } = await renamedModelFixture(
+      "bare-judge-vendor",
+      "large-1",
+    );
+    const stub = await startStub({ bareModelIds: true });
+    const apiKeyEnv = "RIGHTMODELER_BARE_JUDGE_API_KEY";
+    try {
+      for (const command of [
+        ["estimate"],
+        ["init", "--through", "aggregate"],
+      ]) {
+        const result = await runCli(
+          [
+            ...command,
+            "--traces",
+            traces,
+            "--base-url",
+            `http://127.0.0.1:${stub.port}/v1`,
+            "--api-key-env",
+            apiKeyEnv,
+            "--output",
+            "json",
+            "--repo",
+            repo,
+          ],
+          { env: { [apiKeyEnv]: secret } },
+        );
+
+        expect(result.code, result.stderr).toBe(2);
+        const error = lastStderrEvent(result);
+        expect(error.code, command[0]).toBe("judge_family_unknown");
+        expect(error.message, command[0]).toContain("large-1");
+      }
+      expect(stub.getHitCount()).toBe(0);
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("names the missing neutral judge before any spend", async () => {
+    const { repo } = await fixtureCopy("no-neutral-judge");
+    const stub = await startStub({
+      omitCatalogModels: ["zeta/judge-1", "yotta/judge-2"],
+    });
+    const apiKeyEnv = "RIGHTMODELER_NO_NEUTRAL_JUDGE_API_KEY";
+    try {
+      for (const command of [
+        ["estimate"],
+        ["init", "--through", "aggregate"],
+      ]) {
+        const result = await runCli(
+          [
+            ...command,
+            "--traces",
+            tracesPath,
+            "--base-url",
+            `http://127.0.0.1:${stub.port}/v1`,
+            "--api-key-env",
+            apiKeyEnv,
+            "--output",
+            "json",
+            "--repo",
+            repo,
+          ],
+          { env: { [apiKeyEnv]: secret } },
+        );
+
+        expect(result.code, result.stderr).toBe(2);
+        const error = lastStderrEvent(result);
+        expect(error.code, command[0]).toBe("no_neutral_judge");
+        expect(error.message, command[0]).toContain(
+          "the candidates come from acme and the recorded model from acme",
+        );
+      }
+      expect(stub.getHitCount()).toBe(0);
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("checks the fallback judge's vendor before any spend when the external evaluator is unreachable", async () => {
+    const { repo, traces } = await renamedModelFixture(
+      "fallback-judge-vendor",
+      "large-1",
+    );
+    const stub = await startStub({ bareModelIds: true });
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "aggregate",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_E2E_API_KEY",
+          "--evaluator",
+          "braintrust",
+          "--evaluator-base-url",
+          "http://127.0.0.1:1",
+          "--evaluator-api-key-env",
+          "RIGHTMODELER_MISSING_EVALUATOR_KEY",
+          "--evaluator-project-id",
+          "00000000-0000-4000-8000-000000000001",
+          "--evaluator-scorer",
+          "output_similarity",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_E2E_API_KEY: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(2);
+      expect(result.stderr).toContain(
+        '"code":"external_evaluator_unreachable"',
+      );
+      expect(lastStderrEvent(result).code).toBe("judge_family_unknown");
+      expect(stub.getHitCount()).toBe(0);
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
   it("refuses an unpriced catalog until a pricing file is supplied", async () => {
     const { root, repo } = await fixtureCopy("unpriced-catalog");
     const stub = await startUnpricedCatalogStub();
@@ -4857,6 +5101,39 @@ describe("built CLI pipeline", () => {
         reportKey("project", "report.md"),
       );
       expect(report).toContain("provider_catalog_drift");
+    } finally {
+      await stub.close();
+    }
+  }, 120_000);
+
+  it("names the missing neutral judge at confirmation instead of a runtime error", async () => {
+    const { root, repo, traces } = await langgraphFixtureCopy(
+      "confirm-no-neutral-judge",
+    );
+    const modeBConfig = await writeModeBConfig(root, repo, "unused-image");
+    const stub = await startCatalogDriftStub((id) => id.startsWith("acme/"));
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          "RIGHTMODELER_CONFIRM_JUDGE_API_KEY",
+          "--modeb-config",
+          modeBConfig,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { RIGHTMODELER_CONFIRM_JUDGE_API_KEY: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(2);
+      expect(lastStderrEvent(result).code).toBe("no_neutral_judge");
     } finally {
       await stub.close();
     }
