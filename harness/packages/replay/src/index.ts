@@ -1,5 +1,6 @@
 export * from "./budget.js";
 export { createClaudeLoginProvider } from "./claude-route.js";
+export { createCodexLoginProvider } from "./codex-route.js";
 export * from "./confirm.js";
 export {
   replayModeA,

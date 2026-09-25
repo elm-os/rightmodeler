@@ -10590,7 +10590,7 @@ var require__ = __commonJS({
 // src/cli.ts
 import { spawn as spawn2 } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { homedir as homedir2 } from "node:os";
+import { homedir as homedir3 } from "node:os";
 import { basename as basename5, resolve as resolve13 } from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
@@ -11338,9 +11338,9 @@ function floatSafeRemainder(val, step) {
   return ratio - roundedRatio;
 }
 var EVALUATING = /* @__PURE__ */ Symbol("evaluating");
-function defineLazy(object3, key, getter) {
+function defineLazy(object4, key, getter) {
   let value = void 0;
-  Object.defineProperty(object3, key, {
+  Object.defineProperty(object4, key, {
     get() {
       if (value === EVALUATING) {
         return void 0;
@@ -11352,7 +11352,7 @@ function defineLazy(object3, key, getter) {
       return value;
     },
     set(v) {
-      Object.defineProperty(object3, key, {
+      Object.defineProperty(object4, key, {
         value: v
         // configurable: true,
       });
@@ -25256,47 +25256,47 @@ var factSchema = external_exports.union([
 import { createHash, randomUUID } from "node:crypto";
 
 // ../../../node_modules/.pnpm/canonicalize@3.0.0/node_modules/canonicalize/lib/canonicalize.js
-function canonicalize(object3, seen = /* @__PURE__ */ new Set()) {
-  if (typeof object3 === "number" && isNaN(object3)) {
+function canonicalize(object4, seen = /* @__PURE__ */ new Set()) {
+  if (typeof object4 === "number" && isNaN(object4)) {
     throw new Error("NaN is not allowed");
   }
-  if (typeof object3 === "number" && !isFinite(object3)) {
+  if (typeof object4 === "number" && !isFinite(object4)) {
     throw new Error("Infinity is not allowed");
   }
-  if (object3 === null || typeof object3 !== "object") {
-    return JSON.stringify(object3);
+  if (object4 === null || typeof object4 !== "object") {
+    return JSON.stringify(object4);
   }
-  if (typeof object3.toJSON === "function") {
-    if (seen.has(object3)) {
+  if (typeof object4.toJSON === "function") {
+    if (seen.has(object4)) {
       throw new Error("Circular reference detected");
     }
-    seen.add(object3);
-    const result3 = canonicalize(object3.toJSON(), seen);
-    seen.delete(object3);
+    seen.add(object4);
+    const result3 = canonicalize(object4.toJSON(), seen);
+    seen.delete(object4);
     return result3;
   }
-  if (seen.has(object3)) {
+  if (seen.has(object4)) {
     throw new Error("Circular reference detected");
   }
-  seen.add(object3);
+  seen.add(object4);
   let result2;
-  if (Array.isArray(object3)) {
-    const values = object3.map((cv) => {
+  if (Array.isArray(object4)) {
+    const values = object4.map((cv) => {
       const value = cv === void 0 || typeof cv === "symbol" ? null : cv;
       return canonicalize(value, seen);
     });
     result2 = `[${values.join(",")}]`;
   } else {
     const parts = [];
-    for (const key of Object.keys(object3).sort()) {
-      if (object3[key] === void 0 || typeof object3[key] === "symbol") {
+    for (const key of Object.keys(object4).sort()) {
+      if (object4[key] === void 0 || typeof object4[key] === "symbol") {
         continue;
       }
-      parts.push(`${canonicalize(key)}:${canonicalize(object3[key], seen)}`);
+      parts.push(`${canonicalize(key)}:${canonicalize(object4[key], seen)}`);
     }
     result2 = `{${parts.join(",")}}`;
   }
-  seen.delete(object3);
+  seen.delete(object4);
   return result2;
 }
 
@@ -27011,7 +27011,10 @@ function createProvider(options) {
 }
 
 // ../replay/dist/plan-route.js
-var planRouteVendors = { "claude-login": "anthropic" };
+var planRouteVendors = {
+  "claude-login": "anthropic",
+  "codex-login": "openai"
+};
 function isPlanRouteKind(value) {
   return Object.hasOwn(planRouteVendors, value);
 }
@@ -27529,6 +27532,252 @@ var claudeAdapter = {
 };
 function createClaudeLoginProvider(options) {
   return createPlanProvider(claudeAdapter, options);
+}
+
+// ../replay/dist/codex-route.js
+import { readFile as readFile3, stat as stat2, writeFile as writeFile3 } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join as join4 } from "node:path";
+var updateRemedy2 = "Update with npm install -g @openai/codex@latest, then rerun.";
+var loginRemedy2 = "Run codex login, then rerun; finished calls are kept.";
+var chatgptRemedy = "Sign in with ChatGPT using codex login, then rerun.";
+var isolationRemedy = "Use a codex version rightmodeler verified (0.153.3 or later), or an API route with --base-url.";
+var overrides = [
+  "include_permissions_instructions=false",
+  "include_apps_instructions=false",
+  "include_environment_context=false",
+  "include_collaboration_mode_instructions=false",
+  "skills.include_instructions=false",
+  "features.shell_tool=false",
+  "features.unified_exec=false",
+  "features.view_image=false",
+  "features.image_generation=false",
+  "features.multi_agent=false",
+  "features.apps=false",
+  "features.plugins=false",
+  "features.memories=false",
+  "features.goals=false",
+  "features.tool_suggest=false",
+  "features.recommended_plugins=false",
+  "features.personality=false",
+  "tools.experimental_request_user_input.enabled=false",
+  'web_search="disabled"',
+  "project_doc_max_bytes=0",
+  'history.persistence="none"',
+  "features.code_mode_host=false"
+].flatMap((setting) => ["-c", setting]);
+var toolItems = /* @__PURE__ */ new Set([
+  "command_execution",
+  "file_change",
+  "mcp_tool_call",
+  "web_search",
+  "collab_tool_call"
+]);
+function object3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+}
+function parseLine2(line) {
+  try {
+    return object3(JSON.parse(line));
+  } catch {
+    return void 0;
+  }
+}
+function planLogin(output) {
+  return /^Logged in using (ChatGPT|access token|personal access token)$/mu.test(output);
+}
+function refuseOtherLogin(output) {
+  if (/^Logged in using an API key/mu.test(output)) {
+    throw new PlanLoginError("codex is signed in with an API key, which bills API rates, not your ChatGPT plan.", chatgptRemedy);
+  }
+  const kind = /^Logged in using (.+)$/mu.exec(output)?.[1]?.split(" - ")[0];
+  if (kind !== void 0 && !planLogin(output)) {
+    throw new PlanLoginError(`codex is signed in using ${kind}, not a ChatGPT plan.`, chatgptRemedy);
+  }
+}
+async function exists(path) {
+  return stat2(path).then(() => true, () => false);
+}
+function failure(message2, cliModel, maxConcurrency) {
+  if (/You've hit your usage limit for /u.test(message2)) {
+    return new BlockedError({
+      kind: "rate-limit",
+      status: 429,
+      observedCeiling: maxConcurrency
+    });
+  }
+  if (/You've hit your usage limit|out of credits|spend cap/u.test(message2)) {
+    return new BlockedError({
+      kind: "usage-limit",
+      providerId: "codex-login",
+      resetsAt: /try again at ([^.]+)\./iu.exec(message2)?.[1] ?? null,
+      detail: message2
+    });
+  }
+  if (/at capacity|high demand|exceeded retry limit|rate limit exceeded/iu.test(message2)) {
+    return new BlockedError({
+      kind: "rate-limit",
+      status: 429,
+      observedCeiling: maxConcurrency
+    });
+  }
+  if (/401 Unauthorized|Missing bearer|invalid_api_key|upgrade to Plus/u.test(message2)) {
+    return new PlanLoginError("codex stopped accepting its login during the run.", loginRemedy2);
+  }
+  if (/not supported when using Codex with a ChatGPT account/u.test(message2)) {
+    return new ProviderRequestError(`codex cannot use ${cliModel} on this plan`);
+  }
+  return new ProviderRequestError(`codex reported: ${message2.slice(0, 300)}`);
+}
+function createCodexAdapter(options) {
+  const env = options.env ?? process.env;
+  let store = "file";
+  async function loginStatus(run, storeName) {
+    const result2 = await run([
+      ...storeName === void 0 ? [] : ["-c", `cli_auth_credentials_store="${storeName}"`],
+      "login",
+      "status"
+    ], { stdin: "", timeoutMs: 3e4 });
+    refuseOtherLogin(`${result2.stdout}
+${result2.stderr}`);
+    return { code: result2.code, output: `${result2.stdout}
+${result2.stderr}` };
+  }
+  return {
+    kind: "codex-login",
+    command: "codex",
+    minimumVersion: "0.153.3",
+    remedies: {
+      install: "Install Codex with npm install -g @openai/codex@latest and sign in with codex login, or use an API route with --base-url <url> and --api-key-env <name>.",
+      update: updateRemedy2
+    },
+    keyVariables: [
+      "CODEX_API_KEY",
+      "OPENAI_API_KEY",
+      "OPENAI_FEDERATION_RULE_ID",
+      "OPENAI_IDENTITY_TOKEN_FILE"
+    ],
+    childEnv(stripped) {
+      return stripped;
+    },
+    async checkLogin(run) {
+      const file2 = await loginStatus(run, "file");
+      if (file2.code === 0 && planLogin(file2.output)) {
+        store = "file";
+      } else {
+        const plain = await loginStatus(run);
+        if (plain.code === 1 || /^Not logged in/mu.test(plain.output)) {
+          throw new PlanLoginError("codex is not signed in on this machine.", loginRemedy2);
+        }
+        const keyring = await loginStatus(run, "keyring");
+        if (keyring.code !== 0 || !planLogin(keyring.output)) {
+          throw new PlanLoginError("codex reports a login, but rightmodeler could not use it from the file or keyring credential store.", "Run codex login, then rerun.");
+        }
+        store = "keyring";
+      }
+      const home = env.CODEX_HOME ?? join4(homedir(), ".codex");
+      if (await exists(join4(home, "AGENTS.override.md")) || await exists(join4(home, "AGENTS.md"))) {
+        options.warning?.("codex_global_instructions", "Codex adds your global instructions file ($CODEX_HOME/AGENTS.md or AGENTS.override.md) to every call and cannot be told not to; rightmodeler did not read it. Move it aside for this run if it should not shape the replayed answers.");
+      }
+    },
+    async listModels(run) {
+      const result2 = await run(["debug", "models"], {
+        stdin: "",
+        timeoutMs: 3e4
+      });
+      const models = parseLine2(result2.stdout.trim())?.models;
+      if (!Array.isArray(models) || !models.every((model) => typeof object3(model)?.slug === "string" && typeof object3(model)?.visibility === "string")) {
+        const version3 = (await run(["--version"], { stdin: "", timeoutMs: 3e4 })).stdout.trim();
+        throw new PlanRouteUnavailableError(`codex debug models printed a model list rightmodeler cannot read (${version3}).`, updateRemedy2);
+      }
+      return models.flatMap((model) => {
+        const entry = object3(model);
+        if (entry.visibility !== "list")
+          return [];
+        return [
+          {
+            cliModel: entry.slug,
+            ...typeof entry.context_window === "number" ? { contextWindow: entry.context_window } : {}
+          }
+        ];
+      });
+    },
+    async call(run, input) {
+      const instructions = join4(input.dir, "instructions.md");
+      const lastMessage = join4(input.dir, "last-message.txt");
+      await writeFile3(instructions, input.system);
+      const outcome = await run([
+        "exec",
+        "--json",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "--strict-config",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "--color",
+        "never",
+        "-C",
+        input.dir,
+        "-m",
+        input.cliModel,
+        "-c",
+        `cli_auth_credentials_store="${store}"`,
+        "-c",
+        `model_instructions_file=${JSON.stringify(instructions)}`,
+        ...overrides,
+        "-o",
+        lastMessage,
+        "-"
+      ], { stdin: input.user, timeoutMs: input.timeoutMs, cwd: input.dir });
+      const failed = (error51, excerpt = outcome.stderr) => ({ ok: false, error: error51, status: null, excerpt });
+      const rejected = /unknown configuration field `([^`]+)`/u.exec(outcome.stderr)?.[1] ?? /unexpected argument '([^']+)'/u.exec(outcome.stderr)?.[1];
+      if (rejected !== void 0) {
+        return failed(new PlanRouteUnavailableError(`this codex version rejects rightmodeler's isolation setting ${rejected}`, isolationRemedy));
+      }
+      if (outcome.timedOut) {
+        return failed(new ProviderRequestError(`codex did not answer within ${input.timeoutMs / 1e3} s`));
+      }
+      const events = outcome.stdout.split("\n").map(parseLine2).filter((event) => event !== void 0);
+      const turnFailed = events.find(({ type }) => type === "turn.failed");
+      if (turnFailed !== void 0) {
+        const message2 = String(object3(turnFailed.error)?.message ?? "");
+        return failed(failure(message2, input.cliModel, options.maxConcurrency ?? 2), message2.slice(0, 300));
+      }
+      if (outcome.code !== 0) {
+        return failed(new ProviderRequestError(`codex exited ${outcome.code}: ${outcome.stderr.slice(0, 300)}`));
+      }
+      const items = events.flatMap(({ type, item }) => type === "item.completed" && object3(item) !== void 0 ? [object3(item)] : []);
+      const content = items.filter(({ type }) => type === "agent_message").at(-1)?.text ?? await readFile3(lastMessage, "utf8").catch(() => "");
+      if (typeof content !== "string" || content.length === 0) {
+        return failed(new ProviderRequestError("codex returned no answer"));
+      }
+      const usage2 = object3(events.find(({ type }) => type === "turn.completed")?.usage);
+      if (typeof usage2?.input_tokens !== "number" || typeof usage2.output_tokens !== "number") {
+        return failed(new ProviderRequestError("codex ended without completing the turn"));
+      }
+      const rerouted = items.find(({ type, message: message2 }) => type === "error" && typeof message2 === "string" && message2.startsWith("model rerouted:"));
+      const tool = items.find(({ type }) => toolItems.has(String(type)));
+      const substitution2 = rerouted !== void 0 ? {
+        kind: "model",
+        evidence: `codex rerouted: ${String(rerouted.message).slice("model rerouted:".length).trim()}`
+      } : tool !== void 0 ? {
+        kind: "request",
+        evidence: `codex ran ${String(tool.type)} during the call`
+      } : void 0;
+      return {
+        ok: true,
+        content,
+        inputTokens: usage2.input_tokens,
+        outputTokens: usage2.output_tokens,
+        ...substitution2 === void 0 ? {} : { substitution: substitution2 }
+      };
+    }
+  };
+}
+function createCodexLoginProvider(options) {
+  return createPlanProvider(createCodexAdapter(options), options);
 }
 
 // ../replay/dist/confirm.js
@@ -29175,8 +29424,8 @@ function stableSeed2(value) {
 // ../executor/dist/index.js
 import { execFile } from "node:child_process";
 import { randomUUID as randomUUID6 } from "node:crypto";
-import { lstat, readFile as readFile3, readdir as readdir2, realpath } from "node:fs/promises";
-import { join as join4 } from "node:path";
+import { lstat, readFile as readFile4, readdir as readdir2, realpath } from "node:fs/promises";
+import { join as join5 } from "node:path";
 import { promisify } from "node:util";
 var execFileAsync = promisify(execFile);
 var dockerOutputLimit = 10 * 1024 * 1024;
@@ -29252,7 +29501,7 @@ function scratchHostPath(inspect, handle) {
 }
 async function heartbeatTime(scratchPath) {
   try {
-    return (await lstat(join4(scratchPath, HEARTBEAT_FILE))).mtime.toISOString();
+    return (await lstat(join5(scratchPath, HEARTBEAT_FILE))).mtime.toISOString();
   } catch (error51) {
     if (isRecord2(error51) && error51.code === "ENOENT")
       return null;
@@ -29315,7 +29564,7 @@ async function listNamespaceFiles(namespace, namespacePath) {
     entries.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
     for (const entry of entries) {
       const relativePath = relativeDirectory.length === 0 ? entry.name : `${relativeDirectory}/${entry.name}`;
-      const hostPath = join4(directory, entry.name);
+      const hostPath = join5(directory, entry.name);
       const stats = await lstat(hostPath);
       try {
         assertSafeSegment(entry.name, "artifact path segment");
@@ -29468,7 +29717,7 @@ function createDockerExecutor(options) {
       const pendingFiles = [];
       const skipped = [];
       for (const namespace of namespaces) {
-        const listed = await listNamespaceFiles(namespace, join4(request.scratchHostPath, namespace));
+        const listed = await listNamespaceFiles(namespace, join5(request.scratchHostPath, namespace));
         pendingFiles.push(...listed.files);
         skipped.push(...listed.skipped);
       }
@@ -29486,7 +29735,7 @@ function createDockerExecutor(options) {
           });
           continue;
         }
-        const contents = await readFile3(pending.hostPath);
+        const contents = await readFile4(pending.hostPath);
         files.push({
           namespace: pending.namespace,
           path: pending.path,
@@ -29536,8 +29785,8 @@ function createDockerExecutor(options) {
 }
 
 // ../executor/dist/cloud-sandbox.js
-import { lstat as lstat2, mkdir as mkdir2, readFile as readFile4, readdir as readdir3, readlink, realpath as realpath2, writeFile as writeFile3 } from "node:fs/promises";
-import { dirname, join as join5, posix as posix3 } from "node:path";
+import { lstat as lstat2, mkdir as mkdir2, readFile as readFile5, readdir as readdir3, readlink, realpath as realpath2, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname, join as join6, posix as posix3 } from "node:path";
 function isRecord3(value) {
   return typeof value === "object" && value !== null;
 }
@@ -29646,7 +29895,7 @@ async function listLocalEntries(root) {
         kind: "file",
         path: "",
         mode: rootStats.mode & 511,
-        contents: await readFile4(root)
+        contents: await readFile5(root)
       }
     ];
   }
@@ -29659,7 +29908,7 @@ async function listLocalEntries(root) {
     children.sort((left, right) => left.name.localeCompare(right.name));
     for (const child of children) {
       const relativePath = relativeDirectory.length === 0 ? child.name : posix3.join(relativeDirectory, child.name);
-      const absolutePath = join5(directory, child.name);
+      const absolutePath = join6(directory, child.name);
       const stats = await lstat2(absolutePath);
       if (stats.isDirectory()) {
         entries.push({
@@ -29673,7 +29922,7 @@ async function listLocalEntries(root) {
           kind: "file",
           path: relativePath,
           mode: stats.mode & 511,
-          contents: await readFile4(absolutePath)
+          contents: await readFile5(absolutePath)
         });
       } else if (stats.isSymbolicLink()) {
         entries.push({
@@ -29954,9 +30203,9 @@ function createCloudExecutor(options) {
         if (contents === null) {
           throw new Error(`Cloud collection file ${pending.sandboxPath} vanished`);
         }
-        const hostPath = join5(request.scratchHostPath, pending.namespace, ...pending.path.split("/"));
+        const hostPath = join6(request.scratchHostPath, pending.namespace, ...pending.path.split("/"));
         await mkdir2(dirname(hostPath), { recursive: true });
-        await writeFile3(hostPath, contents);
+        await writeFile4(hostPath, contents);
         files.push({
           namespace: pending.namespace,
           path: pending.path,
@@ -29994,8 +30243,8 @@ function createCloudExecutor(options) {
 
 // ../replay/dist/driver-modeb.js
 import { randomUUID as randomUUID8 } from "node:crypto";
-import { mkdir as mkdir3, mkdtemp as mkdtemp2, rm as rm2, writeFile as writeFile4 } from "node:fs/promises";
-import { dirname as dirname2, join as join6, resolve } from "node:path";
+import { mkdir as mkdir3, mkdtemp as mkdtemp2, rm as rm2, writeFile as writeFile5 } from "node:fs/promises";
+import { dirname as dirname2, join as join7, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ../replay/dist/driver.js
@@ -30113,7 +30362,7 @@ async function replayModeA(input) {
   };
   const activeRefunds = /* @__PURE__ */ new Set();
   let nextCell = 0;
-  let failure;
+  let failure2;
   const judges = input.judge?.rankedModels.slice(0, 4) ?? [];
   if (input.judge !== void 0 && judges.length === 0) {
     throw new Error("At least one ranked judge model is required");
@@ -30335,7 +30584,7 @@ async function replayModeA(input) {
   }
   function startJudgeJob(work) {
     const job = work().catch((error51) => {
-      failure ??= error51;
+      failure2 ??= error51;
     }).then(() => {
       judgeJobs.delete(job);
       pumpJudges();
@@ -30343,7 +30592,7 @@ async function replayModeA(input) {
     judgeJobs.add(job);
   }
   function pumpJudges() {
-    if (failure !== void 0)
+    if (failure2 !== void 0)
       return;
     if (judgeSwitchTrigger !== null) {
       if (judgeJobs.size > 0)
@@ -30572,7 +30821,7 @@ async function replayModeA(input) {
     }
   }
   async function worker() {
-    while (failure === void 0) {
+    while (failure2 === void 0) {
       const index = nextCell;
       nextCell += 1;
       const cell = cells[index];
@@ -30581,7 +30830,7 @@ async function replayModeA(input) {
       try {
         await runCell(cell);
       } catch (error51) {
-        failure ??= error51;
+        failure2 ??= error51;
         return;
       }
     }
@@ -30589,8 +30838,8 @@ async function replayModeA(input) {
   await Promise.all(Array.from({ length: Math.min(input.concurrency, Math.max(1, cells.length)) }, () => worker()));
   while (judgeJobs.size > 0)
     await Promise.all(judgeJobs);
-  if (failure !== void 0)
-    throw failure;
+  if (failure2 !== void 0)
+    throw failure2;
   return result2;
 }
 
@@ -30921,15 +31170,15 @@ async function prepareScratch(root, cell, executionId, appSpec) {
   if (command.length === 0) {
     throw new Error("appSpec.command must not be empty");
   }
-  const scratch = join6(root, executionId);
-  await mkdir3(join6(scratch, "driver"), { recursive: true });
-  await writeFile4(join6(scratch, "driver", "case.json"), `${JSON.stringify({
+  const scratch = join7(root, executionId);
+  await mkdir3(join7(scratch, "driver"), { recursive: true });
+  await writeFile5(join7(scratch, "driver", "case.json"), `${JSON.stringify({
     caseId: cell.recordedCase.caseId,
     input: cell.recordedCase.input,
     ...cell.recordedCase.headers === void 0 ? {} : { headers: cell.recordedCase.headers }
   })}
 `, "utf8");
-  await writeFile4(join6(scratch, "driver", "config.json"), `${JSON.stringify({
+  await writeFile5(join7(scratch, "driver", "config.json"), `${JSON.stringify({
     command,
     ...appSpec.installCommand === void 0 ? {} : { installCommand: appSpec.installCommand }
   })}
@@ -31680,7 +31929,7 @@ async function replayModeB(input) {
       hostname: input.egress.hostname,
       port: input.egress.port
     });
-    scratchRoot = await mkdtemp2(join6(dirname2(resolve(input.appSpec.mountPath)), ".rightmodeler-modeb-"));
+    scratchRoot = await mkdtemp2(join7(dirname2(resolve(input.appSpec.mountPath)), ".rightmodeler-modeb-"));
   } catch (error51) {
     if (listener !== null)
       await listener.close().catch(() => void 0);
@@ -32444,9 +32693,9 @@ var {
 import { execFile as execFile7 } from "node:child_process";
 import { createHash as createHash12 } from "node:crypto";
 import { readFileSync as readFileSync6 } from "node:fs";
-import { mkdir as mkdir5, readFile as readFile12, readdir as readdir4, stat as stat3, writeFile as writeFile7 } from "node:fs/promises";
+import { mkdir as mkdir5, readFile as readFile13, readdir as readdir4, stat as stat4, writeFile as writeFile8 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
-import { dirname as dirname7, join as join17, relative as relative8, resolve as resolve8, sep as sep5 } from "node:path";
+import { dirname as dirname7, join as join18, relative as relative8, resolve as resolve8, sep as sep5 } from "node:path";
 import { promisify as promisify6 } from "node:util";
 
 // ../scanner/dist/declarative-matcher.js
@@ -32976,7 +33225,7 @@ function evaluateCoverage(input) {
 
 // ../scanner/dist/detect-tech.js
 import { readFileSync as readFileSync2, readdirSync } from "node:fs";
-import { join as join7, relative as relative2, resolve as resolve2, sep as sep2 } from "node:path";
+import { join as join8, relative as relative2, resolve as resolve2, sep as sep2 } from "node:path";
 
 // ../scanner/dist/ignored-directories.js
 var IGNORED_DIRECTORIES = /* @__PURE__ */ new Set([
@@ -33028,9 +33277,9 @@ function manifests(rootDir) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name))
-          visit(join7(directory, entry.name));
+          visit(join8(directory, entry.name));
       } else if (entry.isFile() && manifestNames.has(entry.name)) {
-        found.push(join7(directory, entry.name));
+        found.push(join8(directory, entry.name));
       }
     }
   };
@@ -33932,16 +34181,16 @@ function reconcile(normalizedSteps, stepRecords) {
 // ../scanner/dist/scan.js
 import { createHash as createHash3 } from "node:crypto";
 import { readFileSync as readFileSync3, readdirSync as readdirSync2 } from "node:fs";
-import { join as join8, relative as relative3, resolve as resolve3, sep as sep3 } from "node:path";
+import { join as join9, relative as relative3, resolve as resolve3, sep as sep3 } from "node:path";
 function sourceFiles(rootDir) {
   const files = [];
   const visit = (directory) => {
     for (const entry of readdirSync2(directory, { withFileTypes: true })) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name))
-          visit(join8(directory, entry.name));
+          visit(join9(directory, entry.name));
       } else if (entry.isFile()) {
-        files.push(join8(directory, entry.name));
+        files.push(join9(directory, entry.name));
       }
     }
   };
@@ -36587,14 +36836,14 @@ function scrubRuns(runs) {
 // src/apply/orchestrator.ts
 import { execFile as execFile5 } from "node:child_process";
 import { createHash as createHash6 } from "node:crypto";
-import { readFile as readFile9 } from "node:fs/promises";
-import { join as join13 } from "node:path";
+import { readFile as readFile10 } from "node:fs/promises";
+import { join as join14 } from "node:path";
 import { promisify as promisify4 } from "node:util";
 
 // src/code-graph/graph.ts
 import { constants } from "node:buffer";
 import { createHash as createHash4 } from "node:crypto";
-import { readFile as readFile5, stat as stat2 } from "node:fs/promises";
+import { readFile as readFile6, stat as stat3 } from "node:fs/promises";
 import { isAbsolute, relative as relative4, sep as sep4 } from "node:path";
 var provenanceRank = {
   AMBIGUOUS: 0,
@@ -36633,9 +36882,9 @@ var edgeSchema = external_exports.looseObject({
 });
 async function graphFileDigest(path) {
   try {
-    const { size } = await stat2(path);
+    const { size } = await stat3(path);
     if (size > constants.MAX_STRING_LENGTH) return `too-large:${size}`;
-    return createHash4("sha256").update(await readFile5(path)).digest("hex");
+    return createHash4("sha256").update(await readFile6(path)).digest("hex");
   } catch {
     return "unreadable";
   }
@@ -36659,7 +36908,7 @@ async function loadCodeGraph(path, repoDir) {
   });
   let size;
   try {
-    size = (await stat2(path)).size;
+    size = (await stat3(path)).size;
   } catch (error51) {
     return unreadable(error51);
   }
@@ -36674,7 +36923,7 @@ async function loadCodeGraph(path, repoDir) {
   }
   let bytes;
   try {
-    bytes = await readFile5(path);
+    bytes = await readFile6(path);
   } catch (error51) {
     return unreadable(error51);
   }
@@ -36704,7 +36953,7 @@ async function loadCodeGraph(path, repoDir) {
       id: node.data.id,
       label: node.data.label ?? node.data.id,
       path: normalizeSourcePath(node.data.source_file, repoDir),
-      line: parseLine2(node.data.source_location),
+      line: parseLine3(node.data.source_location),
       fileType: node.data.file_type ?? null
     });
   }
@@ -36735,7 +36984,7 @@ async function loadCodeGraph(path, repoDir) {
       provenance: edge.data.confidence,
       score: score !== void 0 && score >= 0 && score <= 1 ? score : tierScores[edge.data.confidence],
       path: normalizeSourcePath(edge.data.source_file, repoDir),
-      line: parseLine2(edge.data.source_location)
+      line: parseLine3(edge.data.source_location)
     });
   }
   const sample = unknownConfidences.size === 0 ? "" : ` (for example confidence ${[...unknownConfidences].map((value) => `"${value}"`).join(", ")})`;
@@ -36763,7 +37012,7 @@ function normalizeSourcePath(value, repoDir) {
   const path = isAbsolute(slashed) ? relative4(repoDir, slashed).split(sep4).join("/") : slashed;
   return path.startsWith("./") ? path.slice(2) : path;
 }
-function parseLine2(value) {
+function parseLine3(value) {
   const match = /^L?([1-9]\d*)$/.exec(String(value));
   return match === null ? null : Number(match[1]);
 }
@@ -36839,8 +37088,8 @@ function blastRadius({
 
 // src/enrich/conventions.ts
 import { execFile as execFile2 } from "node:child_process";
-import { access, readFile as readFile6 } from "node:fs/promises";
-import { dirname as dirname3, join as join9, relative as relative5, resolve as resolve4 } from "node:path";
+import { access, readFile as readFile7 } from "node:fs/promises";
+import { dirname as dirname3, join as join10, relative as relative5, resolve as resolve4 } from "node:path";
 import { promisify as promisify2 } from "node:util";
 
 // src/enrich/shared.ts
@@ -36876,7 +37125,7 @@ function posixPath(repoDir, absolutePath) {
 async function existingPath(repoDir, candidates) {
   for (const path of candidates) {
     try {
-      await access(join9(repoDir, path));
+      await access(join10(repoDir, path));
       return path;
     } catch {
       continue;
@@ -36908,7 +37157,7 @@ async function captureInstructionFiles(repoDir) {
   const rootFiles = (await Promise.all(
     ["AGENTS.md", "CLAUDE.md"].map(async (path) => {
       try {
-        await access(join9(repoDir, path));
+        await access(join10(repoDir, path));
         return path;
       } catch {
         return null;
@@ -36930,7 +37179,7 @@ async function captureInstructionFiles(repoDir) {
   async function capture(path, depth, stack, includedFrom) {
     let content;
     try {
-      content = await readFile6(join9(repoDir, path), "utf8");
+      content = await readFile7(join10(repoDir, path), "utf8");
     } catch {
       warn(
         includedFrom === void 0 ? { name: "instruction_file_unreadable", path } : {
@@ -36969,7 +37218,7 @@ async function captureInstructionFiles(repoDir) {
 }
 async function readFirst(repoDir, candidates) {
   const path = await existingPath(repoDir, candidates);
-  return path === null ? null : readFile6(join9(repoDir, path), "utf8");
+  return path === null ? null : readFile7(join10(repoDir, path), "utf8");
 }
 async function detectFormatter(repoDir) {
   const prettier = await existingPath(repoDir, prettierConfigs);
@@ -36978,7 +37227,7 @@ async function detectFormatter(repoDir) {
   if (ruff !== null) return { kind: "ruff", configPath: ruff };
   const pyproject = await existingPath(repoDir, ["pyproject.toml"]);
   if (pyproject !== null && /^\s*\[tool\.ruff(?:\.[^\]]+)?\]\s*$/m.test(
-    await readFile6(join9(repoDir, pyproject), "utf8")
+    await readFile7(join10(repoDir, pyproject), "utf8")
   )) {
     return { kind: "ruff", configPath: pyproject };
   }
@@ -37050,8 +37299,8 @@ async function captureConventions({
 
 // src/enrich/owners.ts
 import { execFile as execFile3 } from "node:child_process";
-import { access as access2, readFile as readFile7 } from "node:fs/promises";
-import { isAbsolute as isAbsolute2, join as join10, relative as relative6 } from "node:path";
+import { access as access2, readFile as readFile8 } from "node:fs/promises";
+import { isAbsolute as isAbsolute2, join as join11, relative as relative6 } from "node:path";
 import { promisify as promisify3 } from "node:util";
 var execFileAsync3 = promisify3(execFile3);
 var maximumBlameOwners = 3;
@@ -37063,7 +37312,7 @@ function repositoryPath(repoDir, filePath) {
 async function findCodeowners(repoDir) {
   for (const path of codeownersPaths) {
     try {
-      await access2(join10(repoDir, path));
+      await access2(join11(repoDir, path));
       return path;
     } catch {
       continue;
@@ -37178,7 +37427,7 @@ async function resolveOwners({
 }) {
   const codeownersPath = await findCodeowners(repoDir);
   const rules = codeownersPath === null ? [] : parseCodeowners(
-    await readFile7(join10(repoDir, codeownersPath), "utf8")
+    await readFile8(join11(repoDir, codeownersPath), "utf8")
   ).map((rule) => ({
     ...rule,
     matcher: codeownersRegex(rule.pattern)
@@ -39072,7 +39321,7 @@ async function restoreBranch({
 
 // src/apply/diff.ts
 import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 
 // src/apply/lex.ts
 function regexStartsAt(content, index) {
@@ -39502,7 +39751,7 @@ function buildSwapDiff({
   for (const [path, fileSwaps] of grouped) {
     let before;
     try {
-      before = readFileSync4(join11(repoDir, path), "utf8");
+      before = readFileSync4(join12(repoDir, path), "utf8");
     } catch {
       results.push({ path, reason: "stale_location" });
       continue;
@@ -39841,17 +40090,17 @@ function lintSwapDiff({
 // src/apply/format.ts
 import { execFile as execFile4 } from "node:child_process";
 import { existsSync, readFileSync as readFileSync5, writeFileSync } from "node:fs";
-import { mkdtemp as mkdtemp3, readFile as readFile8, rm as rm3 } from "node:fs/promises";
-import { basename as basename2, dirname as dirname4, join as join12 } from "node:path";
+import { mkdtemp as mkdtemp3, readFile as readFile9, rm as rm3 } from "node:fs/promises";
+import { basename as basename2, dirname as dirname4, join as join13 } from "node:path";
 function pinnedPrettierVersion(repoDir) {
-  const pnpmLock = join12(repoDir, "pnpm-lock.yaml");
+  const pnpmLock = join13(repoDir, "pnpm-lock.yaml");
   if (existsSync(pnpmLock)) {
     const match = /^  prettier@([^:\s(]+)(?:\([^\n]*)?:/m.exec(
       readFileSync5(pnpmLock, "utf8")
     );
     if (match !== null) return match[1];
   }
-  const packageLock = join12(repoDir, "package-lock.json");
+  const packageLock = join13(repoDir, "package-lock.json");
   if (existsSync(packageLock)) {
     const parsed2 = JSON.parse(readFileSync5(packageLock, "utf8"));
     if (typeof parsed2 === "object" && parsed2 !== null && "packages" in parsed2) {
@@ -39864,7 +40113,7 @@ function pinnedPrettierVersion(repoDir) {
       }
     }
   }
-  const yarnLock = join12(repoDir, "yarn.lock");
+  const yarnLock = join13(repoDir, "yarn.lock");
   if (existsSync(yarnLock)) {
     return /(?:^|\n)["']?prettier@[^\n]+:\n\s+version\s+["']([^"']+)["']/.exec(
       readFileSync5(yarnLock, "utf8")
@@ -39874,9 +40123,9 @@ function pinnedPrettierVersion(repoDir) {
 }
 function formatterCommand(repoDir, formatter) {
   const { kind, configPath } = formatter;
-  const configArgs = configPath === null ? [] : ["--config", join12(repoDir, configPath)];
+  const configArgs = configPath === null ? [] : ["--config", join13(repoDir, configPath)];
   if (kind === "prettier") {
-    const executable = join12(
+    const executable = join13(
       repoDir,
       "node_modules",
       ".bin",
@@ -39904,7 +40153,7 @@ function formatterCommand(repoDir, formatter) {
     };
   }
   if (kind === "ruff") {
-    const local = join12(
+    const local = join13(
       repoDir,
       ".venv",
       process.platform === "win32" ? "Scripts/ruff.exe" : "bin/ruff"
@@ -39972,27 +40221,27 @@ async function formatWithHostFormatter({
   }
   const formattedFiles = [];
   for (const [fileIndex, file2] of files.entries()) {
-    const sourcePath = join12(repoDir, file2.path);
+    const sourcePath = join13(repoDir, file2.path);
     let temporaryDirectory = null;
     try {
       if (!command.stdin) {
         temporaryDirectory = await mkdtemp3(
-          join12(dirname4(sourcePath), ".rightmodeler-format-")
+          join13(dirname4(sourcePath), ".rightmodeler-format-")
         );
         writeFileSync(
-          join12(temporaryDirectory, basename2(sourcePath)),
+          join13(temporaryDirectory, basename2(sourcePath)),
           file2.after,
           "utf8"
         );
       }
-      const temporaryPath = temporaryDirectory === null ? sourcePath : join12(temporaryDirectory, basename2(sourcePath));
+      const temporaryPath = temporaryDirectory === null ? sourcePath : join13(temporaryDirectory, basename2(sourcePath));
       const stdout = await runFormatter(
         command,
         command.stdin ? sourcePath : temporaryPath,
         repoDir,
         file2.after
       );
-      const formatted = stdout === null ? await readFile8(temporaryPath, "utf8") : stdout;
+      const formatted = stdout === null ? await readFile9(temporaryPath, "utf8") : stdout;
       const touchedLines = new Set(file2.hunks.map(({ line }) => line));
       const conflictLine = firstOutsideTouchedLine(
         file2.after,
@@ -40206,7 +40455,8 @@ function pullRequestCodeContext(codeContext, verdicts) {
   return lines.join("\n");
 }
 var planRouteLabels = {
-  "claude-login": "Measured through the claude CLI signed in to a Claude plan, not the Anthropic API: the CLI added its own instructions to each call and could not set temperature or an output limit. Run `rightmodeler docs model-routes` for details."
+  "claude-login": "Measured through the claude CLI signed in to a Claude plan, not the Anthropic API: the CLI added its own instructions to each call and could not set temperature or an output limit. Run `rightmodeler docs model-routes` for details.",
+  "codex-login": "Measured through the codex CLI on a ChatGPT plan, not the OpenAI API: Codex added its own instructions, could not set temperature or an output limit, does not report which model answered, and can take a tool step its output does not show. Run `rightmodeler docs model-routes` for details."
 };
 function evidenceBody(conventions, verdicts, codeContext) {
   const evidence = verdicts[0].evidence;
@@ -40409,7 +40659,7 @@ async function staleDigestPaths(repoDir, swaps) {
     ([left], [right]) => compareText(left, right)
   )) {
     try {
-      const content = (await readFile9(join13(repoDir, path), "utf8")).replaceAll(
+      const content = (await readFile10(join14(repoDir, path), "utf8")).replaceAll(
         "\r\n",
         "\n"
       );
@@ -41079,11 +41329,11 @@ function requireStep(stepsById, stepId) {
 }
 
 // src/drift.ts
-import { mkdir as mkdir4, readFile as readFile10, writeFile as writeFile5 } from "node:fs/promises";
-import { dirname as dirname5, join as join15, resolve as resolve6 } from "node:path";
+import { mkdir as mkdir4, readFile as readFile11, writeFile as writeFile6 } from "node:fs/promises";
+import { dirname as dirname5, join as join16, resolve as resolve6 } from "node:path";
 
 // src/state.ts
-import { join as join14, resolve as resolve5 } from "node:path";
+import { join as join15, resolve as resolve5 } from "node:path";
 var checkpointSchema = external_exports.strictObject({
   inputDigest: external_exports.string().min(1),
   outputKey: external_exports.string().min(1),
@@ -41095,7 +41345,7 @@ var setupStateSchema = external_exports.strictObject({
   stages: external_exports.record(external_exports.string(), checkpointSchema)
 });
 function resolveStoreRoot(repoDir, store) {
-  return resolve5(store ?? join14(repoDir, ".rightmodeler"));
+  return resolve5(store ?? join15(repoDir, ".rightmodeler"));
 }
 async function putImmutableJson(store, key, value) {
   await store.putImmutable(
@@ -41293,7 +41543,7 @@ async function readCorpusVersion(options, corpusVersionId) {
 async function runDrift(options) {
   const { store, storeRoot } = context(options);
   const parent = await loadActiveCorpus(store);
-  const traceText = await readFile10(resolve6(options.traces), "utf8");
+  const traceText = await readFile11(resolve6(options.traces), "utf8");
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
   const result2 = adaptWithReport(adapter, records);
@@ -41337,9 +41587,9 @@ async function runDrift(options) {
   );
   const markdown = renderDriftProposal(proposal);
   await store.putImmutable(keys.report, Buffer.from(markdown, "utf8"));
-  const reportPath2 = join15(storeRoot, keys.report);
+  const reportPath2 = join16(storeRoot, keys.report);
   await mkdir4(dirname5(reportPath2), { recursive: true });
-  await writeFile5(reportPath2, markdown, "utf8");
+  await writeFile6(reportPath2, markdown, "utf8");
   return {
     proposal,
     candidateCorpusVersionId: candidateCorpus.corpusVersionId,
@@ -42643,9 +42893,9 @@ function providerName(provider) {
 // src/evaluators/promptfoo.ts
 import { execFile as execFile6 } from "node:child_process";
 import { createHash as createHash7 } from "node:crypto";
-import { mkdtemp as mkdtemp4, readFile as readFile11, realpath as realpath3, rm as rm4, writeFile as writeFile6 } from "node:fs/promises";
+import { mkdtemp as mkdtemp4, readFile as readFile12, realpath as realpath3, rm as rm4, writeFile as writeFile7 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { dirname as dirname6, join as join16, relative as relative7, resolve as resolve7 } from "node:path";
+import { dirname as dirname6, join as join17, relative as relative7, resolve as resolve7 } from "node:path";
 import { promisify as promisify5 } from "node:util";
 var PROMPTFOO_VERIFIED_VERSION = "0.123.1";
 var PROMPTFOO_EVAL_FLAGS = [
@@ -42827,12 +43077,12 @@ function createPromptfooEvaluator(input) {
       }));
       const cwd = await realpath3(dirname6(assertionsPath));
       const directory = await realpath3(
-        await mkdtemp4(join16(tmpdir2(), "rightmodeler-promptfoo-"))
+        await mkdtemp4(join17(tmpdir2(), "rightmodeler-promptfoo-"))
       );
-      const modelOutputsPath = join16(directory, "model-outputs.json");
-      const resultsPath = join16(directory, "results.json");
+      const modelOutputsPath = join17(directory, "model-outputs.json");
+      const resultsPath = join17(directory, "results.json");
       try {
-        await writeFile6(
+        await writeFile7(
           modelOutputsPath,
           JSON.stringify(
             sent.map(({ caseId, output: output2 }) => ({ output: output2, tags: [caseId] }))
@@ -42861,7 +43111,7 @@ function createPromptfooEvaluator(input) {
         }
         let text;
         try {
-          text = await readFile11(resultsPath, "utf8");
+          text = await readFile12(resultsPath, "utf8");
         } catch (error51) {
           if (error51.code !== "ENOENT") throw error51;
           throw new Error(
@@ -42909,7 +43159,7 @@ async function readPromptfooConfigs(assertionsPath) {
       async (extension) => {
         const file2 = `promptfooconfig.${extension}`;
         try {
-          return [{ file: file2, bytes: await readFile11(join16(directory, file2)) }];
+          return [{ file: file2, bytes: await readFile12(join17(directory, file2)) }];
         } catch (error51) {
           if (error51.code === "ENOENT") return [];
           throw error51;
@@ -43945,7 +44195,7 @@ function apiRoute(options) {
   };
 }
 function planRoute(kind, options) {
-  const provider = createClaudeLoginProvider(options);
+  const provider = kind === "codex-login" ? createCodexLoginProvider(options) : createClaudeLoginProvider(options);
   return {
     label: `the ${kind} price list ${options.priceList}`,
     provider,
@@ -45269,8 +45519,8 @@ async function planStages(context2, options) {
   for (const stage of stages) {
     const checkpoint = state.stages[stage];
     const digestValue = upstreamCurrent ? await inputDigest(stage, context2, state) : void 0;
-    const exists = checkpoint !== void 0 && await checkpointOutputExists(context2, stage, checkpoint);
-    const current = digestValue !== void 0 && checkpoint?.inputDigest === digestValue && exists;
+    const exists2 = checkpoint !== void 0 && await checkpointOutputExists(context2, stage, checkpoint);
+    const current = digestValue !== void 0 && checkpoint?.inputDigest === digestValue && exists2;
     const stageState = current ? "complete" : checkpoint === void 0 ? "pending" : "stale";
     result2.push({ stage, state: stageState });
     upstreamCurrent = current;
@@ -45565,7 +45815,7 @@ async function evaluatorRunIdentity(context2) {
   );
   return jsonValue2({
     ...context2.evaluator,
-    assertionsSha256: sha256(await readFile12(assertionsPath)),
+    assertionsSha256: sha256(await readFile13(assertionsPath)),
     ...promptfooConfigs.length === 0 ? {} : { promptfooConfigs }
   });
 }
@@ -46282,7 +46532,7 @@ async function inputDigest(stage, context2, state) {
       stage,
       repository: await contextRepositoryDigest(context2),
       scanner: SCAN_REVISION,
-      ...context2.matchersPath === void 0 ? {} : { matchers: sha256(await readFile12(context2.matchersPath)) }
+      ...context2.matchersPath === void 0 ? {} : { matchers: sha256(await readFile13(context2.matchersPath)) }
     });
   }
   if (stage === "ingest") {
@@ -46556,6 +46806,7 @@ function routeHandle(context2, kind) {
         catalogReference: context2.catalogReference
       });
     case "claude-login":
+    case "codex-login":
       return planRoute(kind, {
         priceList: context2.catalogReference ?? DEFAULT_PLAN_PRICE_LIST,
         pricingOverrides: context2.pricingOverrides,
@@ -46609,17 +46860,17 @@ function stageNotCompleted(stage, message2 = `${stage} has not completed`) {
 async function readTraceInput(path) {
   let metadata;
   try {
-    metadata = await stat3(path);
+    metadata = await stat4(path);
   } catch (error51) {
     if (!isMissing2(error51)) throw error51;
     throw missingTraceInput(path);
   }
-  if (!metadata.isDirectory()) return [await readFile12(path)];
+  if (!metadata.isDirectory()) return [await readFile13(path)];
   const names = (await readdir4(path, { withFileTypes: true })).filter(
     (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
   ).map(({ name }) => name).sort();
   if (names.length === 0) throw emptyTracesDirectory(path);
-  return Promise.all(names.map((name) => readFile12(join17(path, name))));
+  return Promise.all(names.map((name) => readFile13(join18(path, name))));
 }
 async function executeStage(stage, context2, inputDigestValue, runId) {
   switch (stage) {
@@ -46665,7 +46916,7 @@ async function executeScan(context2, inputDigestValue) {
   });
   if (!coverage.pass) {
     const failures = coverage.failures.map(
-      (failure) => `${failure.code}: ${failure.language} (${failure.dependencies.join(", ")})`
+      (failure2) => `${failure2.code}: ${failure2.language} (${failure2.dependencies.join(", ")})`
     ).join("; ");
     throw new ProtocolError({
       exitCode: 2,
@@ -48653,12 +48904,12 @@ function modeBProviderBaseUrl(baseUrl) {
   return url2.href.replace(/\/$/, "");
 }
 function reportPath(context2) {
-  return join17(context2.storeRoot, reportKey(context2.projectId, "report.md"));
+  return join18(context2.storeRoot, reportKey(context2.projectId, "report.md"));
 }
 async function codeContextFor(context2, callSites, warn) {
   if (context2.codeGraphPath === void 0) {
-    const found = join17(context2.repo, "graphify-out", "graph.json");
-    if (await stat3(found).then(
+    const found = join18(context2.repo, "graphify-out", "graph.json");
+    if (await stat4(found).then(
       (entry) => entry.isFile(),
       () => false
     )) {
@@ -48715,7 +48966,7 @@ async function executeReport(context2, inputDigestValue, ledger) {
   await putMutableJson(context2.store, jsonKey, jsonValue2(report));
   await putMutableText(context2.store, markdownKey, markdown);
   await mkdir5(dirname7(reportPath(context2)), { recursive: true });
-  await writeFile7(reportPath(context2), markdown, "utf8");
+  await writeFile8(reportPath(context2), markdown, "utf8");
   return jsonKey;
 }
 async function checkpointOutputExists(context2, stage, checkpoint) {
@@ -48725,7 +48976,7 @@ async function checkpointOutputExists(context2, stage, checkpoint) {
     return false;
   }
   try {
-    await readFile12(reportPath(context2));
+    await readFile13(reportPath(context2));
     return true;
   } catch (error51) {
     if (isMissing2(error51)) return false;
@@ -48851,14 +49102,14 @@ async function repositoryFiles(repo, storeRoot) {
   const paths = await gitFiles(repo) ?? await walkFiles(repo);
   const files = [];
   for (const path of paths) {
-    const absolute = join17(repo, ...path.split("/"));
+    const absolute = join18(repo, ...path.split("/"));
     if (absolute === storeRoot || absolute.startsWith(`${storeRoot}${sep5}`)) {
       continue;
     }
     if (path.split("/").some((segment) => IGNORED_DIRECTORIES.has(segment))) {
       continue;
     }
-    const stats = await stat3(absolute).catch(() => void 0);
+    const stats = await stat4(absolute).catch(() => void 0);
     if (stats?.isFile()) files.push({ absolute, path });
   }
   return files.sort((left, right) => compareText(left.path, right.path));
@@ -48887,7 +49138,7 @@ async function walkFiles(repo) {
   const files = [];
   async function visit(directory) {
     for (const entry of await readdir4(directory, { withFileTypes: true })) {
-      const absolute = join17(directory, entry.name);
+      const absolute = join18(directory, entry.name);
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) await visit(absolute);
       } else if (entry.isFile()) {
@@ -48907,7 +49158,7 @@ async function repositoryDigest(repo, storeRoot) {
       ...await Promise.all(
         files.slice(index, index + 16).map(async (file2) => ({
           path: file2.path,
-          sha256: sha256(await readFile12(file2.absolute))
+          sha256: sha256(await readFile13(file2.absolute))
         }))
       )
     );
@@ -49497,7 +49748,11 @@ function modelRoutesSection(routes) {
     ),
     "",
     "Calls through a plan route were measured through a coding CLI, not the API your application calls: the CLI adds its own instructions to each call and cannot set temperature or an output limit, and recorded cases with more than one turn were left out. Their latency is the API time the CLI reports. Run `rightmodeler docs model-routes` for details.",
-    ""
+    "",
+    ...routes.some(({ provider }) => provider === "codex-login") ? [
+      "Codex does not report which model answered: the requested model is recorded, and a call Codex reports as rerouted is left out of the evidence. Codex keeps a code tool and a patch tool that cannot be turned off, so a call can include a tool step its output does not show; a call where Codex reports a tool step is left out of the evidence. Rightmodeler turns off Codex's code execution for these calls. Codex also adds your global instructions file, when you have one, to every call, and runs each model at its default reasoning effort.",
+      ""
+    ] : []
   ];
 }
 function reportText(value) {
@@ -49592,7 +49847,7 @@ async function runAuditTabulate(options) {
     })
   });
   const worksheet = options.worksheet ? auditWorksheetSchema.parse(
-    JSON.parse(await readFile12(resolve8(options.worksheet), "utf8"))
+    JSON.parse(await readFile13(resolve8(options.worksheet), "utf8"))
   ) : await loadCurrent(context2, "audit-sample", auditWorksheetSchema);
   const result2 = auditTabulate(worksheet);
   await putMutableJson(
@@ -49702,9 +49957,9 @@ function applySwaps2(options) {
 }
 
 // src/data/discover.ts
-import { open, readdir as readdir5, realpath as realpath4, stat as stat4 } from "node:fs/promises";
-import { homedir } from "node:os";
-import { isAbsolute as isAbsolute3, join as join18, relative as relative9, resolve as resolve10 } from "node:path";
+import { open, readdir as readdir5, realpath as realpath4, stat as stat5 } from "node:fs/promises";
+import { homedir as homedir2 } from "node:os";
+import { isAbsolute as isAbsolute3, join as join19, relative as relative9, resolve as resolve10 } from "node:path";
 var MAX_FILES = 50;
 var MAX_CODEX_EXAMINED = 300;
 var MAX_READ_BYTES = 64 * 1024;
@@ -49712,7 +49967,7 @@ var MAX_SAMPLE_RECORDS = 20;
 var SOURCE_BUDGETS = { local: 20, claude: 15, codex: 15 };
 async function discoverTraces(options) {
   const repo = resolve10(options.repo);
-  const homeDir = resolve10(options.homeDir ?? homedir());
+  const homeDir = resolve10(options.homeDir ?? homedir2());
   const candidates = await candidateFiles(repo, homeDir);
   const discovered = [];
   for (const candidate of candidates.slice(0, MAX_FILES)) {
@@ -49746,10 +50001,10 @@ function sanitizeClaudeProjectPath(repo) {
 async function candidateFiles(repo, homeDir) {
   const localPaths = await localCandidatePaths(repo);
   const claudePaths = (await jsonFiles(
-    join18(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
+    join19(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
     false
   )).sort(compareText);
-  const codexPaths = (await jsonFiles(join18(homeDir, ".codex", "sessions"), true)).filter((path) => path.endsWith(".jsonl")).sort((left, right) => compareText(right, left));
+  const codexPaths = (await jsonFiles(join19(homeDir, ".codex", "sessions"), true)).filter((path) => path.endsWith(".jsonl")).sort((left, right) => compareText(right, left));
   const sources = [
     {
       source: "local",
@@ -49790,7 +50045,7 @@ async function codexCandidates(paths, repo) {
     }
     examined += 1;
     try {
-      const metadata = await stat4(path);
+      const metadata = await stat5(path);
       const head = await detectionHead(path, metadata.size);
       if (codexSessionCwd(head.text) !== repo) continue;
       files.push({
@@ -49810,7 +50065,7 @@ async function statCandidates(paths, source, sortNewest) {
   const files = (await Promise.all(
     selectedPaths.map(async (path) => {
       try {
-        const metadata = await stat4(path);
+        const metadata = await stat5(path);
         return {
           path,
           source,
@@ -49831,7 +50086,7 @@ async function statCandidates(paths, source, sortNewest) {
   return files.slice(0, MAX_FILES);
 }
 async function localCandidatePaths(repo) {
-  const tracesDirectory = join18(repo, "traces");
+  const tracesDirectory = join19(repo, "traces");
   const [realRepo, realTracesDirectory] = await Promise.all([
     realpath4(repo).catch(() => void 0),
     realpath4(tracesDirectory).catch(() => void 0)
@@ -49844,7 +50099,7 @@ async function localCandidatePaths(repo) {
   });
   const topLevelSet = new Set(topLevel);
   return unique([
-    ...[join18(repo, "traces.json"), join18(repo, "traces.jsonl")].filter(
+    ...[join19(repo, "traces.json"), join19(repo, "traces.jsonl")].filter(
       (path) => topLevelSet.has(path)
     ),
     ...nested,
@@ -49860,7 +50115,7 @@ async function jsonFiles(root, recursive) {
   }
   return entries.filter(
     (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
-  ).map((entry) => join18(entry.parentPath, entry.name));
+  ).map((entry) => join19(entry.parentPath, entry.name));
 }
 function isWithin(root, path) {
   const fromRoot = relative9(root, path);
@@ -50667,7 +50922,7 @@ var processRuntime = {
   stdin: process.stdin,
   stdout: process.stdout,
   env: process.env,
-  homeDir: homedir2(),
+  homeDir: homedir3(),
   now: () => /* @__PURE__ */ new Date()
 };
 function createProgram(io = processIo, runtime = processRuntime) {
@@ -51064,12 +51319,12 @@ function addPipelineOptions(command, provider) {
     ).addOption(
       new Option(
         "--route <kind>",
-        "where candidate replays run: api (the --base-url endpoint; the default with --base-url) or claude-login (the claude CLI signed in on this machine; needs --judge-route)"
+        "where candidate replays run: api (the --base-url endpoint), claude-login or codex-login (the claude or codex CLI signed in on this machine); a plan route needs --judge-route"
       ).choices(["api", ...Object.keys(planRouteVendors)])
     ).addOption(
       new Option(
         "--judge-route <kind>",
-        "where the built-in judge runs: api or claude-login; required with a plan --route, because the judge must come from another vendor than the candidates"
+        "where the built-in judge runs: api, claude-login or codex-login; use a vendor other than the candidates'"
       ).choices(["api", ...Object.keys(planRouteVendors)])
     ).option(
       "--max-cost-usd <amount>",

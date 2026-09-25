@@ -1,5 +1,6 @@
 import {
   createClaudeLoginProvider,
+  createCodexLoginProvider,
   createProvider,
   type CreateProviderOptions,
   type ModelCatalogEntry,
@@ -38,7 +39,10 @@ export function planRoute(
   kind: PlanRouteKind,
   options: PlanProviderOptions,
 ): RouteHandle {
-  const provider = createClaudeLoginProvider(options);
+  const provider =
+    kind === "codex-login"
+      ? createCodexLoginProvider(options)
+      : createClaudeLoginProvider(options);
   return {
     label: `the ${kind} price list ${options.priceList}`,
     provider,
