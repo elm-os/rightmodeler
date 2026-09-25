@@ -55,6 +55,16 @@ Two rules you cannot infer from the tree:
 - **`.rightmodeler/` is generated output**, not source. It is the handoff boundary
   between the TypeScript harness stages, and it is gitignored.
 
+**Adding an integration.** Document it in its page data under
+`apps/web/src/content/integrations/data` (registered in
+`apps/web/src/content/integrations/index.ts`, with its logo under
+`apps/web/public/integrations/logos`) and in the packaged CLI doc for its kind under
+`harness/packages/rightmodeler/docs/`, for example the supported trace sources in
+`getting-started.md` or a gateway in `gateways.md`. A new trace source also goes in
+`TRACE_SOURCES` in `apps/web/src/lib/product-facts.ts`, which the site's trace format
+counts and lists read. The root README links to the integrations hub built from that
+data and to those docs, so it needs no edit.
+
 ## Commands
 
 Shared lifecycle tasks run from the repo root:
