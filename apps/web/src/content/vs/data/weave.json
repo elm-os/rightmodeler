@@ -11,7 +11,7 @@
   "h1": "rightmodeler vs W&B Weave",
   "lede": "W&B Weave traces your agent in production, scores it with signals and evaluations you configure, and lets you try other models in its Playground. rightmodeler reads the calls Weave already recorded and settles one narrower question with evidence: which model should each step call?",
   "integrationSlug": "weave",
-  "related": ["braintrust", "langsmith", "phoenix"],
+  "related": ["braintrust", "langsmith", "phoenix", "langwatch"],
   "cta": "github",
   "blocks": [
     {

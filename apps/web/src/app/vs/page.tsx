@@ -28,7 +28,7 @@ const BANDS: { title: string; intro: string; category: string }[] = [
   {
     title: "The observers",
     intro:
-      "They trace, evaluate, and improve your agent where it runs. rightmodeler reads the traces they keep and decides which model each step should call.",
+      "They trace, evaluate, and improve your agent where it runs. rightmodeler reads the traces most of them keep and decides which model each step should call.",
     category: "observability",
   },
   {

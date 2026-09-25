@@ -1,0 +1,183 @@
+{
+  "slug": "opik",
+  "name": "Opik",
+  "website": "https://www.comet.com/site/products/opik/",
+  "logo": "/vs/logos/opik.svg",
+  "category": "observability",
+  "verdict": "complement",
+  "verdictLabel": "Complement · Opik test suites gate the swap",
+  "title": "rightmodeler vs Opik: better agents, right-sized models",
+  "description": "Opik, by Comet, traces your agent, tests it, and optimizes its prompts. rightmodeler replays each recorded step on cheaper models and opens a model-only PR.",
+  "h1": "rightmodeler vs Opik",
+  "lede": "Opik, the open-source platform Comet builds, traces your agent, tests it with plain-language assertions, and improves it with prompt optimization and an assistant that fixes code. rightmodeler leaves prompts and code alone and settles one question per step with recorded evidence: can a cheaper model do this job?",
+  "integrationSlug": "",
+  "related": ["langfuse", "phoenix", "langwatch"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Complements, with one overlap worth naming. As of 2026-09-24, Opik, the open-source platform Comet builds and hosts, logs every step your agent takes and wraps evaluation around it: test suites whose plain-language assertions an LLM judge checks, datasets scored with more than 30 built-in metrics, online evaluation rules and guardrails in production, and an Agent Optimizer SDK whose algorithms rewrite prompts, choose few-shot examples, refine tool descriptions, and tune call parameters. Its assistant, Ollie, reads a failing trace, proposes a code fix you approve, and adds the trace to a test suite so the same bug is caught if it comes back. rightmodeler, a free MIT-licensed CLI, works the lever that loop mostly leaves to you: which model each step calls. It replays recorded steps through cheaper models from your provider's live catalog, judges each against the output you already accepted, reports agreement, sample size, and abstentions per step family, and turns a swap that clears every gate into a draft pull request that changes model identifiers only. The overlap: Opik's Parameter Optimizer can treat the model as one more parameter to search, over a dataset and a metric you supply."
+    },
+    {
+      "type": "table",
+      "heading": "How they differ",
+      "intro": "Opik is where your agent is traced, tested, and tuned. rightmodeler is a report on one decision inside that loop.",
+      "caption": "opik vs rightmodeler",
+      "leftLabel": "Opik",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "job",
+          "theirs": "trace, evaluate, and improve agents from development through production",
+          "ours": "decide which model each step should call, with evidence"
+        },
+        {
+          "dimension": "starting point",
+          "theirs": "traces your app logs through the Opik SDKs, framework integrations, or OpenTelemetry",
+          "ours": "trace files you export in a format the CLI reads, and the repository that made them"
+        },
+        {
+          "dimension": "quality bar",
+          "theirs": "test-suite assertions an LLM judge checks, and metrics scored on datasets",
+          "ours": "agreement with the output you accepted, judged by a model from a family neither side belongs to"
+        },
+        {
+          "dimension": "what it changes",
+          "theirs": "prompts, few-shot examples, tool descriptions, and call parameters through the Agent Optimizer; code, with your approval, through Ollie",
+          "ours": "model identifiers at the call sites your traces came from, and nothing else"
+        },
+        {
+          "dimension": "trying another model",
+          "theirs": "Prompt Playground variants side by side; the Parameter Optimizer can search a list of models you name",
+          "ours": "cheaper candidates from your provider's live catalog, replayed on every recorded call of a step family"
+        },
+        {
+          "dimension": "verdict",
+          "theirs": "pass rates, metric scores, and the best prompt or parameters found",
+          "ours": "a recommendation or an abstention per step family, with sample size, re-cleared on held-out cases"
+        },
+        {
+          "dimension": "seat at runtime",
+          "theirs": "tracing beside every call; guardrails can block a response inline",
+          "ours": "none; it runs offline on files you exported"
+        }
+      ]
+    },
+    {
+      "type": "stack",
+      "heading": "Use both: the pull request is where they meet",
+      "intro": "There is no integration. The handoff is a draft pull request that your CI already knows how to test.",
+      "paragraphs": [
+        "rightmodeler has no Opik integration. It does not read Opik's exports, which come out of the SDKs, the REST API, the UI, or the opik export command as Opik's own JSON or CSV, and it does not call Opik to grade anything; the external evaluators it ships are Braintrust, Langfuse, LangSmith, and promptfoo. The audit reads trace files in formats such as OpenTelemetry GenAI and OpenInference spans. Opik accepts OpenTelemetry traces on its own endpoint, per its docs, so if your model calls already emit OpenTelemetry GenAI spans with their messages, a collector can send the same spans to Opik and to a file the audit reads.",
+        "The pull request is the shared surface. rightmodeler apply opens a draft that changes model identifiers only, with the evidence table in its body and review requested from the owners of the files it touches. Your CI runs on it like on any other change, so an Opik evaluation you already run there grades the cheaper model before anyone merges: Opik's docs suggest running dataset evaluations in CI, and its repository lists a PyTest integration for testing on every commit. rightmodeler watch then reconciles the pull request: a failing check gets one comment, and if a check with the same name fails again under a new run on the same head commit, the pull request is closed. If apply runs inside GitHub Actions, give it a GitHub App token: CI on a pull request opened with the job's own GITHUB_TOKEN waits for approval."
+      ],
+      "commands": [
+        {
+          "comment": "# replay recorded steps on cheaper models, on your own provider key",
+          "command": "npx rightmodeler init --traces ./traces --base-url $BASE_URL --api-key-env PROVIDER_API_KEY"
+        },
+        {
+          "comment": "# open the model-only draft pull request; your CI, Opik evaluation included, runs on it",
+          "command": "npx rightmodeler apply --owner $OWNER --github-token-env GITHUB_TOKEN"
+        },
+        {
+          "comment": "# reconcile it: comment on a failing check, close on a repeat failure",
+          "command": "npx rightmodeler watch --owner $OWNER --pr $PR --github-token-env GITHUB_TOKEN"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one does the job?",
+      "intro": "Three situations, with the honest winner named in each.",
+      "scenarios": [
+        {
+          "scenario": "Your support agent's system prompt keeps failing the same test-suite assertions, and hand-editing it has stopped helping.",
+          "winner": "theirs",
+          "why": "That is Opik's Agent Optimizer, per its docs: pick an algorithm such as MetaPrompt, HRPO, Evolutionary, or GEPA, give it the prompt, a dataset, and a metric, and it proposes and scores new prompts until the search ends, returns the best one, and logs every trial to Opik. rightmodeler changes which model reads the prompt, never the prompt itself."
+        },
+        {
+          "scenario": "Your Opik test suites pass, but every step of the agent calls the same frontier model, and nobody can say which steps need it.",
+          "winner": "ours",
+          "why": "Opik shows what each call cost and will score any model you choose to try; picking the cheaper candidates and trying them at every step is left to you. rightmodeler shortlists them from your provider's live catalog, replays every recorded step family on them, judges each against the output you accepted, abstains where the sample is thin, re-clears the quality floor on held-out cases, and opens a draft pull request only for the swaps that hold."
+        },
+        {
+          "scenario": "You already run an Opik evaluation in CI, and any cheaper model has to pass it before it merges.",
+          "winner": "both",
+          "why": "Run the audit, then let rightmodeler apply open the model-only draft. Your CI grades it with the Opik evaluation you trust, and rightmodeler watch comments on a failing check and closes the pull request if the same check fails again on the same commit. Each tool supplies the evidence it is built for."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "Opik watches production and rightmodeler does not. Online evaluation rules score live traces, alerts fire on the events you choose, Diagnostics scans the last day of traces for recurring failures, and guardrails can block a response before it reaches a user, per its docs. rightmodeler runs after the fact on files you exported and has no live view, by design.",
+        "Opik changes more of the agent. Its Agent Optimizer rewrites prompts, picks few-shot examples, refines tool descriptions and schemas, and tunes call parameters, and Ollie proposes code edits you approve, then reruns the agent. rightmodeler changes model identifiers and nothing else, so a failure that comes from a prompt, a tool, or the code is outside its reach.",
+        "Opik can answer a model question itself. The Prompt Playground runs the same prompt on different models against a test suite, and the Parameter Optimizer can search a list of models you name over a dataset you build, which can come from production traces. If you know which models to try and trust that dataset and metric, the answer is real. What rightmodeler adds is a shortlist from your provider's live catalog, a verdict for each step family on the traffic you recorded, and a pull request.",
+        "rightmodeler replays plain-text steps. A recorded conversation that carries tool calls, tool definitions, or non-text parts is left out of the replay sample, and a call site that needs tools or structured output is not replayed. Opik's Agent Playground runs your whole agent, tools included.",
+        "Opik is Apache-2.0 and free to self-host as a full platform, per its repository, and Comet also runs it as Opik Cloud. rightmodeler is a free MIT-licensed CLI, not a place your traces live, and its verdicts measure agreement with the output you shipped, which is evidence, not proof of correctness. Where the evidence is thin, the audit abstains instead of recommending."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page uses",
+      "terms": [
+        {
+          "term": "test suite",
+          "def": "Opik's pass/fail tests for an agent: test items, plain-language assertions an LLM judge checks, and an execution policy that sets how many runs each item gets and how many must pass. Per Opik's docs, suites grow from the production failures you find."
+        },
+        {
+          "term": "trace",
+          "slug": "trace",
+          "def": "The record of one request through your agent. In Opik a trace holds spans for each step, such as an LLM call, a tool call, or a retrieval. rightmodeler replays the model calls in the trace files you export."
+        },
+        {
+          "term": "LLM-as-a-judge",
+          "slug": "llm-as-judge",
+          "def": "A model that grades another model's output. Opik uses one to check test-suite assertions. rightmodeler's built-in judge comes from a model family neither the candidate nor the current model belongs to, and it grades both output orders."
+        },
+        {
+          "term": "swap candidate",
+          "slug": "swap-candidate",
+          "def": "A cheaper model shortlisted from your configured provider's live catalog and replayed on one step family's recorded inputs."
+        },
+        {
+          "term": "quality floor",
+          "slug": "quality-floor",
+          "def": "The configurable minimum a candidate must clear, on the cases it was chosen on and again on held-out cases, before the audit recommends it."
+        },
+        {
+          "term": "abstain",
+          "slug": "abstain",
+          "def": "What the audit does when a step family's evidence is too thin: it recommends nothing and names the reason. The current model stays."
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Doesn't Opik already help with model cost?",
+          "a": "It helps you see cost and tune around it. Per its docs, Opik estimates the cost of every span, trace, and project, its optimizer FAQ says the Agent Optimizer can shrink prompts to cut cost and latency, and the Parameter Optimizer can search a list of models you name over a dataset and metric you define. Cost Intelligence, an enterprise feature, targets coding-agent spend in Claude Code, Codex, and Cursor. rightmodeler starts from the calls your agent recorded, shortlists cheaper models from your provider's live catalog, and returns a verdict per step family with sample size and abstentions, ending in a model-only draft pull request."
+        },
+        {
+          "q": "Is there an integration between rightmodeler and Opik?",
+          "a": "No. rightmodeler does not read Opik's exports and does not use Opik as an evaluator; the external evaluators it ships are Braintrust, Langfuse, LangSmith, and promptfoo. The two meet in your repository: a rightmodeler draft pull request runs through whatever CI you already have, Opik evaluations included."
+        },
+        {
+          "q": "Ollie fixes things too. How is that different from rightmodeler's pull request?",
+          "a": "Per Opik's docs, Ollie works through opik connect on your machine: it reads your source files, proposes an edit you approve, updates the file locally, reruns the agent, and can add the failing trace to a test suite. rightmodeler apply opens a draft pull request on GitHub that may change model identifiers only: a diff check refuses anything else, the body carries the evidence table, and review is requested from the owners of the changed files. A person merges it."
+        },
+        {
+          "q": "Is Opik open source?",
+          "a": "Yes. Per its repository, Opik is licensed under Apache 2.0, and its server, web application, and core observability and evaluation features can be self-hosted without a commercial license, with Docker Compose for local use or a Helm chart on Kubernetes. As of 2026-09-24, Comet's pricing page lists a free cloud plan with 25k spans a month, a Pro plan at $19 a month, and custom Enterprise plans. The rightmodeler CLI is MIT-licensed."
+        },
+        {
+          "q": "Will the audit always find a cheaper model?",
+          "a": "No, and it is designed not to. A step family abstains when the evidence is thin, when too many of its cases had to be left out, or when no candidate clears the quality floor again on held-out cases. A report that says your current models already earn their cost is a valid result."
+        }
+      ]
+    }
+  ]
+}

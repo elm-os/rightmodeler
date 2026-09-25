@@ -11,7 +11,7 @@
   "h1": "rightmodeler vs Modaic",
   "lede": "Modaic works on the judge itself: typed decisions, confidence scores, and expert feedback that refines its instructions. rightmodeler puts a judgment to one use, deciding which model each step of your agent needs, measured offline against the outputs you accepted.",
   "integrationSlug": "modaic",
-  "related": ["braintrust", "promptfoo", "langsmith"],
+  "related": ["braintrust", "promptfoo", "langsmith", "deepeval"],
   "cta": "github",
   "blocks": [
     {

@@ -1,0 +1,209 @@
+{
+  "slug": "ragas",
+  "name": "Ragas",
+  "website": "https://docs.ragas.io/en/stable/",
+  "logo": "/vs/logos/ragas.svg",
+  "category": "evals",
+  "verdict": "different-job",
+  "verdictLabel": "Different job · a toolkit you assemble vs a finished audit",
+  "title": "rightmodeler vs Ragas: a toolkit vs a finished audit",
+  "description": "Ragas gives you metrics, test data generation, and experiments to assemble your own evals. rightmodeler is one finished audit: which model each step needs.",
+  "h1": "rightmodeler vs Ragas",
+  "lede": "Ragas is an open-source toolkit for building your own evaluation workflow: metrics, synthetic test data, and experiments you wire together in Python. rightmodeler is one workflow already assembled for one decision: which model each step of your agent should call, judged on the traces you recorded.",
+  "integrationSlug": "",
+  "related": ["deepeval", "promptfoo", "langfuse"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Different jobs, and the real difference is who assembles the workflow. As of 2026-09-24, Ragas describes itself as an open-source evaluation framework for LLM applications, RAG pipelines, AI agents, and workflows: metrics, test data generation, experiments over datasets, and integrations with frameworks and tracing tools, as parts you put together in Python. Its docs include a guide to evaluating a new LLM against your current one: you bring the dataset, define the metric, run both models as experiments, and read the results. rightmodeler, a free MIT-licensed CLI, is that model decision already assembled: it reads the traces your agent recorded, shortlists cheaper models from your provider's live catalog, replays every step family, judges each candidate against the output you accepted, and opens a draft pull request that changes model identifiers only. rightmodeler has no dedicated integration with Ragas; a Ragas suite in your CI checks the draft pull request like any other change."
+    },
+    {
+      "type": "fork",
+      "left": {
+        "heading": "Assemble it with Ragas",
+        "items": [
+          "You want to design the evaluation yourself: the dataset, the metrics, and how results are stored and compared. Ragas gives you the parts, per its docs: a Dataset class on a local CSV backend, an experiment decorator that saves every run to a CSV file, and metrics you pick or write.",
+          "You have no production traffic yet. Ragas generates synthetic test sets for RAG pipelines and for agent or tool-use workflows, so there is something to evaluate before launch.",
+          "The question is retrieval or grounding: context precision, context recall, faithfulness, response relevancy, noise sensitivity. Those metrics are Ragas's home ground.",
+          "You want to compare more than models: prompts, retrievers, embedding models, or whole workflows, each run as an experiment against a baseline."
+        ]
+      },
+      "right": {
+        "heading": "Run rightmodeler",
+        "items": [
+          "The question is narrow and recurring: which model should each step of an agent that already runs in production call?",
+          "You want the test set to be the traffic you already recorded, with the output you accepted as the reference, instead of a dataset you build first.",
+          "You want the candidates picked for you from your provider's live catalog, and each verdict to arrive with sample size, abstentions, and a quality floor cleared again on held-out cases.",
+          "You want the result as a draft pull request that changes model identifiers only, for a person to review and merge."
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "heading": "How they differ",
+      "intro": "Both can answer whether a different model holds up. Here is who does which part of the work.",
+      "caption": "ragas vs rightmodeler",
+      "leftLabel": "Ragas",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "what you get",
+          "theirs": "a Python library and CLI of evaluation parts: metrics, datasets, experiments, and test set generators",
+          "ours": "one finished workflow for one decision"
+        },
+        {
+          "dimension": "test cases",
+          "theirs": "a dataset you assemble, sample from your application, or generate synthetically",
+          "ours": "the steps your agent already recorded, read from exported traces"
+        },
+        {
+          "dimension": "reference",
+          "theirs": "expected outputs or grading notes you supply, or reference-free metrics",
+          "ours": "the output you accepted for that exact step"
+        },
+        {
+          "dimension": "trying another model",
+          "theirs": "you run your app on each model as an experiment and compare the result files, per its Evaluate a New LLM guide",
+          "ours": "cheaper candidates shortlisted from your provider's live catalog and replayed on every step family"
+        },
+        {
+          "dimension": "grading",
+          "theirs": "LLM-based metrics with the evaluator model you choose, and non-LLM metrics such as BLEU, ROUGE, exact match, and SQL execution checks",
+          "ours": "a judge from a model family neither side belongs to, or your Braintrust, Langfuse, LangSmith, or promptfoo evaluator"
+        },
+        {
+          "dimension": "the decision",
+          "theirs": "yours, read from the results; the guide says to weigh accuracy against cost and latency",
+          "ours": "a recommendation or an abstention per step family, with sample size, re-cleared on held-out cases"
+        },
+        {
+          "dimension": "output",
+          "theirs": "experiment results in CSV files for you to analyze",
+          "ours": "report.md, and a draft pull request that changes model identifiers only"
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Can you use both? Yes, and neither replaces the other",
+      "paragraphs": [
+        "Nothing about your Ragas setup changes. Your datasets, metrics, and experiments stay where they are, and rightmodeler never sits in the request path or asks for new instrumentation. There is no dedicated integration between them, and the handoff below needs none.",
+        "Ragas scores the data you hand it; recording your app's traffic is a tracing tool's job. rightmodeler needs recorded traces, so it reads the export from the tool that already traces your app, such as Langfuse, LangSmith, W&B Weave, or OpenTelemetry and OpenInference spans. Ragas's integration guides cover several of the same tools, including Langfuse, LangSmith, and Arize Phoenix.",
+        "The handoff is your repository. rightmodeler apply opens a draft pull request that changes model identifiers only, so a Ragas pytest suite, the CI setup Ragas's guide describes, checks the swap before anyone merges when your CI runs it on pull requests. rightmodeler watch comments once when a check fails and closes the pull request if a check with the same name fails again under a new run on the same head commit. You can also plug the proposed model into your own Ragas experiment as the candidate against your current baseline, the loop its Evaluate a New LLM guide describes."
+      ]
+    },
+    {
+      "type": "stack",
+      "heading": "The handoff, step by step",
+      "intro": "Three commands, run from your repository on traces exported from the tool that records your app.",
+      "commands": [
+        {
+          "comment": "# preview the pipeline against your exported traces, without spending",
+          "command": "npx rightmodeler init --plan --traces ./traces --repo ."
+        },
+        {
+          "comment": "# replay cheaper candidates through your endpoint, capped at 25 USD",
+          "command": "npx rightmodeler init --traces ./traces --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+        },
+        {
+          "comment": "# open the model-only draft pull request your Ragas checks run on",
+          "command": "npx rightmodeler apply --owner $OWNER --github-token-env GITHUB_TOKEN"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one does the job?",
+      "intro": "Three situations, with the honest winner named in each.",
+      "scenarios": [
+        {
+          "scenario": "Your RAG assistant has not launched. You have a folder of documents, no user traffic, and a hunch that retrieval, not the model, is the weak link.",
+          "winner": "theirs",
+          "why": "Per its docs, Ragas can generate a test set from your documents, score the retriever with context precision and context recall, and score the answer's consistency with what was retrieved with faithfulness. rightmodeler needs recorded traces, and it changes which model a step calls, never the retriever or the prompt."
+        },
+        {
+          "scenario": "Your agent has run in production for months, every step still calls the frontier model you launched with, and nobody has time to build a dataset and an experiment for each step.",
+          "winner": "ours",
+          "why": "That is the whole assembly job Ragas leaves to you, already done. rightmodeler turns the traces you recorded into the test set, shortlists cheaper models from your provider's live catalog, replays every step family, and reports agreement with the output you accepted, sample size, and abstentions, then opens a pull request only for the swaps that clear every gate."
+        },
+        {
+          "scenario": "Your team keeps a Ragas benchmark for the agent's main task and also wants the rest of the steps right-sized.",
+          "winner": "both",
+          "why": "Keep the benchmark for the task you curated it for, and let the audit cover every recorded step family. When a swap reaches a draft pull request, run your Ragas suite on it before merging. The two give different evidence: agreement with a dataset you built, and agreement with outputs you shipped."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "Ragas covers ground rightmodeler never touches: retrieval and grounding metrics, synthetic test sets for RAG and agent workflows, aligning an LLM judge with human labels, prompt evaluation and optimization, and comparisons of embedding models and retrievers. rightmodeler changes which model a step calls, and nothing else.",
+        "Ragas works before launch. Its test set generators build data from your documents, while rightmodeler needs recorded traces and has nothing to say about an agent that has not run.",
+        "Ragas is a library you shape to your system, and that is a real advantage. If you want to decide how evidence is gathered, scored, stored, and compared, Ragas gives you that control. rightmodeler is opinionated by design: the workflow is set, and you tune it through its release policy, meaning the quality floor, shortlist size, and model allow and deny lists, or by naming an external evaluator.",
+        "rightmodeler replays plain-text steps. A recorded case whose conversation carries tool calls, tool definitions, or non-text parts is left out of the replay sample, and a call site that needs tools or structured output is not replayed. Ragas's agent metrics, such as tool call accuracy and agent goal accuracy, score exactly those steps.",
+        "And the audit's verdicts say only what they measure: agreement with the output you shipped, which is evidence, not proof of correctness. Where the evidence runs thin, the audit abstains instead of recommending."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "The words this page turns on",
+      "terms": [
+        {
+          "term": "experiment",
+          "def": "Ragas's term, per its docs: a deliberate change to your application, such as a new model or retriever, run over a test dataset and scored with metrics, with the results saved for comparison. You design it and read it."
+        },
+        {
+          "term": "trace",
+          "slug": "trace",
+          "def": "The record of what your agent did: every model call with its inputs and outputs. Ragas scores data you hand it; rightmodeler reads traces exported from the tool that records your app."
+        },
+        {
+          "term": "swap candidate",
+          "slug": "swap-candidate",
+          "def": "A cheaper model shortlisted from your configured provider's live catalog and replayed on one step's recorded inputs."
+        },
+        {
+          "term": "reference evidence",
+          "slug": "reference-evidence",
+          "def": "Scores measured against the output you actually accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness: the production result is the reference, not ground truth."
+        },
+        {
+          "term": "quality floor",
+          "slug": "quality-floor",
+          "def": "The minimum agreement a candidate must clear, and clear again on held-out cases, before the audit recommends a swap. It is configurable, and anything below it is a no."
+        },
+        {
+          "term": "abstain",
+          "slug": "abstain",
+          "def": "The audit's decision to recommend nothing for a step family when the sample is small or the evidence is mixed, with the reason named. The current model stays."
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Can Ragas compare models?",
+          "a": "Yes, per its docs. Its Evaluate a New LLM guide runs a baseline and a candidate model over the same dataset as experiments, combines the results into one CSV, and tells you to weigh accuracy against cost and latency before you switch. You choose the candidate, supply or generate the dataset, and define the metric. rightmodeler does those steps for the model question from your recorded traces, across every step family, and ends in a model-only draft pull request."
+        },
+        {
+          "q": "Can Ragas metrics grade rightmodeler's replays?",
+          "a": "The CLI's external evaluators are Braintrust, Langfuse, LangSmith, and promptfoo, and Ragas is not among them. Without one, the built-in judge grades each replay: a model from a family neither the candidate nor the current model belongs to, called twice with the positions swapped. Your Ragas metrics check the swap where they already run: in your CI on the draft pull request, or in your own experiment with the proposed model as the candidate."
+        },
+        {
+          "q": "Does rightmodeler generate test data like Ragas?",
+          "a": "No. It creates no synthetic cases: the test set is the traffic you already recorded, and the reference for each step is the output you accepted. If you have no traffic yet, Ragas's test set generators are the right tool, and rightmodeler has nothing to run on."
+        },
+        {
+          "q": "Who maintains Ragas?",
+          "a": "Vibrant Labs. The repository lives at github.com/vibrantlabsai/ragas, and the earlier explodinggradients/ragas address redirects there. Vibrant Labs, an applied research lab, says on its site that it was built by the team behind Ragas, and the site carries an Exploding Gradients Inc. copyright line. Ragas is Apache-2.0 licensed, with Vibrant Labs named as copyright holder in the license, and installs with pip install ragas; its documentation lives at docs.ragas.io."
+        },
+        {
+          "q": "Does rightmodeler replace Ragas?",
+          "a": "No. Ragas is where you design and run your own evaluations, and it covers retrieval, grounding, test data, and judge alignment, which rightmodeler does not. rightmodeler is an offline workflow for one decision: which model each step should call. Not observability. Not a runtime gateway."
+        }
+      ]
+    }
+  ]
+}

@@ -11,7 +11,7 @@
   "h1": "rightmodeler vs Langfuse",
   "lede": "Langfuse traces, evaluates, and improves your agent in one open platform, including experiments that compare model changes on datasets you build. rightmodeler is a focused workflow for one change: it replays the generations Langfuse recorded on cheaper models and proposes only the swaps the evidence supports.",
   "integrationSlug": "langfuse",
-  "related": ["phoenix", "langsmith", "braintrust"],
+  "related": ["phoenix", "langsmith", "braintrust", "opik"],
   "cta": "github",
   "blocks": [
     {

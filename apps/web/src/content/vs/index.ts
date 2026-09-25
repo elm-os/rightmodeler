@@ -17,8 +17,12 @@ import langsmith from "@/content/vs/data/langsmith.json";
 import langfuse from "@/content/vs/data/langfuse.json";
 import phoenix from "@/content/vs/data/phoenix.json";
 import weave from "@/content/vs/data/weave.json";
+import opik from "@/content/vs/data/opik.json";
+import langwatch from "@/content/vs/data/langwatch.json";
 import promptfoo from "@/content/vs/data/promptfoo.json";
 import modaic from "@/content/vs/data/modaic.json";
+import deepeval from "@/content/vs/data/deepeval.json";
+import ragas from "@/content/vs/data/ragas.json";
 import notDiamond from "@/content/vs/data/not-diamond.json";
 import martian from "@/content/vs/data/martian.json";
 import riften from "@/content/vs/data/riften.json";
@@ -44,8 +48,12 @@ const comparisons: VsPageData[] = [
   langfuse,
   phoenix,
   weave,
+  opik,
+  langwatch,
   promptfoo,
   modaic,
+  deepeval,
+  ragas,
   notDiamond,
   martian,
   riften,

@@ -85,7 +85,7 @@ You review the plan, and the CLI ships only the swaps you approve as a pull requ
 
 ## How to read confidence.
 
-Hard checks run before a model judge. When judgment is needed, a cross-family judge scores both output orders. Every rate is a statistical lower bound, not a point estimate, and a shortlist winner must clear your quality floor again on held-out cases before it is recommended. Evidence counts show what earned the confidence band, and the evidence type limits how high that band can go. Confidence applies only to the prompt, inputs, and runs evaluated. It measures agreement with what you shipped, not proof of correctness.
+A cross-family judge scores both output orders, or the evaluator you name grades the replays: Braintrust, Langfuse, LangSmith, or promptfoo, whose assertions can be deterministic checks such as is-json or regex. Every rate is a statistical lower bound, not a point estimate, and a shortlist winner must clear your quality floor again on held-out cases before it is recommended. Evidence counts show what earned the confidence band, and the evidence type limits how high that band can go. Confidence applies only to the prompt, inputs, and runs evaluated. It measures agreement with what you shipped, not proof of correctness.
 
 ## Not observability. Not a runtime gateway.
 

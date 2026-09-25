@@ -1,0 +1,214 @@
+{
+  "slug": "deepeval",
+  "name": "DeepEval",
+  "website": "https://deepeval.com",
+  "logo": "/vs/logos/deepeval.svg",
+  "category": "evals",
+  "verdict": "complement",
+  "verdictLabel": "Complement · your DeepEval suite gates the swap",
+  "title": "rightmodeler vs DeepEval: eval framework vs model audit",
+  "description": "DeepEval is an open-source eval framework, and Confident AI its platform. rightmodeler tests cheaper models per step on your traces; your DeepEval CI gates it.",
+  "h1": "rightmodeler vs DeepEval",
+  "lede": "DeepEval, with Confident AI as its platform, gives you the parts of an evaluation practice: metrics, pytest-style tests, synthetic datasets, and production monitoring. rightmodeler runs one narrower workflow on the traces you already recorded: which steps can move to a cheaper model, with per-step evidence and a draft pull request.",
+  "integrationSlug": "",
+  "related": ["ragas", "promptfoo", "braintrust"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Complement, with a clean handoff. As of 2026-09-24, DeepEval describes itself as an open-source LLM evaluation framework: pytest-style unit tests for LLM outputs, 50+ ready-to-use metrics per its docs, synthetic datasets, and end-to-end, trajectory, and component-level evals that run in your own environment. Confident AI, the company that builds DeepEval, sells the platform around it: shared test reports, regression tracking across runs, tracing with online evals, dataset management, red teaming, and governance. rightmodeler, a free MIT-licensed CLI, does one narrower job: it reads the traces your agent already recorded, shortlists cheaper models from your provider's live catalog, replays each step, judges every candidate against the output you accepted, and opens a draft pull request that changes model identifiers only. rightmodeler has no dedicated integration with either product. The handoff is your CI: the draft pull request goes through your deepeval test run job, or Confident AI's PR Eval Gate, like any other change before a person merges it."
+    },
+    {
+      "type": "prose",
+      "heading": "DeepEval and Confident AI: one team, two layers",
+      "paragraphs": [
+        "They are not the same product, and they come from the same company. DeepEval's own FAQ puts it plainly: DeepEval is the open-source evaluation framework, while Confident AI is the enterprise platform built for teams that need managed evals, collaboration, observability, and production workflows. deepeval.com names Confident AI Inc. as its organization, and Confident AI says it builds and maintains DeepEval and DeepTeam, its open-source red teaming framework. Per DeepEval's docs, you can use either one without the other.",
+        "DeepEval, Apache-2.0 on GitHub, is the layer that runs where your code runs. You attach metrics to test cases, from LLM-as-a-judge metrics such as G-Eval to graph-based DAG metrics and non-LLM checks such as exact match and JSON correctness. You assert on them in pytest-style tests that deepeval test run executes in CI, exiting non-zero on failure. When real data runs short, it synthesizes goldens from your documents and simulates conversations. It needs no account, only a model provider key for metrics that use an LLM judge.",
+        "Confident AI is the layer your team shares. It keeps datasets and test runs, compares regressions across runs, and posts a pass, fail, or neutral GitHub check on every pull request through its PR Eval Gate. It traces production with online evals on traces, spans, and threads, detects drift, and alerts. Its 2026-09-11 changelog introduced confident-trace, an open-source, OpenTelemetry-first tracing SDK that it now recommends for production tracing, while DeepEval stays the evaluation framework. As of 2026-09-24, its pricing page lists a free plan, paid plans from $200 a month, and self-hosting on Enterprise plans."
+      ]
+    },
+    {
+      "type": "table",
+      "heading": "How they differ",
+      "intro": "Both can tell you whether a different model holds up. What each answer is built from is different.",
+      "caption": "deepeval vs rightmodeler",
+      "leftLabel": "DeepEval",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "built for",
+          "theirs": "evaluating LLM apps end to end: tests, metrics, datasets, and, on Confident AI, monitoring",
+          "ours": "one recurring decision: which model each step of your agent should call"
+        },
+        {
+          "dimension": "test cases",
+          "theirs": "goldens you curate, pull from Confident AI, curate from production traces, or synthesize",
+          "ours": "the steps your agent already recorded, read from exported traces"
+        },
+        {
+          "dimension": "reference",
+          "theirs": "expected outputs and the criteria each metric scores against",
+          "ours": "the output you accepted for that exact step"
+        },
+        {
+          "dimension": "trying another model",
+          "theirs": "you set the model, rerun the same goldens, and compare test runs or pick a winner with Arena G-Eval",
+          "ours": "cheaper candidates shortlisted from your provider's live catalog and replayed on every step family"
+        },
+        {
+          "dimension": "grading",
+          "theirs": "the metrics you attach, each passing at the threshold you set",
+          "ours": "a judge from a model family neither side belongs to, or your Braintrust, Langfuse, LangSmith, or promptfoo evaluator"
+        },
+        {
+          "dimension": "verdict",
+          "theirs": "pass or fail per test case; deepeval test run exits non-zero on a failure",
+          "ours": "a recommendation or an abstention per step family, with sample size, re-cleared on held-out cases"
+        },
+        {
+          "dimension": "the change",
+          "theirs": "yours to make; the suite tells you whether it holds up",
+          "ours": "a draft pull request that changes model identifiers only; a person merges"
+        },
+        {
+          "dimension": "runs on",
+          "theirs": "your machine or CI, with Confident AI as the optional hosted or self-hosted layer",
+          "ours": "a CLI on your machine, on exported trace files; no rightmodeler server, account, or telemetry"
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Can you use both? Yes, and the handoff is your CI",
+      "paragraphs": [
+        "Nothing about your DeepEval setup changes. Your tests, metrics, and goldens stay where they are, Confident AI, if you use it, keeps tracing and scoring production, and rightmodeler never sits in the request path or asks for new instrumentation. There is no dedicated integration between them, and the workflow below needs none.",
+        "The two meet in two places. On the way in, rightmodeler reads traces from files, and an OpenTelemetry pipeline that already feeds Confident AI can write those files too. On the way out, rightmodeler's change is an ordinary draft pull request, so whatever your repository runs on pull requests, DeepEval tests or Confident AI's PR Eval Gate, runs on it before anyone merges."
+      ]
+    },
+    {
+      "type": "stack",
+      "heading": "The handoff, step by step",
+      "intro": "Four commands, run from your repository. Nothing connects to Confident AI; your DeepEval checks run where they already run.",
+      "paragraphs": [
+        "Traces in. Confident AI's trace-broadcasting docs show an OpenTelemetry Collector sending every span to Confident AI and to a second destination. Make that second destination a file exporter and the spans land on disk as OTLP JSON. rightmodeler reads the file when the spans carry OpenTelemetry GenAI attributes with the messages captured, or OpenInference attributes; Confident AI's OTEL server ingests both conventions natively, per its docs.",
+        "The audit. The preview spends nothing. The full run shortlists cheaper models from your provider's live catalog, replays each step family through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, on your own key, judges every replay against the output you accepted, and writes report.md with a verdict or a named abstention per step family.",
+        "Through your checks. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers only and carries an evidence table. A workflow that runs deepeval test run on pull requests, the setup DeepEval's CI/CD docs show, holds the swap to your suite; Confident AI's PR Eval Gate posts its check run the same way. rightmodeler watch comments once when a check fails and closes the pull request if a check with the same name fails again under a new run on the same head commit. A person reviews and merges; the CLI never does."
+      ],
+      "commands": [
+        {
+          "comment": "# preview the pipeline against the spans your collector wrote, without spending",
+          "command": "npx rightmodeler init --plan --traces ./traces/spans.jsonl --repo ."
+        },
+        {
+          "comment": "# replay cheaper candidates through your endpoint, capped at 25 USD",
+          "command": "npx rightmodeler init --traces ./traces/spans.jsonl --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+        },
+        {
+          "comment": "# open the model-only draft pull request your DeepEval checks run on",
+          "command": "npx rightmodeler apply --owner $OWNER --github-token-env GITHUB_TOKEN"
+        },
+        {
+          "comment": "# on a schedule: answer reviews and react to failing checks",
+          "command": "npx rightmodeler watch --owner $OWNER --pr $PR --github-token-env GITHUB_TOKEN"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one does the job?",
+      "intro": "Three situations, with the honest winner named in each.",
+      "scenarios": [
+        {
+          "scenario": "Your RAG assistant has not launched, you have a folder of product documents and no user traffic, and every prompt change has to prove it did not hurt faithfulness or relevancy before it merges.",
+          "winner": "theirs",
+          "why": "That is DeepEval's core loop, per its docs: synthesize goldens from your documents, attach metrics such as Faithfulness and Answer Relevancy, and let deepeval test run fail the build on a regression. rightmodeler needs recorded traces, and it changes which model a step calls, never the prompt."
+        },
+        {
+          "scenario": "Your DeepEval suite is green, your agent has run in production for months, and every step still calls the frontier model you launched with. Nobody can say which steps need it.",
+          "winner": "ours",
+          "why": "A green suite says the agent clears your bar; it does not try cheaper models step by step. rightmodeler shortlists them from your provider's live catalog, replays every step family on the traces you recorded, judges each candidate against the output you accepted, and reports sample size and abstentions, then opens a pull request only for the swaps that clear every gate."
+        },
+        {
+          "scenario": "Your team's rule is that nothing merges without passing the DeepEval suite, and you want the model bill down without breaking that rule.",
+          "winner": "both",
+          "why": "rightmodeler proposes the swaps with evidence attached, as a draft pull request. Your deepeval test run job, or Confident AI's PR Eval Gate, checks it like any other change, and rightmodeler watch closes the pull request if the same check fails again on a new run of the same commit. The rule holds and the evidence comes to the reviewer."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "DeepEval is a whole evaluation practice: metrics for agents, RAG, multi-turn conversations, safety, images, and voice; pytest-style tests for CI; synthetic goldens and simulated conversations; prompt optimization; and standard benchmarks. rightmodeler ships none of that. It answers one question and expects your suite to remain the bar.",
+        "DeepEval works before launch. It can build goldens from your documents when no traffic exists, while rightmodeler needs recorded traces and has nothing to say about an agent that has not run.",
+        "Confident AI watches production: online evals on every trace, span, and thread, drift detection, alerting, red teaming, and governance, with self-hosting on Enterprise plans. rightmodeler works after the fact on exported files and has no live view, by design.",
+        "rightmodeler replays plain-text steps. A recorded case whose conversation carries tool calls, tool definitions, or non-text parts is left out of the replay sample, and a call site that needs tools or structured output is not replayed. DeepEval's agentic metrics, such as Tool Correctness and Argument Correctness, score exactly those steps.",
+        "And the audit's verdicts say only what they measure: agreement with the output you shipped, which is evidence, not proof of correctness. Where the evidence runs thin, the audit abstains instead of recommending."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "The words this page turns on",
+      "terms": [
+        {
+          "term": "golden",
+          "def": "DeepEval's term for a dataset entry: an input or scenario, plus the expected output or outcome when you have one. At evaluation time your app runs on it and it becomes a test case. You write goldens, pull them from Confident AI, or synthesize them."
+        },
+        {
+          "term": "trace",
+          "slug": "trace",
+          "def": "The record of what your agent did: every model call with its inputs and outputs. rightmodeler reads traces from exported files, such as the OTLP spans an OpenTelemetry Collector writes to disk."
+        },
+        {
+          "term": "LLM-as-a-judge",
+          "slug": "llm-as-judge",
+          "def": "Using a model to grade outputs. DeepEval's G-Eval applies it to criteria you write. rightmodeler picks its judge from a model family neither the candidate nor the current model belongs to, so nothing grades its own work."
+        },
+        {
+          "term": "reference evidence",
+          "slug": "reference-evidence",
+          "def": "Scores measured against the output you actually accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness: the production result is the reference, not ground truth."
+        },
+        {
+          "term": "quality floor",
+          "slug": "quality-floor",
+          "def": "The minimum agreement a candidate must clear, and clear again on held-out cases, before the audit recommends a swap. It is configurable, and anything below it is a no."
+        },
+        {
+          "term": "abstain",
+          "slug": "abstain",
+          "def": "The audit's decision to recommend nothing for a step family when the sample is small or the evidence is mixed, with the reason named. The current model stays."
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Is DeepEval the same as Confident AI?",
+          "a": "No, per DeepEval's own FAQ: DeepEval is the open-source evaluation framework, and Confident AI is the enterprise platform for teams that need managed evals, collaboration, observability, and production workflows. They come from the same company, Confident AI Inc., and DeepEval can send its results to Confident AI when you add a Confident AI key. This page covers both because they form one team's stack."
+        },
+        {
+          "q": "Can't DeepEval compare models already?",
+          "a": "It can, per its docs. You rerun the same goldens on another model version, label each test run with the model as a hyperparameter, compare the runs, and Arena G-Eval can pick a winner between versions. You choose the model to try and build the goldens first. rightmodeler starts from the traces you recorded, shortlists the cheaper candidates itself, and returns a verdict per step family with sample size and abstentions, ending in a model-only draft pull request."
+        },
+        {
+          "q": "Can DeepEval's metrics grade rightmodeler's replays?",
+          "a": "The CLI's external evaluators are Braintrust, Langfuse, LangSmith, and promptfoo, and DeepEval is not among them. Without one, the built-in judge grades each replay: a model from a family neither the candidate nor the current model belongs to, called twice with the positions swapped. Your DeepEval metrics grade the swap where they already run: in CI, on the draft pull request, before anyone merges."
+        },
+        {
+          "q": "Will my DeepEval checks run on rightmodeler's pull request?",
+          "a": "Yes, whenever your workflows run on pull requests, because the swap arrives as an ordinary draft pull request. One GitHub rule applies: when GitHub Actions' GITHUB_TOKEN opens the pull request, its pull_request runs wait until a person with write access approves them, and a GitHub App installation token avoids that, per rightmodeler's GitHub guide. For rightmodeler watch to see check runs, such as the one Confident AI's PR Eval Gate posts, use an App installation token or a classic token with the repo scope."
+        },
+        {
+          "q": "Does rightmodeler replace DeepEval or Confident AI?",
+          "a": "No. DeepEval and Confident AI test, monitor, and govern your agent, and your team works in them every day. rightmodeler is an offline workflow for one decision: which model each step should call. Not observability. Not a runtime gateway. Its output is a pull request your existing checks review."
+        },
+        {
+          "q": "Is DeepEval open source, and what does Confident AI cost?",
+          "a": "DeepEval is Apache-2.0 on GitHub and runs locally without an account. As of 2026-09-24, Confident AI's pricing page lists a free plan limited to two seats, one project, and five test runs a week, a Starter plan at $200 a month, a Team plan at $2,000 a month, and custom Enterprise pricing, with self-hosting on Enterprise plans. The rightmodeler CLI is free and MIT-licensed; replays bill to your own provider key."
+        }
+      ]
+    }
+  ]
+}
