@@ -51,7 +51,7 @@
         "heading": "With rightmodeler beside your suite",
         "items": [
           "Keep the suite. The audit does not touch it, replace it, or sit in your request path.",
-          "Candidates are shortlisted from the active provider's live catalog, not a hand-picked list, replayed at temperature 0 against your real steps, and judged by a neutral third-family judge (a judge model from a family neither the current model nor the candidate belongs to), with deterministic checks preferred before any LLM judge.",
+          "Candidates are shortlisted from the active provider's live catalog, not a hand-picked list, replayed at temperature 0 against your real steps, and judged by a neutral third-family judge (a judge model from a family neither the current model nor the candidate belongs to) that grades both output orders, or by your own promptfoo assertions, deterministic types such as is-json and regex included.",
           "Each verdict carries reference agreement (how often the candidate matched the output you accepted), a quality floor (a configurable minimum that agreement must clear), sample size, and abstentions. Multi-step work replays end to end, so cascade risk (a cheaper step's output quietly breaking the step after it) surfaces before you swap.",
           "When you approve a swap, the new model ID goes into promptfooconfig.yaml by hand, and your CI gate keeps the decision honest from then on. promptfoo ships as an evaluator provider selected with `--evaluator promptfoo` and configured with `--evaluator-command` and `--evaluator-config`; it is not a trace source or replay provider, so the model-change handoff remains manual."
         ]
