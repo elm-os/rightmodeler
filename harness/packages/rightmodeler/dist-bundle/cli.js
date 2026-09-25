@@ -3886,9 +3886,9 @@ var require_codegen = __commonJS({
       }
     };
     var Label = class extends Node {
-      constructor(label) {
+      constructor(label2) {
         super();
-        this.label = label;
+        this.label = label2;
         this.names = {};
       }
       render({ _n }) {
@@ -3896,14 +3896,14 @@ var require_codegen = __commonJS({
       }
     };
     var Break = class extends Node {
-      constructor(label) {
+      constructor(label2) {
         super();
-        this.label = label;
+        this.label = label2;
         this.names = {};
       }
       render({ _n }) {
-        const label = this.label ? ` ${this.label}` : "";
-        return `break${label};` + _n;
+        const label2 = this.label ? ` ${this.label}` : "";
+        return `break${label2};` + _n;
       }
     };
     var Throw = class extends Node {
@@ -4315,12 +4315,12 @@ var require_codegen = __commonJS({
         return this._endBlockNode(For);
       }
       // `label` statement
-      label(label) {
-        return this._leafNode(new Label(label));
+      label(label2) {
+        return this._leafNode(new Label(label2));
       }
       // `break` statement
-      break(label) {
-        return this._leafNode(new Break(label));
+      break(label2) {
+        return this._leafNode(new Break(label2));
       }
       // `return` statement
       return(value) {
@@ -5654,20 +5654,20 @@ var require_resolve = __commonJS({
       return false;
     }
     function countKeys(schema) {
-      let count = 0;
+      let count2 = 0;
       for (const key in schema) {
         if (key === "$ref")
           return Infinity;
-        count++;
+        count2++;
         if (SIMPLE_INLINED.has(key))
           continue;
         if (typeof schema[key] == "object") {
-          (0, util_1.eachItem)(schema[key], (sch) => count += countKeys(sch));
+          (0, util_1.eachItem)(schema[key], (sch) => count2 += countKeys(sch));
         }
-        if (count === Infinity)
+        if (count2 === Infinity)
           return Infinity;
       }
-      return count;
+      return count2;
     }
     function getFullPath(resolver, id = "", normalize) {
       if (normalize !== false)
@@ -8845,8 +8845,8 @@ var require_contains = __commonJS({
         cxt.result(valid, () => cxt.reset());
         function validateItemsWithCount() {
           const schValid = gen.name("_valid");
-          const count = gen.let("count", 0);
-          validateItems(schValid, () => gen.if(schValid, () => checkLimits(count)));
+          const count2 = gen.let("count", 0);
+          validateItems(schValid, () => gen.if(schValid, () => checkLimits(count2)));
         }
         function validateItems(_valid, block) {
           gen.forRange("i", 0, len, (i) => {
@@ -8859,16 +8859,16 @@ var require_contains = __commonJS({
             block();
           });
         }
-        function checkLimits(count) {
-          gen.code((0, codegen_1._)`${count}++`);
+        function checkLimits(count2) {
+          gen.code((0, codegen_1._)`${count2}++`);
           if (max === void 0) {
-            gen.if((0, codegen_1._)`${count} >= ${min}`, () => gen.assign(valid, true).break());
+            gen.if((0, codegen_1._)`${count2} >= ${min}`, () => gen.assign(valid, true).break());
           } else {
-            gen.if((0, codegen_1._)`${count} > ${max}`, () => gen.assign(valid, false).break());
+            gen.if((0, codegen_1._)`${count2} > ${max}`, () => gen.assign(valid, false).break());
             if (min === 1)
               gen.assign(valid, true);
             else
-              gen.if((0, codegen_1._)`${count} >= ${min}`, () => gen.assign(valid, true));
+              gen.if((0, codegen_1._)`${count2} >= ${min}`, () => gen.assign(valid, true));
           }
         }
       }
@@ -10588,7 +10588,7 @@ var require__ = __commonJS({
 });
 
 // src/cli.ts
-import { spawn } from "node:child_process";
+import { spawn as spawn2 } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { basename as basename5, resolve as resolve13 } from "node:path";
@@ -11338,9 +11338,9 @@ function floatSafeRemainder(val, step) {
   return ratio - roundedRatio;
 }
 var EVALUATING = /* @__PURE__ */ Symbol("evaluating");
-function defineLazy(object2, key, getter) {
+function defineLazy(object3, key, getter) {
   let value = void 0;
-  Object.defineProperty(object2, key, {
+  Object.defineProperty(object3, key, {
     get() {
       if (value === EVALUATING) {
         return void 0;
@@ -11352,7 +11352,7 @@ function defineLazy(object2, key, getter) {
       return value;
     },
     set(v) {
-      Object.defineProperty(object2, key, {
+      Object.defineProperty(object3, key, {
         value: v
         // configurable: true,
       });
@@ -15252,8 +15252,8 @@ function az_default() {
 }
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/be.js
-function getBelarusianPlural(count, one, few, many) {
-  const absCount = Math.abs(count);
+function getBelarusianPlural(count2, one, few, many) {
+  const absCount = Math.abs(count2);
   const lastDigit = absCount % 10;
   const lastTwoDigits = absCount % 100;
   if (lastTwoDigits >= 11 && lastTwoDigits <= 19) {
@@ -17331,8 +17331,8 @@ function hu_default() {
 }
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/hy.js
-function getArmenianPlural(count, one, many) {
-  return Math.abs(count) === 1 ? one : many;
+function getArmenianPlural(count2, one, many) {
+  return Math.abs(count2) === 1 ? one : many;
 }
 function withDefiniteArticle(word) {
   if (!word)
@@ -19460,8 +19460,8 @@ function ro_default() {
 }
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ru.js
-function getRussianPlural(count, one, few, many) {
-  const absCount = Math.abs(count);
+function getRussianPlural(count2, one, few, many) {
+  const absCount = Math.abs(count2);
   const lastDigit = absCount % 10;
   const lastTwoDigits = absCount % 100;
   if (lastTwoDigits >= 11 && lastTwoDigits <= 19) {
@@ -25256,47 +25256,47 @@ var factSchema = external_exports.union([
 import { createHash, randomUUID } from "node:crypto";
 
 // ../../../node_modules/.pnpm/canonicalize@3.0.0/node_modules/canonicalize/lib/canonicalize.js
-function canonicalize(object2, seen = /* @__PURE__ */ new Set()) {
-  if (typeof object2 === "number" && isNaN(object2)) {
+function canonicalize(object3, seen = /* @__PURE__ */ new Set()) {
+  if (typeof object3 === "number" && isNaN(object3)) {
     throw new Error("NaN is not allowed");
   }
-  if (typeof object2 === "number" && !isFinite(object2)) {
+  if (typeof object3 === "number" && !isFinite(object3)) {
     throw new Error("Infinity is not allowed");
   }
-  if (object2 === null || typeof object2 !== "object") {
-    return JSON.stringify(object2);
+  if (object3 === null || typeof object3 !== "object") {
+    return JSON.stringify(object3);
   }
-  if (typeof object2.toJSON === "function") {
-    if (seen.has(object2)) {
+  if (typeof object3.toJSON === "function") {
+    if (seen.has(object3)) {
       throw new Error("Circular reference detected");
     }
-    seen.add(object2);
-    const result3 = canonicalize(object2.toJSON(), seen);
-    seen.delete(object2);
+    seen.add(object3);
+    const result3 = canonicalize(object3.toJSON(), seen);
+    seen.delete(object3);
     return result3;
   }
-  if (seen.has(object2)) {
+  if (seen.has(object3)) {
     throw new Error("Circular reference detected");
   }
-  seen.add(object2);
+  seen.add(object3);
   let result2;
-  if (Array.isArray(object2)) {
-    const values = object2.map((cv) => {
+  if (Array.isArray(object3)) {
+    const values = object3.map((cv) => {
       const value = cv === void 0 || typeof cv === "symbol" ? null : cv;
       return canonicalize(value, seen);
     });
     result2 = `[${values.join(",")}]`;
   } else {
     const parts = [];
-    for (const key of Object.keys(object2).sort()) {
-      if (object2[key] === void 0 || typeof object2[key] === "symbol") {
+    for (const key of Object.keys(object3).sort()) {
+      if (object3[key] === void 0 || typeof object3[key] === "symbol") {
         continue;
       }
-      parts.push(`${canonicalize(key)}:${canonicalize(object2[key], seen)}`);
+      parts.push(`${canonicalize(key)}:${canonicalize(object3[key], seen)}`);
     }
     result2 = `{${parts.join(",")}}`;
   }
-  seen.delete(object2);
+  seen.delete(object3);
   return result2;
 }
 
@@ -25356,24 +25356,24 @@ var reservedStoreSegments = /* @__PURE__ */ new Set([
   ".rightmodeler-store",
   ".rightmodeler-store.lock"
 ]);
-function assertSafeSegment(segment, label = "segment") {
+function assertSafeSegment(segment, label2 = "segment") {
   if (segment.length === 0) {
-    throw new Error(`Invalid ${label}: must not be empty`);
+    throw new Error(`Invalid ${label2}: must not be empty`);
   }
   if (segment === "." || segment === "..") {
-    throw new Error(`Invalid ${label}: ${JSON.stringify(segment)}`);
+    throw new Error(`Invalid ${label2}: ${JSON.stringify(segment)}`);
   }
   if (segment.includes("\0")) {
-    throw new Error(`Invalid ${label}: contains NUL`);
+    throw new Error(`Invalid ${label2}: contains NUL`);
   }
   if (posix.isAbsolute(segment) || win32.isAbsolute(segment)) {
-    throw new Error(`Invalid ${label}: must not be absolute`);
+    throw new Error(`Invalid ${label2}: must not be absolute`);
   }
   if (segment.includes("/") || segment.includes("\\")) {
-    throw new Error(`Invalid ${label}: contains a path separator`);
+    throw new Error(`Invalid ${label2}: contains a path separator`);
   }
   if (reservedStoreSegments.has(segment)) {
-    throw new Error(`Invalid ${label}: reserved by the store`);
+    throw new Error(`Invalid ${label2}: reserved by the store`);
   }
 }
 function projectPrefix(projectId3) {
@@ -25962,14 +25962,14 @@ function formatUsd(value) {
 function roundUsd(value) {
   return Number(value.toFixed(12));
 }
-function assertAmount(value, label) {
+function assertAmount(value, label2) {
   if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`${label} must be a non-negative number`);
+    throw new Error(`${label2} must be a non-negative number`);
   }
 }
-function assertTokens(value, label) {
+function assertTokens(value, label2) {
   if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`${label} must be a non-negative integer`);
+    throw new Error(`${label2} must be a non-negative integer`);
   }
 }
 function encode3(ledger) {
@@ -26170,6 +26170,1365 @@ function createBudget(options) {
     reserveExecution,
     state
   };
+}
+
+// ../replay/dist/claude-route.js
+import { writeFile as writeFile2 } from "node:fs/promises";
+import { join as join3 } from "node:path";
+
+// ../replay/dist/plan-route.js
+import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join as join2 } from "node:path";
+
+// ../replay/dist/provider.js
+import { readFile as readFile2 } from "node:fs/promises";
+
+// ../replay/dist/provenance.js
+var DATED_SNAPSHOT = /^\d{2,4}(?:-?\d{2}){1,2}$/;
+var PORTKEY_CACHE_HITS = /* @__PURE__ */ new Set(["hit", "semantic hit"]);
+function objectOf(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function servedModel(body) {
+  return nonEmptyString(objectOf(body)?.model);
+}
+function modelParts(id) {
+  const segments = id.toLowerCase().split("/");
+  return {
+    name: segments[segments.length - 1],
+    ...segments.length > 1 ? { vendor: segments[segments.length - 2] } : {}
+  };
+}
+function sameModel(requested, served) {
+  const want = modelParts(requested);
+  const got = modelParts(served);
+  if (want.vendor !== void 0 && got.vendor !== void 0 && want.vendor !== got.vendor) {
+    return false;
+  }
+  if (got.name === want.name)
+    return true;
+  const prefix = `${want.name}-`;
+  return got.name.startsWith(prefix) && DATED_SNAPSHOT.test(got.name.slice(prefix.length));
+}
+function header(headers, name) {
+  if (headers instanceof Headers)
+    return headers.get(name) ?? void 0;
+  const value = headers[name];
+  return typeof value === "string" ? value : value?.join(", ");
+}
+function substitution(kind, evidence) {
+  return { kind, evidence: evidence.slice(0, 200) };
+}
+function responseSubstitution(input) {
+  const body = objectOf(input.body);
+  const extra = objectOf(body?.extra_fields);
+  const served = servedModel(body);
+  if (served !== void 0 && !sameModel(input.requestedModel, served)) {
+    return substitution("model", `served ${served} for requested ${input.requestedModel}`);
+  }
+  const fallback = nonEmptyString(objectOf(extra?.routing_info)?.server_side_fallback_model);
+  if (fallback !== void 0) {
+    return substitution("model", `bifrost server-side fallback served ${fallback}`);
+  }
+  const cacheStatus = header(input.headers, "x-portkey-cache-status");
+  if (cacheStatus !== void 0 && PORTKEY_CACHE_HITS.has(cacheStatus.toLowerCase())) {
+    return substitution("cache", `x-portkey-cache-status: ${cacheStatus}`);
+  }
+  const cacheDebug = objectOf(extra?.cache_debug);
+  if (cacheDebug?.cache_hit === true) {
+    const hitType = cacheDebug.hit_type;
+    return substitution("cache", `bifrost cache hit${typeof hitType === "string" ? ` (${hitType})` : ""}`);
+  }
+  const hookResults = objectOf(body?.hook_results);
+  const transformed = [
+    hookResults?.before_request_hooks,
+    hookResults?.after_request_hooks
+  ].flatMap((hooks) => Array.isArray(hooks) ? hooks : []).map(objectOf).find((hook) => hook?.transformed === true);
+  if (transformed !== void 0) {
+    const id = nonEmptyString(transformed.id) ?? "unnamed";
+    return substitution("request", `portkey hook ${id} transformed the call`);
+  }
+  const dropped = [
+    extra?.dropped_compat_plugin_params,
+    extra?.dropped_unsupported_tools
+  ].flatMap((items) => Array.isArray(items) ? items : []);
+  if (dropped.length > 0) {
+    return substitution("request", `bifrost dropped ${dropped.join(", ")}`);
+  }
+  const converted = nonEmptyString(extra?.converted_request_type);
+  if (converted !== void 0) {
+    return substitution("request", `bifrost converted the request to ${converted}`);
+  }
+  return void 0;
+}
+
+// ../replay/dist/provider.js
+var BlockedError = class extends Error {
+  kind;
+  observedCeiling;
+  providerId;
+  resetsAt;
+  errorDetail;
+  constructor(init) {
+    super(init.kind === "rate-limit" ? `Provider retries exhausted after HTTP ${init.status}; observed concurrency ceiling: ${init.observedCeiling}` : init.kind === "provider" ? `Provider ${init.providerId} returned a malformed model catalog` : init.kind === "credentials" ? `Provider ${init.providerId} rejected the API key with HTTP ${init.errorDetail.status}` : init.kind === "usage-limit" ? `${init.providerId} reached its plan's usage limit${init.resetsAt === null ? "" : ` (resets ${init.resetsAt})`}: ${init.detail}` : `Provider ${init.providerId} reported insufficient credits (HTTP 402)`);
+    this.name = "BlockedError";
+    this.kind = init.kind;
+    this.observedCeiling = init.kind === "rate-limit" ? init.observedCeiling : null;
+    this.providerId = init.kind === "rate-limit" ? null : init.providerId;
+    this.resetsAt = init.kind === "usage-limit" ? init.resetsAt : null;
+    if (init.kind !== "rate-limit" && init.kind !== "usage-limit") {
+      this.errorDetail = init.errorDetail;
+    }
+  }
+};
+function isUsageLimit(error51) {
+  return error51 instanceof BlockedError && error51.kind === "usage-limit";
+}
+var ProviderRequestError = class extends Error {
+};
+var ProviderHttpError = class extends ProviderRequestError {
+  status;
+  constructor(status, body) {
+    super(`Provider request failed with HTTP ${status}: ${body}`);
+    this.name = "ProviderHttpError";
+    this.status = status;
+  }
+};
+var ProviderConfigurationError = class extends Error {
+};
+var CatalogReferenceError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "CatalogReferenceError";
+  }
+};
+var ProviderResponseError = class extends ProviderRequestError {
+  status;
+  bodyExcerpt;
+  redacted = true;
+  constructor(message2, { status, bodyExcerpt }) {
+    super(message2);
+    this.name = "ProviderResponseError";
+    this.status = status;
+    this.bodyExcerpt = bodyExcerpt.slice(0, 500);
+  }
+};
+var AdaptiveLimiter = class {
+  ceiling;
+  floor;
+  cap;
+  active = 0;
+  successStreak = 0;
+  sequence = 0;
+  epochStart = 0;
+  waiters = [];
+  constructor(ceiling) {
+    if (!Number.isSafeInteger(ceiling) || ceiling < 1) {
+      throw new Error("maxConcurrency must be a positive integer");
+    }
+    this.ceiling = ceiling;
+    this.cap = ceiling;
+    this.floor = Math.min(ceiling, Math.max(2, Math.floor(ceiling / 4)));
+  }
+  async run(operation) {
+    const ticket = await this.acquire();
+    try {
+      return await operation(ticket);
+    } finally {
+      this.active -= 1;
+      this.drain();
+    }
+  }
+  rateLimited(ticket) {
+    if (ticket < this.epochStart)
+      return;
+    this.epochStart = this.sequence;
+    this.cap = Math.max(this.floor, Math.floor(this.cap / 2));
+    this.successStreak = 0;
+  }
+  failed() {
+    this.successStreak = 0;
+  }
+  succeeded() {
+    if (this.cap >= this.ceiling)
+      return;
+    this.successStreak += 1;
+    if (this.successStreak >= this.cap) {
+      this.cap += 1;
+      this.successStreak = 0;
+      this.drain();
+    }
+  }
+  get currentCap() {
+    return this.cap;
+  }
+  acquire() {
+    if (this.active < this.cap) {
+      this.active += 1;
+      return Promise.resolve(this.sequence++);
+    }
+    return new Promise((resolve14) => {
+      this.waiters.push(() => {
+        this.active += 1;
+        resolve14(this.sequence++);
+      });
+    });
+  }
+  drain() {
+    while (this.active < this.cap) {
+      const next = this.waiters.shift();
+      if (next === void 0)
+        return;
+      next();
+    }
+  }
+};
+var retryAttempts = 5;
+function objectValue(value, label2) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label2} must be an object`);
+  }
+  return value;
+}
+function nonnegativeNumber(value, label2) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${label2} must be a non-negative number`);
+  }
+  return value;
+}
+function tokenCount(value, label2) {
+  const count2 = nonnegativeNumber(value, label2);
+  if (!Number.isSafeInteger(count2)) {
+    throw new Error(`${label2} must be an integer`);
+  }
+  return count2;
+}
+function releaseDate(value) {
+  if (value === void 0 || value === null || value === "")
+    return null;
+  const parsed2 = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed2) && parsed2 >= 0 ? parsed2 : null;
+}
+function isoReleaseDate(value) {
+  if (typeof value !== "string")
+    return null;
+  const seconds = Date.parse(value) / 1e3;
+  return seconds > 0 ? seconds : null;
+}
+function hostVendor(baseUrl) {
+  const hostname5 = URL.canParse(baseUrl) ? new URL(baseUrl).hostname : void 0;
+  return hostname5 === "api.openai.com" ? "openai" : hostname5 === "api.anthropic.com" ? "anthropic" : void 0;
+}
+function price(value, label2) {
+  if (value === void 0 || value === null || value === "")
+    return null;
+  const parsed2 = typeof value === "number" ? value : Number(value);
+  if (Number.isNaN(parsed2) || Number.isFinite(parsed2) && parsed2 < 0) {
+    return null;
+  }
+  return nonnegativeNumber(parsed2, label2);
+}
+function responsePrice(value, label2) {
+  const parsed2 = price(value, label2);
+  if (parsed2 === null && value !== void 0 && value !== null && value !== "") {
+    throw new Error(`${label2} must be a non-negative number`);
+  }
+  return parsed2;
+}
+function redact(value, apiKey) {
+  return apiKey.length === 0 ? value : value.split(apiKey).join("[redacted]");
+}
+function errorExcerpt(value, apiKey) {
+  return redact(value, apiKey).slice(0, 500);
+}
+function backoffDelay(attempt) {
+  const backoff = 100 * 2 ** (attempt - 1);
+  return backoff + Math.random() * backoff * 0.25;
+}
+function retryDelay(response, attempt) {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter !== null) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0)
+      return seconds * 1e3;
+    const date5 = Date.parse(retryAfter);
+    if (!Number.isNaN(date5))
+      return Math.max(0, date5 - Date.now());
+  }
+  return backoffDelay(attempt);
+}
+function sleep(milliseconds) {
+  return new Promise((resolve14) => setTimeout(resolve14, milliseconds));
+}
+function isRetryable(status) {
+  return status === 408 || status === 409 || status === 429 || status >= 500;
+}
+function rejectedAttempt(errorDetail, latencyMs) {
+  return {
+    outcome: "provider_error",
+    content: "",
+    usage: { inputTokens: 0, outputTokens: 0 },
+    costUsd: 0,
+    costIsEstimate: true,
+    errorDetail,
+    ...latencyMs === void 0 ? {} : { latencyMs }
+  };
+}
+function chatErrorBody(text) {
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return false;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const envelope = value;
+  if (envelope.error !== void 0 && envelope.error !== null)
+    return true;
+  if (!Array.isArray(envelope.choices) || envelope.choices.length === 0) {
+    return false;
+  }
+  const choice = envelope.choices[0];
+  return typeof choice === "object" && choice !== null && !Array.isArray(choice) && choice.finish_reason === "error";
+}
+function normalizeModel(value, index, vendor) {
+  const model = objectValue(value, `models[${index}]`);
+  if (typeof model.id !== "string" || model.id.length === 0) {
+    throw new Error(`models[${index}].id must be a non-empty string`);
+  }
+  if (model.type !== void 0 && typeof model.type !== "string") {
+    throw new Error(`models[${index}].type must be a string`);
+  }
+  if (model.type !== void 0 && model.type !== "language" && model.type !== "model") {
+    return null;
+  }
+  const rawPricing = objectValue(model.pricing ?? {}, `models[${index}].pricing`);
+  const topProvider = objectValue(model.top_provider ?? {}, `models[${index}].top_provider`);
+  const architecture = objectValue(model.architecture ?? {}, `models[${index}].architecture`);
+  const modalities = objectValue(model.modalities ?? {}, `models[${index}].modalities`);
+  const reasoning = objectValue(model.reasoning ?? {}, `models[${index}].reasoning`);
+  const supported = Array.isArray(model.supported_parameters) ? model.supported_parameters : [];
+  if (!supported.every((parameter) => typeof parameter === "string")) {
+    throw new Error(`models[${index}].supported_parameters must contain strings`);
+  }
+  const contextField = model.context_window !== void 0 ? "context_window" : model.context_length === void 0 && model.max_input_tokens !== void 0 ? "max_input_tokens" : "context_length";
+  const rawContext = model.context_window ?? model.context_length ?? model.max_input_tokens ?? 0;
+  const contextLength = tokenCount(rawContext, `models[${index}].${contextField}`);
+  const rawMaxOutputTokens = model.max_tokens ?? topProvider.max_completion_tokens;
+  const maxOutputTokens = rawMaxOutputTokens === void 0 || rawMaxOutputTokens === null || rawMaxOutputTokens === 0 ? null : tokenCount(rawMaxOutputTokens, `models[${index}].max output tokens`);
+  const outputModalities = architecture.output_modalities ?? modalities.output ?? [];
+  if (!Array.isArray(outputModalities) || !outputModalities.every((modality) => typeof modality === "string")) {
+    throw new Error(`models[${index}].output modalities must contain strings`);
+  }
+  if (outputModalities.length > 0 && !outputModalities.includes("text")) {
+    return null;
+  }
+  const entry = {
+    id: model.id,
+    family: vendor !== void 0 && !model.id.includes("/") ? vendor : catalogFamily(model.id),
+    contextLength,
+    pricing: (() => {
+      const input = price(rawPricing.prompt ?? rawPricing.input, `models[${index}].pricing.input`);
+      const output = price(rawPricing.completion ?? rawPricing.output, `models[${index}].pricing.output`);
+      return input === null || output === null ? null : { input, output };
+    })(),
+    supportsTools: supported.includes("tools"),
+    supportsStructuredOutput: supported.includes("response_format") || supported.includes("structured_outputs"),
+    releasedAt: model.released === void 0 && model.created === void 0 ? isoReleaseDate(model.created_at) : releaseDate(model.released ?? model.created),
+    maxOutputTokens,
+    outputModalities,
+    requiresReasoning: reasoning.mandatory === true
+  };
+  return {
+    entry,
+    declaresCapabilities: Array.isArray(model.supported_parameters),
+    declaresReasoning: model.reasoning !== void 0 && model.reasoning !== null
+  };
+}
+function failureMessage(error51) {
+  if (!(error51 instanceof Error))
+    return String(error51);
+  return error51.cause instanceof Error ? `${error51.message} (${error51.cause.message})` : error51.message;
+}
+async function readCatalogReference(reference) {
+  const models = /* @__PURE__ */ new Map();
+  const excluded = /* @__PURE__ */ new Set();
+  const remote = /^https?:\/\//iu.test(reference);
+  let rawCount = 0;
+  let next = reference;
+  for (let page = 0; page < 20 && next !== void 0; page += 1) {
+    const url2 = next;
+    next = void 0;
+    let response;
+    let text;
+    try {
+      if (remote) {
+        response = await fetch(url2, { method: "GET" });
+        text = await response.text();
+      } else {
+        text = await readFile2(url2, "utf8");
+      }
+    } catch (error51) {
+      throw new CatalogReferenceError(`Catalog reference ${reference} could not be ${remote ? "fetched" : "read"}: ${failureMessage(error51)}`);
+    }
+    if (response !== void 0 && !response.ok) {
+      throw new CatalogReferenceError(`Catalog reference ${reference} answered HTTP ${response.status}`);
+    }
+    try {
+      const envelope = objectValue(JSON.parse(text), "model catalog");
+      if (!Array.isArray(envelope.data)) {
+        throw new Error("model catalog data must be an array");
+      }
+      for (const value of envelope.data) {
+        const model = normalizeModel(value, rawCount);
+        rawCount += 1;
+        if (model === null)
+          excluded.add(value.id);
+        else
+          models.set(model.entry.id, model);
+      }
+      if (remote && typeof envelope.links === "object" && envelope.links !== null && !Array.isArray(envelope.links)) {
+        const links = envelope.links;
+        if (typeof links.next === "string" && links.next.length > 0) {
+          const resolved = new URL(links.next, url2);
+          if (resolved.origin === new URL(reference).origin) {
+            next = resolved.href;
+          }
+        }
+      }
+    } catch (error51) {
+      throw new CatalogReferenceError(`Catalog reference ${reference} is not an OpenAI-compatible /models document: ${failureMessage(error51)}`);
+    }
+  }
+  return { models, excluded };
+}
+async function readModelList(reference) {
+  return [...(await readCatalogReference(reference)).models.values()].map(({ entry }) => entry);
+}
+function joinCatalogReference(models, reference) {
+  const listed = (id) => reference.models.has(id) || reference.excluded.has(id);
+  const idsByCanonicalName = /* @__PURE__ */ new Map();
+  for (const id of [...reference.models.keys(), ...reference.excluded]) {
+    const key = `${catalogFamily(id)}/${canonicalModelName(id)}`;
+    idsByCanonicalName.set(key, [...idsByCanonicalName.get(key) ?? [], id]);
+  }
+  const joined = [];
+  for (const { entry, declaresCapabilities, declaresReasoning } of models) {
+    const vendorId = `${entry.family}/${entry.id}`;
+    const canonicalIds = idsByCanonicalName.get(`${entry.family}/${canonicalModelName(entry.id)}`) ?? [];
+    const matchId = entry.id.split("/").map((_, index, segments) => segments.slice(index).join("/")).find(listed) ?? (!entry.id.includes("/") && entry.family !== entry.id && listed(vendorId) ? vendorId : canonicalIds.length === 1 ? canonicalIds[0] : void 0);
+    if (matchId === void 0) {
+      joined.push(entry);
+      continue;
+    }
+    const match = reference.models.get(matchId)?.entry;
+    if (match === void 0)
+      continue;
+    joined.push({
+      ...entry,
+      pricing: entry.pricing ?? match.pricing,
+      contextLength: entry.contextLength === 0 ? match.contextLength : entry.contextLength,
+      maxOutputTokens: entry.maxOutputTokens ?? match.maxOutputTokens,
+      ...declaresCapabilities ? {} : {
+        supportsTools: match.supportsTools,
+        supportsStructuredOutput: match.supportsStructuredOutput
+      },
+      outputModalities: entry.outputModalities?.length === 0 ? match.outputModalities : entry.outputModalities,
+      requiresReasoning: declaresReasoning ? entry.requiresReasoning : match.requiresReasoning,
+      releasedAt: match.releasedAt ?? entry.releasedAt
+    });
+  }
+  return joined;
+}
+function normalizeUsage(value) {
+  if (value === void 0 || value === null)
+    return null;
+  const usage2 = objectValue(value, "chat response usage");
+  const input = usage2.prompt_tokens ?? usage2.input_tokens;
+  const output = usage2.completion_tokens ?? usage2.output_tokens;
+  if (input === void 0 && output === void 0)
+    return null;
+  return {
+    inputTokens: tokenCount(input, "usage.prompt_tokens"),
+    outputTokens: tokenCount(output, "usage.completion_tokens")
+  };
+}
+function estimateInputTokens(messages) {
+  return Math.max(1, Math.ceil(Buffer.byteLength(JSON.stringify(messages)) / 4));
+}
+function createProvider(options) {
+  const baseUrl = options.baseUrl.replace(/\/$/, "");
+  const vendor = hostVendor(baseUrl);
+  const limiter = new AdaptiveLimiter(options.maxConcurrency ?? 8);
+  let catalog;
+  let catalogRequest;
+  function apiKey() {
+    const value = process.env[options.apiKeyEnv];
+    if (value === void 0 || value.length === 0) {
+      throw new ProviderConfigurationError(`Provider API key environment variable is not set: ${options.apiKeyEnv}`);
+    }
+    return value;
+  }
+  async function physicalFetch(url2, init) {
+    const key = apiKey();
+    const headers = new Headers(init.headers);
+    if (vendor === "anthropic")
+      headers.set("anthropic-version", "2023-06-01");
+    for (const [name, value] of Object.entries(options.headers ?? {})) {
+      headers.set(name, value);
+    }
+    headers.set("authorization", `Bearer ${key}`);
+    return limiter.run(async (ticket) => {
+      const startedAt = performance.now();
+      try {
+        const response = await fetch(url2, {
+          ...init,
+          headers
+        });
+        const text = await response.text();
+        const latencyMs = Math.round(performance.now() - startedAt);
+        if (response.status === 429 || response.status >= 500)
+          limiter.rateLimited(ticket);
+        else if (response.ok)
+          limiter.succeeded();
+        else
+          limiter.failed();
+        return { response, text, apiKey: key, latencyMs };
+      } catch (error51) {
+        limiter.failed();
+        throw new ProviderRequestError(error51 instanceof Error ? error51.message : String(error51));
+      }
+    });
+  }
+  async function withRetries(url2, init, hooks = {}) {
+    for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
+      let result2;
+      try {
+        result2 = await physicalFetch(url2, init);
+      } catch (error51) {
+        if (error51 instanceof ProviderConfigurationError)
+          throw error51;
+        await hooks.onRejectedAttempt?.(rejectedAttempt({
+          status: null,
+          bodyExcerpt: errorExcerpt(error51 instanceof Error ? error51.message : String(error51), apiKey())
+        }));
+        if (attempt === retryAttempts)
+          throw error51;
+        await sleep(backoffDelay(attempt));
+        continue;
+      }
+      const status = result2.response.status;
+      if (result2.response.ok && hooks.errorBody?.(result2.text) !== true) {
+        return result2;
+      }
+      const errorDetail = {
+        status,
+        bodyExcerpt: errorExcerpt(result2.text, result2.apiKey)
+      };
+      await hooks.onRejectedAttempt?.(rejectedAttempt(errorDetail, result2.latencyMs));
+      if (status === 401 || status === 403) {
+        throw new BlockedError({
+          kind: "credentials",
+          providerId: options.providerId,
+          errorDetail
+        });
+      }
+      if (status === 402) {
+        throw new BlockedError({
+          kind: "credits",
+          providerId: options.providerId,
+          errorDetail
+        });
+      }
+      if (result2.response.ok || isRetryable(status)) {
+        if (attempt === retryAttempts) {
+          throw new BlockedError({
+            kind: "rate-limit",
+            status,
+            observedCeiling: limiter.currentCap
+          });
+        }
+        await sleep(retryDelay(result2.response, attempt));
+        continue;
+      }
+      throw new ProviderHttpError(status, errorDetail.bodyExcerpt);
+    }
+    throw new BlockedError({
+      kind: "rate-limit",
+      status: 429,
+      observedCeiling: limiter.currentCap
+    });
+  }
+  async function fetchCatalog() {
+    const models = [];
+    let rawCount = 0;
+    let totalCount;
+    let truncated = false;
+    let next = `${baseUrl}/models`;
+    for (let page = 0; page < 20 && next !== void 0; page += 1) {
+      const { response, text, apiKey: requestKey } = await withRetries(next, {
+        method: "GET"
+      });
+      next = void 0;
+      try {
+        const value = JSON.parse(text);
+        const envelope = objectValue(value, "model catalog");
+        if (!Array.isArray(envelope.data)) {
+          throw new Error("model catalog data must be an array");
+        }
+        for (const entry of envelope.data) {
+          const model = normalizeModel(entry, rawCount, vendor);
+          rawCount += 1;
+          if (model !== null)
+            models.push(model);
+        }
+        if (totalCount === void 0 && typeof envelope.total_count === "number") {
+          totalCount = envelope.total_count;
+        }
+        if (typeof envelope.links === "object" && envelope.links !== null && !Array.isArray(envelope.links)) {
+          const links = envelope.links;
+          if (typeof links.next === "string" && links.next.length > 0) {
+            const resolved = new URL(links.next, `${baseUrl}/`);
+            if (resolved.origin === new URL(baseUrl).origin)
+              next = resolved.href;
+            else
+              truncated = true;
+          }
+        }
+        if (next === void 0 && envelope.has_more === true && typeof envelope.last_id === "string" && envelope.last_id.length > 0) {
+          next = `${baseUrl}/models?after_id=${encodeURIComponent(envelope.last_id)}&limit=1000`;
+        }
+      } catch (error51) {
+        throw new BlockedError({
+          kind: "provider",
+          providerId: options.providerId,
+          errorDetail: {
+            status: response.status,
+            bodyExcerpt: errorExcerpt(text, requestKey)
+          }
+        });
+      }
+    }
+    if (next !== void 0)
+      truncated = true;
+    if (truncated || totalCount !== void 0 && totalCount > rawCount) {
+      options.warning?.("catalog_truncated", `Provider ${options.providerId} catalog is truncated: collected ${rawCount} of ${totalCount ?? "an unknown number of"} models`);
+    }
+    const entries = options.catalogReference === void 0 ? models.map(({ entry }) => entry) : joinCatalogReference(models, await readCatalogReference(options.catalogReference));
+    if (options.pricingOverrides !== void 0) {
+      for (const entry of entries) {
+        const override = options.pricingOverrides[entry.id];
+        if (override === void 0)
+          continue;
+        entry.pricing = { input: override.input, output: override.output };
+        if (override.maxOutputTokens !== void 0) {
+          entry.maxOutputTokens = override.maxOutputTokens;
+        }
+      }
+    } else if (entries.length > 0 && entries.every(({ pricing }) => pricing === null)) {
+      try {
+        const { response, text } = await physicalFetch(new URL("/model/info", baseUrl).href, { method: "GET" });
+        if (!response.ok)
+          throw new Error("LiteLLM model info request failed");
+        const envelope = objectValue(JSON.parse(text), "LiteLLM model info");
+        if (!Array.isArray(envelope.data)) {
+          throw new Error("LiteLLM model info data must be an array");
+        }
+        const pricingByModel = /* @__PURE__ */ new Map();
+        for (const [index, value] of envelope.data.entries()) {
+          const row2 = objectValue(value, `model info data[${index}]`);
+          if (typeof row2.model_name !== "string" || row2.model_name.length === 0) {
+            throw new Error(`model info data[${index}].model_name must be a non-empty string`);
+          }
+          const modelInfo = objectValue(row2.model_info, `model info data[${index}].model_info`);
+          const input = price(modelInfo.input_cost_per_token, `model info data[${index}].model_info.input_cost_per_token`);
+          const output = price(modelInfo.output_cost_per_token, `model info data[${index}].model_info.output_cost_per_token`);
+          const rawMaxOutputTokens = modelInfo.max_output_tokens ?? modelInfo.max_tokens;
+          const maxOutputTokens = rawMaxOutputTokens === void 0 || rawMaxOutputTokens === null || rawMaxOutputTokens === 0 ? void 0 : tokenCount(rawMaxOutputTokens, `model info data[${index}].model_info.max_output_tokens`);
+          if (input !== null && output !== null) {
+            pricingByModel.set(row2.model_name, {
+              pricing: { input, output },
+              ...maxOutputTokens === void 0 ? {} : { maxOutputTokens }
+            });
+          }
+        }
+        for (const entry of entries) {
+          if (entry.pricing !== null)
+            continue;
+          const modelInfo = pricingByModel.get(entry.id);
+          if (modelInfo === void 0)
+            continue;
+          entry.pricing = modelInfo.pricing;
+          if (modelInfo.maxOutputTokens !== void 0) {
+            entry.maxOutputTokens = modelInfo.maxOutputTokens;
+          }
+        }
+      } catch {
+      }
+      if (entries.every(({ pricing }) => pricing === null)) {
+        options.warning?.("catalog_pricing_unavailable", `Provider ${options.providerId} catalog does not publish per-token pricing`);
+      }
+    }
+    if (vendor === "anthropic") {
+      for (const entry of entries)
+        entry.supportsStructuredOutput = false;
+    }
+    const unpriced = entries.flatMap(({ id, pricing }) => pricing === null ? [id] : []);
+    if (options.catalogReference !== void 0 && unpriced.length > 0) {
+      const examples = unpriced.slice(0, 5).join(", ");
+      options.warning?.("catalog_reference_unmatched", `${unpriced.length} model(s) in the ${options.providerId} catalog have no price after joining the catalog reference, for example ${examples}. Declare replay models under the ids the reference lists, or pass --pricing-file.`);
+    }
+    catalog = entries;
+    return catalog;
+  }
+  function listModels() {
+    if (catalog !== void 0)
+      return Promise.resolve(catalog);
+    if (catalogRequest !== void 0)
+      return catalogRequest;
+    catalogRequest = fetchCatalog().finally(() => {
+      catalogRequest = void 0;
+    });
+    return catalogRequest;
+  }
+  async function chat(request) {
+    const models = await listModels();
+    const maxTokens = request.maxOutputTokens === void 0 ? void 0 : Math.max(16, request.maxOutputTokens);
+    const body = {
+      model: request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      // AI Gateway rejects output limits below 16 even when the upstream model accepts them.
+      [vendor === "openai" ? "max_completion_tokens" : "max_tokens"]: maxTokens,
+      tools: request.tools,
+      tool_choice: request.toolChoice,
+      response_format: request.responseFormat,
+      stream: false
+    };
+    const { response, text, apiKey: requestKey, latencyMs } = await withRetries(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        ...request.headers,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(body)
+    }, { onRejectedAttempt: request.onAttempt, errorBody: chatErrorBody });
+    let normalized;
+    try {
+      const value = JSON.parse(text);
+      const envelope = objectValue(value, "chat response");
+      if (!Array.isArray(envelope.choices) || envelope.choices.length === 0) {
+        throw new Error("chat response choices must be a non-empty array");
+      }
+      const choice = objectValue(envelope.choices[0], "chat response choice");
+      const message2 = objectValue(choice.message, "chat response message");
+      const finishReason = typeof choice.finish_reason === "string" ? choice.finish_reason : void 0;
+      const providerResponseId = typeof envelope.generationId === "string" && envelope.generationId.length > 0 ? envelope.generationId : typeof envelope.id === "string" && envelope.id.length > 0 ? envelope.id : void 0;
+      if (typeof message2.content !== "string" && message2.content !== null) {
+        throw new Error("chat response message content must be a string or null");
+      }
+      const content = message2.content ?? "";
+      const reportedUsage = normalizeUsage(envelope.usage);
+      const usageObject = envelope.usage === void 0 || envelope.usage === null ? {} : objectValue(envelope.usage, "chat response usage");
+      const usageUnreported = content.trim().length > 0 && (reportedUsage === null || reportedUsage.outputTokens === 0);
+      const usage2 = usageUnreported ? {
+        inputTokens: reportedUsage?.inputTokens || request.estimatedInputTokens || estimateInputTokens(request.messages),
+        outputTokens: Math.max(1, Math.ceil(Buffer.byteLength(content) / 4)),
+        status: "usage_unreported"
+      } : reportedUsage ?? {
+        inputTokens: 0,
+        outputTokens: 0
+      };
+      const costDetails = usageObject.cost_details === void 0 || usageObject.cost_details === null ? {} : objectValue(usageObject.cost_details, "usage.cost_details");
+      const billedCost = typeof usageObject.cost === "object" && usageObject.cost !== null ? responsePrice(objectValue(usageObject.cost, "usage.cost").total_cost, "usage.cost.total_cost") : responsePrice(usageObject.cost, "usage.cost");
+      const marketCost = responsePrice(usageObject.market_cost, "usage.market_cost");
+      const upstreamCost = responsePrice(costDetails.upstream_inference_cost, "usage.cost_details.upstream_inference_cost");
+      let costUsd;
+      let costIsEstimate;
+      const providerCost = billedCost !== null && billedCost > 0 ? billedCost : marketCost ?? upstreamCost;
+      if (!usageUnreported && providerCost !== null) {
+        costUsd = providerCost;
+        costIsEstimate = false;
+      } else {
+        const model = models.find((item) => item.id === request.model);
+        if (model === void 0) {
+          throw new Error(`Requested model is absent from the catalog: ${request.model}`);
+        }
+        if (model.pricing === null) {
+          throw new Error(`Requested model has no pricing: ${request.model}`);
+        }
+        costUsd = usage2.inputTokens * model.pricing.input + usage2.outputTokens * model.pricing.output;
+        costIsEstimate = true;
+      }
+      const served = servedModel(envelope);
+      const substitution2 = responseSubstitution({
+        requestedModel: request.model,
+        headers: response.headers,
+        body: envelope
+      });
+      normalized = {
+        content,
+        usage: usage2,
+        costUsd,
+        costIsEstimate,
+        ...finishReason === void 0 ? {} : { finishReason },
+        ...providerResponseId === void 0 ? {} : { providerResponseId },
+        ...served === void 0 ? {} : { servedModel: served },
+        ...substitution2 === void 0 ? {} : { substitution: substitution2 }
+      };
+    } catch (error51) {
+      const message2 = error51 instanceof Error ? error51.message : String(error51);
+      const errorDetail = {
+        status: response.status,
+        bodyExcerpt: errorExcerpt(text, requestKey)
+      };
+      await request.onAttempt?.({
+        outcome: "provider_error",
+        content: "",
+        usage: { inputTokens: 0, outputTokens: 0 },
+        costUsd: 0,
+        costIsEstimate: true,
+        errorDetail,
+        latencyMs
+      });
+      throw new ProviderResponseError(`Invalid chat response: ${redact(message2, requestKey)}`, errorDetail);
+    }
+    await request.onAttempt?.({
+      outcome: "completed",
+      ...normalized,
+      latencyMs
+    });
+    return normalized;
+  }
+  return { providerId: options.providerId, listModels, chat };
+}
+
+// ../replay/dist/plan-route.js
+var planRouteVendors = { "claude-login": "anthropic" };
+function isPlanRouteKind(value) {
+  return Object.hasOwn(planRouteVendors, value);
+}
+var PlanRouteUnavailableError = class extends ProviderConfigurationError {
+  remedy;
+  constructor(message2, remedy) {
+    super(message2);
+    this.name = "PlanRouteUnavailableError";
+    this.remedy = remedy;
+  }
+};
+var PlanLoginError = class extends ProviderConfigurationError {
+  remedy;
+  constructor(message2, remedy) {
+    super(message2);
+    this.name = "PlanLoginError";
+    this.remedy = remedy;
+  }
+};
+var MAX_STDOUT_BYTES = 32 * 1024 * 1024;
+var PREFLIGHT_TIMEOUT_MS = 3e4;
+var running = /* @__PURE__ */ new Set();
+var exitHookRegistered = false;
+function stopPlanChildren() {
+  for (const child of running)
+    child.kill("SIGKILL");
+}
+function isSingleTurn(messages) {
+  const last = messages.length - 1;
+  return last >= 0 && messages[last].role === "user" && messages.slice(0, last).every(({ role }) => role === "system" || role === "developer");
+}
+function withheldFromChild(name) {
+  return name.startsWith("ANTHROPIC_") || name.startsWith("OPENAI_") || name === "CODEX_API_KEY" || name === "CLAUDECODE" || name === "CLAUDE_PID" || name === "CLAUDE_EFFORT" || name.startsWith("CLAUDE_CODE_") && name !== "CLAUDE_CODE_OAUTH_TOKEN";
+}
+function versionAtLeast(version3, minimum) {
+  const have = version3.split(".").map(Number);
+  const want = minimum.split(".").map(Number);
+  for (const [index, part] of want.entries()) {
+    if (have[index] !== part)
+      return have[index] > part;
+  }
+  return true;
+}
+function runner(command, env, installRemedy) {
+  return async (args, options) => {
+    const cwd = options.cwd ?? await mkdtemp(join2(tmpdir(), "rightmodeler-plan-"));
+    try {
+      return await new Promise((resolve14, reject) => {
+        const child = spawn(command, args, {
+          cwd,
+          env,
+          stdio: ["pipe", "pipe", "pipe"],
+          shell: false
+        });
+        running.add(child);
+        if (!exitHookRegistered) {
+          exitHookRegistered = true;
+          process.once("exit", stopPlanChildren);
+        }
+        let stdout = "";
+        let stderr = "";
+        let pending = "";
+        let bytes = 0;
+        let timedOut = false;
+        let stopped = false;
+        let overflowed = false;
+        let spawnError;
+        let forceKill;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          child.kill("SIGTERM");
+          forceKill = setTimeout(() => child.kill("SIGKILL"), 5e3);
+        }, options.timeoutMs);
+        const readLine = (line) => {
+          if (!stopped && options.onLine?.(line) === true) {
+            stopped = true;
+            child.kill("SIGKILL");
+          }
+        };
+        child.stdout.setEncoding("utf8");
+        child.stdout.on("data", (chunk) => {
+          bytes += Buffer.byteLength(chunk);
+          if (bytes > MAX_STDOUT_BYTES) {
+            overflowed = true;
+            child.kill("SIGKILL");
+            return;
+          }
+          stdout += chunk;
+          pending += chunk;
+          for (let newline = pending.indexOf("\n"); newline !== -1; newline = pending.indexOf("\n")) {
+            readLine(pending.slice(0, newline));
+            pending = pending.slice(newline + 1);
+          }
+        });
+        child.stderr.setEncoding("utf8");
+        child.stderr.on("data", (chunk) => {
+          if (stderr.length < 500)
+            stderr += chunk;
+        });
+        child.stdin.on("error", () => void 0);
+        child.stdin.end(options.stdin);
+        child.once("error", (error51) => {
+          spawnError = error51;
+        });
+        child.once("close", (code) => {
+          clearTimeout(timer);
+          clearTimeout(forceKill);
+          running.delete(child);
+          if (pending.length > 0)
+            readLine(pending);
+          if (spawnError !== void 0) {
+            reject(spawnError.code === "ENOENT" ? new PlanRouteUnavailableError(`${command} is not installed or not on PATH.`, installRemedy) : new ProviderRequestError(`${command} could not start: ${spawnError.message}`));
+            return;
+          }
+          if (overflowed) {
+            reject(new ProviderRequestError(`${command} printed more than 32 MiB`));
+            return;
+          }
+          resolve14({
+            code,
+            stdout,
+            stderr: stderr.slice(0, 500),
+            timedOut,
+            stopped
+          });
+        });
+      });
+    } finally {
+      if (options.cwd === void 0) {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    }
+  };
+}
+function createPlanProvider(adapter, options) {
+  const parentEnv = options.env ?? process.env;
+  const vendor = planRouteVendors[adapter.kind];
+  const limiter = new AdaptiveLimiter(options.maxConcurrency ?? 2);
+  const warned = /* @__PURE__ */ new Set();
+  const cliModelById = /* @__PURE__ */ new Map();
+  let preflight;
+  let known;
+  let callable;
+  let latch;
+  function warnOnce(code, message2) {
+    if (warned.has(code))
+      return;
+    warned.add(code);
+    options.warning?.(code, message2);
+  }
+  function ready() {
+    preflight ??= (async () => {
+      if ((parentEnv.CI ?? "").length > 0) {
+        throw new PlanRouteUnavailableError("Plan routes run only on your own machine, and CI is set.", "In continuous integration, use an API route: --base-url <url> and --api-key-env <name>. If this is your own machine, unset CI and rerun.");
+      }
+      const run = runner(adapter.command, adapter.childEnv(Object.fromEntries(Object.entries(parentEnv).filter(([name]) => !withheldFromChild(name)))), adapter.remedies.install);
+      const version3 = /\d+\.\d+\.\d+/u.exec((await run(["--version"], {
+        stdin: "",
+        timeoutMs: PREFLIGHT_TIMEOUT_MS
+      })).stdout)?.[0];
+      if (version3 === void 0 || !versionAtLeast(version3, adapter.minimumVersion)) {
+        throw new PlanRouteUnavailableError(`${adapter.command} ${version3 ?? "(unknown version)"} is older than ${adapter.minimumVersion}, the version rightmodeler's isolation settings were verified on.`, adapter.remedies.update);
+      }
+      await adapter.checkLogin(run);
+      const withheld = adapter.keyVariables.filter((name) => (parentEnv[name] ?? "").length > 0);
+      if (withheld.length > 0) {
+        const one = withheld.length === 1;
+        warnOnce("plan_route_key_withheld", `${withheld.join(", ")} ${one ? "is" : "are"} set; rightmodeler keeps ${one ? "it" : "them"} away from ${adapter.command} so your plan is used, not a key.`);
+      }
+      return run;
+    })();
+    return preflight;
+  }
+  function knownModels() {
+    known ??= (async () => {
+      await ready();
+      return (await readModelList(options.priceList)).map((entry) => {
+        const override = options.pricingOverrides?.[entry.id];
+        return override === void 0 ? entry : {
+          ...entry,
+          pricing: { input: override.input, output: override.output },
+          ...override.maxOutputTokens === void 0 ? {} : { maxOutputTokens: override.maxOutputTokens }
+        };
+      });
+    })();
+    return known;
+  }
+  function listModels() {
+    callable ??= (async () => {
+      const listed = await adapter.listModels(await ready());
+      const priced = await knownModels();
+      const entries = [];
+      const unpriced = [];
+      for (const { cliModel, contextWindow } of listed) {
+        const canonical = priced.filter(({ id, family }) => family === vendor && canonicalModelName(id) === canonicalModelName(cliModel));
+        const match = priced.find(({ id }) => id === `${vendor}/${cliModel}`) ?? (canonical.length === 1 ? canonical[0] : void 0);
+        if (match === void 0 || match.pricing === null) {
+          unpriced.push(cliModel);
+          continue;
+        }
+        if (cliModelById.has(match.id))
+          continue;
+        cliModelById.set(match.id, cliModel);
+        entries.push({
+          ...match,
+          supportsTools: false,
+          supportsStructuredOutput: false,
+          ...contextWindow === void 0 ? {} : { contextLength: Math.min(match.contextLength, contextWindow) }
+        });
+      }
+      if (unpriced.length > 0) {
+        const one = unpriced.length === 1;
+        options.warning?.("plan_model_unpriced", `${adapter.command} lists ${unpriced.join(", ")} but the price list ${options.priceList} has no price for ${one ? "it" : "them"}; ${one ? "it is" : "they are"} left out.`);
+      }
+      return entries;
+    })();
+    return callable;
+  }
+  async function chat(request) {
+    const run = await ready();
+    if (latch !== void 0)
+      throw latch;
+    const entry = (await listModels()).find(({ id }) => id === request.model);
+    if (entry?.pricing === null || entry?.pricing === void 0) {
+      throw new ProviderRequestError(`${request.model} is not a model the ${adapter.kind} route lists`);
+    }
+    if (!isSingleTurn(request.messages)) {
+      throw new Error(`The ${adapter.kind} route sends one user turn, but the request has ${request.messages.map(({ role }) => role).join(", ")} messages`);
+    }
+    const pricing = entry.pricing;
+    const system = request.messages.slice(0, -1).map(({ content }) => content).join("\n\n");
+    const user = request.messages.at(-1).content;
+    return limiter.run(async () => {
+      if (latch !== void 0)
+        throw latch;
+      const dir = await mkdtemp(join2(tmpdir(), "rightmodeler-plan-"));
+      let result2;
+      try {
+        result2 = await adapter.call(run, {
+          cliModel: cliModelById.get(entry.id),
+          system,
+          user,
+          dir,
+          timeoutMs: options.callTimeoutMs ?? 6e5,
+          warnOnce
+        });
+      } catch (error51) {
+        if (!(error51 instanceof ProviderRequestError) && !(error51 instanceof PlanRouteUnavailableError) && !(error51 instanceof PlanLoginError)) {
+          throw error51;
+        }
+        result2 = { ok: false, error: error51, status: null, excerpt: "" };
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+      if (!result2.ok) {
+        await request.onAttempt?.({
+          outcome: "provider_error",
+          content: "",
+          usage: { inputTokens: 0, outputTokens: 0 },
+          costUsd: 0,
+          costIsEstimate: true,
+          errorDetail: { status: result2.status, bodyExcerpt: result2.excerpt }
+        });
+        const { error: error51 } = result2;
+        if (isUsageLimit(error51) || error51 instanceof PlanLoginError || error51 instanceof PlanRouteUnavailableError) {
+          latch ??= error51;
+        }
+        throw error51;
+      }
+      const response = {
+        content: result2.content,
+        usage: {
+          inputTokens: result2.inputTokens,
+          outputTokens: result2.outputTokens
+        },
+        costUsd: (request.estimatedInputTokens ?? estimateInputTokens(request.messages)) * pricing.input + result2.outputTokens * pricing.output,
+        costIsEstimate: true,
+        ...result2.servedModel === void 0 ? {} : { servedModel: result2.servedModel },
+        ...result2.substitution === void 0 ? {} : { substitution: result2.substitution }
+      };
+      await request.onAttempt?.({
+        outcome: "completed",
+        ...response,
+        ...result2.latencyMs === void 0 ? {} : { latencyMs: result2.latencyMs }
+      });
+      return response;
+    });
+  }
+  return { providerId: adapter.kind, listModels, knownModels, chat };
+}
+
+// ../replay/dist/claude-route.js
+var updateRemedy = "Update with claude update, then rerun.";
+var loginRemedy = "Run claude auth login, then rerun; finished calls are kept.";
+var keyRemedy = "Remove the setting that supplies it (an API key helper, an env block in Claude Code settings, or a cloud provider variable), or use an API route with --base-url <url> and --api-key-env <name>.";
+var isolation = [
+  "--tools",
+  "",
+  "--strict-mcp-config",
+  "--disable-slash-commands",
+  "--setting-sources",
+  "",
+  "--no-session-persistence"
+];
+var settings = ["--settings", '{"switchModelsOnFlag":false}'];
+var streamJson = ["--output-format", "stream-json", "--verbose"];
+var loginErrors = /* @__PURE__ */ new Set([
+  "authentication_failed",
+  "oauth_org_not_allowed",
+  "account_on_hold",
+  "billing_error"
+]);
+function object2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+}
+function parseLine(line) {
+  try {
+    return object2(JSON.parse(line));
+  } catch {
+    return void 0;
+  }
+}
+function label(value, fallback) {
+  return typeof value === "string" && /^[\w.-]{1,64}$/u.test(value) ? value : fallback;
+}
+function resetTime(value) {
+  return typeof value === "number" ? new Date(value * 1e3).toISOString() : null;
+}
+function count(usage2, key) {
+  const value = usage2?.[key];
+  return typeof value === "number" ? value : 0;
+}
+function unreportedPayment() {
+  return new PlanRouteUnavailableError("claude did not report how the call was paid for, so this claude version changed a shape rightmodeler relies on.", updateRemedy);
+}
+var claudeAdapter = {
+  kind: "claude-login",
+  command: "claude",
+  minimumVersion: "2.1.282",
+  remedies: {
+    install: "Install Claude Code and sign in with claude auth login, or use an API route with --base-url <url> and --api-key-env <name>.",
+    update: updateRemedy
+  },
+  keyVariables: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
+  childEnv(stripped) {
+    const env = {
+      ...stripped,
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+      CLAUDE_CODE_MAX_RETRIES: "2",
+      DISABLE_AUTOUPDATER: "1",
+      MAX_THINKING_TOKENS: "0"
+    };
+    delete env.NODE_OPTIONS;
+    return env;
+  },
+  async checkLogin(run) {
+    const result2 = await run(["auth", "status", "--json"], {
+      stdin: "",
+      timeoutMs: 3e4
+    });
+    const notSignedIn = new PlanLoginError("claude is not signed in on this machine.", loginRemedy);
+    if (result2.code === 1)
+      throw notSignedIn;
+    const status = parseLine(result2.stdout.trim());
+    if (status === void 0) {
+      throw new PlanRouteUnavailableError("claude auth status did not print JSON, so this claude version changed a shape rightmodeler relies on.", updateRemedy);
+    }
+    if (status.loggedIn !== true)
+      throw notSignedIn;
+    if (Object.hasOwn(status, "apiKeySource")) {
+      throw new PlanLoginError(`claude would use ${label(status.apiKeySource, "an API key")} instead of your Claude plan login.`, keyRemedy);
+    }
+    if (status.apiProvider !== "firstParty") {
+      throw new PlanLoginError(`claude is signed in through ${label(status.apiProvider, "another provider")}, not a Claude plan.`, keyRemedy);
+    }
+    if (status.authMethod !== "claude.ai" && status.authMethod !== "oauth_token") {
+      throw new PlanLoginError(`claude is signed in with ${label(status.authMethod, "another method")}, not a Claude plan login.`, keyRemedy);
+    }
+  },
+  async listModels(run) {
+    const result2 = await run([
+      "-p",
+      "--input-format",
+      "stream-json",
+      ...streamJson,
+      ...isolation,
+      ...settings
+    ], {
+      stdin: `${JSON.stringify({
+        type: "control_request",
+        request_id: "rightmodeler-models",
+        request: { subtype: "initialize" }
+      })}
+`,
+      timeoutMs: 3e4
+    });
+    const answer = result2.stdout.split("\n").map(parseLine).find((event) => event?.type === "control_response" && object2(event.response)?.request_id === "rightmodeler-models");
+    const models = object2(object2(answer?.response)?.response)?.models;
+    if (!Array.isArray(models)) {
+      throw new PlanRouteUnavailableError("claude's initialize answer has no model list, so this claude version changed a shape rightmodeler relies on.", updateRemedy);
+    }
+    const cliModels = /* @__PURE__ */ new Set();
+    for (const model of models) {
+      const value = object2(model)?.value;
+      const resolvedModel = object2(model)?.resolvedModel;
+      if (typeof resolvedModel !== "string" || resolvedModel.length === 0 || typeof value === "string" && value.includes("[1m]") || resolvedModel.includes("[1m]") || resolvedModel.startsWith("claude-fable")) {
+        continue;
+      }
+      cliModels.add(resolvedModel);
+    }
+    return [...cliModels].map((cliModel) => ({ cliModel }));
+  },
+  async call(run, input) {
+    const systemFile = join3(input.dir, "system.txt");
+    await writeFile2(systemFile, input.system);
+    const seen = { models: [], toolUse: false };
+    const outcome = await run([
+      "-p",
+      "--model",
+      input.cliModel,
+      "--system-prompt-file",
+      systemFile,
+      ...isolation,
+      "--max-turns",
+      "1",
+      ...settings,
+      ...streamJson
+    ], {
+      stdin: input.user,
+      timeoutMs: input.timeoutMs,
+      cwd: input.dir,
+      onLine: (line) => {
+        const event = parseLine(line);
+        if (event?.type === "system" && event.subtype === "init") {
+          seen.init ??= event;
+          return event.apiKeySource !== "none";
+        }
+        if (event?.type === "assistant") {
+          const message2 = object2(event.message);
+          if (typeof message2?.model === "string" && message2.model !== "<synthetic>") {
+            seen.models.push(message2.model);
+          }
+          if (Array.isArray(message2?.content) && message2.content.some((block) => object2(block)?.type === "tool_use")) {
+            seen.toolUse = true;
+          }
+          if (typeof event.error === "string") {
+            seen.assistantError = event.error;
+          }
+        }
+        if (event?.type === "rate_limit_event") {
+          seen.rateLimit = object2(event.rate_limit_info) ?? seen.rateLimit;
+        }
+        if (event?.type === "result")
+          seen.result = event;
+        return false;
+      }
+    });
+    const { init, models, toolUse, assistantError, rateLimit, result: result2 } = seen;
+    const status = typeof result2?.api_error_status === "number" ? result2.api_error_status : null;
+    const failed = (error51, excerpt = outcome.stderr) => ({ ok: false, error: error51, status, excerpt });
+    if (rateLimit?.status === "allowed_warning" && typeof rateLimit.utilization === "number") {
+      const resetsAt = resetTime(rateLimit.resetsAt);
+      input.warnOnce("plan_usage_warning", `claude reports your plan at ${Math.round(rateLimit.utilization * 100)}% of its usage limit${resetsAt === null ? "" : `, resetting at ${resetsAt}`}; rightmodeler stops at the limit, and a rerun after the reset continues.`);
+    }
+    if (outcome.stopped) {
+      return failed(init !== void 0 && Object.hasOwn(init, "apiKeySource") ? new PlanLoginError(`claude reported that the call would be paid by ${label(init.apiKeySource, "an API key")}, not your plan, so rightmodeler stopped it.`, keyRemedy) : unreportedPayment());
+    }
+    if (outcome.timedOut) {
+      return failed(new ProviderRequestError(`claude did not answer within ${input.timeoutMs / 1e3} s`));
+    }
+    const usageLimit = rateLimit?.errorCode === "credits_required" ? "credits_required" : rateLimit?.isUsingOverage === true ? "overage" : rateLimit?.status === "rejected" || assistantError === "rate_limit" ? "rejected" : void 0;
+    if (usageLimit !== void 0) {
+      return failed(new BlockedError({
+        kind: "usage-limit",
+        providerId: "claude-login",
+        resetsAt: resetTime(rateLimit?.resetsAt),
+        detail: usageLimit
+      }));
+    }
+    if (assistantError !== void 0 && loginErrors.has(assistantError)) {
+      return failed(new PlanLoginError(`claude stopped accepting its login during the run (${assistantError}).`, loginRemedy));
+    }
+    if (result2 === void 0) {
+      return failed(new ProviderRequestError(`claude exited with code ${outcome.code} without a result`));
+    }
+    if (init === void 0 || !Object.hasOwn(init, "apiKeySource")) {
+      return failed(unreportedPayment());
+    }
+    const text = typeof result2.result === "string" ? result2.result : "";
+    if (result2.is_error === true) {
+      const excerpt = text.slice(0, 300);
+      return failed(new ProviderRequestError(`claude reported ${status ?? String(result2.subtype)}: ${excerpt}`), excerpt);
+    }
+    const modelUsage = Object.entries(object2(result2.modelUsage) ?? {});
+    const served = [
+      ...typeof init.model === "string" ? [init.model] : [],
+      ...models,
+      ...modelUsage.map(([model]) => model)
+    ].find((model) => !sameModel(input.cliModel, model));
+    const turns = typeof result2.num_turns === "number" ? result2.num_turns : 1;
+    const substitution2 = served !== void 0 ? {
+      kind: "model",
+      evidence: `claude served ${served} for requested ${input.cliModel}`
+    } : turns > 1 ? { kind: "request", evidence: `claude took ${turns} turns` } : toolUse ? { kind: "request", evidence: "claude called a tool" } : void 0;
+    return {
+      ok: true,
+      content: text,
+      inputTokens: modelUsage.reduce((total, [, usage2]) => total + count(object2(usage2), "inputTokens") + count(object2(usage2), "cacheReadInputTokens") + count(object2(usage2), "cacheCreationInputTokens"), 0),
+      outputTokens: modelUsage.reduce((total, [, usage2]) => total + count(object2(usage2), "outputTokens"), 0),
+      ...modelUsage.length === 1 ? { servedModel: modelUsage[0][0] } : {},
+      ...substitution2 === void 0 ? {} : { substitution: substitution2 },
+      ...typeof result2.duration_api_ms === "number" ? { latencyMs: result2.duration_api_ms } : {}
+    };
+  }
+};
+function createClaudeLoginProvider(options) {
+  return createPlanProvider(claudeAdapter, options);
 }
 
 // ../replay/dist/confirm.js
@@ -26729,7 +28088,7 @@ function countAssessmentAbsenceReasons(facts) {
       continue;
     counts.set(reason, (counts.get(reason) ?? 0) + 1);
   }
-  return [...counts.entries()].sort(([left], [right]) => compareText(left, right)).map(([reason, count]) => ({ reason, count }));
+  return [...counts.entries()].sort(([left], [right]) => compareText(left, right)).map(([reason, count2]) => ({ reason, count: count2 }));
 }
 function assertConsistentGroup(facts, first) {
   if (first.expectedEvaluatorAssignments.length === 0) {
@@ -27571,7 +28930,7 @@ async function judgeOnce(chat, judgeModel, task, first, second, labels, supports
   });
   return parseJudgeOutput(response.content);
 }
-function fencedBlock(label, text) {
+function fencedBlock(label2, text) {
   const characters = Array.from(text);
   let body = text;
   if (characters.length > INPUT_CHARACTER_CAP) {
@@ -27579,9 +28938,9 @@ function fencedBlock(label, text) {
 [truncated: ${characters.length - INPUT_CHARACTER_CAP} more chars]`;
   }
   body = body.replaceAll("<<<UNTRUSTED", "<<<-UNTRUSTED").replaceAll("<<<END UNTRUSTED", "<<<-END UNTRUSTED");
-  return `<<<UNTRUSTED ${label}>>>
+  return `<<<UNTRUSTED ${label2}>>>
 ${body}
-<<<END UNTRUSTED ${label}>>>`;
+<<<END UNTRUSTED ${label2}>>>`;
 }
 function parseJudgeOutput(response) {
   const parsed2 = JSON.parse(extractJudgeJson(response));
@@ -27816,8 +29175,8 @@ function stableSeed2(value) {
 // ../executor/dist/index.js
 import { execFile } from "node:child_process";
 import { randomUUID as randomUUID6 } from "node:crypto";
-import { lstat, readFile as readFile2, readdir as readdir2, realpath } from "node:fs/promises";
-import { join as join2 } from "node:path";
+import { lstat, readFile as readFile3, readdir as readdir2, realpath } from "node:fs/promises";
+import { join as join4 } from "node:path";
 import { promisify } from "node:util";
 var execFileAsync = promisify(execFile);
 var dockerOutputLimit = 10 * 1024 * 1024;
@@ -27893,7 +29252,7 @@ function scratchHostPath(inspect, handle) {
 }
 async function heartbeatTime(scratchPath) {
   try {
-    return (await lstat(join2(scratchPath, HEARTBEAT_FILE))).mtime.toISOString();
+    return (await lstat(join4(scratchPath, HEARTBEAT_FILE))).mtime.toISOString();
   } catch (error51) {
     if (isRecord2(error51) && error51.code === "ENOENT")
       return null;
@@ -27956,7 +29315,7 @@ async function listNamespaceFiles(namespace, namespacePath) {
     entries.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
     for (const entry of entries) {
       const relativePath = relativeDirectory.length === 0 ? entry.name : `${relativeDirectory}/${entry.name}`;
-      const hostPath = join2(directory, entry.name);
+      const hostPath = join4(directory, entry.name);
       const stats = await lstat(hostPath);
       try {
         assertSafeSegment(entry.name, "artifact path segment");
@@ -28109,7 +29468,7 @@ function createDockerExecutor(options) {
       const pendingFiles = [];
       const skipped = [];
       for (const namespace of namespaces) {
-        const listed = await listNamespaceFiles(namespace, join2(request.scratchHostPath, namespace));
+        const listed = await listNamespaceFiles(namespace, join4(request.scratchHostPath, namespace));
         pendingFiles.push(...listed.files);
         skipped.push(...listed.skipped);
       }
@@ -28127,7 +29486,7 @@ function createDockerExecutor(options) {
           });
           continue;
         }
-        const contents = await readFile2(pending.hostPath);
+        const contents = await readFile3(pending.hostPath);
         files.push({
           namespace: pending.namespace,
           path: pending.path,
@@ -28177,8 +29536,8 @@ function createDockerExecutor(options) {
 }
 
 // ../executor/dist/cloud-sandbox.js
-import { lstat as lstat2, mkdir as mkdir2, readFile as readFile3, readdir as readdir3, readlink, realpath as realpath2, writeFile as writeFile2 } from "node:fs/promises";
-import { dirname, join as join3, posix as posix3 } from "node:path";
+import { lstat as lstat2, mkdir as mkdir2, readFile as readFile4, readdir as readdir3, readlink, realpath as realpath2, writeFile as writeFile3 } from "node:fs/promises";
+import { dirname, join as join5, posix as posix3 } from "node:path";
 function isRecord3(value) {
   return typeof value === "object" && value !== null;
 }
@@ -28287,7 +29646,7 @@ async function listLocalEntries(root) {
         kind: "file",
         path: "",
         mode: rootStats.mode & 511,
-        contents: await readFile3(root)
+        contents: await readFile4(root)
       }
     ];
   }
@@ -28300,7 +29659,7 @@ async function listLocalEntries(root) {
     children.sort((left, right) => left.name.localeCompare(right.name));
     for (const child of children) {
       const relativePath = relativeDirectory.length === 0 ? child.name : posix3.join(relativeDirectory, child.name);
-      const absolutePath = join3(directory, child.name);
+      const absolutePath = join5(directory, child.name);
       const stats = await lstat2(absolutePath);
       if (stats.isDirectory()) {
         entries.push({
@@ -28314,7 +29673,7 @@ async function listLocalEntries(root) {
           kind: "file",
           path: relativePath,
           mode: stats.mode & 511,
-          contents: await readFile3(absolutePath)
+          contents: await readFile4(absolutePath)
         });
       } else if (stats.isSymbolicLink()) {
         entries.push({
@@ -28595,9 +29954,9 @@ function createCloudExecutor(options) {
         if (contents === null) {
           throw new Error(`Cloud collection file ${pending.sandboxPath} vanished`);
         }
-        const hostPath = join3(request.scratchHostPath, pending.namespace, ...pending.path.split("/"));
+        const hostPath = join5(request.scratchHostPath, pending.namespace, ...pending.path.split("/"));
         await mkdir2(dirname(hostPath), { recursive: true });
-        await writeFile2(hostPath, contents);
+        await writeFile3(hostPath, contents);
         files.push({
           namespace: pending.namespace,
           path: pending.path,
@@ -28635,839 +29994,12 @@ function createCloudExecutor(options) {
 
 // ../replay/dist/driver-modeb.js
 import { randomUUID as randomUUID8 } from "node:crypto";
-import { mkdir as mkdir3, mkdtemp, rm, writeFile as writeFile3 } from "node:fs/promises";
-import { dirname as dirname2, join as join4, resolve } from "node:path";
+import { mkdir as mkdir3, mkdtemp as mkdtemp2, rm as rm2, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname as dirname2, join as join6, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ../replay/dist/driver.js
 import { randomUUID as randomUUID7 } from "node:crypto";
-
-// ../replay/dist/provider.js
-import { readFile as readFile4 } from "node:fs/promises";
-
-// ../replay/dist/provenance.js
-var DATED_SNAPSHOT = /^\d{2,4}(?:-?\d{2}){1,2}$/;
-var PORTKEY_CACHE_HITS = /* @__PURE__ */ new Set(["hit", "semantic hit"]);
-function objectOf(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
-}
-function nonEmptyString(value) {
-  return typeof value === "string" && value.length > 0 ? value : void 0;
-}
-function servedModel(body) {
-  return nonEmptyString(objectOf(body)?.model);
-}
-function modelParts(id) {
-  const segments = id.toLowerCase().split("/");
-  return {
-    name: segments[segments.length - 1],
-    ...segments.length > 1 ? { vendor: segments[segments.length - 2] } : {}
-  };
-}
-function sameModel(requested, served) {
-  const want = modelParts(requested);
-  const got = modelParts(served);
-  if (want.vendor !== void 0 && got.vendor !== void 0 && want.vendor !== got.vendor) {
-    return false;
-  }
-  if (got.name === want.name)
-    return true;
-  const prefix = `${want.name}-`;
-  return got.name.startsWith(prefix) && DATED_SNAPSHOT.test(got.name.slice(prefix.length));
-}
-function header(headers, name) {
-  if (headers instanceof Headers)
-    return headers.get(name) ?? void 0;
-  const value = headers[name];
-  return typeof value === "string" ? value : value?.join(", ");
-}
-function substitution(kind, evidence) {
-  return { kind, evidence: evidence.slice(0, 200) };
-}
-function responseSubstitution(input) {
-  const body = objectOf(input.body);
-  const extra = objectOf(body?.extra_fields);
-  const served = servedModel(body);
-  if (served !== void 0 && !sameModel(input.requestedModel, served)) {
-    return substitution("model", `served ${served} for requested ${input.requestedModel}`);
-  }
-  const fallback = nonEmptyString(objectOf(extra?.routing_info)?.server_side_fallback_model);
-  if (fallback !== void 0) {
-    return substitution("model", `bifrost server-side fallback served ${fallback}`);
-  }
-  const cacheStatus = header(input.headers, "x-portkey-cache-status");
-  if (cacheStatus !== void 0 && PORTKEY_CACHE_HITS.has(cacheStatus.toLowerCase())) {
-    return substitution("cache", `x-portkey-cache-status: ${cacheStatus}`);
-  }
-  const cacheDebug = objectOf(extra?.cache_debug);
-  if (cacheDebug?.cache_hit === true) {
-    const hitType = cacheDebug.hit_type;
-    return substitution("cache", `bifrost cache hit${typeof hitType === "string" ? ` (${hitType})` : ""}`);
-  }
-  const hookResults = objectOf(body?.hook_results);
-  const transformed = [
-    hookResults?.before_request_hooks,
-    hookResults?.after_request_hooks
-  ].flatMap((hooks) => Array.isArray(hooks) ? hooks : []).map(objectOf).find((hook) => hook?.transformed === true);
-  if (transformed !== void 0) {
-    const id = nonEmptyString(transformed.id) ?? "unnamed";
-    return substitution("request", `portkey hook ${id} transformed the call`);
-  }
-  const dropped = [
-    extra?.dropped_compat_plugin_params,
-    extra?.dropped_unsupported_tools
-  ].flatMap((items) => Array.isArray(items) ? items : []);
-  if (dropped.length > 0) {
-    return substitution("request", `bifrost dropped ${dropped.join(", ")}`);
-  }
-  const converted = nonEmptyString(extra?.converted_request_type);
-  if (converted !== void 0) {
-    return substitution("request", `bifrost converted the request to ${converted}`);
-  }
-  return void 0;
-}
-
-// ../replay/dist/provider.js
-var BlockedError = class extends Error {
-  kind;
-  observedCeiling;
-  providerId;
-  resetsAt;
-  errorDetail;
-  constructor(init) {
-    super(init.kind === "rate-limit" ? `Provider retries exhausted after HTTP ${init.status}; observed concurrency ceiling: ${init.observedCeiling}` : init.kind === "provider" ? `Provider ${init.providerId} returned a malformed model catalog` : init.kind === "credentials" ? `Provider ${init.providerId} rejected the API key with HTTP ${init.errorDetail.status}` : init.kind === "usage-limit" ? `${init.providerId} reached its plan's usage limit${init.resetsAt === null ? "" : ` (resets ${init.resetsAt})`}: ${init.detail}` : `Provider ${init.providerId} reported insufficient credits (HTTP 402)`);
-    this.name = "BlockedError";
-    this.kind = init.kind;
-    this.observedCeiling = init.kind === "rate-limit" ? init.observedCeiling : null;
-    this.providerId = init.kind === "rate-limit" ? null : init.providerId;
-    this.resetsAt = init.kind === "usage-limit" ? init.resetsAt : null;
-    if (init.kind !== "rate-limit" && init.kind !== "usage-limit") {
-      this.errorDetail = init.errorDetail;
-    }
-  }
-};
-function isUsageLimit(error51) {
-  return error51 instanceof BlockedError && error51.kind === "usage-limit";
-}
-var ProviderRequestError = class extends Error {
-};
-var ProviderHttpError = class extends ProviderRequestError {
-  status;
-  constructor(status, body) {
-    super(`Provider request failed with HTTP ${status}: ${body}`);
-    this.name = "ProviderHttpError";
-    this.status = status;
-  }
-};
-var ProviderConfigurationError = class extends Error {
-};
-var CatalogReferenceError = class extends Error {
-  constructor(message2) {
-    super(message2);
-    this.name = "CatalogReferenceError";
-  }
-};
-var ProviderResponseError = class extends ProviderRequestError {
-  status;
-  bodyExcerpt;
-  redacted = true;
-  constructor(message2, { status, bodyExcerpt }) {
-    super(message2);
-    this.name = "ProviderResponseError";
-    this.status = status;
-    this.bodyExcerpt = bodyExcerpt.slice(0, 500);
-  }
-};
-var AdaptiveLimiter = class {
-  ceiling;
-  floor;
-  cap;
-  active = 0;
-  successStreak = 0;
-  sequence = 0;
-  epochStart = 0;
-  waiters = [];
-  constructor(ceiling) {
-    if (!Number.isSafeInteger(ceiling) || ceiling < 1) {
-      throw new Error("maxConcurrency must be a positive integer");
-    }
-    this.ceiling = ceiling;
-    this.cap = ceiling;
-    this.floor = Math.min(ceiling, Math.max(2, Math.floor(ceiling / 4)));
-  }
-  async run(operation) {
-    const ticket = await this.acquire();
-    try {
-      return await operation(ticket);
-    } finally {
-      this.active -= 1;
-      this.drain();
-    }
-  }
-  rateLimited(ticket) {
-    if (ticket < this.epochStart)
-      return;
-    this.epochStart = this.sequence;
-    this.cap = Math.max(this.floor, Math.floor(this.cap / 2));
-    this.successStreak = 0;
-  }
-  failed() {
-    this.successStreak = 0;
-  }
-  succeeded() {
-    if (this.cap >= this.ceiling)
-      return;
-    this.successStreak += 1;
-    if (this.successStreak >= this.cap) {
-      this.cap += 1;
-      this.successStreak = 0;
-      this.drain();
-    }
-  }
-  get currentCap() {
-    return this.cap;
-  }
-  acquire() {
-    if (this.active < this.cap) {
-      this.active += 1;
-      return Promise.resolve(this.sequence++);
-    }
-    return new Promise((resolve14) => {
-      this.waiters.push(() => {
-        this.active += 1;
-        resolve14(this.sequence++);
-      });
-    });
-  }
-  drain() {
-    while (this.active < this.cap) {
-      const next = this.waiters.shift();
-      if (next === void 0)
-        return;
-      next();
-    }
-  }
-};
-var retryAttempts = 5;
-function objectValue(value, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${label} must be an object`);
-  }
-  return value;
-}
-function nonnegativeNumber(value, label) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new Error(`${label} must be a non-negative number`);
-  }
-  return value;
-}
-function tokenCount(value, label) {
-  const count = nonnegativeNumber(value, label);
-  if (!Number.isSafeInteger(count)) {
-    throw new Error(`${label} must be an integer`);
-  }
-  return count;
-}
-function releaseDate(value) {
-  if (value === void 0 || value === null || value === "")
-    return null;
-  const parsed2 = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsed2) && parsed2 >= 0 ? parsed2 : null;
-}
-function isoReleaseDate(value) {
-  if (typeof value !== "string")
-    return null;
-  const seconds = Date.parse(value) / 1e3;
-  return seconds > 0 ? seconds : null;
-}
-function hostVendor(baseUrl) {
-  const hostname5 = URL.canParse(baseUrl) ? new URL(baseUrl).hostname : void 0;
-  return hostname5 === "api.openai.com" ? "openai" : hostname5 === "api.anthropic.com" ? "anthropic" : void 0;
-}
-function price(value, label) {
-  if (value === void 0 || value === null || value === "")
-    return null;
-  const parsed2 = typeof value === "number" ? value : Number(value);
-  if (Number.isNaN(parsed2) || Number.isFinite(parsed2) && parsed2 < 0) {
-    return null;
-  }
-  return nonnegativeNumber(parsed2, label);
-}
-function responsePrice(value, label) {
-  const parsed2 = price(value, label);
-  if (parsed2 === null && value !== void 0 && value !== null && value !== "") {
-    throw new Error(`${label} must be a non-negative number`);
-  }
-  return parsed2;
-}
-function redact(value, apiKey) {
-  return apiKey.length === 0 ? value : value.split(apiKey).join("[redacted]");
-}
-function errorExcerpt(value, apiKey) {
-  return redact(value, apiKey).slice(0, 500);
-}
-function backoffDelay(attempt) {
-  const backoff = 100 * 2 ** (attempt - 1);
-  return backoff + Math.random() * backoff * 0.25;
-}
-function retryDelay(response, attempt) {
-  const retryAfter = response.headers.get("retry-after");
-  if (retryAfter !== null) {
-    const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0)
-      return seconds * 1e3;
-    const date5 = Date.parse(retryAfter);
-    if (!Number.isNaN(date5))
-      return Math.max(0, date5 - Date.now());
-  }
-  return backoffDelay(attempt);
-}
-function sleep(milliseconds) {
-  return new Promise((resolve14) => setTimeout(resolve14, milliseconds));
-}
-function isRetryable(status) {
-  return status === 408 || status === 409 || status === 429 || status >= 500;
-}
-function rejectedAttempt(errorDetail, latencyMs) {
-  return {
-    outcome: "provider_error",
-    content: "",
-    usage: { inputTokens: 0, outputTokens: 0 },
-    costUsd: 0,
-    costIsEstimate: true,
-    errorDetail,
-    ...latencyMs === void 0 ? {} : { latencyMs }
-  };
-}
-function chatErrorBody(text) {
-  let value;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    return false;
-  }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const envelope = value;
-  if (envelope.error !== void 0 && envelope.error !== null)
-    return true;
-  if (!Array.isArray(envelope.choices) || envelope.choices.length === 0) {
-    return false;
-  }
-  const choice = envelope.choices[0];
-  return typeof choice === "object" && choice !== null && !Array.isArray(choice) && choice.finish_reason === "error";
-}
-function normalizeModel(value, index, vendor) {
-  const model = objectValue(value, `models[${index}]`);
-  if (typeof model.id !== "string" || model.id.length === 0) {
-    throw new Error(`models[${index}].id must be a non-empty string`);
-  }
-  if (model.type !== void 0 && typeof model.type !== "string") {
-    throw new Error(`models[${index}].type must be a string`);
-  }
-  if (model.type !== void 0 && model.type !== "language" && model.type !== "model") {
-    return null;
-  }
-  const rawPricing = objectValue(model.pricing ?? {}, `models[${index}].pricing`);
-  const topProvider = objectValue(model.top_provider ?? {}, `models[${index}].top_provider`);
-  const architecture = objectValue(model.architecture ?? {}, `models[${index}].architecture`);
-  const modalities = objectValue(model.modalities ?? {}, `models[${index}].modalities`);
-  const reasoning = objectValue(model.reasoning ?? {}, `models[${index}].reasoning`);
-  const supported = Array.isArray(model.supported_parameters) ? model.supported_parameters : [];
-  if (!supported.every((parameter) => typeof parameter === "string")) {
-    throw new Error(`models[${index}].supported_parameters must contain strings`);
-  }
-  const contextField = model.context_window !== void 0 ? "context_window" : model.context_length === void 0 && model.max_input_tokens !== void 0 ? "max_input_tokens" : "context_length";
-  const rawContext = model.context_window ?? model.context_length ?? model.max_input_tokens ?? 0;
-  const contextLength = tokenCount(rawContext, `models[${index}].${contextField}`);
-  const rawMaxOutputTokens = model.max_tokens ?? topProvider.max_completion_tokens;
-  const maxOutputTokens = rawMaxOutputTokens === void 0 || rawMaxOutputTokens === null || rawMaxOutputTokens === 0 ? null : tokenCount(rawMaxOutputTokens, `models[${index}].max output tokens`);
-  const outputModalities = architecture.output_modalities ?? modalities.output ?? [];
-  if (!Array.isArray(outputModalities) || !outputModalities.every((modality) => typeof modality === "string")) {
-    throw new Error(`models[${index}].output modalities must contain strings`);
-  }
-  if (outputModalities.length > 0 && !outputModalities.includes("text")) {
-    return null;
-  }
-  const entry = {
-    id: model.id,
-    family: vendor !== void 0 && !model.id.includes("/") ? vendor : catalogFamily(model.id),
-    contextLength,
-    pricing: (() => {
-      const input = price(rawPricing.prompt ?? rawPricing.input, `models[${index}].pricing.input`);
-      const output = price(rawPricing.completion ?? rawPricing.output, `models[${index}].pricing.output`);
-      return input === null || output === null ? null : { input, output };
-    })(),
-    supportsTools: supported.includes("tools"),
-    supportsStructuredOutput: supported.includes("response_format") || supported.includes("structured_outputs"),
-    releasedAt: model.released === void 0 && model.created === void 0 ? isoReleaseDate(model.created_at) : releaseDate(model.released ?? model.created),
-    maxOutputTokens,
-    outputModalities,
-    requiresReasoning: reasoning.mandatory === true
-  };
-  return {
-    entry,
-    declaresCapabilities: Array.isArray(model.supported_parameters),
-    declaresReasoning: model.reasoning !== void 0 && model.reasoning !== null
-  };
-}
-function failureMessage(error51) {
-  if (!(error51 instanceof Error))
-    return String(error51);
-  return error51.cause instanceof Error ? `${error51.message} (${error51.cause.message})` : error51.message;
-}
-async function readCatalogReference(reference) {
-  const models = /* @__PURE__ */ new Map();
-  const excluded = /* @__PURE__ */ new Set();
-  const remote = /^https?:\/\//iu.test(reference);
-  let rawCount = 0;
-  let next = reference;
-  for (let page = 0; page < 20 && next !== void 0; page += 1) {
-    const url2 = next;
-    next = void 0;
-    let response;
-    let text;
-    try {
-      if (remote) {
-        response = await fetch(url2, { method: "GET" });
-        text = await response.text();
-      } else {
-        text = await readFile4(url2, "utf8");
-      }
-    } catch (error51) {
-      throw new CatalogReferenceError(`Catalog reference ${reference} could not be ${remote ? "fetched" : "read"}: ${failureMessage(error51)}`);
-    }
-    if (response !== void 0 && !response.ok) {
-      throw new CatalogReferenceError(`Catalog reference ${reference} answered HTTP ${response.status}`);
-    }
-    try {
-      const envelope = objectValue(JSON.parse(text), "model catalog");
-      if (!Array.isArray(envelope.data)) {
-        throw new Error("model catalog data must be an array");
-      }
-      for (const value of envelope.data) {
-        const model = normalizeModel(value, rawCount);
-        rawCount += 1;
-        if (model === null)
-          excluded.add(value.id);
-        else
-          models.set(model.entry.id, model);
-      }
-      if (remote && typeof envelope.links === "object" && envelope.links !== null && !Array.isArray(envelope.links)) {
-        const links = envelope.links;
-        if (typeof links.next === "string" && links.next.length > 0) {
-          const resolved = new URL(links.next, url2);
-          if (resolved.origin === new URL(reference).origin) {
-            next = resolved.href;
-          }
-        }
-      }
-    } catch (error51) {
-      throw new CatalogReferenceError(`Catalog reference ${reference} is not an OpenAI-compatible /models document: ${failureMessage(error51)}`);
-    }
-  }
-  return { models, excluded };
-}
-function joinCatalogReference(models, reference) {
-  const listed = (id) => reference.models.has(id) || reference.excluded.has(id);
-  const idsByCanonicalName = /* @__PURE__ */ new Map();
-  for (const id of [...reference.models.keys(), ...reference.excluded]) {
-    const key = `${catalogFamily(id)}/${canonicalModelName(id)}`;
-    idsByCanonicalName.set(key, [...idsByCanonicalName.get(key) ?? [], id]);
-  }
-  const joined = [];
-  for (const { entry, declaresCapabilities, declaresReasoning } of models) {
-    const vendorId = `${entry.family}/${entry.id}`;
-    const canonicalIds = idsByCanonicalName.get(`${entry.family}/${canonicalModelName(entry.id)}`) ?? [];
-    const matchId = entry.id.split("/").map((_, index, segments) => segments.slice(index).join("/")).find(listed) ?? (!entry.id.includes("/") && entry.family !== entry.id && listed(vendorId) ? vendorId : canonicalIds.length === 1 ? canonicalIds[0] : void 0);
-    if (matchId === void 0) {
-      joined.push(entry);
-      continue;
-    }
-    const match = reference.models.get(matchId)?.entry;
-    if (match === void 0)
-      continue;
-    joined.push({
-      ...entry,
-      pricing: entry.pricing ?? match.pricing,
-      contextLength: entry.contextLength === 0 ? match.contextLength : entry.contextLength,
-      maxOutputTokens: entry.maxOutputTokens ?? match.maxOutputTokens,
-      ...declaresCapabilities ? {} : {
-        supportsTools: match.supportsTools,
-        supportsStructuredOutput: match.supportsStructuredOutput
-      },
-      outputModalities: entry.outputModalities?.length === 0 ? match.outputModalities : entry.outputModalities,
-      requiresReasoning: declaresReasoning ? entry.requiresReasoning : match.requiresReasoning,
-      releasedAt: match.releasedAt ?? entry.releasedAt
-    });
-  }
-  return joined;
-}
-function normalizeUsage(value) {
-  if (value === void 0 || value === null)
-    return null;
-  const usage2 = objectValue(value, "chat response usage");
-  const input = usage2.prompt_tokens ?? usage2.input_tokens;
-  const output = usage2.completion_tokens ?? usage2.output_tokens;
-  if (input === void 0 && output === void 0)
-    return null;
-  return {
-    inputTokens: tokenCount(input, "usage.prompt_tokens"),
-    outputTokens: tokenCount(output, "usage.completion_tokens")
-  };
-}
-function estimateInputTokens(messages) {
-  return Math.max(1, Math.ceil(Buffer.byteLength(JSON.stringify(messages)) / 4));
-}
-function createProvider(options) {
-  const baseUrl = options.baseUrl.replace(/\/$/, "");
-  const vendor = hostVendor(baseUrl);
-  const limiter = new AdaptiveLimiter(options.maxConcurrency ?? 8);
-  let catalog;
-  let catalogRequest;
-  function apiKey() {
-    const value = process.env[options.apiKeyEnv];
-    if (value === void 0 || value.length === 0) {
-      throw new ProviderConfigurationError(`Provider API key environment variable is not set: ${options.apiKeyEnv}`);
-    }
-    return value;
-  }
-  async function physicalFetch(url2, init) {
-    const key = apiKey();
-    const headers = new Headers(init.headers);
-    if (vendor === "anthropic")
-      headers.set("anthropic-version", "2023-06-01");
-    for (const [name, value] of Object.entries(options.headers ?? {})) {
-      headers.set(name, value);
-    }
-    headers.set("authorization", `Bearer ${key}`);
-    return limiter.run(async (ticket) => {
-      const startedAt = performance.now();
-      try {
-        const response = await fetch(url2, {
-          ...init,
-          headers
-        });
-        const text = await response.text();
-        const latencyMs = Math.round(performance.now() - startedAt);
-        if (response.status === 429 || response.status >= 500)
-          limiter.rateLimited(ticket);
-        else if (response.ok)
-          limiter.succeeded();
-        else
-          limiter.failed();
-        return { response, text, apiKey: key, latencyMs };
-      } catch (error51) {
-        limiter.failed();
-        throw new ProviderRequestError(error51 instanceof Error ? error51.message : String(error51));
-      }
-    });
-  }
-  async function withRetries(url2, init, hooks = {}) {
-    for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
-      let result2;
-      try {
-        result2 = await physicalFetch(url2, init);
-      } catch (error51) {
-        if (error51 instanceof ProviderConfigurationError)
-          throw error51;
-        await hooks.onRejectedAttempt?.(rejectedAttempt({
-          status: null,
-          bodyExcerpt: errorExcerpt(error51 instanceof Error ? error51.message : String(error51), apiKey())
-        }));
-        if (attempt === retryAttempts)
-          throw error51;
-        await sleep(backoffDelay(attempt));
-        continue;
-      }
-      const status = result2.response.status;
-      if (result2.response.ok && hooks.errorBody?.(result2.text) !== true) {
-        return result2;
-      }
-      const errorDetail = {
-        status,
-        bodyExcerpt: errorExcerpt(result2.text, result2.apiKey)
-      };
-      await hooks.onRejectedAttempt?.(rejectedAttempt(errorDetail, result2.latencyMs));
-      if (status === 401 || status === 403) {
-        throw new BlockedError({
-          kind: "credentials",
-          providerId: options.providerId,
-          errorDetail
-        });
-      }
-      if (status === 402) {
-        throw new BlockedError({
-          kind: "credits",
-          providerId: options.providerId,
-          errorDetail
-        });
-      }
-      if (result2.response.ok || isRetryable(status)) {
-        if (attempt === retryAttempts) {
-          throw new BlockedError({
-            kind: "rate-limit",
-            status,
-            observedCeiling: limiter.currentCap
-          });
-        }
-        await sleep(retryDelay(result2.response, attempt));
-        continue;
-      }
-      throw new ProviderHttpError(status, errorDetail.bodyExcerpt);
-    }
-    throw new BlockedError({
-      kind: "rate-limit",
-      status: 429,
-      observedCeiling: limiter.currentCap
-    });
-  }
-  async function fetchCatalog() {
-    const models = [];
-    let rawCount = 0;
-    let totalCount;
-    let truncated = false;
-    let next = `${baseUrl}/models`;
-    for (let page = 0; page < 20 && next !== void 0; page += 1) {
-      const { response, text, apiKey: requestKey } = await withRetries(next, {
-        method: "GET"
-      });
-      next = void 0;
-      try {
-        const value = JSON.parse(text);
-        const envelope = objectValue(value, "model catalog");
-        if (!Array.isArray(envelope.data)) {
-          throw new Error("model catalog data must be an array");
-        }
-        for (const entry of envelope.data) {
-          const model = normalizeModel(entry, rawCount, vendor);
-          rawCount += 1;
-          if (model !== null)
-            models.push(model);
-        }
-        if (totalCount === void 0 && typeof envelope.total_count === "number") {
-          totalCount = envelope.total_count;
-        }
-        if (typeof envelope.links === "object" && envelope.links !== null && !Array.isArray(envelope.links)) {
-          const links = envelope.links;
-          if (typeof links.next === "string" && links.next.length > 0) {
-            const resolved = new URL(links.next, `${baseUrl}/`);
-            if (resolved.origin === new URL(baseUrl).origin)
-              next = resolved.href;
-            else
-              truncated = true;
-          }
-        }
-        if (next === void 0 && envelope.has_more === true && typeof envelope.last_id === "string" && envelope.last_id.length > 0) {
-          next = `${baseUrl}/models?after_id=${encodeURIComponent(envelope.last_id)}&limit=1000`;
-        }
-      } catch (error51) {
-        throw new BlockedError({
-          kind: "provider",
-          providerId: options.providerId,
-          errorDetail: {
-            status: response.status,
-            bodyExcerpt: errorExcerpt(text, requestKey)
-          }
-        });
-      }
-    }
-    if (next !== void 0)
-      truncated = true;
-    if (truncated || totalCount !== void 0 && totalCount > rawCount) {
-      options.warning?.("catalog_truncated", `Provider ${options.providerId} catalog is truncated: collected ${rawCount} of ${totalCount ?? "an unknown number of"} models`);
-    }
-    const entries = options.catalogReference === void 0 ? models.map(({ entry }) => entry) : joinCatalogReference(models, await readCatalogReference(options.catalogReference));
-    if (options.pricingOverrides !== void 0) {
-      for (const entry of entries) {
-        const override = options.pricingOverrides[entry.id];
-        if (override === void 0)
-          continue;
-        entry.pricing = { input: override.input, output: override.output };
-        if (override.maxOutputTokens !== void 0) {
-          entry.maxOutputTokens = override.maxOutputTokens;
-        }
-      }
-    } else if (entries.length > 0 && entries.every(({ pricing }) => pricing === null)) {
-      try {
-        const { response, text } = await physicalFetch(new URL("/model/info", baseUrl).href, { method: "GET" });
-        if (!response.ok)
-          throw new Error("LiteLLM model info request failed");
-        const envelope = objectValue(JSON.parse(text), "LiteLLM model info");
-        if (!Array.isArray(envelope.data)) {
-          throw new Error("LiteLLM model info data must be an array");
-        }
-        const pricingByModel = /* @__PURE__ */ new Map();
-        for (const [index, value] of envelope.data.entries()) {
-          const row2 = objectValue(value, `model info data[${index}]`);
-          if (typeof row2.model_name !== "string" || row2.model_name.length === 0) {
-            throw new Error(`model info data[${index}].model_name must be a non-empty string`);
-          }
-          const modelInfo = objectValue(row2.model_info, `model info data[${index}].model_info`);
-          const input = price(modelInfo.input_cost_per_token, `model info data[${index}].model_info.input_cost_per_token`);
-          const output = price(modelInfo.output_cost_per_token, `model info data[${index}].model_info.output_cost_per_token`);
-          const rawMaxOutputTokens = modelInfo.max_output_tokens ?? modelInfo.max_tokens;
-          const maxOutputTokens = rawMaxOutputTokens === void 0 || rawMaxOutputTokens === null || rawMaxOutputTokens === 0 ? void 0 : tokenCount(rawMaxOutputTokens, `model info data[${index}].model_info.max_output_tokens`);
-          if (input !== null && output !== null) {
-            pricingByModel.set(row2.model_name, {
-              pricing: { input, output },
-              ...maxOutputTokens === void 0 ? {} : { maxOutputTokens }
-            });
-          }
-        }
-        for (const entry of entries) {
-          if (entry.pricing !== null)
-            continue;
-          const modelInfo = pricingByModel.get(entry.id);
-          if (modelInfo === void 0)
-            continue;
-          entry.pricing = modelInfo.pricing;
-          if (modelInfo.maxOutputTokens !== void 0) {
-            entry.maxOutputTokens = modelInfo.maxOutputTokens;
-          }
-        }
-      } catch {
-      }
-      if (entries.every(({ pricing }) => pricing === null)) {
-        options.warning?.("catalog_pricing_unavailable", `Provider ${options.providerId} catalog does not publish per-token pricing`);
-      }
-    }
-    if (vendor === "anthropic") {
-      for (const entry of entries)
-        entry.supportsStructuredOutput = false;
-    }
-    const unpriced = entries.flatMap(({ id, pricing }) => pricing === null ? [id] : []);
-    if (options.catalogReference !== void 0 && unpriced.length > 0) {
-      const examples = unpriced.slice(0, 5).join(", ");
-      options.warning?.("catalog_reference_unmatched", `${unpriced.length} model(s) in the ${options.providerId} catalog have no price after joining the catalog reference, for example ${examples}. Declare replay models under the ids the reference lists, or pass --pricing-file.`);
-    }
-    catalog = entries;
-    return catalog;
-  }
-  function listModels() {
-    if (catalog !== void 0)
-      return Promise.resolve(catalog);
-    if (catalogRequest !== void 0)
-      return catalogRequest;
-    catalogRequest = fetchCatalog().finally(() => {
-      catalogRequest = void 0;
-    });
-    return catalogRequest;
-  }
-  async function chat(request) {
-    const models = await listModels();
-    const maxTokens = request.maxOutputTokens === void 0 ? void 0 : Math.max(16, request.maxOutputTokens);
-    const body = {
-      model: request.model,
-      messages: request.messages,
-      temperature: request.temperature,
-      // AI Gateway rejects output limits below 16 even when the upstream model accepts them.
-      [vendor === "openai" ? "max_completion_tokens" : "max_tokens"]: maxTokens,
-      tools: request.tools,
-      tool_choice: request.toolChoice,
-      response_format: request.responseFormat,
-      stream: false
-    };
-    const { response, text, apiKey: requestKey, latencyMs } = await withRetries(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        ...request.headers,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify(body)
-    }, { onRejectedAttempt: request.onAttempt, errorBody: chatErrorBody });
-    let normalized;
-    try {
-      const value = JSON.parse(text);
-      const envelope = objectValue(value, "chat response");
-      if (!Array.isArray(envelope.choices) || envelope.choices.length === 0) {
-        throw new Error("chat response choices must be a non-empty array");
-      }
-      const choice = objectValue(envelope.choices[0], "chat response choice");
-      const message2 = objectValue(choice.message, "chat response message");
-      const finishReason = typeof choice.finish_reason === "string" ? choice.finish_reason : void 0;
-      const providerResponseId = typeof envelope.generationId === "string" && envelope.generationId.length > 0 ? envelope.generationId : typeof envelope.id === "string" && envelope.id.length > 0 ? envelope.id : void 0;
-      if (typeof message2.content !== "string" && message2.content !== null) {
-        throw new Error("chat response message content must be a string or null");
-      }
-      const content = message2.content ?? "";
-      const reportedUsage = normalizeUsage(envelope.usage);
-      const usageObject = envelope.usage === void 0 || envelope.usage === null ? {} : objectValue(envelope.usage, "chat response usage");
-      const usageUnreported = content.trim().length > 0 && (reportedUsage === null || reportedUsage.outputTokens === 0);
-      const usage2 = usageUnreported ? {
-        inputTokens: reportedUsage?.inputTokens || request.estimatedInputTokens || estimateInputTokens(request.messages),
-        outputTokens: Math.max(1, Math.ceil(Buffer.byteLength(content) / 4)),
-        status: "usage_unreported"
-      } : reportedUsage ?? {
-        inputTokens: 0,
-        outputTokens: 0
-      };
-      const costDetails = usageObject.cost_details === void 0 || usageObject.cost_details === null ? {} : objectValue(usageObject.cost_details, "usage.cost_details");
-      const billedCost = typeof usageObject.cost === "object" && usageObject.cost !== null ? responsePrice(objectValue(usageObject.cost, "usage.cost").total_cost, "usage.cost.total_cost") : responsePrice(usageObject.cost, "usage.cost");
-      const marketCost = responsePrice(usageObject.market_cost, "usage.market_cost");
-      const upstreamCost = responsePrice(costDetails.upstream_inference_cost, "usage.cost_details.upstream_inference_cost");
-      let costUsd;
-      let costIsEstimate;
-      const providerCost = billedCost !== null && billedCost > 0 ? billedCost : marketCost ?? upstreamCost;
-      if (!usageUnreported && providerCost !== null) {
-        costUsd = providerCost;
-        costIsEstimate = false;
-      } else {
-        const model = models.find((item) => item.id === request.model);
-        if (model === void 0) {
-          throw new Error(`Requested model is absent from the catalog: ${request.model}`);
-        }
-        if (model.pricing === null) {
-          throw new Error(`Requested model has no pricing: ${request.model}`);
-        }
-        costUsd = usage2.inputTokens * model.pricing.input + usage2.outputTokens * model.pricing.output;
-        costIsEstimate = true;
-      }
-      const served = servedModel(envelope);
-      const substitution2 = responseSubstitution({
-        requestedModel: request.model,
-        headers: response.headers,
-        body: envelope
-      });
-      normalized = {
-        content,
-        usage: usage2,
-        costUsd,
-        costIsEstimate,
-        ...finishReason === void 0 ? {} : { finishReason },
-        ...providerResponseId === void 0 ? {} : { providerResponseId },
-        ...served === void 0 ? {} : { servedModel: served },
-        ...substitution2 === void 0 ? {} : { substitution: substitution2 }
-      };
-    } catch (error51) {
-      const message2 = error51 instanceof Error ? error51.message : String(error51);
-      const errorDetail = {
-        status: response.status,
-        bodyExcerpt: errorExcerpt(text, requestKey)
-      };
-      await request.onAttempt?.({
-        outcome: "provider_error",
-        content: "",
-        usage: { inputTokens: 0, outputTokens: 0 },
-        costUsd: 0,
-        costIsEstimate: true,
-        errorDetail,
-        latencyMs
-      });
-      throw new ProviderResponseError(`Invalid chat response: ${redact(message2, requestKey)}`, errorDetail);
-    }
-    await request.onAttempt?.({
-      outcome: "completed",
-      ...normalized,
-      latencyMs
-    });
-    return normalized;
-  }
-  return { providerId: options.providerId, listModels, chat };
-}
-
-// ../replay/dist/driver.js
 var BUDGET_HEARTBEAT_INTERVAL_MS = 3e4;
 var JUDGE_CONCURRENCY = 8;
 function replayCorrelationKey(evidenceQuestionId2, caseId, candidateId3) {
@@ -30389,15 +30921,15 @@ async function prepareScratch(root, cell, executionId, appSpec) {
   if (command.length === 0) {
     throw new Error("appSpec.command must not be empty");
   }
-  const scratch = join4(root, executionId);
-  await mkdir3(join4(scratch, "driver"), { recursive: true });
-  await writeFile3(join4(scratch, "driver", "case.json"), `${JSON.stringify({
+  const scratch = join6(root, executionId);
+  await mkdir3(join6(scratch, "driver"), { recursive: true });
+  await writeFile4(join6(scratch, "driver", "case.json"), `${JSON.stringify({
     caseId: cell.recordedCase.caseId,
     input: cell.recordedCase.input,
     ...cell.recordedCase.headers === void 0 ? {} : { headers: cell.recordedCase.headers }
   })}
 `, "utf8");
-  await writeFile3(join4(scratch, "driver", "config.json"), `${JSON.stringify({
+  await writeFile4(join6(scratch, "driver", "config.json"), `${JSON.stringify({
     command,
     ...appSpec.installCommand === void 0 ? {} : { installCommand: appSpec.installCommand }
   })}
@@ -31046,8 +31578,8 @@ async function replayModeB(input) {
       }
       const inspection = container.inspection;
       result2.rejectedRows += inspection.rejectedRows;
-      for (const [reason, count] of Object.entries(inspection.lostReasons)) {
-        result2.lostReasons[reason] = (result2.lostReasons[reason] ?? 0) + count;
+      for (const [reason, count2] of Object.entries(inspection.lostReasons)) {
+        result2.lostReasons[reason] = (result2.lostReasons[reason] ?? 0) + count2;
       }
       if (container.lifecycleFailed) {
         result2.lostReasons.container_lifecycle = (result2.lostReasons.container_lifecycle ?? 0) + 1;
@@ -31148,7 +31680,7 @@ async function replayModeB(input) {
       hostname: input.egress.hostname,
       port: input.egress.port
     });
-    scratchRoot = await mkdtemp(join4(dirname2(resolve(input.appSpec.mountPath)), ".rightmodeler-modeb-"));
+    scratchRoot = await mkdtemp2(join6(dirname2(resolve(input.appSpec.mountPath)), ".rightmodeler-modeb-"));
   } catch (error51) {
     if (listener !== null)
       await listener.close().catch(() => void 0);
@@ -31177,7 +31709,7 @@ async function replayModeB(input) {
     process.off("SIGINT", onInterrupt);
     try {
       if (scratchRoot !== null) {
-        await rm(scratchRoot, { recursive: true, force: true });
+        await rm2(scratchRoot, { recursive: true, force: true });
       }
     } finally {
       if (listener !== null)
@@ -31705,8 +32237,8 @@ async function confirmSwapSet(input) {
       store: input.store,
       budget: input.budget.modeB
     });
-    for (const [reason, count] of Object.entries(result3.lostReasons)) {
-      lostReasons[reason] = (lostReasons[reason] ?? 0) + count;
+    for (const [reason, count2] of Object.entries(result3.lostReasons)) {
+      lostReasons[reason] = (lostReasons[reason] ?? 0) + count2;
     }
     substituted.push(...result3.substituted);
     for (const block of result3.blocked) {
@@ -31912,9 +32444,9 @@ var {
 import { execFile as execFile7 } from "node:child_process";
 import { createHash as createHash12 } from "node:crypto";
 import { readFileSync as readFileSync6 } from "node:fs";
-import { mkdir as mkdir5, readFile as readFile12, readdir as readdir4, stat as stat3, writeFile as writeFile6 } from "node:fs/promises";
+import { mkdir as mkdir5, readFile as readFile12, readdir as readdir4, stat as stat3, writeFile as writeFile7 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
-import { dirname as dirname7, join as join15, relative as relative8, resolve as resolve8, sep as sep5 } from "node:path";
+import { dirname as dirname7, join as join17, relative as relative8, resolve as resolve8, sep as sep5 } from "node:path";
 import { promisify as promisify6 } from "node:util";
 
 // ../scanner/dist/declarative-matcher.js
@@ -32444,7 +32976,7 @@ function evaluateCoverage(input) {
 
 // ../scanner/dist/detect-tech.js
 import { readFileSync as readFileSync2, readdirSync } from "node:fs";
-import { join as join5, relative as relative2, resolve as resolve2, sep as sep2 } from "node:path";
+import { join as join7, relative as relative2, resolve as resolve2, sep as sep2 } from "node:path";
 
 // ../scanner/dist/ignored-directories.js
 var IGNORED_DIRECTORIES = /* @__PURE__ */ new Set([
@@ -32496,9 +33028,9 @@ function manifests(rootDir) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name))
-          visit(join5(directory, entry.name));
+          visit(join7(directory, entry.name));
       } else if (entry.isFile() && manifestNames.has(entry.name)) {
-        found.push(join5(directory, entry.name));
+        found.push(join7(directory, entry.name));
       }
     }
   };
@@ -33400,16 +33932,16 @@ function reconcile(normalizedSteps, stepRecords) {
 // ../scanner/dist/scan.js
 import { createHash as createHash3 } from "node:crypto";
 import { readFileSync as readFileSync3, readdirSync as readdirSync2 } from "node:fs";
-import { join as join6, relative as relative3, resolve as resolve3, sep as sep3 } from "node:path";
+import { join as join8, relative as relative3, resolve as resolve3, sep as sep3 } from "node:path";
 function sourceFiles(rootDir) {
   const files = [];
   const visit = (directory) => {
     for (const entry of readdirSync2(directory, { withFileTypes: true })) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name))
-          visit(join6(directory, entry.name));
+          visit(join8(directory, entry.name));
       } else if (entry.isFile()) {
-        files.push(join6(directory, entry.name));
+        files.push(join8(directory, entry.name));
       }
     }
   };
@@ -33740,56 +34272,56 @@ function excludedStepsWarning(result2) {
   if (excluded.length === 0) return void 0;
   const clauses = Object.entries(exclusionMeanings).flatMap(
     ([reason, meaning]) => {
-      const count = excluded.filter((step) => step.reason === reason).length;
-      return count === 0 ? [] : [`${count} ${reason} (${meaning})`];
+      const count2 = excluded.filter((step) => step.reason === reason).length;
+      return count2 === 0 ? [] : [`${count2} ${reason} (${meaning})`];
     }
   );
   return `${excluded.length} traced model call(s) were left out of the corpus: ${clauses.join(", ")}. The rest of the trace input was read.`;
 }
-function requiredString(value, label, format11) {
+function requiredString(value, label2, format11) {
   if (typeof value !== "string" || value.length === 0) {
-    throw new TraceAdaptError(format11, `${label} must be a non-empty string`);
+    throw new TraceAdaptError(format11, `${label2} must be a non-empty string`);
   }
   return value;
 }
 function optionalString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
-function tokenCount2(value, label, format11) {
+function tokenCount2(value, label2, format11) {
   if (value === void 0) return 0;
   if (!Number.isInteger(value) || value < 0) {
     throw new TraceAdaptError(
       format11,
-      `${label} must be a non-negative integer`
+      `${label2} must be a non-negative integer`
     );
   }
   return value;
 }
-function optionalTokenCount(value, label, format11) {
+function optionalTokenCount(value, label2, format11) {
   if (value === void 0 || value === null) return void 0;
-  return tokenCount2(value, label, format11);
+  return tokenCount2(value, label2, format11);
 }
-function optionalUsage(input, output, label, format11) {
-  const inputTokens = optionalTokenCount(input, `${label} input usage`, format11);
+function optionalUsage(input, output, label2, format11) {
+  const inputTokens = optionalTokenCount(input, `${label2} input usage`, format11);
   const outputTokens = optionalTokenCount(
     output,
-    `${label} output usage`,
+    `${label2} output usage`,
     format11
   );
   if (inputTokens === void 0 || outputTokens === void 0) return void 0;
   return { inputTokens, outputTokens };
 }
-function optionalNonnegativeNumber(value, label, format11) {
+function optionalNonnegativeNumber(value, label2, format11) {
   if (value === void 0 || value === null) return void 0;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new TraceAdaptError(format11, `${label} must be a non-negative number`);
+    throw new TraceAdaptError(format11, `${label2} must be a non-negative number`);
   }
   return value;
 }
-function jsonValue(value, label, format11) {
+function jsonValue(value, label2, format11) {
   const parsed2 = normalizedJsonValue(value);
   if (parsed2 === void 0) {
-    throw new TraceAdaptError(format11, `${label} must be valid JSON data`);
+    throw new TraceAdaptError(format11, `${label2} must be valid JSON data`);
   }
   return parsed2;
 }
@@ -33869,9 +34401,9 @@ function compareStartValues(left, right) {
   }
   return left < right ? -1 : left > right ? 1 : 0;
 }
-function recordList(records, format11, label) {
+function recordList(records, format11, label2) {
   if (!Array.isArray(records)) {
-    throw new TraceAdaptError(format11, `${label} must be a list`);
+    throw new TraceAdaptError(format11, `${label2} must be a list`);
   }
   return records;
 }
@@ -33925,12 +34457,12 @@ function spanTree(spans) {
 function errorMessage(error51) {
   return error51 instanceof Error ? error51.message : String(error51);
 }
-function adaptSpans(format11, label, records, classify) {
-  const list = recordList(records, format11, `${label} trace records`);
+function adaptSpans(format11, label2, records, classify) {
+  const list = recordList(records, format11, `${label2} trace records`);
   const dropped = /* @__PURE__ */ new Map();
   for (const [recordIndex, record2] of list.entries()) {
     if (!isRecord(record2)) {
-      dropped.set(recordIndex, `${label} record must be an object`);
+      dropped.set(recordIndex, `${label2} record must be an object`);
     }
   }
   const spans = traceSpans(list);
@@ -33943,7 +34475,7 @@ function adaptSpans(format11, label, records, classify) {
       if (result2.kind === "skip") continue;
       const traceId = requiredString(
         span.traceId,
-        `${label} span ${span.sourceIndex + 1} trace ID`,
+        `${label2} span ${span.sourceIndex + 1} trace ID`,
         format11
       );
       if (result2.kind === "excluded") {
@@ -33970,7 +34502,7 @@ function adaptSpans(format11, label, records, classify) {
     if ((traceCounts.get(traceId) ?? 0) > 1 && startValue(span.span) === void 0 && !dropped.has(span.recordIndex)) {
       dropped.set(
         span.recordIndex,
-        `${label} trajectory ${traceId} is missing its start time`
+        `${label2} trajectory ${traceId} is missing its start time`
       );
     }
   }
@@ -34085,7 +34617,7 @@ function inputPart(part) {
       return part;
   }
 }
-function outputParts(attributes, label) {
+function outputParts(attributes, label2) {
   const reasoning = attributes["ai.response.reasoning"];
   const text = attributes["ai.response.text"];
   const toolCalls2 = attributes["ai.response.toolCalls"];
@@ -34100,7 +34632,7 @@ function outputParts(attributes, label) {
     for (const call of recordList(
       jsonEncodedValue(toolCalls2),
       format,
-      `${label} ai.response.toolCalls`
+      `${label2} ai.response.toolCalls`
     )) {
       parts.push(
         isRecord(call) ? {
@@ -34123,17 +34655,17 @@ function aiSdkStep(span) {
   if (attributes["ai.response.finishReason"] === void 0) {
     return { kind: "excluded", reason: "stream_incomplete" };
   }
-  const label = `AI SDK span ${span.sourceIndex + 1}`;
+  const label2 = `AI SDK span ${span.sourceIndex + 1}`;
   const model = requiredString(
     attributes["ai.model.id"] ?? attributes["gen_ai.request.model"],
-    `${label} model`,
+    `${label2} model`,
     format
   );
   const prompt = jsonEncodedValue(attributes["ai.prompt.messages"]);
   if (!Array.isArray(prompt)) {
     throw new TraceAdaptError(
       format,
-      `${label} has no ai.prompt.messages; keep telemetry recordInputs enabled`
+      `${label2} has no ai.prompt.messages; keep telemetry recordInputs enabled`
     );
   }
   const system = [];
@@ -34147,7 +34679,7 @@ function aiSdkStep(span) {
         parts: typeof message2.content === "string" ? [{ type: "text", content: message2.content }] : recordList(
           message2.content,
           format,
-          `${label} message content`
+          `${label2} message content`
         ).map(inputPart)
       });
     } else {
@@ -34159,19 +34691,19 @@ function aiSdkStep(span) {
   if (outputKeys.every((key) => attributes[key] === void 0)) {
     throw new TraceAdaptError(
       format,
-      `${label} has no recorded output; keep telemetry recordOutputs enabled`
+      `${label2} has no recorded output; keep telemetry recordOutputs enabled`
     );
   }
-  const parts = objectOutput ? [{ type: "text", content: String(attributes["ai.response.object"]) }] : outputParts(attributes, label);
+  const parts = objectOutput ? [{ type: "text", content: String(attributes["ai.response.object"]) }] : outputParts(attributes, label2);
   const finishReason = requiredString(
     attributes["ai.response.finishReason"],
-    `${label} finish reason`,
+    `${label2} finish reason`,
     format
   );
   const usage2 = optionalUsage(
     attributes["ai.usage.inputTokens"] ?? attributes["gen_ai.usage.input_tokens"],
     attributes["ai.usage.outputTokens"] ?? attributes["gen_ai.usage.output_tokens"],
-    label,
+    label2,
     format
   );
   const family = optionalString(attributes["rightmodeler.family"]) ?? optionalString(attributes["ai.telemetry.functionId"]);
@@ -34180,7 +34712,7 @@ function aiSdkStep(span) {
     step: {
       model,
       messages: messages.map(
-        (message2, index) => jsonValue(message2, `${label} input message ${index + 1}`, format)
+        (message2, index) => jsonValue(message2, `${label2} input message ${index + 1}`, format)
       ),
       output: jsonValue(
         [
@@ -34190,7 +34722,7 @@ function aiSdkStep(span) {
             finish_reason: finishReasons[finishReason] ?? finishReason
           }
         ],
-        `${label} output`,
+        `${label2} output`,
         format
       ),
       ...usage2 === void 0 ? {} : { usage: usage2 },
@@ -34323,10 +34855,10 @@ var bifrostAdapter = createRowAdapter({
       `Bifrost record ${recordIndex + 1} id`,
       format2
     );
-    const label = `Bifrost log ${id}`;
+    const label2 = `Bifrost log ${id}`;
     if (typeof record2.object !== "string" || !chatObjects.has(record2.object)) {
       throw new Error(
-        `${label} is not a chat completion (object ${String(record2.object)}); export chat completions only (objects=chat_completion,chat_completion_stream)`
+        `${label2} is not a chat completion (object ${String(record2.object)}); export chat completions only (objects=chat_completion,chat_completion_stream)`
       );
     }
     const traceId = optionalString(record2.session_id) ?? id;
@@ -34348,28 +34880,28 @@ var bifrostAdapter = createRowAdapter({
     }
     const provider = requiredString(
       record2.provider,
-      `${label} provider`,
+      `${label2} provider`,
       format2
     );
-    const model = requiredString(record2.model, `${label} model`, format2);
+    const model = requiredString(record2.model, `${label2} model`, format2);
     if (!Array.isArray(record2.input_history)) {
-      throw new Error(`${label} input_history must be a list`);
+      throw new Error(`${label2} input_history must be a list`);
     }
     const tokenUsage = isRecord(record2.token_usage) ? record2.token_usage : {};
     const usage2 = optionalUsage(
       tokenUsage.prompt_tokens,
       tokenUsage.completion_tokens,
-      label,
+      label2,
       format2
     );
     const costUsd = optionalNonnegativeNumber(
       record2.cost,
-      `${label} cost`,
+      `${label2} cost`,
       format2
     );
     const durationMs = optionalNonnegativeNumber(
       record2.latency,
-      `${label} latency`,
+      `${label2} latency`,
       format2
     );
     const timestamp3 = optionalString(record2.timestamp);
@@ -34382,16 +34914,16 @@ var bifrostAdapter = createRowAdapter({
           stepIndex: 0,
           model: `${provider}/${optionalString(record2.alias) ?? model}`,
           messages: record2.input_history.map(
-            (message2, index) => jsonValue(message2, `${label} input ${index + 1}`, format2)
+            (message2, index) => jsonValue(message2, `${label2} input ${index + 1}`, format2)
           ),
-          output: jsonValue(record2.output_message, `${label} output`, format2),
+          output: jsonValue(record2.output_message, `${label2} output`, format2),
           ...usage2 === void 0 ? {} : { usage: usage2 },
           ...costUsd === void 0 ? {} : { costUsd },
           ...durationMs === void 0 ? {} : { durationMs },
           ...record2.number_of_retries === void 0 ? {} : {
             retryCount: tokenCount2(
               record2.number_of_retries,
-              `${label} number_of_retries`,
+              `${label2} number_of_retries`,
               format2
             )
           },
@@ -34502,27 +35034,27 @@ function trajectoryId(group, recordsByUuid) {
   }
   return optionalString(users.at(-1)?.uuid) ?? group.sessionId;
 }
-function claudeUsage(usage2, label) {
+function claudeUsage(usage2, label2) {
   if (!isRecord(usage2)) return void 0;
   const input = optionalTokenCount(
     usage2.input_tokens,
-    `${label} input usage`,
+    `${label2} input usage`,
     format4
   );
   const output = optionalTokenCount(
     usage2.output_tokens,
-    `${label} output usage`,
+    `${label2} output usage`,
     format4
   );
   if (input === void 0 || output === void 0) return void 0;
   return {
     inputTokens: input + (optionalTokenCount(
       usage2.cache_read_input_tokens,
-      `${label} cache read usage`,
+      `${label2} cache read usage`,
       format4
     ) ?? 0) + (optionalTokenCount(
       usage2.cache_creation_input_tokens,
-      `${label} cache creation usage`,
+      `${label2} cache creation usage`,
       format4
     ) ?? 0),
     outputTokens: output
@@ -35795,12 +36327,12 @@ function buildStrata(cases, runs) {
     }
   }
   const totalTraffic = [...trafficCounts.values()].reduce(
-    (total, count) => total + count,
+    (total, count2) => total + count2,
     0
   );
-  return [...caseCounts.entries()].sort(([left], [right]) => compareText(left, right)).map(([family, count]) => ({
+  return [...caseCounts.entries()].sort(([left], [right]) => compareText(left, right)).map(([family, count2]) => ({
     family,
-    corpusShare: count / cases.length,
+    corpusShare: count2 / cases.length,
     trafficShare: (trafficCounts.get(family) ?? 0) / totalTraffic
   }));
 }
@@ -36056,7 +36588,7 @@ function scrubRuns(runs) {
 import { execFile as execFile5 } from "node:child_process";
 import { createHash as createHash6 } from "node:crypto";
 import { readFile as readFile9 } from "node:fs/promises";
-import { join as join11 } from "node:path";
+import { join as join13 } from "node:path";
 import { promisify as promisify4 } from "node:util";
 
 // src/code-graph/graph.ts
@@ -36172,7 +36704,7 @@ async function loadCodeGraph(path, repoDir) {
       id: node.data.id,
       label: node.data.label ?? node.data.id,
       path: normalizeSourcePath(node.data.source_file, repoDir),
-      line: parseLine(node.data.source_location),
+      line: parseLine2(node.data.source_location),
       fileType: node.data.file_type ?? null
     });
   }
@@ -36203,7 +36735,7 @@ async function loadCodeGraph(path, repoDir) {
       provenance: edge.data.confidence,
       score: score !== void 0 && score >= 0 && score <= 1 ? score : tierScores[edge.data.confidence],
       path: normalizeSourcePath(edge.data.source_file, repoDir),
-      line: parseLine(edge.data.source_location)
+      line: parseLine2(edge.data.source_location)
     });
   }
   const sample = unknownConfidences.size === 0 ? "" : ` (for example confidence ${[...unknownConfidences].map((value) => `"${value}"`).join(", ")})`;
@@ -36231,7 +36763,7 @@ function normalizeSourcePath(value, repoDir) {
   const path = isAbsolute(slashed) ? relative4(repoDir, slashed).split(sep4).join("/") : slashed;
   return path.startsWith("./") ? path.slice(2) : path;
 }
-function parseLine(value) {
+function parseLine2(value) {
   const match = /^L?([1-9]\d*)$/.exec(String(value));
   return match === null ? null : Number(match[1]);
 }
@@ -36308,7 +36840,7 @@ function blastRadius({
 // src/enrich/conventions.ts
 import { execFile as execFile2 } from "node:child_process";
 import { access, readFile as readFile6 } from "node:fs/promises";
-import { dirname as dirname3, join as join7, relative as relative5, resolve as resolve4 } from "node:path";
+import { dirname as dirname3, join as join9, relative as relative5, resolve as resolve4 } from "node:path";
 import { promisify as promisify2 } from "node:util";
 
 // src/enrich/shared.ts
@@ -36344,7 +36876,7 @@ function posixPath(repoDir, absolutePath) {
 async function existingPath(repoDir, candidates) {
   for (const path of candidates) {
     try {
-      await access(join7(repoDir, path));
+      await access(join9(repoDir, path));
       return path;
     } catch {
       continue;
@@ -36376,7 +36908,7 @@ async function captureInstructionFiles(repoDir) {
   const rootFiles = (await Promise.all(
     ["AGENTS.md", "CLAUDE.md"].map(async (path) => {
       try {
-        await access(join7(repoDir, path));
+        await access(join9(repoDir, path));
         return path;
       } catch {
         return null;
@@ -36398,7 +36930,7 @@ async function captureInstructionFiles(repoDir) {
   async function capture(path, depth, stack, includedFrom) {
     let content;
     try {
-      content = await readFile6(join7(repoDir, path), "utf8");
+      content = await readFile6(join9(repoDir, path), "utf8");
     } catch {
       warn(
         includedFrom === void 0 ? { name: "instruction_file_unreadable", path } : {
@@ -36437,7 +36969,7 @@ async function captureInstructionFiles(repoDir) {
 }
 async function readFirst(repoDir, candidates) {
   const path = await existingPath(repoDir, candidates);
-  return path === null ? null : readFile6(join7(repoDir, path), "utf8");
+  return path === null ? null : readFile6(join9(repoDir, path), "utf8");
 }
 async function detectFormatter(repoDir) {
   const prettier = await existingPath(repoDir, prettierConfigs);
@@ -36446,7 +36978,7 @@ async function detectFormatter(repoDir) {
   if (ruff !== null) return { kind: "ruff", configPath: ruff };
   const pyproject = await existingPath(repoDir, ["pyproject.toml"]);
   if (pyproject !== null && /^\s*\[tool\.ruff(?:\.[^\]]+)?\]\s*$/m.test(
-    await readFile6(join7(repoDir, pyproject), "utf8")
+    await readFile6(join9(repoDir, pyproject), "utf8")
   )) {
     return { kind: "ruff", configPath: pyproject };
   }
@@ -36519,7 +37051,7 @@ async function captureConventions({
 // src/enrich/owners.ts
 import { execFile as execFile3 } from "node:child_process";
 import { access as access2, readFile as readFile7 } from "node:fs/promises";
-import { isAbsolute as isAbsolute2, join as join8, relative as relative6 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join10, relative as relative6 } from "node:path";
 import { promisify as promisify3 } from "node:util";
 var execFileAsync3 = promisify3(execFile3);
 var maximumBlameOwners = 3;
@@ -36531,7 +37063,7 @@ function repositoryPath(repoDir, filePath) {
 async function findCodeowners(repoDir) {
   for (const path of codeownersPaths) {
     try {
-      await access2(join8(repoDir, path));
+      await access2(join10(repoDir, path));
       return path;
     } catch {
       continue;
@@ -36646,7 +37178,7 @@ async function resolveOwners({
 }) {
   const codeownersPath = await findCodeowners(repoDir);
   const rules = codeownersPath === null ? [] : parseCodeowners(
-    await readFile7(join8(repoDir, codeownersPath), "utf8")
+    await readFile7(join10(repoDir, codeownersPath), "utf8")
   ).map((rule) => ({
     ...rule,
     matcher: codeownersRegex(rule.pattern)
@@ -36846,7 +37378,7 @@ async function readCodeContext(input) {
       continue;
     }
     const fileNode = inPath.find(
-      ({ label }) => label === basename(callSite.path)
+      ({ label: label2 }) => label2 === basename(callSite.path)
     );
     const enclosing = stale ? void 0 : inPath.filter(
       (node) => node !== fileNode && node.line !== null && node.line <= callSite.line
@@ -36855,11 +37387,11 @@ async function readCodeContext(input) {
     )[0];
     const seed = enclosing ?? fileNode;
     const findings = [];
-    const hitFinding = (kind, label, hit) => {
+    const hitFinding = (kind, label2, hit) => {
       if (hit.path === null) return;
       findings.push({
         kind,
-        label,
+        label: label2,
         path: hit.path,
         line: hit.line,
         hops: hit.hops,
@@ -37281,18 +37813,18 @@ function transientDelay(attempt) {
 function sleep2(milliseconds) {
   return new Promise((resolve14) => setTimeout(resolve14, milliseconds));
 }
-function parseJson(text, label) {
+function parseJson(text, label2) {
   try {
     return JSON.parse(text);
   } catch {
-    throw new GithubRequestError(`${label} was not valid JSON`);
+    throw new GithubRequestError(`${label2} was not valid JSON`);
   }
 }
-function parsed(schema, value, label) {
+function parsed(schema, value, label2) {
   const result2 = schema.safeParse(value);
   if (!result2.success) {
     throw new GithubRequestError(
-      `${label} did not match the GitHub response schema`
+      `${label2} did not match the GitHub response schema`
     );
   }
   return result2.data;
@@ -37374,17 +37906,17 @@ function createGithubClient(options) {
     }
     throw new BlockedError2(new Date(lastResetAt).toISOString());
   }
-  async function requestJson(path, init, schema, label) {
+  async function requestJson(path, init, schema, label2) {
     const result2 = await request(path, init);
-    return parsed(schema, parseJson(result2.text, label), label);
+    return parsed(schema, parseJson(result2.text, label2), label2);
   }
-  async function listJson(path, schema, label) {
+  async function listJson(path, schema, label2) {
     const items = [];
     let next = `${path}${path.includes("?") ? "&" : "?"}per_page=100`;
     while (next !== void 0) {
       const result2 = await request(next);
       items.push(
-        ...parsed(external_exports.array(schema), parseJson(result2.text, label), label)
+        ...parsed(external_exports.array(schema), parseJson(result2.text, label2), label2)
       );
       next = nextPage(result2.response);
     }
@@ -38540,7 +39072,7 @@ async function restoreBranch({
 
 // src/apply/diff.ts
 import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join9 } from "node:path";
+import { join as join11 } from "node:path";
 
 // src/apply/lex.ts
 function regexStartsAt(content, index) {
@@ -38805,7 +39337,7 @@ function constantSpans(content, identifier, expectedValue, callOffset, isPython)
     );
   }
   const bindingCount = bindingPatterns.reduce(
-    (count, pattern) => count + [...masked.matchAll(pattern)].length,
+    (count2, pattern) => count2 + [...masked.matchAll(pattern)].length,
     0
   );
   const parameterLists = [
@@ -38970,7 +39502,7 @@ function buildSwapDiff({
   for (const [path, fileSwaps] of grouped) {
     let before;
     try {
-      before = readFileSync4(join9(repoDir, path), "utf8");
+      before = readFileSync4(join11(repoDir, path), "utf8");
     } catch {
       results.push({ path, reason: "stale_location" });
       continue;
@@ -39309,17 +39841,17 @@ function lintSwapDiff({
 // src/apply/format.ts
 import { execFile as execFile4 } from "node:child_process";
 import { existsSync, readFileSync as readFileSync5, writeFileSync } from "node:fs";
-import { mkdtemp as mkdtemp2, readFile as readFile8, rm as rm2 } from "node:fs/promises";
-import { basename as basename2, dirname as dirname4, join as join10 } from "node:path";
+import { mkdtemp as mkdtemp3, readFile as readFile8, rm as rm3 } from "node:fs/promises";
+import { basename as basename2, dirname as dirname4, join as join12 } from "node:path";
 function pinnedPrettierVersion(repoDir) {
-  const pnpmLock = join10(repoDir, "pnpm-lock.yaml");
+  const pnpmLock = join12(repoDir, "pnpm-lock.yaml");
   if (existsSync(pnpmLock)) {
     const match = /^  prettier@([^:\s(]+)(?:\([^\n]*)?:/m.exec(
       readFileSync5(pnpmLock, "utf8")
     );
     if (match !== null) return match[1];
   }
-  const packageLock = join10(repoDir, "package-lock.json");
+  const packageLock = join12(repoDir, "package-lock.json");
   if (existsSync(packageLock)) {
     const parsed2 = JSON.parse(readFileSync5(packageLock, "utf8"));
     if (typeof parsed2 === "object" && parsed2 !== null && "packages" in parsed2) {
@@ -39332,7 +39864,7 @@ function pinnedPrettierVersion(repoDir) {
       }
     }
   }
-  const yarnLock = join10(repoDir, "yarn.lock");
+  const yarnLock = join12(repoDir, "yarn.lock");
   if (existsSync(yarnLock)) {
     return /(?:^|\n)["']?prettier@[^\n]+:\n\s+version\s+["']([^"']+)["']/.exec(
       readFileSync5(yarnLock, "utf8")
@@ -39342,9 +39874,9 @@ function pinnedPrettierVersion(repoDir) {
 }
 function formatterCommand(repoDir, formatter) {
   const { kind, configPath } = formatter;
-  const configArgs = configPath === null ? [] : ["--config", join10(repoDir, configPath)];
+  const configArgs = configPath === null ? [] : ["--config", join12(repoDir, configPath)];
   if (kind === "prettier") {
-    const executable = join10(
+    const executable = join12(
       repoDir,
       "node_modules",
       ".bin",
@@ -39372,7 +39904,7 @@ function formatterCommand(repoDir, formatter) {
     };
   }
   if (kind === "ruff") {
-    const local = join10(
+    const local = join12(
       repoDir,
       ".venv",
       process.platform === "win32" ? "Scripts/ruff.exe" : "bin/ruff"
@@ -39440,20 +39972,20 @@ async function formatWithHostFormatter({
   }
   const formattedFiles = [];
   for (const [fileIndex, file2] of files.entries()) {
-    const sourcePath = join10(repoDir, file2.path);
+    const sourcePath = join12(repoDir, file2.path);
     let temporaryDirectory = null;
     try {
       if (!command.stdin) {
-        temporaryDirectory = await mkdtemp2(
-          join10(dirname4(sourcePath), ".rightmodeler-format-")
+        temporaryDirectory = await mkdtemp3(
+          join12(dirname4(sourcePath), ".rightmodeler-format-")
         );
         writeFileSync(
-          join10(temporaryDirectory, basename2(sourcePath)),
+          join12(temporaryDirectory, basename2(sourcePath)),
           file2.after,
           "utf8"
         );
       }
-      const temporaryPath = temporaryDirectory === null ? sourcePath : join10(temporaryDirectory, basename2(sourcePath));
+      const temporaryPath = temporaryDirectory === null ? sourcePath : join12(temporaryDirectory, basename2(sourcePath));
       const stdout = await runFormatter(
         command,
         command.stdin ? sourcePath : temporaryPath,
@@ -39524,7 +40056,7 @@ async function formatWithHostFormatter({
       };
     } finally {
       if (temporaryDirectory !== null) {
-        await rm2(temporaryDirectory, { recursive: true, force: true });
+        await rm3(temporaryDirectory, { recursive: true, force: true });
       }
     }
   }
@@ -39653,10 +40185,10 @@ function pullRequestCodeContext(codeContext, verdicts) {
   const callSites = codeContext.callSites.filter(({ stepId }) => stepIds.has(stepId)).map((callSite) => {
     const shown = /* @__PURE__ */ new Map();
     const findings = callSite.findings.filter(({ kind }) => {
-      const count = (shown.get(kind) ?? 0) + 1;
-      shown.set(kind, count);
-      if (count > codeContextFindingsPerKind) cut = true;
-      return count <= codeContextFindingsPerKind;
+      const count2 = (shown.get(kind) ?? 0) + 1;
+      shown.set(kind, count2);
+      if (count2 > codeContextFindingsPerKind) cut = true;
+      return count2 <= codeContextFindingsPerKind;
     });
     return { ...callSite, findings };
   });
@@ -39673,6 +40205,9 @@ function pullRequestCodeContext(codeContext, verdicts) {
   }
   return lines.join("\n");
 }
+var planRouteLabels = {
+  "claude-login": "Measured through the claude CLI signed in to a Claude plan, not the Anthropic API: the CLI added its own instructions to each call and could not set temperature or an output limit. Run `rightmodeler docs model-routes` for details."
+};
 function evidenceBody(conventions, verdicts, codeContext) {
   const evidence = verdicts[0].evidence;
   const table = [
@@ -39690,6 +40225,13 @@ function evidenceBody(conventions, verdicts, codeContext) {
     "",
     "Costs are dollars per replayed case. `n/a` means the number is not in the store: the replayed case carries no recorded token usage, the catalog publishes no price for the incumbent model, or no attempt recorded a duration.",
     "Case IDs are SHA-256 digests of the replayed case, not file paths.",
+    ...[
+      ...new Set(
+        verdicts.flatMap(
+          ({ planRoute: planRoute2 }) => planRoute2 === void 0 ? [] : [planRoute2]
+        )
+      )
+    ].sort().map((planRoute2) => planRouteLabels[planRoute2]),
     ""
   ].join("\n");
   const template = conventions.prTemplate?.trimEnd();
@@ -39867,7 +40409,7 @@ async function staleDigestPaths(repoDir, swaps) {
     ([left], [right]) => compareText(left, right)
   )) {
     try {
-      const content = (await readFile9(join11(repoDir, path), "utf8")).replaceAll(
+      const content = (await readFile9(join13(repoDir, path), "utf8")).replaceAll(
         "\r\n",
         "\n"
       );
@@ -40537,11 +41079,11 @@ function requireStep(stepsById, stepId) {
 }
 
 // src/drift.ts
-import { mkdir as mkdir4, readFile as readFile10, writeFile as writeFile4 } from "node:fs/promises";
-import { dirname as dirname5, join as join13, resolve as resolve6 } from "node:path";
+import { mkdir as mkdir4, readFile as readFile10, writeFile as writeFile5 } from "node:fs/promises";
+import { dirname as dirname5, join as join15, resolve as resolve6 } from "node:path";
 
 // src/state.ts
-import { join as join12, resolve as resolve5 } from "node:path";
+import { join as join14, resolve as resolve5 } from "node:path";
 var checkpointSchema = external_exports.strictObject({
   inputDigest: external_exports.string().min(1),
   outputKey: external_exports.string().min(1),
@@ -40553,7 +41095,7 @@ var setupStateSchema = external_exports.strictObject({
   stages: external_exports.record(external_exports.string(), checkpointSchema)
 });
 function resolveStoreRoot(repoDir, store) {
-  return resolve5(store ?? join12(repoDir, ".rightmodeler"));
+  return resolve5(store ?? join14(repoDir, ".rightmodeler"));
 }
 async function putImmutableJson(store, key, value) {
   await store.putImmutable(
@@ -40795,9 +41337,9 @@ async function runDrift(options) {
   );
   const markdown = renderDriftProposal(proposal);
   await store.putImmutable(keys.report, Buffer.from(markdown, "utf8"));
-  const reportPath2 = join13(storeRoot, keys.report);
+  const reportPath2 = join15(storeRoot, keys.report);
   await mkdir4(dirname5(reportPath2), { recursive: true });
-  await writeFile4(reportPath2, markdown, "utf8");
+  await writeFile5(reportPath2, markdown, "utf8");
   return {
     proposal,
     candidateCorpusVersionId: candidateCorpus.corpusVersionId,
@@ -41354,24 +41896,24 @@ async function requiredJson(store, key, code) {
   }
   return parseEntry(entry.body);
 }
-async function requiredArtifactJson(store, key, missingCode, label) {
+async function requiredArtifactJson(store, key, missingCode, label2) {
   const entry = await store.get(key);
   if (entry === null) {
     throw new DriftServiceError(missingCode, `Store output is missing: ${key}`);
   }
-  return parseArtifactEntry(entry.body, label);
+  return parseArtifactEntry(entry.body, label2);
 }
-function parseArtifactEntry(body, label) {
+function parseArtifactEntry(body, label2) {
   try {
     return parseEntry(body);
   } catch (error51) {
     throw new DriftServiceError(
       "drift_artifact_malformed",
-      `${label} is malformed: ${errorMessage2(error51)}`
+      `${label2} is malformed: ${errorMessage2(error51)}`
     );
   }
 }
-function validateProposalArtifact(schema, value, label) {
+function validateProposalArtifact(schema, value, label2) {
   try {
     const proposal = schema.parse(value);
     assertDriftProposalIntegrity(proposal);
@@ -41380,7 +41922,7 @@ function validateProposalArtifact(schema, value, label) {
     if (error51 instanceof DriftServiceError) throw error51;
     throw new DriftServiceError(
       "drift_artifact_malformed",
-      `${label} is malformed: ${errorMessage2(error51)}`
+      `${label2} is malformed: ${errorMessage2(error51)}`
     );
   }
 }
@@ -41785,14 +42327,14 @@ function resolveScoringConfig(config2) {
     ...config2.gateThreshold === void 0 ? {} : { gateThreshold: config2.gateThreshold }
   };
 }
-function requireText(value, label) {
-  if (value.length === 0) throw new Error(`${label} must not be empty`);
+function requireText(value, label2) {
+  if (value.length === 0) throw new Error(`${label2} must not be empty`);
   return value;
 }
-function environmentSecret(name, label) {
+function environmentSecret(name, label2) {
   const value = process.env[name];
   if (value === void 0 || value.length === 0) {
-    throw new Error(`${label} environment variable is not set: ${name}`);
+    throw new Error(`${label2} environment variable is not set: ${name}`);
   }
   return value;
 }
@@ -41802,18 +42344,18 @@ function redactSecrets(value, secrets) {
     value
   );
 }
-async function responseJson(response, label, secrets) {
+async function responseJson(response, label2, secrets) {
   const text = await response.text();
   if (!response.ok) {
     throw new Error(
-      `${label} request failed with ${response.status}: ${redactSecrets(text, secrets)}`
+      `${label2} request failed with ${response.status}: ${redactSecrets(text, secrets)}`
     );
   }
   try {
     return JSON.parse(text);
   } catch {
     throw new Error(
-      `${label} returned invalid JSON: ${redactSecrets(text, secrets)}`
+      `${label2} returned invalid JSON: ${redactSecrets(text, secrets)}`
     );
   }
 }
@@ -41897,10 +42439,10 @@ async function importCorpus(config2, options) {
   for (const item of cases) {
     counts.set(item.content.family, (counts.get(item.content.family) ?? 0) + 1);
   }
-  const strata = [...counts.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([family, count]) => ({
+  const strata = [...counts.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([family, count2]) => ({
     family,
-    corpusShare: count / cases.length,
-    trafficShare: count / cases.length
+    corpusShare: count2 / cases.length,
+    trafficShare: count2 / cases.length
   }));
   return {
     corpusVersionId: computeRunSpecDigest(cases.map(({ caseId }) => caseId)),
@@ -42101,9 +42643,9 @@ function providerName(provider) {
 // src/evaluators/promptfoo.ts
 import { execFile as execFile6 } from "node:child_process";
 import { createHash as createHash7 } from "node:crypto";
-import { mkdtemp as mkdtemp3, readFile as readFile11, realpath as realpath3, rm as rm3, writeFile as writeFile5 } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname as dirname6, join as join14, relative as relative7, resolve as resolve7 } from "node:path";
+import { mkdtemp as mkdtemp4, readFile as readFile11, realpath as realpath3, rm as rm4, writeFile as writeFile6 } from "node:fs/promises";
+import { tmpdir as tmpdir2 } from "node:os";
+import { dirname as dirname6, join as join16, relative as relative7, resolve as resolve7 } from "node:path";
 import { promisify as promisify5 } from "node:util";
 var PROMPTFOO_VERIFIED_VERSION = "0.123.1";
 var PROMPTFOO_EVAL_FLAGS = [
@@ -42285,12 +42827,12 @@ function createPromptfooEvaluator(input) {
       }));
       const cwd = await realpath3(dirname6(assertionsPath));
       const directory = await realpath3(
-        await mkdtemp3(join14(tmpdir(), "rightmodeler-promptfoo-"))
+        await mkdtemp4(join16(tmpdir2(), "rightmodeler-promptfoo-"))
       );
-      const modelOutputsPath = join14(directory, "model-outputs.json");
-      const resultsPath = join14(directory, "results.json");
+      const modelOutputsPath = join16(directory, "model-outputs.json");
+      const resultsPath = join16(directory, "results.json");
       try {
-        await writeFile5(
+        await writeFile6(
           modelOutputsPath,
           JSON.stringify(
             sent.map(({ caseId, output: output2 }) => ({ output: output2, tags: [caseId] }))
@@ -42332,7 +42874,7 @@ function createPromptfooEvaluator(input) {
         );
         return { providerRunId };
       } finally {
-        await rm3(directory, { recursive: true, force: true });
+        await rm4(directory, { recursive: true, force: true });
       }
     },
     async status(providerRunId) {
@@ -42367,7 +42909,7 @@ async function readPromptfooConfigs(assertionsPath) {
       async (extension) => {
         const file2 = `promptfooconfig.${extension}`;
         try {
-          return [{ file: file2, bytes: await readFile11(join14(directory, file2)) }];
+          return [{ file: file2, bytes: await readFile11(join16(directory, file2)) }];
         } catch (error51) {
           if (error51.code === "ENOENT") return [];
           throw error51;
@@ -42378,15 +42920,15 @@ async function readPromptfooConfigs(assertionsPath) {
   return configs.flat();
 }
 async function runPromptfoo(command, args, cwd) {
-  const running = execFileAsync5(command, [...args], {
+  const running2 = execFileAsync5(command, [...args], {
     cwd,
     encoding: "utf8",
     env: { ...process.env, ...PROMPTFOO_ENV },
     maxBuffer: 10 * 1024 * 1024
   });
-  running.child.stdin?.end();
+  running2.child.stdin?.end();
   try {
-    const { stdout, stderr } = await running;
+    const { stdout, stderr } = await running2;
     return { code: 0, output: `${stdout}${stderr}` };
   } catch (error51) {
     const failed = error51;
@@ -43389,6 +43931,7 @@ function formatRate(value) {
 }
 
 // src/routes.ts
+var DEFAULT_PLAN_PRICE_LIST = "https://ai-gateway.vercel.sh/v1/models";
 function apiRoute(options) {
   const provider = createProvider({
     providerId: "configured-provider",
@@ -43399,6 +43942,15 @@ function apiRoute(options) {
     provider,
     callable: () => provider.listModels(),
     known: () => provider.listModels()
+  };
+}
+function planRoute(kind, options) {
+  const provider = createClaudeLoginProvider(options);
+  return {
+    label: `the ${kind} price list ${options.priceList}`,
+    provider,
+    callable: () => provider.listModels(),
+    known: () => provider.knownModels()
   };
 }
 
@@ -44834,11 +45386,15 @@ async function estimateReplay(options) {
   const plan = await loadReplayPlan(context2);
   const known = context2.existingRunId === void 0 ? await routeCatalog(() => routes.candidates.known()) : await readDetachedReplayCatalog(context2, context2.existingRunId);
   const judgeCatalog = context2.existingRunId === void 0 ? await routeCatalog(() => routes.judge.callable()) : known;
-  const candidates = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known) : await approvedReplayCandidates(
+  const callable = planCandidateRoute(context2) === void 0 ? void 0 : await routeCatalog(() => routes.candidates.callable());
+  const candidates = dropJudgeVendorCandidates(
     context2,
-    plan,
-    known,
-    context2.approvedRunSpecDigest
+    context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable) : await approvedReplayCandidates(
+      context2,
+      plan,
+      callable ?? known,
+      context2.approvedRunSpecDigest
+    )
   );
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
@@ -44877,6 +45433,9 @@ async function estimateReplay(options) {
       candidates,
       judge
     }),
+    ...usesPlanRoute(context2) ? {
+      basis: `List-price equivalents from the price list ${context2.catalogReference ?? DEFAULT_PLAN_PRICE_LIST} for calls made through a plan you are signed in to (charged to that plan's usage allowance, not billed in dollars), and current provider catalog pricing for any API route. Worst-case candidate reservation from corpus token bounds; holdout uses the most expensive possible family winner. Judge calls are priced at two calls per replayed cell. A plan route sets no output cap, so actual use can exceed this figure.`
+    } : {},
     policy: context2.release.effective
   };
 }
@@ -45471,6 +46030,7 @@ async function prepareApply(context2) {
     if (radius === void 0) {
       throw new Error(`Missing blast radius for family ${family.familyId}`);
     }
+    const measuredRoute = planRouteOfWinner(ledger, plan, family.verdict);
     return {
       verdict: family.verdict,
       releaseGates: family.gates,
@@ -45499,7 +46059,8 @@ async function prepareApply(context2) {
         incumbentCostPerCaseUsd: null,
         costDeltaPct: null,
         winnerLatencyP50Ms: null
-      }
+      },
+      ...measuredRoute === void 0 ? {} : { planRoute: measuredRoute }
     };
   });
   return {
@@ -45520,6 +46081,7 @@ function createContext(options) {
   const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve8(options.modeBConfigPath);
   const pricingFilePath = options.pricingFilePath === void 0 ? void 0 : resolve8(options.pricingFilePath);
   const policyFilePath = options.policyFilePath === void 0 ? void 0 : resolve8(options.policyFilePath);
+  const candidateRoute = options.route ?? (options.baseUrl === void 0 ? void 0 : "api");
   return {
     repo,
     storeRoot,
@@ -45547,7 +46109,12 @@ function createContext(options) {
     ...options.catalogReference === void 0 ? {} : {
       catalogReference: /^https?:\/\//iu.test(options.catalogReference) ? options.catalogReference : resolve8(options.catalogReference)
     },
-    ...options.baseUrl === void 0 ? {} : { routes: { candidates: "api", judge: "api" } },
+    ...candidateRoute === void 0 ? {} : {
+      routes: {
+        candidates: candidateRoute,
+        judge: options.judgeRoute ?? candidateRoute
+      }
+    },
     ...policyFilePath === void 0 ? {} : { policyFilePath },
     ...options.matchersPath === void 0 ? {} : {
       matchersPath: resolve8(options.matchersPath),
@@ -45667,7 +46234,8 @@ function evidenceQuestionIdentity(input) {
       jsonValue2({
         family: input.family,
         stepIds: [...input.stepIds],
-        ...input.reproofRequestIds.length === 0 ? {} : { reproofRequestIds: [...input.reproofRequestIds] }
+        ...input.reproofRequestIds.length === 0 ? {} : { reproofRequestIds: [...input.reproofRequestIds] },
+        ...input.candidateRoute === void 0 ? {} : { candidateRoute: input.candidateRoute }
       })
     ),
     evaluatorPlan: input.evaluatorPlan,
@@ -45753,6 +46321,8 @@ async function inputDigest(stage, context2, state) {
   if (stage === "shortlist") {
     extra.approvedRunSpecDigest = context2.approvedRunSpecDigest ?? null;
     extra.evaluatorPlan = evaluatorPlan(context2);
+    const candidateRoute = planCandidateRoute(context2);
+    if (candidateRoute !== void 0) extra.candidateRoute = candidateRoute;
     const reproofRequests = await readReproofRequests(
       context2.store,
       context2.projectId
@@ -45771,10 +46341,10 @@ async function inputDigest(stage, context2, state) {
       context2.store,
       context2.projectId
     );
-    if (context2.baseUrl === void 0 && reproofRequests.some(({ requested }) => requested)) {
+    if (!routesReady(context2) && reproofRequests.some(({ requested }) => requested)) {
       return void 0;
     }
-    if (context2.baseUrl === void 0) return state.stages.replay?.inputDigest;
+    if (!routesReady(context2)) return state.stages.replay?.inputDigest;
     if (reproofRequests.length > 0) {
       extra.reproofRequests = jsonValue2(
         reproofRequests.map(({ familyId, requestIds }) => ({
@@ -45783,13 +46353,22 @@ async function inputDigest(stage, context2, state) {
         }))
       );
     }
+    const routes = context2.routes;
+    const apiRole = routes.candidates === "api" || routes.judge === "api";
+    const planRole = routes.candidates !== "api" || routes.judge !== "api";
     extra.provider = digest({
-      baseUrl: context2.baseUrl,
-      apiKeyEnv: context2.apiKeyEnv,
+      ...apiRole ? {
+        baseUrl: context2.baseUrl,
+        apiKeyEnv: context2.apiKeyEnv,
+        ...context2.requestHeaders === void 0 ? {} : { headers: requestHeaderIdentity(context2.requestHeaders) }
+      } : {},
       maxCostUsd: context2.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context2),
-      ...context2.requestHeaders === void 0 ? {} : { headers: requestHeaderIdentity(context2.requestHeaders) },
-      ...context2.catalogReference === void 0 ? {} : { catalogReference: context2.catalogReference }
+      ...context2.catalogReference === void 0 ? {} : { catalogReference: context2.catalogReference },
+      ...planRole ? {
+        routes: { candidates: routes.candidates, judge: routes.judge },
+        priceList: context2.catalogReference ?? DEFAULT_PLAN_PRICE_LIST
+      } : {}
     });
     if (context2.evaluator !== void 0) {
       extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context2));
@@ -45933,6 +46512,22 @@ function invalidCatalogReference(message2) {
     remedy: "Pass --catalog-reference an http(s) URL or a readable file that returns an OpenAI-compatible /models document, or remove it, then rerun."
   });
 }
+function planCliUnavailable(error51) {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "plan_cli_unavailable",
+    message: error51.message,
+    remedy: error51.remedy
+  });
+}
+function planLoginRequired(error51) {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "plan_login_required",
+    message: error51.message,
+    remedy: error51.remedy
+  });
+}
 async function routeCatalog(load) {
   try {
     return await load();
@@ -45940,6 +46535,10 @@ async function routeCatalog(load) {
     if (error51 instanceof CatalogReferenceError) {
       throw invalidCatalogReference(error51.message);
     }
+    if (error51 instanceof PlanRouteUnavailableError) {
+      throw planCliUnavailable(error51);
+    }
+    if (error51 instanceof PlanLoginError) throw planLoginRequired(error51);
     throw error51;
   }
 }
@@ -45956,10 +46555,27 @@ function routeHandle(context2, kind) {
         headers: context2.requestHeaders,
         catalogReference: context2.catalogReference
       });
+    case "claude-login":
+      return planRoute(kind, {
+        priceList: context2.catalogReference ?? DEFAULT_PLAN_PRICE_LIST,
+        pricingOverrides: context2.pricingOverrides,
+        maxConcurrency: context2.maxConcurrency,
+        warning: (code, message2) => context2.reporter.warning(code, message2)
+      });
   }
 }
+function routesReady(context2) {
+  return context2.routes !== void 0 && (context2.baseUrl !== void 0 || context2.routes.candidates !== "api" && context2.routes.judge !== "api");
+}
+function usesPlanRoute(context2) {
+  return context2.routes !== void 0 && (context2.routes.candidates !== "api" || context2.routes.judge !== "api");
+}
+function planCandidateRoute(context2) {
+  const kind = context2.routes?.candidates;
+  return kind === void 0 || kind === "api" ? void 0 : kind;
+}
 function replayRoutes(context2) {
-  if (context2.routes === void 0) throw missingProviderConfiguration();
+  if (!routesReady(context2)) throw missingProviderConfiguration();
   const candidates = routeHandle(context2, context2.routes.candidates);
   return {
     candidates,
@@ -46003,7 +46619,7 @@ async function readTraceInput(path) {
     (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
   ).map(({ name }) => name).sort();
   if (names.length === 0) throw emptyTracesDirectory(path);
-  return Promise.all(names.map((name) => readFile12(join15(path, name))));
+  return Promise.all(names.map((name) => readFile12(join17(path, name))));
 }
 async function executeStage(stage, context2, inputDigestValue, runId) {
   switch (stage) {
@@ -46284,15 +46900,20 @@ async function planFamilies(context2, corpus, reconciled, approved) {
   const sharedStepIds = new Set(
     [...familiesByStep].filter(([, reached]) => reached.size > 1).map(([stepId]) => stepId)
   );
+  const candidateRoute = planCandidateRoute(context2);
   return families.map((family) => {
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family
     );
     const reasons = familyCases.map(unsendableReason);
+    const multiTurnCases = familyCases.map(
+      ({ content }, index) => candidateRoute !== void 0 && reasons[index] === void 0 && !isSingleTurn(toWireMessages(content.messages, content.systemPrompt))
+    );
     const sendableCases = familyCases.filter(
-      (_, index) => reasons[index] === void 0
+      (_, index) => reasons[index] === void 0 && !multiTurnCases[index]
     );
     const unsendable = reasons.filter((reason) => reason !== void 0);
+    const multiTurn = multiTurnCases.filter(Boolean).length;
     const binding = approved === void 0 ? bindFamily({
       family,
       cases: sendableCases.map((corpusCase) => ({
@@ -46322,7 +46943,7 @@ async function planFamilies(context2, corpus, reconciled, approved) {
       required: binding.requiredDistinctSteps
     } : void 0;
     const stepIds = abstainReason === void 0 ? [...placement.stepIds] : [];
-    const leftOutCases = bindingLeftOut + unsendable.length;
+    const leftOutCases = bindingLeftOut + unsendable.length + multiTurn;
     const reproofRequestIds = reproofRequests.get(family) ?? [];
     const evidenceQuestionId2 = evidenceQuestionIdentity({
       corpusVersionId: corpus.corpusVersionId,
@@ -46330,7 +46951,8 @@ async function planFamilies(context2, corpus, reconciled, approved) {
       evaluatorPlan: evaluatorPlan(context2),
       family,
       stepIds,
-      reproofRequestIds
+      reproofRequestIds,
+      ...candidateRoute === void 0 ? {} : { candidateRoute }
     });
     return {
       plan: {
@@ -46346,7 +46968,8 @@ async function planFamilies(context2, corpus, reconciled, approved) {
       },
       caseSteps: placement.caseSteps,
       leftOut,
-      unsendable
+      unsendable,
+      multiTurn
     };
   });
 }
@@ -46374,7 +46997,13 @@ async function executeShortlist(context2, inputDigestValue) {
   const steps = [];
   const cases = [];
   const sampleSizes = {};
-  for (const { plan: familyPlan, caseSteps, leftOut, unsendable } of planned) {
+  for (const {
+    plan: familyPlan,
+    caseSteps,
+    leftOut,
+    unsendable,
+    multiTurn
+  } of planned) {
     const { familyId: family, evidenceQuestionId: evidenceQuestionId2, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
     const bindingLeftOut = leftOut.ambiguous + leftOut.unmatched + leftOut.unreplayable;
@@ -46392,13 +47021,19 @@ async function executeShortlist(context2, inputDigestValue) {
       ];
       context2.reporter.warning(
         "family_cases_left_out",
-        `Family ${family}: ${bindingLeftOut} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes.filter(([count]) => count > 0).map(([count, cause]) => `${count} ${cause}`).join(", ")}.`
+        `Family ${family}: ${bindingLeftOut} of ${familyPlan.cases} traced cases were left out of the replay sample: ${causes.filter(([count2]) => count2 > 0).map(([count2, cause]) => `${count2} ${cause}`).join(", ")}.`
       );
     }
     if (unsendable.length > 0) {
       context2.reporter.warning(
         "recorded_messages_not_replayable",
         `Family ${family}: ${unsendable.length} of ${familyPlan.cases} recorded cases carry messages the replay cannot send yet and were left out of the replay sample (first: ${unsendable[0]}). Tool calls, non-text parts and tool definitions in a recorded conversation are not replayed.`
+      );
+    }
+    if (multiTurn > 0) {
+      context2.reporter.warning(
+        "plan_route_cases_left_out",
+        `Family ${family}: ${multiTurn} of ${familyPlan.cases} recorded cases have an earlier assistant or tool turn or more than one user message, and the ${planCandidateRoute(context2)} route sends one user turn, so they were left out of the replay sample.`
       );
     }
     if (stepIds.length === 0) continue;
@@ -46558,21 +47193,28 @@ function approvedRecords(approved, family, records) {
   }
   return selected.sort((left, right) => compareText(left.stepId, right.stepId));
 }
-function replayCandidates(plan, catalog) {
-  const catalogById = new Map(catalog.map((model) => [model.id, model]));
+function replayCandidates(plan, catalog, callable) {
+  const callableById = new Map(
+    (callable ?? []).map((model) => [model.id, model])
+  );
+  const models = catalog.map((model) => callableById.get(model.id) ?? model);
+  const catalogById = new Map(models.map((model) => [model.id, model]));
+  const allow = callable === void 0 ? plan.allowModels : callable.map(({ id }) => id).filter(
+    (id) => plan.allowModels.length === 0 || plan.allowModels.includes(id)
+  );
   const shortlisted = shortlist(
     plan.steps.map((step) => ({
       ...step,
       corpusSplit: "shortlist",
       selectionStage: "shortlist"
     })),
-    catalog.map(
+    models.map(
       (model) => model.contextLength === 0 ? { ...model, contextLength: Number.MAX_SAFE_INTEGER } : model
     ),
     {
       top: plan.top,
       includeFreeModels: plan.includeFreeModels,
-      ...plan.allowModels.length === 0 ? {} : { allow: plan.allowModels },
+      ...callable === void 0 && allow.length === 0 ? {} : { allow },
       deny: plan.denyModels
     }
   ).map((assignment) => ({
@@ -46602,6 +47244,38 @@ function replayCandidates(plan, catalog) {
       candidates: assignment.candidates.filter(({ id }) => commonIds.has(id))
     };
   });
+}
+function dropJudgeVendorCandidates(context2, candidates) {
+  const judgeKind = context2.routes?.judge;
+  if (judgeKind === void 0 || judgeKind === "api") return candidates;
+  const vendor = planRouteVendors[judgeKind];
+  const dropped = [
+    ...new Set(
+      candidates.flatMap(
+        (assignment) => assignment.candidates.flatMap(
+          ({ id, family }) => family === vendor ? [id] : []
+        )
+      )
+    )
+  ].sort(compareText);
+  if (dropped.length === 0) return candidates;
+  const kept = candidates.map((assignment) => ({
+    ...assignment,
+    candidates: assignment.candidates.filter(({ family }) => family !== vendor)
+  }));
+  context2.reporter.warning(
+    "judge_vendor_candidates_dropped",
+    `Candidates ${dropped.slice(0, 5).join(", ")}${dropped.length > 5 ? ` and ${dropped.length - 5} more` : ""} were left out: the judge runs through ${judgeKind} (${vendor}), and it must come from another vendor than the candidate.`
+  );
+  if (kept.every((assignment) => assignment.candidates.length === 0)) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "no_neutral_judge",
+      message: `Every shortlisted candidate is from ${vendor}, the vendor of the judge route ${judgeKind}, so no candidate can be judged neutrally.`,
+      remedy: "Use a --judge-route from another vendor, or an api --route whose catalog lists other vendors."
+    });
+  }
+  return kept;
 }
 function reportShortlistAbstentions(context2, plan, candidates) {
   const warned = /* @__PURE__ */ new Set();
@@ -46633,7 +47307,7 @@ function assertPricedCandidates(baseUrl, candidates) {
     });
   }
 }
-var noNeutralJudgeRemedy = "List or price a model from a third vendor (a multi-vendor gateway, --catalog-reference or --pricing-file), or grade with your own evaluator (--evaluator).";
+var noNeutralJudgeRemedy = "List or price a model from a third vendor (a multi-vendor gateway, --catalog-reference or --pricing-file), run the judge through another vendor's CLI you are signed in to with --judge-route, or grade with your own evaluator (--evaluator).";
 function assertNeutralJudges(plan, known, judgeCatalog, candidates, referenceFamilyByStepId) {
   const vendorless = /* @__PURE__ */ new Set();
   const pairs = /* @__PURE__ */ new Map();
@@ -46733,11 +47407,15 @@ async function executeReplay(context2, inputDigestValue, runId) {
     corpusSplit: split,
     selectionStage: split
   }));
-  const candidates = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known) : await approvedReplayCandidates(
+  const callable = planCandidateRoute(context2) === void 0 ? void 0 : await routeCatalog(() => routes.candidates.callable());
+  const candidates = dropJudgeVendorCandidates(
     context2,
-    plan,
-    known,
-    context2.approvedRunSpecDigest
+    context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable) : await approvedReplayCandidates(
+      context2,
+      plan,
+      callable ?? known,
+      context2.approvedRunSpecDigest
+    )
   );
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
@@ -47231,7 +47909,7 @@ async function executeConfirm(context2, inputDigestValue, runId) {
         runSetsUsed: 0,
         culprits: [],
         cascadeSeedStepId: null,
-        blocker: "Missing --modeb-config for cascade confirmation."
+        blocker: usesPlanRoute(context2) ? "Mode B confirmation runs only when candidates and the judge use the api route; measure this family with --base-url and pass --modeb-config to confirm it." : "Missing --modeb-config for cascade confirmation."
       });
     }
   } else if (needsConfirmation.size > 0) {
@@ -47419,13 +48097,13 @@ async function executeConfirm(context2, inputDigestValue, runId) {
         ([left], [right]) => compareText(left, right)
       );
       const lostRows = lostReasonEntries.reduce(
-        (total, [, count]) => total + count,
+        (total, [, count2]) => total + count2,
         0
       );
       if (lostRows > 0) {
         context2.reporter.warning(
           "modeb_rows_lost",
-          `Family ${familyId}: ${lostRows} Mode B rows lost (${lostReasonEntries.map(([reason, count]) => `${reason}=${count}`).join(", ")})`
+          `Family ${familyId}: ${lostRows} Mode B rows lost (${lostReasonEntries.map(([reason, count2]) => `${reason}=${count2}`).join(", ")})`
         );
       }
       for (const block of result2.infrastructureBlocks) {
@@ -47678,7 +48356,7 @@ async function assessExternalExecutions(input) {
   if (regraded > 0) {
     input.context.reporter.warning(
       "evaluator_regrade",
-      `Re-grading ${regraded} ${input.split} candidate outputs with ${input.evaluator.id}: ${causes.filter(([count]) => count > 0).map(([count, cause]) => `${count} ${cause}`).join(
+      `Re-grading ${regraded} ${input.split} candidate outputs with ${input.evaluator.id}: ${causes.filter(([count2]) => count2 > 0).map(([count2, cause]) => `${count2} ${cause}`).join(
         ", "
       )}. The stored outputs are reused; no model call is repeated.`
     );
@@ -47975,11 +48653,11 @@ function modeBProviderBaseUrl(baseUrl) {
   return url2.href.replace(/\/$/, "");
 }
 function reportPath(context2) {
-  return join15(context2.storeRoot, reportKey(context2.projectId, "report.md"));
+  return join17(context2.storeRoot, reportKey(context2.projectId, "report.md"));
 }
 async function codeContextFor(context2, callSites, warn) {
   if (context2.codeGraphPath === void 0) {
-    const found = join15(context2.repo, "graphify-out", "graph.json");
+    const found = join17(context2.repo, "graphify-out", "graph.json");
     if (await stat3(found).then(
       (entry) => entry.isFile(),
       () => false
@@ -48037,7 +48715,7 @@ async function executeReport(context2, inputDigestValue, ledger) {
   await putMutableJson(context2.store, jsonKey, jsonValue2(report));
   await putMutableText(context2.store, markdownKey, markdown);
   await mkdir5(dirname7(reportPath(context2)), { recursive: true });
-  await writeFile6(reportPath(context2), markdown, "utf8");
+  await writeFile7(reportPath(context2), markdown, "utf8");
   return jsonKey;
 }
 async function checkpointOutputExists(context2, stage, checkpoint) {
@@ -48173,7 +48851,7 @@ async function repositoryFiles(repo, storeRoot) {
   const paths = await gitFiles(repo) ?? await walkFiles(repo);
   const files = [];
   for (const path of paths) {
-    const absolute = join15(repo, ...path.split("/"));
+    const absolute = join17(repo, ...path.split("/"));
     if (absolute === storeRoot || absolute.startsWith(`${storeRoot}${sep5}`)) {
       continue;
     }
@@ -48209,7 +48887,7 @@ async function walkFiles(repo) {
   const files = [];
   async function visit(directory) {
     for (const entry of await readdir4(directory, { withFileTypes: true })) {
-      const absolute = join15(directory, entry.name);
+      const absolute = join17(directory, entry.name);
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) await visit(absolute);
       } else if (entry.isFile()) {
@@ -48306,13 +48984,13 @@ function requiredCapFromMessage(message2) {
 }
 function warnSubstitutedResponses(context2, responses) {
   if (responses.length === 0) return;
-  const count = (kind) => responses.filter(({ substitution: substitution2 }) => substitution2.kind === kind).length;
+  const count2 = (kind) => responses.filter(({ substitution: substitution2 }) => substitution2.kind === kind).length;
   const examples = [
     ...new Set(responses.map(({ substitution: substitution2 }) => substitution2.evidence))
   ].slice(0, 3);
   context2.reporter.warning(
     "replay_responses_substituted",
-    `${responses.length} replayed response(s) did not come fresh from the requested model (model ${count("model")}, cache ${count("cache")}, request ${count("request")}), for example: ${examples.join("; ")}. They were left out of the evidence as attribution_substituted. Name replay models by their upstream ids (rename custom aliases) and turn off fallbacks, response caching and request plugins for the replay route, then rerun with a fresh store (--store <directory>), because completed replay cells are reused. See "Which model answered" in rightmodeler docs getting-started.`
+    `${responses.length} replayed response(s) did not come fresh from the requested model (model ${count2("model")}, cache ${count2("cache")}, request ${count2("request")}), for example: ${examples.join("; ")}. They were left out of the evidence as attribution_substituted. Name replay models by their upstream ids (rename custom aliases) and turn off fallbacks, response caching and request plugins for the replay route, then rerun with a fresh store (--store <directory>), because completed replay cells are reused. See "Which model answered" in rightmodeler docs getting-started.`
   );
 }
 function normalizePipelineError(error51, context2) {
@@ -48330,9 +49008,13 @@ function normalizePipelineError(error51, context2) {
       exitCode: 2,
       code: "plan_usage_limit",
       message: error51.message,
-      remedy: "Rerun the same command after the limit resets; completed replay and judge calls are kept and not repeated."
+      remedy: "Rerun the same command after the limit resets; completed replay and judge calls are kept and not repeated. To go on now, choose a route that does not use this plan with --route or --judge-route."
     });
   }
+  if (error51 instanceof PlanRouteUnavailableError) {
+    return planCliUnavailable(error51);
+  }
+  if (error51 instanceof PlanLoginError) return planLoginRequired(error51);
   if (error51 instanceof ProviderConfigurationError) {
     return new ProtocolError({
       exitCode: 2,
@@ -48413,11 +49095,22 @@ function blockedFamilyDiagnosis(family, aggregationFacts) {
 }
 function spendSummary(spendEvents) {
   const byActor = {};
+  const routes = /* @__PURE__ */ new Map();
   for (const spend of spendEvents) {
     const actor = byActor[spend.actor] ?? { events: 0, costUsd: 0 };
     actor.events += 1;
     actor.costUsd = roundUsd(actor.costUsd + spend.costUsd);
     byActor[spend.actor] = actor;
+    const key = JSON.stringify([spend.actor, spend.provider]);
+    const route = routes.get(key) ?? {
+      actor: spend.actor,
+      provider: spend.provider,
+      events: 0,
+      costUsd: 0
+    };
+    route.events += 1;
+    route.costUsd = roundUsd(route.costUsd + spend.costUsd);
+    routes.set(key, route);
   }
   return {
     events: spendEvents.length,
@@ -48425,7 +49118,12 @@ function spendSummary(spendEvents) {
       (total, spend) => roundUsd(total + spend.costUsd),
       0
     ),
-    byActor
+    byActor,
+    ...spendEvents.some(({ provider }) => isPlanRouteKind(provider)) ? {
+      routes: [...routes.values()].sort(
+        (left, right) => compareText(left.actor, right.actor) || compareText(left.provider, right.provider)
+      )
+    } : {}
   };
 }
 function lifecycleReport(events) {
@@ -48477,12 +49175,7 @@ function familyReceipts(ledger, plan, replay, corpus, verdicts) {
     ]);
   }
   return verdicts.map((verdict) => {
-    const familyStepIds = new Set(
-      plan.steps.filter(({ family }) => family === verdict.familyId).map(({ stepId }) => stepId)
-    );
-    const winnerExecutions = ledger.executions.filter(
-      (execution) => familyStepIds.has(execution.stepId) && execution.candidateId === verdict.candidateId && execution.terminalOutcome === "success" && execution.attribution === "ok" && (execution.selectionStage === "shortlist" || execution.selectionStage === "holdout")
-    ).sort((left, right) => compareText(left.executionId, right.executionId));
+    const winnerExecutions = familyWinnerExecutions(ledger, plan, verdict);
     const winnerCostPerCaseUsd = winnerExecutions.length === 0 ? null : winnerExecutions.reduce(
       (total, execution) => roundUsd(
         total + (attemptsByExecutionId.get(execution.executionId) ?? []).reduce(
@@ -48522,6 +49215,27 @@ function familyReceipts(ledger, plan, replay, corpus, verdicts) {
       winnerLatencyP50Ms
     };
   });
+}
+function familyWinnerExecutions(ledger, plan, verdict) {
+  const familyStepIds = new Set(
+    plan.steps.filter(({ family }) => family === verdict.familyId).map(({ stepId }) => stepId)
+  );
+  return ledger.executions.filter(
+    (execution) => familyStepIds.has(execution.stepId) && execution.candidateId === verdict.candidateId && execution.terminalOutcome === "success" && execution.attribution === "ok" && (execution.selectionStage === "shortlist" || execution.selectionStage === "holdout")
+  ).sort((left, right) => compareText(left.executionId, right.executionId));
+}
+function planRouteOfWinner(ledger, plan, verdict) {
+  const executionIds = new Set(
+    familyWinnerExecutions(ledger, plan, verdict).map(
+      ({ executionId }) => executionId
+    )
+  );
+  for (const { actor, provider, reconcilableTo } of ledger.spendEvents) {
+    if (actor === "replay-driver" && isPlanRouteKind(provider) && typeof reconcilableTo === "object" && reconcilableTo !== null && !Array.isArray(reconcilableTo) && typeof reconcilableTo.executionId === "string" && executionIds.has(reconcilableTo.executionId)) {
+      return provider;
+    }
+  }
+  return void 0;
 }
 function candidateErrorReport(ledger, plan, replay) {
   const evidenceQuestionIds = new Set(
@@ -48737,6 +49451,7 @@ function renderReport(report) {
     "",
     `Total: $${report.spend.totalCostUsd.toFixed(8)} across ${report.spend.events} events.`,
     "",
+    ...report.spend.routes === void 0 ? [] : modelRoutesSection(report.spend.routes),
     "## Stratum weights (corpus_only)",
     "",
     "| Family | Corpus share | Traffic share |",
@@ -48767,6 +49482,23 @@ function renderReport(report) {
   if (report.codeContext !== void 0)
     lines.push(...renderCodeContext(report.codeContext), "");
   return lines.join("\n");
+}
+function modelRoutesSection(routes) {
+  const cost = (plan) => routes.filter(({ provider }) => isPlanRouteKind(provider) === plan).reduce((total, { costUsd }) => roundUsd(total + costUsd), 0);
+  return [
+    `Through a plan you are signed in to (list-price equivalent, not billed): $${cost(true).toFixed(8)}. Billed through the API route: $${cost(false).toFixed(8)}.`,
+    "",
+    "## Model routes",
+    "",
+    "| Role | Route | Events | Cost (USD) |",
+    "| --- | --- | --- | --- |",
+    ...routes.map(
+      ({ actor, provider, events, costUsd }) => `| ${actor === "replay-driver" ? "candidates" : actor} | ${provider === "configured-provider" ? "api" : provider} | ${events} | ${costUsd.toFixed(8)}${isPlanRouteKind(provider) ? " (list-price equivalent)" : ""} |`
+    ),
+    "",
+    "Calls through a plan route were measured through a coding CLI, not the API your application calls: the CLI adds its own instructions to each call and cannot set temperature or an output limit, and recorded cases with more than one turn were left out. Their latency is the API time the CLI reports. Run `rightmodeler docs model-routes` for details.",
+    ""
+  ];
 }
 function reportText(value) {
   return value.replaceAll("|", "\\|").replace(/\s+/gu, " ").trim();
@@ -48972,7 +49704,7 @@ function applySwaps2(options) {
 // src/data/discover.ts
 import { open, readdir as readdir5, realpath as realpath4, stat as stat4 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute as isAbsolute3, join as join16, relative as relative9, resolve as resolve10 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join18, relative as relative9, resolve as resolve10 } from "node:path";
 var MAX_FILES = 50;
 var MAX_CODEX_EXAMINED = 300;
 var MAX_READ_BYTES = 64 * 1024;
@@ -49014,10 +49746,10 @@ function sanitizeClaudeProjectPath(repo) {
 async function candidateFiles(repo, homeDir) {
   const localPaths = await localCandidatePaths(repo);
   const claudePaths = (await jsonFiles(
-    join16(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
+    join18(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
     false
   )).sort(compareText);
-  const codexPaths = (await jsonFiles(join16(homeDir, ".codex", "sessions"), true)).filter((path) => path.endsWith(".jsonl")).sort((left, right) => compareText(right, left));
+  const codexPaths = (await jsonFiles(join18(homeDir, ".codex", "sessions"), true)).filter((path) => path.endsWith(".jsonl")).sort((left, right) => compareText(right, left));
   const sources = [
     {
       source: "local",
@@ -49035,9 +49767,9 @@ async function candidateFiles(repo, homeDir) {
   const selected = [];
   const offsets = /* @__PURE__ */ new Map();
   for (const source of sources) {
-    const count = Math.min(SOURCE_BUDGETS[source.source], source.files.length);
-    selected.push(...source.files.slice(0, count));
-    offsets.set(source.source, count);
+    const count2 = Math.min(SOURCE_BUDGETS[source.source], source.files.length);
+    selected.push(...source.files.slice(0, count2));
+    offsets.set(source.source, count2);
   }
   for (const source of sources) {
     const remaining = MAX_FILES - selected.length;
@@ -49099,7 +49831,7 @@ async function statCandidates(paths, source, sortNewest) {
   return files.slice(0, MAX_FILES);
 }
 async function localCandidatePaths(repo) {
-  const tracesDirectory = join16(repo, "traces");
+  const tracesDirectory = join18(repo, "traces");
   const [realRepo, realTracesDirectory] = await Promise.all([
     realpath4(repo).catch(() => void 0),
     realpath4(tracesDirectory).catch(() => void 0)
@@ -49112,7 +49844,7 @@ async function localCandidatePaths(repo) {
   });
   const topLevelSet = new Set(topLevel);
   return unique([
-    ...[join16(repo, "traces.json"), join16(repo, "traces.jsonl")].filter(
+    ...[join18(repo, "traces.json"), join18(repo, "traces.jsonl")].filter(
       (path) => topLevelSet.has(path)
     ),
     ...nested,
@@ -49128,7 +49860,7 @@ async function jsonFiles(root, recursive) {
   }
   return entries.filter(
     (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
-  ).map((entry) => join16(entry.parentPath, entry.name));
+  ).map((entry) => join18(entry.parentPath, entry.name));
 }
 function isWithin(root, path) {
   const fromRoot = relative9(root, path);
@@ -49376,8 +50108,8 @@ function formatAge(modifiedAt, now) {
   const days = Math.floor(hours / 24);
   return `${days} ${unit("day", days)} ago`;
 }
-function unit(label, value) {
-  return value === 1 ? label : `${label}s`;
+function unit(label2, value) {
+  return value === 1 ? label2 : `${label2}s`;
 }
 
 // src/rollback.ts
@@ -50329,6 +51061,16 @@ function addPipelineOptions(command, provider) {
     command.option("--base-url <url>", "OpenAI-compatible provider base URL").option(
       "--api-key-env <name>",
       "environment variable containing the provider API key"
+    ).addOption(
+      new Option(
+        "--route <kind>",
+        "where candidate replays run: api (the --base-url endpoint; the default with --base-url) or claude-login (the claude CLI signed in on this machine; needs --judge-route)"
+      ).choices(["api", ...Object.keys(planRouteVendors)])
+    ).addOption(
+      new Option(
+        "--judge-route <kind>",
+        "where the built-in judge runs: api or claude-login; required with a plan --route, because the judge must come from another vendor than the candidates"
+      ).choices(["api", ...Object.keys(planRouteVendors)])
     ).option(
       "--max-cost-usd <amount>",
       "optional hard spend cap in USD; omit to run uncapped so every case and judge cell completes"
@@ -50466,6 +51208,33 @@ function pipelineOptions(global, local, reporter) {
     }
     requestHeaders2.set(name, value);
   }
+  const planCandidates = local.route !== void 0 && isPlanRouteKind(local.route);
+  const planJudge = local.judgeRoute !== void 0 && isPlanRouteKind(local.judgeRoute);
+  if (planCandidates && local.judgeRoute === void 0) {
+    throw invalidOption(
+      `--route ${local.route} needs --judge-route: a plan route serves one vendor's models, and the judge must come from another vendor`
+    );
+  }
+  if (local.judgeRoute !== void 0 && local.route === void 0 && local.baseUrl === void 0) {
+    throw invalidOption(
+      "--judge-route needs --route or --base-url to say where candidates replay"
+    );
+  }
+  if (planCandidates && planJudge && (local.baseUrl !== void 0 || local.apiKeyEnv !== void 0 || local.header !== void 0)) {
+    throw invalidOption(
+      "--base-url, --api-key-env and --header configure the api route, which neither --route nor --judge-route uses"
+    );
+  }
+  if (local.detach && (planCandidates || planJudge)) {
+    throw invalidOption(
+      "--detach runs only on the api route; plan routes run in the foreground"
+    );
+  }
+  if (local.modebConfig !== void 0 && (planCandidates || planJudge)) {
+    throw invalidOption(
+      "--modeb-config runs Mode B confirmation, which calls models only through the api route; remove it, or use --base-url without a plan route"
+    );
+  }
   return {
     repo: global.repo,
     store: global.store,
@@ -50473,6 +51242,8 @@ function pipelineOptions(global, local, reporter) {
     matchersPath: local.matchers,
     baseUrl: local.baseUrl,
     apiKeyEnv: local.apiKeyEnv,
+    route: local.route,
+    judgeRoute: local.judgeRoute,
     maxCostUsd,
     maxConcurrency,
     pricingFilePath: local.pricingFile,
@@ -50841,7 +51612,7 @@ async function startDetachedReplay(global, local, runId) {
   args.push("replay", ...pipelineArgv(local));
   appendCliOption(args, "--internal-run-id", runId);
   await new Promise((resolveSpawn, rejectSpawn) => {
-    const child = spawn(process.execPath, args, {
+    const child = spawn2(process.execPath, args, {
       cwd: resolve13(global.repo),
       detached: true,
       env: process.env,

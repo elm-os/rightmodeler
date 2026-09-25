@@ -1,4 +1,5 @@
 export * from "./budget.js";
+export { createClaudeLoginProvider } from "./claude-route.js";
 export * from "./confirm.js";
 export {
   replayModeA,
@@ -9,6 +10,16 @@ export {
   type ReplayModeAResult,
 } from "./driver.js";
 export * from "./driver-modeb.js";
+export {
+  isPlanRouteKind,
+  isSingleTurn,
+  PlanLoginError,
+  planRouteVendors,
+  PlanRouteUnavailableError,
+  type PlanProvider,
+  type PlanProviderOptions,
+  type PlanRouteKind,
+} from "./plan-route.js";
 export * from "./provenance.js";
 export * from "./provider.js";
 export * from "./proxy/egress.js";

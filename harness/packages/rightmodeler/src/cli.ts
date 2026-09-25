@@ -7,7 +7,11 @@ import { basename, resolve } from "node:path";
 import { Writable, type Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
-import { hopByHopHeaders } from "@rightmodeler/replay";
+import {
+  hopByHopHeaders,
+  isPlanRouteKind,
+  planRouteVendors,
+} from "@rightmodeler/replay";
 import { Argument, Command, CommanderError, Option } from "commander";
 
 import {
@@ -60,6 +64,7 @@ import {
   type RollbackResult,
   type RollbackSwapsOptions,
 } from "./rollback.js";
+import type { RouteKind } from "./routes.js";
 import { version } from "./version.js";
 import { docNames, readDoc } from "./cli-docs.js";
 
@@ -74,6 +79,8 @@ interface PipelineCommandOptions {
   matchers?: string;
   baseUrl?: string;
   apiKeyEnv?: string;
+  route?: RouteKind;
+  judgeRoute?: RouteKind;
   evaluator?: "braintrust" | "langfuse" | "langsmith" | "promptfoo";
   evaluatorBaseUrl?: string;
   evaluatorApiKeyEnv?: string;
@@ -720,6 +727,18 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
         "--api-key-env <name>",
         "environment variable containing the provider API key",
       )
+      .addOption(
+        new Option(
+          "--route <kind>",
+          "where candidate replays run: api (the --base-url endpoint; the default with --base-url) or claude-login (the claude CLI signed in on this machine; needs --judge-route)",
+        ).choices(["api", ...Object.keys(planRouteVendors)]),
+      )
+      .addOption(
+        new Option(
+          "--judge-route <kind>",
+          "where the built-in judge runs: api or claude-login; required with a plan --route, because the judge must come from another vendor than the candidates",
+        ).choices(["api", ...Object.keys(planRouteVendors)]),
+      )
       .option(
         "--max-cost-usd <amount>",
         "optional hard spend cap in USD; omit to run uncapped so every case and judge cell completes",
@@ -914,6 +933,45 @@ function pipelineOptions(
     }
     requestHeaders.set(name, value);
   }
+  const planCandidates =
+    local.route !== undefined && isPlanRouteKind(local.route);
+  const planJudge =
+    local.judgeRoute !== undefined && isPlanRouteKind(local.judgeRoute);
+  if (planCandidates && local.judgeRoute === undefined) {
+    throw invalidOption(
+      `--route ${local.route} needs --judge-route: a plan route serves one vendor's models, and the judge must come from another vendor`,
+    );
+  }
+  if (
+    local.judgeRoute !== undefined &&
+    local.route === undefined &&
+    local.baseUrl === undefined
+  ) {
+    throw invalidOption(
+      "--judge-route needs --route or --base-url to say where candidates replay",
+    );
+  }
+  if (
+    planCandidates &&
+    planJudge &&
+    (local.baseUrl !== undefined ||
+      local.apiKeyEnv !== undefined ||
+      local.header !== undefined)
+  ) {
+    throw invalidOption(
+      "--base-url, --api-key-env and --header configure the api route, which neither --route nor --judge-route uses",
+    );
+  }
+  if (local.detach && (planCandidates || planJudge)) {
+    throw invalidOption(
+      "--detach runs only on the api route; plan routes run in the foreground",
+    );
+  }
+  if (local.modebConfig !== undefined && (planCandidates || planJudge)) {
+    throw invalidOption(
+      "--modeb-config runs Mode B confirmation, which calls models only through the api route; remove it, or use --base-url without a plan route",
+    );
+  }
   return {
     repo: global.repo,
     store: global.store,
@@ -921,6 +979,8 @@ function pipelineOptions(
     matchersPath: local.matchers,
     baseUrl: local.baseUrl,
     apiKeyEnv: local.apiKeyEnv,
+    route: local.route,
+    judgeRoute: local.judgeRoute,
     maxCostUsd,
     maxConcurrency,
     pricingFilePath: local.pricingFile,

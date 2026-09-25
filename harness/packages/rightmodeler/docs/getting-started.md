@@ -9,6 +9,12 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 - Trace input in a supported format.
 - An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for a gateway that lists bare model ids or a direct OpenAI or Anthropic key, pass `--catalog-reference`; for another unpriced endpoint, pass `--pricing-file`.
 
+Instead of an API key, candidates or the judge can run through the `claude`
+CLI you are signed in to on this machine, under your Claude plan:
+`--route claude-login` with a `--judge-route` from another vendor. Run
+`rightmodeler docs model-routes` for what a plan route measures, what it costs
+your plan, and its safeguards.
+
 Supported trace sources are OTel GenAI, AI SDK telemetry, OpenAI JSONL,
 Langfuse, Braintrust, LangSmith, OpenInference, Helicone, Bifrost, W&B Weave,
 Claude Code, and Codex.
@@ -189,10 +195,11 @@ The built-in judge must come from a vendor other than both the candidate's and
 the recorded model's, and rightmodeler checks this before any paid call, also
 when an unreachable `--evaluator` falls back to the built-in judge. One vendor's
 key lists only that vendor's models, so a run on it alone stops with
-`no_neutral_judge` unless your own evaluator grades the replays. Bare ids from
-any other host name no vendor, and a run on them stops with
-`judge_family_unknown`; use a gateway whose ids carry their vendor
-(`vendor/model`), or `--evaluator`.
+`no_neutral_judge` unless the judge runs through the other vendor's CLI you are
+signed in to (`--judge-route`, see `rightmodeler docs model-routes`) or your own
+evaluator grades the replays. Bare ids from any other host name no vendor, and
+a run on them stops with `judge_family_unknown`; use a gateway whose ids carry
+their vendor (`vendor/model`), or `--evaluator`.
 
 ## Which model answered
 

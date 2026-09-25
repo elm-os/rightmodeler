@@ -59,11 +59,13 @@ Use `--output json` for one result object or `--output jsonl` for stage events f
 - `missing_traces_path` (exit `2`): pass `--traces <path>` pointing to an existing trace file or directory.
 - `mixed_trace_formats` (exit `2`): split the directory so every file uses the same trace format, or pass one file with `--traces`.
 - `modeb_cloud_unavailable` (exit `2`): install the optional sandbox SDK and set its credentials, or set `"backend": "docker"` in the `--modeb-config` file, then rerun.
-- `no_neutral_judge` (exit `2`): the catalog has no priced model from a vendor other than both the candidate's and the recorded model's, which the built-in judge needs; list or price one (a multi-vendor gateway, `--catalog-reference` or `--pricing-file`), or grade with `--evaluator`.
+- `no_neutral_judge` (exit `2`): the catalog has no priced model from a vendor other than both the candidate's and the recorded model's, which the built-in judge needs; list or price one (a multi-vendor gateway, `--catalog-reference` or `--pricing-file`), run the judge through another vendor's CLI with `--judge-route`, or grade with `--evaluator`.
 - `no_priced_candidates` (exit `2`): point `--base-url` at a catalog that publishes per-token pricing, pass `--catalog-reference <url>`, expose priced LiteLLM `GET /model/info`, or pass `--pricing-file <path>`, then rerun.
 - `no_replayable_call_sites` (exit `2`): point `--repo` at a service with plain text completions, or add a matcher for a text call site, then rerun.
 - `not_git_repository` (exit `2`): run the command again from a Git repository with at least one commit.
-- `plan_usage_limit` (exit `2`): a plan you are signed in to reached its usage limit; rerun the same command after the reset time in the message, and completed replay and judge calls are kept and not repeated.
+- `plan_cli_unavailable` (exit `2`): the CLI a plan route runs is missing, older than the verified version, or changed an output shape, or `CI` is set; install or update it (`claude update`), unset `CI` on your own machine, or use an API route with `--base-url`.
+- `plan_login_required` (exit `2`): sign the CLI in to your plan (`claude auth login`) and remove any API key setting it would use, or use an API route with `--base-url`; finished calls are kept.
+- `plan_usage_limit` (exit `2`): a plan you are signed in to reached its usage limit; rerun the same command after the reset time in the message, and completed replay and judge calls are kept and not repeated; or choose a route that does not use this plan with `--route` or `--judge-route`.
 - `stage_not_completed` (exit `2`): run `rightmodeler init --through <stage>` first, then rerun the command.
 - `unusable_trace_input` (exit `2`): the selected discovered trace could not be adapted; rerun and choose a different trace file.
 - `usage_error` (exit `10`): the command line is invalid; `message` carries the parser text.

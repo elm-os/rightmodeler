@@ -721,3 +721,121 @@ describe("CLI needs-input errors", () => {
     });
   });
 });
+
+describe("CLI model routes", () => {
+  it("refuses route combinations that cannot run, and accepts --evaluator with --judge-route", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const missingTraces = join(root, "no-such-traces.json");
+    const api = ["--base-url", "http://127.0.0.1:9/v1"];
+    const bothPlan = [
+      "--route",
+      "claude-login",
+      "--judge-route",
+      "claude-login",
+    ];
+    const planCandidates = ["--route", "claude-login", "--judge-route", "api"];
+    const apiOnlyMessage =
+      "--base-url, --api-key-env and --header configure the api route, which neither --route nor --judge-route uses";
+    const modeBMessage =
+      "--modeb-config runs Mode B confirmation, which calls models only through the api route; remove it, or use --base-url without a plan route";
+    const detachMessage =
+      "--detach runs only on the api route; plan routes run in the foreground";
+    const refused: Array<[string[], string]> = [
+      [
+        ["init", "--route", "claude-login"],
+        "--route claude-login needs --judge-route: a plan route serves one vendor's models, and the judge must come from another vendor",
+      ],
+      [
+        ["init", "--judge-route", "api"],
+        "--judge-route needs --route or --base-url to say where candidates replay",
+      ],
+      [
+        ["init", "--judge-route", "claude-login"],
+        "--judge-route needs --route or --base-url to say where candidates replay",
+      ],
+      [["init", ...bothPlan, ...api], apiOnlyMessage],
+      [["init", ...bothPlan, "--api-key-env", "PROVIDER_KEY"], apiOnlyMessage],
+      [["estimate", ...bothPlan, "--header", "x-a: 1"], apiOnlyMessage],
+      [["replay", "--detach", ...planCandidates, ...api], detachMessage],
+      [
+        ["replay", "--detach", ...api, "--judge-route", "claude-login"],
+        detachMessage,
+      ],
+      [
+        ["init", "--modeb-config", "modeb.json", ...planCandidates, ...api],
+        modeBMessage,
+      ],
+      [
+        [
+          "confirm",
+          "--modeb-config",
+          "modeb.json",
+          ...api,
+          "--judge-route",
+          "claude-login",
+        ],
+        modeBMessage,
+      ],
+    ];
+    for (const [args, message] of refused) {
+      const captured = captureIo();
+
+      expect(
+        await executeCli(
+          ["--output", "json", ...args, "--repo", repo],
+          captured.io,
+          runtime(homeDir, "", undefined).runtime,
+        ),
+        args.join(" "),
+      ).toBe(2);
+      expect(JSON.parse(captured.stderr())).toMatchObject({
+        code: "invalid_option",
+        message,
+      });
+    }
+
+    const accepted = [
+      [
+        ...planCandidates,
+        ...api,
+        "--evaluator",
+        "braintrust",
+        "--evaluator-project-id",
+        "project-1",
+        "--evaluator-scorer",
+        "quality",
+      ],
+      bothPlan,
+      ["--route", "api"],
+      ["--route", "claude-login", "--judge-route", "api"],
+      ["--api-key-env", "PROVIDER_KEY"],
+      ["--header", "x-a: 1"],
+    ];
+    for (const args of accepted) {
+      const captured = captureIo();
+
+      expect(
+        await executeCli(
+          [
+            "--output",
+            "json",
+            "init",
+            ...args,
+            "--through",
+            "ingest",
+            "--traces",
+            missingTraces,
+            "--repo",
+            repo,
+          ],
+          captured.io,
+          runtime(homeDir, "", undefined).runtime,
+        ),
+        args.join(" "),
+      ).toBe(2);
+      expect(JSON.parse(captured.stderr()), args.join(" ")).toMatchObject({
+        code: "missing_traces_path",
+      });
+    }
+  });
+});

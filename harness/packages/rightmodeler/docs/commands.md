@@ -61,6 +61,17 @@ Options:
   --base-url <url>                    OpenAI-compatible provider base URL
   --api-key-env <name>                environment variable containing the
                                       provider API key
+  --route <kind>                      where candidate replays run: api (the
+                                      --base-url endpoint; the default with
+                                      --base-url) or claude-login (the claude
+                                      CLI signed in on this machine; needs
+                                      --judge-route) (choices: "api",
+                                      "claude-login")
+  --judge-route <kind>                where the built-in judge runs: api or
+                                      claude-login; required with a plan
+                                      --route, because the judge must come from
+                                      another vendor than the candidates
+                                      (choices: "api", "claude-login")
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
@@ -121,6 +132,17 @@ Options:
   --base-url <url>                    OpenAI-compatible provider base URL
   --api-key-env <name>                environment variable containing the
                                       provider API key
+  --route <kind>                      where candidate replays run: api (the
+                                      --base-url endpoint; the default with
+                                      --base-url) or claude-login (the claude
+                                      CLI signed in on this machine; needs
+                                      --judge-route) (choices: "api",
+                                      "claude-login")
+  --judge-route <kind>                where the built-in judge runs: api or
+                                      claude-login; required with a plan
+                                      --route, because the judge must come from
+                                      another vendor than the candidates
+                                      (choices: "api", "claude-login")
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
@@ -251,6 +273,17 @@ Options:
   --base-url <url>                    OpenAI-compatible provider base URL
   --api-key-env <name>                environment variable containing the
                                       provider API key
+  --route <kind>                      where candidate replays run: api (the
+                                      --base-url endpoint; the default with
+                                      --base-url) or claude-login (the claude
+                                      CLI signed in on this machine; needs
+                                      --judge-route) (choices: "api",
+                                      "claude-login")
+  --judge-route <kind>                where the built-in judge runs: api or
+                                      claude-login; required with a plan
+                                      --route, because the judge must come from
+                                      another vendor than the candidates
+                                      (choices: "api", "claude-login")
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
@@ -320,6 +353,17 @@ Options:
   --base-url <url>                    OpenAI-compatible provider base URL
   --api-key-env <name>                environment variable containing the
                                       provider API key
+  --route <kind>                      where candidate replays run: api (the
+                                      --base-url endpoint; the default with
+                                      --base-url) or claude-login (the claude
+                                      CLI signed in on this machine; needs
+                                      --judge-route) (choices: "api",
+                                      "claude-login")
+  --judge-route <kind>                where the built-in judge runs: api or
+                                      claude-login; required with a plan
+                                      --route, because the judge must come from
+                                      another vendor than the candidates
+                                      (choices: "api", "claude-login")
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
@@ -585,7 +629,7 @@ print documentation packaged with this CLI
 Arguments:
   name        packaged document name (choices: "commands", "evaluators",
               "exit-codes", "gateways", "getting-started", "github",
-              "github-actions", "modeb")
+              "github-actions", "modeb", "model-routes")
 
 Options:
   -h, --help  display help for command

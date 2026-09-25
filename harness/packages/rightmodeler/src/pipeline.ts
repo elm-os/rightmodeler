@@ -70,7 +70,12 @@ import {
   createCloudExecutor,
   createDockerExecutor,
   detectCloudAvailability,
+  isPlanRouteKind,
+  isSingleTurn,
   isUsageLimit,
+  PlanLoginError,
+  PlanRouteUnavailableError,
+  planRouteVendors,
   ProviderConfigurationError,
   replayModeA,
   resolveCurrentModel,
@@ -80,6 +85,7 @@ import {
   type ModelCatalogEntry,
   type ModelPricing,
   type ModeBCase,
+  type PlanRouteKind,
   type ProviderClient,
   type RecordedCase,
   type ReplayStep,
@@ -181,7 +187,13 @@ import {
   formatLatencyMs,
   formatUsdPerCase,
 } from "./report/format.js";
-import { apiRoute, type RouteHandle, type RouteKind } from "./routes.js";
+import {
+  apiRoute,
+  DEFAULT_PLAN_PRICE_LIST,
+  planRoute,
+  type RouteHandle,
+  type RouteKind,
+} from "./routes.js";
 import {
   putImmutableJson,
   putMutableJson,
@@ -620,6 +632,8 @@ export interface PipelineOptions {
   traces?: string;
   baseUrl?: string;
   apiKeyEnv?: string;
+  route?: RouteKind;
+  judgeRoute?: RouteKind;
   maxCostUsd?: number;
   maxConcurrency?: number;
   includeFreeModels?: boolean;
@@ -980,15 +994,21 @@ export async function estimateReplay(
     context.existingRunId === undefined
       ? await routeCatalog(() => routes.judge.callable())
       : known;
-  const candidates =
+  const callable =
+    planCandidateRoute(context) === undefined
+      ? undefined
+      : await routeCatalog(() => routes.candidates.callable());
+  const candidates = dropJudgeVendorCandidates(
+    context,
     context.approvedRunSpecDigest === undefined
-      ? replayCandidates(plan, known)
+      ? replayCandidates(plan, known, callable)
       : await approvedReplayCandidates(
           context,
           plan,
-          known,
+          callable ?? known,
           context.approvedRunSpecDigest,
-        );
+        ),
+  );
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
   const referenceFamilyByStepId = referenceFamiliesByStep(
@@ -1029,6 +1049,11 @@ export async function estimateReplay(
       candidates,
       judge,
     }),
+    ...(usesPlanRoute(context)
+      ? {
+          basis: `List-price equivalents from the price list ${context.catalogReference ?? DEFAULT_PLAN_PRICE_LIST} for calls made through a plan you are signed in to (charged to that plan's usage allowance, not billed in dollars), and current provider catalog pricing for any API route. Worst-case candidate reservation from corpus token bounds; holdout uses the most expensive possible family winner. Judge calls are priced at two calls per replayed cell. A plan route sets no output cap, so actual use can exceed this figure.`,
+        }
+      : {}),
     policy: context.release.effective,
   };
 }
@@ -1813,6 +1838,7 @@ async function prepareApply(context: PipelineContext): Promise<{
     if (radius === undefined) {
       throw new Error(`Missing blast radius for family ${family.familyId}`);
     }
+    const measuredRoute = planRouteOfWinner(ledger, plan, family.verdict);
     return {
       verdict: family.verdict,
       releaseGates: family.gates,
@@ -1844,6 +1870,7 @@ async function prepareApply(context: PipelineContext): Promise<{
         costDeltaPct: null,
         winnerLatencyP50Ms: null,
       },
+      ...(measuredRoute === undefined ? {} : { planRoute: measuredRoute }),
     };
   });
   return {
@@ -1887,6 +1914,8 @@ function createContext(options: PipelineOptions): PipelineContext {
     options.policyFilePath === undefined
       ? undefined
       : resolve(options.policyFilePath);
+  const candidateRoute =
+    options.route ?? (options.baseUrl === undefined ? undefined : "api");
   return {
     repo,
     storeRoot,
@@ -1926,9 +1955,14 @@ function createContext(options: PipelineOptions): PipelineContext {
             ? options.catalogReference
             : resolve(options.catalogReference),
         }),
-    ...(options.baseUrl === undefined
+    ...(candidateRoute === undefined
       ? {}
-      : { routes: { candidates: "api", judge: "api" } }),
+      : {
+          routes: {
+            candidates: candidateRoute,
+            judge: options.judgeRoute ?? candidateRoute,
+          },
+        }),
     ...(policyFilePath === undefined ? {} : { policyFilePath }),
     ...(options.matchersPath === undefined
       ? {}
@@ -2080,6 +2114,7 @@ export function evidenceQuestionIdentity(input: {
   readonly family: string;
   readonly stepIds: readonly string[];
   readonly reproofRequestIds: readonly string[];
+  readonly candidateRoute?: PlanRouteKind;
 }): string {
   return computeEvidenceQuestionId({
     corpusVersionId: input.corpusVersionId,
@@ -2092,6 +2127,9 @@ export function evidenceQuestionIdentity(input: {
         ...(input.reproofRequestIds.length === 0
           ? {}
           : { reproofRequestIds: [...input.reproofRequestIds] }),
+        ...(input.candidateRoute === undefined
+          ? {}
+          : { candidateRoute: input.candidateRoute }),
       }),
     ),
     evaluatorPlan: input.evaluatorPlan,
@@ -2199,6 +2237,8 @@ async function inputDigest(
   if (stage === "shortlist") {
     extra.approvedRunSpecDigest = context.approvedRunSpecDigest ?? null;
     extra.evaluatorPlan = evaluatorPlan(context);
+    const candidateRoute = planCandidateRoute(context);
+    if (candidateRoute !== undefined) extra.candidateRoute = candidateRoute;
     const reproofRequests = await readReproofRequests(
       context.store,
       context.projectId,
@@ -2218,12 +2258,12 @@ async function inputDigest(
       context.projectId,
     );
     if (
-      context.baseUrl === undefined &&
+      !routesReady(context) &&
       reproofRequests.some(({ requested }) => requested)
     ) {
       return undefined;
     }
-    if (context.baseUrl === undefined) return state.stages.replay?.inputDigest;
+    if (!routesReady(context)) return state.stages.replay?.inputDigest;
     if (reproofRequests.length > 0) {
       extra.reproofRequests = jsonValue(
         reproofRequests.map(({ familyId, requestIds }) => ({
@@ -2232,17 +2272,30 @@ async function inputDigest(
         })),
       );
     }
+    const routes = context.routes!;
+    const apiRole = routes.candidates === "api" || routes.judge === "api";
+    const planRole = routes.candidates !== "api" || routes.judge !== "api";
     extra.provider = digest({
-      baseUrl: context.baseUrl,
-      apiKeyEnv: context.apiKeyEnv,
+      ...(apiRole
+        ? {
+            baseUrl: context.baseUrl!,
+            apiKeyEnv: context.apiKeyEnv,
+            ...(context.requestHeaders === undefined
+              ? {}
+              : { headers: requestHeaderIdentity(context.requestHeaders) }),
+          }
+        : {}),
       maxCostUsd: context.maxCostUsd ?? null,
       evaluatorPlan: evaluatorPlan(context),
-      ...(context.requestHeaders === undefined
-        ? {}
-        : { headers: requestHeaderIdentity(context.requestHeaders) }),
       ...(context.catalogReference === undefined
         ? {}
         : { catalogReference: context.catalogReference }),
+      ...(planRole
+        ? {
+            routes: { candidates: routes.candidates, judge: routes.judge },
+            priceList: context.catalogReference ?? DEFAULT_PLAN_PRICE_LIST,
+          }
+        : {}),
     });
     if (context.evaluator !== undefined) {
       extra.evaluatorIdentity = digest(await evaluatorRunIdentity(context));
@@ -2416,6 +2469,24 @@ function invalidCatalogReference(message: string): ProtocolError {
   });
 }
 
+function planCliUnavailable(error: PlanRouteUnavailableError): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "plan_cli_unavailable",
+    message: error.message,
+    remedy: error.remedy,
+  });
+}
+
+function planLoginRequired(error: PlanLoginError): ProtocolError {
+  return new ProtocolError({
+    exitCode: 2,
+    code: "plan_login_required",
+    message: error.message,
+    remedy: error.remedy,
+  });
+}
+
 async function routeCatalog(
   load: () => Promise<ModelCatalogEntry[]>,
 ): Promise<ModelCatalogEntry[]> {
@@ -2425,6 +2496,10 @@ async function routeCatalog(
     if (error instanceof CatalogReferenceError) {
       throw invalidCatalogReference(error.message);
     }
+    if (error instanceof PlanRouteUnavailableError) {
+      throw planCliUnavailable(error);
+    }
+    if (error instanceof PlanLoginError) throw planLoginRequired(error);
     throw error;
   }
 }
@@ -2442,21 +2517,50 @@ function routeHandle(context: PipelineContext, kind: RouteKind): RouteHandle {
         headers: context.requestHeaders,
         catalogReference: context.catalogReference,
       });
+    case "claude-login":
+      return planRoute(kind, {
+        priceList: context.catalogReference ?? DEFAULT_PLAN_PRICE_LIST,
+        pricingOverrides: context.pricingOverrides,
+        maxConcurrency: context.maxConcurrency,
+        warning: (code, message) => context.reporter.warning(code, message),
+      });
   }
+}
+
+function routesReady(context: PipelineContext): boolean {
+  return (
+    context.routes !== undefined &&
+    (context.baseUrl !== undefined ||
+      (context.routes.candidates !== "api" && context.routes.judge !== "api"))
+  );
+}
+
+function usesPlanRoute(context: PipelineContext): boolean {
+  return (
+    context.routes !== undefined &&
+    (context.routes.candidates !== "api" || context.routes.judge !== "api")
+  );
+}
+
+function planCandidateRoute(
+  context: PipelineContext,
+): PlanRouteKind | undefined {
+  const kind = context.routes?.candidates;
+  return kind === undefined || kind === "api" ? undefined : kind;
 }
 
 function replayRoutes(context: PipelineContext): {
   readonly candidates: RouteHandle;
   readonly judge: RouteHandle;
 } {
-  if (context.routes === undefined) throw missingProviderConfiguration();
-  const candidates = routeHandle(context, context.routes.candidates);
+  if (!routesReady(context)) throw missingProviderConfiguration();
+  const candidates = routeHandle(context, context.routes!.candidates);
   return {
     candidates,
     judge:
-      context.routes.judge === context.routes.candidates
+      context.routes!.judge === context.routes!.candidates
         ? candidates
-        : routeHandle(context, context.routes.judge),
+        : routeHandle(context, context.routes!.judge),
   };
 }
 
@@ -2807,6 +2911,7 @@ async function planFamilies(
     caseSteps: ReadonlyMap<string, string>;
     leftOut: FamilyBinding["leftOut"];
     unsendable: readonly string[];
+    multiTurn: number;
   }>
 > {
   const { records } = reconciled;
@@ -2884,15 +2989,23 @@ async function planFamilies(
       .filter(([, reached]) => reached.size > 1)
       .map(([stepId]) => stepId),
   );
+  const candidateRoute = planCandidateRoute(context);
   return families.map((family) => {
     const familyCases = corpus.cases.filter(
       ({ content }) => content.family === family,
     );
     const reasons = familyCases.map(unsendableReason);
+    const multiTurnCases = familyCases.map(
+      ({ content }, index) =>
+        candidateRoute !== undefined &&
+        reasons[index] === undefined &&
+        !isSingleTurn(toWireMessages(content.messages, content.systemPrompt)),
+    );
     const sendableCases = familyCases.filter(
-      (_, index) => reasons[index] === undefined,
+      (_, index) => reasons[index] === undefined && !multiTurnCases[index],
     );
     const unsendable = reasons.filter((reason) => reason !== undefined);
+    const multiTurn = multiTurnCases.filter(Boolean).length;
     const binding =
       approved === undefined
         ? bindFamily({
@@ -2942,7 +3055,7 @@ async function planFamilies(
                 }
               : undefined;
     const stepIds = abstainReason === undefined ? [...placement.stepIds] : [];
-    const leftOutCases = bindingLeftOut + unsendable.length;
+    const leftOutCases = bindingLeftOut + unsendable.length + multiTurn;
     const reproofRequestIds = reproofRequests.get(family) ?? [];
     const evidenceQuestionId = evidenceQuestionIdentity({
       corpusVersionId: corpus.corpusVersionId,
@@ -2951,6 +3064,7 @@ async function planFamilies(
       family,
       stepIds,
       reproofRequestIds,
+      ...(candidateRoute === undefined ? {} : { candidateRoute }),
     });
     return {
       plan: {
@@ -2971,6 +3085,7 @@ async function planFamilies(
       caseSteps: placement.caseSteps,
       leftOut,
       unsendable,
+      multiTurn,
     };
   });
 }
@@ -3008,7 +3123,13 @@ async function executeShortlist(
   const steps: Array<Omit<ReplayStep, "corpusSplit"> & { family: string }> = [];
   const cases: Array<RecordedCase & { family: string }> = [];
   const sampleSizes: Record<string, number> = {};
-  for (const { plan: familyPlan, caseSteps, leftOut, unsendable } of planned) {
+  for (const {
+    plan: familyPlan,
+    caseSteps,
+    leftOut,
+    unsendable,
+    multiTurn,
+  } of planned) {
     const { familyId: family, evidenceQuestionId, stepIds } = familyPlan;
     sampleSizes[family] = familyPlan.cases;
     const bindingLeftOut =
@@ -3037,6 +3158,12 @@ async function executeShortlist(
       context.reporter.warning(
         "recorded_messages_not_replayable",
         `Family ${family}: ${unsendable.length} of ${familyPlan.cases} recorded cases carry messages the replay cannot send yet and were left out of the replay sample (first: ${unsendable[0]}). Tool calls, non-text parts and tool definitions in a recorded conversation are not replayed.`,
+      );
+    }
+    if (multiTurn > 0) {
+      context.reporter.warning(
+        "plan_route_cases_left_out",
+        `Family ${family}: ${multiTurn} of ${familyPlan.cases} recorded cases have an earlier assistant or tool turn or more than one user message, and the ${planCandidateRoute(context)} route sends one user turn, so they were left out of the replay sample.`,
       );
     }
     if (stepIds.length === 0) continue;
@@ -3240,15 +3367,29 @@ function approvedRecords(
 function replayCandidates(
   plan: z.infer<typeof replayPlanSchema>,
   catalog: readonly ModelCatalogEntry[],
+  callable?: readonly ModelCatalogEntry[],
 ): StepShortlist[] {
-  const catalogById = new Map(catalog.map((model) => [model.id, model]));
+  const callableById = new Map(
+    (callable ?? []).map((model) => [model.id, model] as const),
+  );
+  const models = catalog.map((model) => callableById.get(model.id) ?? model);
+  const catalogById = new Map(models.map((model) => [model.id, model]));
+  const allow =
+    callable === undefined
+      ? plan.allowModels
+      : callable
+          .map(({ id }) => id)
+          .filter(
+            (id) =>
+              plan.allowModels.length === 0 || plan.allowModels.includes(id),
+          );
   const shortlisted = shortlist(
     plan.steps.map((step) => ({
       ...step,
       corpusSplit: "shortlist" as const,
       selectionStage: "shortlist",
     })),
-    catalog.map((model) =>
+    models.map((model) =>
       model.contextLength === 0
         ? { ...model, contextLength: Number.MAX_SAFE_INTEGER }
         : model,
@@ -3256,7 +3397,7 @@ function replayCandidates(
     {
       top: plan.top,
       includeFreeModels: plan.includeFreeModels,
-      ...(plan.allowModels.length === 0 ? {} : { allow: plan.allowModels }),
+      ...(callable === undefined && allow.length === 0 ? {} : { allow }),
       deny: plan.denyModels,
     },
   ).map((assignment) => ({
@@ -3291,6 +3432,43 @@ function replayCandidates(
       candidates: assignment.candidates.filter(({ id }) => commonIds.has(id)),
     };
   });
+}
+
+function dropJudgeVendorCandidates(
+  context: PipelineContext,
+  candidates: StepShortlist[],
+): StepShortlist[] {
+  const judgeKind = context.routes?.judge;
+  if (judgeKind === undefined || judgeKind === "api") return candidates;
+  const vendor = planRouteVendors[judgeKind];
+  const dropped = [
+    ...new Set(
+      candidates.flatMap((assignment) =>
+        assignment.candidates.flatMap(({ id, family }) =>
+          family === vendor ? [id] : [],
+        ),
+      ),
+    ),
+  ].sort(compareText);
+  if (dropped.length === 0) return candidates;
+  const kept = candidates.map((assignment) => ({
+    ...assignment,
+    candidates: assignment.candidates.filter(({ family }) => family !== vendor),
+  }));
+  context.reporter.warning(
+    "judge_vendor_candidates_dropped",
+    `Candidates ${dropped.slice(0, 5).join(", ")}${dropped.length > 5 ? ` and ${dropped.length - 5} more` : ""} were left out: the judge runs through ${judgeKind} (${vendor}), and it must come from another vendor than the candidate.`,
+  );
+  if (kept.every((assignment) => assignment.candidates.length === 0)) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "no_neutral_judge",
+      message: `Every shortlisted candidate is from ${vendor}, the vendor of the judge route ${judgeKind}, so no candidate can be judged neutrally.`,
+      remedy:
+        "Use a --judge-route from another vendor, or an api --route whose catalog lists other vendors.",
+    });
+  }
+  return kept;
 }
 
 function reportShortlistAbstentions(
@@ -3347,7 +3525,7 @@ function assertPricedCandidates(
 }
 
 const noNeutralJudgeRemedy =
-  "List or price a model from a third vendor (a multi-vendor gateway, --catalog-reference or --pricing-file), or grade with your own evaluator (--evaluator).";
+  "List or price a model from a third vendor (a multi-vendor gateway, --catalog-reference or --pricing-file), run the judge through another vendor's CLI you are signed in to with --judge-route, or grade with your own evaluator (--evaluator).";
 
 function assertNeutralJudges(
   plan: z.infer<typeof replayPlanSchema>,
@@ -3488,15 +3666,21 @@ async function executeReplay(
       corpusSplit: split,
       selectionStage: split,
     }));
-  const candidates =
+  const callable =
+    planCandidateRoute(context) === undefined
+      ? undefined
+      : await routeCatalog(() => routes.candidates.callable());
+  const candidates = dropJudgeVendorCandidates(
+    context,
     context.approvedRunSpecDigest === undefined
-      ? replayCandidates(plan, known)
+      ? replayCandidates(plan, known, callable)
       : await approvedReplayCandidates(
           context,
           plan,
-          known,
+          callable ?? known,
           context.approvedRunSpecDigest,
-        );
+        ),
+  );
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
   const referenceFamilyByStepId = referenceFamiliesByStep(
@@ -4119,7 +4303,9 @@ async function executeConfirm(
         runSetsUsed: 0,
         culprits: [],
         cascadeSeedStepId: null,
-        blocker: "Missing --modeb-config for cascade confirmation.",
+        blocker: usesPlanRoute(context)
+          ? "Mode B confirmation runs only when candidates and the judge use the api route; measure this family with --base-url and pass --modeb-config to confirm it."
+          : "Missing --modeb-config for cascade confirmation.",
       });
     }
   } else if (needsConfirmation.size > 0) {
@@ -5541,9 +5727,13 @@ function normalizePipelineError(
       code: "plan_usage_limit",
       message: error.message,
       remedy:
-        "Rerun the same command after the limit resets; completed replay and judge calls are kept and not repeated.",
+        "Rerun the same command after the limit resets; completed replay and judge calls are kept and not repeated. To go on now, choose a route that does not use this plan with --route or --judge-route.",
     });
   }
+  if (error instanceof PlanRouteUnavailableError) {
+    return planCliUnavailable(error);
+  }
+  if (error instanceof PlanLoginError) return planLoginRequired(error);
   if (error instanceof ProviderConfigurationError) {
     return new ProtocolError({
       exitCode: 2,
@@ -5588,6 +5778,12 @@ interface ReportData {
     events: number;
     totalCostUsd: number;
     byActor: Record<string, { events: number; costUsd: number }>;
+    routes?: Array<{
+      actor: string;
+      provider: string;
+      events: number;
+      costUsd: number;
+    }>;
   };
   stratumWeights: {
     basis: "corpus_only";
@@ -5722,11 +5918,25 @@ function blockedFamilyDiagnosis(
 
 function spendSummary(spendEvents: readonly SpendEvent[]): ReportData["spend"] {
   const byActor: Record<string, { events: number; costUsd: number }> = {};
+  const routes = new Map<
+    string,
+    { actor: string; provider: string; events: number; costUsd: number }
+  >();
   for (const spend of spendEvents) {
     const actor = byActor[spend.actor] ?? { events: 0, costUsd: 0 };
     actor.events += 1;
     actor.costUsd = roundUsd(actor.costUsd + spend.costUsd);
     byActor[spend.actor] = actor;
+    const key = JSON.stringify([spend.actor, spend.provider]);
+    const route = routes.get(key) ?? {
+      actor: spend.actor,
+      provider: spend.provider,
+      events: 0,
+      costUsd: 0,
+    };
+    route.events += 1;
+    route.costUsd = roundUsd(route.costUsd + spend.costUsd);
+    routes.set(key, route);
   }
   return {
     events: spendEvents.length,
@@ -5735,6 +5945,15 @@ function spendSummary(spendEvents: readonly SpendEvent[]): ReportData["spend"] {
       0,
     ),
     byActor,
+    ...(spendEvents.some(({ provider }) => isPlanRouteKind(provider))
+      ? {
+          routes: [...routes.values()].sort(
+            (left, right) =>
+              compareText(left.actor, right.actor) ||
+              compareText(left.provider, right.provider),
+          ),
+        }
+      : {}),
   };
 }
 
@@ -5811,22 +6030,7 @@ export function familyReceipts(
   }
 
   return verdicts.map((verdict) => {
-    const familyStepIds = new Set(
-      plan.steps
-        .filter(({ family }) => family === verdict.familyId)
-        .map(({ stepId }) => stepId),
-    );
-    const winnerExecutions = ledger.executions
-      .filter(
-        (execution) =>
-          familyStepIds.has(execution.stepId) &&
-          execution.candidateId === verdict.candidateId &&
-          execution.terminalOutcome === "success" &&
-          execution.attribution === "ok" &&
-          (execution.selectionStage === "shortlist" ||
-            execution.selectionStage === "holdout"),
-      )
-      .sort((left, right) => compareText(left.executionId, right.executionId));
+    const winnerExecutions = familyWinnerExecutions(ledger, plan, verdict);
     const winnerCostPerCaseUsd =
       winnerExecutions.length === 0
         ? null
@@ -5893,6 +6097,55 @@ export function familyReceipts(
       winnerLatencyP50Ms,
     };
   });
+}
+
+function familyWinnerExecutions(
+  ledger: Ledger,
+  plan: z.input<typeof replayPlanSchema>,
+  verdict: FamilyVerdict,
+): Execution[] {
+  const familyStepIds = new Set(
+    plan.steps
+      .filter(({ family }) => family === verdict.familyId)
+      .map(({ stepId }) => stepId),
+  );
+  return ledger.executions
+    .filter(
+      (execution) =>
+        familyStepIds.has(execution.stepId) &&
+        execution.candidateId === verdict.candidateId &&
+        execution.terminalOutcome === "success" &&
+        execution.attribution === "ok" &&
+        (execution.selectionStage === "shortlist" ||
+          execution.selectionStage === "holdout"),
+    )
+    .sort((left, right) => compareText(left.executionId, right.executionId));
+}
+
+export function planRouteOfWinner(
+  ledger: Ledger,
+  plan: z.input<typeof replayPlanSchema>,
+  verdict: FamilyVerdict,
+): PlanRouteKind | undefined {
+  const executionIds = new Set(
+    familyWinnerExecutions(ledger, plan, verdict).map(
+      ({ executionId }) => executionId,
+    ),
+  );
+  for (const { actor, provider, reconcilableTo } of ledger.spendEvents) {
+    if (
+      actor === "replay-driver" &&
+      isPlanRouteKind(provider) &&
+      typeof reconcilableTo === "object" &&
+      reconcilableTo !== null &&
+      !Array.isArray(reconcilableTo) &&
+      typeof reconcilableTo.executionId === "string" &&
+      executionIds.has(reconcilableTo.executionId)
+    ) {
+      return provider;
+    }
+  }
+  return undefined;
 }
 
 function candidateErrorReport(
@@ -6158,6 +6411,9 @@ function renderReport(report: ReportData): string {
     "",
     `Total: $${report.spend.totalCostUsd.toFixed(8)} across ${report.spend.events} events.`,
     "",
+    ...(report.spend.routes === undefined
+      ? []
+      : modelRoutesSection(report.spend.routes)),
     "## Stratum weights (corpus_only)",
     "",
     "| Family | Corpus share | Traffic share |",
@@ -6191,6 +6447,30 @@ function renderReport(report: ReportData): string {
   if (report.codeContext !== undefined)
     lines.push(...renderCodeContext(report.codeContext), "");
   return lines.join("\n");
+}
+
+function modelRoutesSection(
+  routes: NonNullable<ReportData["spend"]["routes"]>,
+): string[] {
+  const cost = (plan: boolean) =>
+    routes
+      .filter(({ provider }) => isPlanRouteKind(provider) === plan)
+      .reduce((total, { costUsd }) => roundUsd(total + costUsd), 0);
+  return [
+    `Through a plan you are signed in to (list-price equivalent, not billed): $${cost(true).toFixed(8)}. Billed through the API route: $${cost(false).toFixed(8)}.`,
+    "",
+    "## Model routes",
+    "",
+    "| Role | Route | Events | Cost (USD) |",
+    "| --- | --- | --- | --- |",
+    ...routes.map(
+      ({ actor, provider, events, costUsd }) =>
+        `| ${actor === "replay-driver" ? "candidates" : actor} | ${provider === "configured-provider" ? "api" : provider} | ${events} | ${costUsd.toFixed(8)}${isPlanRouteKind(provider) ? " (list-price equivalent)" : ""} |`,
+    ),
+    "",
+    "Calls through a plan route were measured through a coding CLI, not the API your application calls: the CLI adds its own instructions to each call and cannot set temperature or an output limit, and recorded cases with more than one turn were left out. Their latency is the API time the CLI reports. Run `rightmodeler docs model-routes` for details.",
+    "",
+  ];
 }
 
 function reportText(value: string): string {

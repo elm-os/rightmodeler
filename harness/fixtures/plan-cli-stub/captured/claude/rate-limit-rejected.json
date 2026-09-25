@@ -1,0 +1,10 @@
+{
+  "type": "rate_limit_event",
+  "rate_limit_info": {
+    "status": "rejected",
+    "resetsAt": 1790758800,
+    "utilization": 1
+  },
+  "uuid": "UUID",
+  "session_id": "SESSION-ID"
+}

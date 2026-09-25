@@ -1,6 +1,7 @@
 import {
   executionSchema,
   requestAttemptSchema,
+  spendEventSchema,
   type Execution,
   type Ledger,
   type RequestAttempt,
@@ -9,7 +10,7 @@ import type { FamilyVerdict } from "@rightmodeler/kernel";
 import { describe, expect, it } from "vitest";
 
 import type { Corpus } from "./data/index.js";
-import { familyReceipts } from "./pipeline.js";
+import { familyReceipts, planRouteOfWinner } from "./pipeline.js";
 
 const familyId = "summarize";
 const candidateId = "acme/small-1";
@@ -321,5 +322,52 @@ describe("familyReceipts", () => {
     expect(receiptFor(["execution-c", "execution-b", "execution-a"])).toEqual(
       forward,
     );
+  });
+});
+
+describe("planRouteOfWinner", () => {
+  function spend(actor: string, provider: string, executionId: string) {
+    return spendEventSchema.parse({
+      actor,
+      phase: "shortlist",
+      costUsd: 0.001,
+      provider,
+      reconcilableTo: { executionId, candidateId },
+    });
+  }
+
+  function planRoute(spendEvents: Ledger["spendEvents"]) {
+    return planRouteOfWinner(
+      {
+        executions: [...winnerExecutions, ...excludedExecutions],
+        requestAttempts: [],
+        assessments: [],
+        spendEvents,
+        cascadeFindings: [],
+        lifecycleEvents: [],
+        droppedRows: 0,
+      },
+      plan,
+      verdict,
+    );
+  }
+
+  it("finds the plan route a family winner was measured through", () => {
+    expect(
+      planRoute([
+        spend("replay-driver", "configured-provider", "execution-1"),
+        spend("replay-driver", "claude-login", "execution-2"),
+      ]),
+    ).toBe("claude-login");
+    expect(
+      planRoute([
+        spend("replay-driver", "configured-provider", "execution-1"),
+        spend("judge", "claude-login", "execution-1"),
+      ]),
+    ).toBeUndefined();
+    expect(
+      planRoute([spend("replay-driver", "claude-login", "failed")]),
+    ).toBeUndefined();
+    expect(planRoute([])).toBeUndefined();
   });
 });
