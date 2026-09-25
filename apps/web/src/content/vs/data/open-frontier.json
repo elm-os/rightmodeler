@@ -11,7 +11,7 @@
   "h1": "rightmodeler vs The Open Frontier",
   "lede": "The Open Frontier is a free-to-read site, built by Together AI, that republishes Artificial Analysis scores and published prices for open models, use case by use case. rightmodeler reads no public scores: it replays your own recorded traces through cheaper models and reports, step by step, which ones held up.",
   "integrationSlug": "",
-  "related": ["vals-ai", "openrouter", "not-diamond"],
+  "related": ["vals-ai", "openrouter", "not-diamond", "artificial-analysis"],
   "cta": "github",
   "blocks": [
     {

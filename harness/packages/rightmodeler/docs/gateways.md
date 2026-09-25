@@ -69,7 +69,7 @@ On Kubernetes (Kubernetes 1.32 or newer, Envoy Gateway 1.8.1 or newer, Helm char
 
 ## Bifrost
 
-Verified on the open-source Bifrost gateway transports/v2.2.1 (Apache 2.0, `maximhq/bifrost:v2.2.1`); pin the image, because releases arrive weekly. Enterprise features are a separate image and are not covered here.
+Verified on the open-source Bifrost gateway transports/v2.2.1 (Apache 2.0, `maximhq/bifrost:v2.2.1`); pin the image, because releases arrive weekly. Enterprise features ship in a separate image; this guide uses the open-source one.
 
 As a replay route:
 

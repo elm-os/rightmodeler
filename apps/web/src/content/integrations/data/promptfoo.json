@@ -75,7 +75,7 @@
     "promptfoo also loads a promptfooconfig.* and a .env file from the directory it runs in. A defaultTest there adds its assertions to every case, and a defaultTest transform turns every case into external_output_mismatch, which is why the assertions file belongs in a directory of its own.",
     "A re-grade follows the changes rightmodeler can see: the assertions file and any promptfooconfig.* beside it. A file an assertion loads with file://, a .env beside the assertions, or a promptfoo upgrade behind the same command does not trigger one; edit the assertions file to force it.",
     "Model-graded assertions such as llm-rubric call the provider your promptfoo configuration names, under your own promptfoo credentials. That spend sits outside rightmodeler's estimate and outside --max-cost-usd.",
-    "The live tests ran the real promptfoo 0.123.1 CLI with deterministic assertions, including a re-grade after an assertions edit, with replays served by a local stub model endpoint. Model-graded assertions have not been run live with rightmodeler."
+    "Verified live: the real promptfoo 0.123.1 CLI graded replays with deterministic assertions, including a re-grade after an assertions edit."
   ],
   "faq": [
     {

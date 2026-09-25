@@ -89,7 +89,7 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/vs",
     title: "rightmodeler vs alternatives",
     description:
-      "Honest comparisons with gateways, eval platforms, routers, spend meters, model trainers, and benchmarks: what each tool decides, what it measures, and when to use which.",
+      "Honest comparisons with gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, and benchmarks: when to use which.",
   },
   {
     path: "/manifesto",
