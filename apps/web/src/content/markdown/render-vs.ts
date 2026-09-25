@@ -1,6 +1,7 @@
 // /vs/[slug] as Markdown, generated from the same JSON the page renders from, so a comparison can
 // never say one thing in HTML and another in Markdown. One case per block type in
 // vs-page.schema.json; scripts/markdown.test.mjs fails if the schema grows a type this misses.
+// The site origin is passed in rather than imported, so the Node tests can load this module as is.
 
 import type { VsBlock, VsPageData, VsSide } from "@/content/vs/types";
 
@@ -14,7 +15,11 @@ function side(part: VsSide | undefined): string[] {
   ];
 }
 
-function block(item: VsBlock, name: string): string[] {
+function block(
+  item: VsBlock,
+  name: string,
+  setupGuide: string | undefined,
+): string[] {
   switch (item.type) {
     case "tldr":
       return [item.body ?? "", ""];
@@ -67,6 +72,7 @@ function block(item: VsBlock, name: string): string[] {
       for (const entry of item.commands ?? []) {
         lines.push("```bash", entry.comment, entry.command, "```", "");
       }
+      if (setupGuide) lines.push(setupGuide, "");
       return lines;
     }
 
@@ -101,7 +107,7 @@ function block(item: VsBlock, name: string): string[] {
   }
 }
 
-export function renderVsMarkdown(data: VsPageData): string {
+export function renderVsMarkdown(data: VsPageData, siteUrl: string): string {
   const lines = [
     `# ${data.h1}`,
     "",
@@ -112,7 +118,12 @@ export function renderVsMarkdown(data: VsPageData): string {
     `Official site: ${data.website}`,
     "",
   ];
-  for (const entry of data.blocks) lines.push(...block(entry, data.name));
+  // Mirrors the page: a stack section ends with the integration's setup guide when one exists.
+  const setupGuide = data.integrationSlug
+    ? `Setup guide: ${siteUrl}/integrations/${data.integrationSlug}`
+    : undefined;
+  for (const entry of data.blocks)
+    lines.push(...block(entry, data.name, setupGuide));
   return lines
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")

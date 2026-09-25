@@ -3,7 +3,7 @@
   "name": "Braintrust",
   "website": "https://www.braintrust.dev",
   "logo": "/integrations/logos/braintrust.svg",
-  "category": "evals",
+  "category": "observability",
   "verdict": "complement",
   "verdictLabel": "Complement · your evals stay the bar",
   "title": "rightmodeler vs Braintrust: who sets the reference",

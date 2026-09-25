@@ -11,7 +11,7 @@
   "h1": "rightmodeler vs LiteLLM",
   "lede": "LiteLLM decides in the milliseconds before each call; rightmodeler decides after the run, from replays of outputs you already accepted. Keep the proxy: it is the only tool in these comparisons that also plays three roles inside the audit.",
   "integrationSlug": "litellm",
-  "related": ["openrouter", "vercel-ai-gateway", "not-diamond"],
+  "related": ["openrouter", "vercel-ai-gateway", "not-diamond", "bifrost"],
   "cta": "github",
   "blocks": [
     {

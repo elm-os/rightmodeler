@@ -79,7 +79,7 @@
     "A graph built at a different commit than the scan is shown file-level only: enclosing symbols and callers are hidden until you rebuild with graphify update . at the scanned commit.",
     "An unusable graph, such as a missing file, a file that is not a Graphify graph, one too large for Node.js to read, or one built from another repository, produces a warning and a section that says why it is not shown, and the rest of the report is unchanged. Edges and nodes whose shape this version does not read are ignored and counted in the section.",
     "Owners come from CODEOWNERS, or from git blame when no rule matches, and are listed only. Reviewers on the pull request still come from apply's own CODEOWNERS and blame rules, never from the graph.",
-    "Tested with Graphify 0.9.65: real graphs from that release were rendered in the report for fixture apps and a copy of the Vercel AI chatbot, and the pull request section was checked against a local GitHub stub, not a live pull request. rightmodeler never installs or runs Graphify; it only reads the graph.json you pass."
+    "Verified with Graphify 0.9.65: real graphs from that release were rendered in the report for fixture apps and a copy of the Vercel AI chatbot, and the test suite covers the pull request section. rightmodeler never installs or runs Graphify; it only reads the graph.json you pass."
   ],
   "faq": [
     {

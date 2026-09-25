@@ -63,7 +63,7 @@
       "type": "prose",
       "heading": "Order matters when they stack",
       "paragraphs": [
-        "A rightmodeler verdict is evidence about one exact set of inputs: the recorded inputs of each step, and the outputs you accepted for them. A reducer changes those inputs. A cheaper model that matched your accepted outputs while reading a full test log has not been tested on the short summary a reducer hands it instead, and the reverse can happen too: a small model that stumbled over a huge log may cope with the reduced version.",
+        "A rightmodeler verdict is evidence about one exact set of inputs: the recorded inputs of each step, and the outputs you accepted for them. A reducer changes those inputs. A cheaper model that matched your accepted outputs while reading a full test log earned that verdict on the full log, not on the short summary a reducer hands it instead, and the reverse can happen too: a small model that stumbled over a huge log may cope with the reduced version.",
         "So if compression changes the model input, rebuild the evaluation corpus from post-compression traces before any model decision. Check where your traces are written, too: a log captured before a reducer runs records what the tool printed, not what the model read. rightmodeler does not detect a reducer for you. The same care runs the other way: if you swap a model first and attach a reducer later, the evidence behind the swap came from unreduced inputs, so rerun the audit on fresh traces once the reducer is in place.",
         "Credit where due. Codag works live, inside the session, with no traces to collect and nothing to review, and per its docs it fails open: timeouts, unknown tools, and an exhausted quota all hand the agent the original bytes. rightmodeler works after the fact and needs recorded traces with enough distinct trajectories to say anything. In the current release it replays plain text model steps only; call sites that declare tools or structured output are found by the scan but not replayed, so tool-heavy steps can end with no verdict at all."
       ]
@@ -118,8 +118,8 @@
           "a": "Per Codag's privacy docs, model traffic goes from a local proxy straight to your provider, and eligible tool output plus minimal task context is sent to Codag's service, processed transiently, and not retained; source code, diffs, and configuration are never sent. rightmodeler has no server, account, or telemetry, but its replays send each step's recorded inputs to the model provider you configure, under your own key."
         },
         {
-          "q": "Are Codag's savings numbers verified?",
-          "a": "Not by us. As of 2026-09-22, Codag's homepage advertises about 75% compression, its pricing page labels dollar savings as estimates from public model prices, and its Y Combinator profile says 20 to 30% lower token spend. Those are vendor figures. rightmodeler's reports are measured on your own traces and show their sample sizes and abstentions, and agreement with an accepted output is evidence, not proof of correctness."
+          "q": "Where do Codag's savings numbers come from?",
+          "a": "From Codag. As of 2026-09-22, its homepage advertises about 75% compression, its pricing page labels dollar savings as estimates from public model prices, and its Y Combinator profile says 20 to 30% lower token spend. rightmodeler's reports are measured on your own traces and show their sample sizes and abstentions, and agreement with an accepted output is evidence, not proof of correctness."
         }
       ]
     }

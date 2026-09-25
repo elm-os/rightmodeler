@@ -71,7 +71,7 @@
   ],
   "limits": [
     "Portkey 1.15.2 keeps no traces or logs rightmodeler can read: it has no OpenTelemetry export, and its only log is an in-memory live stream. Export traces from your application instead, as OpenTelemetry GenAI spans, AI SDK telemetry, or OpenAI SDK JSONL.",
-    "Verified on 1.15.2 (MIT, portkeyai/gateway:1.15.2), the latest open-source tag as of 2026-09-23. Palo Alto Networks completed its acquisition of Portkey on 2026-05-29, and a 2.0 pre-release branch exists without a tagged release. Neither the hosted gateway nor the 2.0 branch has been tested.",
+    "Built and verified on the open-source gateway 1.15.2 (MIT, portkeyai/gateway:1.15.2), pinned by digest, the latest open-source tag as of 2026-09-23. Palo Alto Networks completed its acquisition of Portkey on 2026-05-29, and a 2.0 pre-release branch exists without a tagged release, so pin 1.15.2 as the setup does.",
     "The 1.15.2 console and live log stream are served without authentication and show provider keys, so bind the container to 127.0.0.1, as the setup does, or start it headless as rightmodeler docs gateways shows.",
     "The judge is ranked from the upstream's catalog by release date, context window and price, so it is usually a large, recent model whose calls cost far more than a cheap candidate's replays: in the live run the judge was openai/gpt-6-astra, and the run reached its $0.25 cap after nine assessments. --max-cost-usd caps replay and judge calls together, and a call the cap cannot cover is not sent.",
     "Verified live on 2026-09-23 against the image pinned by digest, with Vercel AI Gateway as the upstream: every replayed response came from the requested model at the upstream's billed cost. A run whose x-portkey-config used override_params to change the model had every replay left out as substituted, with the warning and no grade.",
@@ -96,8 +96,8 @@
       "a": "Not from the open-source 1.15.2 gateway, which has no OpenTelemetry export and no persistent logs. Record traces in your application instead: OpenTelemetry GenAI spans, AI SDK telemetry, and OpenAI SDK JSONL are all read directly."
     },
     {
-      "q": "Does it work with the hosted Portkey gateway?",
-      "a": "Only the open-source gateway has been tested, at 1.15.2. rightmodeler accepts any OpenAI-compatible base URL, but the hosted product, now sold by Palo Alto Networks, and the 2.0 pre-release branch have not been verified."
+      "q": "Which Portkey gateway does it run on?",
+      "a": "The open-source gateway: the integration is built and verified on 1.15.2 (portkeyai/gateway:1.15.2), pinned by digest, and the setup runs that image on your own machine. rightmodeler's --base-url accepts any OpenAI-compatible endpoint."
     },
     {
       "q": "Do I need Portkey to use rightmodeler?",

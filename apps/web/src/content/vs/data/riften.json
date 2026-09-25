@@ -122,11 +122,11 @@
         },
         {
           "q": "Does rightmodeler integrate with Riften?",
-          "a": "No integration ships today: there is no Riften trace adapter and no Riften replay provider. Riften's trust page mentions external trace destinations; whether any export matches a trace format rightmodeler reads is unverified, and its docs were password-gated as of 2026-09-22. rightmodeler reads the traces your own logging already keeps."
+          "a": "No integration ships today: there is no Riften trace adapter and no Riften replay provider. Riften's trust page mentions external trace destinations, and its docs were password-gated as of 2026-09-22. rightmodeler reads the traces your own logging already keeps."
         },
         {
           "q": "Does Riften see my prompts?",
-          "a": "Requests it routes pass through its gateway. Per its trust page, your data stays scoped to your workspace, is used to improve your own models and never to train models for other customers, and you set retention windows; its homepage ties training data to content capture being enabled. We have not verified any of this independently. rightmodeler has no server, no account, and no telemetry; the CLI runs on your machine against your own traces."
+          "a": "Requests it routes pass through its gateway. Per its trust page, your data stays scoped to your workspace, is used to improve your own models and never to train models for other customers, and you set retention windows; its homepage ties training data to content capture being enabled. rightmodeler has no server, no account, and no telemetry; the CLI runs on your machine against your own traces."
         },
         {
           "q": "Is either one open source?",

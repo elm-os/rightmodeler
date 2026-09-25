@@ -1,0 +1,198 @@
+{
+  "slug": "phoenix",
+  "name": "Arize Phoenix",
+  "website": "https://arize.com/phoenix/",
+  "logo": "/integrations/logos/phoenix.svg",
+  "category": "observability",
+  "verdict": "complement",
+  "verdictLabel": "Complement · experiments vs model maintenance",
+  "title": "rightmodeler vs Arize Phoenix: the whole swap decision",
+  "description": "Arize Phoenix replays spans and compares models side by side. rightmodeler turns the spans you export into a per-step swap decision and a draft PR you merge.",
+  "h1": "rightmodeler vs Arize Phoenix",
+  "lede": "Phoenix is an open environment for tracing, evaluating, and experimenting, and it can already replay a recorded span on another model. rightmodeler runs one decision as a routine on the spans Phoenix records: which steps can move to a cheaper model, with per-step evidence and a draft pull request.",
+  "integrationSlug": "phoenix",
+  "related": ["langfuse", "langsmith", "braintrust"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Complement, with real overlap. As of 2026-09-24, Phoenix's docs describe Span Replay, which loads a recorded LLM span into the Prompt Playground to rerun it with another model, prompt, or parameters, plus side-by-side model comparison and dataset experiments whose charts track cost per experiment. So Phoenix can already replay a step on another model. What rightmodeler adds is the rest of the decision, run as a routine on the spans you export: candidates shortlisted from your provider's live catalog, every step family replayed and judged against the output you accepted, sample size and abstentions reported, a quality floor cleared again on held-out cases, multi-step swaps confirmed end to end, and a draft pull request that changes model identifiers only, for a person to merge. Not observability. Not a runtime gateway."
+    },
+    {
+      "type": "table",
+      "heading": "Replay is not the difference",
+      "intro": "Both can rerun a recorded LLM call on another model. What differs is everything around the rerun.",
+      "caption": "phoenix vs rightmodeler",
+      "leftLabel": "Arize Phoenix",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "built for",
+          "theirs": "tracing, evaluation, prompt engineering, and experiments in one environment",
+          "ours": "one recurring decision: which model each step of your agent should call"
+        },
+        {
+          "dimension": "replay",
+          "theirs": "Span Replay reruns a span you pick in the Prompt Playground, with another model, prompt, or parameters",
+          "ours": "every step family in the export replayed on its recorded inputs, on each shortlisted candidate"
+        },
+        {
+          "dimension": "candidates",
+          "theirs": "the models you set in the Playground or in an experiment's task",
+          "ours": "cheaper models shortlisted from your configured provider's live catalog"
+        },
+        {
+          "dimension": "reference",
+          "theirs": "reference outputs in a dataset, which you can build from spans, scored by evaluators you attach",
+          "ours": "the output you accepted for that exact step, read from the span"
+        },
+        {
+          "dimension": "evidence",
+          "theirs": "evaluator scores and annotations per experiment, plus latency, error rate, cost, and token charts per dataset",
+          "ours": "reference agreement, sample size, abstentions, and a quality floor cleared again on held-out cases"
+        },
+        {
+          "dimension": "multi-step effects",
+          "theirs": "the experiment you design to exercise them",
+          "ours": "swaps whose output feeds later model-authored steps are confirmed end to end in a container"
+        },
+        {
+          "dimension": "the change",
+          "theirs": "you read the experiment and make the change",
+          "ours": "a draft pull request that changes model identifiers only; a person merges"
+        },
+        {
+          "dimension": "runs on",
+          "theirs": "a Phoenix instance you host, free with no feature limits",
+          "ours": "a CLI on your machine, on exported span files; no rightmodeler server, account, or telemetry"
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Can you use both? Yes, and Phoenix stays where it is",
+      "paragraphs": [
+        "Keep Phoenix exactly as it runs today. Your OpenInference instrumentation keeps sending spans, your evaluators keep scoring them, and your team keeps debugging and experimenting in the same place. rightmodeler adds no instrumentation and never sits in the request path.",
+        "The link between them is a file. Export your project's spans as OTLP JSON or JSONL and rightmodeler reads them offline, with no Arize account and no Phoenix key, wherever your Phoenix instance runs. The only credential the audit needs is the key for the replay endpoint you choose.",
+        "After a swap merges, the new model shows up in the spans Phoenix records, and the evaluators you already run keep scoring it in production."
+      ]
+    },
+    {
+      "type": "stack",
+      "heading": "The supported workflow: Phoenix spans in, a reviewed swap out",
+      "intro": "Two commands from the integration guide, run on the spans you exported. Nothing connects to your Phoenix instance.",
+      "paragraphs": [
+        "Export your project's spans as an OTLP file, JSON or JSONL, keeping the resourceSpans envelope and each span's OpenInference attributes intact. The CLI recognizes the format from the openinference.span.kind attribute alongside attribute keys that begin with llm, keeps the spans whose kind is LLM, rebuilds the flattened message keys in index order, and reads the model from llm.model_name and token counts from llm.token_count. A span's session.id becomes its trajectory, so a multi-span agent run is resampled as one unit.",
+        "The first command previews the pipeline against your spans without spending anything. The second replays each step family on cheaper candidates from your provider's live catalog, through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, on your own key, with replays and judging capped together by --max-cost-usd. The built-in judge, a model from a family neither the candidate nor the current model belongs to, scores each replay against the output you accepted in two temperature-zero calls with the positions swapped.",
+        "The run writes report.md with a verdict per step family, and an abstention with a named reason wherever the evidence is thin. Swaps at steps whose output feeds later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in, configured with --modeb-config. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, and a person reviews and merges it."
+      ],
+      "commands": [
+        {
+          "comment": "# preview the pipeline against your spans, without spending",
+          "command": "npx rightmodeler init --plan --traces ./traces/phoenix-spans.json --repo ."
+        },
+        {
+          "comment": "# then run it against your replay endpoint",
+          "command": "npx rightmodeler init --traces ./traces/phoenix-spans.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one does the job?",
+      "intro": "Three situations, with the honest winner named in each.",
+      "scenarios": [
+        {
+          "scenario": "One production answer came out wrong, and you want to rerun that exact LLM call with a different prompt, model, or temperature and watch what changes.",
+          "winner": "theirs",
+          "why": "That is Span Replay, per Phoenix's docs: load the recorded span into the Prompt Playground, change the prompt, model, or parameters, and compare the outputs, with every Playground run recorded as a trace. rightmodeler has no interactive view and never edits prompts; it answers a narrower question in batch."
+        },
+        {
+          "scenario": "Every step of your agent still runs on the model you chose at launch, the bill keeps growing, and nobody has time to build a dataset for each step and try cheaper models one by one.",
+          "winner": "ours",
+          "why": "rightmodeler turns the spans Phoenix already holds into the whole decision: a shortlist from your provider's live catalog, every step family replayed on its recorded inputs, agreement with the output you accepted, sample size, and abstentions, then a model-only draft pull request for the swaps that clear every gate."
+        },
+        {
+          "scenario": "Your team evaluates production in Phoenix and wants any model swap to pass the same checks before and after it merges.",
+          "winner": "both",
+          "why": "Run the audit on exported spans and review its draft pull request, which carries an evidence table for each step family. Before merging, run the swapped step through a Phoenix experiment on your golden dataset; after it merges, the evaluators you already run on production keep scoring the new model's spans."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "Phoenix is a full environment for building and evaluating LLM applications: OpenInference auto-instrumentation for frameworks and providers, LLM-as-judge and code evaluators on traces and datasets, prompt management, a playground, and experiments with repetitions, baselines, and cost charts. rightmodeler ships none of that. It is a CLI that answers one question.",
+        "Phoenix can already replay a recorded step on another model and compare models side by side. For one step where you know which model to try, the Playground gives you a quick, visual answer that rightmodeler does not. What rightmodeler adds is the routine around the rerun, applied to every step family at once and ending in a pull request.",
+        "Phoenix is free to self-host with no feature limitations, per its docs, and keeps your data inside your own infrastructure. rightmodeler also runs on your machine, but it is not a place your team inspects traces. Phoenix stays that place.",
+        "And the audit's verdicts say only what they measure: agreement with the output you shipped, which is evidence, not proof of correctness. When the sample is too small or the evidence is mixed, the audit abstains instead of recommending."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "The words this page turns on",
+      "terms": [
+        {
+          "term": "trace",
+          "slug": "trace",
+          "def": "The record of what your agent did: every model call with its inputs and outputs. Phoenix stores it as OpenInference spans, and the spans whose kind is LLM are the calls the audit replays."
+        },
+        {
+          "term": "swap candidate",
+          "slug": "swap-candidate",
+          "def": "A cheaper model shortlisted from your configured provider's live catalog and replayed on one step's recorded inputs."
+        },
+        {
+          "term": "reference evidence",
+          "slug": "reference-evidence",
+          "def": "Scores measured against the output you actually accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness: the production result is the reference, not ground truth."
+        },
+        {
+          "term": "quality floor",
+          "slug": "quality-floor",
+          "def": "The minimum agreement a candidate must clear, and clear again on held-out cases, before the audit recommends a swap. It is configurable, and anything below it is a no."
+        },
+        {
+          "term": "cascade risk",
+          "slug": "cascade-risk",
+          "def": "The chance that a cheaper model at one step quietly degrades the later steps that build on its output. Swaps that could cascade are confirmed by running the pipeline end to end."
+        },
+        {
+          "term": "abstain",
+          "slug": "abstain",
+          "def": "The audit's decision to recommend nothing for a step family when the sample is small or the evidence is mixed, with the reason named. The current model stays."
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Phoenix can replay spans on other models. Why add rightmodeler?",
+          "a": "Because replay is one step of the decision. Phoenix's Span Replay reruns a span you pick, on a model you pick, and shows you the outputs. rightmodeler starts from all the LLM spans you export, shortlists cheaper candidates from your provider's live catalog, replays every step family, judges each candidate against the output you accepted, reports sample size and abstentions, clears the quality floor again on held-out cases, and turns only the swaps that clear every gate into a draft pull request a person merges."
+        },
+        {
+          "q": "Does rightmodeler need an Arize account or API key?",
+          "a": "No. The integration works with the OpenInference span format itself: export the spans and hand over the file. It makes no difference where your Phoenix instance runs. The only credential the audit needs is the key for the replay endpoint you configure."
+        },
+        {
+          "q": "Can Phoenix's evaluators grade the audit's replays?",
+          "a": "The CLI's external evaluators are Braintrust, Langfuse, LangSmith, and promptfoo, and any of them can grade replays of Phoenix spans. Without one, the built-in judge grades each replay: a model from a family neither the candidate nor the current model belongs to, called twice with the positions swapped. Your Phoenix evaluators stay useful around the audit: run the swapped step through a Phoenix experiment before you merge, and keep scoring production after."
+        },
+        {
+          "q": "Does rightmodeler replace Phoenix?",
+          "a": "No. Phoenix is where you trace, evaluate, and experiment. rightmodeler runs after the fact on exported spans, answers which model each step should call, and hands the change to code review. Not observability. Not a runtime gateway."
+        },
+        {
+          "q": "Is Phoenix open source?",
+          "a": "Arize describes Phoenix as its open-source platform: free to self-host, with no Phoenix feature gated behind its commercial product, per its docs. The code is on GitHub under the Elastic License 2.0. Arize AX is Arize's separate managed platform. The rightmodeler CLI is MIT-licensed."
+        },
+        {
+          "q": "Will the audit always find a cheaper model?",
+          "a": "No, and it is designed not to. A family abstains when the evidence is thin, when too many of its cases had to be left out, or when no candidate clears the quality floor again on held-out cases. A report that says every step already earns its model is a possible result."
+        }
+      ]
+    }
+  ]
+}

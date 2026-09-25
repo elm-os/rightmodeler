@@ -17,6 +17,7 @@ import {
   STATIC_MARKDOWN_PATHS,
 } from "../src/lib/markdown-routes.ts";
 import { renderVsMarkdown } from "../src/content/markdown/render-vs.ts";
+import { SITE_URL } from "../src/lib/site.ts";
 
 const read = (rel) => fs.readFileSync(path.join(webRoot, rel), "utf8");
 
@@ -277,24 +278,27 @@ test("the Markdown handler stays out of /api/, and robots keeps it uncrawlable",
 });
 
 test("the vs twin spells out scenario verdicts and the hero verdict the way the page does", () => {
-  const markdown = renderVsMarkdown({
-    name: "Acme",
-    h1: "rightmodeler vs Acme",
-    lede: "Lede.",
-    verdictLabel: "Complement · rightmodeler runs on top",
-    website: "https://acme.example",
-    blocks: [
-      {
-        type: "scenarios",
-        heading: "Scenarios",
-        scenarios: [
-          { scenario: "A", winner: "theirs", why: "w" },
-          { scenario: "B", winner: "ours", why: "w" },
-          { scenario: "C", winner: "both", why: "w" },
-        ],
-      },
-    ],
-  });
+  const markdown = renderVsMarkdown(
+    {
+      name: "Acme",
+      h1: "rightmodeler vs Acme",
+      lede: "Lede.",
+      verdictLabel: "Complement · rightmodeler runs on top",
+      website: "https://acme.example",
+      blocks: [
+        {
+          type: "scenarios",
+          heading: "Scenarios",
+          scenarios: [
+            { scenario: "A", winner: "theirs", why: "w" },
+            { scenario: "B", winner: "ours", why: "w" },
+            { scenario: "C", winner: "both", why: "w" },
+          ],
+        },
+      ],
+    },
+    SITE_URL,
+  );
   assert.doesNotMatch(markdown, /^Use: (?:ours|theirs|both)$/m);
   for (const label of [
     "the right hire: Acme",
@@ -315,4 +319,45 @@ test("the vs twin spells out scenario verdicts and the hero verdict the way the 
     ),
     "the official site line must follow the verdict label, as the hero link follows the chip",
   );
+});
+
+test("a comparison with an integration ends its stack section with the setup guide, as the page does", () => {
+  const dir = path.join(webRoot, "src", "content", "vs", "data");
+  const pages = fs
+    .readdirSync(dir)
+    .filter((file) => file.endsWith(".json"))
+    .map((file) => JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")));
+  const stacked = pages.filter(
+    (page) =>
+      page.integrationSlug &&
+      page.blocks.some((block) => block.type === "stack"),
+  );
+  assert.ok(
+    stacked.length > 0,
+    "no comparison has both an integrationSlug and a stack block",
+  );
+  for (const page of pages) {
+    const markdown = renderVsMarkdown(page, SITE_URL);
+    if (!page.integrationSlug) {
+      assert.doesNotMatch(
+        markdown,
+        /^Setup guide:/m,
+        `${page.slug} names no integration but its twin links a setup guide`,
+      );
+      continue;
+    }
+    const line = `Setup guide: ${SITE_URL}/integrations/${page.integrationSlug}`;
+    // Blocks such as positioning carry no h2, so anchor on the stack's own last line instead of
+    // slicing to the next heading: the setup guide must follow it directly.
+    for (const block of page.blocks.filter((b) => b.type === "stack")) {
+      const last = block.commands?.length
+        ? `${block.commands.at(-1).command}\n\`\`\``
+        : block.paragraphs.at(-1);
+      assert.ok(
+        markdown.includes(`${last}\n\n${line}\n`) ||
+          markdown.endsWith(`${last}\n\n${line}`),
+        `${page.slug}: the stack section must end with "${line}"`,
+      );
+    }
+  }
 });

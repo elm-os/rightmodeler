@@ -11,7 +11,12 @@
   "h1": "rightmodeler vs Vals AI",
   "lede": "Vals AI measures models on expert-built tasks nobody can train on, and open-sources the tooling it runs them with. rightmodeler measures cheaper models against the outputs your own agent already shipped, step by step.",
   "integrationSlug": "",
-  "related": ["open-frontier", "promptfoo", "braintrust"],
+  "related": [
+    "open-frontier",
+    "promptfoo",
+    "braintrust",
+    "artificial-analysis"
+  ],
   "cta": "github",
   "blocks": [
     {

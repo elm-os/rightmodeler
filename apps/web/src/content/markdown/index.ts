@@ -56,7 +56,8 @@ export function getMarkdown(pathname: string): string | undefined {
     }
     if (family === "vs") {
       const comparison = getComparison(slug);
-      if (comparison) return withSource(path, renderVsMarkdown(comparison));
+      if (comparison)
+        return withSource(path, renderVsMarkdown(comparison, SITE_URL));
     }
     if (family === "integrations") {
       const integration = getIntegration(slug);

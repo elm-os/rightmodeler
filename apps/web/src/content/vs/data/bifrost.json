@@ -1,0 +1,210 @@
+{
+  "slug": "bifrost",
+  "name": "Bifrost",
+  "website": "https://www.getmaxim.ai/bifrost",
+  "logo": "/integrations/logos/bifrost.png",
+  "category": "gateway",
+  "verdict": "complement",
+  "verdictLabel": "Complement · the gateway executes, the audit decides",
+  "title": "rightmodeler vs Bifrost: the call vs the choice",
+  "description": "Bifrost executes your model calls with fallbacks, budgets and caching. rightmodeler reads its request logs and replays through it to decide which model to call.",
+  "h1": "rightmodeler vs Bifrost",
+  "lede": "Bifrost executes the model calls your code sends, with failover, budgets and caching around each one. rightmodeler decides which model each step should request: it reads Bifrost's own request logs, replays the steps through the same gateway, and proposes the change as a pull request you review.",
+  "integrationSlug": "bifrost",
+  "related": ["portkey", "litellm", "openrouter"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Keep your gateway. Bifrost, Maxim's open-source AI gateway, is hired to execute requests: per its docs as of 2026-09-24, one OpenAI-compatible API in front of 20+ providers, with retries, fallbacks, load balancing, a semantic cache, and budgets set through virtual keys. rightmodeler is hired to decide what those requests should ask for. It reads the request logs Bifrost keeps, replays each recorded step through cheaper candidates on the same gateway, judges every candidate against the output you accepted, and opens a draft pull request that changes only model identifiers once the evidence holds. It never sits in your request path: Bifrost serves every production call before and after the audit."
+    },
+    {
+      "type": "table",
+      "heading": "Executing a request, deciding a model",
+      "intro": "Both tools touch the model name in a request. One carries it out; the other asks whether it is the right one.",
+      "caption": "bifrost vs rightmodeler",
+      "leftLabel": "Bifrost",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "job",
+          "theirs": "execute each request: route it, retry it, fall back, serve from cache, log it",
+          "ours": "decide which model each step of your agent should request"
+        },
+        {
+          "dimension": "decides",
+          "theirs": "in the request path, per call",
+          "ours": "offline, after the run, before any change ships"
+        },
+        {
+          "dimension": "works from",
+          "theirs": "the request, your config, and provider health at that moment",
+          "ours": "replays of recorded steps, judged against the output you accepted"
+        },
+        {
+          "dimension": "the model name",
+          "theirs": "carries out the one the request names, or the fallback you configured",
+          "ours": "questions the name itself, one step at a time"
+        },
+        {
+          "dimension": "output",
+          "theirs": "a response, and a log row with tokens, cost, latency and retries",
+          "ours": "a per-step report with agreement, sample size and abstentions, then a draft pull request"
+        },
+        {
+          "dimension": "in your request path",
+          "theirs": "yes; it is the gateway",
+          "ours": "never; it is a report you run"
+        }
+      ]
+    },
+    {
+      "type": "contrast",
+      "left": {
+        "heading": "Bifrost alone: every call carried out and logged",
+        "items": [
+          "Retries, key rotation and provider fallbacks keep calls answered through rate limits and outages, per Bifrost's docs.",
+          "Budgets and rate limits apply at the virtual key, team and customer levels, and the log store records each call's input, output, tokens, cost and latency.",
+          "Which model a step should call stays a decision you make by hand: the log shows what each call cost, not what a cheaper model would have answered."
+        ]
+      },
+      "right": {
+        "heading": "Keep Bifrost, add rightmodeler on top",
+        "items": [
+          "Your application keeps sending its calls through Bifrost, and the log store becomes the audit's corpus, one ordered run per session.",
+          "The same gateway becomes the replay route: candidates replay each step's recorded inputs through it, and a response counts only when it is the requested model's own answer.",
+          "An approved swap ships as a draft pull request that changes only model identifiers, and Bifrost keeps serving the new model."
+        ]
+      }
+    },
+    {
+      "type": "stack",
+      "heading": "The supported workflow: request logs in, replays through Bifrost",
+      "intro": "Bifrost is both the trace source and the replay route. Built and verified on the open-source gateway, maximhq/bifrost:v2.2.1, pinned by digest.",
+      "paragraphs": [
+        "Request logs. With logging on, Bifrost records every call as your application sent it. Send x-bf-session-id so the calls of one conversation form one ordered run, and x-bf-dim-rightmodeler-family to name each call's family. Export chat completions from the management API, one GET /api/logs/{id} detail per line, and rightmodeler reads the model your application asked for, the conversation as sent, the output, usage, cost, latency and retries. Failed calls, answers from a configured fallback, rightmodeler's own replays, calls still running at export, and calls whose content was not logged are left out, each named in a trace_steps_excluded warning.",
+        "Candidate identity. Candidates replay each step's recorded inputs through Bifrost's POST /v1/chat/completions, and every response is checked before it counts. A response that names another model, reports a server-side fallback or a cache hit, or reports that the compat plugin dropped parameters or converted the request is recorded as substituted and never graded, and a family with more than 5% of its replays substituted abstains. Only the requested model's own answer becomes evidence.",
+        "Replay settings. Run the gateway with every compat flag set to false, logging on, and no key aliases or routing rules for replay models. Pass --catalog-reference with the upstream's public model list, because a custom provider lists ids and context windows only; the billed cost of each replay is read from usage.cost.total_cost. Send x-bf-cache-no-store: true and x-bf-dim-rightmodeler: replay with --header: the first stops Bifrost writing replay answers to its semantic cache, and a cache hit is still caught by the identity check above; the second tags replays so the next export leaves them out.",
+        "Verified live on 2026-09-23 on maximhq/bifrost:v2.2.1, pinned by digest, with Vercel AI Gateway as a custom provider: the log export read as one ordered run per session with a failed call and a fallback answer named, every replayed response came from the requested model at the billed cost, and a key alias that mapped the candidate to another model had every replay left out as substituted."
+      ],
+      "commands": [
+        {
+          "comment": "# the upstream key, which config.json reads as env.AI_GATEWAY_API_KEY",
+          "command": "export AI_GATEWAY_API_KEY=..."
+        },
+        {
+          "comment": "# a named volume for config.json and the log store",
+          "command": "docker volume create bifrost-data"
+        },
+        {
+          "comment": "# the open-source image, reachable from this machine only",
+          "command": "docker create --name bifrost -p 127.0.0.1:8080:8080 -e AI_GATEWAY_API_KEY -v bifrost-data:/app/data maximhq/bifrost:v2.2.1"
+        },
+        {
+          "comment": "# copy in the replay-safe config and start the gateway",
+          "command": "docker cp config.json bifrost:/app/data/config.json && docker start bifrost"
+        },
+        {
+          "comment": "# export chat completions oldest first; past 1000 rows, repeat with offset=1000 and append",
+          "command": "curl -s 'http://127.0.0.1:8080/api/logs?objects=chat_completion,chat_completion_stream&order=asc&limit=1000&offset=0' | jq -r '.logs[].id' | while read -r id; do curl -s \"http://127.0.0.1:8080/api/logs/$id\"; echo; done > bifrost-logs.jsonl"
+        },
+        {
+          "comment": "# Bifrost holds the upstream key, so this only has to be non-empty",
+          "command": "export BIFROST_KEY=unused"
+        },
+        {
+          "comment": "# replay through Bifrost: replays skip its cache and are tagged for the next export",
+          "command": "npx rightmodeler init --traces ./bifrost-logs.jsonl --base-url http://127.0.0.1:8080/v1 --api-key-env BIFROST_KEY --catalog-reference https://ai-gateway.vercel.sh/v1/models --header 'x-bf-cache-no-store: true' --header 'x-bf-dim-rightmodeler: replay' --max-cost-usd 25"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one gets the call?",
+      "intro": "Three situations, each with the honest winner.",
+      "scenarios": [
+        {
+          "scenario": "A provider starts returning rate-limit and server errors in the middle of a traffic spike.",
+          "winner": "theirs",
+          "why": "That is a live request that needs an answer now. Bifrost retries with backoff, rotates to another key, and falls back to the next provider in your chain, per its docs. rightmodeler works on recorded traces and never touches a request in flight."
+        },
+        {
+          "scenario": "Bifrost's logs show one agent step running thousands of times a day on a frontier model, and you want to know whether a cheaper model would give answers you accept.",
+          "winner": "ours",
+          "why": "No gateway setting answers that. rightmodeler replays that step's recorded inputs through cheaper candidates, judges each against the output you accepted, and reports agreement, sample size and abstentions; a swap is proposed only when a candidate clears your quality floor."
+        },
+        {
+          "scenario": "You already run Bifrost with logging on and want the bill lower without changing how requests are served.",
+          "winner": "both",
+          "why": "Bifrost already holds the corpus: its log export is read as one ordered run per session, with failed calls and fallback answers left out by name. With the replay settings above, replays run through the same gateway, and an approved swap changes only the model name your code sends, which Bifrost keeps serving."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "Bifrost runs in the request path and rightmodeler never does. Retries, key rotation, provider fallbacks, load balancing and the semantic cache all act on live calls, and an audit replaces none of them.",
+        "Bifrost governs access and spend while traffic flows: virtual keys control access, budgets and rate limits apply at the virtual key, team and customer levels, and an MCP gateway centralizes tool connections. Bifrost Enterprise, per Maxim's docs, adds clustering, adaptive load balancing, guardrails, role-based access control and audit logs. rightmodeler has no keys, no budgets and no enforcement of any kind.",
+        "Bifrost is built for speed, and Maxim publishes the numbers: as of 2026-09-24, its docs report 11 microseconds of added overhead per request at 5,000 requests per second on a t3.xlarge, measured on mocked OpenAI calls and excluding JSON marshalling and the HTTP call. Those are Maxim's figures. rightmodeler records the latency of every replay it sends through your gateway, hop included, so you see how long real calls take on your prompts and upstreams.",
+        "And the audit's verdicts are agreement with the output you shipped, not proof of correctness. When a step's evidence is too thin to rule, the audit abstains instead of recommending a swap."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page leans on",
+      "terms": [
+        {
+          "term": "trace",
+          "def": "The record of what your agent did: each model call's inputs, outputs, model and usage. Here, the rows Bifrost's log store keeps, exported and read as one run per session.",
+          "slug": "trace"
+        },
+        {
+          "term": "swap candidate",
+          "def": "A cheaper model the audit shortlists, replays and judges for one specific step.",
+          "slug": "swap-candidate"
+        },
+        {
+          "term": "reference evidence",
+          "def": "How a replay is scored: agreement with the output you accepted for that exact step. The production result is the reference, not ground truth.",
+          "slug": "reference-evidence"
+        },
+        {
+          "term": "quality floor",
+          "def": "The configurable minimum agreement score a candidate must clear before the audit recommends it for a step.",
+          "slug": "quality-floor"
+        },
+        {
+          "term": "abstain",
+          "def": "What the audit does when a step's evidence is too thin to support a verdict: it says so and recommends nothing.",
+          "slug": "abstain"
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace Bifrost?",
+          "a": "No. Bifrost executes and governs your live traffic; rightmodeler is a report on traffic already served, and it never sits in your request path. An audit gives Bifrost more work, not less: its logs are the corpus, its gateway is the replay route, and an approved swap keeps serving through it."
+        },
+        {
+          "q": "Can rightmodeler read the logs Bifrost already keeps?",
+          "a": "Yes. Export chat completions from GET /api/logs oldest first, write one GET /api/logs/{id} detail per line, and pass the file with --traces; the Bifrost reader is picked automatically. Send x-bf-session-id from your application so the calls of one conversation form one ordered run, and do not pass roots_only=true, which hides fallback rows."
+        },
+        {
+          "q": "How does rightmodeler know a replayed answer came from the candidate?",
+          "a": "It checks every response before it counts. One that names another model, reports a server-side fallback or a semantic-cache hit, or reports that the compat plugin dropped parameters or converted the request is recorded as substituted and never graded. Every compat flag off and no key aliases or routing rules for replay models keep that from happening, and a family with more than 5% of its replays substituted abstains."
+        },
+        {
+          "q": "Which Bifrost build does the integration run on?",
+          "a": "The open-source gateway: built and verified on transports/v2.2.1 (maximhq/bifrost:v2.2.1), pinned by digest. Pin the image, as the setup does."
+        },
+        {
+          "q": "Will the audit always find a cheaper model?",
+          "a": "No. Plenty of steps already run on the cheapest model that can do the work, and a candidate can fall short of the quality floor or leave too little evidence, which ends in an abstention. Every swap that is offered waits for a person to review and merge the pull request."
+        }
+      ]
+    }
+  ]
+}

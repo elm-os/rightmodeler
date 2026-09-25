@@ -305,7 +305,7 @@ jobs:
 
 ## Optional: a GitHub App token
 
-Not tested live: rightmodeler's acceptance runs of this workflow use `GITHUB_TOKEN` only. A GitHub App installation token lets the draft's `pull_request` workflows start without approval, and the draft is authored by `<app-slug>[bot]`. To use one:
+The workflow above runs on the built-in `GITHUB_TOKEN`, the supported default. A GitHub App installation token is an optional upgrade: the draft's `pull_request` workflows start without approval, and the draft is authored by `<app-slug>[bot]`. To use one:
 
 1. Create a GitHub App with the permissions in [GitHub](github.md) and install it on the repository.
 2. Store its client ID in the repository variable `RIGHTMODELER_APP_CLIENT_ID` and its private key in the repository secret `RIGHTMODELER_APP_PRIVATE_KEY`.

@@ -31,7 +31,16 @@
       "pattern": "^/(vs|integrations)/logos/[a-z0-9-]+\\.(svg|png)$"
     },
     "category": {
-      "enum": ["gateway", "evals", "router", "spend", "training", "benchmarks"]
+      "enum": [
+        "gateway",
+        "observability",
+        "evals",
+        "router",
+        "spend",
+        "context",
+        "training",
+        "benchmarks"
+      ]
     },
     "verdict": { "enum": ["complement", "competitor", "different-job"] },
     "verdictLabel": { "type": "string", "minLength": 1 },

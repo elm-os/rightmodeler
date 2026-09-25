@@ -65,8 +65,8 @@ the site. Two findings, both verified rather than assumed, so nobody has to redi
 2. **`Vary` cannot be set on a prerendered page at all** on the current deployment platform. A
    custom marker header and `Vary` were shipped from the _same_ `vercel.json` rule: the marker
    arrived on the response, `Vary` did not. The platform manages `Vary` on cached responses
-   itself. This finding was not re-verified during the 16.3.4 check because that check ran under
-   local `next start`, not on the deployment platform.
+   itself. Verified on the deployment platform under 16.3.0-preview.5; the 16.3.4 check ran under
+   local `next start`, so it covered finding 1.
 
 Consequences worth knowing before you debug this again:
 

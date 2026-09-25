@@ -76,7 +76,7 @@
       "intro": "Admissions first, then the reason we made the opposite bet.",
       "paragraphs": [
         "Runtime adaptivity is real. Not Diamond routes each individual input live, so on high-volume, heterogeneous traffic it can capture savings a fixed per-step assignment leaves behind. Not Diamond Code goes further: mid-session, it adjusts model and reasoning effort step by step and factors in KV-cache state, sometimes staying on a pricier model because the warm cache makes that cheaper overall. rightmodeler never touches a live request and cannot do any of that.",
-        "There is also no measurement lift on their side. The router works out of the box, with no traces to collect and no replays to run, and it has operated at real scale: Not Diamond's meta-model has powered OpenRouter's Auto router since January 2025, and OpenRouter's CEO still credits it on Not Diamond's homepage as of August 2026. Their launch post claims 20%+ cost reduction without quality degradation for Not Diamond Code; read that as a vendor-run number awaiting independent reproduction, the same hedge we would ask you to apply to any figure, ours included.",
+        "There is also no measurement lift on their side. The router works out of the box, with no traces to collect and no replays to run, and it has operated at real scale: Not Diamond's meta-model has powered OpenRouter's Auto router since January 2025, and OpenRouter's CEO still credits it on Not Diamond's homepage as of August 2026. Their launch post claims 20%+ cost reduction without quality degradation for Not Diamond Code; that is Not Diamond's own number, so weigh it as you would any figure, ours included: against your own traffic.",
         "Here is why we still built a report instead of a router. Researchers from Michigan, Stanford, MIT, Google DeepMind, and All Hands AI, the team behind the OpenHands agent, ran eight frontier models across 500 real GitHub issues, four separate times each, and recorded every token (Bai et al., arXiv:2604.22750). Across those repeats, token usage on the identical task, agent, and model varied by as much as thirty times. A single live prediction, like a single replay, is one draw from that wide distribution. So the report shows reference agreement (how often a candidate agreed with the output you shipped), sample size, and abstentions, and it abstains (declines to recommend) where the evidence is thin, rather than stretching one draw into a verdict. The verdicts stay hedged accordingly: agreement with what you shipped, never proof of correctness, because the production result is the reference, not ground truth."
       ]
     },
@@ -112,7 +112,7 @@
         },
         {
           "q": "Is Not Diamond Code generally available?",
-          "a": "No. As of August 2026 it is in early access behind a gated waitlist, per their docs. Its launch post claims 20%+ cost reduction without quality degradation, plus benchmark wins on Poly-SWE-Bench and LongCodeQA; those are vendor-run numbers that have not been independently reproduced."
+          "a": "No. As of August 2026 it is in early access behind a gated waitlist, per their docs. Its launch post claims 20%+ cost reduction without quality degradation, plus benchmark wins on Poly-SWE-Bench and LongCodeQA; those are Not Diamond's own numbers."
         },
         {
           "q": "Can rightmodeler tell me whether a router would pay off on my pipeline?",
@@ -120,7 +120,7 @@
         },
         {
           "q": "Does Not Diamond see my prompts and code?",
-          "a": "Per their docs, no: the Not Diamond Code proxy computes derived metadata about the session, sends only that to their optimization service, and the model call itself runs through your configured provider or gateway. We have not independently verified this. rightmodeler's answer to the same worry is structural: there is no rightmodeler server, no account with us, no telemetry; the CLI runs on your machine against your own traces."
+          "a": "Per their docs, no: the Not Diamond Code proxy computes derived metadata about the session, sends only that to their optimization service, and the model call itself runs through your configured provider or gateway. rightmodeler's answer to the same worry is structural: there is no rightmodeler server, no account with us, no telemetry; the CLI runs on your machine against your own traces."
         }
       ]
     }

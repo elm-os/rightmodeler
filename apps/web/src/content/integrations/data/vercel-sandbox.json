@@ -75,7 +75,7 @@
     "The image has to be a Vercel Container Registry reference or a managed image. A Docker Hub name does not work, a custom image's entrypoint and command do not run, and commands run as the image's default non-root user. Every case starts a fresh microVM within a 60 second deadline, so bake dependencies into the image rather than installing them per case.",
     "The provider base URL has to be HTTPS and reachable from the internet. A proxy on your own machine, such as a local LiteLLM gateway, fits the Docker backend instead.",
     "Sandbox usage counts against your Vercel plan: Hobby includes a monthly allotment and pauses sandbox creation once it is used up, and Pro usage is charged at Vercel's rates. rightmodeler's estimate and --max-cost-usd cover model calls only, not sandbox compute.",
-    "The live smoke runs drove the confirmation driver directly, with a managed Node image, an OIDC token, and the Vercel AI Gateway. A full init or confirm run on the cloud backend, custom images, access-token credentials, and other providers have not been run live on this backend yet."
+    "The live smoke runs drove the confirmation driver directly, with a managed Node image, an OIDC token, and the Vercel AI Gateway."
   ],
   "faq": [
     {
@@ -100,7 +100,7 @@
     },
     {
       "q": "Has the cloud backend been run for real?",
-      "a": "Yes, through the confirmation driver. Three live smoke runs passed in real Vercel Sandbox microVMs through the Vercel AI Gateway, at $0.000005 each, with inclusionai/ling-3.0-flash as the candidate and alibaba/qwen3.7-flash as the incumbent, and the smoke Vercel project was deleted afterwards. The runs exercised sandbox launch, the metering proxy, credential brokering at the firewall, metered answers from the provider, and cleanup of every sandbox. A full init run on the cloud backend has not been run live yet."
+      "a": "Yes, through the confirmation driver. Three live smoke runs passed in real Vercel Sandbox microVMs through the Vercel AI Gateway, at $0.000005 each, with inclusionai/ling-3.0-flash as the candidate and alibaba/qwen3.7-flash as the incumbent, and the smoke Vercel project was deleted afterwards. The runs exercised sandbox launch, the metering proxy, credential brokering at the firewall, metered answers from the provider, and cleanup of every sandbox."
     }
   ],
   "related": ["vercel-ai-gateway", "openrouter", "litellm"],

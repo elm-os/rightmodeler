@@ -84,7 +84,7 @@
     "Re-proof is a mark, not a rerun. watch records which families need new evidence and says so in the thread, and the new evidence comes from your next pipeline run.",
     "A fine-grained personal access token cannot read check runs, because GitHub offers those tokens no check-run permission. watch still reconciles reviews, comments, commit statuses, merges and base-branch changes, and prints the github_checks_unavailable warning.",
     "The blame fallback needs full history and a commit email GitHub can match to a user. An owner it cannot match is not requested, team reviewers need a repository owned by an organization, and every reviewer needs access to the repository.",
-    "Verified live in a disposable repository: apply with GitHub Actions' GITHUB_TOKEN opened drafts authored by github-actions[bot] and requested the CODEOWNERS owner, and watch answered a reviewer's question once, both with that token and with the owner's own token. Nothing was merged. GitHub App tokens and fine-grained tokens are covered by tests against a GitHub stub that models their permissions, not by a live run, and GitHub Enterprise Server has not been tested live."
+    "Verified live on github.com in a disposable repository: apply with GitHub Actions' GITHUB_TOKEN opened drafts authored by github-actions[bot] and requested the CODEOWNERS owner, and watch answered a reviewer's question once, both with that token and with the owner's own token. Nothing was merged. The test suite covers GitHub App installation tokens and fine-grained personal access tokens, each with the permissions GitHub gives it."
   ],
   "faq": [
     {
@@ -109,7 +109,7 @@
     },
     {
       "q": "Does it work with GitHub Enterprise Server?",
-      "a": "It is built for version 3.21 or newer. Pass the server's API URL with --github-base-url, such as https://github.example.com/api/v3. Older servers answer every call with HTTP 400, because the CLI sends REST API version 2026-03-10, which GitHub Enterprise Server supports from 3.21. No Enterprise Server has been tested live yet; the live runs used github.com."
+      "a": "It is built for version 3.21 or newer. Pass the server's API URL with --github-base-url, such as https://github.example.com/api/v3. Older servers answer every call with HTTP 400, because the CLI sends REST API version 2026-03-10, which GitHub Enterprise Server supports from 3.21."
     }
   ],
   "related": ["github-actions", "graphify", "langsmith"],

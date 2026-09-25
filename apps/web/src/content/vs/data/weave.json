@@ -1,0 +1,194 @@
+{
+  "slug": "weave",
+  "name": "W&B Weave",
+  "website": "https://wandb.ai/site/weave/",
+  "logo": "/integrations/logos/weave.svg",
+  "category": "observability",
+  "verdict": "complement",
+  "verdictLabel": "Complement · Weave evaluates, the audit right-sizes",
+  "title": "rightmodeler vs W&B Weave: agent evals vs model swaps",
+  "description": "W&B Weave traces, scores, and monitors production agents. rightmodeler replays the calls Weave recorded on cheaper models and proposes reviewed model swaps.",
+  "h1": "rightmodeler vs W&B Weave",
+  "lede": "W&B Weave traces your agent in production, scores it with signals and evaluations you configure, and lets you try other models in its Playground. rightmodeler reads the calls Weave already recorded and settles one narrower question with evidence: which model should each step call?",
+  "integrationSlug": "weave",
+  "related": ["braintrust", "langsmith", "phoenix"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Complements, working on the same calls. You hire W&B Weave to see and improve an agent in production: as of 2026-09-24, its site describes end-to-end observability of agent sessions, out-of-the-box signals that surface failure modes, a flexible evaluation framework to prevent regressions, guardrails, and a Playground for testing new models against production traces. You hire rightmodeler, a free MIT-licensed CLI, for model right-sizing: its dedicated Weave adapter reads the calls you export, replays each recorded step through cheaper candidates from your provider's live catalog, judges them against the output you already shipped, and reports agreement, sample size, and abstentions per step family. When a swap clears every gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, for a human to review and merge. Keep Weave where production is watched; your Weave evaluations are the right last check on any swap."
+    },
+    {
+      "type": "table",
+      "heading": "How they differ",
+      "intro": "Weave is the platform your agent reports to. rightmodeler is a report you run on what Weave recorded.",
+      "caption": "weave vs rightmodeler",
+      "leftLabel": "W&B Weave",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "job",
+          "theirs": "observe, evaluate, and improve agents and LLM apps in production",
+          "ours": "decide which model each step should call, with evidence"
+        },
+        {
+          "dimension": "starting point",
+          "theirs": "traces your app sends through the Weave SDK, an agent integration, or OpenTelemetry",
+          "ours": "Weave calls you export to JSON or JSONL"
+        },
+        {
+          "dimension": "quality signal",
+          "theirs": "scorers and LLM judges you configure, preset signals, and human feedback",
+          "ours": "agreement with the output you shipped, judged by a model from a family neither side belongs to"
+        },
+        {
+          "dimension": "trying another model",
+          "theirs": "Playground and Evaluation Playground, side by side, on the prompts, traces, or dataset you pick",
+          "ours": "every recorded call of a step family replayed on cheaper candidates from your provider's live catalog"
+        },
+        {
+          "dimension": "verdict",
+          "theirs": "scores and comparisons you read; leaderboards rank model versions",
+          "ours": "a recommendation or an abstention per step family, with sample size, re-cleared on held-out cases"
+        },
+        {
+          "dimension": "the change",
+          "theirs": "made by you, or by a coding agent you connect through W&B's skills and MCP server",
+          "ours": "a draft pull request that changes model identifiers only; a human merges it"
+        },
+        {
+          "dimension": "seat at runtime",
+          "theirs": "tracing beside every call; guardrails can block or modify an output inline",
+          "ours": "none; it runs offline on files you exported"
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Can you use both? Yes, and Weave stays put",
+      "paragraphs": [
+        "Nothing about your Weave setup changes: no new SDK, no re-instrumentation, no change to your weave.op decorators. Weave keeps tracing, scoring, and monitoring production the whole time. rightmodeler reads a file of calls you exported and never connects to your W&B project during the audit; your W&B key is used only by the export you run yourself.",
+        "The two answer different questions about the same calls. Weave's evaluations and signals tell you whether the agent clears the bar you set. The audit asks whether each step needs the model it pays for, and a swap it proposes is exactly the change worth running your Weave evaluations against before it ships."
+      ]
+    },
+    {
+      "type": "stack",
+      "heading": "The supported workflow: Weave calls in, a reviewed pull request out",
+      "intro": "A dedicated adapter reads Weave call exports. Three commands, run from your repository.",
+      "paragraphs": [
+        "Export the calls with the Weave Python SDK: weave.init on your project, then client.get_calls with the inputs, output, and summary columns, saved as JSON or JSONL. The adapter recognizes Weave rows by their id, trace_id, op_name, and started_at keys, takes the model and messages from inputs, reads output as the answer you shipped, and pulls token counts from the per-model usage in summary. display_name, or op_name when there is none, names the step family, and calls that share a trace_id stay together as one trajectory.",
+        "The preview run spends nothing. The full run replays each recorded call on cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, judges every replay against the output you accepted, and caps replay and judge spend together at the figure you pass with --max-cost-usd. It writes report.md with a verdict per step family. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers only and cites case-id hashes rather than case content. There is no rightmodeler server, no account, and no telemetry."
+      ],
+      "commands": [
+        {
+          "comment": "# export calls from your Weave project to a file",
+          "command": "python -c \"import weave; c = weave.init('entity/project'); c.get_calls(columns=['inputs','output','summary']).to_pandas().to_json('weave.json', orient='records')\""
+        },
+        {
+          "comment": "# preview the pipeline without spending anything",
+          "command": "npx rightmodeler init --plan --traces ./weave.json --repo ."
+        },
+        {
+          "comment": "# then run it against your replay endpoint",
+          "command": "npx rightmodeler init --traces ./weave.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one does the job?",
+      "intro": "Three situations, with the honest winner named in each.",
+      "scenarios": [
+        {
+          "scenario": "Overnight, users start complaining that your support agent gives off-topic answers, and you need to find the conversations and the cause.",
+          "winner": "theirs",
+          "why": "That is production observability, and it is Weave's job. Per its docs, signals such as the User Frustration and Low Quality Response presets tag agent turns using an LLM judge, a custom signal flags any behavior you describe, and the Agents view lays each conversation out turn by turn; per its site, alerts route to Slack or trigger webhook automations. rightmodeler runs offline on files you exported and has no live view, by design."
+        },
+        {
+          "scenario": "Your Weave evaluations are green, yet every op in the agent still calls a frontier model, and nobody can say which ones need it.",
+          "winner": "ours",
+          "why": "Weave's evaluations score the agent against the bar you defined; they do not replay each recorded call on cheaper models and judge the result against what you shipped. The audit does exactly that per step family, with sample size and abstentions attached, re-clears the quality floor on held-out cases, and opens a pull request for a multi-step swap only once it is confirmed end to end."
+        },
+        {
+          "scenario": "A cheaper model looks promising in the Weave Playground on a handful of production traces.",
+          "winner": "both",
+          "why": "The Playground shows how models answer the prompts you open, side by side, per Weave's docs. The audit turns that hunch into a per-step verdict across every recorded call in the family, on your own provider key. If a swap clears, run your Weave evaluation against the draft pull request before you merge it."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "Weave watches production continuously. Tracing, preset and custom signals, and alerts tell you what an agent is doing now, and guardrails can block or modify an output before it reaches a user, per its docs. rightmodeler works after the fact on exported files and will never tell you that something broke an hour ago.",
+        "Weave owns the evaluation workflow: versioned datasets, scorers you write or pick from its built-in set, evaluation comparisons, leaderboards, human feedback, and annotation queues. rightmodeler ships none of that. It answers one question, which model each step should call, and expects your Weave evaluations to remain the bar.",
+        "Weave also covers ground rightmodeler never touches: prompt and model versioning, a Playground for exploring prompts, coding agents that iterate through W&B's skills and MCP server, and hosting on W&B's multi-tenant cloud, a dedicated cloud, or a self-managed instance, per its docs. rightmodeler changes the model a step calls; it does not rewrite prompts, context, or code.",
+        "And the audit's verdicts carry their own limit: they measure how closely a candidate tracked the output you shipped, which is evidence of agreement, not proof of correctness. Where the sample is thin, the family abstains with a named reason instead of recommending."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page uses",
+      "terms": [
+        {
+          "term": "call",
+          "def": "Weave's record of one execution of an op: its inputs, output, timing, and parent, per Weave's docs. A call that recorded a model and messages under inputs is one step the audit can replay."
+        },
+        {
+          "term": "trace",
+          "slug": "trace",
+          "def": "In Weave, the tree of calls that share one trace_id. The audit keeps those calls together as one trajectory, so a multi-step op chain stays a single unit in the statistics."
+        },
+        {
+          "term": "swap candidate",
+          "slug": "swap-candidate",
+          "def": "A cheaper model from your configured provider's live catalog, replayed on one step family's recorded inputs."
+        },
+        {
+          "term": "reference evidence",
+          "slug": "reference-evidence",
+          "def": "Agreement between a candidate's output and the output you shipped for that exact call. Evidence of agreement with shipped output, not proof of correctness."
+        },
+        {
+          "term": "quality floor",
+          "slug": "quality-floor",
+          "def": "The configurable minimum a candidate must clear, on the cases it was chosen on and again on held-out cases, before the audit recommends it."
+        },
+        {
+          "term": "abstain",
+          "slug": "abstain",
+          "def": "What the audit does when a step family's evidence is too thin: it recommends nothing and names the reason. The current model stays."
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace W&B Weave?",
+          "a": "No. Weave traces, evaluates, and monitors your agent, and guards its outputs in production. rightmodeler is a report on calls Weave already recorded, and it answers one question Weave's evaluations do not ask: which model each step needs. A swap it proposes is the change to run through your Weave evaluations before it ships."
+        },
+        {
+          "q": "Weave's Playground can already compare models. Why run an audit?",
+          "a": "Different evidence. The Playground and the Evaluation Playground compare models on the prompts, traces, or dataset you choose, graded by you or by an LLM judge you configure, per Weave's docs. The audit replays every recorded call of a step family on cheaper candidates, judges each against the output you shipped, reports sample size and abstentions, and re-clears the quality floor on held-out cases before it recommends a swap."
+        },
+        {
+          "q": "How do I get my calls out of Weave?",
+          "a": "With the Weave Python SDK: initialize the client with weave.init(\"entity/project\"), call client.get_calls(columns=[\"inputs\", \"output\", \"summary\"]), and write the rows to JSON or JSONL. id, project_id, trace_id, op_name, and started_at come back on every call; those three columns carry the model, the messages, the output, and the token usage the adapter maps. The first command in the workflow above does it in one line."
+        },
+        {
+          "q": "Does the audit connect to my W&B account?",
+          "a": "No. Your W&B key is used by the export you run yourself. Once the calls are on disk the audit runs against them offline, and the only credential it needs is the key for the OpenAI-compatible endpoint you replay through. Recorded inputs leave your machine only during replay, to that endpoint, under your key."
+        },
+        {
+          "q": "Is this a comparison with all of Weights & Biases?",
+          "a": "No. This page compares rightmodeler with W&B Weave, the Weights & Biases product for tracing and evaluating agents and LLM applications. The rest of the W&B platform, such as experiment tracking, sweeps, and the model registry, serves model training work and sits outside this comparison."
+        },
+        {
+          "q": "Will the audit always find a cheaper model?",
+          "a": "No, and that is the point. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor on held-out cases. A report that says your current models already earn their cost is a valid result."
+        }
+      ]
+    }
+  ]
+}
