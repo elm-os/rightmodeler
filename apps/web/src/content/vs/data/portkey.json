@@ -1,0 +1,181 @@
+{
+  "slug": "portkey",
+  "name": "Portkey",
+  "website": "https://portkey.ai",
+  "logo": "/integrations/logos/portkey.svg",
+  "category": "gateway",
+  "verdict": "complement",
+  "verdictLabel": "Complement · infrastructure vs evidence",
+  "title": "rightmodeler vs Portkey: infrastructure vs evidence",
+  "description": "Portkey, now Prisma AIRS AI Gateway, runs and governs live AI traffic. rightmodeler replays your traces through its open-source gateway to test cheaper models.",
+  "h1": "rightmodeler vs Portkey",
+  "lede": "Portkey is gateway infrastructure for live AI traffic, now presented by Palo Alto Networks as Prisma AIRS AI Gateway. rightmodeler is the evidence behind a model replacement, and its replays can run through the open-source Portkey gateway on your own machine.",
+  "integrationSlug": "portkey",
+  "related": ["bifrost", "litellm", "vercel-ai-gateway"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Keep Portkey. It is hired to run and govern live AI traffic: per its homepage, gateway, observability, guardrails, governance and prompt management in one platform, with 1,600+ LLMs behind one API as of 2026-09-24. Palo Alto Networks completed its acquisition of Portkey on 2026-05-29, and the platform is now presented as Prisma AIRS AI Gateway. rightmodeler is hired for the evidence a model replacement needs before any traffic moves: it replays the steps you already shipped through cheaper candidates, judges each against the output you accepted, and opens a draft pull request that changes only model identifiers. The two meet at the open-source Portkey gateway, which rightmodeler uses as a replay route."
+    },
+    {
+      "type": "positioning",
+      "left": {
+        "heading": "Portkey: infrastructure for live traffic",
+        "items": [
+          "The platform: gateway, observability, guardrails, governance and prompt management in one product. Since Palo Alto Networks completed its acquisition on 2026-05-29, it is presented as Prisma AIRS AI Gateway, generally available since 2026-07-16.",
+          "The open-source AI Gateway (MIT, Portkey-AI/gateway) routes each request you send it: retries, fallbacks, load balancing, conditional routing, caching and guardrails, set per request by configs, per its README.",
+          "Both act at request time, on the call in front of them: which provider serves it, which fallback answers, which checks it has to pass."
+        ]
+      },
+      "right": {
+        "heading": "rightmodeler: evidence for a model replacement",
+        "items": [
+          "An MIT-licensed CLI you run on traces you export. It is never in the request path.",
+          "It replays each recorded step through cheaper candidates from the upstream's live catalog and judges every candidate against the output you accepted, with sample size, abstentions and a quality floor.",
+          "A swap that clears the bar ships as a draft pull request that changes only model identifiers, and a person reviews and merges it."
+        ]
+      }
+    },
+    {
+      "type": "contrast",
+      "left": {
+        "heading": "Your Portkey setup, as it runs today",
+        "items": [
+          "Production traffic flows through the Portkey or Prisma AIRS deployment you already run, with its configs, logs and guardrails.",
+          "Model choices live in your code and your configs, and the gateway carries them out on every call.",
+          "A canary config can send a share of traffic to a new model, and analytics show the effect on cost, latency, errors and feedback, per Portkey's docs."
+        ]
+      },
+      "right": {
+        "heading": "The same setup, with rightmodeler added",
+        "items": [
+          "Production stays exactly where it is. The audit runs offline on traces your application exports: OpenTelemetry GenAI spans, AI SDK telemetry or OpenAI SDK JSONL.",
+          "Replays run through an open-source Portkey gateway on your machine, routed by header to the upstream you choose, on that upstream's key.",
+          "Each candidate's evidence arrives before any user sees it, and an approved swap is a model identifier change your gateway keeps serving."
+        ]
+      }
+    },
+    {
+      "type": "stack",
+      "heading": "The supported workflow: replays through the open-source gateway",
+      "intro": "Built and verified on the open-source Portkey gateway 1.15.2 (MIT, portkeyai/gateway:1.15.2), pinned by digest.",
+      "paragraphs": [
+        "Run the open-source image on your machine, bound to 127.0.0.1. It needs no server configuration and has no key of its own: Portkey forwards the Authorization header to the upstream, so --api-key-env names the upstream's key, which rightmodeler reads at call time and never writes to its store.",
+        "Portkey picks the upstream for each request from headers, so pass x-portkey-provider: openai and x-portkey-custom-host with --header, pointing the custom host at any OpenAI-compatible upstream: Vercel AI Gateway in the setup below, OpenRouter, or a LiteLLM proxy. The upstream's catalog, the billed cost of each call, and its rate-limit and credit errors come through Portkey unchanged, so the shortlist is built from the upstream's own prices and capabilities.",
+        "rightmodeler sends no Portkey config, so fallbacks, retries, load balancing, caching and guardrail hooks stay off for replays. Every replayed response is still checked before it counts: one that names another model (a config's override_params or targets), reports x-portkey-cache-status: HIT, or carries a hook result with transformed: true is recorded as substituted and never graded, and a family with more than 5% of its replays substituted abstains.",
+        "Verified live on 2026-09-23 against the image pinned by digest, with Vercel AI Gateway as the upstream: every replayed response came from the requested model at the upstream's billed cost, and a run whose x-portkey-config used override_params to change the model had every replay left out as substituted."
+      ],
+      "commands": [
+        {
+          "comment": "# the open-source gateway, reachable from this machine only",
+          "command": "docker run -d --name portkey -p 127.0.0.1:8787:8787 portkeyai/gateway:1.15.2"
+        },
+        {
+          "comment": "# Portkey forwards this key to the upstream",
+          "command": "export AI_GATEWAY_API_KEY=..."
+        },
+        {
+          "comment": "# project the replay spend through Portkey first",
+          "command": "npx rightmodeler estimate --traces ./traces.jsonl --base-url http://127.0.0.1:8787/v1 --api-key-env AI_GATEWAY_API_KEY --header 'x-portkey-provider: openai' --header 'x-portkey-custom-host: https://ai-gateway.vercel.sh/v1'"
+        },
+        {
+          "comment": "# then run the pipeline under a hard spend cap",
+          "command": "npx rightmodeler init --traces ./traces.jsonl --base-url http://127.0.0.1:8787/v1 --api-key-env AI_GATEWAY_API_KEY --header 'x-portkey-provider: openai' --header 'x-portkey-custom-host: https://ai-gateway.vercel.sh/v1' --max-cost-usd 25"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one gets the call?",
+      "intro": "Three situations, each with the honest winner.",
+      "scenarios": [
+        {
+          "scenario": "A security team needs every prompt and response inspected inline, and approved-model rules and budgets enforced across coding agents, copilots and internal apps.",
+          "winner": "theirs",
+          "why": "That is runtime governance, and Prisma AIRS AI Gateway is built for it: Palo Alto Networks describes inline inspection of prompts and responses, central rules for model access, tool use and budgets, and verified agent identities. rightmodeler inspects nothing at runtime and enforces nothing."
+        },
+        {
+          "scenario": "You want to move one agent step off an expensive model, and you need evidence that a cheaper one matches your accepted outputs before any user sees the change.",
+          "winner": "ours",
+          "why": "rightmodeler replays that step's recorded inputs through cheaper candidates, judges each against the output you accepted, and reports agreement, sample size and abstentions. The replays can run through an open-source Portkey gateway, and production traffic never carries an experiment."
+        },
+        {
+          "scenario": "The audit found a swap, and you want to watch it on a slice of live traffic before a full rollout.",
+          "winner": "both",
+          "why": "rightmodeler's evidence says the swap held on the steps you already shipped. Portkey's canary testing sends a share of requests to the new model, 5% in its docs example, and its analytics show the effect on cost, latency, errors and feedback. Offline evidence first, live traffic second."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "Portkey runs in the request path and rightmodeler never does. Fallbacks, retries, load balancing, conditional routing and caching act on live calls, and an audit replaces none of them.",
+        "Portkey watches and governs production. Per its docs, its logs keep the full request and response with tokens and cost, budgets and rate limits cap spend, guardrails can deny a request or fall back to another model, and the Prompt Engineering Studio versions and deploys prompts. Prisma AIRS AI Gateway adds runtime security that inspects prompts and responses inline, per Palo Alto Networks. rightmodeler has none of that; it is a report you run on exported traces.",
+        "Portkey can also try a new model on live traffic: a canary config sends a share of requests to it, and analytics show the effect. That tells you how the model behaves with real users. rightmodeler answers an earlier, narrower question: whether the model matches the outputs you already accepted, step by step, before a user sees it.",
+        "And the audit's verdicts are agreement with the output you shipped, not proof of correctness. When a step's evidence is too thin to rule, the audit abstains instead of recommending a swap."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page leans on",
+      "terms": [
+        {
+          "term": "trace",
+          "def": "The record of what your agent did: each model call's inputs, outputs, model and usage, exported from your application.",
+          "slug": "trace"
+        },
+        {
+          "term": "swap candidate",
+          "def": "A cheaper model the audit shortlists, replays and judges for one specific step.",
+          "slug": "swap-candidate"
+        },
+        {
+          "term": "reference evidence",
+          "def": "How a replay is scored: agreement with the output you accepted for that exact step. The production result is the reference, not ground truth.",
+          "slug": "reference-evidence"
+        },
+        {
+          "term": "quality floor",
+          "def": "The configurable minimum agreement score a candidate must clear before the audit recommends it for a step.",
+          "slug": "quality-floor"
+        },
+        {
+          "term": "abstain",
+          "def": "What the audit does when a step's evidence is too thin to support a verdict: it says so and recommends nothing.",
+          "slug": "abstain"
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace Portkey?",
+          "a": "No. Portkey runs, observes and governs live AI traffic; rightmodeler is a report on traffic already served, and it never sits in your request path. The report recommends a model, not a route: keep serving the approved model through the Portkey deployment you already run."
+        },
+        {
+          "q": "Which Portkey gateway does the integration run on?",
+          "a": "The open-source gateway: built and verified on 1.15.2 (portkeyai/gateway:1.15.2), pinned by digest, the latest tagged open-source release as of 2026-09-24. The setup runs that image on your own machine, and rightmodeler's --base-url accepts any OpenAI-compatible endpoint."
+        },
+        {
+          "q": "What does the Palo Alto Networks acquisition change?",
+          "a": "The product's name and home. Palo Alto Networks completed its acquisition of Portkey on 2026-05-29, made it the core AI gateway of Prisma AIRS, and announced Prisma AIRS AI Gateway as generally available on 2026-07-16; portkey.ai now presents Portkey as Prisma AIRS AI Gateway. The integration runs on the MIT-licensed open-source gateway 1.15.2, pinned by digest, so the setup on this page stays the same."
+        },
+        {
+          "q": "Where do the traces come from?",
+          "a": "From your application: OpenTelemetry GenAI spans, AI SDK telemetry and OpenAI SDK JSONL are all read directly. The open-source 1.15.2 gateway keeps only an in-memory live log stream, so it plays one role in the audit: the replay route."
+        },
+        {
+          "q": "What if my Portkey config falls back to another model?",
+          "a": "rightmodeler never sends a config, so replays do not fall back. If you pass one with --header and it answers with another model, from its cache, or through a hook that changed the request, that response is recorded as substituted and left out of the evidence. Remove the config, then rerun with a fresh --store directory, because completed replay cells are reused."
+        },
+        {
+          "q": "Do I need Portkey to use rightmodeler?",
+          "a": "No. rightmodeler needs an OpenAI-compatible base URL with a priced model catalog. Portkey is one route; OpenRouter, Vercel AI Gateway and a LiteLLM proxy work the same way. Use the gateway you already run."
+        }
+      ]
+    }
+  ]
+}

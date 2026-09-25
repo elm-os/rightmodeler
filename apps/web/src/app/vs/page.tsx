@@ -22,7 +22,7 @@ const BANDS: { title: string; intro: string; category: string }[] = [
   {
     title: "The rails",
     intro:
-      "They move your live requests. rightmodeler rides them as test benches and hands back a decision, not a proxy.",
+      "They move your live requests. rightmodeler reads the requests some of them log, replays through others as test benches, and hands back a decision, not a proxy.",
     category: "gateway",
   },
   {
