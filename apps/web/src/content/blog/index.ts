@@ -3,6 +3,10 @@
 // a sibling module and add one entry below. Sorted newest-first for listings.
 
 import type { Post } from "@/content/blog/types";
+import * as bifrostVsLitellm from "@/content/blog/bifrost-vs-litellm";
+import * as langfuseVsHelicone from "@/content/blog/langfuse-vs-helicone";
+import * as llmCostOptimizationTools from "@/content/blog/llm-cost-optimization-tools";
+import * as llmGatewayEvaluationPitfalls from "@/content/blog/llm-gateway-evaluation-pitfalls";
 import * as nobodyCanPredictTheBill from "@/content/blog/nobody-can-predict-the-bill";
 import * as theBillNobodyCanRead from "@/content/blog/the-bill-nobody-can-read";
 import * as theTuesdayProblem from "@/content/blog/the-tuesday-problem";
@@ -10,6 +14,26 @@ import * as whyWeBuiltRightmodeler from "@/content/blog/why-we-built-rightmodele
 
 // The two vision posts share a date; the stable sort keeps this order (part one above part two).
 const posts: Post[] = [
+  {
+    meta: llmCostOptimizationTools.meta,
+    Body: llmCostOptimizationTools.Body,
+    markdown: llmCostOptimizationTools.markdown,
+  },
+  {
+    meta: llmGatewayEvaluationPitfalls.meta,
+    Body: llmGatewayEvaluationPitfalls.Body,
+    markdown: llmGatewayEvaluationPitfalls.markdown,
+  },
+  {
+    meta: langfuseVsHelicone.meta,
+    Body: langfuseVsHelicone.Body,
+    markdown: langfuseVsHelicone.markdown,
+  },
+  {
+    meta: bifrostVsLitellm.meta,
+    Body: bifrostVsLitellm.Body,
+    markdown: bifrostVsLitellm.markdown,
+  },
   {
     meta: nobodyCanPredictTheBill.meta,
     Body: nobodyCanPredictTheBill.Body,
