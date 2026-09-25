@@ -60,8 +60,10 @@ Two rules you cannot infer from the tree:
 `apps/web/src/content/integrations/index.ts`, with its logo under
 `apps/web/public/integrations/logos`) and in the packaged CLI doc for its kind under
 `harness/packages/rightmodeler/docs/`, for example the supported trace sources in
-`getting-started.md` or a gateway in `gateways.md`. The root README links to the
-integrations hub built from that data and to those docs, so it needs no edit.
+`getting-started.md` or a gateway in `gateways.md`. A new trace source also goes in
+`TRACE_SOURCES` in `apps/web/src/lib/product-facts.ts`, which the site's trace format
+counts and lists read. The root README links to the integrations hub built from that
+data and to those docs, so it needs no edit.
 
 ## Commands
 
