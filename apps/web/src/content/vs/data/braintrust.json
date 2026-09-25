@@ -67,7 +67,7 @@
         "heading": "A model change with rightmodeler on top",
         "items": [
           "The reference set already exists: the outputs your agent produced in the traces you fetched. No dataset to curate, no scorer to write.",
-          "Each step is replayed through cheaper candidates and judged against the accepted output (deterministic checks like tests, builds, schemas, and valid tool calls first; a cross-family judge, meaning one from a different model family than either model being compared, only when nothing stronger applies), guarded by the quality floor.",
+          "Each step is replayed through cheaper candidates and judged against the accepted output (by a cross-family judge, meaning one from a different model family than either model being compared, that grades both output orders, or by your own Braintrust scorers with --evaluator braintrust), guarded by the quality floor.",
           "You approve every swap yourself, thin evidence produces an abstention instead of a recommendation, and your Braintrust evals confirm the change before it ships."
         ]
       }
@@ -134,7 +134,7 @@
         },
         {
           "q": "Does the audit's judge replace my Braintrust scorers?",
-          "a": "No. Your scorers grade your agent against criteria you authored; that remains the bar. The audit prefers deterministic checks and reaches for an LLM judge only when nothing stronger applies, and its verdicts are always agreement with shipped output, not proof of correctness."
+          "a": "No. Your scorers grade your agent against criteria you authored; that remains the bar. The audit's built-in judge comes from a model family neither the candidate nor the current model belongs to and grades both output orders; --evaluator braintrust lets your own scorers grade the replays instead. Either way, the verdicts are always agreement with shipped output, not proof of correctness."
         }
       ]
     }
