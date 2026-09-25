@@ -523,4 +523,43 @@ describe("status spend", () => {
       },
     });
   });
+
+  it("totals the same spend whichever order the fact keys list in", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-status-order-"));
+    temporaryDirectories.push(root);
+    const spends = [];
+    for (const costs of [
+      [0.1, 0.2, 0.3],
+      [0.3, 0.2, 0.1],
+    ]) {
+      const store = new FsStore(join(root, `store-${costs.join("-")}`));
+      for (const [index, costUsd] of costs.entries()) {
+        const record = spendEventSchema.parse({
+          actor: "candidate",
+          phase: "replay",
+          costUsd,
+          provider: "fixture",
+          reconcilableTo: { costUsd },
+        });
+        await store.putImmutable(
+          factKey("project", `spend-${index}`),
+          Buffer.from(canonicalJson(record), "utf8"),
+        );
+      }
+      spends.push(
+        (
+          (await readStatus({ repo: demoAppPath, store: store.root })) as {
+            spend: unknown;
+          }
+        ).spend,
+      );
+    }
+
+    expect(spends[0]).toEqual({
+      events: 3,
+      totalCostUsd: 0.6,
+      byActor: { candidate: { events: 3, costUsd: 0.6 } },
+    });
+    expect(spends[1]).toEqual(spends[0]);
+  });
 });

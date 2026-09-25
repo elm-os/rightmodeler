@@ -1290,6 +1290,75 @@ describe("Mode B proxy and host egress", () => {
     );
   });
 
+  it("admits requests that exactly fill the case lease after concurrent reservations settle", async () => {
+    const pair = await startPair({
+      pricingTable: {
+        "acme/lite-1": { input: 0, output: 0.1 },
+        "acme/small-1": { input: 0, output: 0.2 },
+        "acme/large-1": { input: 0, output: 0.3 },
+      },
+      maxUsd: 0.3,
+    });
+    const send = (model: string, call: string, hold = "0") =>
+      callProxy(
+        pair.runtime,
+        "step-fit",
+        call,
+        chatBody({ model, max_tokens: 1 }),
+        { "x-stub-empty": "1", "x-stub-hold-before-response-ms": hold },
+      );
+
+    const held = send("acme/lite-1", "logical-held", "1000");
+    await waitFor(
+      () => pair.stub.getHitCount() === 1,
+      "Stub did not receive the held request",
+    );
+    const concurrent = await send("acme/small-1", "logical-concurrent");
+    expect(concurrent.status).toBe(200);
+    await concurrent.arrayBuffer();
+    const settled = await held;
+    expect(settled.status).toBe(200);
+    await settled.arrayBuffer();
+    const fit = await send("acme/large-1", "logical-fit");
+
+    expect(fit.status).toBe(200);
+    await fit.arrayBuffer();
+    expect(
+      (await readRows(spoolPath(pair.scratch))).map((row) => [
+        row.kind,
+        row.model,
+      ]),
+    ).toEqual([
+      ["attempt_reservation", "acme/lite-1"],
+      ["attempt_reservation", "acme/small-1"],
+      ["request_attempt", "acme/small-1"],
+      ["request_attempt", "acme/lite-1"],
+      ["attempt_reservation", "acme/large-1"],
+      ["request_attempt", "acme/large-1"],
+    ]);
+  });
+
+  it("admits a request that exactly fills a computed case lease below its grid point", async () => {
+    const pricing = { input: 0, output: 0.0000002 };
+    const lease = 13 * pricing.output;
+    expect(lease).toBeLessThan(0.0000026);
+    const pair = await startPair({
+      pricingTable: { "acme/large-1": pricing },
+      maxUsd: lease,
+    });
+
+    const fit = await callProxy(
+      pair.runtime,
+      "step-fit",
+      "logical-fit",
+      chatBody({ max_tokens: 13 }),
+      { "x-stub-empty": "1" },
+    );
+
+    expect(fit.status).toBe(200);
+    await fit.arrayBuffer();
+  });
+
   it("rejects a non-allowlisted egress host before forwarding", async () => {
     process.env[apiKeyEnv] = credential;
     const stub = await startStub();
