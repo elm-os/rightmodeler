@@ -9,28 +9,28 @@
   "title": "rightmodeler vs LiteLLM: request path vs report",
   "description": "LiteLLM runs your request path: one API, budgets, fallbacks. rightmodeler replays your traces offline to measure which model belongs at each step. Keep both.",
   "h1": "rightmodeler vs LiteLLM",
-  "lede": "LiteLLM decides in the milliseconds before each call; rightmodeler decides after the run, from replays of outputs you already accepted. Keep the proxy: it is the only tool in these comparisons that also plays three roles inside the audit.",
+  "lede": "LiteLLM decides in the milliseconds before each call; rightmodeler decides after the run, from replays of outputs you already accepted. Keep the proxy: the audit can replay through it, on your own keys and budgets.",
   "integrationSlug": "litellm",
   "related": ["openrouter", "vercel-ai-gateway", "not-diamond", "bifrost"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Keep your proxy. LiteLLM is hired to run the request path: one OpenAI-compatible API in front of the model catalog, budgets that hard-stop overruns, retries and fallbacks when a provider degrades. rightmodeler is hired for a different job on a different clock: after the fact, it replays the agent traces (the recorded runs) you already shipped through cheaper models and reports, step by step, which swaps hold up. Nothing about it touches your request path: the audit is a document you review, not a hop your traffic takes. And of every tool on these pages, LiteLLM is the only one that also works inside rightmodeler, three ways."
+      "body": "Keep your proxy. LiteLLM is hired to run the request path: one OpenAI-compatible API in front of the model catalog, budgets that hard-stop overruns, retries and fallbacks when a provider degrades. rightmodeler is hired for a different job on a different clock: after the fact, it replays the agent traces (the recorded runs) you already shipped through cheaper models and reports, step by step, which swaps hold up. Nothing about it touches your request path: the audit is a document you review, not a hop your traffic takes. And the proxy you already run can be the audit's replay route: candidate and judge calls go through it, on your own keys and budgets."
     },
     {
       "type": "stack",
-      "heading": "One gateway, three roles inside the audit",
-      "intro": "LiteLLM is the only comparison target that plays every part: the evidence, the engine, and the swap point.",
+      "heading": "Your proxy as the audit's replay route",
+      "intro": "rightmodeler replays and judges through any OpenAI-compatible base URL, and a LiteLLM proxy is one.",
       "paragraphs": [
-        "Trace source. Your proxy already writes a StandardLoggingPayload row for every call: messages, response, cost. rightmodeler reads that format directly, no new instrumentation; the ingester recognizes it on sight. The raw material for an audit is sitting in logs you already keep.",
-        "Replay provider. Set RIGHTMODELER_PROVIDER=litellm and the audit's shortlist, replay, and judge calls all run through your proxy's live catalog, priced from what the proxy reports back. Your keys, your routes; there is no rightmodeler server, no account with us, no telemetry.",
-        "Injection layer. When a swap candidate (a cheaper model the audit is testing for one step) has to prove itself across tools and loops, end-to-end replay stands up a LiteLLM proxy inside the replay sandbox, in front of your unmodified pipeline, so the candidate does the real work. The LiteLLM integration page covers the setup."
+        "Replay route. Point --base-url at the proxy's /v1 root and --api-key-env at the variable holding a virtual key, and the audit's shortlist, replay, and judge calls run through the gateway you already operate, on your own keys, budgets, and routes. There is no rightmodeler server, no account with us, no telemetry.",
+        "Catalog. LiteLLM's /v1/models lists model ids only, so pass --catalog-reference with the upstream's public model list and name each model group by its upstream id, such as openai/gpt-4o-mini: the reference fills in each listed model's price, context window, and capabilities. When no model is priced after that join, rightmodeler reads per-token costs from the proxy's GET /model/info. Give each replay model a group of its own, with no fallbacks, aliases, or caching, so every answer comes from the model it names.",
+        "Traces. rightmodeler has no LiteLLM log adapter. For traffic through the proxy, export OpenTelemetry GenAI spans, or log OpenAI SDK calls as JSONL, and the matching adapter reads them. The LiteLLM integration page has the full setup."
       ],
       "commands": [
         {
-          "comment": "# your proxy becomes the audit's replay engine",
-          "command": "export RIGHTMODELER_PROVIDER=litellm"
+          "comment": "# replay and judge through your proxy, with the upstream's public model list for price and context",
+          "command": "npx rightmodeler init --traces ./traces/spans.json --base-url http://localhost:4000/v1 --api-key-env LITELLM_API_KEY --catalog-reference https://openrouter.ai/api/v1/models --max-cost-usd 25"
         }
       ]
     },
@@ -47,7 +47,7 @@
       "right": {
         "heading": "With rightmodeler on top",
         "items": [
-          "Those same logs become audit input: the steps you already paid for, rerun on cheaper candidates and scored against the answers you accepted.",
+          "Traces of the same calls become audit input: the steps you already paid for, rerun on cheaper candidates through your proxy and scored against the answers you accepted.",
           "Every recommendation carries reference evidence (agreement with the output you shipped, not proof of correctness), a sample size, and abstentions (steps where the audit declines to rule because the evidence is thin).",
           "You approve every swap, and the report recommends a model, not a route: serve the approved model through the proxy you already run."
         ]
@@ -69,9 +69,9 @@
           "why": "Budgets cap the bill; they do not right-size it. rightmodeler replays your real traces through cheaper candidates and judges each step against the output you accepted, reporting agreement, sample size, and abstentions for every step. No gateway setting answers this question."
         },
         {
-          "scenario": "You already run a LiteLLM proxy, and months of its logs are sitting in your observability stack doing nothing.",
+          "scenario": "You already run a LiteLLM proxy, and your application's model calls are already traced with OpenTelemetry.",
           "winner": "both",
-          "why": "LiteLLM produced the evidence: standardized rows with messages, responses, and per-call cost. rightmodeler ingests that format through a dedicated adapter and can replay through the same proxy. The gateway that ran your traffic hands you the audit that right-sizes it."
+          "why": "The traces are the evidence and the proxy is the route. rightmodeler reads GenAI spans that carry message content, replays recorded steps through cheaper candidates on the same proxy, and judges them against the outputs you shipped. The gateway that runs your traffic carries the audit that right-sizes it."
         }
       ]
     },
@@ -133,7 +133,7 @@
         },
         {
           "q": "Can an audit start from the logs my proxy already writes?",
-          "a": "Yes. The StandardLoggingPayload rows your proxy already writes carry what an audit needs: messages, responses, and per-call cost. A dedicated adapter reads them as they are, with no new instrumentation. The LiteLLM integration page walks through the full setup, including using the same proxy as the replay provider."
+          "a": "Not from the proxy's own logs: rightmodeler has no LiteLLM log adapter. It reads OpenTelemetry GenAI spans or OpenAI SDK JSONL of the same calls, and it can replay through the same proxy. The LiteLLM integration page walks through the full setup."
         },
         {
           "q": "Does an audit ever touch my production traffic?",
