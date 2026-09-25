@@ -32,6 +32,7 @@ import {
 import {
   BlockedError,
   estimateInputTokens,
+  isUsageLimit,
   type ChatMessage,
   type ModelCatalogEntry,
   type ModelPricing,
@@ -79,6 +80,7 @@ export interface ReplayModeAInput {
       maxOutputTokens: number;
     }[];
     warning?: (code: string, message: string) => void;
+    providerId?: string;
   };
   store: Store;
   budget: Budget;
@@ -116,6 +118,7 @@ interface JudgeCell {
   readonly recordAttempt: (
     attempt: ProviderAttempt,
     logicalCallId?: ReturnType<typeof randomUUID>,
+    providerId?: string,
   ) => Promise<void>;
 }
 
@@ -144,6 +147,7 @@ export async function writeReplayFact(
 async function replayFactState(
   store: Store,
   projectId: string,
+  runId?: string,
 ): Promise<{
   readonly completed: Set<string>;
   readonly unusableJudges: Set<string>;
@@ -175,9 +179,13 @@ async function replayFactState(
       spend.reconcilableTo !== null &&
       !Array.isArray(spend.reconcilableTo) &&
       spend.reconcilableTo.judgeStatus === "unusable" &&
-      typeof spend.reconcilableTo.judgeModel === "string"
+      typeof spend.reconcilableTo.judgeModel === "string" &&
+      (spend.reconcilableTo.note !== "rate_limited" ||
+        spend.reconcilableTo.runId === runId)
     ) {
-      unusableJudges.add(spend.reconcilableTo.judgeModel);
+      unusableJudges.add(
+        JSON.stringify([spend.provider, spend.reconcilableTo.judgeModel]),
+      );
     }
   }
   const unassessed = new Map<
@@ -315,6 +323,7 @@ export async function replayModeA(
   const replayState = await replayFactState(
     input.store,
     input.budget.projectId,
+    input.budget.runId,
   );
   const existing = replayState.completed;
   const cells = cellsFor(input);
@@ -331,19 +340,23 @@ export async function replayModeA(
   if (input.judge !== undefined && judges.length === 0) {
     throw new Error("At least one ranked judge model is required");
   }
+  const judgeProviderId = input.judge?.providerId ?? input.provider.providerId;
   const unusableJudges = replayState.unusableJudges;
   const firstUsableJudge = judges.findIndex(
-    ({ judgeModel }) => !unusableJudges.has(judgeModel),
+    ({ judgeModel }) =>
+      !unusableJudges.has(JSON.stringify([judgeProviderId, judgeModel])),
   );
   let activeJudgeIndex =
     firstUsableJudge === -1 ? judges.length : firstUsableJudge;
   let consecutiveJudgeFailures = 0;
+  let judgeStreakRateLimited = false;
   let judgeFailurePending: JudgeCell[] = [];
   const judgeQueue: JudgeCell[] = [];
   const judgeJobs = new Set<Promise<void>>();
   let judgeSwitchTrigger: {
     readonly job: JudgeCell;
     readonly substitution?: string;
+    readonly rateLimited?: boolean;
   } | null = null;
   let judgeRetirement = new AbortController();
 
@@ -369,6 +382,7 @@ export async function replayModeA(
           verdict: judged.verdict,
           justification: judged.justification,
           judgeModel: judged.judgeModel,
+          judgeProvider: judgeProviderId,
           orderConsistent: judged.orderConsistent,
         },
       }),
@@ -390,7 +404,7 @@ export async function replayModeA(
         actor: "judge",
         phase: job.cell.step.selectionStage ?? job.cell.step.corpusSplit,
         costUsd: 0,
-        provider: input.provider.providerId,
+        provider: judgeProviderId,
         reconcilableTo: {
           executionId: job.executionId,
           judgeModel,
@@ -415,9 +429,7 @@ export async function replayModeA(
         readonly status: "success";
         readonly assessment: Awaited<ReturnType<typeof judgeExecution>>;
       }
-    | {
-        readonly status: "failure";
-      }
+    | { readonly status: "failure"; readonly rateLimited: boolean }
     | { readonly status: "blocked"; readonly message: string }
   > {
     const retirement = judgeRetirement.signal;
@@ -482,6 +494,7 @@ export async function replayModeA(
                     },
                   },
                   judgeLogicalCallId,
+                  judgeProviderId,
                 );
               } catch (persistenceError) {
                 judgePersistenceFailure = persistenceError;
@@ -501,7 +514,7 @@ export async function replayModeA(
                   phase:
                     job.cell.step.selectionStage ?? job.cell.step.corpusSplit,
                   costUsd: judgeResponse?.costUsd ?? 0,
-                  provider: input.provider.providerId,
+                  provider: judgeProviderId,
                   reconcilableTo: {
                     executionId: job.executionId,
                     judgeModel: judge.judgeModel,
@@ -535,6 +548,7 @@ export async function replayModeA(
     } catch (error) {
       if (
         error instanceof ProviderConfigurationError ||
+        isUsageLimit(error) ||
         judgePersistenceFailure !== undefined
       ) {
         throw error;
@@ -543,10 +557,14 @@ export async function replayModeA(
         return { status: "blocked", message: error.message };
       }
       if (retirement.aborted && error === retirement.reason) {
-        return { status: "failure" };
+        return { status: "failure", rateLimited: false };
       }
       await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error);
-      return { status: "failure" };
+      return {
+        status: "failure",
+        rateLimited:
+          error instanceof BlockedError && error.kind === "rate-limit",
+      };
     }
   }
 
@@ -556,6 +574,7 @@ export async function replayModeA(
     trigger: JudgeCell,
     consecutiveAssessments: number,
     substitution: string | undefined,
+    rateLimited: boolean,
   ): Promise<void> {
     const cause =
       substitution === undefined
@@ -577,15 +596,21 @@ export async function replayModeA(
         phase:
           trigger.cell.step.selectionStage ?? trigger.cell.step.corpusSplit,
         costUsd: 0,
-        provider: input.provider.providerId,
+        provider: judgeProviderId,
         reconcilableTo: {
           judgeModel: judge.judgeModel,
           judgeStatus: "unusable",
           ...(substitution === undefined
-            ? {
-                note: "three_consecutive_terminal_failures",
-                consecutiveAssessments,
-              }
+            ? rateLimited
+              ? {
+                  note: "rate_limited",
+                  runId: input.budget.runId,
+                  consecutiveAssessments,
+                }
+              : {
+                  note: "three_consecutive_terminal_failures",
+                  consecutiveAssessments,
+                }
             : { note: "model_substituted", substitution }),
         },
       }),
@@ -600,6 +625,7 @@ export async function replayModeA(
       if (judgeSwitchTrigger === null) {
         judgeFailurePending = [];
         consecutiveJudgeFailures = 0;
+        judgeStreakRateLimited = false;
       }
       await completeWithAssessment(job, outcome.assessment);
       return;
@@ -617,7 +643,9 @@ export async function replayModeA(
     judgeFailurePending.push(job);
     if (judgeSwitchTrigger !== null) return;
     consecutiveJudgeFailures += 1;
-    if (consecutiveJudgeFailures >= 3) judgeSwitchTrigger = { job };
+    if (outcome.rateLimited) judgeStreakRateLimited = true;
+    if (consecutiveJudgeFailures >= 3)
+      judgeSwitchTrigger = { job, rateLimited: judgeStreakRateLimited };
   }
 
   function startJudgeJob(work: () => Promise<void>): void {
@@ -636,7 +664,11 @@ export async function replayModeA(
     if (failure !== undefined) return;
     if (judgeSwitchTrigger !== null) {
       if (judgeJobs.size > 0) return;
-      const { job: trigger, substitution } = judgeSwitchTrigger;
+      const {
+        job: trigger,
+        substitution,
+        rateLimited = false,
+      } = judgeSwitchTrigger;
       const judge = judges[activeJudgeIndex]!;
       const nextJudge = judges[activeJudgeIndex + 1];
       const consecutiveAssessments = consecutiveJudgeFailures;
@@ -646,6 +678,7 @@ export async function replayModeA(
       judgeQueue.unshift(...judgeFailurePending);
       judgeFailurePending = [];
       consecutiveJudgeFailures = 0;
+      judgeStreakRateLimited = false;
       startJudgeJob(() =>
         recordUnusableJudge(
           judge,
@@ -653,6 +686,7 @@ export async function replayModeA(
           trigger,
           consecutiveAssessments,
           substitution,
+          rateLimited,
         ),
       );
       return;
@@ -670,6 +704,7 @@ export async function replayModeA(
     async function recordAttempt(
       attempt: ProviderAttempt,
       attemptLogicalCallId = logicalCallId,
+      providerId = input.provider.providerId,
     ): Promise<void> {
       actualCostUsd += attempt.costUsd;
       const attemptId = mintAttemptId();
@@ -714,7 +749,7 @@ export async function replayModeA(
           actor: "replay-driver",
           phase: cell.step.selectionStage ?? cell.step.corpusSplit,
           costUsd: attempt.costUsd,
-          provider: input.provider.providerId,
+          provider: providerId,
           reconcilableTo: {
             attemptId,
             logicalCallId: attemptLogicalCallId,

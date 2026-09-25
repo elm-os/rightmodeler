@@ -454,7 +454,10 @@ model in replay, and in `confirm` the final step's model, whose output is the re
 reference. A family whose call sites use models of several vendors is judged per call site,
 never refused. A judge that fails three consecutive terminal calls, or once answers as another
 model, is marked unusable and the next-ranked neutral-family model re-judges the affected cells.
-Cheaper settings exist and are opt-in.
+The mark is kept per provider, and when a rate limit was among those failures it lasts only for
+the run that set it. A plan's usage limit never marks a judge: it stops the run with exit `2`
+`plan_usage_limit`, and a rerun after the reset reuses every finished call. Cheaper settings
+exist and are opt-in.
 
 **Rate limits are throughput to discover, not a ceiling to hide under.** A per-provider adaptive
 concurrency controller ramps while requests succeed and backs off multiplicatively on 429 or

@@ -6,7 +6,7 @@ Rightmodeler reserves exit codes `0` through `3` for machine-readable outcomes. 
 
 - `0`: the command completed and no recommendation is being reported. Planning and partial `--through` runs also return `0` when successful.
 - `1`: a complete `init` or `report` found an actionable recommendation.
-- `2`: the run needs input at a resumable boundary, such as missing traces, a cancelled trace prompt, provider configuration, or required confirmation configuration.
+- `2`: the run needs input at a resumable boundary, such as missing traces, a cancelled trace prompt, provider configuration, required confirmation configuration, or a plan's usage limit (rerun after it resets).
 - `3`: the cost budget was reached at a resumable boundary.
 - `10` or greater: command-line or runtime failure.
 
@@ -63,6 +63,7 @@ Use `--output json` for one result object or `--output jsonl` for stage events f
 - `no_priced_candidates` (exit `2`): point `--base-url` at a catalog that publishes per-token pricing, pass `--catalog-reference <url>`, expose priced LiteLLM `GET /model/info`, or pass `--pricing-file <path>`, then rerun.
 - `no_replayable_call_sites` (exit `2`): point `--repo` at a service with plain text completions, or add a matcher for a text call site, then rerun.
 - `not_git_repository` (exit `2`): run the command again from a Git repository with at least one commit.
+- `plan_usage_limit` (exit `2`): a plan you are signed in to reached its usage limit; rerun the same command after the reset time in the message, and completed replay and judge calls are kept and not repeated.
 - `stage_not_completed` (exit `2`): run `rightmodeler init --through <stage>` first, then rerun the command.
 - `unusable_trace_input` (exit `2`): the selected discovered trace could not be adapted; rerun and choose a different trace file.
 - `usage_error` (exit `10`): the command line is invalid; `message` carries the parser text.

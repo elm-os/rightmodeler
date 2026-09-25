@@ -69,8 +69,8 @@ import {
   createBudget,
   createCloudExecutor,
   createDockerExecutor,
-  createProvider,
   detectCloudAvailability,
+  isUsageLimit,
   ProviderConfigurationError,
   replayModeA,
   resolveCurrentModel,
@@ -180,6 +180,7 @@ import {
   formatLatencyMs,
   formatUsdPerCase,
 } from "./report/format.js";
+import { apiRoute, type RouteHandle, type RouteKind } from "./routes.js";
 import {
   putImmutableJson,
   putMutableJson,
@@ -600,6 +601,7 @@ interface PipelineContext {
   pricingFilePath?: string;
   requestHeaders?: Readonly<Record<string, string>>;
   catalogReference?: string;
+  routes?: { readonly candidates: RouteKind; readonly judge: RouteKind };
   policyFilePath?: string;
   release: ReleasePolicyResolution;
   matchers?: readonly DeclarativeMatcher[];
@@ -967,42 +969,40 @@ export async function estimateReplay(
   options: PipelineOptions,
 ): Promise<ReplayCostEstimate & { readonly policy: EffectiveReleasePolicy }> {
   const context = createContext(options);
-  if (context.baseUrl === undefined) {
-    throw missingProviderConfiguration();
-  }
+  const routes = replayRoutes(context);
   const plan = await loadReplayPlan(context);
-  const provider = createProvider({
-    providerId: "configured-provider",
-    baseUrl: context.baseUrl,
-    apiKeyEnv: context.apiKeyEnv,
-    maxConcurrency: context.maxConcurrency,
-    warning: (code, message) => context.reporter.warning(code, message),
-    pricingOverrides: context.pricingOverrides,
-    headers: context.requestHeaders,
-    catalogReference: context.catalogReference,
-  });
-  const catalog =
+  const known =
     context.existingRunId === undefined
-      ? await providerCatalog(provider)
+      ? await routeCatalog(() => routes.candidates.known())
       : await readDetachedReplayCatalog(context, context.existingRunId);
+  const judgeCatalog =
+    context.existingRunId === undefined
+      ? await routeCatalog(() => routes.judge.callable())
+      : known;
   const candidates =
     context.approvedRunSpecDigest === undefined
-      ? replayCandidates(plan, catalog)
+      ? replayCandidates(plan, known)
       : await approvedReplayCandidates(
           context,
           plan,
-          catalog,
+          known,
           context.approvedRunSpecDigest,
         );
   reportShortlistAbstentions(context, plan, candidates);
-  assertPricedCandidates(context.baseUrl, candidates);
+  assertPricedCandidates(routes.candidates.label, candidates);
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
-    catalog,
+    known,
   );
   if (context.evaluator === undefined) {
-    assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId);
+    assertNeutralJudges(
+      plan,
+      known,
+      judgeCatalog,
+      candidates,
+      referenceFamilyByStepId,
+    );
   }
   const judges = new Map<string, ReplayCostJudge>();
   const judge =
@@ -1011,13 +1011,13 @@ export async function estimateReplay(
       : (stepId: string, candidate: ModelCatalogEntry): ReplayCostJudge => {
           const referenceFamily = referenceFamilyByStepId.get(stepId)!;
           const key = JSON.stringify([candidate.family, referenceFamily]);
-          const known = judges.get(key);
-          if (known !== undefined) return known;
-          const modelId = pickJudges(catalog, {
+          const cached = judges.get(key);
+          if (cached !== undefined) return cached;
+          const modelId = pickJudges(judgeCatalog, {
             candidateFamily: candidate.family,
             referenceFamily,
           })[0]!;
-          const selected = { modelId, ...judgeLimits(catalog, modelId) };
+          const selected = { modelId, ...judgeLimits(judgeCatalog, modelId) };
           judges.set(key, selected);
           return selected;
         };
@@ -1051,18 +1051,7 @@ export async function claimDetachedReplay(
     });
   }
   const catalogIdentity = (
-    await providerCatalog(
-      createProvider({
-        providerId: "configured-provider",
-        baseUrl: context.baseUrl,
-        apiKeyEnv: context.apiKeyEnv,
-        maxConcurrency: context.maxConcurrency,
-        warning: (code, message) => context.reporter.warning(code, message),
-        pricingOverrides: context.pricingOverrides,
-        headers: context.requestHeaders,
-        catalogReference: context.catalogReference,
-      }),
-    )
+    await routeCatalog(() => routeHandle(context, "api").known())
   ).sort((left, right) => compareText(left.id, right.id));
   const targetPhase = options.through ?? "replay";
   if (!isPipelineStage(targetPhase)) {
@@ -1936,6 +1925,9 @@ function createContext(options: PipelineOptions): PipelineContext {
             ? options.catalogReference
             : resolve(options.catalogReference),
         }),
+    ...(options.baseUrl === undefined
+      ? {}
+      : { routes: { candidates: "api", judge: "api" } }),
     ...(policyFilePath === undefined ? {} : { policyFilePath }),
     ...(options.matchersPath === undefined
       ? {}
@@ -2423,17 +2415,48 @@ function invalidCatalogReference(message: string): ProtocolError {
   });
 }
 
-async function providerCatalog(
-  provider: ProviderClient,
+async function routeCatalog(
+  load: () => Promise<ModelCatalogEntry[]>,
 ): Promise<ModelCatalogEntry[]> {
   try {
-    return await provider.listModels();
+    return await load();
   } catch (error) {
     if (error instanceof CatalogReferenceError) {
       throw invalidCatalogReference(error.message);
     }
     throw error;
   }
+}
+
+function routeHandle(context: PipelineContext, kind: RouteKind): RouteHandle {
+  switch (kind) {
+    case "api":
+      if (context.baseUrl === undefined) throw missingProviderConfiguration();
+      return apiRoute({
+        baseUrl: context.baseUrl,
+        apiKeyEnv: context.apiKeyEnv,
+        maxConcurrency: context.maxConcurrency,
+        warning: (code, message) => context.reporter.warning(code, message),
+        pricingOverrides: context.pricingOverrides,
+        headers: context.requestHeaders,
+        catalogReference: context.catalogReference,
+      });
+  }
+}
+
+function replayRoutes(context: PipelineContext): {
+  readonly candidates: RouteHandle;
+  readonly judge: RouteHandle;
+} {
+  if (context.routes === undefined) throw missingProviderConfiguration();
+  const candidates = routeHandle(context, context.routes.candidates);
+  return {
+    candidates,
+    judge:
+      context.routes.judge === context.routes.candidates
+        ? candidates
+        : routeHandle(context, context.routes.judge),
+  };
 }
 
 function invalidPolicyFile(message: string): ProtocolError {
@@ -3327,7 +3350,8 @@ const noNeutralJudgeRemedy =
 
 function assertNeutralJudges(
   plan: z.infer<typeof replayPlanSchema>,
-  catalog: readonly ModelCatalogEntry[],
+  known: readonly ModelCatalogEntry[],
+  judgeCatalog: readonly ModelCatalogEntry[],
   candidates: readonly StepShortlist[],
   referenceFamilyByStepId: ReadonlyMap<string, string>,
 ): void {
@@ -3339,7 +3363,7 @@ function assertNeutralJudges(
   for (const { stepId, candidates: stepCandidates } of candidates) {
     if (stepCandidates.length === 0) continue;
     const step = plan.steps.find((candidate) => candidate.stepId === stepId)!;
-    const resolution = resolveCurrentModel(catalog, step.currentModel);
+    const resolution = resolveCurrentModel(known, step.currentModel);
     const referenceFamily = referenceFamilyByStepId.get(stepId)!;
     for (const { id, family } of [
       ...(resolution.kind === "exact" || resolution.kind === "resolved"
@@ -3368,7 +3392,7 @@ function assertNeutralJudges(
   }
   for (const { candidateFamily, referenceFamily } of pairs.values()) {
     try {
-      pickJudges(catalog, { candidateFamily, referenceFamily });
+      pickJudges(judgeCatalog, { candidateFamily, referenceFamily });
     } catch (error) {
       if (!(error instanceof NoNeutralJudgeError)) throw error;
       throw new ProtocolError({
@@ -3446,25 +3470,17 @@ async function executeReplay(
   inputDigestValue: string,
   runId: string,
 ): Promise<string> {
-  if (context.baseUrl === undefined) {
-    throw missingProviderConfiguration();
-  }
+  const routes = replayRoutes(context);
   const plan = await loadReplayPlan(context);
   const ceilings = await loadReferenceCeilings(context, plan);
-  const provider = createProvider({
-    providerId: "configured-provider",
-    baseUrl: context.baseUrl,
-    apiKeyEnv: context.apiKeyEnv,
-    maxConcurrency: context.maxConcurrency,
-    warning: (code, message) => context.reporter.warning(code, message),
-    pricingOverrides: context.pricingOverrides,
-    headers: context.requestHeaders,
-    catalogReference: context.catalogReference,
-  });
-  const catalog =
+  const known =
     context.existingRunId === undefined
-      ? await providerCatalog(provider)
+      ? await routeCatalog(() => routes.candidates.known())
       : await readDetachedReplayCatalog(context, context.existingRunId);
+  const judgeCatalog =
+    context.existingRunId === undefined
+      ? await routeCatalog(() => routes.judge.callable())
+      : known;
   const replaySteps = (split: "shortlist" | "holdout"): ReplayStep[] =>
     plan.steps.map((step) => ({
       ...step,
@@ -3473,23 +3489,23 @@ async function executeReplay(
     }));
   const candidates =
     context.approvedRunSpecDigest === undefined
-      ? replayCandidates(plan, catalog)
+      ? replayCandidates(plan, known)
       : await approvedReplayCandidates(
           context,
           plan,
-          catalog,
+          known,
           context.approvedRunSpecDigest,
         );
   reportShortlistAbstentions(context, plan, candidates);
-  assertPricedCandidates(context.baseUrl, candidates);
+  assertPricedCandidates(routes.candidates.label, candidates);
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
-    catalog,
+    known,
   );
   const currentPricingByStepId = new Map(
     plan.steps.map((step) => {
-      const resolution = resolveCurrentModel(catalog, step.currentModel);
+      const resolution = resolveCurrentModel(known, step.currentModel);
       return [
         step.stepId,
         resolution.kind === "exact" || resolution.kind === "resolved"
@@ -3509,7 +3525,13 @@ async function executeReplay(
     );
   }
   if (externalEvaluator === undefined) {
-    assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId);
+    assertNeutralJudges(
+      plan,
+      known,
+      judgeCatalog,
+      candidates,
+      referenceFamilyByStepId,
+    );
   }
   const assessmentAbsences = new Map<string, string>();
   const evaluation = () => ({
@@ -3573,25 +3595,26 @@ async function executeReplay(
         referenceFamily === undefined
           ? undefined
           : {
-              rankedModels: pickJudges(catalog, {
+              rankedModels: pickJudges(judgeCatalog, {
                 candidateFamily,
                 referenceFamily,
               }).map((judgeModel) => ({
                 judgeModel,
-                supportsStructuredOutput: catalog.find(
+                supportsStructuredOutput: judgeCatalog.find(
                   ({ id }) => id === judgeModel,
                 )!.supportsStructuredOutput,
-                ...judgeLimits(catalog, judgeModel),
+                ...judgeLimits(judgeCatalog, judgeModel),
               })),
               warning: (code: string, message: string) =>
                 context.reporter.warning(code, message),
-              chat: judgeChat(provider, catalog),
+              providerId: routes.judge.provider.providerId,
+              chat: judgeChat(routes.judge.provider, judgeCatalog),
             };
       const result = await replayModeA({
         steps: replaySteps(split),
         cases: plan.cases,
         candidates: familyAssignments,
-        provider,
+        provider: routes.candidates.provider,
         ...(judge === undefined ? {} : { judge }),
         store: context.store,
         budget,
@@ -4113,17 +4136,9 @@ async function executeConfirm(
         );
       }
     }
-    const provider = createProvider({
-      providerId: "configured-provider",
-      baseUrl: context.baseUrl,
-      apiKeyEnv: context.apiKeyEnv,
-      maxConcurrency: context.maxConcurrency,
-      warning: (code, message) => context.reporter.warning(code, message),
-      pricingOverrides: context.pricingOverrides,
-      headers: context.requestHeaders,
-      catalogReference: context.catalogReference,
-    });
-    const catalog = await providerCatalog(provider);
+    const route = routeHandle(context, "api");
+    const provider = route.provider;
+    const catalog = await routeCatalog(() => route.known());
     const configuredRecords = configuredStepRecords(config, reconciled.records);
     const orderedRecords = topologicalRecords(configuredRecords);
     const runtimeByCanonical = config.stepMap;
@@ -5517,6 +5532,15 @@ function normalizePipelineError(
       message: error.message,
       remedy:
         "Provide a trace file that unambiguously matches one supported format.",
+    });
+  }
+  if (isUsageLimit(error)) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "plan_usage_limit",
+      message: error.message,
+      remedy:
+        "Rerun the same command after the limit resets; completed replay and judge calls are kept and not repeated.",
     });
   }
   if (error instanceof ProviderConfigurationError) {

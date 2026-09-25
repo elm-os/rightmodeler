@@ -28729,18 +28729,23 @@ var BlockedError = class extends Error {
   kind;
   observedCeiling;
   providerId;
+  resetsAt;
   errorDetail;
   constructor(init) {
-    super(init.kind === "rate-limit" ? `Provider retries exhausted after HTTP ${init.status}; observed concurrency ceiling: ${init.observedCeiling}` : init.kind === "provider" ? `Provider ${init.providerId} returned a malformed model catalog` : init.kind === "credentials" ? `Provider ${init.providerId} rejected the API key with HTTP ${init.errorDetail.status}` : `Provider ${init.providerId} reported insufficient credits (HTTP 402)`);
+    super(init.kind === "rate-limit" ? `Provider retries exhausted after HTTP ${init.status}; observed concurrency ceiling: ${init.observedCeiling}` : init.kind === "provider" ? `Provider ${init.providerId} returned a malformed model catalog` : init.kind === "credentials" ? `Provider ${init.providerId} rejected the API key with HTTP ${init.errorDetail.status}` : init.kind === "usage-limit" ? `${init.providerId} reached its plan's usage limit${init.resetsAt === null ? "" : ` (resets ${init.resetsAt})`}: ${init.detail}` : `Provider ${init.providerId} reported insufficient credits (HTTP 402)`);
     this.name = "BlockedError";
     this.kind = init.kind;
     this.observedCeiling = init.kind === "rate-limit" ? init.observedCeiling : null;
     this.providerId = init.kind === "rate-limit" ? null : init.providerId;
-    if (init.kind !== "rate-limit") {
+    this.resetsAt = init.kind === "usage-limit" ? init.resetsAt : null;
+    if (init.kind !== "rate-limit" && init.kind !== "usage-limit") {
       this.errorDetail = init.errorDetail;
     }
   }
 };
+function isUsageLimit(error51) {
+  return error51 instanceof BlockedError && error51.kind === "usage-limit";
+}
 var ProviderRequestError = class extends Error {
 };
 var ProviderHttpError = class extends ProviderRequestError {
@@ -29470,7 +29475,7 @@ async function writeReplayFact(store, projectId3, factId, value) {
   await store.putImmutable(factKey(projectId3, factId), Buffer.from(JSON.stringify(fact), "utf8"));
   return fact;
 }
-async function replayFactState(store, projectId3) {
+async function replayFactState(store, projectId3, runId) {
   const ledger = await readLedger(store, projectId3);
   const completed = /* @__PURE__ */ new Set();
   const unusableJudges = /* @__PURE__ */ new Set();
@@ -29480,8 +29485,8 @@ async function replayFactState(store, projectId3) {
     completed.add(replayCorrelationKey(execution.evidenceQuestionId, execution.caseId, execution.candidateId));
   }
   for (const spend of ledger.spendEvents) {
-    if (spend.actor === "judge" && typeof spend.reconcilableTo === "object" && spend.reconcilableTo !== null && !Array.isArray(spend.reconcilableTo) && spend.reconcilableTo.judgeStatus === "unusable" && typeof spend.reconcilableTo.judgeModel === "string") {
-      unusableJudges.add(spend.reconcilableTo.judgeModel);
+    if (spend.actor === "judge" && typeof spend.reconcilableTo === "object" && spend.reconcilableTo !== null && !Array.isArray(spend.reconcilableTo) && spend.reconcilableTo.judgeStatus === "unusable" && typeof spend.reconcilableTo.judgeModel === "string" && (spend.reconcilableTo.note !== "rate_limited" || spend.reconcilableTo.runId === runId)) {
+      unusableJudges.add(JSON.stringify([spend.provider, spend.reconcilableTo.judgeModel]));
     }
   }
   const unassessed = /* @__PURE__ */ new Map();
@@ -29562,7 +29567,7 @@ async function replayModeA(input) {
   if (input.store !== input.budget.store) {
     throw new Error("Replay store must match the budget store");
   }
-  const replayState = await replayFactState(input.store, input.budget.projectId);
+  const replayState = await replayFactState(input.store, input.budget.projectId, input.budget.runId);
   const existing = replayState.completed;
   const cells = cellsFor(input);
   const result2 = {
@@ -29578,10 +29583,12 @@ async function replayModeA(input) {
   if (input.judge !== void 0 && judges.length === 0) {
     throw new Error("At least one ranked judge model is required");
   }
+  const judgeProviderId = input.judge?.providerId ?? input.provider.providerId;
   const unusableJudges = replayState.unusableJudges;
-  const firstUsableJudge = judges.findIndex(({ judgeModel }) => !unusableJudges.has(judgeModel));
+  const firstUsableJudge = judges.findIndex(({ judgeModel }) => !unusableJudges.has(JSON.stringify([judgeProviderId, judgeModel])));
   let activeJudgeIndex = firstUsableJudge === -1 ? judges.length : firstUsableJudge;
   let consecutiveJudgeFailures = 0;
+  let judgeStreakRateLimited = false;
   let judgeFailurePending = [];
   const judgeQueue = [];
   const judgeJobs = /* @__PURE__ */ new Set();
@@ -29602,6 +29609,7 @@ async function replayModeA(input) {
         verdict: judged.verdict,
         justification: judged.justification,
         judgeModel: judged.judgeModel,
+        judgeProvider: judgeProviderId,
         orderConsistent: judged.orderConsistent
       }
     }));
@@ -29612,7 +29620,7 @@ async function replayModeA(input) {
       actor: "judge",
       phase: job.cell.step.selectionStage ?? job.cell.step.corpusSplit,
       costUsd: 0,
-      provider: input.provider.providerId,
+      provider: judgeProviderId,
       reconcilableTo: {
         executionId: job.executionId,
         judgeModel,
@@ -29676,7 +29684,7 @@ async function replayModeA(input) {
                     status: error51.status,
                     bodyExcerpt: error51.bodyExcerpt
                   }
-                }, judgeLogicalCallId);
+                }, judgeLogicalCallId, judgeProviderId);
               } catch (persistenceError) {
                 judgePersistenceFailure = persistenceError;
                 throw persistenceError;
@@ -29690,7 +29698,7 @@ async function replayModeA(input) {
                 actor: "judge",
                 phase: job.cell.step.selectionStage ?? job.cell.step.corpusSplit,
                 costUsd: judgeResponse?.costUsd ?? 0,
-                provider: input.provider.providerId,
+                provider: judgeProviderId,
                 reconcilableTo: {
                   executionId: job.executionId,
                   judgeModel: judge.judgeModel,
@@ -29718,20 +29726,23 @@ async function replayModeA(input) {
       });
       return { status: "success", assessment };
     } catch (error51) {
-      if (error51 instanceof ProviderConfigurationError || judgePersistenceFailure !== void 0) {
+      if (error51 instanceof ProviderConfigurationError || isUsageLimit(error51) || judgePersistenceFailure !== void 0) {
         throw error51;
       }
       if (error51 instanceof BudgetRefusalError) {
         return { status: "blocked", message: error51.message };
       }
       if (retirement.aborted && error51 === retirement.reason) {
-        return { status: "failure" };
+        return { status: "failure", rateLimited: false };
       }
       await recordJudgeFailure(job, judge.judgeModel, judgeFailureKind, error51);
-      return { status: "failure" };
+      return {
+        status: "failure",
+        rateLimited: error51 instanceof BlockedError && error51.kind === "rate-limit"
+      };
     }
   }
-  async function recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments, substitution2) {
+  async function recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments, substitution2, rateLimited) {
     const cause = substitution2 === void 0 ? " after three consecutive terminal failures" : `: it answered as another model (${substitution2})`;
     input.judge.warning?.("judge_unusable", nextJudge === void 0 ? `Judge ${judge.judgeModel} is unusable${cause}; no eligible fallback judge remains.` : `Judge ${judge.judgeModel} is unusable${cause}; switching to ${nextJudge.judgeModel}.`);
     const noteId = randomUUID7();
@@ -29739,11 +29750,15 @@ async function replayModeA(input) {
       actor: "judge",
       phase: trigger.cell.step.selectionStage ?? trigger.cell.step.corpusSplit,
       costUsd: 0,
-      provider: input.provider.providerId,
+      provider: judgeProviderId,
       reconcilableTo: {
         judgeModel: judge.judgeModel,
         judgeStatus: "unusable",
-        ...substitution2 === void 0 ? {
+        ...substitution2 === void 0 ? rateLimited ? {
+          note: "rate_limited",
+          runId: input.budget.runId,
+          consecutiveAssessments
+        } : {
           note: "three_consecutive_terminal_failures",
           consecutiveAssessments
         } : { note: "model_substituted", substitution: substitution2 }
@@ -29759,6 +29774,7 @@ async function replayModeA(input) {
       if (judgeSwitchTrigger === null) {
         judgeFailurePending = [];
         consecutiveJudgeFailures = 0;
+        judgeStreakRateLimited = false;
       }
       await completeWithAssessment(job, outcome.assessment);
       return;
@@ -29777,8 +29793,10 @@ async function replayModeA(input) {
     if (judgeSwitchTrigger !== null)
       return;
     consecutiveJudgeFailures += 1;
+    if (outcome.rateLimited)
+      judgeStreakRateLimited = true;
     if (consecutiveJudgeFailures >= 3)
-      judgeSwitchTrigger = { job };
+      judgeSwitchTrigger = { job, rateLimited: judgeStreakRateLimited };
   }
   function startJudgeJob(work) {
     const job = work().catch((error51) => {
@@ -29795,7 +29813,7 @@ async function replayModeA(input) {
     if (judgeSwitchTrigger !== null) {
       if (judgeJobs.size > 0)
         return;
-      const { job: trigger, substitution: substitution2 } = judgeSwitchTrigger;
+      const { job: trigger, substitution: substitution2, rateLimited = false } = judgeSwitchTrigger;
       const judge = judges[activeJudgeIndex];
       const nextJudge = judges[activeJudgeIndex + 1];
       const consecutiveAssessments = consecutiveJudgeFailures;
@@ -29805,7 +29823,8 @@ async function replayModeA(input) {
       judgeQueue.unshift(...judgeFailurePending);
       judgeFailurePending = [];
       consecutiveJudgeFailures = 0;
-      startJudgeJob(() => recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments, substitution2));
+      judgeStreakRateLimited = false;
+      startJudgeJob(() => recordUnusableJudge(judge, nextJudge, trigger, consecutiveAssessments, substitution2, rateLimited));
       return;
     }
     while (judgeJobs.size < JUDGE_CONCURRENCY) {
@@ -29818,7 +29837,7 @@ async function replayModeA(input) {
   function attemptRecorder(cell, executionId) {
     const logicalCallId = randomUUID7();
     let actualCostUsd = 0;
-    async function recordAttempt(attempt, attemptLogicalCallId = logicalCallId) {
+    async function recordAttempt(attempt, attemptLogicalCallId = logicalCallId, providerId = input.provider.providerId) {
       actualCostUsd += attempt.costUsd;
       const attemptId = mintAttemptId();
       await writeReplayFact(input.store, input.budget.projectId, attemptId, requestAttemptSchema.parse({
@@ -29841,7 +29860,7 @@ async function replayModeA(input) {
         actor: "replay-driver",
         phase: cell.step.selectionStage ?? cell.step.corpusSplit,
         costUsd: attempt.costUsd,
-        provider: input.provider.providerId,
+        provider: providerId,
         reconcilableTo: {
           attemptId,
           logicalCallId: attemptLogicalCallId,
@@ -43366,6 +43385,20 @@ function formatRate(value) {
   return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "0.0%";
 }
 
+// src/routes.ts
+function apiRoute(options) {
+  const provider = createProvider({
+    providerId: "configured-provider",
+    ...options
+  });
+  return {
+    label: options.baseUrl,
+    provider,
+    callable: () => provider.listModels(),
+    known: () => provider.listModels()
+  };
+}
+
 // src/watch/aggregate.ts
 function handledEventKey(event) {
   if (typeof event.detail !== "object" || event.detail === null || Array.isArray(event.detail) || !("handledEventKey" in event.detail)) {
@@ -44794,48 +44827,43 @@ async function runPipeline(options) {
 }
 async function estimateReplay(options) {
   const context2 = createContext(options);
-  if (context2.baseUrl === void 0) {
-    throw missingProviderConfiguration();
-  }
+  const routes = replayRoutes(context2);
   const plan = await loadReplayPlan(context2);
-  const provider = createProvider({
-    providerId: "configured-provider",
-    baseUrl: context2.baseUrl,
-    apiKeyEnv: context2.apiKeyEnv,
-    maxConcurrency: context2.maxConcurrency,
-    warning: (code, message2) => context2.reporter.warning(code, message2),
-    pricingOverrides: context2.pricingOverrides,
-    headers: context2.requestHeaders,
-    catalogReference: context2.catalogReference
-  });
-  const catalog = context2.existingRunId === void 0 ? await providerCatalog(provider) : await readDetachedReplayCatalog(context2, context2.existingRunId);
-  const candidates = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, catalog) : await approvedReplayCandidates(
+  const known = context2.existingRunId === void 0 ? await routeCatalog(() => routes.candidates.known()) : await readDetachedReplayCatalog(context2, context2.existingRunId);
+  const judgeCatalog = context2.existingRunId === void 0 ? await routeCatalog(() => routes.judge.callable()) : known;
+  const candidates = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known) : await approvedReplayCandidates(
     context2,
     plan,
-    catalog,
+    known,
     context2.approvedRunSpecDigest
   );
   reportShortlistAbstentions(context2, plan, candidates);
-  assertPricedCandidates(context2.baseUrl, candidates);
+  assertPricedCandidates(routes.candidates.label, candidates);
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
-    catalog
+    known
   );
   if (context2.evaluator === void 0) {
-    assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId);
+    assertNeutralJudges(
+      plan,
+      known,
+      judgeCatalog,
+      candidates,
+      referenceFamilyByStepId
+    );
   }
   const judges = /* @__PURE__ */ new Map();
   const judge = context2.evaluator !== void 0 ? void 0 : (stepId, candidate) => {
     const referenceFamily = referenceFamilyByStepId.get(stepId);
     const key = JSON.stringify([candidate.family, referenceFamily]);
-    const known = judges.get(key);
-    if (known !== void 0) return known;
-    const modelId = pickJudges(catalog, {
+    const cached2 = judges.get(key);
+    if (cached2 !== void 0) return cached2;
+    const modelId = pickJudges(judgeCatalog, {
       candidateFamily: candidate.family,
       referenceFamily
     })[0];
-    const selected = { modelId, ...judgeLimits(catalog, modelId) };
+    const selected = { modelId, ...judgeLimits(judgeCatalog, modelId) };
     judges.set(key, selected);
     return selected;
   };
@@ -44864,18 +44892,7 @@ async function claimDetachedReplay(options) {
       remedy: "Pass --traces <path> or complete ingest before detaching replay."
     });
   }
-  const catalogIdentity = (await providerCatalog(
-    createProvider({
-      providerId: "configured-provider",
-      baseUrl: context2.baseUrl,
-      apiKeyEnv: context2.apiKeyEnv,
-      maxConcurrency: context2.maxConcurrency,
-      warning: (code, message2) => context2.reporter.warning(code, message2),
-      pricingOverrides: context2.pricingOverrides,
-      headers: context2.requestHeaders,
-      catalogReference: context2.catalogReference
-    })
-  )).sort((left, right) => compareText(left.id, right.id));
+  const catalogIdentity = (await routeCatalog(() => routeHandle(context2, "api").known())).sort((left, right) => compareText(left.id, right.id));
   const targetPhase = options.through ?? "replay";
   if (!isPipelineStage(targetPhase)) {
     throw new Error(`Invalid detached replay target: ${targetPhase}`);
@@ -45527,6 +45544,7 @@ function createContext(options) {
     ...options.catalogReference === void 0 ? {} : {
       catalogReference: /^https?:\/\//iu.test(options.catalogReference) ? options.catalogReference : resolve8(options.catalogReference)
     },
+    ...options.baseUrl === void 0 ? {} : { routes: { candidates: "api", judge: "api" } },
     ...policyFilePath === void 0 ? {} : { policyFilePath },
     ...options.matchersPath === void 0 ? {} : {
       matchersPath: resolve8(options.matchersPath),
@@ -45912,15 +45930,38 @@ function invalidCatalogReference(message2) {
     remedy: "Pass --catalog-reference an http(s) URL or a readable file that returns an OpenAI-compatible /models document, or remove it, then rerun."
   });
 }
-async function providerCatalog(provider) {
+async function routeCatalog(load) {
   try {
-    return await provider.listModels();
+    return await load();
   } catch (error51) {
     if (error51 instanceof CatalogReferenceError) {
       throw invalidCatalogReference(error51.message);
     }
     throw error51;
   }
+}
+function routeHandle(context2, kind) {
+  switch (kind) {
+    case "api":
+      if (context2.baseUrl === void 0) throw missingProviderConfiguration();
+      return apiRoute({
+        baseUrl: context2.baseUrl,
+        apiKeyEnv: context2.apiKeyEnv,
+        maxConcurrency: context2.maxConcurrency,
+        warning: (code, message2) => context2.reporter.warning(code, message2),
+        pricingOverrides: context2.pricingOverrides,
+        headers: context2.requestHeaders,
+        catalogReference: context2.catalogReference
+      });
+  }
+}
+function replayRoutes(context2) {
+  if (context2.routes === void 0) throw missingProviderConfiguration();
+  const candidates = routeHandle(context2, context2.routes.candidates);
+  return {
+    candidates,
+    judge: context2.routes.judge === context2.routes.candidates ? candidates : routeHandle(context2, context2.routes.judge)
+  };
 }
 function invalidPolicyFile(message2) {
   return new ProtocolError({
@@ -46590,13 +46631,13 @@ function assertPricedCandidates(baseUrl, candidates) {
   }
 }
 var noNeutralJudgeRemedy = "List or price a model from a third vendor (a multi-vendor gateway, --catalog-reference or --pricing-file), or grade with your own evaluator (--evaluator).";
-function assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId) {
+function assertNeutralJudges(plan, known, judgeCatalog, candidates, referenceFamilyByStepId) {
   const vendorless = /* @__PURE__ */ new Set();
   const pairs = /* @__PURE__ */ new Map();
   for (const { stepId, candidates: stepCandidates } of candidates) {
     if (stepCandidates.length === 0) continue;
     const step = plan.steps.find((candidate) => candidate.stepId === stepId);
-    const resolution = resolveCurrentModel(catalog, step.currentModel);
+    const resolution = resolveCurrentModel(known, step.currentModel);
     const referenceFamily = referenceFamilyByStepId.get(stepId);
     for (const { id, family } of [
       ...resolution.kind === "exact" || resolution.kind === "resolved" ? [resolution.model] : [],
@@ -46622,7 +46663,7 @@ function assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId)
   }
   for (const { candidateFamily, referenceFamily } of pairs.values()) {
     try {
-      pickJudges(catalog, { candidateFamily, referenceFamily });
+      pickJudges(judgeCatalog, { candidateFamily, referenceFamily });
     } catch (error51) {
       if (!(error51 instanceof NoNeutralJudgeError)) throw error51;
       throw new ProtocolError({
@@ -46679,43 +46720,32 @@ async function approvedReplayCandidates(context2, plan, catalog, runSpecDigest) 
   });
 }
 async function executeReplay(context2, inputDigestValue, runId) {
-  if (context2.baseUrl === void 0) {
-    throw missingProviderConfiguration();
-  }
+  const routes = replayRoutes(context2);
   const plan = await loadReplayPlan(context2);
   const ceilings = await loadReferenceCeilings(context2, plan);
-  const provider = createProvider({
-    providerId: "configured-provider",
-    baseUrl: context2.baseUrl,
-    apiKeyEnv: context2.apiKeyEnv,
-    maxConcurrency: context2.maxConcurrency,
-    warning: (code, message2) => context2.reporter.warning(code, message2),
-    pricingOverrides: context2.pricingOverrides,
-    headers: context2.requestHeaders,
-    catalogReference: context2.catalogReference
-  });
-  const catalog = context2.existingRunId === void 0 ? await providerCatalog(provider) : await readDetachedReplayCatalog(context2, context2.existingRunId);
+  const known = context2.existingRunId === void 0 ? await routeCatalog(() => routes.candidates.known()) : await readDetachedReplayCatalog(context2, context2.existingRunId);
+  const judgeCatalog = context2.existingRunId === void 0 ? await routeCatalog(() => routes.judge.callable()) : known;
   const replaySteps = (split) => plan.steps.map((step) => ({
     ...step,
     corpusSplit: split,
     selectionStage: split
   }));
-  const candidates = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, catalog) : await approvedReplayCandidates(
+  const candidates = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known) : await approvedReplayCandidates(
     context2,
     plan,
-    catalog,
+    known,
     context2.approvedRunSpecDigest
   );
   reportShortlistAbstentions(context2, plan, candidates);
-  assertPricedCandidates(context2.baseUrl, candidates);
+  assertPricedCandidates(routes.candidates.label, candidates);
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
-    catalog
+    known
   );
   const currentPricingByStepId = new Map(
     plan.steps.map((step) => {
-      const resolution = resolveCurrentModel(catalog, step.currentModel);
+      const resolution = resolveCurrentModel(known, step.currentModel);
       return [
         step.stepId,
         resolution.kind === "exact" || resolution.kind === "resolved" ? resolution.model.pricing : void 0
@@ -46733,7 +46763,13 @@ async function executeReplay(context2, inputDigestValue, runId) {
     );
   }
   if (externalEvaluator === void 0) {
-    assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId);
+    assertNeutralJudges(
+      plan,
+      known,
+      judgeCatalog,
+      candidates,
+      referenceFamilyByStepId
+    );
   }
   const assessmentAbsences = /* @__PURE__ */ new Map();
   const evaluation = () => ({
@@ -46774,24 +46810,25 @@ async function executeReplay(context2, inputDigestValue, runId) {
         familyAssignments.filter(({ candidates: candidates2 }) => candidates2.length > 0).map(({ stepId }) => stepId)
       );
       const judge = referenceFamily === void 0 ? void 0 : {
-        rankedModels: pickJudges(catalog, {
+        rankedModels: pickJudges(judgeCatalog, {
           candidateFamily,
           referenceFamily
         }).map((judgeModel) => ({
           judgeModel,
-          supportsStructuredOutput: catalog.find(
+          supportsStructuredOutput: judgeCatalog.find(
             ({ id }) => id === judgeModel
           ).supportsStructuredOutput,
-          ...judgeLimits(catalog, judgeModel)
+          ...judgeLimits(judgeCatalog, judgeModel)
         })),
         warning: (code, message2) => context2.reporter.warning(code, message2),
-        chat: judgeChat(provider, catalog)
+        providerId: routes.judge.provider.providerId,
+        chat: judgeChat(routes.judge.provider, judgeCatalog)
       };
       const result2 = await replayModeA({
         steps: replaySteps(split),
         cases: plan.cases,
         candidates: familyAssignments,
-        provider,
+        provider: routes.candidates.provider,
         ...judge === void 0 ? {} : { judge },
         store: context2.store,
         budget,
@@ -47209,17 +47246,9 @@ async function executeConfirm(context2, inputDigestValue, runId) {
         );
       }
     }
-    const provider = createProvider({
-      providerId: "configured-provider",
-      baseUrl: context2.baseUrl,
-      apiKeyEnv: context2.apiKeyEnv,
-      maxConcurrency: context2.maxConcurrency,
-      warning: (code, message2) => context2.reporter.warning(code, message2),
-      pricingOverrides: context2.pricingOverrides,
-      headers: context2.requestHeaders,
-      catalogReference: context2.catalogReference
-    });
-    const catalog = await providerCatalog(provider);
+    const route = routeHandle(context2, "api");
+    const provider = route.provider;
+    const catalog = await routeCatalog(() => route.known());
     const configuredRecords = configuredStepRecords(config2, reconciled.records);
     const orderedRecords = topologicalRecords(configuredRecords);
     const runtimeByCanonical = config2.stepMap;
@@ -48291,6 +48320,14 @@ function normalizePipelineError(error51, context2) {
       code: "ambiguous_trace_format",
       message: error51.message,
       remedy: "Provide a trace file that unambiguously matches one supported format."
+    });
+  }
+  if (isUsageLimit(error51)) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "plan_usage_limit",
+      message: error51.message,
+      remedy: "Rerun the same command after the limit resets; completed replay and judge calls are kept and not repeated."
     });
   }
   if (error51 instanceof ProviderConfigurationError) {

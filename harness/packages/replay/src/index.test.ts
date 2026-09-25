@@ -34,7 +34,9 @@ import {
   createBudget,
   createProvider,
   estimateInputTokens,
+  isUsageLimit,
   ProviderRequestError,
+  ProviderResponseError,
   replayModeA,
   shortlist,
   type Budget,
@@ -383,6 +385,44 @@ describe("provider client", () => {
 
     expect(response.status).toBe(400);
     await expect(response.text()).resolves.toContain("messages[0].parts");
+  });
+
+  it("names the provider and the reset time of a plan usage limit", () => {
+    const limited = new BlockedError({
+      kind: "usage-limit",
+      providerId: "claude-login",
+      resetsAt: "2026-09-25T20:00:00.000Z",
+      detail: "five-hour limit",
+    });
+    const unknownReset = new BlockedError({
+      kind: "usage-limit",
+      providerId: "codex-login",
+      resetsAt: null,
+      detail: "out of credits",
+    });
+
+    expect(limited.message).toBe(
+      "claude-login reached its plan's usage limit (resets 2026-09-25T20:00:00.000Z): five-hour limit",
+    );
+    expect(unknownReset.message).toBe(
+      "codex-login reached its plan's usage limit: out of credits",
+    );
+    expect([
+      limited.providerId,
+      limited.resetsAt,
+      unknownReset.resetsAt,
+    ]).toEqual(["claude-login", "2026-09-25T20:00:00.000Z", null]);
+    expect(isUsageLimit(limited)).toBe(true);
+    expect(
+      isUsageLimit(
+        new BlockedError({
+          kind: "rate-limit",
+          status: 429,
+          observedCeiling: 2,
+        }),
+      ),
+    ).toBe(false);
+    expect(isUsageLimit(new Error("usage limit"))).toBe(false);
   });
 });
 
@@ -2722,6 +2762,7 @@ describe("Mode A replay", () => {
     warning?: (code: string, message: string) => void,
     authorizedTotalUsd = 1,
     wrapBudget = (budget: Budget) => budget,
+    judgeProviderId?: string,
   ) {
     const catalog = await provider.listModels();
     const candidate = catalog.find((model) => model.id === "acme/small-1");
@@ -2751,6 +2792,9 @@ describe("Mode A replay", () => {
         chat: judgeChat,
         rankedModels,
         ...(warning === undefined ? {} : { warning }),
+        ...(judgeProviderId === undefined
+          ? {}
+          : { providerId: judgeProviderId }),
       },
       store,
       budget,
@@ -2775,6 +2819,37 @@ describe("Mode A replay", () => {
       baseUrl: baseUrl(stub),
       apiKeyEnv: "REPLAY_TEST_API_KEY",
       maxConcurrency: 4,
+    });
+  }
+
+  const rankedJudges = [
+    {
+      judgeModel: "zeta/judge-1",
+      supportsStructuredOutput: true,
+      ...unpricedJudgeLimits,
+    },
+    {
+      judgeModel: "yotta/judge-2",
+      supportsStructuredOutput: false,
+      ...unpricedJudgeLimits,
+    },
+  ];
+
+  function numberedCases(count: number, first = 1): RecordedCase[] {
+    return Array.from({ length: count }, (_, index) =>
+      recordedCase({
+        caseId: `case-${first + index}`,
+        trajectoryId: `trajectory-${first + index}`,
+      }),
+    );
+  }
+
+  function planUsageLimit(): BlockedError {
+    return new BlockedError({
+      kind: "usage-limit",
+      providerId: "plan-route",
+      resetsAt: "2026-09-25T20:00:00.000Z",
+      detail: "fixture plan limit",
     });
   }
 
@@ -4559,5 +4634,405 @@ describe("Mode A replay", () => {
     expect(attempt.errorDetail?.bodyExcerpt.length).toBeLessThanOrEqual(500);
     const serialized = JSON.stringify(facts);
     expect(serialized).not.toContain(fakeKey);
+  });
+
+  it("records the judge route's provider on judge spend, judge failures, retirement notes and assessments", async () => {
+    const equivalent = judge();
+    let zetaCalls = 0;
+    const chat: JudgeChat = async (request) => {
+      if (request.model !== "zeta/judge-1") return equivalent(request);
+      zetaCalls += 1;
+      if (zetaCalls === 1) {
+        throw new ProviderResponseError("Fixture judge rejection", {
+          status: 400,
+          bodyExcerpt: "fixture judge rejection",
+        });
+      }
+      return judgeReply('{"verdict":');
+    };
+
+    await run(
+      numberedCases(3),
+      chat,
+      1,
+      "zeta/judge-1",
+      rankedJudges,
+      undefined,
+      1,
+      undefined,
+      "judge-route",
+    );
+    const facts = await readFacts(store);
+    const spend = facts.filter((fact) => "actor" in fact);
+    const attempts = facts.filter((fact) => "attemptId" in fact);
+    const assessments = facts.filter((fact) => "assessmentId" in fact);
+    const reconciled = (
+      fact: (typeof spend)[number],
+    ): { readonly [key: string]: JsonValue | undefined } =>
+      typeof fact.reconcilableTo === "object" &&
+      fact.reconcilableTo !== null &&
+      !Array.isArray(fact.reconcilableTo)
+        ? fact.reconcilableTo
+        : {};
+    const attemptSpend = (attemptId: string) =>
+      spend.filter(
+        (fact) =>
+          fact.actor === "replay-driver" &&
+          reconciled(fact).attemptId === attemptId,
+      );
+    const rejected = attempts.find(
+      (attempt) =>
+        attempt.streamOutcome === "provider_error" &&
+        attempt.errorDetail?.bodyExcerpt === "fixture judge rejection",
+    );
+    const completedAttempts = attempts.filter(
+      (attempt) => attempt.streamOutcome === "completed",
+    );
+    if (rejected === undefined) {
+      throw new Error("Expected the judge's rejected attempt");
+    }
+
+    expect(
+      spend.filter((fact) => reconciled(fact).judgeFailureKind !== undefined),
+    ).not.toHaveLength(0);
+    expect(
+      spend.filter((fact) => reconciled(fact).judgeStatus === "unusable"),
+    ).toHaveLength(1);
+    expect(
+      new Set(
+        spend
+          .filter(({ actor }) => actor === "judge")
+          .map(({ provider }) => provider),
+      ),
+    ).toEqual(new Set(["judge-route"]));
+    expect(
+      attemptSpend(rejected.attemptId).map(({ provider }) => provider),
+    ).toEqual(["judge-route"]);
+    expect(completedAttempts).toHaveLength(3);
+    expect(
+      new Set(
+        completedAttempts
+          .flatMap(({ attemptId }) => attemptSpend(attemptId))
+          .map(({ provider }) => provider),
+      ),
+    ).toEqual(new Set(["stub-provider"]));
+    expect(assessments).toHaveLength(3);
+    for (const assessment of assessments) {
+      expect(assessment).toMatchObject({
+        artifactRef: { judgeProvider: "judge-route" },
+      });
+    }
+  });
+
+  it("keeps a stored judge retirement to the provider that recorded it", async () => {
+    const equivalent = judge();
+    const called: string[] = [];
+    const chat: JudgeChat = async (request) => {
+      called.push(request.model);
+      return request.model === "zeta/judge-1"
+        ? judgeReply('{"verdict":')
+        : equivalent(request);
+    };
+    const runOn = (cases: RecordedCase[], judgeProviderId: string) =>
+      run(
+        cases,
+        chat,
+        1,
+        "zeta/judge-1",
+        rankedJudges,
+        undefined,
+        1,
+        undefined,
+        judgeProviderId,
+      );
+
+    await runOn(numberedCases(3), "route-a");
+    called.length = 0;
+    await runOn(numberedCases(1, 4), "route-b");
+
+    expect(called).toContain("zeta/judge-1");
+
+    called.length = 0;
+    await runOn(numberedCases(1, 5), "route-a");
+
+    expect(called).not.toContain("zeta/judge-1");
+  });
+
+  it("retires a rate-limited judge for the rest of its run and tries it again on the next run", async () => {
+    const equivalent = judge();
+    const called: string[] = [];
+    const chat: JudgeChat = async (request) => {
+      called.push(request.model);
+      if (request.model === "zeta/judge-1") {
+        throw new BlockedError({
+          kind: "rate-limit",
+          status: 429,
+          observedCeiling: 1,
+        });
+      }
+      return equivalent(request);
+    };
+    const runWith = (cases: RecordedCase[], wrapBudget?: () => Budget) =>
+      run(
+        cases,
+        chat,
+        1,
+        "zeta/judge-1",
+        rankedJudges,
+        undefined,
+        1,
+        wrapBudget,
+        "judge-route",
+      );
+
+    await runWith(numberedCases(4));
+    const facts = await readFacts(store);
+    const spend = facts.filter((fact) => "actor" in fact);
+    const reconciled = (
+      fact: (typeof spend)[number],
+    ): { readonly [key: string]: JsonValue | undefined } =>
+      typeof fact.reconcilableTo === "object" &&
+      fact.reconcilableTo !== null &&
+      !Array.isArray(fact.reconcilableTo)
+        ? fact.reconcilableTo
+        : {};
+    const assessments = facts.filter((fact) => "assessmentId" in fact);
+    const failures = spend.filter(
+      (fact) => reconciled(fact).judgeFailureKind !== undefined,
+    );
+    const notes = spend.filter(
+      (fact) => reconciled(fact).judgeStatus === "unusable",
+    );
+
+    expect(assessments).toHaveLength(4);
+    expect(
+      assessments.every(({ evaluatorId }) => evaluatorId === "yotta/judge-2"),
+    ).toBe(true);
+    expect(failures).not.toHaveLength(0);
+    expect(
+      failures.every(
+        (fact) => reconciled(fact).judgeFailureKind === "provider_error",
+      ),
+    ).toBe(true);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({
+      provider: "judge-route",
+      reconcilableTo: {
+        judgeModel: "zeta/judge-1",
+        judgeStatus: "unusable",
+        note: "rate_limited",
+        runId: "run-1",
+        consecutiveAssessments: 3,
+      },
+    });
+
+    called.length = 0;
+    await runWith(numberedCases(1, 5));
+
+    expect(called).not.toContain("zeta/judge-1");
+
+    called.length = 0;
+    await runWith(numberedCases(1, 6), () =>
+      createBudget({
+        store,
+        projectId,
+        runId: "run-2",
+        authorizedTotalUsd: 1,
+      }),
+    );
+
+    expect(called[0]).toBe("zeta/judge-1");
+  });
+
+  it("stops the run at a plan usage limit from a candidate call, keeps the cells already written and replays only the rest next time", async () => {
+    const delegate = provider;
+    let calls = 0;
+    let delegated = 0;
+    let limited = true;
+    provider = {
+      providerId: delegate.providerId,
+      listModels: () => delegate.listModels(),
+      chat: async (request) => {
+        calls += 1;
+        if (limited && calls > 2) throw planUsageLimit();
+        delegated += 1;
+        return delegate.chat(request);
+      },
+    };
+
+    await expect(run(numberedCases(5), judge(), 1)).rejects.toMatchObject({
+      name: "BlockedError",
+      kind: "usage-limit",
+    });
+    const executions = (await readFacts(store)).filter(
+      (fact) => "executionId" in fact && "caseId" in fact,
+    );
+
+    expect(executions.map(({ caseId }) => caseId).sort()).toEqual([
+      "case-1",
+      "case-2",
+    ]);
+
+    limited = false;
+
+    await expect(run(numberedCases(5), judge(), 1)).resolves.toMatchObject({
+      completed: 3,
+      skipped: 2,
+      blocked: [],
+    });
+    expect(delegated).toBe(5);
+  });
+
+  it("stops the run at a plan usage limit from a judge call without counting a judge failure", async () => {
+    await expect(
+      run(
+        numberedCases(3),
+        async () => {
+          throw planUsageLimit();
+        },
+        1,
+        "zeta/judge-1",
+        rankedJudges,
+      ),
+    ).rejects.toMatchObject({ kind: "usage-limit" });
+    const facts = await readFacts(store);
+
+    expect(
+      facts.filter((fact) => "executionId" in fact && "caseId" in fact),
+    ).not.toHaveLength(0);
+    expect(facts.filter((fact) => "assessmentId" in fact)).toHaveLength(0);
+    expect(
+      facts.filter(
+        (fact) =>
+          "actor" in fact &&
+          typeof fact.reconcilableTo === "object" &&
+          fact.reconcilableTo !== null &&
+          !Array.isArray(fact.reconcilableTo) &&
+          (fact.reconcilableTo.judgeFailureKind !== undefined ||
+            fact.reconcilableTo.judgeStatus !== undefined),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("reassesses the executions a judge usage limit left unassessed, with the same judge, on the next run", async () => {
+    await expect(
+      run(
+        numberedCases(4),
+        async () => {
+          throw planUsageLimit();
+        },
+        1,
+        "zeta/judge-1",
+        rankedJudges,
+      ),
+    ).rejects.toMatchObject({ kind: "usage-limit" });
+
+    await run(numberedCases(4), judge(), 1, "zeta/judge-1", rankedJudges);
+    const facts = await readFacts(store);
+    const executions = facts.filter(
+      (fact) => "executionId" in fact && "caseId" in fact,
+    );
+    const assessments = facts.filter((fact) => "assessmentId" in fact);
+
+    expect(executions).toHaveLength(4);
+    for (const { executionId } of executions) {
+      expect(
+        assessments.filter(
+          (assessment) => assessment.executionId === executionId,
+        ),
+      ).toHaveLength(1);
+    }
+    expect(
+      assessments.every(({ evaluatorId }) => evaluatorId === "zeta/judge-1"),
+    ).toBe(true);
+    expect(stub.getHitCount()).toBe(4);
+  });
+
+  async function retirementNotes(): Promise<
+    Record<string, JsonValue | undefined>
+  > {
+    const notes: Record<string, JsonValue | undefined> = {};
+    for (const fact of await readFacts(store)) {
+      if (
+        "actor" in fact &&
+        typeof fact.reconcilableTo === "object" &&
+        fact.reconcilableTo !== null &&
+        !Array.isArray(fact.reconcilableTo) &&
+        fact.reconcilableTo.judgeStatus === "unusable"
+      ) {
+        notes[String(fact.reconcilableTo.judgeModel)] =
+          fact.reconcilableTo.note;
+      }
+    }
+    return notes;
+  }
+
+  it("records a lasting retirement when a success ended the judge's earlier rate-limited failures", async () => {
+    const equivalent = judge();
+    let releaseAfterFailure = (): void => undefined;
+    const failureRecorded = new Promise<void>((resolve) => {
+      releaseAfterFailure = resolve;
+    });
+    let releaseAfterAssessment = (): void => undefined;
+    const assessmentRecorded = new Promise<void>((resolve) => {
+      releaseAfterAssessment = resolve;
+    });
+    const putImmutable = store.putImmutable.bind(store);
+    vi.spyOn(store, "putImmutable").mockImplementation(async (key, body) => {
+      await putImmutable(key, body);
+      const written = Buffer.from(body).toString("utf8");
+      if (written.includes('"judgeFailureKind"')) releaseAfterFailure();
+      if (written.includes('"assessmentId"')) releaseAfterAssessment();
+    });
+    const chat: JudgeChat = async (request) => {
+      if (request.model !== "zeta/judge-1") return equivalent(request);
+      const prompt = JSON.stringify(request.messages);
+      if (prompt.includes("for case-1")) {
+        throw new BlockedError({
+          kind: "rate-limit",
+          status: 429,
+          observedCeiling: 1,
+        });
+      }
+      await failureRecorded;
+      if (prompt.includes("for case-2")) return equivalent(request);
+      await assessmentRecorded;
+      return judgeReply('{"verdict":');
+    };
+
+    await run(
+      numberedCases(5).map((recorded) => ({
+        ...recorded,
+        referenceOutput: `Accepted summary for ${recorded.caseId}`,
+      })),
+      chat,
+      1,
+      "zeta/judge-1",
+      rankedJudges,
+    );
+
+    expect(await retirementNotes()).toEqual({
+      "zeta/judge-1": "three_consecutive_terminal_failures",
+    });
+  });
+
+  it("records a lasting retirement for the next judge after a judge retired for rate limits", async () => {
+    const chat: JudgeChat = async (request) => {
+      if (request.model === "zeta/judge-1") {
+        throw new BlockedError({
+          kind: "rate-limit",
+          status: 429,
+          observedCeiling: 1,
+        });
+      }
+      return judgeReply('{"verdict":');
+    };
+
+    await run(numberedCases(3), chat, 1, "zeta/judge-1", rankedJudges);
+
+    expect(await retirementNotes()).toEqual({
+      "zeta/judge-1": "rate_limited",
+      "yotta/judge-2": "three_consecutive_terminal_failures",
+    });
   });
 });
