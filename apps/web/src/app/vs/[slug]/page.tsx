@@ -15,6 +15,7 @@ import { RelatedLinks } from "@/components/sections/related-links";
 import { Tldr } from "@/components/sections/tldr";
 import { CompareTable } from "@/components/vs/compare-table";
 import { SplitColumns } from "@/components/vs/split-columns";
+import { getIntegration } from "@/content/integrations";
 import { getAllSlugs, getComparison } from "@/content/vs";
 import type { VsBlock } from "@/content/vs/types";
 import { pageMetadata } from "@/lib/seo";
@@ -88,7 +89,16 @@ function Band({
 // enforced in `pnpm check`) guarantees each type carries exactly the fields it renders, so the
 // guards below are unreachable fallbacks, not content switches. Winner labels stay lowercase
 // "rightmodeler" (no CSS uppercase), per the brand rule.
-function BlockSection({ block, name }: { block: VsBlock; name: string }) {
+// A stack block ends with a link to the integration's setup guide when the page names one.
+function BlockSection({
+  block,
+  name,
+  setupGuide,
+}: {
+  block: VsBlock;
+  name: string;
+  setupGuide?: { href: string; label: string };
+}) {
   switch (block.type) {
     case "tldr":
       if (!block.body) return null;
@@ -184,6 +194,16 @@ function BlockSection({ block, name }: { block: VsBlock; name: string }) {
                 command={entry.command}
               />
             ))}
+            {setupGuide && (
+              <p className="text-body">
+                <Link
+                  href={setupGuide.href}
+                  className="inline-flex min-h-11 items-center text-midnight-ink underline decoration-ash-border decoration-1 underline-offset-4 transition-colors duration-150 ease-out hover:decoration-midnight-ink focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white"
+                >
+                  {setupGuide.label}
+                </Link>
+              </p>
+            )}
           </div>
         </Band>
       );
@@ -268,6 +288,14 @@ export default async function VsDetailPage({
     const entry = getComparison(relatedSlug);
     return entry ? [entry] : [];
   });
+  // The label reads as the integration page's own H1, "rightmodeler + <name>".
+  const integration = data.integrationSlug
+    ? getIntegration(data.integrationSlug)
+    : undefined;
+  const setupGuide = integration && {
+    href: `/integrations/${integration.slug}`,
+    label: `Setup guide: rightmodeler + ${integration.name}`,
+  };
 
   const breadcrumbLd = {
     "@context": "https://schema.org",
@@ -309,7 +337,11 @@ export default async function VsDetailPage({
       {data.blocks.map((block, i) => (
         <Fragment key={i}>
           {rule}
-          <BlockSection block={block} name={data.name} />
+          <BlockSection
+            block={block}
+            name={data.name}
+            setupGuide={setupGuide}
+          />
         </Fragment>
       ))}
 

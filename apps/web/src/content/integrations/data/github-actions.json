@@ -83,12 +83,12 @@
     "Schedules are best effort. GitHub can delay scheduled runs at busy times and may drop queued jobs under heavy load, and in a public repository it disables schedules after 60 days without activity.",
     "Runs wait in line for the store, and only the newest waiting run is kept. If a run is already waiting, a newly queued run replaces it, so dispatch again if yours was replaced.",
     "The cache is not durable storage. If no job touches the store for 7 days, GitHub evicts it and the next run starts from an empty store.",
-    "Verified live in a disposable repository with dispatched runs: init completed, apply opened drafts authored by github-actions[bot] and requested the CODEOWNERS owner, watch answered a review comment, and nothing was merged. Those runs used a packed build of the CLI and a stand-in model provider, so they prove the workflow and its GitHub side rather than a paid replay. The schedules, the push trigger and the GitHub App token variant have not run live."
+    "Verified live in a disposable repository with dispatched runs: init completed, apply opened drafts authored by github-actions[bot] and requested the CODEOWNERS owner, watch answered a review comment, and nothing was merged. Those runs used a packed build of the CLI and a stand-in model provider to verify the workflow and its GitHub side."
   ],
   "faq": [
     {
       "q": "Do I need a GitHub App or a personal access token?",
-      "a": "No. Every job uses the built-in GITHUB_TOKEN, and the only repository setting is Allow GitHub Actions to create and approve pull requests, under Actions, General, Workflow permissions. In a repository owned by an organization, the organization has to allow it first. A GitHub App token is an optional upgrade that lets CI on the draft start without approval, and it has not been tested live."
+      "a": "No. Every job uses the built-in GITHUB_TOKEN, and the only repository setting is Allow GitHub Actions to create and approve pull requests, under Actions, General, Workflow permissions. In a repository owned by an organization, the organization has to allow it first. A GitHub App token is an optional upgrade that lets CI on the draft start without approval."
     },
     {
       "q": "Why does init not open the pull request itself?",

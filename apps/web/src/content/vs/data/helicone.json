@@ -1,0 +1,189 @@
+{
+  "slug": "helicone",
+  "name": "Helicone",
+  "website": "https://www.helicone.ai",
+  "logo": "/integrations/logos/helicone.svg",
+  "category": "gateway",
+  "verdict": "complement",
+  "verdictLabel": "Complement · it logs the bill, the audit tests the swap",
+  "title": "rightmodeler vs Helicone: routing vs a tested swap",
+  "description": "Helicone routes and logs your model traffic, so you can see where the bill goes. rightmodeler replays those logged requests on cheaper models before any swap.",
+  "h1": "rightmodeler vs Helicone",
+  "lede": "Helicone sits in your request path, routing each call to a provider and logging what it cost and returned. rightmodeler starts from those logged requests and asks what the log cannot: would a cheaper model have produced a response you would have accepted?",
+  "integrationSlug": "helicone",
+  "related": ["openrouter", "litellm", "langfuse"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Complements on the same traffic. You hire Helicone to run and read your model traffic: as of 2026-09-24, its docs describe an OpenAI-compatible AI Gateway in front of 100+ LLM providers that routes each request to the cheapest provider serving the model you named and fails over when one errors, with every request logged alongside its cost, latency, and errors, and sessions, custom properties, alerts, caching, and rate limits on top. You hire rightmodeler, a free MIT-licensed CLI, when the bill raises a different question: which of those calls could a cheaper model answer as well? Its dedicated Helicone adapter reads the request rows you export, replays each recorded call through cheaper candidates, judges them against the response you shipped, and reports agreement, sample size, and abstentions per step family. What clears every gate becomes a draft pull request that changes model identifiers only, for a human to review and merge. Keep Helicone in the request path; the audit never enters it."
+    },
+    {
+      "type": "table",
+      "heading": "How they differ",
+      "intro": "Helicone works on every live request. rightmodeler works once, on requests you already made.",
+      "caption": "helicone vs rightmodeler",
+      "leftLabel": "Helicone",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "job",
+          "theirs": "route, log, and analyze live model traffic",
+          "ours": "test whether a cheaper model can take each step"
+        },
+        {
+          "dimension": "acts",
+          "theirs": "in the request path as a proxy, or off the critical path when you log asynchronously",
+          "ours": "after the fact, on request rows you exported"
+        },
+        {
+          "dimension": "cheaper routing",
+          "theirs": "the cheapest provider serving the model you named, with failover",
+          "ours": "a cheaper model for the step, only when it holds up against the response you shipped"
+        },
+        {
+          "dimension": "cost view",
+          "theirs": "spend per request, session, user, or custom property, with cost alerts and weekly reports",
+          "ours": "cost per case on your replays, next to what the current model cost"
+        },
+        {
+          "dimension": "quality",
+          "theirs": "scores you report from other eval frameworks; Helicone says it is not an evaluation framework",
+          "ours": "a judge from a model family neither side belongs to, sample size, abstentions, and a floor re-cleared on held-out cases"
+        },
+        {
+          "dimension": "output",
+          "theirs": "dashboards, alerts, reports, and a searchable request log",
+          "ours": "report.md per step family and, once a swap clears, a draft pull request"
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Can you use both? Yes, and Helicone stays in the path",
+      "paragraphs": [
+        "Helicone keeps proxying production traffic throughout: no SDK change, no new header, no code in your app. The audit reads a file of request rows you exported, and nothing connects to your Helicone account while it runs; your Helicone key is used only by the export call you run yourself.",
+        "The division of labor is simple. Helicone shows where the money goes, by session, user, feature, or any custom property you attach. The audit shows which of those calls a cheaper model could have answered as well, with evidence per step family. If you already stamp requests with Helicone-Session-Id, those rows arrive as one trajectory, so a multi-call agent run stays one unit in the statistics."
+      ]
+    },
+    {
+      "type": "stack",
+      "heading": "The supported workflow: Helicone rows in, a reviewed pull request out",
+      "intro": "A dedicated adapter reads Helicone request exports. Three commands, run from your repository.",
+      "paragraphs": [
+        "Export your request rows with Helicone's query API, POST https://api.helicone.ai/v1/request/query, with includeInputs set so request_body and response_body come back with each row. The adapter recognizes Helicone rows by their request_id, response_id, and request_created_at keys, reads the model, messages, and any tool definitions from request_body, and takes response_body as the answer you shipped. Rows that share a Helicone-Session-Id become one trajectory; rows without one fall back to their request_id.",
+        "The preview run spends nothing. The full run replays each recorded call on cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, judges every replay against the response you accepted, and caps replay and judge spend together at the figure you pass with --max-cost-usd. It writes report.md with a verdict per step family, and when a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers only. There is no rightmodeler server, no account, and no telemetry."
+      ],
+      "commands": [
+        {
+          "comment": "# export request rows, bodies included, to a file",
+          "command": "curl -s https://api.helicone.ai/v1/request/query -H \"Authorization: $HELICONE_API_KEY\" -H 'content-type: application/json' -d '{\"filter\":\"all\",\"limit\":1000,\"includeInputs\":true}' > helicone.json"
+        },
+        {
+          "comment": "# preview the pipeline without spending anything",
+          "command": "npx rightmodeler init --plan --traces ./helicone.json --repo ."
+        },
+        {
+          "comment": "# then run it against your replay endpoint",
+          "command": "npx rightmodeler init --traces ./helicone.json --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one gets the call?",
+      "intro": "Three situations, with the honest winner named in each.",
+      "scenarios": [
+        {
+          "scenario": "Your provider starts returning errors in the middle of a launch, and requests need somewhere else to go right now.",
+          "winner": "theirs",
+          "why": "That is a live request that needs saving, and it is Helicone's job: per its docs, the AI Gateway fails over to the next provider serving the same model on rate limits, timeouts, and server errors, and alerts can fire on error rate. rightmodeler is offline by design and cannot help a request in flight."
+        },
+        {
+          "scenario": "You already know which agent drives the bill, and every step in it calls the same frontier model.",
+          "winner": "ours",
+          "why": "Helicone's cheapest-provider routing lowers the price of the model you named; it never changes the model. The audit replays that agent's recorded calls on cheaper models from your provider's live catalog, judges each against the response you shipped, abstains where the sample is thin, and re-clears the quality floor on held-out cases before it recommends a swap."
+        },
+        {
+          "scenario": "Finance asks why the model bill doubled last month and what to do about it.",
+          "winner": "both",
+          "why": "Helicone answers the first half: sessions and custom properties show which workflow, user, or feature drove the spend, per its docs. Export those rows and the audit answers the second half, per step family: which calls a cheaper model could have answered as well, with the evidence attached. An approved swap keeps flowing through Helicone like any other request."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "Helicone runs in your request path and keeps it up: routing across providers, failover, response caching on Cloudflare's edge, and custom rate limits by request count, cost, or property, per its docs. rightmodeler never serves a single production request and cannot retry, cache, or rate-limit anything.",
+        "Helicone is where you see the traffic: a searchable log of every request, sessions that lay out an agent run, user and custom-property analytics, alerts on errors, cost, and latency, and weekly reports to email or Slack. rightmodeler is a point-in-time report you choose to run on rows you exported.",
+        "Helicone is open source under the Apache License 2.0 and can be self-hosted with Docker Compose or Kubernetes, per its docs. Its gateway also gives one key access to many providers with pass-through billing. rightmodeler brings no models and no keys of its own; it replays through the endpoint and key you configure.",
+        "The audit's verdicts measure agreement with the response you shipped, which is evidence of agreement, not proof of correctness, and a family with thin evidence abstains instead of recommending."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page uses",
+      "terms": [
+        {
+          "term": "session",
+          "def": "In Helicone, the related requests grouped by the Helicone-Session-Id header, per its docs. The audit reads that ID as the trajectory, so one agent run counts as one unit."
+        },
+        {
+          "term": "trace",
+          "slug": "trace",
+          "def": "The step-by-step record of what your agent did. For Helicone users it is the request log: each exported row holds the request body, the response body, and the tokens used."
+        },
+        {
+          "term": "swap candidate",
+          "slug": "swap-candidate",
+          "def": "A cheaper model from your configured provider's live catalog, replayed on one step family's recorded requests."
+        },
+        {
+          "term": "reference evidence",
+          "slug": "reference-evidence",
+          "def": "Agreement between a candidate's response and the response you shipped for that exact request. Evidence of agreement with shipped output, not proof of correctness."
+        },
+        {
+          "term": "quality floor",
+          "slug": "quality-floor",
+          "def": "The configurable minimum a candidate must clear, on the cases it was chosen on and again on held-out cases, before the audit recommends it."
+        },
+        {
+          "term": "abstain",
+          "slug": "abstain",
+          "def": "What the audit does when a step family's evidence is too thin: it recommends nothing and names the reason. The current model stays."
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Does rightmodeler replace Helicone?",
+          "a": "No. Helicone proxies, caches, and observes live traffic. rightmodeler runs offline on rows you exported and answers a different question: whether a cheaper model would have produced an equivalent response on the calls you actually made. Keep Helicone in the request path; an approved swap keeps flowing through it."
+        },
+        {
+          "q": "Helicone's gateway already routes to the cheapest provider. Isn't that the same saving?",
+          "a": "It is a different saving. Per Helicone's docs, provider routing finds every provider that serves the model you requested and sends the call to the cheapest available one, so the model stays the one you named. The audit tests a different model for each step, judges it against the response you shipped, and recommends it only when it holds up. The two stack: a cheaper model, served by the cheapest provider."
+        },
+        {
+          "q": "Does the audit use Helicone's recorded cost?",
+          "a": "Not as evidence. The audit prices candidate calls from what your replay endpoint reports for the call it just ran, and marks the figure as an estimate when the provider returns no cost. Historical spend stays in Helicone, where you already track it."
+        },
+        {
+          "q": "What does Helicone joining Mintlify mean for this workflow?",
+          "a": "Helicone announced on 2026-03-03 that it had been acquired by Mintlify, and as of 2026-09-24 its post says Helicone's services remain live in maintenance mode, with security updates, new models, and bug and performance fixes still shipping. The audit reads request rows from a file on your disk and never connects to Helicone while it runs, so it works on any export you already have."
+        },
+        {
+          "q": "Does my request data leave my machine?",
+          "a": "Only during replay, when recorded inputs go to candidate models through the endpoint you configured, under your own key. There is no rightmodeler server and no account; the export file and the report stay on your disk."
+        },
+        {
+          "q": "Will it always find savings?",
+          "a": "No, and that is deliberate. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor on held-out cases. An audit that always finds a swap is not measuring anything."
+        }
+      ]
+    }
+  ]
+}

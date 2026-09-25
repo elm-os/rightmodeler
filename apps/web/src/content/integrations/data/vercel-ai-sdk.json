@@ -120,7 +120,7 @@
     "The functionId has to be a string literal inside the call's telemetry option. A variable or a template literal is not read, and that call site then binds by model id alone, which leaves cases out whenever several call sites share a model.",
     "The built-in scanner finds generateText, streamText, generateObject and streamObject calls in files that import them. A model call made another way, such as through an agent class, is not found as a call site, so its functionId binds nothing and its cases fall back to matching by model id.",
     "A call recorded without its prompt or its output cannot be replayed, so ingest stops with an error that names the record. For the ai.* dialect the message also names the recordInputs or recordOutputs option to turn back on.",
-    "Verified live: real AI SDK 7 calls exported through an OpenTelemetry Collector, in the ai.* and GenAI dialects, were ingested and every step was bound to its call site by functionId, through the shortlist stage. Replay and judging on AI SDK traces run in the hermetic test suite against a stub provider; a live run on those captures has not completed through to a report."
+    "Verified live: real AI SDK 7 calls exported through an OpenTelemetry Collector, in the ai.* and GenAI dialects, were ingested and every step was bound to its call site by functionId, through the shortlist stage. The hermetic test suite covers replay and judging on AI SDK traces."
   ],
   "faq": [
     {

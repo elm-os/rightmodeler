@@ -3,7 +3,7 @@
   "name": "LangSmith",
   "website": "https://www.langchain.com/langsmith-platform",
   "logo": "/integrations/logos/langsmith.svg",
-  "category": "evals",
+  "category": "observability",
   "verdict": "different-job",
   "verdictLabel": "Different job · failure fixes vs model right-sizing",
   "title": "rightmodeler vs LangSmith: which model each step needs",
@@ -11,7 +11,7 @@
   "h1": "rightmodeler vs LangSmith",
   "lede": "LangSmith traces, evaluates, and deploys your agent, and its Engine now turns production traces into diagnosed issues and proposed fix pull requests. rightmodeler reads the runs LangSmith already recorded and settles a narrower question with evidence: can a cheaper model take this step without losing what you accepted?",
   "integrationSlug": "langsmith",
-  "related": ["braintrust", "promptfoo", "litellm"],
+  "related": ["braintrust", "promptfoo", "litellm", "langfuse"],
   "cta": "github",
   "blocks": [
     {

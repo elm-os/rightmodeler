@@ -64,8 +64,9 @@ export type VsPageData = {
   logo: string;
   /**
    * Which hub band the page belongs to; presentation only.
-   * One of: "gateway" (The rails) | "evals" (The graders) | "router" (The routers) |
-   * "spend" (The meters) | "training" (The trainers) | "benchmarks" (The scorekeepers).
+   * One of: "gateway" (The rails) | "observability" (The observers) | "evals" (The graders) |
+   * "router" (The routers) | "spend" (The meters) | "context" (The coaches) |
+   * "training" (The trainers) | "benchmarks" (The scorekeepers).
    */
   category: string;
   /**
