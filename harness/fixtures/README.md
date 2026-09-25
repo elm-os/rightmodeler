@@ -30,6 +30,8 @@ The remaining trace fixtures are synthetic, append-friendly examples of each ada
 
 `catalogs/openai-models.json` is written from OpenAI's List models reference (`GET https://api.openai.com/v1/models`), not captured: `id`, `object`, `created`, `owned_by` and `shutdown_date` only, for `gpt-6-sol`, `gpt-6-luna` and `text-embedding-3-small`. Replay tests read it to check that bare ids from `api.openai.com` take the `openai` family, that the same ids from another host name no vendor, and that only `api.openai.com` is sent `max_completion_tokens`; the CLI tests read it as a direct OpenAI key's catalog.
 
+`catalogs/plan-route-prices.json` is a verbatim seventeen-model slice of Vercel AI Gateway's public model list (`GET https://ai-gateway.vercel.sh/v1/models`, no key), captured on 2026-09-25: the Anthropic models the owner's `claude` 2.1.282 listed and the OpenAI models `codex` listed, Fable included. Plan-route tests read it as the price list that prices calls made through a CLI signed in to a plan.
+
 `gateways/` holds gateway responses, fresh ones and ones that came from another model, from a cache, or from a changed request, for the response provenance tests in the replay package; `gateways/README.md` says which were captured from a running gateway and which were written from pinned vendor source.
 
 `gateway-acceptance/` is the kit for the opt-in live gateway tests: a two-call-site application template, a capture script that sends chat completions through a gateway and writes them as OpenAI SDK JSONL, and the pinned gateway images; `gateway-acceptance/README.md` says how the tests use them.
@@ -82,3 +84,5 @@ capture code-graph-app
 capture demo-app
 rm -rf "$CAP"
 ```
+
+`plan-cli-stub/` holds a fake `claude` for hermetic plan-route tests: `bin/claude` starts `claude.mjs`, which answers `--version`, `auth status`, the `initialize` control request and `-p` model calls from `captured/claude/`, exits 96 when an isolation flag is missing and 97 when a key or parent-session variable reaches it, records each invocation to `PLAN_STUB_RECORD` (variable names only), counts calls in `PLAN_STUB_STATE`, and injects failures named by `PLAN_STUB_FAULT`. `captured/claude/` was scrubbed on 2026-09-25 from a real Claude Code 2.1.282 on a Claude Max login: account, email, organization, directories, session ids and uuids were removed or replaced by placeholders, and the fake adds synthetic `*-SENTINEL` account fields so tests can prove none reaches an error or warning. `rate-limit-rejected.json`, the `credits_required` and overage events, and the logged-out and key-login `auth status` answers were written from Anthropic's documented `SDKRateLimitEvent` type, the CLI reference and the probe's recorded shapes, not captured, because no live run reached a plan limit or a signed-out state.

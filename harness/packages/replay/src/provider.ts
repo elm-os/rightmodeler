@@ -590,6 +590,14 @@ async function readCatalogReference(
   return { models, excluded };
 }
 
+export async function readModelList(
+  reference: string,
+): Promise<ModelCatalogEntry[]> {
+  return [...(await readCatalogReference(reference)).models.values()].map(
+    ({ entry }) => entry,
+  );
+}
+
 function joinCatalogReference(
   models: readonly NormalizedCatalogModel[],
   reference: CatalogReference,
