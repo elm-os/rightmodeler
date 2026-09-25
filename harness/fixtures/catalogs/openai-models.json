@@ -1,0 +1,26 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "gpt-6-sol",
+      "object": "model",
+      "created": 1686935002,
+      "owned_by": "openai",
+      "shutdown_date": null
+    },
+    {
+      "id": "gpt-6-luna",
+      "object": "model",
+      "created": 1686935002,
+      "owned_by": "openai",
+      "shutdown_date": null
+    },
+    {
+      "id": "text-embedding-3-small",
+      "object": "model",
+      "created": 1686935002,
+      "owned_by": "openai",
+      "shutdown_date": null
+    }
+  ]
+}
