@@ -1,0 +1,22 @@
+{
+  "type": "control_response",
+  "response": {
+    "subtype": "success",
+    "request_id": "REQUEST-ID",
+    "response": {
+      "models": [
+        { "value": "default", "resolvedModel": "claude-opus-5-5" },
+        { "value": "opus", "resolvedModel": "claude-opus-5-5" },
+        { "value": "claude-fable-5-1", "resolvedModel": "claude-fable-5-1" },
+        { "value": "sonnet", "resolvedModel": "claude-sonnet-5" },
+        { "value": "haiku", "resolvedModel": "claude-haiku-4-5-20251001" },
+        { "value": "claude-opus-5", "resolvedModel": "claude-opus-5" },
+        { "value": "claude-fable-5", "resolvedModel": "claude-fable-5" },
+        { "value": "claude-opus-4-8", "resolvedModel": "claude-opus-4-8" },
+        { "value": "claude-opus-4-7", "resolvedModel": "claude-opus-4-7" },
+        { "value": "claude-opus-4-6", "resolvedModel": "claude-opus-4-6" },
+        { "value": "claude-sonnet-4-6", "resolvedModel": "claude-sonnet-4-6" }
+      ]
+    }
+  }
+}

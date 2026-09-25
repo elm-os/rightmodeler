@@ -1,6 +1,6 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import {
   chmod,
@@ -14,7 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { delimiter, dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -39,11 +39,13 @@ import {
 } from "@rightmodeler/kernel";
 import { createProvider } from "@rightmodeler/replay";
 import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   estimateReplay,
+  evidenceQuestionIdentity,
   listApprovedSwapSets,
+  releasePolicy,
   resolveCheckpointedPipelineCorpus,
   runPipeline,
   topologicalRecords,
@@ -5926,4 +5928,937 @@ describe("built CLI pipeline", () => {
       remedy: "Create the first commit, then rerun the command.",
     });
   });
+});
+
+describe("built CLI through plan routes", () => {
+  const fakeBin = fileURLToPath(
+    new URL("../../../fixtures/plan-cli-stub/bin", import.meta.url),
+  );
+  const planPrices = fileURLToPath(
+    new URL(
+      "../../../fixtures/catalogs/plan-route-prices.json",
+      import.meta.url,
+    ),
+  );
+  const planPath = [
+    fakeBin,
+    dirname(process.execPath),
+    "/usr/bin",
+    "/bin",
+  ].join(delimiter);
+  const apiKeyEnv = "RIGHTMODELER_PLAN_E2E_API_KEY";
+  const dummyAnthropicKey = "sk-ant-plan-e2e-dummy-must-stay-home";
+  const judgeModels = new Set(["zeta/judge-1", "yotta/judge-2"]);
+  const loginRemedy =
+    "Run claude auth login, then rerun; finished calls are kept.";
+  let routed:
+    | {
+        root: string;
+        repo: string;
+        baseUrl: string;
+        prices: string;
+        policy: string;
+      }
+    | undefined;
+
+  interface StubRecord {
+    event: "start" | "end";
+    pid: number;
+    argv?: string[];
+    stdin?: string;
+    envNames?: string[];
+    outcome?: string;
+  }
+
+  beforeAll(() => {
+    const root = join(tmpdir(), `rightmodeler-plan-fake-${process.pid}`);
+    const record = `${root}.jsonl`;
+    const version = spawnSync("claude", ["--version"], {
+      env: { PATH: planPath, PLAN_STUB_RECORD: record },
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+    });
+    expect(version.stdout.trim()).toBe("2.1.282 (Claude Code)");
+    const lines = readFileSync(record, "utf8").trim().split("\n");
+    rmSync(record, { force: true });
+    expect(lines.map((line) => JSON.parse(line).event)).toEqual([
+      "start",
+      "end",
+    ]);
+  });
+
+  async function writePlanPrices(
+    root: string,
+    incumbents: Record<string, { input: string; output: string }> = {
+      "acme/large-1": { input: "0.00003", output: "0.00015" },
+    },
+  ): Promise<string> {
+    const catalog = JSON.parse(await readFile(planPrices, "utf8")) as {
+      object: string;
+      data: unknown[];
+    };
+    const path = join(root, "plan-prices.json");
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...catalog,
+        data: [
+          ...catalog.data,
+          // Synthetic incumbents: the fixtures' recorded models are not on the public list.
+          ...Object.entries(incumbents).map(([id, pricing]) => ({
+            id,
+            type: "language",
+            context_window: 128_000,
+            pricing,
+          })),
+        ],
+      }),
+    );
+    return path;
+  }
+
+  async function writePolicy(root: string, shortlistTop: number) {
+    const path = join(root, `policy-${shortlistTop}.json`);
+    await writeFile(path, JSON.stringify({ shortlistTop }));
+    return path;
+  }
+
+  function planEnv(
+    root: string,
+    name: string,
+    extra: NodeJS.ProcessEnv = {},
+  ): NodeJS.ProcessEnv {
+    return {
+      PATH: planPath,
+      PLAN_STUB_RECORD: join(root, `${name}.record.jsonl`),
+      PLAN_STUB_STATE: join(root, `${name}-state`),
+      PLAN_STUB_FAULT: undefined,
+      CI: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      ANTHROPIC_AUTH_TOKEN: undefined,
+      [apiKeyEnv]: secret,
+      ...extra,
+    };
+  }
+
+  async function stubRecords(root: string, name: string) {
+    let text: string;
+    try {
+      text = await readFile(join(root, `${name}.record.jsonl`), "utf8");
+    } catch {
+      return [];
+    }
+    return text
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as StubRecord);
+  }
+
+  function modelCalls(records: readonly StubRecord[]): StubRecord[] {
+    return records.filter(
+      ({ event, argv }) => event === "start" && argv?.includes("--model"),
+    );
+  }
+
+  function chatModels(stub: RecordingStubProvider): string[] {
+    return stub
+      .getRequestHeaders()
+      .filter(
+        ({ method, path }) =>
+          method === "POST" && path === "/v1/chat/completions",
+      )
+      .map(({ model }) => model ?? "");
+  }
+
+  function spendProviders(ledger: Awaited<ReturnType<typeof readLedger>>) {
+    const providers = (actor: string) => [
+      ...new Set(
+        ledger.spendEvents
+          .filter((event) => event.actor === actor)
+          .map(({ provider }) => provider),
+      ),
+    ];
+    return {
+      candidates: providers("replay-driver"),
+      judge: providers("judge"),
+    };
+  }
+
+  async function planRouteRun(label: string) {
+    const { root, repo } = await fixtureCopy(label);
+    const stub = await startStub();
+    const baseUrl = `http://127.0.0.1:${stub.port}/v1`;
+    const prices = await writePlanPrices(root);
+    const policy = await writePolicy(root, 1);
+    const args = (command: string, extra: readonly string[] = []) => [
+      command,
+      "--traces",
+      tracesPath,
+      "--route",
+      "claude-login",
+      "--judge-route",
+      "api",
+      "--base-url",
+      baseUrl,
+      "--api-key-env",
+      apiKeyEnv,
+      "--catalog-reference",
+      prices,
+      "--policy",
+      policy,
+      ...extra,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    return { root, repo, stub, baseUrl, prices, policy, args };
+  }
+
+  async function startRenamedCatalogStub(
+    renames: Readonly<Record<string, string>>,
+  ): Promise<{
+    port: number;
+    upstream: RecordingStubProvider;
+    close(): Promise<void>;
+  }> {
+    const upstream = await startStub();
+    const server = createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = Buffer.concat(chunks);
+      const upstreamResponse = await fetch(
+        `http://127.0.0.1:${upstream.port}${request.url ?? "/"}`,
+        {
+          method: request.method,
+          headers: { "content-type": "application/json" },
+          ...(body.length === 0 ? {} : { body }),
+        },
+      );
+      const text = await upstreamResponse.text();
+      response.writeHead(upstreamResponse.status, {
+        "content-type":
+          upstreamResponse.headers.get("content-type") ?? "application/json",
+      });
+      if (request.method === "GET" && request.url === "/v1/models") {
+        const catalog = JSON.parse(text) as { data: Array<{ id: string }> };
+        response.end(
+          JSON.stringify({
+            ...catalog,
+            data: catalog.data.map((model) => ({
+              ...model,
+              id: renames[model.id] ?? model.id,
+            })),
+          }),
+        );
+        return;
+      }
+      response.end(text);
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    if (address === null || typeof address === "string") {
+      await upstream.close();
+      throw new Error("Renamed catalog stub did not bind a TCP port");
+    }
+    return {
+      port: address.port,
+      upstream,
+      close: async () => {
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+        await upstream.close();
+      },
+    };
+  }
+
+  it("replays candidates through claude-login and judges through an API route", async () => {
+    const run = await planRouteRun("plan-route");
+    try {
+      const result = await runCli(run.args("init"), {
+        env: planEnv(run.root, "first", {
+          ANTHROPIC_API_KEY: dummyAnthropicKey,
+        }),
+      });
+
+      expect(result.code, result.stderr).toBe(0);
+      expect(warningMessages(result.stderr, "plan_route_key_withheld")).toEqual(
+        [
+          "ANTHROPIC_API_KEY is set; rightmodeler keeps it away from claude so your plan is used, not a key.",
+        ],
+      );
+      const records = await stubRecords(run.root, "first");
+      expect(modelCalls(records).length).toBeGreaterThan(0);
+      expect(records.filter(({ event }) => event === "end")).not.toContainEqual(
+        expect.objectContaining({ outcome: "leaked-variable" }),
+      );
+      const chats = chatModels(run.stub);
+      expect(chats.length).toBeGreaterThan(0);
+      expect(chats.filter((model) => !judgeModels.has(model))).toEqual([]);
+      const storeRoot = join(run.repo, ".rightmodeler");
+      const store = new FsStore(storeRoot);
+      expect(spendProviders(await readLedger(store, "project"))).toEqual({
+        candidates: ["claude-login"],
+        judge: ["configured-provider"],
+      });
+      const shortlist = (await readStageArtifact(storeRoot, "shortlist")) as {
+        familyPlans: Array<{
+          familyId: string;
+          evidenceQuestionId: string;
+          stepIds: string[];
+        }>;
+      };
+      const { corpusVersionId } = await resolveCheckpointedPipelineCorpus({
+        repo: run.repo,
+        store,
+        storeRoot,
+        projectId: "project",
+      });
+      expect(shortlist.familyPlans.length).toBeGreaterThan(0);
+      for (const family of shortlist.familyPlans) {
+        const question = {
+          corpusVersionId,
+          gatePolicyVersion: releasePolicy({ shortlistTop: 1 }).gate
+            .gatePolicyVersion,
+          evaluatorPlan: {
+            evaluatorKind: "judge",
+            gateMetric: "replacement-quality",
+          },
+          family: family.familyId,
+          stepIds: family.stepIds,
+          reproofRequestIds: [],
+        };
+        expect(family.evidenceQuestionId).toBe(
+          evidenceQuestionIdentity({
+            ...question,
+            candidateRoute: "claude-login",
+          }),
+        );
+        expect(family.evidenceQuestionId).not.toBe(
+          evidenceQuestionIdentity(question),
+        );
+      }
+      const report = await storeText(store, reportKey("project", "report.md"));
+      expect(report).toMatch(
+        /\nThrough a plan you are signed in to \(list-price equivalent, not billed\): \$\d+\.\d{8}\. Billed through the API route: \$\d+\.\d{8}\.\n/u,
+      );
+      expect(report).toContain("\n## Model routes\n");
+      expect(report).toMatch(
+        /\| candidates \| claude-login \| \d+ \| \d+\.\d{8} \(list-price equivalent\) \|/u,
+      );
+      expect(report).toMatch(/\| judge \| api \| \d+ \| \d+\.\d{8} \|/u);
+      for (const text of [
+        result.stdout,
+        result.stderr,
+        await allFileText(storeRoot),
+        await readFile(join(run.root, "first.record.jsonl"), "utf8"),
+      ]) {
+        expect(text).not.toContain(dummyAnthropicKey);
+      }
+      routed = run;
+    } finally {
+      await run.stub.close();
+    }
+  }, 180_000);
+
+  it("keeps plan-route stages apart from API stages: an identical init --plan keeps them complete, --judge-route claude-login (without --base-url) makes replay stale, and --base-url alone makes shortlist stale", async () => {
+    expect(routed).toBeDefined();
+    const { root, repo, baseUrl, prices, policy } = routed!;
+    const stages = async (extra: readonly string[]) => {
+      const result = await runCli(
+        [
+          "init",
+          "--plan",
+          "--traces",
+          tracesPath,
+          ...extra,
+          "--catalog-reference",
+          prices,
+          "--policy",
+          policy,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: planEnv(root, "plan-only") },
+      );
+      expect(result.code, result.stderr).toBe(0);
+      return Object.fromEntries(
+        (
+          JSON.parse(result.stdout) as {
+            stages: Array<{ stage: string; state: string }>;
+          }
+        ).stages.map(({ stage, state }) => [stage, state]),
+      );
+    };
+
+    const identical = await stages([
+      "--route",
+      "claude-login",
+      "--judge-route",
+      "api",
+      "--base-url",
+      baseUrl,
+      "--api-key-env",
+      apiKeyEnv,
+    ]);
+    const judgeOnPlan = await stages([
+      "--route",
+      "claude-login",
+      "--judge-route",
+      "claude-login",
+    ]);
+    const apiOnly = await stages([
+      "--base-url",
+      baseUrl,
+      "--api-key-env",
+      apiKeyEnv,
+    ]);
+
+    expect(new Set(Object.values(identical))).toEqual(new Set(["complete"]));
+    expect(judgeOnPlan).toMatchObject({
+      shortlist: "complete",
+      replay: "stale",
+    });
+    expect(apiOnly).toMatchObject({ corpus: "complete", shortlist: "stale" });
+    expect(await stubRecords(root, "plan-only")).toEqual([]);
+  }, 180_000);
+
+  it("drops candidates from the judge route's vendor with a warning and judges the rest through claude-login", async () => {
+    const { root, repo } = await fixtureCopy("plan-judge-vendor");
+    const stub = await startRenamedCatalogStub({
+      "acme/lite-1": "anthropic/claude-haiku-4.5",
+    });
+    const apiArgs = [
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--catalog-reference",
+      await writePlanPrices(root),
+      "--policy",
+      await writePolicy(root, 2),
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    try {
+      const result = await runCli(
+        ["init", "--judge-route", "claude-login", ...apiArgs],
+        { env: planEnv(root, "judge-vendor") },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      expect(
+        warningMessages(result.stderr, "judge_vendor_candidates_dropped"),
+      ).toEqual([
+        "Candidates anthropic/claude-haiku-4.5 were left out: the judge runs through claude-login (anthropic), and it must come from another vendor than the candidate.",
+      ]);
+      const chats = chatModels(stub.upstream);
+      expect(chats.length).toBeGreaterThan(0);
+      expect(new Set(chats)).toEqual(new Set(["acme/small-1"]));
+      expect(
+        modelCalls(await stubRecords(root, "judge-vendor")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        spendProviders(
+          await readLedger(new FsStore(join(repo, ".rightmodeler")), "project"),
+        ),
+      ).toEqual({
+        candidates: ["configured-provider"],
+        judge: ["claude-login"],
+      });
+      const estimated = await runCli(
+        ["estimate", "--judge-route", "claude-login", ...apiArgs],
+        { env: planEnv(root, "judge-vendor-estimate") },
+      );
+      expect(estimated.code, estimated.stderr).toBe(0);
+      expect(
+        warningMessages(estimated.stderr, "judge_vendor_candidates_dropped"),
+      ).toEqual([
+        "Candidates anthropic/claude-haiku-4.5 were left out: the judge runs through claude-login (anthropic), and it must come from another vendor than the candidate.",
+      ]);
+      expect(
+        modelCalls(await stubRecords(root, "judge-vendor-estimate")),
+      ).toEqual([]);
+      const apiJudge = await runCli(["init", "--plan", ...apiArgs], {
+        env: planEnv(root, "judge-vendor-plan"),
+      });
+      expect(apiJudge.code, apiJudge.stderr).toBe(0);
+      expect(
+        Object.fromEntries(
+          (
+            JSON.parse(apiJudge.stdout) as {
+              stages: Array<{ stage: string; state: string }>;
+            }
+          ).stages.map(({ stage, state }) => [stage, state]),
+        ),
+      ).toMatchObject({ shortlist: "complete", replay: "stale" });
+    } finally {
+      await stub.close();
+    }
+  }, 180_000);
+
+  it("stops before any model call when every candidate shares the judge route's vendor", async () => {
+    const { root, repo } = await fixtureCopy("plan-same-vendor");
+    const result = await runCli(
+      [
+        "init",
+        "--traces",
+        tracesPath,
+        "--route",
+        "claude-login",
+        "--judge-route",
+        "claude-login",
+        "--catalog-reference",
+        await writePlanPrices(root),
+        "--policy",
+        await writePolicy(root, 1),
+        "--output",
+        "json",
+        "--repo",
+        repo,
+      ],
+      { env: planEnv(root, "same-vendor") },
+    );
+
+    expect(result.code, result.stderr).toBe(2);
+    expect(lastStderrEvent(result)).toEqual({
+      code: "no_neutral_judge",
+      message:
+        "Every shortlisted candidate is from anthropic, the vendor of the judge route claude-login, so no candidate can be judged neutrally.",
+      remedy:
+        "Use a --judge-route from another vendor, or an api --route whose catalog lists other vendors.",
+    });
+    expect(modelCalls(await stubRecords(root, "same-vendor"))).toEqual([]);
+  }, 180_000);
+
+  it("leaves multi-turn cases out of a plan route's sample with plan_route_cases_left_out", async () => {
+    const run = await planRouteRun("plan-multi-turn");
+    const traces = JSON.parse(await readFile(tracesPath, "utf8")) as Array<{
+      attributes: Record<string, unknown>;
+    }>;
+    for (const { attributes } of traces
+      .filter(
+        ({ attributes }) => attributes["rightmodeler.family"] === "summarize",
+      )
+      .slice(0, 5)) {
+      attributes["gen_ai.input.messages"] = [
+        ...(attributes["gen_ai.input.messages"] as JsonValue[]),
+        {
+          role: "assistant",
+          parts: [{ type: "text", content: "An earlier answer." }],
+        },
+        { role: "user", parts: [{ type: "text", content: "And then?" }] },
+      ];
+    }
+    const multiTurn = join(run.root, "multi-turn.json");
+    await writeFile(multiTurn, JSON.stringify(traces));
+    try {
+      const args = run.args("init");
+      args[args.indexOf(tracesPath)] = multiTurn;
+      const result = await runCli(args, {
+        env: planEnv(run.root, "multi-turn"),
+      });
+
+      expect(result.code, result.stderr).toBe(0);
+      const warnings = warningMessages(
+        result.stderr,
+        "plan_route_cases_left_out",
+      );
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatch(
+        /^Family summarize: 5 of \d+ recorded cases have an earlier assistant or tool turn or more than one user message, and the claude-login route sends one user turn, so they were left out of the replay sample\.$/u,
+      );
+      expect(
+        warningMessages(result.stderr, "recorded_messages_not_replayable"),
+      ).toEqual([]);
+      const bindingLeftOut = Number(
+        /^Family summarize: (\d+) of /u.exec(
+          warningMessages(result.stderr, "family_cases_left_out").find(
+            (message) => message.startsWith("Family summarize: "),
+          ) ?? "",
+        )?.[1] ?? 0,
+      );
+      const shortlist = (await readStageArtifact(
+        join(run.repo, ".rightmodeler"),
+        "shortlist",
+      )) as { familyPlans: Array<{ familyId: string; leftOutCases?: number }> };
+      expect(
+        shortlist.familyPlans.find(({ familyId }) => familyId === "summarize")
+          ?.leftOutCases,
+      ).toBe(bindingLeftOut + 5);
+      const calls = modelCalls(await stubRecords(run.root, "multi-turn"));
+      expect(calls.length).toBeGreaterThan(0);
+      expect(calls.filter(({ stdin }) => stdin === "And then?")).toEqual([]);
+    } finally {
+      await run.stub.close();
+    }
+  }, 180_000);
+
+  it("stops at plan_usage_limit (exit 2) and resumes on rerun without repeating completed calls", async () => {
+    const run = await planRouteRun("plan-usage-limit");
+    try {
+      const limited = await runCli(run.args("init"), {
+        env: planEnv(run.root, "limited", {
+          PLAN_STUB_FAULT: "usage-limit-after:6",
+        }),
+      });
+
+      expect(limited.code, limited.stderr).toBe(2);
+      expect(lastStderrEvent(limited)).toEqual({
+        code: "plan_usage_limit",
+        message: expect.stringContaining(
+          "claude-login reached its plan's usage limit (resets 2026-",
+        ),
+        remedy:
+          "Rerun the same command after the limit resets; completed replay and judge calls are kept and not repeated. To go on now, choose a route that does not use this plan with --route or --judge-route.",
+      });
+      const store = new FsStore(join(run.repo, ".rightmodeler"));
+      const state = JSON.parse(
+        await storeText(store, setupStateKey("project")),
+      ) as { stages: Record<string, unknown> };
+      expect(state.stages.shortlist).toBeDefined();
+      expect(state.stages.replay).toBeUndefined();
+
+      const resumed = await runCli(run.args("init"), {
+        env: planEnv(run.root, "resumed"),
+      });
+
+      expect(resumed.code, resumed.stderr).toBe(0);
+      const firstRecords = await stubRecords(run.root, "limited");
+      const finished = new Set(
+        firstRecords
+          .filter(({ outcome }) => outcome === "ok")
+          .map(({ pid }) => pid),
+      );
+      const pair = ({ argv, stdin }: StubRecord) =>
+        JSON.stringify([argv![argv!.indexOf("--model") + 1], stdin]);
+      const completed = new Set(
+        modelCalls(firstRecords)
+          .filter(({ pid }) => finished.has(pid))
+          .map(pair),
+      );
+      expect(completed.size).toBeGreaterThanOrEqual(6);
+      const repeated = modelCalls(await stubRecords(run.root, "resumed"))
+        .map(pair)
+        .filter((key) => completed.has(key));
+      expect(repeated).toEqual([]);
+    } finally {
+      await run.stub.close();
+    }
+  }, 180_000);
+
+  it("exits 2 plan_login_required and plan_cli_unavailable with their remedies, in estimate and init, and when CI is set", async () => {
+    const run = await planRouteRun("plan-errors");
+    const cases = [
+      {
+        command: "estimate",
+        env: { PLAN_STUB_FAULT: "logged-out" },
+        error: {
+          code: "plan_login_required",
+          message: "claude is not signed in on this machine.",
+          remedy: loginRemedy,
+        },
+      },
+      {
+        command: "estimate",
+        env: { PLAN_STUB_FAULT: "old-version" },
+        error: {
+          code: "plan_cli_unavailable",
+          message:
+            "claude 2.1.281 is older than 2.1.282, the version rightmodeler's isolation settings were verified on.",
+          remedy: "Update with claude update, then rerun.",
+        },
+      },
+      {
+        command: "init",
+        env: { PLAN_STUB_FAULT: "auth-failed" },
+        error: {
+          code: "plan_login_required",
+          message:
+            "claude stopped accepting its login during the run (authentication_failed).",
+          remedy: loginRemedy,
+        },
+      },
+      {
+        command: "init",
+        env: { CI: "true" },
+        error: {
+          code: "plan_cli_unavailable",
+          message: "Plan routes run only on your own machine, and CI is set.",
+          remedy:
+            "In continuous integration, use an API route: --base-url <url> and --api-key-env <name>. If this is your own machine, unset CI and rerun.",
+        },
+      },
+    ];
+    try {
+      for (const [index, { command, env, error }] of cases.entries()) {
+        const result = await runCli(run.args(command), {
+          env: planEnv(run.root, `error-${index}`, env),
+        });
+
+        expect(result.code, result.stderr).toBe(2);
+        expect(lastStderrEvent(result)).toEqual(error);
+      }
+    } finally {
+      await run.stub.close();
+    }
+  }, 180_000);
+
+  it("estimate states list-price equivalents for a plan route without calling a model", async () => {
+    const run = await planRouteRun("plan-estimate");
+    try {
+      const result = await runCli(run.args("estimate"), {
+        env: planEnv(run.root, "estimate"),
+      });
+
+      expect(result.code, result.stderr).toBe(0);
+      const estimate = JSON.parse(result.stdout) as {
+        basis: string;
+        candidateExecutions: number;
+      };
+      expect(estimate.basis).toBe(
+        `List-price equivalents from the price list ${run.prices} for calls made through a plan you are signed in to (charged to that plan's usage allowance, not billed in dollars), and current provider catalog pricing for any API route. Worst-case candidate reservation from corpus token bounds; holdout uses the most expensive possible family winner. Judge calls are priced at two calls per replayed cell. A plan route sets no output cap, so actual use can exceed this figure.`,
+      );
+      expect(estimate.candidateExecutions).toBeGreaterThan(0);
+      const records = await stubRecords(run.root, "estimate");
+      expect(records.length).toBeGreaterThan(0);
+      expect(modelCalls(records)).toEqual([]);
+      expect(chatModels(run.stub)).toEqual([]);
+    } finally {
+      await run.stub.close();
+    }
+  }, 180_000);
+
+  it("marks a confirmation-needing family blocked with the API-route blocker on a plan route", async () => {
+    const { root, repo, traces } =
+      await langgraphFixtureCopy("plan-unconfirmed");
+    const stub = await startStub();
+    const blocker =
+      "Mode B confirmation runs only when candidates and the judge use the api route; measure this family with --base-url and pass --modeb-config to confirm it.";
+    const common = [
+      "--traces",
+      traces,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--catalog-reference",
+      await writePlanPrices(root, {
+        "acme/large-1": { input: "0.00003", output: "0.00015" },
+        "acme/max-1": { input: "0.00006", output: "0.0003" },
+      }),
+      "--policy",
+      await writePolicy(root, 1),
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    try {
+      for (const [name, routes] of [
+        ["unconfirmed", ["--route", "claude-login", "--judge-route", "api"]],
+        ["unconfirmed-judge", ["--judge-route", "claude-login"]],
+      ] as const) {
+        const result = await runCli(["init", ...routes, ...common], {
+          env: planEnv(root, name),
+        });
+
+        expect(result.code, result.stderr).toBe(0);
+        expect(
+          (JSON.parse(result.stdout) as { familyOutcomes: unknown[] })
+            .familyOutcomes,
+        ).toContainEqual(
+          expect.objectContaining({
+            familyId: "langgraph_order_lookup",
+            decisionDisplay: "recommend (unconfirmed)",
+            confirmation: expect.objectContaining({
+              status: "blocked",
+              blocker,
+            }),
+          }),
+        );
+        expect(
+          modelCalls(await stubRecords(root, name)).length,
+        ).toBeGreaterThan(0);
+        expect(
+          await storeText(
+            new FsStore(join(repo, ".rightmodeler")),
+            reportKey("project", "report.md"),
+          ),
+        ).toContain(blocker);
+      }
+    } finally {
+      await stub.close();
+    }
+  }, 180_000);
+
+  it("keeps API-only report and status output free of plan-route text", async () => {
+    const { root, repo } = await fixtureCopy("api-only-report");
+    const stub = await startStub();
+    const target = ["--output", "json", "--repo", repo];
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--policy",
+          await writePolicy(root, 1),
+          ...target,
+        ],
+        { env: planEnv(root, "api-only") },
+      );
+
+      expect([0, 1], result.stderr).toContain(result.code);
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const markdown = await storeText(
+        store,
+        reportKey("project", "report.md"),
+      );
+      expect(markdown).toContain("\n## Spend\n");
+      expect(markdown).not.toContain("## Model routes");
+      expect(markdown).not.toContain("Through a plan you are signed in to");
+      const report = JSON.parse(
+        await storeText(store, reportKey("project", "report.json")),
+      ) as { spend: Record<string, unknown> };
+      expect(report.spend.events).toEqual(expect.any(Number));
+      expect(report.spend).not.toHaveProperty("routes");
+      const status = await runCli(["status", ...target], {
+        env: planEnv(root, "api-only"),
+      });
+      expect(status.code, status.stderr).toBe(0);
+      const { spend } = JSON.parse(status.stdout) as {
+        spend: Record<string, unknown>;
+      };
+      expect(spend.events).toEqual(report.spend.events);
+      expect(spend).not.toHaveProperty("routes");
+      expect(await stubRecords(root, "api-only")).toEqual([]);
+    } finally {
+      await stub.close();
+    }
+  }, 180_000);
+
+  it("labels the apply pull request body when the winner was measured through claude-login", async () => {
+    const { root, repo } = await fixtureCopy("route-apply");
+    const filteredTraces = await narrowDemoFixtureForApply(root, repo);
+    const stub = await startStub();
+    const githubToken = "github-plan-route-token";
+    const github = await startGithubStub(githubToken);
+    const githubBaseUrl = `http://127.0.0.1:${github.port}`;
+    const head = (
+      await execFileAsync("git", ["-C", repo, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      })
+    ).stdout.trim();
+    try {
+      const seeded = await fetch(`${githubBaseUrl}/__test/seed`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${githubToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          owner: "acme",
+          repo: "demo-app",
+          defaultBranch: "main",
+          sha: head,
+          tree: {
+            src: {
+              "extract.ts": await readFile(
+                join(repo, "src", "extract.ts"),
+                "utf8",
+              ),
+              "summarize.ts": await readFile(
+                join(repo, "src", "summarize.ts"),
+                "utf8",
+              ),
+            },
+          },
+        }),
+      });
+      expect(seeded.status).toBe(201);
+      const env = planEnv(root, "apply", {
+        RIGHTMODELER_PLAN_E2E_GITHUB_TOKEN: githubToken,
+      });
+      const initialized = await runCli(
+        [
+          "init",
+          "--traces",
+          filteredTraces,
+          "--route",
+          "claude-login",
+          "--judge-route",
+          "api",
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--catalog-reference",
+          await writePlanPrices(root, {
+            "acme/large-1": { input: "0.00003", output: "0.00015" },
+            "acme/max-1": { input: "0.00006", output: "0.0003" },
+          }),
+          "--policy",
+          await writePolicy(root, 1),
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env },
+      );
+      expect(initialized.code, initialized.stderr).toBe(1);
+      expect(
+        (JSON.parse(initialized.stdout) as { recommendationExists: boolean })
+          .recommendationExists,
+      ).toBe(true);
+
+      const dryRun = await runCli(
+        [
+          "apply",
+          "--owner",
+          "acme",
+          "--github-repo",
+          "demo-app",
+          "--github-base-url",
+          githubBaseUrl,
+          "--github-token-env",
+          "RIGHTMODELER_PLAN_E2E_GITHUB_TOKEN",
+          "--dry-run",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env },
+      );
+
+      expect(dryRun.code, dryRun.stderr).toBe(0);
+      const preview = JSON.parse(dryRun.stdout) as {
+        status: string;
+        body: string;
+      };
+      expect(preview.status).toBe("dry_run");
+      expect(preview.body).toContain(
+        "\nCase IDs are SHA-256 digests of the replayed case, not file paths.\nMeasured through the claude CLI signed in to a Claude plan, not the Anthropic API: the CLI added its own instructions to each call and could not set temperature or an output limit. Run `rightmodeler docs model-routes` for details.\n",
+      );
+    } finally {
+      await github.close();
+      await stub.close();
+    }
+  }, 180_000);
 });

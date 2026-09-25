@@ -84,6 +84,7 @@ export interface ApplyVerdict {
     readonly costDeltaPct: number | null;
     readonly winnerLatencyP50Ms: number | null;
   };
+  readonly planRoute?: string;
 }
 
 export type ApplyRefusalCode =
@@ -346,6 +347,11 @@ function pullRequestCodeContext(
   return lines.join("\n");
 }
 
+const planRouteLabels: Readonly<Record<string, string>> = {
+  "claude-login":
+    "Measured through the claude CLI signed in to a Claude plan, not the Anthropic API: the CLI added its own instructions to each call and could not set temperature or an output limit. Run `rightmodeler docs model-routes` for details.",
+};
+
 function evidenceBody(
   conventions: CapturedConventions,
   verdicts: readonly ApplyVerdict[],
@@ -367,6 +373,15 @@ function evidenceBody(
     "",
     "Costs are dollars per replayed case. `n/a` means the number is not in the store: the replayed case carries no recorded token usage, the catalog publishes no price for the incumbent model, or no attempt recorded a duration.",
     "Case IDs are SHA-256 digests of the replayed case, not file paths.",
+    ...[
+      ...new Set(
+        verdicts.flatMap(({ planRoute }) =>
+          planRoute === undefined ? [] : [planRoute],
+        ),
+      ),
+    ]
+      .sort()
+      .map((planRoute) => planRouteLabels[planRoute]),
     "",
   ].join("\n");
   const template = conventions.prTemplate?.trimEnd();

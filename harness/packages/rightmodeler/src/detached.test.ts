@@ -562,4 +562,48 @@ describe("status spend", () => {
     });
     expect(spends[1]).toEqual(spends[0]);
   });
+
+  it("totals plan-route spend the same whichever order the fact keys list in", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-status-routes-"));
+    temporaryDirectories.push(root);
+    const spends = [];
+    for (const costs of [
+      [0.1, 0.2, 0.3],
+      [0.3, 0.2, 0.1],
+    ]) {
+      const store = new FsStore(join(root, `store-${costs.join("-")}`));
+      for (const [index, costUsd] of costs.entries()) {
+        const record = spendEventSchema.parse({
+          actor: "replay-driver",
+          phase: "replay",
+          costUsd,
+          provider: "claude-login",
+          reconcilableTo: { costUsd },
+        });
+        await store.putImmutable(
+          factKey("project", `spend-${index}`),
+          Buffer.from(canonicalJson(record), "utf8"),
+        );
+      }
+      spends.push(
+        (
+          (await readStatus({ repo: demoAppPath, store: store.root })) as {
+            spend: unknown;
+          }
+        ).spend,
+      );
+    }
+
+    expect(spends[0]).toMatchObject({
+      routes: [
+        {
+          actor: "replay-driver",
+          provider: "claude-login",
+          events: 3,
+          costUsd: 0.6,
+        },
+      ],
+    });
+    expect(spends[1]).toEqual(spends[0]);
+  });
 });

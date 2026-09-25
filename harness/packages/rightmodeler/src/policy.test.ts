@@ -8,6 +8,7 @@ import {
   computeRunSpecDigest,
   FsStore,
   setupStateKey,
+  type JsonValue,
 } from "@rightmodeler/core";
 import { minimumTrialsForFloor } from "@rightmodeler/kernel";
 import { afterEach, describe, expect, it } from "vitest";
@@ -96,6 +97,47 @@ describe("release policy", () => {
         replayMode: "single_shot",
       }),
     );
+  });
+
+  it("separates plan-route evidence from API evidence and keeps API identities unchanged", () => {
+    const input = {
+      corpusVersionId: "corpus-1",
+      gatePolicyVersion: "policy-1",
+      evaluatorPlan: {
+        evaluatorKind: "judge",
+        gateMetric: "replacement-quality",
+      },
+      family: "summarize",
+      stepIds: ["step-1", "step-2"],
+      reproofRequestIds: [],
+    };
+    const identity = (stepFingerprint: JsonValue) =>
+      computeEvidenceQuestionId({
+        corpusVersionId: input.corpusVersionId,
+        promptRevision: "replay-prompt-v1",
+        gatePolicyVersion: input.gatePolicyVersion,
+        stepFingerprint: computeRunSpecDigest(stepFingerprint),
+        evaluatorPlan: input.evaluatorPlan,
+        replayMode: "single_shot",
+      });
+
+    const api = evidenceQuestionIdentity(input);
+    const plan = evidenceQuestionIdentity({
+      ...input,
+      candidateRoute: "claude-login",
+    });
+
+    expect(api).toBe(
+      identity({ family: input.family, stepIds: [...input.stepIds] }),
+    );
+    expect(plan).toBe(
+      identity({
+        family: input.family,
+        stepIds: [...input.stepIds],
+        candidateRoute: "claude-login",
+      }),
+    );
+    expect(plan).not.toBe(api);
   });
 
   it("persists evidence question ids from the shared formula", async () => {

@@ -444,6 +444,7 @@ async function assertPackedDocumentation(
     "docs/github-actions.md",
     "docs/github.md",
     "docs/modeb.md",
+    "docs/model-routes.md",
   ]);
 
   for (const markdownPath of markdownFiles) {

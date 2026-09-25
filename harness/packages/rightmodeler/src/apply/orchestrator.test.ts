@@ -1424,6 +1424,33 @@ describe("applySwaps", () => {
     expect(pull.body).toContain("`acme/small-1`");
   });
 
+  it("names the plan CLI a winner was measured through in the pull request body", async () => {
+    const label =
+      "Measured through the claude CLI signed in to a Claude plan, not the Anthropic API: the CLI added its own instructions to each call and could not set temperature or an output limit. Run `rightmodeler docs model-routes` for details.";
+    const planHarness = await createHarness();
+    const planPull = await planHarness.githubClient.getPullRequest({
+      ...repository,
+      pullNumber: requireApplied(
+        await runApply(planHarness, [
+          { ...applyVerdict(planHarness), planRoute: "claude-login" },
+        ]),
+      ).prNumber,
+    });
+    const apiHarness = await createHarness();
+    const apiPull = await apiHarness.githubClient.getPullRequest({
+      ...repository,
+      pullNumber: requireApplied(
+        await runApply(apiHarness, [applyVerdict(apiHarness)]),
+      ).prNumber,
+    });
+
+    expect(planPull.body).toContain(
+      `Case IDs are SHA-256 digests of the replayed case, not file paths.\n${label}\n`,
+    );
+    expect(apiPull.body).toContain("Case IDs are SHA-256 digests");
+    expect(apiPull.body).not.toContain("Measured through");
+  });
+
   it("includes cost and latency receipts in the pull request body", async () => {
     const harness = await createHarness();
     const applied = requireApplied(
