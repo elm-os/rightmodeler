@@ -58,6 +58,8 @@ export async function planStubHarness(
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.CI;
   delete env.PLAN_STUB_FAULT;
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
   Object.assign(env, {
     PATH: options.path ?? [fakeBin, dirname(process.execPath)].join(delimiter),
     PLAN_STUB_RECORD: recordPath,

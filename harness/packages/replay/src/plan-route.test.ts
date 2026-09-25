@@ -56,6 +56,31 @@ describe("plan route runtime", () => {
     expect(isSingleTurn([user, system])).toBe(false);
   });
 
+  it("refuses a request that is not one user turn without starting a model call", async () => {
+    const harness = await planStubHarness();
+
+    const error = await harness.provider
+      .chat({
+        model: haiku,
+        messages: [
+          { role: "system", content: "You are a terse assistant." },
+          { role: "user", content: "Say lime." },
+          { role: "assistant", content: "Lime." },
+          { role: "user", content: "Say plum." },
+        ],
+      })
+      .then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      "The claude-login route sends one user turn, but the request has system, user, assistant, user messages",
+    );
+    expect(await harness.modelCalls()).toEqual([]);
+  });
+
   it("withholds API keys and parent Claude Code session variables from the child and names each withheld Anthropic key once", async () => {
     const values = {
       ANTHROPIC_API_KEY: "sk-ant-withheld-value",
@@ -307,7 +332,6 @@ describe("plan route runtime", () => {
             .length,
       ),
     );
-    expect(overlap).toBeLessThanOrEqual(2);
-    expect(overlap).toBeGreaterThan(0);
+    expect(overlap).toBe(2);
   }, 30_000);
 });

@@ -5935,7 +5935,7 @@ function spendSummary(spendEvents: readonly SpendEvent[]): ReportData["spend"] {
       costUsd: 0,
     };
     route.events += 1;
-    route.costUsd += spend.costUsd;
+    route.costUsd = roundUsd(route.costUsd + spend.costUsd);
     routes.set(key, route);
   }
   return {
@@ -6455,7 +6455,7 @@ function modelRoutesSection(
   const cost = (plan: boolean) =>
     routes
       .filter(({ provider }) => isPlanRouteKind(provider) === plan)
-      .reduce((total, { costUsd }) => total + costUsd, 0);
+      .reduce((total, { costUsd }) => roundUsd(total + costUsd), 0);
   return [
     `Through a plan you are signed in to (list-price equivalent, not billed): $${cost(true).toFixed(8)}. Billed through the API route: $${cost(false).toFixed(8)}.`,
     "",

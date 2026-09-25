@@ -45,6 +45,7 @@ async function sizeOf(path: string): Promise<number | null> {
 describe.skipIf(!liveRequested)("claude-login live", () => {
   it("lists, answers, withholds a key, skips the default prompt, judges, and leaves no session file", async () => {
     const projectsBefore = new Set(await entryNames(projects));
+    const tempBefore = new Set(await entryNames(tmpdir()));
     const historyBefore = await sizeOf(history);
     const hadKey = Object.hasOwn(process.env, "ANTHROPIC_API_KEY");
     const previousKey = process.env.ANTHROPIC_API_KEY;
@@ -139,8 +140,9 @@ describe.skipIf(!liveRequested)("claude-login live", () => {
       ).toEqual([]);
       expect(await sizeOf(history)).toBe(historyBefore);
       expect(
-        (await entryNames(tmpdir())).filter((name) =>
-          name.startsWith("rightmodeler-plan-"),
+        (await entryNames(tmpdir())).filter(
+          (name) =>
+            name.startsWith("rightmodeler-plan-") && !tempBefore.has(name),
         ),
       ).toEqual([]);
       console.warn(

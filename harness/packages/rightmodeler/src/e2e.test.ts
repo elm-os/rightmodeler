@@ -43,7 +43,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   estimateReplay,
+  evidenceQuestionIdentity,
   listApprovedSwapSets,
+  releasePolicy,
   resolveCheckpointedPipelineCorpus,
   runPipeline,
   topologicalRecords,
@@ -6032,6 +6034,8 @@ describe("built CLI through plan routes", () => {
       PLAN_STUB_STATE: join(root, `${name}-state`),
       PLAN_STUB_FAULT: undefined,
       CI: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      ANTHROPIC_AUTH_TOKEN: undefined,
       [apiKeyEnv]: secret,
       ...extra,
     };
@@ -6201,6 +6205,43 @@ describe("built CLI through plan routes", () => {
         candidates: ["claude-login"],
         judge: ["configured-provider"],
       });
+      const shortlist = (await readStageArtifact(storeRoot, "shortlist")) as {
+        familyPlans: Array<{
+          familyId: string;
+          evidenceQuestionId: string;
+          stepIds: string[];
+        }>;
+      };
+      const { corpusVersionId } = await resolveCheckpointedPipelineCorpus({
+        repo: run.repo,
+        store,
+        storeRoot,
+        projectId: "project",
+      });
+      expect(shortlist.familyPlans.length).toBeGreaterThan(0);
+      for (const family of shortlist.familyPlans) {
+        const question = {
+          corpusVersionId,
+          gatePolicyVersion: releasePolicy({ shortlistTop: 1 }).gate
+            .gatePolicyVersion,
+          evaluatorPlan: {
+            evaluatorKind: "judge",
+            gateMetric: "replacement-quality",
+          },
+          family: family.familyId,
+          stepIds: family.stepIds,
+          reproofRequestIds: [],
+        };
+        expect(family.evidenceQuestionId).toBe(
+          evidenceQuestionIdentity({
+            ...question,
+            candidateRoute: "claude-login",
+          }),
+        );
+        expect(family.evidenceQuestionId).not.toBe(
+          evidenceQuestionIdentity(question),
+        );
+      }
       const report = await storeText(store, reportKey("project", "report.md"));
       expect(report).toMatch(
         /\nThrough a plan you are signed in to \(list-price equivalent, not billed\): \$\d+\.\d{8}\. Billed through the API route: \$\d+\.\d{8}\.\n/u,
@@ -6335,6 +6376,19 @@ describe("built CLI through plan routes", () => {
         candidates: ["configured-provider"],
         judge: ["claude-login"],
       });
+      const estimated = await runCli(
+        ["estimate", "--judge-route", "claude-login", ...apiArgs],
+        { env: planEnv(root, "judge-vendor-estimate") },
+      );
+      expect(estimated.code, estimated.stderr).toBe(0);
+      expect(
+        warningMessages(estimated.stderr, "judge_vendor_candidates_dropped"),
+      ).toEqual([
+        "Candidates anthropic/claude-haiku-4.5 were left out: the judge runs through claude-login (anthropic), and it must come from another vendor than the candidate.",
+      ]);
+      expect(
+        modelCalls(await stubRecords(root, "judge-vendor-estimate")),
+      ).toEqual([]);
       const apiJudge = await runCli(["init", "--plan", ...apiArgs], {
         env: planEnv(root, "judge-vendor-plan"),
       });
@@ -6427,6 +6481,21 @@ describe("built CLI through plan routes", () => {
       expect(
         warningMessages(result.stderr, "recorded_messages_not_replayable"),
       ).toEqual([]);
+      const bindingLeftOut = Number(
+        /^Family summarize: (\d+) of /u.exec(
+          warningMessages(result.stderr, "family_cases_left_out").find(
+            (message) => message.startsWith("Family summarize: "),
+          ) ?? "",
+        )?.[1] ?? 0,
+      );
+      const shortlist = (await readStageArtifact(
+        join(run.repo, ".rightmodeler"),
+        "shortlist",
+      )) as { familyPlans: Array<{ familyId: string; leftOutCases?: number }> };
+      expect(
+        shortlist.familyPlans.find(({ familyId }) => familyId === "summarize")
+          ?.leftOutCases,
+      ).toBe(bindingLeftOut + 5);
       const calls = modelCalls(await stubRecords(run.root, "multi-turn"));
       expect(calls.length).toBeGreaterThan(0);
       expect(calls.filter(({ stdin }) => stdin === "And then?")).toEqual([]);
@@ -6576,12 +6645,160 @@ describe("built CLI through plan routes", () => {
     const stub = await startStub();
     const blocker =
       "Mode B confirmation runs only when candidates and the judge use the api route; measure this family with --base-url and pass --modeb-config to confirm it.";
+    const common = [
+      "--traces",
+      traces,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--catalog-reference",
+      await writePlanPrices(root, {
+        "acme/large-1": { input: "0.00003", output: "0.00015" },
+        "acme/max-1": { input: "0.00006", output: "0.0003" },
+      }),
+      "--policy",
+      await writePolicy(root, 1),
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    try {
+      for (const [name, routes] of [
+        ["unconfirmed", ["--route", "claude-login", "--judge-route", "api"]],
+        ["unconfirmed-judge", ["--judge-route", "claude-login"]],
+      ] as const) {
+        const result = await runCli(["init", ...routes, ...common], {
+          env: planEnv(root, name),
+        });
+
+        expect(result.code, result.stderr).toBe(0);
+        expect(
+          (JSON.parse(result.stdout) as { familyOutcomes: unknown[] })
+            .familyOutcomes,
+        ).toContainEqual(
+          expect.objectContaining({
+            familyId: "langgraph_order_lookup",
+            decisionDisplay: "recommend (unconfirmed)",
+            confirmation: expect.objectContaining({
+              status: "blocked",
+              blocker,
+            }),
+          }),
+        );
+        expect(
+          modelCalls(await stubRecords(root, name)).length,
+        ).toBeGreaterThan(0);
+        expect(
+          await storeText(
+            new FsStore(join(repo, ".rightmodeler")),
+            reportKey("project", "report.md"),
+          ),
+        ).toContain(blocker);
+      }
+    } finally {
+      await stub.close();
+    }
+  }, 180_000);
+
+  it("keeps API-only report and status output free of plan-route text", async () => {
+    const { root, repo } = await fixtureCopy("api-only-report");
+    const stub = await startStub();
+    const target = ["--output", "json", "--repo", repo];
     try {
       const result = await runCli(
         [
           "init",
           "--traces",
-          traces,
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--policy",
+          await writePolicy(root, 1),
+          ...target,
+        ],
+        { env: planEnv(root, "api-only") },
+      );
+
+      expect([0, 1], result.stderr).toContain(result.code);
+      const store = new FsStore(join(repo, ".rightmodeler"));
+      const markdown = await storeText(
+        store,
+        reportKey("project", "report.md"),
+      );
+      expect(markdown).toContain("\n## Spend\n");
+      expect(markdown).not.toContain("## Model routes");
+      expect(markdown).not.toContain("Through a plan you are signed in to");
+      const report = JSON.parse(
+        await storeText(store, reportKey("project", "report.json")),
+      ) as { spend: Record<string, unknown> };
+      expect(report.spend.events).toEqual(expect.any(Number));
+      expect(report.spend).not.toHaveProperty("routes");
+      const status = await runCli(["status", ...target], {
+        env: planEnv(root, "api-only"),
+      });
+      expect(status.code, status.stderr).toBe(0);
+      const { spend } = JSON.parse(status.stdout) as {
+        spend: Record<string, unknown>;
+      };
+      expect(spend.events).toEqual(report.spend.events);
+      expect(spend).not.toHaveProperty("routes");
+      expect(await stubRecords(root, "api-only")).toEqual([]);
+    } finally {
+      await stub.close();
+    }
+  }, 180_000);
+
+  it("labels the apply pull request body when the winner was measured through claude-login", async () => {
+    const { root, repo } = await fixtureCopy("route-apply");
+    const filteredTraces = await narrowDemoFixtureForApply(root, repo);
+    const stub = await startStub();
+    const githubToken = "github-plan-route-token";
+    const github = await startGithubStub(githubToken);
+    const githubBaseUrl = `http://127.0.0.1:${github.port}`;
+    const head = (
+      await execFileAsync("git", ["-C", repo, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      })
+    ).stdout.trim();
+    try {
+      const seeded = await fetch(`${githubBaseUrl}/__test/seed`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${githubToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          owner: "acme",
+          repo: "demo-app",
+          defaultBranch: "main",
+          sha: head,
+          tree: {
+            src: {
+              "extract.ts": await readFile(
+                join(repo, "src", "extract.ts"),
+                "utf8",
+              ),
+              "summarize.ts": await readFile(
+                join(repo, "src", "summarize.ts"),
+                "utf8",
+              ),
+            },
+          },
+        }),
+      });
+      expect(seeded.status).toBe(201);
+      const env = planEnv(root, "apply", {
+        RIGHTMODELER_PLAN_E2E_GITHUB_TOKEN: githubToken,
+      });
+      const initialized = await runCli(
+        [
+          "init",
+          "--traces",
+          filteredTraces,
           "--route",
           "claude-login",
           "--judge-route",
@@ -6602,27 +6819,45 @@ describe("built CLI through plan routes", () => {
           "--repo",
           repo,
         ],
-        { env: planEnv(root, "unconfirmed") },
+        { env },
+      );
+      expect(initialized.code, initialized.stderr).toBe(1);
+      expect(
+        (JSON.parse(initialized.stdout) as { recommendationExists: boolean })
+          .recommendationExists,
+      ).toBe(true);
+
+      const dryRun = await runCli(
+        [
+          "apply",
+          "--owner",
+          "acme",
+          "--github-repo",
+          "demo-app",
+          "--github-base-url",
+          githubBaseUrl,
+          "--github-token-env",
+          "RIGHTMODELER_PLAN_E2E_GITHUB_TOKEN",
+          "--dry-run",
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env },
       );
 
-      expect(result.code, result.stderr).toBe(0);
-      expect(
-        (JSON.parse(result.stdout) as { familyOutcomes: unknown[] })
-          .familyOutcomes,
-      ).toContainEqual(
-        expect.objectContaining({
-          familyId: "langgraph_order_lookup",
-          decisionDisplay: "recommend (unconfirmed)",
-          confirmation: expect.objectContaining({ status: "blocked", blocker }),
-        }),
+      expect(dryRun.code, dryRun.stderr).toBe(0);
+      const preview = JSON.parse(dryRun.stdout) as {
+        status: string;
+        body: string;
+      };
+      expect(preview.status).toBe("dry_run");
+      expect(preview.body).toContain(
+        "\nCase IDs are SHA-256 digests of the replayed case, not file paths.\nMeasured through the claude CLI signed in to a Claude plan, not the Anthropic API: the CLI added its own instructions to each call and could not set temperature or an output limit. Run `rightmodeler docs model-routes` for details.\n",
       );
-      expect(
-        await storeText(
-          new FsStore(join(repo, ".rightmodeler")),
-          reportKey("project", "report.md"),
-        ),
-      ).toContain(blocker);
     } finally {
+      await github.close();
       await stub.close();
     }
   }, 180_000);

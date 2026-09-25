@@ -157,7 +157,7 @@ async function modelCall(stdin) {
   if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
   const [capturedInit, capturedAssistant, capturedResult] =
     capturedEvents("call.jsonl");
-  const init = { ...capturedInit, model, cwd: process.cwd() };
+  const init = { ...capturedInit, model, cwd: process.cwd(), ...sentinels };
   if (hasFault("hang")) {
     keepAlive();
     return;
@@ -305,7 +305,13 @@ async function main() {
   }
   if (argv[0] === "auth" && argv[1] === "status") {
     if (hasFault("logged-out")) {
-      process.stdout.write(`${JSON.stringify({ loggedIn: false })}\n`);
+      process.stdout.write(
+        `${JSON.stringify({
+          loggedIn: false,
+          projectsDirectory: sentinels.projectsDirectory,
+          configDirectory: sentinels.configDirectory,
+        })}\n`,
+      );
       finish("logged-out", 1);
       return;
     }
@@ -315,6 +321,12 @@ async function main() {
         ...(hasFault("api-key-login")
           ? { apiKeySource: "ANTHROPIC_API_KEY" }
           : {}),
+        ...(hasFault("bedrock-login")
+          ? { authMethod: "third_party", apiProvider: "bedrock" }
+          : {}),
+        ...(faultValue("auth-method") === undefined
+          ? {}
+          : { authMethod: faultValue("auth-method") }),
         ...sentinels,
       })}\n`,
     );

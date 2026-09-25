@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, delimiter, dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -280,9 +280,7 @@ describe("claude-login adapter", () => {
     await mkdir(empty);
     const cases = [
       {
-        harness: await planStubHarness({
-          path: [empty, dirname(process.execPath)].join(delimiter),
-        }),
+        harness: await planStubHarness({ path: empty }),
         type: PlanRouteUnavailableError,
         message: "claude is not installed or not on PATH.",
         remedy:
@@ -306,6 +304,19 @@ describe("claude-login adapter", () => {
         type: PlanLoginError,
         message:
           "claude would use ANTHROPIC_API_KEY instead of your Claude plan login.",
+        remedy: keyRemedy,
+      },
+      {
+        harness: await planStubHarness({ fault: "bedrock-login" }),
+        type: PlanLoginError,
+        message: "claude is signed in through bedrock, not a Claude plan.",
+        remedy: keyRemedy,
+      },
+      {
+        harness: await planStubHarness({ fault: "auth-method:third_party" }),
+        type: PlanLoginError,
+        message:
+          "claude is signed in with third_party, not a Claude plan login.",
         remedy: keyRemedy,
       },
     ];
