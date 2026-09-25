@@ -88,12 +88,20 @@ export type BlockedErrorInit =
       kind: "provider" | "credentials" | "credits";
       providerId: string;
       errorDetail: ProviderErrorDetail;
+    }
+  | {
+      kind: "usage-limit";
+      providerId: string;
+      resetsAt: string | null;
+      detail: string;
     };
 
 export class BlockedError extends Error {
-  readonly kind: "rate-limit" | "provider" | "credentials" | "credits";
+  readonly kind:
+    "rate-limit" | "provider" | "credentials" | "credits" | "usage-limit";
   readonly observedCeiling: number | null;
   readonly providerId: string | null;
+  readonly resetsAt: string | null;
   readonly errorDetail?: ProviderErrorDetail;
 
   constructor(init: BlockedErrorInit) {
@@ -104,17 +112,24 @@ export class BlockedError extends Error {
           ? `Provider ${init.providerId} returned a malformed model catalog`
           : init.kind === "credentials"
             ? `Provider ${init.providerId} rejected the API key with HTTP ${init.errorDetail.status}`
-            : `Provider ${init.providerId} reported insufficient credits (HTTP 402)`,
+            : init.kind === "usage-limit"
+              ? `${init.providerId} reached its plan's usage limit${init.resetsAt === null ? "" : ` (resets ${init.resetsAt})`}: ${init.detail}`
+              : `Provider ${init.providerId} reported insufficient credits (HTTP 402)`,
     );
     this.name = "BlockedError";
     this.kind = init.kind;
     this.observedCeiling =
       init.kind === "rate-limit" ? init.observedCeiling : null;
     this.providerId = init.kind === "rate-limit" ? null : init.providerId;
-    if (init.kind !== "rate-limit") {
+    this.resetsAt = init.kind === "usage-limit" ? init.resetsAt : null;
+    if (init.kind !== "rate-limit" && init.kind !== "usage-limit") {
       this.errorDetail = init.errorDetail;
     }
   }
+}
+
+export function isUsageLimit(error: unknown): error is BlockedError {
+  return error instanceof BlockedError && error.kind === "usage-limit";
 }
 
 export class ProviderRequestError extends Error {}
