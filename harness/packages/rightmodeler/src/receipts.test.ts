@@ -294,4 +294,32 @@ describe("familyReceipts", () => {
 
     expect(result.winnerLatencyP50Ms).toBeNull();
   });
+
+  it("costs a family the same whichever order its execution ids sort in", () => {
+    const costs = [0.1, 0.2, 0.3];
+    const receiptFor = (executionIds: readonly string[]) =>
+      receipt({
+        executions: executionIds.map((executionId, index) =>
+          execution(executionId, `case-${index + 1}`, "step-1"),
+        ),
+        requestAttempts: executionIds.map((executionId, index) =>
+          attempt(executionId, 1, costs[index]!, 1),
+        ),
+        corpusCases: costs.map((_, index) =>
+          corpusCase(`case-${index + 1}`, 0, {
+            inputTokens: (index + 1) * 100,
+            outputTokens: 0,
+          }),
+        ),
+      });
+    const forward = receiptFor(["execution-a", "execution-b", "execution-c"]);
+
+    expect(forward).toMatchObject({
+      winnerCostPerCaseUsd: 0.6 / 3,
+      incumbentCostPerCaseUsd: 0.6 / 3,
+    });
+    expect(receiptFor(["execution-c", "execution-b", "execution-a"])).toEqual(
+      forward,
+    );
+  });
 });

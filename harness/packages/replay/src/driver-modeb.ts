@@ -26,6 +26,7 @@ import {
 
 import {
   BudgetRefusalError,
+  roundUsd,
   type Budget,
   type BudgetReservation,
 } from "./budget.js";
@@ -1537,7 +1538,9 @@ export async function replayModeB(
         budgetState.reservedUsd,
     );
     const admitted =
-      largestUsd === 0 ? workerLimit : Math.floor(availableUsd / largestUsd);
+      largestUsd === 0
+        ? workerLimit
+        : Math.floor(roundUsd(availableUsd / largestUsd));
     if (admitted < workerLimit) {
       input.warning?.(
         "modeb_concurrency_capped",
