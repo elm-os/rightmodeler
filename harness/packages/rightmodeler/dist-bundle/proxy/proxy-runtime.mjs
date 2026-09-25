@@ -745,7 +745,7 @@ async function main() {
     const requiredLeaseUsd = roundUsd(
       state.spentUsd + reservedUsd + estimatedWorstCaseUsd,
     );
-    if (requiredLeaseUsd > config.lease.maxUsd) {
+    if (requiredLeaseUsd > roundUsd(config.lease.maxUsd)) {
       appendRow(spoolPath, {
         kind: "blocked",
         runId: config.runId,

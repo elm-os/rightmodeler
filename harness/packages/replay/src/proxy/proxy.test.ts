@@ -1338,6 +1338,27 @@ describe("Mode B proxy and host egress", () => {
     ]);
   });
 
+  it("admits a request that exactly fills a computed case lease below its grid point", async () => {
+    const pricing = { input: 0, output: 0.0000002 };
+    const lease = 13 * pricing.output;
+    expect(lease).toBeLessThan(0.0000026);
+    const pair = await startPair({
+      pricingTable: { "acme/large-1": pricing },
+      maxUsd: lease,
+    });
+
+    const fit = await callProxy(
+      pair.runtime,
+      "step-fit",
+      "logical-fit",
+      chatBody({ max_tokens: 13 }),
+      { "x-stub-empty": "1" },
+    );
+
+    expect(fit.status).toBe(200);
+    await fit.arrayBuffer();
+  });
+
   it("rejects a non-allowlisted egress host before forwarding", async () => {
     process.env[apiKeyEnv] = credential;
     const stub = await startStub();

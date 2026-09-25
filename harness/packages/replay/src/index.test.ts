@@ -2402,9 +2402,11 @@ describe("budget reservation", () => {
       }
 
       expect((await budget.state()).spentUsd).toBe(0.6);
-      await expect(
-        budget.reserveExecution(worstCase(0.1)),
-      ).resolves.toMatchObject({ reservedUsd: 0.1 });
+      const next = await budget.reserveExecution(worstCase(0.1));
+      expect(next.reservedUsd).toBe(0.1);
+      // The grid keeps sub-nano-dollar costs that cheap per-token prices produce.
+      await next.refund(0.000000000375);
+      expect((await budget.state()).spentUsd).toBe(0.600000000375);
     }
   });
 
@@ -2431,6 +2433,28 @@ describe("budget reservation", () => {
     await expect(
       budget.reserveExecution(worstCase(0.1)),
     ).resolves.toMatchObject({ reservedUsd: 0.1 });
+  });
+
+  it("admits an exact fit under a cap just below its grid point", async () => {
+    // 0.3.0 printed its remedy unsnapped: $0.10 spent plus a $0.70 worst case
+    // asked for --max-cost-usd 0.7999999999999999.
+    const budget = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.1 + 0.7,
+    });
+    const first = await budget.reserveExecution(worstCase(0.1));
+    await first.refund(0.1);
+    const held = await budget.reserveExecution(worstCase(0.1));
+
+    await expect(budget.reserveExecution(worstCase(0.7))).rejects.toMatchObject(
+      { requiredCapUsd: 0.8, causedByReservations: true },
+    );
+    await held.refund(0);
+    await expect(
+      budget.reserveExecution(worstCase(0.7)),
+    ).resolves.toMatchObject({ reservedUsd: 0.7 });
   });
 });
 

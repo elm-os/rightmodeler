@@ -26084,8 +26084,8 @@ function createBudget(options) {
       const current = await load(true);
       const requiredCapUsd = roundUsd(current.ledger.spentUsd + worstCaseUsd);
       const capacityRequiredUsd = roundUsd(requiredCapUsd + reservedTotal(current.ledger));
-      if (current.ledger.authorizedTotalUsd !== void 0 && capacityRequiredUsd > current.ledger.authorizedTotalUsd) {
-        throw new BudgetRefusalError(requiredCapUsd, current.ledger.authorizedTotalUsd, requiredCapUsd <= current.ledger.authorizedTotalUsd);
+      if (current.ledger.authorizedTotalUsd !== void 0 && capacityRequiredUsd > roundUsd(current.ledger.authorizedTotalUsd)) {
+        throw new BudgetRefusalError(requiredCapUsd, current.ledger.authorizedTotalUsd, requiredCapUsd <= roundUsd(current.ledger.authorizedTotalUsd));
       }
       const next = {
         ...current.ledger,

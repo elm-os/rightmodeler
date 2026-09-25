@@ -111,8 +111,9 @@ function formatUsd(value: number): string {
   return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-// Dollar sums snap to formatUsd's 1e-12 grid, so a total does not depend on the order
-// concurrent refunds and reservations commit in, and an exact fit is never refused.
+// Dollar sums, and the caps they are checked against, snap to formatUsd's 1e-12 grid, so a
+// total does not depend on the order concurrent refunds and reservations commit in, and an
+// exact fit is never refused.
 export function roundUsd(value: number): number {
   return Number(value.toFixed(12));
 }
@@ -310,12 +311,12 @@ export function createBudget(options: CreateBudgetOptions): Budget {
       );
       if (
         current.ledger.authorizedTotalUsd !== undefined &&
-        capacityRequiredUsd > current.ledger.authorizedTotalUsd
+        capacityRequiredUsd > roundUsd(current.ledger.authorizedTotalUsd)
       ) {
         throw new BudgetRefusalError(
           requiredCapUsd,
           current.ledger.authorizedTotalUsd,
-          requiredCapUsd <= current.ledger.authorizedTotalUsd,
+          requiredCapUsd <= roundUsd(current.ledger.authorizedTotalUsd),
         );
       }
       const next: BudgetLedger = {
