@@ -103,6 +103,13 @@ const SYSTEM_PROMPT = [
   "verdict must be equivalent, minor_drift, or divergent; score must be between 0 and 1; justification must be one line.",
 ].join(" ");
 
+export class NoNeutralJudgeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NoNeutralJudgeError";
+  }
+}
+
 export function pickJudge(
   catalog: readonly ModelCatalogEntry[],
   options: {
@@ -131,6 +138,7 @@ export function pickJudges(
 
   const eligible = withoutFastTiers(catalog).filter((model) => {
     if (model.id.includes(":")) return false;
+    if (!model.id.includes("/") && model.family === model.id) return false;
 
     const outputModalities = model.outputModalities ?? [];
     if (outputModalities.length > 0 && !outputModalities.includes("text")) {
@@ -147,7 +155,7 @@ export function pickJudges(
   });
 
   if (eligible.length === 0) {
-    throw new Error(
+    throw new NoNeutralJudgeError(
       "No neutral third-family judge is available: the catalog needs a priced model from a family other than the candidate's and the reference's",
     );
   }

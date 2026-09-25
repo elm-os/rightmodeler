@@ -89,6 +89,14 @@ const bifrostModelsFixtureUrl = new URL(
   "../../../fixtures/catalogs/bifrost-models.json",
   import.meta.url,
 );
+const anthropicModelsFixtureUrl = new URL(
+  "../../../fixtures/catalogs/anthropic-models.json",
+  import.meta.url,
+);
+const openaiModelsFixtureUrl = new URL(
+  "../../../fixtures/catalogs/openai-models.json",
+  import.meta.url,
+);
 const bifrostChatFixtureUrl = new URL(
   "../../../fixtures/gateways/bifrost/chat.json",
   import.meta.url,
@@ -1212,6 +1220,310 @@ describe("AI Gateway catalog", () => {
   });
 });
 
+describe("Anthropic catalog", () => {
+  const firstPage = "https://api.anthropic.com/v1/models";
+  const secondPage =
+    "https://api.anthropic.com/v1/models?after_id=claude-opus-5&limit=1000";
+
+  beforeEach(() => {
+    process.env.REPLAY_TEST_API_KEY = fakeKey;
+  });
+
+  afterEach(() => {
+    delete process.env.REPLAY_TEST_API_KEY;
+    vi.restoreAllMocks();
+  });
+
+  async function listAnthropicModels(
+    options: {
+      headers?: Record<string, string>;
+      catalogReference?: string;
+    } = {},
+  ): Promise<{
+    catalog: ModelCatalogEntry[];
+    requests: Array<{ url: string; anthropicVersion: string | null }>;
+  }> {
+    const [page1, page2] = JSON.parse(
+      await readFile(anthropicModelsFixtureUrl, "utf8"),
+    ) as unknown[];
+    const requests: Array<{ url: string; anthropicVersion: string | null }> =
+      [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({
+        url,
+        anthropicVersion: new Headers(init?.headers).get("anthropic-version"),
+      });
+      const body =
+        url === firstPage ? page1 : url === secondPage ? page2 : undefined;
+      return new Response(JSON.stringify(body ?? {}), {
+        status: body === undefined ? 404 : 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const catalog = await createProvider({
+      providerId: "anthropic-direct",
+      baseUrl: "https://api.anthropic.com/v1",
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+      ...options,
+    }).listModels();
+    return { catalog, requests };
+  }
+
+  async function withReference<T>(
+    models: ReadonlyArray<Record<string, unknown>>,
+    use: (reference: string) => Promise<T>,
+  ): Promise<T> {
+    const directory = await mkdtemp(join(tmpdir(), "rightmodeler-anthropic-"));
+    try {
+      const reference = join(directory, "reference.json");
+      await writeFile(reference, JSON.stringify({ data: models }));
+      return await use(reference);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+
+  const referenceModel = (id: string, input: string, output: string) => ({
+    id,
+    type: "language",
+    context_window: 1_000_000,
+    pricing: { input, output },
+    supported_parameters: ["tools", "response_format"],
+  });
+  const anthropicReference = [
+    referenceModel("anthropic/claude-opus-5", "0.000005", "0.000025"),
+    referenceModel("anthropic/claude-haiku-4.5", "0.000001", "0.000005"),
+  ];
+
+  it("keeps Anthropic's type model entries with their context and release date", async () => {
+    const { catalog } = await listAnthropicModels();
+
+    expect(catalog.map(({ id }) => id)).toEqual([
+      "claude-opus-5",
+      "claude-haiku-4-5-20251001",
+    ]);
+    expect(catalog[0]).toMatchObject({
+      releasedAt: 1_784_851_200,
+      contextLength: 0,
+    });
+    expect(catalog[1]).toMatchObject({
+      contextLength: 200_000,
+      maxOutputTokens: 64_000,
+      releasedAt: null,
+    });
+  });
+
+  it("walks has_more pages with after_id on the same origin", async () => {
+    const { requests } = await listAnthropicModels();
+
+    expect(
+      requests.map(({ url }) => url).filter((url) => url.startsWith(firstPage)),
+    ).toEqual([firstPage, secondPage]);
+  });
+
+  it("sends anthropic-version unless the user sets it", async () => {
+    const { requests } = await listAnthropicModels();
+
+    expect(requests.length).toBeGreaterThan(0);
+    expect([
+      ...new Set(requests.map(({ anthropicVersion }) => anthropicVersion)),
+    ]).toEqual(["2023-06-01"]);
+
+    vi.restoreAllMocks();
+    const custom = await listAnthropicModels({
+      headers: { "anthropic-version": "2099-01-01" },
+    });
+
+    expect(custom.requests.length).toBeGreaterThan(0);
+    expect([
+      ...new Set(
+        custom.requests.map(({ anthropicVersion }) => anthropicVersion),
+      ),
+    ]).toEqual(["2099-01-01"]);
+  });
+
+  it("never claims structured output through Anthropic's OpenAI compatibility", async () => {
+    const { catalog } = await withReference(anthropicReference, (reference) =>
+      listAnthropicModels({ catalogReference: reference }),
+    );
+
+    expect(
+      catalog.map(({ id, supportsTools, supportsStructuredOutput }) => [
+        id,
+        supportsTools,
+        supportsStructuredOutput,
+      ]),
+    ).toEqual([
+      ["claude-opus-5", true, false],
+      ["claude-haiku-4-5-20251001", true, false],
+    ]);
+  });
+
+  it("joins bare and dated ids to a vendor-prefixed catalog reference within their vendor", async () => {
+    const { catalog } = await withReference(
+      [
+        ...anthropicReference,
+        referenceModel(
+          "anthropic/claude-opus-5-20260724",
+          "0.00001",
+          "0.00005",
+        ),
+        referenceModel("zeta/claude-haiku-4.5", "0.0000002", "0.0000008"),
+      ],
+      (reference) => listAnthropicModels({ catalogReference: reference }),
+    );
+
+    expect(
+      catalog.map(({ id, family, pricing }) => [id, family, pricing]),
+    ).toEqual([
+      ["claude-opus-5", "anthropic", { input: 0.000005, output: 0.000025 }],
+      [
+        "claude-haiku-4-5-20251001",
+        "anthropic",
+        { input: 0.000001, output: 0.000005 },
+      ],
+    ]);
+  });
+});
+
+describe("OpenAI direct catalog", () => {
+  beforeEach(() => {
+    process.env.REPLAY_TEST_API_KEY = fakeKey;
+  });
+
+  afterEach(() => {
+    delete process.env.REPLAY_TEST_API_KEY;
+    vi.restoreAllMocks();
+  });
+
+  async function listOpenAIModels(
+    baseUrl: string,
+  ): Promise<ModelCatalogEntry[]> {
+    const body = await readFile(openaiModelsFixtureUrl, "utf8");
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) =>
+        new Response(String(input).endsWith("/models") ? body : "{}", {
+          status: String(input).endsWith("/models") ? 200 : 404,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    return createProvider({
+      providerId: "openai-direct",
+      baseUrl,
+      apiKeyEnv: "REPLAY_TEST_API_KEY",
+    }).listModels();
+  }
+
+  it("gives bare ids from api.openai.com the openai family", async () => {
+    const catalog = await listOpenAIModels("https://api.openai.com/v1");
+
+    expect(catalog.map(({ id, family }) => [id, family])).toEqual([
+      ["gpt-6-sol", "openai"],
+      ["gpt-6-luna", "openai"],
+      ["text-embedding-3-small", "openai"],
+    ]);
+  });
+
+  it("leaves bare ids from an unknown host vendorless", async () => {
+    const catalog = await listOpenAIModels("https://gateway.example/v1");
+
+    expect(catalog.map(({ id, family }) => [id, family])).toEqual([
+      ["gpt-6-sol", "gpt-6-sol"],
+      ["gpt-6-luna", "gpt-6-luna"],
+      ["text-embedding-3-small", "text-embedding-3-small"],
+    ]);
+  });
+
+  it("sends anthropic-version to no host other than api.anthropic.com", async () => {
+    for (const baseUrl of [
+      "https://api.openai.com/v1",
+      "https://gateway.example/v1",
+      "https://anthropic.example.com/v1",
+    ]) {
+      vi.restoreAllMocks();
+      await listOpenAIModels(baseUrl);
+      const versions = vi
+        .mocked(globalThis.fetch)
+        .mock.calls.map(([, init]) =>
+          new Headers(init?.headers).get("anthropic-version"),
+        );
+
+      expect(versions.length, baseUrl).toBeGreaterThan(0);
+      expect(new Set(versions), baseUrl).toEqual(new Set([null]));
+    }
+  });
+
+  it("asks api.openai.com for max_completion_tokens and every other host for max_tokens", async () => {
+    const catalogBody = await readFile(openaiModelsFixtureUrl, "utf8");
+    const chatBody = JSON.stringify({
+      id: "chatcmpl-052",
+      object: "chat.completion",
+      model: "gpt-6-luna",
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: "ok" },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
+    });
+    const sentBody = async (baseUrl: string) => {
+      vi.restoreAllMocks();
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(
+          async (input) =>
+            new Response(
+              String(input).endsWith("/models") ? catalogBody : chatBody,
+              { status: 200, headers: { "content-type": "application/json" } },
+            ),
+        );
+      await createProvider({
+        providerId: "openai-direct",
+        baseUrl,
+        apiKeyEnv: "REPLAY_TEST_API_KEY",
+        pricingOverrides: {
+          "gpt-6-luna": { input: 0.0000001, output: 0.0000005 },
+        },
+      }).chat({
+        model: "gpt-6-luna",
+        messages: [{ role: "user", content: "Reply with ok." }],
+        maxOutputTokens: 40,
+      });
+      const [, init] = fetchMock.mock.calls.find(([input]) =>
+        String(input).endsWith("/chat/completions"),
+      )!;
+      return JSON.parse(String(init?.body)) as Record<string, unknown>;
+    };
+
+    const direct = await sentBody("https://api.openai.com/v1");
+    expect(Object.keys(direct)).toEqual([
+      "model",
+      "messages",
+      "max_completion_tokens",
+      "stream",
+    ]);
+    expect(direct.max_completion_tokens).toBe(40);
+
+    for (const baseUrl of [
+      "https://gateway.example/v1",
+      "https://api.anthropic.com/v1",
+      "https://openai.example.com/v1",
+    ]) {
+      const other = await sentBody(baseUrl);
+      expect(Object.keys(other), baseUrl).toEqual([
+        "model",
+        "messages",
+        "max_tokens",
+        "stream",
+      ]);
+      expect(other.max_tokens, baseUrl).toBe(40);
+    }
+  });
+});
+
 describe("AI Gateway chat", () => {
   beforeEach(() => {
     process.env.REPLAY_TEST_API_KEY = fakeKey;
@@ -2143,6 +2455,41 @@ describe("shortlist", () => {
         message:
           "Recorded model gpt-4o matches more than one catalog model: azure/gpt-4o, openai/gpt-4o",
       },
+    });
+  });
+
+  it("resolves a dated recorded id to the dotted catalog id", () => {
+    const result = shortlist(
+      [step({ currentModel: "claude-haiku-4-5-20251001" })],
+      [
+        {
+          ...catalog[0]!,
+          id: "anthropic/claude-haiku-4.5",
+          family: "anthropic",
+        },
+        {
+          ...catalog[1]!,
+          id: "anthropic/claude-lite-1",
+          family: "anthropic",
+        },
+      ],
+    );
+
+    expect(result[0]).toMatchObject({
+      resolvedCurrentModelId: "anthropic/claude-haiku-4.5",
+      candidates: [{ id: "anthropic/claude-lite-1" }],
+    });
+  });
+
+  it("keeps a canonical match inside the recorded vendor", () => {
+    const result = shortlist(
+      [step({ currentModel: "acme/x-1" })],
+      [{ ...catalog[0]!, id: "zeta/x.1", family: "zeta" }],
+    );
+
+    expect(result[0]).toMatchObject({
+      candidates: [],
+      abstention: { kind: "current-model-absent" },
     });
   });
 

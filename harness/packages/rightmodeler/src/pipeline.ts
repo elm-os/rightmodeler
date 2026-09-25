@@ -50,6 +50,7 @@ import {
   evaluateGates,
   MIN_DISTINCT_STEPS,
   minimumTrialsForFloor,
+  NoNeutralJudgeError,
   pickJudges,
   ReleaseGatePolicy,
   selectWinner,
@@ -995,7 +996,14 @@ export async function estimateReplay(
         );
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(context.baseUrl, candidates);
-  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
+  const referenceFamilyByStepId = referenceFamiliesByStep(
+    plan,
+    candidates,
+    catalog,
+  );
+  if (context.evaluator === undefined) {
+    assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId);
+  }
   const judges = new Map<string, ReplayCostJudge>();
   const judge =
     context.evaluator !== undefined
@@ -3314,6 +3322,65 @@ function assertPricedCandidates(
   }
 }
 
+const noNeutralJudgeRemedy =
+  "List or price a model from a third vendor (a multi-vendor gateway, --catalog-reference or --pricing-file), or grade with your own evaluator (--evaluator).";
+
+function assertNeutralJudges(
+  plan: z.infer<typeof replayPlanSchema>,
+  catalog: readonly ModelCatalogEntry[],
+  candidates: readonly StepShortlist[],
+  referenceFamilyByStepId: ReadonlyMap<string, string>,
+): void {
+  const vendorless = new Set<string>();
+  const pairs = new Map<
+    string,
+    { readonly candidateFamily: string; readonly referenceFamily: string }
+  >();
+  for (const { stepId, candidates: stepCandidates } of candidates) {
+    if (stepCandidates.length === 0) continue;
+    const step = plan.steps.find((candidate) => candidate.stepId === stepId)!;
+    const resolution = resolveCurrentModel(catalog, step.currentModel);
+    const referenceFamily = referenceFamilyByStepId.get(stepId)!;
+    for (const { id, family } of [
+      ...(resolution.kind === "exact" || resolution.kind === "resolved"
+        ? [resolution.model]
+        : []),
+      ...stepCandidates,
+    ]) {
+      if (!id.includes("/") && family === id) vendorless.add(id);
+    }
+    for (const { family: candidateFamily } of stepCandidates) {
+      pairs.set(JSON.stringify([candidateFamily, referenceFamily]), {
+        candidateFamily,
+        referenceFamily,
+      });
+    }
+  }
+  if (vendorless.size > 0) {
+    const ids = [...vendorless].sort(compareText).slice(0, 3).join(", ");
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "judge_family_unknown",
+      message: `The judge's vendor cannot be checked: model ids ${ids} name no vendor, so the built-in judge could come from the same vendor as a candidate or the recorded model.`,
+      remedy:
+        "Use a gateway whose model ids carry their vendor (vendor/model), or grade with your own evaluator (--evaluator).",
+    });
+  }
+  for (const { candidateFamily, referenceFamily } of pairs.values()) {
+    try {
+      pickJudges(catalog, { candidateFamily, referenceFamily });
+    } catch (error) {
+      if (!(error instanceof NoNeutralJudgeError)) throw error;
+      throw new ProtocolError({
+        exitCode: 2,
+        code: "no_neutral_judge",
+        message: `No judge is available: the candidates come from ${candidateFamily} and the recorded model from ${referenceFamily}, and the built-in judge must come from another vendor, but the catalog has no priced model from one.`,
+        remedy: noNeutralJudgeRemedy,
+      });
+    }
+  }
+}
+
 async function approvedReplayCandidates(
   context: PipelineContext,
   plan: z.infer<typeof replayPlanSchema>,
@@ -3415,7 +3482,11 @@ async function executeReplay(
         );
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(context.baseUrl, candidates);
-  const referenceFamilyByStepId = referenceFamiliesByStep(plan, candidates);
+  const referenceFamilyByStepId = referenceFamiliesByStep(
+    plan,
+    candidates,
+    catalog,
+  );
   const currentPricingByStepId = new Map(
     plan.steps.map((step) => {
       const resolution = resolveCurrentModel(catalog, step.currentModel);
@@ -3436,6 +3507,9 @@ async function executeReplay(
       configured,
       (code, message) => context.reporter.warning(code, message),
     );
+  }
+  if (externalEvaluator === undefined) {
+    assertNeutralJudges(plan, catalog, candidates, referenceFamilyByStepId);
   }
   const assessmentAbsences = new Map<string, string>();
   const evaluation = () => ({
@@ -4944,6 +5018,7 @@ function judgeChat(
 function referenceFamiliesByStep(
   plan: z.infer<typeof replayPlanSchema>,
   candidates: readonly StepShortlist[],
+  catalog: readonly ModelCatalogEntry[],
 ): ReadonlyMap<string, string> {
   const resolvedByStepId = new Map(
     candidates.map(({ stepId, resolvedCurrentModelId }) => [
@@ -4952,10 +5027,14 @@ function referenceFamiliesByStep(
     ]),
   );
   return new Map(
-    plan.steps.map(({ stepId, currentModel }) => [
-      stepId,
-      modelFamily(resolvedByStepId.get(stepId) ?? currentModel),
-    ]),
+    plan.steps.map(({ stepId, currentModel }) => {
+      const modelId = resolvedByStepId.get(stepId) ?? currentModel;
+      return [
+        stepId,
+        catalog.find(({ id }) => id === modelId)?.family ??
+          modelFamily(modelId),
+      ];
+    }),
   );
 }
 
@@ -5454,6 +5533,14 @@ function normalizePipelineError(
       code: "budget_cap_refusal",
       message: error.message,
       remedy: `Rerun with --max-cost-usd ${error.requiredCapUsd}.`,
+    });
+  }
+  if (error instanceof NoNeutralJudgeError) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "no_neutral_judge",
+      message: error.message,
+      remedy: noNeutralJudgeRemedy,
     });
   }
   return error;

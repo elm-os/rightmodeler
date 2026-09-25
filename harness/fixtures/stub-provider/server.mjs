@@ -71,6 +71,7 @@ async function readJson(request) {
 
 export async function startStubProvider({
   port,
+  bareModelIds = false,
   catalogPageSize,
   catalogTotalCount,
   errorModels = [],
@@ -88,9 +89,13 @@ export async function startStubProvider({
   const malformedJudges = new Set(malformedJudgeModels);
   const omittedCatalogModels = new Set(omitCatalogModels);
   const persistentlyRateLimitedModels = new Set(rateLimitedModels);
-  const catalogModels = (
-    includeFreeModel ? [...models, freeModel] : models
-  ).filter(({ id }) => !omittedCatalogModels.has(id));
+  const catalogModels = (includeFreeModel ? [...models, freeModel] : models)
+    .filter(({ id }) => !omittedCatalogModels.has(id))
+    .map((model) =>
+      bareModelIds && model.id.startsWith("acme/")
+        ? { ...model, id: model.id.slice("acme/".length) }
+        : model,
+    );
   let hitCount = 0;
   let inFlight = 0;
   let maxInFlight = 0;

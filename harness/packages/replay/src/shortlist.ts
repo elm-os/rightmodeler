@@ -1,4 +1,9 @@
-import { blendedPrice, withoutFastTiers } from "@rightmodeler/core";
+import {
+  blendedPrice,
+  canonicalModelName,
+  catalogFamily,
+  withoutFastTiers,
+} from "@rightmodeler/core";
 import type { ModelCatalogEntry } from "./provider.js";
 import type { CorpusSplit } from "@rightmodeler/kernel";
 
@@ -49,9 +54,23 @@ export function resolveCurrentModel(
   const exact = catalog.find(({ id }) => id === currentModel);
   if (exact !== undefined) return { kind: "exact", model: exact };
   if (currentModel === null) return { kind: "absent" };
-  const matches = catalog
+  const suffixMatches = catalog
     .filter(({ id }) => id.endsWith(`/${currentModel}`))
     .map(({ id }) => id);
+  const key = canonicalModelName(currentModel);
+  const vendor = currentModel.includes("/")
+    ? catalogFamily(currentModel)
+    : undefined;
+  const matches =
+    suffixMatches.length > 0
+      ? suffixMatches
+      : catalog
+          .filter(
+            ({ id, family }) =>
+              canonicalModelName(id) === key &&
+              (vendor === undefined || family === vendor),
+          )
+          .map(({ id }) => id);
   if (matches.length === 1) {
     return {
       kind: "resolved",

@@ -34,3 +34,12 @@ export function catalogFamily(modelId: string): string {
   const segments = modelId.split("/");
   return segments.length < 2 ? modelId : segments[segments.length - 2]!;
 }
+
+export function canonicalModelName(modelId: string): string {
+  return modelId
+    .split("/")
+    .at(-1)!
+    .toLowerCase()
+    .replace(/-\d{8}$/u, "")
+    .replaceAll(".", "-");
+}

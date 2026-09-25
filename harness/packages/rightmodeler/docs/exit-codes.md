@@ -54,10 +54,12 @@ Use `--output json` for one result object or `--output jsonl` for stage events f
 - `invalid_option` (exit `2`): correct the option and rerun; use `rightmodeler <command> --help` for accepted values.
 - `invalid_policy_file` (exit `2`): fix the named field in the `--policy` file and rerun; `qualityFloor` must be greater than 0.8 and less than 1, `shortlistTop` a positive integer, `allowModels` and `denyModels` arrays of model ids.
 - `invalid_pricing_file` (exit `2`): fix `--pricing-file` to map each model id to non-negative `input` and `output` USD per token and, optionally, a positive integer `maxOutputTokens`, then rerun.
+- `judge_family_unknown` (exit `2`): the catalog's model ids name no vendor, so the built-in judge could share a vendor with the candidate or the recorded model; use a gateway whose ids carry their vendor (`vendor/model`), or grade with `--evaluator`.
 - `missing_provider_configuration` (exit `2`): pass `--base-url <url>` and, if needed, `--api-key-env <environment-variable-name>` naming a populated variable.
 - `missing_traces_path` (exit `2`): pass `--traces <path>` pointing to an existing trace file or directory.
 - `mixed_trace_formats` (exit `2`): split the directory so every file uses the same trace format, or pass one file with `--traces`.
 - `modeb_cloud_unavailable` (exit `2`): install the optional sandbox SDK and set its credentials, or set `"backend": "docker"` in the `--modeb-config` file, then rerun.
+- `no_neutral_judge` (exit `2`): the catalog has no priced model from a vendor other than both the candidate's and the recorded model's, which the built-in judge needs; list or price one (a multi-vendor gateway, `--catalog-reference` or `--pricing-file`), or grade with `--evaluator`.
 - `no_priced_candidates` (exit `2`): point `--base-url` at a catalog that publishes per-token pricing, pass `--catalog-reference <url>`, expose priced LiteLLM `GET /model/info`, or pass `--pricing-file <path>`, then rerun.
 - `no_replayable_call_sites` (exit `2`): point `--repo` at a service with plain text completions, or add a matcher for a text call site, then rerun.
 - `not_git_repository` (exit `2`): run the command again from a Git repository with at least one commit.
