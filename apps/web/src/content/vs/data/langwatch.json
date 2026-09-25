@@ -1,0 +1,185 @@
+{
+  "slug": "langwatch",
+  "name": "LangWatch",
+  "website": "https://langwatch.ai",
+  "logo": "/vs/logos/langwatch.png",
+  "category": "observability",
+  "verdict": "complement",
+  "verdictLabel": "Complement · simulated users gate per-step swaps",
+  "title": "rightmodeler vs LangWatch: simulations vs recorded steps",
+  "description": "LangWatch tests agents with simulated users, and its Langy agent opens fix PRs. rightmodeler replays recorded steps on cheaper models and opens model-only PRs.",
+  "h1": "rightmodeler vs LangWatch",
+  "lede": "LangWatch tests your agent with simulated users, scores it offline and in production, and its Langy agent turns what it finds into Scenario tests and pull requests. rightmodeler changes one thing, the model each step calls, and only where the calls your agent already made show that a cheaper model holds up.",
+  "integrationSlug": "",
+  "related": ["langsmith", "opik", "braintrust"],
+  "cta": "github",
+  "blocks": [
+    {
+      "type": "tldr",
+      "body": "Complements that overlap on one question. As of 2026-09-24, LangWatch calls itself the open-source platform for AI in production: tracing, agent testing with simulated users, offline and online evaluations, prompt management, an AI gateway, and governance. Its Langy agent reads your traces and evals, writes a failing Scenario test or evaluation, and opens a bot-authored pull request with the fix, which a person reviews and merges. Its prompt optimization rewrites a prompt, scores it against the baseline, and offers to publish the winner as a new version. LangWatch also documents a cost workflow: run your scenario suite on two models side by side and keep the cheaper one where the pass rate holds. rightmodeler, a free MIT-licensed CLI, answers that question from different evidence and per step: it replays each recorded step through cheaper models from your provider's live catalog, judges them against the outputs you accepted, reports agreement, sample size, and abstentions per step family, and turns a swap that clears every gate into a draft pull request that changes model identifiers only. A LangWatch suite that already runs on your pull requests is a natural gate for that one."
+    },
+    {
+      "type": "table",
+      "heading": "What each one changes, and on what evidence",
+      "intro": "Both can end in a pull request a person merges. What goes into it, and why, is where they differ.",
+      "caption": "langwatch vs rightmodeler",
+      "leftLabel": "LangWatch",
+      "rightLabel": "rightmodeler",
+      "rows": [
+        {
+          "dimension": "what it changes",
+          "theirs": "agent behavior: code, tool contracts, and tests through Langy or your coding agent, and prompts through prompt optimization or DSPy optimizers",
+          "ours": "the model identifier at each call site your traces came from, and nothing else"
+        },
+        {
+          "dimension": "evidence",
+          "theirs": "simulated multi-turn conversations judged against criteria you write, plus evaluators on datasets and live traffic",
+          "ours": "each recorded step replayed and judged against the output you accepted"
+        },
+        {
+          "dimension": "trying a cheaper model",
+          "theirs": "a comparison run of your suite, with the model declared as a run parameter; pass rate, cost, and latency per model",
+          "ours": "candidates cheaper than the current model, shortlisted from your provider's live catalog"
+        },
+        {
+          "dimension": "unit of the verdict",
+          "theirs": "a target, meaning an agent or prompt with its parameters, on a test suite, over the repeats you choose",
+          "ours": "a step family, with sample size and abstentions, re-cleared on held-out cases"
+        },
+        {
+          "dimension": "the pull request",
+          "theirs": "bot-authored through a GitHub App, with the fix and the Scenario tests it wrote, which your CI runs",
+          "ours": "a draft that may change model identifiers only, with an evidence table in the body"
+        },
+        {
+          "dimension": "model calls for the work",
+          "theirs": "Langy calls models through the LangWatch AI Gateway, on your keys or a Codex sign-in",
+          "ours": "replays and judge calls go to your provider on your key; no rightmodeler server, account, or telemetry"
+        },
+        {
+          "dimension": "seat at runtime",
+          "theirs": "tracing beside every call; the AI gateway and guardrails can sit in the request path",
+          "ours": "none; it runs offline on files you exported"
+        }
+      ]
+    },
+    {
+      "type": "stack",
+      "heading": "Use both: the suite gates the swap",
+      "intro": "No integration is involved. The handoff is a draft pull request and the CI job you already run.",
+      "paragraphs": [
+        "rightmodeler has no LangWatch integration. It does not read the output of LangWatch's Traces API, which comes back as LangWatch's own digest or JSON, and it does not run LangWatch evaluators; the external evaluators it ships are Braintrust, Langfuse, LangSmith, and promptfoo. The audit reads trace files in formats such as OpenTelemetry GenAI and OpenInference spans. LangWatch accepts OpenTelemetry on its own endpoints and says it supports the GenAI spec, so if your model calls already emit OpenTelemetry GenAI spans with their messages, a collector can send the same spans to LangWatch and to a file the audit reads.",
+        "LangWatch's homepage says the same scenarios run on your machine and on every pull request. Scenario tests written with its open-source SDK run in your own test runner, so the CI job that runs your tests on a rightmodeler draft pull request runs them on the cheaper model. Platform test suites run from CI too: per its Run from CI guide, langwatch test-suite run with --wait polls the batch and exits non-zero when a run failed, which fails the job, so a job that targets the agent built from the draft's branch holds the cheaper model to the same simulated conversations before anyone merges. rightmodeler watch reconciles the pull request alongside: a failing check gets one comment, and if a check with the same name fails again under a new run on the same head commit, the pull request is closed. If apply runs inside GitHub Actions, give it a GitHub App token: CI on a pull request opened with the job's own GITHUB_TOKEN waits for approval."
+      ],
+      "commands": [
+        {
+          "comment": "# replay recorded steps on cheaper models, on your own provider key",
+          "command": "npx rightmodeler init --traces ./traces --base-url $BASE_URL --api-key-env PROVIDER_API_KEY"
+        },
+        {
+          "comment": "# open the model-only draft pull request for the swaps that cleared every gate",
+          "command": "npx rightmodeler apply --owner $OWNER --github-token-env GITHUB_TOKEN"
+        },
+        {
+          "comment": "# in CI, against the agent built from that branch: fails the job on a failed run",
+          "command": "langwatch test-suite run \"$SUITE\" --target http:$AGENT_ID --wait"
+        },
+        {
+          "comment": "# reconcile the pull request: comment on a failing check, close on a repeat",
+          "command": "npx rightmodeler watch --owner $OWNER --pr $PR --github-token-env GITHUB_TOKEN"
+        }
+      ]
+    },
+    {
+      "type": "scenarios",
+      "heading": "Which one does the job?",
+      "intro": "Three situations, with the honest winner named in each.",
+      "scenarios": [
+        {
+          "scenario": "Your support agent handles one message well but drifts by turn 15 when a customer gets angry, and a production incident needs a regression test and a fix.",
+          "winner": "theirs",
+          "why": "That is LangWatch's ground, per its docs: a simulated user drives the whole conversation, a judge reads it together with the agent's traces, and Langy can turn the failing trace into a Scenario test, draft the fix, and open a pull request whose tests run in your CI. rightmodeler replays single recorded steps as text; it cannot simulate a conversation and never touches prompts or code."
+        },
+        {
+          "scenario": "Your suite passes on a frontier model, but the agent makes a dozen distinct model calls, and you want to know which of them can run cheaper on the traffic you actually served.",
+          "winner": "ours",
+          "why": "LangWatch's cost guide compares the models you declare as run parameters, on the scenarios you wrote. rightmodeler starts from the calls you recorded: it groups them into step families, shortlists cheaper candidates from your provider's live catalog, judges each against the output you accepted, abstains where the sample is thin, and re-clears the quality floor on held-out cases before it proposes a swap."
+        },
+        {
+          "scenario": "You already run a LangWatch scenario suite on every pull request and want the model bill down without weakening that gate.",
+          "winner": "both",
+          "why": "Let the audit propose the per-step swaps and rightmodeler apply open the model-only draft. Your suite then judges the cheaper models on simulated conversations in CI, and rightmodeler watch comments on a failing check and closes the pull request if the same check fails again on the same commit. Recorded evidence proposes; simulated evidence gates."
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "The honest part",
+      "paragraphs": [
+        "LangWatch tests what rightmodeler cannot replay. Simulated users drive whole conversations in text and voice, red-team runs attack the agent over many turns, and criteria can check the tools the agent called, read from its own traces. rightmodeler resends each recorded conversation as text: a case that carries tool calls, tool definitions, or non-text parts is left out of the replay sample, and a call site that needs tools or structured output is not replayed.",
+        "LangWatch changes what rightmodeler never touches. Langy's pull requests carry code and the Scenario tests it wrote, its prompt optimization publishes a new prompt version when you accept it, and its DSPy guides rewrite instructions and tool descriptions. rightmodeler changes model identifiers only, so a failure that comes from a prompt, a tool contract, or the harness is outside its reach.",
+        "LangWatch can answer the cheaper-model question itself. Its Reduce Cost and Latency guide says to test the model first and to keep the cheaper one when its pass rate matches the baseline across repeats, and Langy answers a question like whether a feature can move to a cheaper model by writing an evaluation or a Scenario test of the current behavior to compare against. If your suite covers what matters, that answer is real. rightmodeler adds per-step verdicts on the traffic you recorded, candidates from your provider's live catalog, abstentions where the evidence is thin, and a pull request that cannot change anything but model identifiers.",
+        "LangWatch is a platform your team works in, and it can sit in the request path through its AI gateway and guardrails. Its core is Apache 2.0 and self-hostable, with enterprise features under a separate license, per its docs. rightmodeler is a free MIT-licensed CLI with no server, account, or telemetry, and its verdicts measure agreement with the output you shipped, which is evidence, not proof of correctness. Where the evidence is thin, it abstains."
+      ]
+    },
+    {
+      "type": "definitions",
+      "heading": "Terms this page uses",
+      "terms": [
+        {
+          "term": "scenario",
+          "def": "LangWatch's unit of agent testing: a situation a simulated user acts out against your agent, and the criteria a judge scores the conversation against. A test suite groups the scenarios you run together."
+        },
+        {
+          "term": "comparison run",
+          "def": "In LangWatch, one run of the same scenarios against two or more targets, such as the same agent with a different model parameter, with the pass rate, cost, and latency of each side by side."
+        },
+        {
+          "term": "trace",
+          "slug": "trace",
+          "def": "The recorded log of an agent run: each model call with its inputs, outputs, and tool calls. LangWatch's judge reads the agent's traces; rightmodeler replays the model calls in the trace files you export."
+        },
+        {
+          "term": "swap candidate",
+          "slug": "swap-candidate",
+          "def": "A cheaper model shortlisted from your configured provider's live catalog and replayed on one step family's recorded inputs."
+        },
+        {
+          "term": "quality floor",
+          "slug": "quality-floor",
+          "def": "The configurable minimum a candidate must clear, on the cases it was chosen on and again on held-out cases, before the audit recommends it."
+        },
+        {
+          "term": "abstain",
+          "slug": "abstain",
+          "def": "What the audit does when a step family's evidence is too thin: it recommends nothing and names the reason. The current model stays."
+        }
+      ]
+    },
+    {
+      "type": "faq",
+      "items": [
+        {
+          "q": "Doesn't LangWatch already test cheaper models?",
+          "a": "It does, per its docs as of 2026-09-24. Its Reduce Cost and Latency guide declares the model as a run parameter, runs your scenario suite on two models in one comparison run, and keeps the cheaper model where the pass rate holds across repeats. You choose the models and write the scenarios. rightmodeler starts from the calls you recorded, shortlists cheaper candidates from your provider's live catalog, and returns a verdict per step family, with sample size and abstentions, judged against the outputs you accepted. The two answers rest on different evidence, and a swap can be held to both."
+        },
+        {
+          "q": "Langy opens pull requests too. What is different about rightmodeler's?",
+          "a": "Langy's pull request carries a fix: code and the Scenario tests it wrote, opened by the LangWatch GitHub App on a branch it creates, with you credited as co-author, per its docs. Langy never merges its own pull request, and its docs cap it at 20 pull requests a day. rightmodeler apply opens a draft that may change model identifiers only: a diff check refuses anything else, the body carries the evidence table for each step family, and review is requested from the owners of the changed files. A person merges both."
+        },
+        {
+          "q": "Is there an integration between rightmodeler and LangWatch?",
+          "a": "No. rightmodeler does not read LangWatch's exports or run its evaluators; the external evaluators it ships are Braintrust, Langfuse, LangSmith, and promptfoo. The two meet in your repository: a rightmodeler draft pull request goes through your CI, and a LangWatch suite in that CI judges it."
+        },
+        {
+          "q": "Is LangWatch open source?",
+          "a": "Open core, per its docs. The platform is Apache 2.0 and self-hostable with Docker or Helm, with no volume cap on your own infrastructure; the client SDKs are MIT; and enterprise features such as SSO, custom RBAC roles, audit logs, and AI governance features such as anomaly rules and SIEM export sit under a separate enterprise license. Its Scenario testing framework is open source, and LangWatch Cloud has a free plan. The rightmodeler CLI is MIT-licensed."
+        },
+        {
+          "q": "Will the audit always find a cheaper model?",
+          "a": "No, and it is designed not to. A step family abstains when the evidence is thin, when too many of its cases had to be left out, or when no candidate clears the quality floor again on held-out cases. A report that says your current models already earn their cost is a valid result."
+        }
+      ]
+    }
+  ]
+}
