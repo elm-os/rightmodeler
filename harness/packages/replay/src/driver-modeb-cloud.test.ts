@@ -169,3 +169,77 @@ describe("cloud Mode B launch contract", () => {
     expect(Buffer.byteLength(JSON.stringify(launch.env))).toBeLessThan(4096);
   });
 });
+
+describe("Mode B concurrency warning", () => {
+  it("counts the cases a cap admits without float drift", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-modeb-warning-"));
+    try {
+      const store = new FsStore(join(root, "store"));
+      const warnings: Array<[string, string]> = [];
+      const refusingExecutor: ModeBExecutor = {
+        async launch() {
+          throw new Error("launch refused");
+        },
+        async status() {
+          throw new Error("status should not be called");
+        },
+        async collect() {
+          throw new Error("collect should not be called");
+        },
+        async destroy() {
+          throw new Error("destroy should not be called");
+        },
+      };
+
+      await replayModeB({
+        stepRecords,
+        cases: Array.from({ length: 4 }, (_, index) => ({
+          ...cases[0]!,
+          caseId: `case-${index + 1}`,
+          trajectoryId: `trace-${index + 1}`,
+          maxOutputTokens: 10_000,
+        })),
+        swapPolicy: { lookup: "acme/small-1" },
+        executor: refusingExecutor,
+        egress: {
+          providerId: "stub",
+          providerBaseUrl: "https://provider.example",
+          apiKeyEnv: "REPLAY_MODEB_CLOUD_TEST_API_KEY",
+          catalog: [
+            {
+              ...catalog[0]!,
+              pricing: { input: 0, output: 0.00001 },
+            },
+          ],
+        },
+        store,
+        budget: createBudget({
+          store,
+          projectId: "modeb-warning-test",
+          runId: randomUUID(),
+          authorizedTotalUsd: 0.3,
+        }),
+        image: "vercel/sandbox/universal:latest",
+        appSpec: {
+          mountPath: join(root, "app"),
+          command: (caseFile) => ["node", "app.mjs", caseFile],
+          timeoutMs: 5_000,
+        },
+        concurrency: 4,
+        backend: "cloud",
+        warning: (code, message) => warnings.push([code, message]),
+      });
+
+      expect(warnings).toEqual([
+        [
+          "modeb_concurrency_capped",
+          expect.stringContaining(
+            "admits 3 concurrent Mode B case(s) of up to $0.1000 each",
+          ),
+        ],
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

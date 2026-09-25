@@ -74,6 +74,7 @@ import {
   ProviderConfigurationError,
   replayModeA,
   resolveCurrentModel,
+  roundUsd,
   shortlist,
   toWireMessages,
   type ModelCatalogEntry,
@@ -5724,13 +5725,13 @@ function spendSummary(spendEvents: readonly SpendEvent[]): ReportData["spend"] {
   for (const spend of spendEvents) {
     const actor = byActor[spend.actor] ?? { events: 0, costUsd: 0 };
     actor.events += 1;
-    actor.costUsd += spend.costUsd;
+    actor.costUsd = roundUsd(actor.costUsd + spend.costUsd);
     byActor[spend.actor] = actor;
   }
   return {
     events: spendEvents.length,
     totalCostUsd: spendEvents.reduce(
-      (total, spend) => total + spend.costUsd,
+      (total, spend) => roundUsd(total + spend.costUsd),
       0,
     ),
     byActor,
@@ -5831,10 +5832,15 @@ export function familyReceipts(
         ? null
         : winnerExecutions.reduce(
             (total, execution) =>
-              total +
-              (attemptsByExecutionId.get(execution.executionId) ?? []).reduce(
-                (executionTotal, attempt) => executionTotal + attempt.costUsd,
-                0,
+              roundUsd(
+                total +
+                  (
+                    attemptsByExecutionId.get(execution.executionId) ?? []
+                  ).reduce(
+                    (executionTotal, attempt) =>
+                      executionTotal + attempt.costUsd,
+                    0,
+                  ),
               ),
             0,
           ) / winnerExecutions.length;
@@ -5847,8 +5853,11 @@ export function familyReceipts(
         hasIncumbentCost = false;
         break;
       }
-      incumbentTotal +=
-        usage.inputTokens * pricing.input + usage.outputTokens * pricing.output;
+      incumbentTotal = roundUsd(
+        incumbentTotal +
+          usage.inputTokens * pricing.input +
+          usage.outputTokens * pricing.output,
+      );
     }
     const incumbentCostPerCaseUsd = hasIncumbentCost
       ? incumbentTotal / winnerExecutions.length

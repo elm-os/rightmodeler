@@ -40,6 +40,12 @@ function isObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// The same 1e-12 snap as roundUsd in ../budget.ts, which this runtime ships without:
+// lease sums then do not depend on the order requests settle in.
+function roundUsd(value) {
+  return Number(value.toFixed(12));
+}
+
 function parseConfig() {
   const rawSwapPolicy = jsonEnv("RM_SWAP_POLICY");
   if (
@@ -227,11 +233,11 @@ function loadState(spoolPath, checkpointPath) {
     state.lastAttemptGroup = Math.max(state.lastAttemptGroup, row.attemptGroup);
     state.groups.set(row.logicalCallId, row.attemptGroup);
     state.attemptIds.add(row.attemptId);
-    state.spentUsd += row.costUsd;
+    state.spentUsd = roundUsd(state.spentUsd + row.costUsd);
   }
 
   for (const reservation of state.reservations.values()) {
-    state.spentUsd += reservation.reservedUsd;
+    state.spentUsd = roundUsd(state.spentUsd + reservation.reservedUsd);
   }
 
   return state;
@@ -736,8 +742,9 @@ async function main() {
     const estimatedInputTokens = forwardedBody.length;
     const estimatedWorstCaseUsd =
       estimatedInputTokens * pricing.input + maxTokens * pricing.output;
-    const requiredLeaseUsd =
-      state.spentUsd + reservedUsd + estimatedWorstCaseUsd;
+    const requiredLeaseUsd = roundUsd(
+      state.spentUsd + reservedUsd + estimatedWorstCaseUsd,
+    );
     if (requiredLeaseUsd > config.lease.maxUsd) {
       appendRow(spoolPath, {
         kind: "blocked",
@@ -763,7 +770,7 @@ async function main() {
       return;
     }
 
-    reservedUsd += estimatedWorstCaseUsd;
+    reservedUsd = roundUsd(reservedUsd + estimatedWorstCaseUsd);
     const attemptId = nextAttemptId(state);
     const responseSpoolPath = join(streamDirectory, `${attemptId}.txt`);
     appendRow(spoolPath, {
@@ -892,10 +899,10 @@ async function main() {
         endedAt: new Date().toISOString(),
       });
       state.reservations.delete(attemptId);
-      state.spentUsd += leaseChargeUsd;
+      state.spentUsd = roundUsd(state.spentUsd + leaseChargeUsd);
       if (!outgoing.destroyed && !outgoing.writableEnded) outgoing.end();
     } finally {
-      reservedUsd -= estimatedWorstCaseUsd;
+      reservedUsd = roundUsd(reservedUsd - estimatedWorstCaseUsd);
     }
   }
 

@@ -25959,6 +25959,9 @@ async function reserveWhenFree(budget, input, inFlight, signal) {
 function formatUsd(value) {
   return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "");
 }
+function roundUsd(value) {
+  return Number(value.toFixed(12));
+}
 function assertAmount(value, label) {
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${label} must be a non-negative number`);
@@ -26003,7 +26006,7 @@ function decode3(body) {
   };
 }
 function reservedTotal(ledger) {
-  return Object.values(ledger.reservations).reduce((total, reservation) => total + reservation.reservedUsd, 0);
+  return Object.values(ledger.reservations).reduce((total, reservation) => roundUsd(total + reservation.reservedUsd), 0);
 }
 function createBudget(options) {
   if (options.authorizedTotalUsd !== void 0) {
@@ -26079,8 +26082,8 @@ function createBudget(options) {
     const reservationId = randomUUID5();
     for (; ; ) {
       const current = await load(true);
-      const requiredCapUsd = current.ledger.spentUsd + worstCaseUsd;
-      const capacityRequiredUsd = requiredCapUsd + reservedTotal(current.ledger);
+      const requiredCapUsd = roundUsd(current.ledger.spentUsd + worstCaseUsd);
+      const capacityRequiredUsd = roundUsd(requiredCapUsd + reservedTotal(current.ledger));
       if (current.ledger.authorizedTotalUsd !== void 0 && capacityRequiredUsd > current.ledger.authorizedTotalUsd) {
         throw new BudgetRefusalError(requiredCapUsd, current.ledger.authorizedTotalUsd, requiredCapUsd <= current.ledger.authorizedTotalUsd);
       }
@@ -26139,7 +26142,7 @@ function createBudget(options) {
             delete reservations[reservationId];
             const finalized = {
               ...latest.ledger,
-              spentUsd: latest.ledger.spentUsd + actualCostUsd,
+              spentUsd: roundUsd(latest.ledger.spentUsd + actualCostUsd),
               reservations
             };
             const finalizedWon = await options.store.compareAndSwap(key, latest.version, encode3(finalized), latest.fenceToken);
@@ -30988,7 +30991,7 @@ async function replayModeB(input) {
   if (budgetState.authorizedTotalUsd !== void 0) {
     const largestUsd = Math.max(...pending.map((cell) => modeBCaseWorstCaseUsd(cell.recordedCase, input.stepRecords, policy, input.egress.catalog)));
     const availableUsd = Math.max(0, budgetState.authorizedTotalUsd - budgetState.spentUsd - budgetState.reservedUsd);
-    const admitted = largestUsd === 0 ? workerLimit : Math.floor(availableUsd / largestUsd);
+    const admitted = largestUsd === 0 ? workerLimit : Math.floor(roundUsd(availableUsd / largestUsd));
     if (admitted < workerLimit) {
       input.warning?.("modeb_concurrency_capped", `The cost cap admits ${admitted} concurrent Mode B case(s) of up to $${largestUsd.toFixed(4)} each; ${workerLimit} were requested. Raise the cap to run wider.`);
     }
@@ -48413,13 +48416,13 @@ function spendSummary(spendEvents) {
   for (const spend of spendEvents) {
     const actor = byActor[spend.actor] ?? { events: 0, costUsd: 0 };
     actor.events += 1;
-    actor.costUsd += spend.costUsd;
+    actor.costUsd = roundUsd(actor.costUsd + spend.costUsd);
     byActor[spend.actor] = actor;
   }
   return {
     events: spendEvents.length,
     totalCostUsd: spendEvents.reduce(
-      (total, spend) => total + spend.costUsd,
+      (total, spend) => roundUsd(total + spend.costUsd),
       0
     ),
     byActor
@@ -48481,9 +48484,11 @@ function familyReceipts(ledger, plan, replay, corpus, verdicts) {
       (execution) => familyStepIds.has(execution.stepId) && execution.candidateId === verdict.candidateId && execution.terminalOutcome === "success" && execution.attribution === "ok" && (execution.selectionStage === "shortlist" || execution.selectionStage === "holdout")
     ).sort((left, right) => compareText(left.executionId, right.executionId));
     const winnerCostPerCaseUsd = winnerExecutions.length === 0 ? null : winnerExecutions.reduce(
-      (total, execution) => total + (attemptsByExecutionId.get(execution.executionId) ?? []).reduce(
-        (executionTotal, attempt) => executionTotal + attempt.costUsd,
-        0
+      (total, execution) => roundUsd(
+        total + (attemptsByExecutionId.get(execution.executionId) ?? []).reduce(
+          (executionTotal, attempt) => executionTotal + attempt.costUsd,
+          0
+        )
       ),
       0
     ) / winnerExecutions.length;
@@ -48496,7 +48501,9 @@ function familyReceipts(ledger, plan, replay, corpus, verdicts) {
         hasIncumbentCost = false;
         break;
       }
-      incumbentTotal += usage2.inputTokens * pricing.input + usage2.outputTokens * pricing.output;
+      incumbentTotal = roundUsd(
+        incumbentTotal + usage2.inputTokens * pricing.input + usage2.outputTokens * pricing.output
+      );
     }
     const incumbentCostPerCaseUsd = hasIncumbentCost ? incumbentTotal / winnerExecutions.length : null;
     const costDeltaPct = winnerCostPerCaseUsd === null || incumbentCostPerCaseUsd === null || incumbentCostPerCaseUsd === 0 ? null : (winnerCostPerCaseUsd - incumbentCostPerCaseUsd) / incumbentCostPerCaseUsd * 100;

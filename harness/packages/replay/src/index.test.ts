@@ -2374,6 +2374,64 @@ describe("budget reservation", () => {
       causedByReservations: false,
     });
   });
+
+  const worstCase = (usd: number) => ({
+    contextTokens: 1,
+    maxOutputTokens: 0,
+    pricing: { input: usd, output: 0 },
+  });
+
+  it("settles the same spend and cap decision whichever order refunds land in", async () => {
+    for (const costs of [
+      [0.1, 0.2, 0.3],
+      [0.3, 0.2, 0.1],
+    ]) {
+      const budget = createBudget({
+        store,
+        projectId,
+        runId: `run-${costs.join("-")}`,
+        authorizedTotalUsd: 0.7,
+      });
+      const reservations = [];
+      for (const cost of costs) {
+        reservations.push(await budget.reserveExecution(worstCase(cost)));
+      }
+      expect((await budget.state()).reservedUsd).toBe(0.6);
+      for (const [index, reservation] of reservations.entries()) {
+        await reservation.refund(costs[index]!);
+      }
+
+      expect((await budget.state()).spentUsd).toBe(0.6);
+      await expect(
+        budget.reserveExecution(worstCase(0.1)),
+      ).resolves.toMatchObject({ reservedUsd: 0.1 });
+    }
+  });
+
+  it("admits an execution whose worst case exactly fills the cap", async () => {
+    const budget = createBudget({
+      store,
+      projectId,
+      runId,
+      authorizedTotalUsd: 0.3,
+    });
+    const first = await budget.reserveExecution(worstCase(0.1));
+    await first.refund(0.1);
+
+    const fill = await budget.reserveExecution(worstCase(0.2));
+    expect(fill.reservedUsd).toBe(0.2);
+    // The same fit held back only by an in-flight reservation waits for it,
+    // rather than asking for a higher cap.
+    await expect(budget.reserveExecution(worstCase(0.2))).rejects.toMatchObject(
+      { requiredCapUsd: 0.3, causedByReservations: true },
+    );
+    await fill.refund(0);
+
+    await budget.reserveExecution(worstCase(0.1));
+    await expect(
+      budget.reserveExecution(worstCase(0.1)),
+    ).resolves.toMatchObject({ reservedUsd: 0.1 });
+  });
 });
 
 describe("shortlist", () => {
