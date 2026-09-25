@@ -1,0 +1,41 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "client": {
+    "enable_logging": true
+  },
+  "providers": {
+    "vercel": {
+      "keys": [
+        {
+          "name": "vercel-1",
+          "value": "env.AI_GATEWAY_API_KEY",
+          "models": ["*"],
+          "weight": 1.0
+        }
+      ],
+      "network_config": {
+        "base_url": "https://ai-gateway.vercel.sh"
+      },
+      "custom_provider_config": {
+        "base_provider_type": "openai"
+      }
+    },
+    "openrouter": {
+      "keys": [
+        {
+          "name": "openrouter-1",
+          "value": "env.OPENROUTER_API_KEY",
+          "models": ["*"],
+          "weight": 1.0
+        }
+      ]
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "./logs.db"
+    }
+  }
+}

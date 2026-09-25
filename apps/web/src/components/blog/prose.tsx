@@ -69,6 +69,21 @@ export function LI({ children }: { children: ReactNode }) {
   );
 }
 
+// A multi-line config or response excerpt: mono on the warm-sand window the case-study Artifact
+// uses. The text is the only child, so the Markdown twin's indented block carries the same
+// characters, and long lines scroll inside the window instead of widening the page. The window
+// takes keyboard focus so those lines can be scrolled without a pointer.
+export function Code({ children }: { children: string }) {
+  return (
+    <pre
+      tabIndex={0}
+      className="overflow-x-auto rounded-xl border border-ash-border bg-warm-sand px-4 py-3 font-mono text-[13px] text-midnight-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white"
+    >
+      <code>{children}</code>
+    </pre>
+  );
+}
+
 export function Hr() {
   return <hr className="border-0 border-t border-ash-border" />;
 }
