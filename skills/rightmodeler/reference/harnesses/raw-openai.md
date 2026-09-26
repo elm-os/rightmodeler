@@ -36,7 +36,10 @@ Mode B application must read that variable or pass it into the client; the drive
 the local proxy.
 
 Phase A Mode A instead uses the CLI `--base-url`. It does not read `OPENAI_BASE_URL`; its API-key
-variable defaults to `RIGHTMODELER_API_KEY` and can be changed with `--api-key-env`.
+variable defaults to `RIGHTMODELER_API_KEY` and can be changed with `--api-key-env`. On a plan
+route (`--route codex-login`, only after the user agrees), Mode A candidates run through the
+`codex` CLI signed in on this machine instead, and rightmodeler keeps API key variables away
+from it.
 
 ## Side-effect mocking
 

@@ -140,14 +140,19 @@ bound to meet the quality floor.
 ## Judge selection and execution
 
 Candidate and reference families must both be known. Exclude a judge catalog entry when its
-family is missing, `unknown`, the candidate family, or the reference family; when its declared
+family is missing, `unknown`, the candidate family, or the reference family; when its id has no
+`/` and its family is the id itself, because a bare id names no vendor; when its declared
 type is not `language`; when declared output modalities omit text; when it has no pricing; or
 when its id is `<id>-fast` and `<id>` is also in the catalog, because a gateway answers that
 faster service tier as the base model (the shortlist skips such an id as a candidate too). An id
-ending in `-fast` with no base model listed is ranked like any other. With no eligible neutral
-family, fail with no judge rather than borrowing either evaluated family. When the catalog
-publishes no prices, price at least one third-family model with `--pricing-file` or
-`--catalog-reference`.
+ending in `-fast` with no base model listed is ranked like any other. Never borrow either
+evaluated family. The built-in judge is checked before replay calls any model, also when it
+stands in for an unreachable external evaluator: a candidate or recorded model whose bare id
+names no vendor stops the run with exit 2 `judge_family_unknown`, and no eligible third-vendor
+judge stops it with exit 2 `no_neutral_judge`. When the judge runs through a plan route
+(`claude-login` or `codex-login`), candidates from the judge's vendor are left out with a
+`judge_vendor_candidates_dropped` warning. When the catalog publishes no prices, price at least
+one third-family model with `--pricing-file` or `--catalog-reference`.
 
 Rank eligible judges by the sum of equal-weight percentile signals for release/creation recency,
 context length, and prompt-plus-completion price. Missing signals score zero. When
@@ -157,25 +162,31 @@ higher raw recency, then context, then price, then lexicographically larger mode
 non-finite numeric catalog signals fail loudly. Preserve the full strongest-first ranking for
 run-level fallback.
 
-The judge runs two temperature-zero calls with reference and candidate positions swapped. It must
-return exactly `verdict`, `score`, and `justification` as strict JSON. Send a strict
-`response_format` JSON schema when the selected catalog entry advertises structured output;
-otherwise append an explicit strict-JSON-only instruction and omit `response_format`. Before the
-unchanged exact schema validation, extraction may remove one surrounding Markdown code fence and
-leading prose before the first balanced JSON object. Invalid or incomplete JSON still fails.
+The judge runs two calls with reference and candidate positions swapped, at temperature zero
+except on a plan route, whose CLI cannot set temperature. It must return exactly `verdict`,
+`score`, and `justification` as strict JSON. Send a strict `response_format` JSON schema when the
+selected catalog entry advertises structured output; otherwise append an explicit
+strict-JSON-only instruction and omit `response_format`. A plan route always gets the schema:
+`claude` through `--json-schema` with `--max-turns 3`, so it can correct a non-matching answer
+twice, and `codex` through `--output-schema`. Before the unchanged exact schema validation,
+extraction may remove one surrounding Markdown code fence and leading prose before the first
+balanced JSON object. Invalid or incomplete JSON still fails.
 
 Kernel scores, not the judge's numeric score, bind: `equivalent = 1`, `minor_drift = 0.6`, and
 `divergent = 0`. Only two `equivalent` verdicts pass. A position disagreement becomes
 `minor_drift`, fails, and records `orderConsistent: false`. After three consecutive terminal judge
 failures, each recorded as `response_malformed` or `provider_error`, mark that model unusable with a
 warning and a zero-cost `SpendEvent` note, switch to the next-ranked eligible model, and re-judge
-only the affected pending cells. A judge whose response names another model is retired at that
-first response instead: no new call goes to it, its calls still waiting for budget are cancelled,
-and once the calls already under way return, the affected cells are re-judged with the
-next-ranked judge; the `judge_unusable` warning names the model that answered.
-Try at most two judge models. The replay driver publishes the
-terminal execution only after complete judge evidence is persisted or both judges are exhausted,
-so an interrupted pending cell is retried rather than resumed as complete.
+only the affected pending cells. A retirement applies to that model on that judge route only,
+and one caused by rate limits is not kept for a later run. A plan's usage limit is never a
+judge failure: it stops the run with exit 2 `plan_usage_limit`, and the unjudged cells are
+judged when the run resumes after the reset. A judge whose response names another model is
+retired at that first response instead: no new call goes to it, its calls still waiting for
+budget are cancelled, and once the calls already under way return, the affected cells are
+re-judged with the next-ranked judge; the `judge_unusable` warning names the model that answered.
+Try at most four judge models. The replay driver publishes the terminal execution only after
+complete judge evidence is persisted or every judge is exhausted, so an interrupted pending cell
+is retried rather than resumed as complete.
 
 ## Reading the final result
 
