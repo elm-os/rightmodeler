@@ -109,6 +109,9 @@ const apiPresets = {
     apiKeyEnv: "RIGHTMODELER_API_KEY",
   },
 } as const;
+export const apiKeyVariables = Object.values(apiPresets).map(
+  ({ apiKeyEnv }) => apiKeyEnv,
+);
 const singleVendorPresets = {
   openai: {
     judge: "claude-login",

@@ -15,11 +15,12 @@ export interface PlanLoginStatus {
 
 export async function detectPlanLogins(
   env: NodeJS.ProcessEnv,
+  withhold: readonly string[] = [],
 ): Promise<PlanLoginStatus[]> {
   return Promise.all(
     [createCodexAdapter({ env }), claudeAdapter].map(async (adapter) => {
       try {
-        const { version } = await preflightPlanCli(adapter, env);
+        const { version } = await preflightPlanCli(adapter, env, withhold);
         return {
           kind: adapter.kind,
           ready: true,

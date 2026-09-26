@@ -54,7 +54,11 @@ import {
 } from "./protocol.js";
 import { discoverTraces, type DiscoveredTrace } from "./data/discover.js";
 import { TraceAdaptError } from "./data/index.js";
-import { promptForModelRoute, promptForTracePath } from "./guidance.js";
+import {
+  apiKeyVariables,
+  promptForModelRoute,
+  promptForTracePath,
+} from "./guidance.js";
 import {
   approveDriftProposal,
   publishDriftProposal,
@@ -1044,7 +1048,11 @@ async function guidedPipelineOptions(
           output: promptOutput(reporter.io, runtime.stdout.isTTY),
           plans:
             local.modebConfig === undefined
-              ? () => detectPlanLogins(runtime.env)
+              ? () =>
+                  detectPlanLogins(runtime.env, [
+                    ...apiKeyVariables,
+                    ...(saved?.api === undefined ? [] : [saved.api.apiKeyEnv]),
+                  ])
               : undefined,
           saved: saved && {
             route: saved,
