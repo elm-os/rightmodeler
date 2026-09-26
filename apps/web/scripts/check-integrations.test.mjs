@@ -102,3 +102,19 @@ test("every category is a documented value", () => {
     );
   }
 });
+
+test("the Codex and Claude Code pages replay through their own CLI and judge through the other, uncapped", () => {
+  const planRoutes = (slug) =>
+    readPage(`${slug}.json`).setup.commands.flatMap(({ command }) => {
+      const route = command.match(/(?:^|\s)--route (\S+)/u)?.[1];
+      const judgeRoute = command.match(/(?:^|\s)--judge-route (\S+)/u)?.[1];
+      if (route === undefined) return [];
+      assert.ok(
+        !command.includes("--max-cost-usd"),
+        `${slug}: plan routes have no default cap, so the plan-route command sets no --max-cost-usd`,
+      );
+      return [`${route} ${judgeRoute}`];
+    });
+  assert.deepEqual(planRoutes("codex"), ["codex-login claude-login"]);
+  assert.deepEqual(planRoutes("claude-code"), ["claude-login codex-login"]);
+});

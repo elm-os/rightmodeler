@@ -4,7 +4,7 @@
   "website": "https://claude.com/product/claude-code",
   "logo": "/integrations/logos/claude-code.svg",
   "category": "trace-source",
-  "categoryLabel": "Trace source · dedicated adapter",
+  "categoryLabel": "Trace source · replay route",
   "title": "Claude Code integration: replay sessions on cheaper models",
   "description": "Point rightmodeler at ~/.claude/projects: it reads your sessions as traces and measures cheaper models against the output you accepted, step by step.",
   "h1": "rightmodeler + Claude Code",
@@ -24,7 +24,7 @@
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you accepted",
-      "body": "Each step is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, picking a judge from a family that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
+      "body": "Each step is replayed against cheaper candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route claude-login, the claude CLI you are signed in to, on your Claude plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, picking a judge from a vendor that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
@@ -33,7 +33,7 @@
     }
   ],
   "setup": {
-    "intro": "Nothing to install: npx runs the published CLI, and init finds your Claude Code sessions on disk automatically. The coding-agent skill also runs inside the tool that wrote the traces. Sessions live at ~/.claude/projects; point the CLI at one project folder or a single session file.",
+    "intro": "Nothing to install: npx runs the published CLI, and init finds your Claude Code sessions on disk automatically. The coding-agent skill also runs inside the tool that wrote the traces. Sessions live at ~/.claude/projects; point the CLI at one project folder or a single session file. An interactive init asks how to call models and remembers the answer for the repository: an API key for a provider or gateway, or the plans you are signed in to on this machine, through your own claude and codex CLIs. rightmodeler never reads your tokens or credential files, and it keeps API key variables away from those CLIs.",
     "commands": [
       {
         "comment": "# your sessions are already on disk, one folder per project",
@@ -46,6 +46,14 @@
       {
         "comment": "# then run it against your replay endpoint",
         "command": "npx rightmodeler init --traces ~/.claude/projects/<project>/<session>.jsonl --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+      },
+      {
+        "comment": "# or replay on your Claude plan, judged through your ChatGPT plan",
+        "command": "npx rightmodeler init --traces ~/.claude/projects/<project>/<session>.jsonl --route claude-login --judge-route codex-login"
+      },
+      {
+        "comment": "# what a plan route does, and what it cannot do",
+        "command": "npx rightmodeler docs model-routes"
       }
     ]
   },
@@ -96,13 +104,19 @@
     {
       "title": "Audit an agent built on Claude Code",
       "body": "If your team ships automation on headless Claude Code (CI jobs, hooks, subagent fan-outs) the session logs are already complete traces. The audit reads them as they are, so a coding agent gets right-sized without standing up an observability stack first."
+    },
+    {
+      "title": "Replay through your plan",
+      "body": "No API key needed: --route claude-login replays candidates through the claude CLI you are signed in to, and --judge-route codex-login has the codex CLI you are signed in to judge them, because the judge must come from a vendor other than both the candidates' and the recorded model's (an API key for a multi-vendor gateway can judge instead). The calls count against your plans' usage limits, the same limits as your own sessions: when one is reached the run stops and names the reset time, and rerunning the same command after the reset picks up where the run stopped. These calls write no session files, so they never turn up in ~/.claude/projects as traces."
     }
   ],
   "limits": [
     "It reads the JSONL session logs already on disk; it does not watch live sessions, and it never changes which model Claude Code uses. Acting on the report stays your decision.",
     "Replay needs plain-text model call sites in the repository it scans; session files are read as traces, and the audit is built for the model calls your own code makes.",
     "An assistant message has to carry a message id, a model, and a usage object. Rows missing any of those are dropped with a recorded reason rather than guessed at, and a message that changed model between rows is dropped too.",
-    "Claude Code logs token counts, including cache reads and writes, but no dollar cost. Historical spend is not derived from them; candidate calls are priced from what your replay endpoint reports.",
+    "Claude Code logs token counts, including cache reads and writes, but no dollar cost. Historical spend is not derived from them; candidate calls are priced from what your replay endpoint reports. Calls through a plan are priced at list price from a public model list, always as an estimate: a list-price equivalent, not a bill.",
+    "Through a plan, rightmodeler measures the model inside a coding CLI, not the API your app calls: claude adds its own instructions to every call, including your account's email address and the date, and cannot set temperature or an output cap. The report labels this. Only cases made of system or developer messages and one user message replay that way; multi-turn cases are left out with a named reason.",
+    "Plan routes run only on your own machine: rightmodeler refuses one when CI is set, and Mode B confirmation and --detach stay on an API route. Plan routes have no default limit on calls or spend: a run makes as many calls as it needs, and your plan's usage limit is the only stop.",
     "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Coding sessions are dense, so a short session usually abstains for want of distinct trajectories rather than producing a thin recommendation.",
     "Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in. That needs a --modeb-config file naming the image and the step map; without it the recommendation is reported as unconfirmed.",
     "It is a report, not a gateway. Claude Code keeps calling its provider directly; rightmodeler never sits in the request path."
@@ -114,7 +128,7 @@
     },
     {
       "q": "Do I need to export my traces first?",
-      "a": "No, this is the one integration with no export step. rightmodeler is installed as a Claude Code skill, so it runs inside the tool that wrote the logs and reads them straight off disk."
+      "a": "No, there is no export step. rightmodeler is installed as a Claude Code skill, so it runs inside the tool that wrote the logs and reads them straight off disk. Replay needs either the key for an OpenAI-compatible endpoint you replay through, or no key at all with --route claude-login --judge-route codex-login, which run through the claude and codex CLIs you are signed in to. The judge runs on the other CLI because it must come from a vendor other than both the candidates' and the recorded model's. When a plan reaches its usage limit, the run stops and names the reset time, and the same command picks up where it stopped after the reset. npx rightmodeler docs model-routes prints the full guide to both routes."
     },
     {
       "q": "How does it turn a transcript into steps?",
@@ -122,7 +136,7 @@
     },
     {
       "q": "Does my code leave my machine?",
-      "a": "Replays send step inputs, which for a coding session include your prompts and code, to candidate models through the endpoint you configured, under your own key, the same shape of call Claude Code already makes. There is no rightmodeler server and no account; nothing else holds your traces."
+      "a": "Replays send step inputs, which for a coding session include your prompts and code, to candidate models and the judge: through the endpoint you configured, under your own key, the same shape of call Claude Code already makes, or through the claude and codex CLIs you are signed in to, where Anthropic and OpenAI handle them under your plan accounts' data settings. There is no rightmodeler server and no account; nothing else holds your traces."
     },
     {
       "q": "Can it switch the model my sessions use?",
