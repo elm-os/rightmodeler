@@ -155,7 +155,7 @@ store is a direction item, not shipped.
 ```
 <store>/<projectId>/
   project.json
-  setup/         setup-state.json, call-site-inventory.json
+  setup/         setup-state.json, call-site-inventory.json, model-route.json
   cases/         immutable content-addressed corpus, per-stratum sampling weights
   steps/         <stepId>.json, the locked unit
   facts/         immutable Execution / RequestAttempt / Assessment / SpendEvent objects
@@ -651,6 +651,11 @@ npx rightmodeler init
 is the whole onboarding, resumable, with a machine protocol so a coding agent can drive it
 unattended: `--plan --output json` to preview, `--yes --through <phase> --output jsonl` to run
 and stream events, and `--max-cost-usd` to bound a run.
+
+Run in a terminal, `init` and `estimate` first ask how to call models (an API key, or a
+`claude` or `codex` CLI signed in on the machine) and keep the answer in
+`setup/model-route.json` as the next default; machine output, a non-terminal run and route
+flags never read it.
 
 Exit codes: `0` clean, `1` findings, `2` needs input, `3` the cost budget reached at a resumable
 boundary.

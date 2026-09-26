@@ -2,7 +2,10 @@ import {
   copyFile,
   mkdir,
   mkdtemp,
+  readdir,
+  readFile,
   rm,
+  symlink,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -11,7 +14,8 @@ import { join, resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { FsStore } from "@rightmodeler/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createProgram,
@@ -19,8 +23,10 @@ import {
   pipelineArgv,
   type PipelineCommandOptions,
 } from "./cli.js";
+import { saveModelRoute, type ModelRoute } from "./pipeline.js";
 import type { CliIo } from "./protocol.js";
 import { makeGitFixture } from "./test-utils/git-fixture.js";
+import { promptAnswers } from "./test-utils/prompt-answers.js";
 
 const temporaryDirectories: string[] = [];
 const validTracePath = fileURLToPath(
@@ -927,6 +933,552 @@ describe("CLI model routes", () => {
       expect(JSON.parse(captured.stderr()), args.join(" ")).toMatchObject({
         code: "missing_traces_path",
       });
+    }
+  });
+});
+
+const fakeBin = fileURLToPath(
+  new URL("../../../fixtures/plan-cli-stub/bin", import.meta.url),
+);
+const demoAppPath = fileURLToPath(
+  new URL("../../../fixtures/demo-app", import.meta.url),
+);
+const modelRouteKey = "project/setup/model-route.json";
+const otherUnset: ModelRoute = {
+  route: "api",
+  judgeRoute: "api",
+  api: {
+    preset: "other",
+    baseUrl: "http://127.0.0.1:9/v1",
+    apiKeyEnv: "RM_056_UNSET_KEY",
+  },
+};
+const otherUnsetFlags =
+  "--base-url http://127.0.0.1:9/v1 --api-key-env RM_056_UNSET_KEY";
+const question = "How should rightmodeler call models?";
+const unsetKey =
+  "Provider API key environment variable is not set: RM_056_UNSET_KEY";
+const noProvider = "Provider configuration is required when replay is reached.";
+const noTraces = "A trace input path is required when ingest is reached.";
+
+async function routeRepo(
+  source?: string,
+): Promise<{ root: string; repo: string; homeDir: string }> {
+  const root = await mkdtemp(join(tmpdir(), "rightmodeler-cli-route-"));
+  temporaryDirectories.push(root);
+  const repo = await makeGitFixture(root, source);
+  return { root, repo, homeDir: join(root, "home") };
+}
+
+async function planClis(
+  root: string,
+  clis: ReadonlyArray<"claude" | "codex">,
+): Promise<{ env: NodeJS.ProcessEnv; records(): Promise<string[]> }> {
+  const bin = join(root, "bin");
+  await mkdir(bin);
+  await symlink(process.execPath, join(bin, "node"));
+  for (const cli of clis) await symlink(join(fakeBin, cli), join(bin, cli));
+  const record = join(root, "plan-stub-record.jsonl");
+  vi.stubEnv("PATH", `${bin}:/usr/bin:/bin`);
+  return {
+    env: {
+      PATH: `${bin}:/usr/bin:/bin`,
+      CODEX_HOME: join(root, "codex-home"),
+      PLAN_STUB_RECORD: record,
+    },
+    async records() {
+      const text = await readFile(record, "utf8").catch(() => "");
+      return text
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .flatMap((line) => {
+          const { argv } = JSON.parse(line) as { argv?: string[] };
+          return argv === undefined ? [] : [argv.join(" ")];
+        })
+        .sort();
+    },
+  };
+}
+
+function terminal(
+  homeDir: string,
+  answers: readonly string[],
+  env: NodeJS.ProcessEnv,
+  tty = true,
+): {
+  io: CliIo;
+  runtime: Parameters<typeof executeCli>[2];
+  stdout(): string;
+  stderr(): string;
+} {
+  const answering = promptAnswers(answers);
+  const captured = captureIo();
+  const isTTY = tty ? true : undefined;
+  return {
+    io: {
+      stdout: (value) => {
+        captured.io.stdout(value);
+        answering.observe(value);
+      },
+      stderr: captured.io.stderr,
+    },
+    runtime: {
+      stdin: Object.assign(answering.input, { isTTY }),
+      stdout: Object.assign(
+        new Writable({
+          write(_chunk, _encoding, callback) {
+            callback();
+          },
+        }),
+        { isTTY },
+      ),
+      env,
+      homeDir,
+      now: () => new Date("2026-08-15T00:00:00.000Z"),
+    },
+    stdout: captured.stdout,
+    stderr: captured.stderr,
+  };
+}
+
+async function savedRoute(repo: string): Promise<string | null> {
+  const entry = await new FsStore(join(repo, ".rightmodeler")).get(
+    modelRouteKey,
+  );
+  return entry === null ? null : Buffer.from(entry.body).toString("utf8");
+}
+
+async function storeText(repo: string): Promise<string> {
+  const root = join(repo, ".rightmodeler");
+  const files = await readdir(root, { recursive: true, withFileTypes: true });
+  const texts = await Promise.all(
+    files
+      .filter((file) => file.isFile())
+      .map((file) => readFile(join(file.parentPath, file.name), "utf8")),
+  );
+  return texts.join("\n");
+}
+
+describe("CLI model route question", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("asks how to call models before any stage when an interactive init reaches replay, even with --traces", async () => {
+    const { root, repo, homeDir } = await routeRepo(demoAppPath);
+    const { env } = await planClis(root, []);
+    const run = terminal(
+      homeDir,
+      ["2", "5", "http://127.0.0.1:9/v1", "RM_056_UNSET_KEY"],
+      env,
+    );
+
+    const code = await executeCli(
+      ["init", "--traces", validTracePath, "--repo", repo],
+      run.io,
+      run.runtime,
+    );
+
+    expect(run.stderr()).toContain(unsetKey);
+    expect(code).toBe(2);
+    expect(await savedRoute(repo)).toBe(
+      '{"version":1,"route":"api","judgeRoute":"api","api":{"preset":"other","baseUrl":"http://127.0.0.1:9/v1","apiKeyEnv":"RM_056_UNSET_KEY"}}',
+    );
+    const stdout = run.stdout();
+    expect(stdout).toContain("RM_056_UNSET_KEY is not set in this shell.");
+    expect(stdout).toContain(
+      `Saved for this repository. Next time, skip these questions with:\n  ${otherUnsetFlags}\n`,
+    );
+    expect(stdout.indexOf(question)).toBeGreaterThanOrEqual(0);
+    expect(
+      stdout.indexOf("Next time, skip these questions with:"),
+    ).toBeLessThan(stdout.indexOf("scan: started"));
+  }, 120_000);
+
+  it.each([
+    { name: "init --through replay", args: ["init", "--through", "replay"] },
+    { name: "estimate", args: ["estimate"] },
+  ])(
+    "asks with --through replay and for estimate ($name)",
+    async ({ args }) => {
+      const { root, repo, homeDir } = await routeRepo();
+      const { env } = await planClis(root, []);
+      const run = terminal(homeDir, ["2", "1", "", ""], env);
+
+      expect(
+        await executeCli([...args, "--repo", repo], run.io, run.runtime),
+      ).toBe(2);
+      expect(run.stderr()).toContain(noTraces);
+      expect(run.stdout()).toContain(question);
+      expect(run.stdout()).toContain(
+        "Next time, skip these questions with:\n  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY\n",
+      );
+      expect(await savedRoute(repo)).toBe(
+        '{"version":1,"route":"api","judgeRoute":"api","api":{"preset":"openrouter","baseUrl":"https://openrouter.ai/api/v1","apiKeyEnv":"OPENROUTER_API_KEY"}}',
+      );
+    },
+  );
+
+  it("saves a plan route with names only and prints its flags", async () => {
+    const { root, repo, homeDir } = await routeRepo();
+    const clis = await planClis(root, ["claude", "codex"]);
+    const run = terminal(homeDir, ["", "", "", "y", ""], {
+      ...clis.env,
+      RM_056_SENTINEL: "rm-056-sentinel-value",
+      OPENROUTER_API_KEY: "rm-056-sentinel-key",
+    });
+
+    const code = await executeCli(
+      ["init", "--repo", repo],
+      run.io,
+      run.runtime,
+    );
+
+    expect(run.stderr()).toContain(noTraces);
+    expect(code).toBe(2);
+    expect(await savedRoute(repo)).toBe(
+      '{"version":1,"route":"codex-login","judgeRoute":"claude-login"}',
+    );
+    expect(await storeText(repo)).not.toContain("rm-056-sentinel");
+    expect(run.stdout()).toContain(
+      "Saved for this repository. Next time, skip these questions with:\n  --route codex-login --judge-route claude-login\n",
+    );
+    expect(await clis.records()).toEqual([
+      "--version",
+      "--version",
+      '-c cli_auth_credentials_store="file" login status',
+      "auth status --json",
+    ]);
+  });
+
+  it("an OpenAI key judged through claude prints the route, judge route and price list", async () => {
+    const { root, repo, homeDir } = await routeRepo();
+    const clis = await planClis(root, ["claude"]);
+    const run = terminal(homeDir, ["2", "3", "", "y", ""], {
+      ...clis.env,
+      OPENAI_API_KEY: "rm-056-sentinel-key",
+    });
+
+    const code = await executeCli(
+      ["init", "--repo", repo],
+      run.io,
+      run.runtime,
+    );
+
+    expect(run.stderr()).toContain(noTraces);
+    expect(code).toBe(2);
+    expect(run.stdout()).toContain("OPENAI_API_KEY is set.\n");
+    expect(run.stdout()).toContain(
+      "Next time, skip these questions with:\n  --base-url https://api.openai.com/v1 --api-key-env OPENAI_API_KEY --route api --judge-route claude-login --catalog-reference https://ai-gateway.vercel.sh/v1/models\n",
+    );
+    expect(await savedRoute(repo)).toBe(
+      '{"version":1,"route":"api","judgeRoute":"claude-login","api":{"preset":"openai","baseUrl":"https://api.openai.com/v1","apiKeyEnv":"OPENAI_API_KEY","catalogReference":"https://ai-gateway.vercel.sh/v1/models"}}',
+    );
+    expect(await storeText(repo)).not.toContain("rm-056-sentinel");
+  });
+
+  it("a claude plan judged through an API key prints the route, judge route and endpoint", async () => {
+    const { root, repo, homeDir } = await routeRepo();
+    const clis = await planClis(root, ["claude"]);
+    const run = terminal(homeDir, ["", "", "", "", "", "y", ""], clis.env);
+
+    const code = await executeCli(
+      ["init", "--repo", repo],
+      run.io,
+      run.runtime,
+    );
+
+    expect(run.stderr()).toContain(noTraces);
+    expect(code).toBe(2);
+    expect(run.stdout()).toContain(
+      "Next time, skip these questions with:\n  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY --route claude-login --judge-route api\n",
+    );
+    expect(await savedRoute(repo)).toBe(
+      '{"version":1,"route":"claude-login","judgeRoute":"api","api":{"preset":"openrouter","baseUrl":"https://openrouter.ai/api/v1","apiKeyEnv":"OPENROUTER_API_KEY"}}',
+    );
+    expect(await clis.records()).toEqual(["--version", "auth status --json"]);
+  });
+
+  it("a flag passed with the question wins over the preset's value", async () => {
+    const { root, repo, homeDir } = await routeRepo();
+    const clis = await planClis(root, ["claude"]);
+    const run = terminal(homeDir, ["2", "3", "", "y", ""], clis.env);
+
+    const code = await executeCli(
+      ["init", "--catalog-reference", "./local.json", "--repo", repo],
+      run.io,
+      run.runtime,
+    );
+
+    expect(run.stderr()).toContain(noTraces);
+    expect(code).toBe(2);
+    expect(run.stdout()).toContain(
+      `Next time, skip these questions with:\n  --base-url https://api.openai.com/v1 --api-key-env OPENAI_API_KEY --route api --judge-route claude-login --catalog-reference ${resolve("./local.json")}\n`,
+    );
+    expect(JSON.parse((await savedRoute(repo))!)).toMatchObject({
+      api: { catalogReference: "https://ai-gateway.vercel.sh/v1/models" },
+    });
+  });
+
+  it("Enter keeps the saved route and --yes applies it without asking", async () => {
+    const { root, repo, homeDir } = await routeRepo(demoAppPath);
+    const clis = await planClis(root, ["claude", "codex"]);
+    await saveModelRoute({ repo }, otherUnset);
+    const kept = terminal(homeDir, [""], clis.env);
+
+    expect(
+      await executeCli(
+        ["init", "--traces", validTracePath, "--repo", repo],
+        kept.io,
+        kept.runtime,
+      ),
+    ).toBe(2);
+    expect(kept.stderr()).toContain(unsetKey);
+    expect(kept.stdout()).toContain(
+      `Models: ${otherUnsetFlags} (saved for this repository)\n`,
+    );
+    expect(kept.stdout()).not.toContain(question);
+    expect(kept.stdout()).not.toContain("Next time, skip these questions");
+
+    const yes = terminal(homeDir, [], clis.env);
+
+    expect(
+      await executeCli(
+        ["init", "--yes", "--traces", validTracePath, "--repo", repo],
+        yes.io,
+        yes.runtime,
+      ),
+    ).toBe(2);
+    expect(yes.stderr()).toContain(unsetKey);
+    expect(yes.stdout()).toContain(
+      `Using the saved model route: ${otherUnsetFlags}\n`,
+    );
+    expect(yes.stdout()).not.toContain("saved for this repository");
+    expect(yes.stdout()).not.toContain(question);
+    expect(await clis.records()).toEqual([]);
+  }, 120_000);
+
+  it("declining consent or cancelling continues with no route, saves nothing and no longer asks for a base URL", async () => {
+    const { root, repo, homeDir } = await routeRepo(demoAppPath);
+    const clis = await planClis(root, ["claude", "codex"]);
+    const declined = terminal(homeDir, ["", "", "", "n"], clis.env);
+
+    expect(
+      await executeCli(
+        ["init", "--traces", validTracePath, "--repo", repo],
+        declined.io,
+        declined.runtime,
+      ),
+    ).toBe(2);
+    expect(declined.stdout()).toContain("[y/N]: ");
+    expect(declined.stderr()).toContain(noProvider);
+    expect(declined.stdout()).not.toContain("Provider base URL");
+    expect(await savedRoute(repo)).toBeNull();
+
+    const cancelled = terminal(homeDir, [], clis.env);
+
+    expect(
+      await executeCli(
+        ["init", "--traces", validTracePath, "--repo", repo],
+        cancelled.io,
+        cancelled.runtime,
+      ),
+    ).toBe(2);
+    expect(cancelled.stdout()).toContain(question);
+    expect(cancelled.stderr()).toContain(noProvider);
+    expect(cancelled.stdout()).not.toContain("Provider base URL");
+    expect(await savedRoute(repo)).toBeNull();
+  }, 120_000);
+
+  it.each([
+    { name: "machine output", args: ["--output", "json", "init"], tty: true },
+    { name: "no terminal", args: ["init"], tty: false },
+    {
+      name: "route flags",
+      args: ["init", "--route", "codex-login", "--judge-route", "claude-login"],
+      tty: true,
+    },
+    { name: "api route flag", args: ["init", "--route", "api"], tty: true },
+    {
+      name: "base URL",
+      args: ["init", "--base-url", "http://127.0.0.1:9/v1"],
+      tty: true,
+    },
+    {
+      name: "key variable",
+      args: ["init", "--api-key-env", "RM_056_UNSET_KEY"],
+      tty: true,
+    },
+    { name: "header", args: ["init", "--header", "x-a: b"], tty: true },
+    { name: "plan", args: ["init", "--plan"], tty: true },
+    {
+      name: "through shortlist",
+      args: ["init", "--through", "shortlist"],
+      tty: true,
+    },
+  ])(
+    "never asks or reads a saved route with machine output, without a terminal, with a route or API flag, with --plan, or with --through shortlist ($name)",
+    async ({ args, tty }) => {
+      const { root, repo, homeDir } = await routeRepo();
+      const clis = await planClis(root, ["claude", "codex"]);
+      await saveModelRoute({ repo }, otherUnset);
+      const run = terminal(homeDir, [""], clis.env, tty);
+      const code = args.includes("--plan") ? 0 : 2;
+
+      expect(
+        await executeCli([...args, "--repo", repo], run.io, run.runtime),
+      ).toBe(code);
+      if (code === 2) expect(run.stderr()).toContain(noTraces);
+      expect(run.stdout()).not.toContain(question);
+      expect(run.stdout()).not.toContain("saved for this repository");
+      expect(run.stdout()).not.toContain("Using the saved model route");
+      expect(await clis.records()).toEqual([]);
+    },
+  );
+
+  it("never reads the saved route in a non-interactive run", async () => {
+    const { root, repo, homeDir } = await routeRepo(demoAppPath);
+    const clis = await planClis(root, ["claude", "codex"]);
+    await saveModelRoute({ repo }, otherUnset);
+    for (const args of [
+      ["--output", "json", "init"],
+      ["init", "--yes"],
+    ]) {
+      const run = terminal(homeDir, [], clis.env, false);
+
+      expect(
+        await executeCli(
+          [...args, "--traces", validTracePath, "--repo", repo],
+          run.io,
+          run.runtime,
+        ),
+        args.join(" "),
+      ).toBe(2);
+      expect(run.stderr(), args.join(" ")).toContain(noProvider);
+      expect(run.stdout(), args.join(" ")).not.toContain(
+        "Using the saved model route",
+      );
+    }
+  }, 120_000);
+
+  it("ignores an unreadable saved route and asks again", async () => {
+    for (const body of [
+      Buffer.from(JSON.stringify({ version: 2 })),
+      Buffer.from("{not json"),
+      Buffer.from(
+        JSON.stringify({ version: 2, route: "api", judgeRoute: "api" }),
+      ),
+      Buffer.from(
+        JSON.stringify({
+          version: 1,
+          route: "api",
+          judgeRoute: "api",
+          api: {
+            preset: "other",
+            baseUrl: "https://u:rm056pw@x.example/v1",
+            apiKeyEnv: "RM_KEY",
+          },
+        }),
+      ),
+      Buffer.from(
+        JSON.stringify({
+          version: 1,
+          route: "api",
+          judgeRoute: "api",
+          api: {
+            preset: "other",
+            baseUrl: "https://x.example/v1",
+            apiKeyEnv: "sk-live-rm056secret",
+          },
+        }),
+      ),
+    ]) {
+      const { root, repo, homeDir } = await routeRepo();
+      await new FsStore(join(repo, ".rightmodeler")).compareAndSwap(
+        modelRouteKey,
+        0,
+        body,
+        0,
+      );
+      const { env } = await planClis(root, []);
+      const run = terminal(homeDir, ["2", "", "", ""], env);
+
+      expect(
+        await executeCli(["init", "--repo", repo], run.io, run.runtime),
+      ).toBe(2);
+      expect(run.stderr()).toContain(noTraces);
+      expect(run.stdout()).toContain(question);
+      expect(run.stdout()).not.toContain("saved for this repository");
+      expect(run.stdout()).not.toContain("rm056");
+      expect(JSON.parse((await savedRoute(repo))!)).toEqual({
+        version: 1,
+        route: "api",
+        judgeRoute: "api",
+        api: {
+          preset: "openrouter",
+          baseUrl: "https://openrouter.ai/api/v1",
+          apiKeyEnv: "OPENROUTER_API_KEY",
+        },
+      });
+    }
+  });
+
+  it("with --modeb-config ignores a saved plan route and offers only API routes", async () => {
+    for (const stored of [
+      { route: "codex-login", judgeRoute: "claude-login" },
+      {
+        route: "api",
+        judgeRoute: "claude-login",
+        api: {
+          preset: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          apiKeyEnv: "OPENAI_API_KEY",
+          catalogReference: "https://ai-gateway.vercel.sh/v1/models",
+        },
+      },
+    ] satisfies ModelRoute[]) {
+      const { root, repo, homeDir } = await routeRepo();
+      const clis = await planClis(root, ["claude", "codex"]);
+      const modeB = join(root, "modeb.json");
+      await writeFile(
+        modeB,
+        JSON.stringify({
+          version: "1",
+          image: "node:24",
+          appSpec: { mountPath: "/app", command: ["node", "{caseFile}"] },
+          stepMap: { answer: "x-step" },
+        }),
+      );
+      await saveModelRoute({ repo }, stored);
+      const run = terminal(homeDir, ["1", "", ""], clis.env);
+
+      expect(
+        await executeCli(
+          ["init", "--modeb-config", modeB, "--repo", repo],
+          run.io,
+          run.runtime,
+        ),
+        stored.route,
+      ).toBe(2);
+      expect(run.stderr(), stored.route).toContain(noTraces);
+      const stdout = run.stdout();
+      expect(stdout, stored.route).toContain(
+        "Mode B confirmation (--modeb-config) needs an API key for candidates and the judge, so only OpenRouter, Vercel AI Gateway and other endpoints are offered.\nWhich provider or gateway?\n1. OpenRouter\n2. Vercel AI Gateway\n3. Another OpenAI-compatible endpoint\n",
+      );
+      for (const hidden of [
+        "saved for this repository",
+        question,
+        "OpenAI (",
+        "Anthropic (",
+        "claude (",
+        "codex (",
+      ]) {
+        expect(stdout, stored.route).not.toContain(hidden);
+      }
+      expect(stdout, stored.route).toContain(
+        "Next time, skip these questions with:\n  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY\n",
+      );
+      expect(await clis.records(), stored.route).toEqual([]);
     }
   });
 });
