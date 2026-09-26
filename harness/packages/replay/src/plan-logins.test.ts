@@ -30,7 +30,7 @@ async function machine(
   clis: { readonly claude?: "fake" | "unrunnable"; readonly codex?: "fake" },
   extra: NodeJS.ProcessEnv = {},
 ): Promise<{ env: NodeJS.ProcessEnv; records(): Promise<StubRecord[]> }> {
-  const root = await mkdtemp(join(tmpdir(), "rightmodeler-plan-logins-"));
+  const root = await mkdtemp(join(tmpdir(), "rightmodeler-logins-"));
   roots.push(root);
   const bin = join(root, "bin");
   await mkdir(bin);

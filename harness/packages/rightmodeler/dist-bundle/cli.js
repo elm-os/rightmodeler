@@ -44379,9 +44379,15 @@ function question(streams, prompt, accept = () => true) {
   });
   return new Promise((resolveAnswer) => {
     let settled = false;
+    const cancel = () => {
+      readline.close();
+      finish({ answer: "", cancelled: true });
+    };
     const finish = (asked) => {
       if (settled) return;
       settled = true;
+      streams.input.off("close", cancel);
+      streams.output.off("close", cancel);
       resolveAnswer(asked);
     };
     const ask = () => {
@@ -44395,14 +44401,8 @@ function question(streams, prompt, accept = () => true) {
       });
     };
     readline.once("close", () => finish({ answer: "", cancelled: true }));
-    streams.input.once("close", () => {
-      readline.close();
-      finish({ answer: "", cancelled: true });
-    });
-    streams.output.once("close", () => {
-      readline.close();
-      finish({ answer: "", cancelled: true });
-    });
+    streams.input.once("close", cancel);
+    streams.output.once("close", cancel);
     ask();
   });
 }
@@ -46001,7 +46001,10 @@ async function readIngestResumption(options) {
     ...checkpoint.traceSource === void 0 ? {} : { tracePath: checkpoint.traceSource }
   };
 }
-var routeKindSchema = external_exports.enum(["api", "claude-login", "codex-login"]);
+var routeKindSchema = external_exports.enum([
+  "api",
+  ...Object.keys(planRouteVendors)
+]);
 var savedModelRouteSchema = external_exports.strictObject({
   version: external_exports.literal(1),
   route: routeKindSchema,

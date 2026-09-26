@@ -874,7 +874,10 @@ export async function readIngestResumption(options: PipelineOptions): Promise<{
   };
 }
 
-const routeKindSchema = z.enum(["api", "claude-login", "codex-login"]);
+const routeKindSchema = z.enum([
+  "api",
+  ...(Object.keys(planRouteVendors) as PlanRouteKind[]),
+]);
 const savedModelRouteSchema = z.strictObject({
   version: z.literal(1),
   route: routeKindSchema,

@@ -450,9 +450,15 @@ function question(
   });
   return new Promise((resolveAnswer) => {
     let settled = false;
+    const cancel = (): void => {
+      readline.close();
+      finish({ answer: "", cancelled: true });
+    };
     const finish = (asked: Asked): void => {
       if (settled) return;
       settled = true;
+      streams.input.off("close", cancel);
+      streams.output.off("close", cancel);
       resolveAnswer(asked);
     };
     const ask = (): void => {
@@ -466,14 +472,8 @@ function question(
       });
     };
     readline.once("close", () => finish({ answer: "", cancelled: true }));
-    streams.input.once("close", () => {
-      readline.close();
-      finish({ answer: "", cancelled: true });
-    });
-    streams.output.once("close", () => {
-      readline.close();
-      finish({ answer: "", cancelled: true });
-    });
+    streams.input.once("close", cancel);
+    streams.output.once("close", cancel);
     ask();
   });
 }

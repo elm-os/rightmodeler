@@ -1085,6 +1085,7 @@ describe("CLI model route question", () => {
       '{"version":1,"route":"api","judgeRoute":"api","api":{"preset":"other","baseUrl":"http://127.0.0.1:9/v1","apiKeyEnv":"RM_056_UNSET_KEY"}}',
     );
     const stdout = run.stdout();
+    expect(stdout).toContain("RM_056_UNSET_KEY is not set in this shell.");
     expect(stdout).toContain(
       `Saved for this repository. Next time, skip these questions with:\n  ${otherUnsetFlags}\n`,
     );
@@ -1093,6 +1094,30 @@ describe("CLI model route question", () => {
       stdout.indexOf("Next time, skip these questions with:"),
     ).toBeLessThan(stdout.indexOf("scan: started"));
   }, 120_000);
+
+  it.each([
+    { name: "init --through replay", args: ["init", "--through", "replay"] },
+    { name: "estimate", args: ["estimate"] },
+  ])(
+    "asks with --through replay and for estimate ($name)",
+    async ({ args }) => {
+      const { root, repo, homeDir } = await routeRepo();
+      const { env } = await planClis(root, []);
+      const run = terminal(homeDir, ["2", "1", "", ""], env);
+
+      expect(
+        await executeCli([...args, "--repo", repo], run.io, run.runtime),
+      ).toBe(2);
+      expect(run.stderr()).toContain(noTraces);
+      expect(run.stdout()).toContain(question);
+      expect(run.stdout()).toContain(
+        "Next time, skip these questions with:\n  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY\n",
+      );
+      expect(await savedRoute(repo)).toBe(
+        '{"version":1,"route":"api","judgeRoute":"api","api":{"preset":"openrouter","baseUrl":"https://openrouter.ai/api/v1","apiKeyEnv":"OPENROUTER_API_KEY"}}',
+      );
+    },
+  );
 
   it("saves a plan route with names only and prints its flags", async () => {
     const { root, repo, homeDir } = await routeRepo();
@@ -1150,6 +1175,28 @@ describe("CLI model route question", () => {
       '{"version":1,"route":"api","judgeRoute":"claude-login","api":{"preset":"openai","baseUrl":"https://api.openai.com/v1","apiKeyEnv":"OPENAI_API_KEY","catalogReference":"https://ai-gateway.vercel.sh/v1/models"}}',
     );
     expect(await storeText(repo)).not.toContain("rm-056-sentinel");
+  });
+
+  it("a claude plan judged through an API key prints the route, judge route and endpoint", async () => {
+    const { root, repo, homeDir } = await routeRepo();
+    const clis = await planClis(root, ["claude"]);
+    const run = terminal(homeDir, ["", "", "", "", "", "y", ""], clis.env);
+
+    const code = await executeCli(
+      ["init", "--repo", repo],
+      run.io,
+      run.runtime,
+    );
+
+    expect(run.stderr()).toContain(noTraces);
+    expect(code).toBe(2);
+    expect(run.stdout()).toContain(
+      "Next time, skip these questions with:\n  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY --route claude-login --judge-route api\n",
+    );
+    expect(await savedRoute(repo)).toBe(
+      '{"version":1,"route":"claude-login","judgeRoute":"api","api":{"preset":"openrouter","baseUrl":"https://openrouter.ai/api/v1","apiKeyEnv":"OPENROUTER_API_KEY"}}',
+    );
+    expect(await clis.records()).toEqual(["--version", "auth status --json"]);
   });
 
   it("a flag passed with the question wins over the preset's value", async () => {
@@ -1318,6 +1365,33 @@ describe("CLI model route question", () => {
     for (const body of [
       Buffer.from(JSON.stringify({ version: 2 })),
       Buffer.from("{not json"),
+      Buffer.from(
+        JSON.stringify({ version: 2, route: "api", judgeRoute: "api" }),
+      ),
+      Buffer.from(
+        JSON.stringify({
+          version: 1,
+          route: "api",
+          judgeRoute: "api",
+          api: {
+            preset: "other",
+            baseUrl: "https://u:rm056pw@x.example/v1",
+            apiKeyEnv: "RM_KEY",
+          },
+        }),
+      ),
+      Buffer.from(
+        JSON.stringify({
+          version: 1,
+          route: "api",
+          judgeRoute: "api",
+          api: {
+            preset: "other",
+            baseUrl: "https://x.example/v1",
+            apiKeyEnv: "sk-live-rm056secret",
+          },
+        }),
+      ),
     ]) {
       const { root, repo, homeDir } = await routeRepo();
       await new FsStore(join(repo, ".rightmodeler")).compareAndSwap(
@@ -1335,6 +1409,7 @@ describe("CLI model route question", () => {
       expect(run.stderr()).toContain(noTraces);
       expect(run.stdout()).toContain(question);
       expect(run.stdout()).not.toContain("saved for this repository");
+      expect(run.stdout()).not.toContain("rm056");
       expect(JSON.parse((await savedRoute(repo))!)).toEqual({
         version: 1,
         route: "api",
@@ -1349,49 +1424,61 @@ describe("CLI model route question", () => {
   });
 
   it("with --modeb-config ignores a saved plan route and offers only API routes", async () => {
-    const { root, repo, homeDir } = await routeRepo();
-    const clis = await planClis(root, ["claude", "codex"]);
-    const modeB = join(root, "modeb.json");
-    await writeFile(
-      modeB,
-      JSON.stringify({
-        version: "1",
-        image: "node:24",
-        appSpec: { mountPath: "/app", command: ["node", "{caseFile}"] },
-        stepMap: { answer: "x-step" },
-      }),
-    );
-    await saveModelRoute(
-      { repo },
+    for (const stored of [
       { route: "codex-login", judgeRoute: "claude-login" },
-    );
-    const run = terminal(homeDir, ["1", "", ""], clis.env);
+      {
+        route: "api",
+        judgeRoute: "claude-login",
+        api: {
+          preset: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          apiKeyEnv: "OPENAI_API_KEY",
+          catalogReference: "https://ai-gateway.vercel.sh/v1/models",
+        },
+      },
+    ] satisfies ModelRoute[]) {
+      const { root, repo, homeDir } = await routeRepo();
+      const clis = await planClis(root, ["claude", "codex"]);
+      const modeB = join(root, "modeb.json");
+      await writeFile(
+        modeB,
+        JSON.stringify({
+          version: "1",
+          image: "node:24",
+          appSpec: { mountPath: "/app", command: ["node", "{caseFile}"] },
+          stepMap: { answer: "x-step" },
+        }),
+      );
+      await saveModelRoute({ repo }, stored);
+      const run = terminal(homeDir, ["1", "", ""], clis.env);
 
-    expect(
-      await executeCli(
-        ["init", "--modeb-config", modeB, "--repo", repo],
-        run.io,
-        run.runtime,
-      ),
-    ).toBe(2);
-    expect(run.stderr()).toContain(noTraces);
-    const stdout = run.stdout();
-    expect(stdout).toContain(
-      "Mode B confirmation (--modeb-config) needs an API key for candidates and the judge, so only OpenRouter, Vercel AI Gateway and other endpoints are offered.\nWhich provider or gateway?\n1. OpenRouter\n2. Vercel AI Gateway\n3. Another OpenAI-compatible endpoint\n",
-    );
-    for (const hidden of [
-      "saved for this repository",
-      question,
-      "OpenAI (",
-      "Anthropic (",
-      "claude (",
-      "codex (",
-    ]) {
-      expect(stdout).not.toContain(hidden);
+      expect(
+        await executeCli(
+          ["init", "--modeb-config", modeB, "--repo", repo],
+          run.io,
+          run.runtime,
+        ),
+        stored.route,
+      ).toBe(2);
+      expect(run.stderr(), stored.route).toContain(noTraces);
+      const stdout = run.stdout();
+      expect(stdout, stored.route).toContain(
+        "Mode B confirmation (--modeb-config) needs an API key for candidates and the judge, so only OpenRouter, Vercel AI Gateway and other endpoints are offered.\nWhich provider or gateway?\n1. OpenRouter\n2. Vercel AI Gateway\n3. Another OpenAI-compatible endpoint\n",
+      );
+      for (const hidden of [
+        "saved for this repository",
+        question,
+        "OpenAI (",
+        "Anthropic (",
+        "claude (",
+        "codex (",
+      ]) {
+        expect(stdout, stored.route).not.toContain(hidden);
+      }
+      expect(stdout, stored.route).toContain(
+        "Next time, skip these questions with:\n  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY\n",
+      );
+      expect(await clis.records(), stored.route).toEqual([]);
     }
-    expect(stdout).toContain(
-      "Next time, skip these questions with:\n  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY\n",
-    );
-    expect(await clis.records()).toEqual([]);
   });
 });

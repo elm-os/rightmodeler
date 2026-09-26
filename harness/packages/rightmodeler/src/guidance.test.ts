@@ -534,7 +534,7 @@ describe("model route question", () => {
   });
 
   it("consent: anything but y returns no route, and a plan kind already in the saved route is not asked again", async () => {
-    for (const answer of ["n", "", "sure"]) {
+    for (const answer of ["n", "", "sure", "yeah"]) {
       const declined = await chooseRoute(["1", "1", "1", answer]);
 
       expect(declined.route, answer).toBeUndefined();
@@ -577,6 +577,28 @@ describe("model route question", () => {
     expect(added.output).toContain(
       "Send recorded prompts through your plans? [y/N]: ",
     );
+  });
+
+  it("leaves no listener on the terminal streams however many questions it asks", async () => {
+    const answering = promptAnswers(["2", ...Array(12).fill("3"), "1", ""]);
+    const output = new Writable({
+      write(chunk, _encoding, callback) {
+        answering.observe(String(chunk));
+        callback();
+      },
+    });
+
+    const route = await promptForModelRoute({
+      input: answering.input,
+      output,
+      plans: async () => [codexReady, claudeMissing],
+      hasEnv: () => true,
+      priceList,
+    });
+
+    expect(route).toEqual(openRouter);
+    expect(answering.input.listenerCount("close")).toBe(0);
+    expect(output.listenerCount("close")).toBe(0);
   });
 
   it("cancelling at any question returns no route", async () => {
