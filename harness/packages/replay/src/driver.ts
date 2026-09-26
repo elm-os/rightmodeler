@@ -311,6 +311,43 @@ export function toWireMessages(
     : [{ role: "system", content: system }, ...wire];
 }
 
+// The judge compares the candidate's text with the recorded answer's text. A
+// recorded output that is one assistant message of text (alone, as a
+// response's only choice, or as a one-item list) is shown as that text, read
+// the way toWireMessages reads a recorded message. Tool calls, parts other than
+// text and several messages keep the recorded JSON.
+function recordedAnswerText(output: JsonValue): string {
+  if (typeof output === "string") return output;
+  const objectOf = (value: JsonValue | undefined) =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? value
+      : undefined;
+  const choices = objectOf(output)?.choices;
+  const answer = Array.isArray(choices)
+    ? choices.length === 1
+      ? objectOf(choices[0])?.message
+      : undefined
+    : output;
+  const message = objectOf(
+    Array.isArray(answer) && answer.length === 1 ? answer[0] : answer,
+  );
+  if (
+    message?.role === "assistant" &&
+    !Object.entries(message).some(
+      ([key, value]) =>
+        (key === "function_call" && value !== null) ||
+        key.startsWith("tool_calls."),
+    )
+  ) {
+    try {
+      return toWireMessages([message])[0]!.content;
+    } catch {
+      // Tool calls or parts other than text: the recorded JSON below.
+    }
+  }
+  return JSON.stringify(output);
+}
+
 export async function replayModeA(
   input: ReplayModeAInput,
 ): Promise<ReplayModeAResult> {
@@ -538,10 +575,7 @@ export async function replayModeA(
         judgeModel: judge.judgeModel,
         supportsStructuredOutput: judge.supportsStructuredOutput,
         task: job.cell.recordedCase.task,
-        reference:
-          typeof job.cell.recordedCase.referenceOutput === "string"
-            ? job.cell.recordedCase.referenceOutput
-            : JSON.stringify(job.cell.recordedCase.referenceOutput),
+        reference: recordedAnswerText(job.cell.recordedCase.referenceOutput),
         candidate: job.candidateOutput,
       });
       return { status: "success", assessment };

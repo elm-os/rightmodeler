@@ -30350,6 +30350,21 @@ function toWireMessages(messages, system) {
   });
   return system === void 0 ? wire : [{ role: "system", content: system }, ...wire];
 }
+function recordedAnswerText(output) {
+  if (typeof output === "string")
+    return output;
+  const objectOf2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+  const choices = objectOf2(output)?.choices;
+  const answer = Array.isArray(choices) ? choices.length === 1 ? objectOf2(choices[0])?.message : void 0 : output;
+  const message2 = objectOf2(Array.isArray(answer) && answer.length === 1 ? answer[0] : answer);
+  if (message2?.role === "assistant" && !Object.entries(message2).some(([key, value]) => key === "function_call" && value !== null || key.startsWith("tool_calls."))) {
+    try {
+      return toWireMessages([message2])[0].content;
+    } catch {
+    }
+  }
+  return JSON.stringify(output);
+}
 async function replayModeA(input) {
   if (!Number.isSafeInteger(input.concurrency) || input.concurrency < 1) {
     throw new Error("concurrency must be a positive integer");
@@ -30511,7 +30526,7 @@ async function replayModeA(input) {
         judgeModel: judge.judgeModel,
         supportsStructuredOutput: judge.supportsStructuredOutput,
         task: job.cell.recordedCase.task,
-        reference: typeof job.cell.recordedCase.referenceOutput === "string" ? job.cell.recordedCase.referenceOutput : JSON.stringify(job.cell.recordedCase.referenceOutput),
+        reference: recordedAnswerText(job.cell.recordedCase.referenceOutput),
         candidate: job.candidateOutput
       });
       return { status: "success", assessment };
