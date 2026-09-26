@@ -181,6 +181,7 @@ import {
   type CodeContext,
 } from "./code-graph/index.js";
 import type { GithubClient } from "./github/index.js";
+import { isApiKeyEnvName, isShareableBaseUrl } from "./guidance.js";
 import { ProtocolError, Reporter } from "./protocol.js";
 import {
   formatDeltaPct,
@@ -871,6 +872,58 @@ export async function readIngestResumption(options: PipelineOptions): Promise<{
       ? {}
       : { tracePath: checkpoint.traceSource }),
   };
+}
+
+const routeKindSchema = z.enum(["api", "claude-login", "codex-login"]);
+const savedModelRouteSchema = z.strictObject({
+  version: z.literal(1),
+  route: routeKindSchema,
+  judgeRoute: routeKindSchema,
+  api: z
+    .strictObject({
+      preset: z.enum(["openrouter", "vercel", "openai", "anthropic", "other"]),
+      baseUrl: z.string().refine(isShareableBaseUrl),
+      apiKeyEnv: z.string().refine(isApiKeyEnvName),
+      catalogReference: z.string().optional(),
+    })
+    .optional(),
+});
+
+export type ModelRoute = Omit<z.infer<typeof savedModelRouteSchema>, "version">;
+
+function modelRouteKey(projectId: string): string {
+  return `${setupPrefix(projectId)}model-route.json`;
+}
+
+export async function readSavedModelRoute(options: {
+  readonly repo: string;
+  readonly store?: string;
+}): Promise<ModelRoute | undefined> {
+  const context = createHeadlessContext(options);
+  const entry = await context.store.get(modelRouteKey(context.projectId));
+  if (entry === null) return undefined;
+  let body: unknown;
+  try {
+    body = JSON.parse(Buffer.from(entry.body).toString("utf8"));
+  } catch {
+    return undefined;
+  }
+  const parsed = savedModelRouteSchema.safeParse(body);
+  if (!parsed.success) return undefined;
+  const { route, judgeRoute, api } = parsed.data;
+  return { route, judgeRoute, ...(api === undefined ? {} : { api }) };
+}
+
+export async function saveModelRoute(
+  options: { readonly repo: string; readonly store?: string },
+  route: ModelRoute,
+): Promise<void> {
+  const context = createHeadlessContext(options);
+  await putMutableJson(
+    context.store,
+    modelRouteKey(context.projectId),
+    savedModelRouteSchema.parse({ version: 1, ...route }),
+  );
 }
 
 export async function runPipeline(

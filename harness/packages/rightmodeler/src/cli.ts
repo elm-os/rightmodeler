@@ -8,6 +8,7 @@ import { Writable, type Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import {
+  detectPlanLogins,
   hopByHopHeaders,
   isPlanRouteKind,
   planRouteVendors,
@@ -26,12 +27,15 @@ import {
   readIngestResumption,
   readReport,
   readRunStatus,
+  readSavedModelRoute,
   readStatus,
   runAuditTabulate,
   runCorpusImport,
   runPipeline,
   runResultExport,
   runWatch,
+  saveModelRoute,
+  type ModelRoute,
   type PipelineOptions,
   type PipelineStage,
 } from "./pipeline.js";
@@ -50,7 +54,7 @@ import {
 } from "./protocol.js";
 import { discoverTraces, type DiscoveredTrace } from "./data/discover.js";
 import { TraceAdaptError } from "./data/index.js";
-import { promptForProviderBaseUrl, promptForTracePath } from "./guidance.js";
+import { promptForModelRoute, promptForTracePath } from "./guidance.js";
 import {
   approveDriftProposal,
   publishDriftProposal,
@@ -64,7 +68,7 @@ import {
   type RollbackResult,
   type RollbackSwapsOptions,
 } from "./rollback.js";
-import type { RouteKind } from "./routes.js";
+import { DEFAULT_PLAN_PRICE_LIST, type RouteKind } from "./routes.js";
 import { version } from "./version.js";
 import { docNames, readDoc } from "./cli-docs.js";
 
@@ -249,19 +253,15 @@ export function createProgram(
       reporter,
       runtime,
     );
-    const result = await withInputGuidance(
-      prepared,
-      local,
-      runtime,
-      async (options) =>
-        local.plan
-          ? {
-              ...(await planPipeline(options)),
-              executedStages: [],
-              verdicts: [],
-              recommendationExists: false,
-            }
-          : runPipeline(options),
+    const result = await withInputGuidance(prepared, async (options) =>
+      local.plan
+        ? {
+            ...(await planPipeline(options)),
+            executedStages: [],
+            verdicts: [],
+            recommendationExists: false,
+          }
+        : runPipeline(options),
     );
     reporter.result(result);
     return local.plan ||
@@ -289,15 +289,10 @@ export function createProgram(
       reporter,
       runtime,
     );
-    const result = await withInputGuidance(
-      prepared,
-      local,
-      runtime,
-      async (options) => {
-        await runPipeline({ ...options, through: "shortlist" });
-        return estimateReplay(options);
-      },
-    );
+    const result = await withInputGuidance(prepared, async (options) => {
+      await runPipeline({ ...options, through: "shortlist" });
+      return estimateReplay(options);
+    });
     reporter.result(result);
     return 0;
   });
@@ -818,7 +813,7 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
   if (command.name() === "init" || command.name() === "estimate") {
     command.option(
       "--yes",
-      "accept the newest discovered trace without prompting",
+      "accept the newest discovered trace and the saved model route without prompting",
     );
   }
   return command;
@@ -1012,16 +1007,65 @@ async function guidedPipelineOptions(
 ): Promise<{
   readonly options: PipelineOptions;
   readonly candidates: readonly DiscoveredTrace[];
-  readonly interactive: boolean;
   readonly selectedDiscoveredTrace?: string;
 }> {
-  const options = pipelineOptions(global, local, reporter);
+  let options = pipelineOptions(global, local, reporter);
   const interactive =
     global.output === "human" &&
     runtime.stdin.isTTY === true &&
     runtime.stdout.isTTY === true;
+  if (
+    interactive &&
+    !local.plan &&
+    (local.through === undefined ||
+      PIPELINE_STAGES.indexOf(local.through) >=
+        PIPELINE_STAGES.indexOf("replay")) &&
+    local.route === undefined &&
+    local.judgeRoute === undefined &&
+    local.baseUrl === undefined &&
+    local.apiKeyEnv === undefined &&
+    local.header === undefined
+  ) {
+    const stored = await readSavedModelRoute(options);
+    const saved =
+      local.modebConfig !== undefined &&
+      (stored?.route !== "api" || stored.judgeRoute !== "api")
+        ? undefined
+        : stored;
+    if (local.yes && saved !== undefined) {
+      reporter.io.stdout(
+        `Using the saved model route: ${routeFlags(routeOptions(saved, local))}\n`,
+      );
+    }
+    const route = local.yes
+      ? saved
+      : await promptForModelRoute({
+          input: runtime.stdin,
+          output: promptOutput(reporter.io, runtime.stdout.isTTY),
+          plans:
+            local.modebConfig === undefined
+              ? () => detectPlanLogins(runtime.env)
+              : undefined,
+          saved: saved && {
+            route: saved,
+            flags: routeFlags(routeOptions(saved, local)),
+          },
+          hasEnv: (name) => (runtime.env[name] ?? "") !== "",
+          priceList: DEFAULT_PLAN_PRICE_LIST,
+        });
+    if (route !== undefined) {
+      const chosen = routeOptions(route, local);
+      if (route !== saved) {
+        await saveModelRoute(options, route);
+        reporter.io.stdout(
+          `Saved for this repository. Next time, skip these questions with:\n  ${routeFlags(chosen)}\n`,
+        );
+      }
+      options = pipelineOptions(global, chosen, reporter);
+    }
+  }
   if (local.traces !== undefined || local.plan || local.through === "scan") {
-    return { options, candidates: [], interactive };
+    return { options, candidates: [] };
   }
   const resumption = await readIngestResumption(options);
   if (resumption.resumable) {
@@ -1030,7 +1074,7 @@ async function guidedPipelineOptions(
         `Resuming the ingested trace: ${resumption.tracePath}\n`,
       );
     }
-    return { options, candidates: [], interactive };
+    return { options, candidates: [] };
   }
   const candidates = await discoverTraces({
     repo: global.repo,
@@ -1054,20 +1098,45 @@ async function guidedPipelineOptions(
   return {
     options: traces === undefined ? options : { ...options, traces },
     candidates,
-    interactive,
     ...(traces === undefined ? {} : { selectedDiscoveredTrace: traces }),
   };
+}
+
+function routeOptions(
+  route: ModelRoute,
+  local: PipelineCommandOptions,
+): PipelineCommandOptions {
+  return {
+    ...(route.api === undefined
+      ? {}
+      : {
+          baseUrl: route.api.baseUrl,
+          apiKeyEnv: route.api.apiKeyEnv,
+          catalogReference: route.api.catalogReference,
+        }),
+    ...(route.route === "api" && route.judgeRoute === "api"
+      ? {}
+      : { route: route.route, judgeRoute: route.judgeRoute }),
+    ...local,
+  };
+}
+
+function routeFlags(local: PipelineCommandOptions): string {
+  return pipelineArgv({
+    route: local.route,
+    judgeRoute: local.judgeRoute,
+    baseUrl: local.baseUrl,
+    apiKeyEnv: local.apiKeyEnv,
+    catalogReference: local.catalogReference,
+  }).join(" ");
 }
 
 async function withInputGuidance<T>(
   prepared: {
     readonly options: PipelineOptions;
     readonly candidates: readonly DiscoveredTrace[];
-    readonly interactive: boolean;
     readonly selectedDiscoveredTrace?: string;
   },
-  local: PipelineCommandOptions,
-  runtime: CliRuntime,
   operation: (options: PipelineOptions) => Promise<T>,
 ): Promise<T> {
   try {
@@ -1096,33 +1165,7 @@ async function withInputGuidance<T>(
         remedy: "Rerun the command and choose a different trace file.",
       });
     }
-    if (
-      !(error instanceof ProtocolError) ||
-      error.code !== "missing_provider_configuration" ||
-      !prepared.interactive
-    ) {
-      throw error;
-    }
-    const baseUrl = await promptForProviderBaseUrl({
-      current: local.baseUrl,
-      input: runtime.stdin,
-      output: promptOutput(prepared.options.reporter.io, runtime.stdout.isTTY),
-    });
-    if (baseUrl === undefined) throw error;
-    const apiKeyEnv = local.apiKeyEnv ?? "RIGHTMODELER_API_KEY";
-    if (!runtime.env[apiKeyEnv]) {
-      throw new ProtocolError({
-        exitCode: 2,
-        code: "missing_provider_configuration",
-        message: `Provider API key environment variable is not set: ${apiKeyEnv}.`,
-        remedy: `Set the environment variable ${apiKeyEnv} to your provider API key, then rerun.`,
-      });
-    }
-    return operation({
-      ...prepared.options,
-      baseUrl,
-      apiKeyEnv,
-    });
+    throw error;
   }
 }
 
@@ -1335,6 +1378,8 @@ const PIPELINE_ARG_OPTIONS = [
   { flag: "--modeb-config", key: "modebConfig", kind: "path" },
   { flag: "--base-url", key: "baseUrl", kind: "value" },
   { flag: "--api-key-env", key: "apiKeyEnv", kind: "value" },
+  { flag: "--route", key: "route", kind: "value" },
+  { flag: "--judge-route", key: "judgeRoute", kind: "value" },
   { flag: "--max-cost-usd", key: "maxCostUsd", kind: "value" },
   { flag: "--max-concurrency", key: "maxConcurrency", kind: "value" },
   { flag: "--pricing-file", key: "pricingFile", kind: "path" },

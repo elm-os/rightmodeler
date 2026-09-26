@@ -11,6 +11,7 @@ export {
   type ReplayModeAResult,
 } from "./driver.js";
 export * from "./driver-modeb.js";
+export { detectPlanLogins, type PlanLoginStatus } from "./plan-logins.js";
 export {
   isPlanRouteKind,
   isSingleTurn,
