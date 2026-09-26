@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"00000000-0000-7000-8000-000000000000"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"{\"verdict\":\"pass\",\"reason\":\"The candidate conveys the same fact as the reference.\"}"}}
+{"type":"turn.completed","usage":{"input_tokens":1919,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":29,"reasoning_output_tokens":0}}
