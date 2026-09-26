@@ -7127,6 +7127,141 @@ describe("built CLI through plan routes", () => {
     }
   }, 180_000);
 
+  type SchemaRecord = CodexRecord & { outputSchema?: unknown };
+  const verdictSchema = {
+    type: "object",
+    properties: {
+      verdict: {
+        type: "string",
+        enum: ["equivalent", "minor_drift", "divergent"],
+      },
+      score: { type: "number", minimum: 0, maximum: 1 },
+      justification: { type: "string" },
+    },
+    required: ["verdict", "score", "justification"],
+    additionalProperties: false,
+  };
+
+  function judgeFailureKinds(ledger: Awaited<ReturnType<typeof readLedger>>) {
+    return ledger.spendEvents.flatMap(({ actor, reconcilableTo }) => {
+      const kind = (reconcilableTo as Record<string, unknown> | null)
+        ?.judgeFailureKind;
+      return actor === "judge" && kind !== undefined ? [kind] : [];
+    });
+  }
+
+  it("judges through claude-login with the verdict schema, replays codex candidates without one, and parses a justification that quotes the reference", async () => {
+    const run = await codexRouteRun(
+      "claude-schema-judge",
+      "codex-login",
+      "claude-login",
+    );
+
+    const result = await runCli(run.args("init"), {
+      env: await codexEnv(run.root, "claude-schema-judge", {
+        PLAN_STUB_FAULT: "quoted-justification",
+      }),
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    const ledger = await readLedger(
+      new FsStore(join(run.repo, ".rightmodeler")),
+      "project",
+    );
+    expect(judgeFailureKinds(ledger)).toEqual([]);
+    expect(ledger.executions.length).toBeGreaterThan(0);
+    expect(ledger.assessments).toHaveLength(ledger.executions.length);
+    for (const { artifactRef } of ledger.assessments) {
+      expect((artifactRef as Record<string, unknown>).justification).toContain(
+        'paraphrasing "prior to its debut performance"',
+      );
+    }
+    const judgeCalls = modelCalls(
+      await stubRecords(run.root, "claude-schema-judge"),
+    );
+    expect(judgeCalls.length).toBeGreaterThan(0);
+    for (const { argv } of judgeCalls) {
+      expect(argv!.at(-2)).toBe("--json-schema");
+      expect(JSON.parse(argv!.at(-1)!)).toEqual(verdictSchema);
+      expect(argv![argv!.indexOf("--max-turns") + 1]).toBe("3");
+    }
+    const execs = (await codexExecs(
+      run.root,
+      "claude-schema-judge",
+    )) as SchemaRecord[];
+    expect(execs.length).toBeGreaterThan(0);
+    for (const exec of execs) {
+      expect(exec.argv).not.toContain("--output-schema");
+      expect(exec).not.toHaveProperty("outputSchema");
+    }
+  }, 180_000);
+
+  it("judges through codex-login with the verdict schema file and replays claude candidates without one", async () => {
+    const run = await codexRouteRun(
+      "codex-schema-judge",
+      "claude-login",
+      "codex-login",
+    );
+
+    const result = await runCli(run.args("init"), {
+      env: await codexEnv(run.root, "codex-schema-judge"),
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    const ledger = await readLedger(
+      new FsStore(join(run.repo, ".rightmodeler")),
+      "project",
+    );
+    expect(judgeFailureKinds(ledger)).toEqual([]);
+    expect(ledger.executions.length).toBeGreaterThan(0);
+    expect(ledger.assessments).toHaveLength(ledger.executions.length);
+    const execs = (await codexExecs(
+      run.root,
+      "codex-schema-judge",
+    )) as SchemaRecord[];
+    expect(execs.length).toBeGreaterThan(0);
+    for (const { argv, outputSchema } of execs) {
+      const at = argv!.indexOf("--output-schema");
+      expect(argv!.slice(at, at + 3)).toEqual([
+        "--output-schema",
+        join(argv![argv!.indexOf("-C") + 1]!, "output-schema.json"),
+        "-o",
+      ]);
+      expect(outputSchema).toEqual(verdictSchema);
+    }
+    const candidateCalls = modelCalls(
+      await stubRecords(run.root, "codex-schema-judge"),
+    );
+    expect(candidateCalls.length).toBeGreaterThan(0);
+    for (const { argv } of candidateCalls) {
+      expect(argv).not.toContain("--json-schema");
+      expect(argv![argv!.indexOf("--max-turns") + 1]).toBe("1");
+    }
+  }, 180_000);
+
+  it("books a claude judge verdict that fails the schema as response_malformed", async () => {
+    const run = await codexRouteRun(
+      "claude-schema-mismatch",
+      "codex-login",
+      "claude-login",
+    );
+
+    const result = await runCli(run.args("init"), {
+      env: await codexEnv(run.root, "claude-schema-mismatch", {
+        PLAN_STUB_FAULT: "schema-mismatch",
+      }),
+    });
+
+    const ledger = await readLedger(
+      new FsStore(join(run.repo, ".rightmodeler")),
+      "project",
+    );
+    const kinds = judgeFailureKinds(ledger);
+    expect(kinds.length, result.stderr).toBeGreaterThan(0);
+    expect(new Set(kinds)).toEqual(new Set(["response_malformed"]));
+    expect(ledger.assessments).toEqual([]);
+  }, 180_000);
+
   it("states the latency sentence only with a claude-login route and the Codex sentences only with a codex-login route", async () => {
     expect(routed).toBeDefined();
     const claudeReport = await storeText(

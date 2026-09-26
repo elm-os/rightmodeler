@@ -184,6 +184,20 @@ function missingIsolation() {
   return undefined;
 }
 
+function outputSchema() {
+  let text;
+  try {
+    text = readFileSync(valueOf("--output-schema"), "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 function turnFailed(message, outcome) {
   const [thread] = capturedEvents("exec.jsonl");
   emit(thread);
@@ -231,11 +245,35 @@ async function exec(stdin) {
     finish("missing-isolation-setting", 96);
     return;
   }
+  const schemaFile = valueOf("--output-schema");
+  const schema = schemaFile === undefined ? undefined : outputSchema();
+  if (schema === null) {
+    process.stderr.write(
+      `Failed to read output schema file ${schemaFile}: No such file or directory (os error 2)\n`,
+    );
+    finish("output-schema-unreadable", 1);
+    return;
+  }
+  if (typeof schema === "string") {
+    process.stderr.write(
+      captured("output-schema-not-json.err").replace(
+        "OUTPUT-SCHEMA-FILE",
+        schemaFile,
+      ),
+    );
+    finish("output-schema-not-json", 1);
+    return;
+  }
   const instructionsFile = config("model_instructions_file");
-  const entries = readdirSync(process.cwd());
+  const entries = readdirSync(process.cwd()).sort();
   if (
     entries.join(", ") !==
-    (instructionsFile === undefined ? "" : "instructions.md")
+    [
+      ...(instructionsFile === undefined ? [] : ["instructions.md"]),
+      ...(schemaFile === undefined ? [] : ["output-schema.json"]),
+    ]
+      .sort()
+      .join(", ")
   ) {
     process.stderr.write(`the working directory holds ${entries.join(", ")}\n`);
     finish("working-directory-not-empty", 96);
@@ -307,6 +345,23 @@ async function exec(stdin) {
     finish("bad-model", 1);
     return;
   }
+  const notRequired =
+    schema === undefined
+      ? undefined
+      : Object.keys(schema.properties ?? {}).find(
+          (key) => !(schema.required ?? []).includes(key),
+        );
+  if (notRequired !== undefined) {
+    for (const event of capturedEvents("exec-invalid-json-schema.jsonl")) {
+      emit(
+        JSON.parse(
+          JSON.stringify(event).replaceAll("'score'", `'${notRequired}'`),
+        ),
+      );
+    }
+    finish("invalid-json-schema", 1);
+    return;
+  }
   const digest = createHash("sha256").update(stdin).digest("hex").slice(0, 12);
   const answer = instructions.startsWith("You are a strict evaluation judge.")
     ? JSON.stringify({
@@ -315,7 +370,9 @@ async function exec(stdin) {
         justification: `Deterministic judge result ${digest}.`,
       })
     : `Deterministic reply ${digest}`;
-  const [thread, started, message, completed] = capturedEvents("exec.jsonl");
+  const [thread, started, message, completed] = capturedEvents(
+    schemaFile === undefined ? "exec.jsonl" : "exec-output-schema.jsonl",
+  ).filter(({ item }) => item?.type !== "error");
   emit(thread);
   if (configs().includes("features.code_mode_host=false")) {
     emit(JSON.parse(captured("item-code-mode-notice.json")));
@@ -364,6 +421,9 @@ async function main() {
     cwd: process.cwd(),
     stdin,
     envNames: Object.keys(process.env).sort(),
+    ...(valueOf("--output-schema") === undefined
+      ? {}
+      : { outputSchema: outputSchema() }),
   });
   const leaked = Object.keys(process.env).find(
     (name) =>

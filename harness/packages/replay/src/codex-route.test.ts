@@ -24,6 +24,7 @@ import {
 import {
   planPriceList,
   turn,
+  verdictFormat,
   type StubRecord,
 } from "./test-utils/plan-cli-stub.js";
 
@@ -299,6 +300,39 @@ describe("codex-login adapter", () => {
     expect(bareCall?.stdin).toBe("Say ok.");
     expect(bare.usage.inputTokens).toBe(
       Math.ceil(Buffer.byteLength("Say ok.") / 4) + 1800,
+    );
+  });
+
+  it("passes a verdict schema to codex as an --output-schema file in the call's directory and reads the verdict from the final message", async () => {
+    const harness = await codexHarness();
+    const user = "Judge this.";
+
+    const response = await harness.provider.chat({
+      model: luna,
+      messages: [
+        { role: "system", content: "You are a strict evaluation judge." },
+        { role: "user", content: user },
+      ],
+      responseFormat: verdictFormat,
+    });
+
+    const [call] = await harness.execs();
+    const dir = call!.argv![12]!;
+    const argv = overrides(dir, "file");
+    expect(call?.argv).toEqual([
+      ...argv.slice(0, -3),
+      "--output-schema",
+      join(dir, "output-schema.json"),
+      ...argv.slice(-3),
+    ]);
+    expect(call?.outputSchema).toEqual(verdictFormat.json_schema.schema);
+    expect(existsSync(dir)).toBe(false);
+    expect(response.content).toBe(
+      JSON.stringify({
+        verdict: "equivalent",
+        score: 1,
+        justification: `Deterministic judge result ${digest(user)}.`,
+      }),
     );
   });
 

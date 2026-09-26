@@ -16,6 +16,7 @@ import {
   planStubHarness,
   removePlanStubRoots,
   turn,
+  verdictFormat,
   type PlanStubHarness,
 } from "./test-utils/plan-cli-stub.js";
 
@@ -180,6 +181,112 @@ describe("claude-login adapter", () => {
     expect((await tool.provider.chat(turn(haiku))).substitution).toEqual({
       kind: "request",
       evidence: "claude called a tool",
+    });
+  });
+
+  it("reads the judge verdict from structured_output and accepts claude's StructuredOutput round trip", async () => {
+    const harness = await planStubHarness();
+    const corrected = await planStubHarness({ fault: "turns:4" });
+    const request = turn(haiku, "Judge this.", {
+      responseFormat: verdictFormat,
+    });
+
+    const response = await harness.provider.chat(request);
+    const correctedResponse = await corrected.provider.chat(request);
+
+    const [call] = await harness.modelCalls();
+    expect(call?.argv).toEqual([
+      "-p",
+      "--model",
+      "claude-haiku-4-5-20251001",
+      "--system-prompt-file",
+      call!.argv![4]!,
+      ...isolation,
+      "--max-turns",
+      "3",
+      ...settings,
+      ...stream,
+      "--json-schema",
+      JSON.stringify(verdictFormat.json_schema.schema),
+    ]);
+    expect(response.content).toBe(
+      JSON.stringify({
+        verdict: "equivalent",
+        score: 1,
+        justification: `Deterministic judge result ${createHash("sha256").update("Judge this.").digest("hex").slice(0, 12)}.`,
+      }),
+    );
+    expect(response.substitution).toBeUndefined();
+    expect(correctedResponse.substitution).toBeUndefined();
+  });
+
+  it("prefers structured_output over the result text", async () => {
+    const harness = await planStubHarness({ fault: "result-text" });
+
+    const response = await harness.provider.chat(
+      turn(haiku, "Judge this.", { responseFormat: verdictFormat }),
+    );
+
+    expect(JSON.parse(response.content)).toMatchObject({
+      verdict: "equivalent",
+      score: 1,
+    });
+  });
+
+  it("returns no verdict when a schema call ends without structured_output, even when the result text holds one", async () => {
+    const harness = await planStubHarness({ fault: "no-structured-output" });
+
+    const response = await harness.provider.chat(
+      turn(haiku, "Judge this.", { responseFormat: verdictFormat }),
+    );
+
+    expect(response.content).toBe("");
+  });
+
+  it("returns a verdict that fails the schema as an unparsable answer, not a lost request, and keeps other errors as lost requests", async () => {
+    for (const fault of ["schema-mismatch", "schema-retries"]) {
+      const harness = await planStubHarness({ fault });
+      const attempts: ProviderAttempt[] = [];
+
+      const response = await harness.provider.chat(
+        turn(haiku, "Judge this.", {
+          responseFormat: verdictFormat,
+          onAttempt: (a) => void attempts.push(a),
+        }),
+      );
+
+      expect(response.content, fault).toBe("");
+      expect(response.usage, fault).toEqual({
+        inputTokens: 3347,
+        outputTokens: 239,
+      });
+      expect(response.substitution, fault).toBeUndefined();
+      expect(attempts, fault).toEqual([
+        expect.objectContaining({ outcome: "completed", content: "" }),
+      ]);
+    }
+    const plain = await planStubHarness({ fault: "schema-mismatch" });
+
+    const error = await rejection(plain.provider.chat(turn(haiku)));
+
+    expect(error).toBeInstanceOf(ProviderRequestError);
+    expect((error as Error).message).toBe("claude reported error_max_turns: ");
+  });
+
+  it("still records a request substitution when a judge call uses another tool or more than four turns", async () => {
+    const tool = await planStubHarness({ fault: "tool-use" });
+    const turns = await planStubHarness({ fault: "turns:5" });
+    const request = turn(haiku, "Judge this.", {
+      responseFormat: verdictFormat,
+    });
+
+    expect((await tool.provider.chat(request)).substitution).toEqual({
+      kind: "request",
+      evidence: "claude called a tool",
+    });
+    expect((await turns.provider.chat(request)).substitution).toEqual({
+      kind: "request",
+      evidence: "claude took 5 turns",
     });
   });
 
