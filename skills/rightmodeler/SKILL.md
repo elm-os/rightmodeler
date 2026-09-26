@@ -47,12 +47,13 @@ Ask only for inputs that are not already known:
   candidates or the judge through the user's own `claude` or `codex` CLI, signed in on this
   machine (section 5); use one only after the user agrees, as below.
 - On an API route, the maximum allowed replay spend in US dollars, if the operator wants a
-  cap. Never ask for, suggest, or set a cap when a plan route is used.
+  cap. Never ask for, suggest, or set a cap when a plan route is used, unless the user asks
+  for one.
 - Model, provider, quality, or ownership constraints that affect the run.
 
-Never ask for an API key value. The user sets the named environment variable in
-their own shell. Do not echo, persist, or inline its value, and never put a key in a
-base URL or a header.
+Never ask for, read, echo, or store an API key or login token, and never open `~/.claude`,
+the Keychain, or `~/.codex/auth.json`. The user sets the named environment variable in their
+own shell. Never inline a key's value, and never put a key in a base URL or a header.
 
 Before choosing a plan route, name the route for each role, tell the user what a plan route
 means, and get their yes:
@@ -66,10 +67,9 @@ means, and get their yes:
   set temperature or an output limit, so the results measure the model inside a coding CLI.
   `rightmodeler docs model-routes` has the details.
 
-On a plan route, never ask for, read, echo, or store a key or login token, and never open
-`~/.claude`, the Keychain, or `~/.codex/auth.json`; rightmodeler checks the sign-in itself.
-Never offer a plan route in CI: rightmodeler refuses one when `CI` is set, so use an API
-route there. Mode B confirmation (`--modeb-config`) needs an API route for both roles.
+On a plan route, rightmodeler checks the sign-in itself. Never offer a plan route in CI:
+rightmodeler refuses one when `CI` is set, so use an API route there. Mode B confirmation
+(`--modeb-config`) needs an API route for both roles.
 
 ## 2. Detect onboarding state
 
@@ -270,12 +270,13 @@ the operator-approved trace path explicitly.
 Model routes add these exit-2 codes. Report the `message` and `remedy`, then:
 
 - `plan_usage_limit`: the plan reached its usage limit. Tell the user the reset time that
-  `message` quotes, and stop. Rerun the same command only after the reset and when the user
-  says so; completed calls are kept. Never retry in a loop, and never switch routes without
-  asking.
+  `message` quotes, or that the vendor gave none, and stop. Rerun the same command only after
+  the reset and when the user says so; completed calls are kept. Never retry in a loop, and
+  never switch routes without asking.
 - `plan_login_required`: the CLI is not signed in with a plan, would use an API key, or lost
-  its login. Ask the user to sign in from their own terminal with the command the remedy
-  names, then rerun.
+  its login. Ask the user to follow the remedy from their own terminal: sign in with the
+  command it names, or remove the API key setting it names. Never read or edit that setting
+  yourself. Then rerun.
 - `plan_cli_unavailable`: the CLI is missing, too old, or changed in a way rightmodeler
   rejects, or `CI` is set. Relay the remedy. Never unset `CI` yourself; in CI, use an API
   route.
@@ -314,7 +315,8 @@ If a plan route ran, name the route that replayed candidates and the route that 
 relay the report's `## Model routes` section, and say that spend on a plan route is a
 list-price equivalent drawn from the plan's allowance, not a bill. Report every `warning`
 event with its `code` and `message`; on a plan route these include `plan_route_key_withheld`,
-`plan_usage_warning`, `judge_vendor_candidates_dropped`, and `plan_route_cases_left_out`.
+`plan_usage_warning`, `codex_global_instructions`, `judge_vendor_candidates_dropped`, and
+`plan_route_cases_left_out`.
 
 Treat family verdicts as the decision unit. Do not promote a single successful case
 into a family recommendation. Exit 0 can still contain useful rejects and
