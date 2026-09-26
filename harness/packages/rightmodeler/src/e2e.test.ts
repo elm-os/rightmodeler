@@ -77,6 +77,12 @@ const demoGraphPath = fileURLToPath(
 const openaiModelsPath = fileURLToPath(
   new URL("../../../fixtures/catalogs/openai-models.json", import.meta.url),
 );
+const aiGatewayChatResponsePath = fileURLToPath(
+  new URL(
+    "../../../fixtures/catalogs/ai-gateway-chat-response.json",
+    import.meta.url,
+  ),
+);
 const aiSdkAppPath = fileURLToPath(
   new URL("../../../fixtures/ai-sdk-app", import.meta.url),
 );
@@ -217,6 +223,7 @@ interface RecordingStubProvider extends StubProvider {
     headers: Record<string, string>;
     model?: string;
   }>;
+  getRequests(): Array<Record<string, unknown>>;
 }
 
 interface StubProviderModule {
@@ -1493,6 +1500,128 @@ describe("built CLI pipeline", () => {
       const resumed = await runCli(args, { env: { [apiKeyEnv]: secret } });
       expect(resumed.code, resumed.stderr).toBe(0);
       expect(stub.getHitCount()).toBe(hitsAfterFirstRun);
+    } finally {
+      await stub.close();
+    }
+  }, 60_000);
+
+  it("judges the recorded answer's text from gateway traces and keeps the recorded message in the stored plan", async () => {
+    const { root, repo } = await fixtureCopy("gateway-reference");
+    const gatewayMessage = (
+      JSON.parse(await readFile(aiGatewayChatResponsePath, "utf8")) as {
+        choices: [{ message: Record<string, JsonValue> }];
+      }
+    ).choices[0].message;
+    type TextParts = Array<{ content: string }>;
+    const spans = JSON.parse(await readFile(tracesPath, "utf8")) as Array<{
+      traceId: string;
+      startTimeUnixNano: string;
+      attributes: {
+        "rightmodeler.family": string;
+        "gen_ai.request.model": string;
+        "gen_ai.system_instructions"?: TextParts;
+        "gen_ai.input.messages": Array<{ role: string; parts: TextParts }>;
+        "gen_ai.output.messages": [{ parts: TextParts }];
+        "gen_ai.usage.input_tokens": number;
+        "gen_ai.usage.output_tokens": number;
+      };
+    }>;
+    const text = (parts: TextParts) =>
+      parts.map(({ content }) => content).join("\n");
+    const recordedTexts: string[] = [];
+    const records = spans.map(({ traceId, startTimeUnixNano, attributes }) => {
+      const model = attributes["gen_ai.request.model"];
+      const system = attributes["gen_ai.system_instructions"];
+      const recorded = text(attributes["gen_ai.output.messages"][0].parts);
+      recordedTexts.push(recorded);
+      return JSON.stringify({
+        name: attributes["rightmodeler.family"],
+        case_id: traceId,
+        timestamp: startTimeUnixNano,
+        model,
+        messages: [
+          ...(system === undefined
+            ? []
+            : [{ role: "system", content: text(system) }]),
+          ...attributes["gen_ai.input.messages"].map(({ role, parts }) => ({
+            role,
+            content: text(parts),
+          })),
+        ],
+        response: {
+          id: "chatcmpl-SANITIZED",
+          object: "chat.completion",
+          model,
+          choices: [
+            {
+              index: 0,
+              finish_reason: "stop",
+              message: { ...gatewayMessage, content: recorded },
+            },
+          ],
+          usage: {
+            prompt_tokens: attributes["gen_ai.usage.input_tokens"],
+            completion_tokens: attributes["gen_ai.usage.output_tokens"],
+          },
+        },
+      });
+    });
+    const traces = join(root, "gateway-traces.jsonl");
+    await writeFile(traces, `${records.join("\n")}\n`);
+    const stub = await startStub();
+    const apiKeyEnv = "RIGHTMODELER_GATEWAY_REFERENCE_E2E_API_KEY";
+
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--through",
+          "replay",
+          "--traces",
+          traces,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const judgeRequests = stub
+        .getRequests()
+        .filter(({ messages }) =>
+          (messages as Array<{ content: string }>)[0]?.content.startsWith(
+            "You are a strict evaluation judge.",
+          ),
+        );
+      expect(judgeRequests.length).toBeGreaterThan(0);
+      for (const request of judgeRequests) {
+        const prompt = (request.messages as Array<{ content: string }>)
+          .map(({ content }) => content)
+          .join("\n");
+        const reference =
+          /<<<UNTRUSTED REFERENCE>>>\n([\s\S]*?)\n<<<END UNTRUSTED REFERENCE>>>/.exec(
+            prompt,
+          )?.[1];
+        expect(recordedTexts).toContain(reference);
+        expect(JSON.stringify(request)).not.toContain("provider_metadata");
+      }
+      const plan = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "shortlist",
+      );
+      const cases = plan.cases as Array<{ referenceOutput: JsonValue }>;
+      expect(cases.length).toBeGreaterThan(0);
+      for (const { referenceOutput } of cases) {
+        expect(referenceOutput).toMatchObject({
+          provider_metadata: gatewayMessage.provider_metadata,
+        });
+      }
     } finally {
       await stub.close();
     }
