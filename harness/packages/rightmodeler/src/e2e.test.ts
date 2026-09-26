@@ -6865,7 +6865,9 @@ describe("built CLI through plan routes", () => {
   type CodexRecord = StubRecord & { command?: string; cwd?: string };
   const dummyCodexKey = "sk-codex-plan-e2e-dummy-must-stay-home";
   const codexSentence =
-    "Codex does not report which model answered: the requested model is recorded, and a call Codex reports as rerouted is left out of the evidence. Codex keeps a code tool and a patch tool that cannot be turned off, so a call can include a tool step its output does not show; a call where Codex reports a tool step is left out of the evidence. Rightmodeler turns off Codex's code execution for these calls. Codex also adds your global instructions file, when you have one, to every call, and runs each model at its default reasoning effort.";
+    "Codex does not report which model answered: the requested model is recorded, and a call Codex reports as rerouted is left out of the evidence. Codex keeps a code tool and a patch tool that cannot be turned off, so a call can include a tool step its output does not show; a call where Codex reports a tool step is left out of the evidence. Rightmodeler turns off Codex's code execution for these calls. Codex also adds your global instructions file, when you have one, to every call, and runs each model at its default reasoning effort. Codex reports no latency, so the p50 latency of a Codex answer reads n/a.";
+  const claudeLatencySentence =
+    " Their latency is the API time the CLI reports.";
 
   async function codexEnv(
     root: string,
@@ -6993,6 +6995,47 @@ describe("built CLI through plan routes", () => {
     ]) {
       expect(text).not.toContain(dummyAnthropicKey);
       expect(text).not.toContain(dummyCodexKey);
+    }
+  }, 180_000);
+
+  it("states the latency sentence only with a claude-login route and the Codex sentences only with a codex-login route", async () => {
+    expect(routed).toBeDefined();
+    const claudeReport = await storeText(
+      new FsStore(join(routed!.repo, ".rightmodeler")),
+      reportKey("project", "report.md"),
+    );
+    const run = await codexRouteRun("codex-api-judge", "codex-login", "api");
+    const stub = await startStub();
+    try {
+      const result = await runCli(
+        run.args("init", [
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+        ]),
+        { env: await codexEnv(run.root, "codex-api-judge") },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const chats = chatModels(stub);
+      expect(chats.length).toBeGreaterThan(0);
+      expect(chats.filter((model) => !judgeModels.has(model))).toEqual([]);
+      const store = new FsStore(join(run.repo, ".rightmodeler"));
+      expect(spendProviders(await readLedger(store, "project"))).toEqual({
+        candidates: ["codex-login"],
+        judge: ["configured-provider"],
+      });
+      const codexReport = await storeText(
+        store,
+        reportKey("project", "report.md"),
+      );
+      expect(codexReport).toContain(`\n\n${codexSentence}\n`);
+      expect(codexReport).not.toContain(claudeLatencySentence);
+      expect(claudeReport).toContain(claudeLatencySentence);
+      expect(claudeReport).not.toContain("Codex");
+    } finally {
+      await stub.close();
     }
   }, 180_000);
 

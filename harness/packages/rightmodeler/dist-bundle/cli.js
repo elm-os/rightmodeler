@@ -27746,7 +27746,7 @@ ${result2.stderr}` };
         return failed(failure(message2, input.cliModel, options.maxConcurrency ?? 2), message2.slice(0, 300));
       }
       if (outcome.code !== 0) {
-        return failed(new ProviderRequestError(`codex exited ${outcome.code}: ${outcome.stderr.slice(0, 300)}`));
+        return failed(new ProviderRequestError(`codex exited ${outcome.code}: ${outcome.stderr.trim().slice(0, 300)}`));
       }
       const items = events.flatMap(({ type, item }) => type === "item.completed" && object3(item) !== void 0 ? [object3(item)] : []);
       const content = items.filter(({ type }) => type === "agent_message").at(-1)?.text ?? await readFile3(lastMessage, "utf8").catch(() => "");
@@ -49747,10 +49747,10 @@ function modelRoutesSection(routes) {
       ({ actor, provider, events, costUsd }) => `| ${actor === "replay-driver" ? "candidates" : actor} | ${provider === "configured-provider" ? "api" : provider} | ${events} | ${costUsd.toFixed(8)}${isPlanRouteKind(provider) ? " (list-price equivalent)" : ""} |`
     ),
     "",
-    "Calls through a plan route were measured through a coding CLI, not the API your application calls: the CLI adds its own instructions to each call and cannot set temperature or an output limit, and recorded cases with more than one turn were left out. Their latency is the API time the CLI reports. Run `rightmodeler docs model-routes` for details.",
+    `Calls through a plan route were measured through a coding CLI, not the API your application calls: the CLI adds its own instructions to each call and cannot set temperature or an output limit, and recorded cases with more than one turn were left out.${routes.some(({ provider }) => provider === "claude-login") ? " Their latency is the API time the CLI reports." : ""} Run \`rightmodeler docs model-routes\` for details.`,
     "",
     ...routes.some(({ provider }) => provider === "codex-login") ? [
-      "Codex does not report which model answered: the requested model is recorded, and a call Codex reports as rerouted is left out of the evidence. Codex keeps a code tool and a patch tool that cannot be turned off, so a call can include a tool step its output does not show; a call where Codex reports a tool step is left out of the evidence. Rightmodeler turns off Codex's code execution for these calls. Codex also adds your global instructions file, when you have one, to every call, and runs each model at its default reasoning effort.",
+      "Codex does not report which model answered: the requested model is recorded, and a call Codex reports as rerouted is left out of the evidence. Codex keeps a code tool and a patch tool that cannot be turned off, so a call can include a tool step its output does not show; a call where Codex reports a tool step is left out of the evidence. Rightmodeler turns off Codex's code execution for these calls. Codex also adds your global instructions file, when you have one, to every call, and runs each model at its default reasoning effort. Codex reports no latency, so the p50 latency of a Codex answer reads n/a.",
       ""
     ] : []
   ];

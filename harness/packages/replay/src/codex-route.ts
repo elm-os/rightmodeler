@@ -329,7 +329,7 @@ function createCodexAdapter(options: PlanProviderOptions): PlanAdapter {
       if (outcome.code !== 0) {
         return failed(
           new ProviderRequestError(
-            `codex exited ${outcome.code}: ${outcome.stderr.slice(0, 300)}`,
+            `codex exited ${outcome.code}: ${outcome.stderr.trim().slice(0, 300)}`,
           ),
         );
       }

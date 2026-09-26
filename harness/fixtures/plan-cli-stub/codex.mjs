@@ -265,6 +265,16 @@ async function exec(stdin) {
     turnFailed(captured("turn-failed-capacity.txt").trim(), "capacity");
     return;
   }
+  const failedWith = faultValue("turn-failed");
+  if (failedWith !== undefined) {
+    turnFailed(captured(`turn-failed-${failedWith}.txt`).trim(), failedWith);
+    return;
+  }
+  if (hasFault("crash")) {
+    process.stderr.write("the fake codex crashed\n");
+    finish("crash", 1);
+    return;
+  }
   if (hasFault("auth-failed")) {
     const [thread] = capturedEvents("exec.jsonl");
     emit(thread);
@@ -306,15 +316,17 @@ async function exec(stdin) {
     emit({ ...message, item: { ...message.item, id: "item_9", text: answer } });
   }
   if (!hasFault("empty-turn")) writeFileSync(valueOf("-o"), answer);
-  emit({
-    ...completed,
-    usage: {
-      ...completed.usage,
-      input_tokens:
-        Math.ceil(Buffer.byteLength(instructions + stdin) / 4) + 1800,
-      output_tokens: Math.ceil(Buffer.byteLength(answer) / 4),
-    },
-  });
+  if (!hasFault("no-turn-completed")) {
+    emit({
+      ...completed,
+      usage: {
+        ...completed.usage,
+        input_tokens:
+          Math.ceil(Buffer.byteLength(instructions + stdin) / 4) + 1800,
+        output_tokens: Math.ceil(Buffer.byteLength(answer) / 4),
+      },
+    });
+  }
   finish(
     faults.find((fault) =>
       [
@@ -323,6 +335,7 @@ async function exec(stdin) {
         "two-messages",
         "file-only",
         "empty-turn",
+        "no-turn-completed",
       ].includes(fault),
     ) ?? "ok",
     0,

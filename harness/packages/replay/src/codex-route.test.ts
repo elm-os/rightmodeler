@@ -478,6 +478,28 @@ describe("codex-login adapter", () => {
     ]);
   });
 
+  it("fails a call that exits non-zero without a turn.failed event", async () => {
+    const harness = await codexHarness({ fault: "crash" });
+
+    const error = await rejection(harness.provider.chat(turn(luna)));
+
+    expect(error).toBeInstanceOf(ProviderRequestError);
+    expect((error as Error).message).toBe(
+      "codex exited 1: the fake codex crashed",
+    );
+  });
+
+  it("fails a call whose turn never completes", async () => {
+    const harness = await codexHarness({ fault: "no-turn-completed" });
+
+    const error = await rejection(harness.provider.chat(turn(luna)));
+
+    expect(error).toBeInstanceOf(ProviderRequestError);
+    expect((error as Error).message).toBe(
+      "codex ended without completing the turn",
+    );
+  });
+
   it("records a model substitution when codex reports a reroute", async () => {
     const harness = await codexHarness({ fault: "rerouted" });
 
@@ -506,6 +528,7 @@ describe("codex-login adapter", () => {
 
   it("stops at an account usage limit, quoting Codex's reset time, and spawns nothing more", async () => {
     const harness = await codexHarness({ fault: "usage-limit-after:1" });
+    const plus = await codexHarness({ fault: "turn-failed:usage-limit-plus" });
 
     await harness.provider.chat(turn(luna));
     const limited = await rejection(
@@ -514,6 +537,7 @@ describe("codex-login adapter", () => {
     const later = await rejection(
       harness.provider.chat(turn(luna, "Say fig.")),
     );
+    const plusLimited = await rejection(plus.provider.chat(turn(luna)));
 
     expect(limited).toBeInstanceOf(BlockedError);
     expect(limited).toMatchObject({
@@ -525,6 +549,12 @@ describe("codex-login adapter", () => {
     });
     expect(later).toBe(limited);
     expect(await harness.execs()).toHaveLength(2);
+    expect(plusLimited).toBeInstanceOf(BlockedError);
+    expect(plusLimited).toMatchObject({
+      kind: "usage-limit",
+      providerId: "codex-login",
+      resetsAt: "Oct 2nd, 2026 3:45 PM",
+    });
   });
 
   it("treats a limit on one model as a rate limit, so the judge can fail over", async () => {
@@ -545,12 +575,22 @@ describe("codex-login adapter", () => {
   });
 
   it("maps capacity and demand messages to a rate limit", async () => {
-    const harness = await codexHarness({ fault: "capacity" });
+    for (const fault of [
+      "capacity",
+      "turn-failed:high-demand",
+      "turn-failed:retry-limit",
+      "turn-failed:rate-limit",
+    ]) {
+      const harness = await codexHarness({ fault });
 
-    const error = await rejection(harness.provider.chat(turn(luna)));
+      const error = await rejection(harness.provider.chat(turn(luna)));
 
-    expect(error).toBeInstanceOf(BlockedError);
-    expect(error).toMatchObject({ kind: "rate-limit", observedCeiling: 2 });
+      expect(error, fault).toBeInstanceOf(BlockedError);
+      expect(error, fault).toMatchObject({
+        kind: "rate-limit",
+        observedCeiling: 2,
+      });
+    }
   });
 
   it("reports a model this plan cannot use as a lost request", async () => {
