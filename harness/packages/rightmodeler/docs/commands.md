@@ -62,16 +62,15 @@ Options:
   --api-key-env <name>                environment variable containing the
                                       provider API key
   --route <kind>                      where candidate replays run: api (the
-                                      --base-url endpoint; the default with
-                                      --base-url) or claude-login (the claude
-                                      CLI signed in on this machine; needs
-                                      --judge-route) (choices: "api",
-                                      "claude-login")
-  --judge-route <kind>                where the built-in judge runs: api or
-                                      claude-login; required with a plan
-                                      --route, because the judge must come from
-                                      another vendor than the candidates
-                                      (choices: "api", "claude-login")
+                                      --base-url endpoint), claude-login or
+                                      codex-login (the claude or codex CLI
+                                      signed in on this machine); a plan route
+                                      needs --judge-route (choices: "api",
+                                      "claude-login", "codex-login")
+  --judge-route <kind>                where the built-in judge runs: api,
+                                      claude-login or codex-login; use a vendor
+                                      other than the candidates' (choices:
+                                      "api", "claude-login", "codex-login")
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
@@ -133,16 +132,15 @@ Options:
   --api-key-env <name>                environment variable containing the
                                       provider API key
   --route <kind>                      where candidate replays run: api (the
-                                      --base-url endpoint; the default with
-                                      --base-url) or claude-login (the claude
-                                      CLI signed in on this machine; needs
-                                      --judge-route) (choices: "api",
-                                      "claude-login")
-  --judge-route <kind>                where the built-in judge runs: api or
-                                      claude-login; required with a plan
-                                      --route, because the judge must come from
-                                      another vendor than the candidates
-                                      (choices: "api", "claude-login")
+                                      --base-url endpoint), claude-login or
+                                      codex-login (the claude or codex CLI
+                                      signed in on this machine); a plan route
+                                      needs --judge-route (choices: "api",
+                                      "claude-login", "codex-login")
+  --judge-route <kind>                where the built-in judge runs: api,
+                                      claude-login or codex-login; use a vendor
+                                      other than the candidates' (choices:
+                                      "api", "claude-login", "codex-login")
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
@@ -274,16 +272,15 @@ Options:
   --api-key-env <name>                environment variable containing the
                                       provider API key
   --route <kind>                      where candidate replays run: api (the
-                                      --base-url endpoint; the default with
-                                      --base-url) or claude-login (the claude
-                                      CLI signed in on this machine; needs
-                                      --judge-route) (choices: "api",
-                                      "claude-login")
-  --judge-route <kind>                where the built-in judge runs: api or
-                                      claude-login; required with a plan
-                                      --route, because the judge must come from
-                                      another vendor than the candidates
-                                      (choices: "api", "claude-login")
+                                      --base-url endpoint), claude-login or
+                                      codex-login (the claude or codex CLI
+                                      signed in on this machine); a plan route
+                                      needs --judge-route (choices: "api",
+                                      "claude-login", "codex-login")
+  --judge-route <kind>                where the built-in judge runs: api,
+                                      claude-login or codex-login; use a vendor
+                                      other than the candidates' (choices:
+                                      "api", "claude-login", "codex-login")
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes
@@ -354,16 +351,15 @@ Options:
   --api-key-env <name>                environment variable containing the
                                       provider API key
   --route <kind>                      where candidate replays run: api (the
-                                      --base-url endpoint; the default with
-                                      --base-url) or claude-login (the claude
-                                      CLI signed in on this machine; needs
-                                      --judge-route) (choices: "api",
-                                      "claude-login")
-  --judge-route <kind>                where the built-in judge runs: api or
-                                      claude-login; required with a plan
-                                      --route, because the judge must come from
-                                      another vendor than the candidates
-                                      (choices: "api", "claude-login")
+                                      --base-url endpoint), claude-login or
+                                      codex-login (the claude or codex CLI
+                                      signed in on this machine); a plan route
+                                      needs --judge-route (choices: "api",
+                                      "claude-login", "codex-login")
+  --judge-route <kind>                where the built-in judge runs: api,
+                                      claude-login or codex-login; use a vendor
+                                      other than the candidates' (choices:
+                                      "api", "claude-login", "codex-login")
   --max-cost-usd <amount>             optional hard spend cap in USD; omit to
                                       run uncapped so every case and judge cell
                                       completes

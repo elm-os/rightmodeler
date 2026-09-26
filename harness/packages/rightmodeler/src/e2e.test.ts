@@ -1,6 +1,6 @@
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import {
   chmod,
@@ -6860,5 +6860,345 @@ describe("built CLI through plan routes", () => {
       await github.close();
       await stub.close();
     }
+  }, 180_000);
+
+  type CodexRecord = StubRecord & { command?: string; cwd?: string };
+  const dummyCodexKey = "sk-codex-plan-e2e-dummy-must-stay-home";
+  const codexSentence =
+    "Codex does not report which model answered: the requested model is recorded, and a call Codex reports as rerouted is left out of the evidence. Codex keeps a code tool and a patch tool that cannot be turned off, so a call can include a tool step its output does not show; a call where Codex reports a tool step is left out of the evidence. Rightmodeler turns off Codex's code execution for these calls. Codex also adds your global instructions file, when you have one, to every call, and runs each model at its default reasoning effort. Codex reports no latency, so the p50 latency of a Codex answer reads n/a.";
+  const claudeLatencySentence =
+    " Their latency is the API time the CLI reports.";
+
+  async function codexEnv(
+    root: string,
+    name: string,
+    extra: NodeJS.ProcessEnv = {},
+  ): Promise<NodeJS.ProcessEnv> {
+    const codexHome = join(root, `${name}-codex-home`);
+    await mkdir(codexHome, { recursive: true });
+    return planEnv(root, name, {
+      CODEX_HOME: codexHome,
+      PLAN_STUB_CODEX_FAULT: undefined,
+      CODEX_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      OPENAI_FEDERATION_RULE_ID: undefined,
+      OPENAI_IDENTITY_TOKEN_FILE: undefined,
+      ...extra,
+    });
+  }
+
+  async function codexExecs(root: string, name: string) {
+    return ((await stubRecords(root, name)) as CodexRecord[]).filter(
+      ({ event, command, argv }) =>
+        event === "start" && command === "codex" && argv?.[0] === "exec",
+    );
+  }
+
+  async function codexRouteRun(label: string, route: string, judge: string) {
+    const { root, repo } = await fixtureCopy(label);
+    const prices = await writePlanPrices(root);
+    const policy = await writePolicy(root, 1);
+    const args = (command: string, extra: readonly string[] = []) => [
+      command,
+      "--traces",
+      tracesPath,
+      "--route",
+      route,
+      "--judge-route",
+      judge,
+      "--catalog-reference",
+      prices,
+      "--policy",
+      policy,
+      ...extra,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    return { root, repo, prices, args };
+  }
+
+  it("exits 2 before any codex call when both roles are codex-login", async () => {
+    const run = await codexRouteRun(
+      "codex-same-vendor",
+      "codex-login",
+      "codex-login",
+    );
+
+    const result = await runCli(run.args("init"), {
+      env: await codexEnv(run.root, "codex-same-vendor"),
+    });
+
+    expect(result.code, result.stderr).toBe(2);
+    expect(lastStderrEvent(result)).toEqual({
+      code: "no_neutral_judge",
+      message:
+        "Every shortlisted candidate is from openai, the vendor of the judge route codex-login, so no candidate can be judged neutrally.",
+      remedy:
+        "Use a --judge-route from another vendor, or an api --route whose catalog lists other vendors.",
+    });
+    expect(await codexExecs(run.root, "codex-same-vendor")).toEqual([]);
+  }, 180_000);
+
+  it("replays candidates through codex-login and judges through claude-login", async () => {
+    const run = await codexRouteRun(
+      "codex-candidates",
+      "codex-login",
+      "claude-login",
+    );
+
+    const result = await runCli(run.args("init"), {
+      env: await codexEnv(run.root, "codex-candidates", {
+        ANTHROPIC_API_KEY: dummyAnthropicKey,
+        CODEX_API_KEY: dummyCodexKey,
+      }),
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(
+      warningMessages(result.stderr, "plan_route_key_withheld").sort(),
+    ).toEqual([
+      "ANTHROPIC_API_KEY is set; rightmodeler keeps it away from claude so your plan is used, not a key.",
+      "CODEX_API_KEY is set; rightmodeler keeps it away from codex so your plan is used, not a key.",
+    ]);
+    const records = (await stubRecords(
+      run.root,
+      "codex-candidates",
+    )) as CodexRecord[];
+    const execs = await codexExecs(run.root, "codex-candidates");
+    expect(execs.length).toBeGreaterThan(0);
+    expect(modelCalls(records).length).toBeGreaterThan(0);
+    for (const { cwd } of execs) expect(existsSync(cwd!)).toBe(false);
+    expect(records.filter(({ event }) => event === "end")).not.toContainEqual(
+      expect.objectContaining({ outcome: "leaked-variable" }),
+    );
+    const storeRoot = join(run.repo, ".rightmodeler");
+    const store = new FsStore(storeRoot);
+    expect(spendProviders(await readLedger(store, "project"))).toEqual({
+      candidates: ["codex-login"],
+      judge: ["claude-login"],
+    });
+    const report = await storeText(store, reportKey("project", "report.md"));
+    expect(report).toMatch(
+      /\| candidates \| codex-login \| \d+ \| \d+\.\d{8} \(list-price equivalent\) \|/u,
+    );
+    expect(report).toMatch(
+      /\| judge \| claude-login \| \d+ \| \d+\.\d{8} \(list-price equivalent\) \|/u,
+    );
+    expect(report).toContain(`\n\n${codexSentence}\n`);
+    for (const text of [
+      result.stdout,
+      result.stderr,
+      await allFileText(storeRoot),
+      await readFile(join(run.root, "codex-candidates.record.jsonl"), "utf8"),
+    ]) {
+      expect(text).not.toContain(dummyAnthropicKey);
+      expect(text).not.toContain(dummyCodexKey);
+    }
+  }, 180_000);
+
+  it("states the latency sentence only with a claude-login route and the Codex sentences only with a codex-login route", async () => {
+    expect(routed).toBeDefined();
+    const claudeReport = await storeText(
+      new FsStore(join(routed!.repo, ".rightmodeler")),
+      reportKey("project", "report.md"),
+    );
+    const run = await codexRouteRun("codex-api-judge", "codex-login", "api");
+    const stub = await startStub();
+    try {
+      const result = await runCli(
+        run.args("init", [
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+        ]),
+        { env: await codexEnv(run.root, "codex-api-judge") },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const chats = chatModels(stub);
+      expect(chats.length).toBeGreaterThan(0);
+      expect(chats.filter((model) => !judgeModels.has(model))).toEqual([]);
+      const store = new FsStore(join(run.repo, ".rightmodeler"));
+      expect(spendProviders(await readLedger(store, "project"))).toEqual({
+        candidates: ["codex-login"],
+        judge: ["configured-provider"],
+      });
+      const codexReport = await storeText(
+        store,
+        reportKey("project", "report.md"),
+      );
+      expect(codexReport).toContain(`\n\n${codexSentence}\n`);
+      expect(codexReport).not.toContain(claudeLatencySentence);
+      expect(claudeReport).toContain(claudeLatencySentence);
+      expect(claudeReport).not.toContain("Codex");
+    } finally {
+      await stub.close();
+    }
+  }, 180_000);
+
+  it("leaves multi-turn cases out of a codex-login sample with the plan route's own reason", async () => {
+    const run = await codexRouteRun(
+      "codex-multi-turn",
+      "codex-login",
+      "claude-login",
+    );
+    const traces = JSON.parse(await readFile(tracesPath, "utf8")) as Array<{
+      attributes: Record<string, unknown>;
+    }>;
+    for (const { attributes } of traces
+      .filter(
+        ({ attributes }) => attributes["rightmodeler.family"] === "summarize",
+      )
+      .slice(0, 5)) {
+      attributes["gen_ai.input.messages"] = [
+        ...(attributes["gen_ai.input.messages"] as JsonValue[]),
+        {
+          role: "assistant",
+          parts: [{ type: "text", content: "An earlier answer." }],
+        },
+        { role: "user", parts: [{ type: "text", content: "And then?" }] },
+      ];
+    }
+    const multiTurn = join(run.root, "multi-turn.json");
+    await writeFile(multiTurn, JSON.stringify(traces));
+    const args = run.args("init");
+    args[args.indexOf(tracesPath)] = multiTurn;
+
+    const result = await runCli(args, {
+      env: await codexEnv(run.root, "codex-multi-turn"),
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    const warnings = warningMessages(
+      result.stderr,
+      "plan_route_cases_left_out",
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(
+      /^Family summarize: 5 of \d+ recorded cases have an earlier assistant or tool turn or more than one user message, and the codex-login route sends one user turn, so they were left out of the replay sample\.$/u,
+    );
+    const execs = await codexExecs(run.root, "codex-multi-turn");
+    expect(execs.length).toBeGreaterThan(0);
+    expect(execs.filter(({ stdin }) => stdin === "And then?")).toEqual([]);
+  }, 180_000);
+
+  it("judges claude-login candidates through codex-login, stops at plan_usage_limit (exit 2) quoting Codex's reset time, and resumes on rerun without repeating completed calls", async () => {
+    const run = await codexRouteRun(
+      "codex-usage-limit",
+      "claude-login",
+      "codex-login",
+    );
+
+    const limited = await runCli(run.args("init"), {
+      env: await codexEnv(run.root, "codex-limited", {
+        PLAN_STUB_CODEX_FAULT: "usage-limit-after:2",
+      }),
+    });
+
+    expect(limited.code, limited.stderr).toBe(2);
+    expect(lastStderrEvent(limited)).toEqual({
+      code: "plan_usage_limit",
+      message: expect.stringContaining(
+        "codex-login reached its plan's usage limit (resets 3:45 PM): You've hit your usage limit. Try again at 3:45 PM.",
+      ),
+      remedy:
+        "Rerun the same command after the limit resets; completed replay and judge calls are kept and not repeated. To go on now, choose a route that does not use this plan with --route or --judge-route.",
+    });
+    const store = new FsStore(join(run.repo, ".rightmodeler"));
+    const state = JSON.parse(
+      await storeText(store, setupStateKey("project")),
+    ) as { stages: Record<string, unknown> };
+    expect(state.stages.shortlist).toBeDefined();
+    expect(state.stages.replay).toBeUndefined();
+
+    const resumed = await runCli(run.args("init"), {
+      env: await codexEnv(run.root, "codex-resumed"),
+    });
+
+    expect(resumed.code, resumed.stderr).toBe(0);
+    const firstRecords = await stubRecords(run.root, "codex-limited");
+    const finished = new Set(
+      firstRecords
+        .filter(({ outcome }) => outcome === "ok")
+        .map(({ pid }) => pid),
+    );
+    const pair = ({ argv, stdin }: StubRecord) =>
+      JSON.stringify([argv![argv!.indexOf("--model") + 1], stdin]);
+    const completed = new Set(
+      modelCalls(firstRecords)
+        .filter(({ pid }) => finished.has(pid))
+        .map(pair),
+    );
+    expect(completed.size).toBeGreaterThan(0);
+    const repeated = modelCalls(await stubRecords(run.root, "codex-resumed"))
+      .map(pair)
+      .filter((key) => completed.has(key));
+    expect(repeated).toEqual([]);
+    expect(spendProviders(await readLedger(store, "project")).judge).toEqual([
+      "codex-login",
+    ]);
+  }, 180_000);
+
+  it("moves the codex judge to its next model on a limit for one model", async () => {
+    const run = await codexRouteRun(
+      "codex-model-limit",
+      "claude-login",
+      "codex-login",
+    );
+
+    const result = await runCli(run.args("init"), {
+      env: await codexEnv(run.root, "codex-model-limit", {
+        PLAN_STUB_CODEX_FAULT: "model-limit:first",
+      }),
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    const unusable = warningMessages(result.stderr, "judge_unusable");
+    expect(unusable).toHaveLength(1);
+    const [, first, next] =
+      /^Judge (openai\/[\w.-]+) is unusable after three consecutive terminal failures; switching to (openai\/[\w.-]+)\.$/u.exec(
+        unusable[0]!,
+      ) ?? [];
+    expect(first).toBeDefined();
+    expect(next).not.toBe(first);
+    const execs = await codexExecs(run.root, "codex-model-limit");
+    const model = ({ argv }: StubRecord) =>
+      `openai/${argv![argv!.indexOf("-m") + 1]}`;
+    expect(model(execs[0]!)).toBe(first);
+    expect(execs.map(model)).toContain(next);
+  }, 180_000);
+
+  it("estimates a codex-login run without a model call", async () => {
+    const run = await codexRouteRun(
+      "codex-estimate",
+      "codex-login",
+      "claude-login",
+    );
+
+    const result = await runCli(run.args("estimate"), {
+      env: await codexEnv(run.root, "codex-estimate"),
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    const estimate = JSON.parse(result.stdout) as {
+      basis: string;
+      candidateExecutions: number;
+    };
+    expect(estimate.basis).toBe(
+      `List-price equivalents from the price list ${run.prices} for calls made through a plan you are signed in to (charged to that plan's usage allowance, not billed in dollars), and current provider catalog pricing for any API route. Worst-case candidate reservation from corpus token bounds; holdout uses the most expensive possible family winner. Judge calls are priced at two calls per replayed cell. A plan route sets no output cap, so actual use can exceed this figure.`,
+    );
+    expect(estimate.candidateExecutions).toBeGreaterThan(0);
+    const records = (await stubRecords(
+      run.root,
+      "codex-estimate",
+    )) as CodexRecord[];
+    expect(
+      records.filter(({ command }) => command === "codex").length,
+    ).toBeGreaterThan(0);
+    expect(await codexExecs(run.root, "codex-estimate")).toEqual([]);
+    expect(modelCalls(records)).toEqual([]);
   }, 180_000);
 });

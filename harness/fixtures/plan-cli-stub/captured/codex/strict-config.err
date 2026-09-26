@@ -1,0 +1,1 @@
+Error loading config.toml: unknown configuration field `tools.view_image` in -c/--config override

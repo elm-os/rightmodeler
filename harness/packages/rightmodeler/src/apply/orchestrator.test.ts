@@ -1451,6 +1451,24 @@ describe("applySwaps", () => {
     expect(apiPull.body).not.toContain("Measured through");
   });
 
+  it("names the codex CLI a winner was measured through in the pull request body", async () => {
+    const label =
+      "Measured through the codex CLI on a ChatGPT plan, not the OpenAI API: Codex added its own instructions, could not set temperature or an output limit, does not report which model answered, and can take a tool step its output does not show. Run `rightmodeler docs model-routes` for details.";
+    const harness = await createHarness();
+    const pull = await harness.githubClient.getPullRequest({
+      ...repository,
+      pullNumber: requireApplied(
+        await runApply(harness, [
+          { ...applyVerdict(harness), planRoute: "codex-login" },
+        ]),
+      ).prNumber,
+    });
+
+    expect(pull.body).toContain(
+      `Case IDs are SHA-256 digests of the replayed case, not file paths.\n${label}\n`,
+    );
+  });
+
   it("includes cost and latency receipts in the pull request body", async () => {
     const harness = await createHarness();
     const applied = requireApplied(

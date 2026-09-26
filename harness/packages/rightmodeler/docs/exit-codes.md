@@ -63,8 +63,8 @@ Use `--output json` for one result object or `--output jsonl` for stage events f
 - `no_priced_candidates` (exit `2`): point `--base-url` at a catalog that publishes per-token pricing, pass `--catalog-reference <url>`, expose priced LiteLLM `GET /model/info`, or pass `--pricing-file <path>`, then rerun.
 - `no_replayable_call_sites` (exit `2`): point `--repo` at a service with plain text completions, or add a matcher for a text call site, then rerun.
 - `not_git_repository` (exit `2`): run the command again from a Git repository with at least one commit.
-- `plan_cli_unavailable` (exit `2`): the CLI a plan route runs is missing, older than the verified version, or changed an output shape, or `CI` is set; install or update it (`claude update`), unset `CI` on your own machine, or use an API route with `--base-url`.
-- `plan_login_required` (exit `2`): sign the CLI in to your plan (`claude auth login`) and remove any API key setting it would use, or use an API route with `--base-url`; finished calls are kept.
+- `plan_cli_unavailable` (exit `2`): the CLI a plan route runs is missing, older than the verified version, or changed an output shape, or `CI` is set; install or update it (`claude update`, or `npm install -g @openai/codex@latest` for `codex`), unset `CI` on your own machine, or use an API route with `--base-url`.
+- `plan_login_required` (exit `2`): sign the CLI in to your plan (`claude auth login`, or `codex login` with ChatGPT) and remove any API key setting it would use, or use an API route with `--base-url`; finished calls are kept.
 - `plan_usage_limit` (exit `2`): a plan you are signed in to reached its usage limit; rerun the same command after the reset time in the message, and completed replay and judge calls are kept and not repeated; or choose a route that does not use this plan with `--route` or `--judge-route`.
 - `stage_not_completed` (exit `2`): run `rightmodeler init --through <stage>` first, then rerun the command.
 - `unusable_trace_input` (exit `2`): the selected discovered trace could not be adapted; rerun and choose a different trace file.

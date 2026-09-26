@@ -1,0 +1,8 @@
+{
+  "type": "item.completed",
+  "item": {
+    "id": "item_1",
+    "type": "error",
+    "message": "model rerouted: gpt-5.6-luna -> gpt-5.6-sol (HighRiskCyberActivity)"
+  }
+}

@@ -21,7 +21,10 @@ import {
   type ProviderClient,
 } from "./provider.js";
 
-export const planRouteVendors = { "claude-login": "anthropic" } as const;
+export const planRouteVendors = {
+  "claude-login": "anthropic",
+  "codex-login": "openai",
+} as const;
 export type PlanRouteKind = keyof typeof planRouteVendors;
 
 export function isPlanRouteKind(value: string): value is PlanRouteKind {

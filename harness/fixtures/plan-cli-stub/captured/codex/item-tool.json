@@ -1,0 +1,11 @@
+{
+  "type": "item.completed",
+  "item": {
+    "id": "item_1",
+    "type": "command_execution",
+    "command": "cat probe.txt",
+    "aggregated_output": "",
+    "exit_code": 0,
+    "status": "completed"
+  }
+}
