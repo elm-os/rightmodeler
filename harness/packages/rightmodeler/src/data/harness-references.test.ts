@@ -106,4 +106,35 @@ describe("skill runbook", () => {
     expect(markdown).toContain("reference/harnesses/index.md");
     expect(markdown).toContain("reference/evidence.md");
   });
+
+  it("tells agents how to handle every model-route exit code", async () => {
+    const [markdown, exitCodes] = await Promise.all([
+      readFile(
+        new URL("../../../../../skills/rightmodeler/SKILL.md", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../../docs/exit-codes.md", import.meta.url), "utf8"),
+    ]);
+    const codes = [...exitCodes.matchAll(/^- `([a-z_]+)` \(exit `2`\)/gmu)]
+      .map((match) => match[1]!)
+      .filter(
+        (code) =>
+          code.startsWith("plan_") ||
+          code === "judge_family_unknown" ||
+          code === "no_neutral_judge",
+      );
+
+    expect(codes).toEqual(
+      expect.arrayContaining([
+        "judge_family_unknown",
+        "no_neutral_judge",
+        "plan_cli_unavailable",
+        "plan_login_required",
+        "plan_usage_limit",
+      ]),
+    );
+    for (const code of codes) {
+      expect(markdown, code).toContain(`\`${code}\``);
+    }
+  });
 });
