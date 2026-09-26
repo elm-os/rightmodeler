@@ -1481,4 +1481,57 @@ describe("CLI model route question", () => {
       expect(await clis.records(), stored.route).toEqual([]);
     }
   });
+
+  it("keeps the API key variables it names away from the claude and codex status checks", async () => {
+    const { root, repo, homeDir } = await routeRepo(demoAppPath);
+    const clis = await planClis(root, ["claude", "codex"]);
+    await saveModelRoute(
+      { repo },
+      { ...otherUnset, api: { ...otherUnset.api!, apiKeyEnv: "RM_SAVED_KEY" } },
+    );
+    const keyNames = [
+      "AI_GATEWAY_API_KEY",
+      "OPENROUTER_API_KEY",
+      "RIGHTMODELER_API_KEY",
+      "RM_SAVED_KEY",
+    ];
+    const run = terminal(
+      homeDir,
+      ["c", "2", "5", "http://127.0.0.1:9/v1", "RM_056_UNSET_KEY"],
+      {
+        ...clis.env,
+        ...Object.fromEntries(
+          keyNames.map((name) => [name, "rm-key-sentinel"]),
+        ),
+      },
+    );
+
+    expect(
+      await executeCli(
+        ["init", "--traces", validTracePath, "--repo", repo],
+        run.io,
+        run.runtime,
+      ),
+    ).toBe(2);
+    expect(run.stderr()).toContain(unsetKey);
+    expect(await clis.records()).toEqual([
+      "--version",
+      "--version",
+      '-c cli_auth_credentials_store="file" login status',
+      "auth status --json",
+    ]);
+    const envNames = (
+      await readFile(join(root, "plan-stub-record.jsonl"), "utf8")
+    )
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .flatMap((line) => {
+        const { event, envNames } = JSON.parse(line) as {
+          event: string;
+          envNames?: string[];
+        };
+        return event === "start" ? envNames! : [];
+      });
+    expect(envNames.filter((name) => keyNames.includes(name))).toEqual([]);
+  }, 120_000);
 });

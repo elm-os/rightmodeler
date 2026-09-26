@@ -57,6 +57,7 @@ export interface PlanProviderOptions {
   readonly maxConcurrency?: number;
   readonly warning?: (code: string, message: string) => void;
   readonly env?: NodeJS.ProcessEnv;
+  readonly withhold?: readonly string[];
   readonly callTimeoutMs?: number;
 }
 
@@ -283,6 +284,7 @@ function runner(
 export async function preflightPlanCli(
   adapter: PlanAdapter,
   parentEnv: NodeJS.ProcessEnv,
+  withhold: readonly string[] = [],
 ): Promise<{ readonly run: RunCli; readonly version: string }> {
   if ((parentEnv.CI ?? "").length > 0) {
     throw new PlanRouteUnavailableError(
@@ -294,7 +296,9 @@ export async function preflightPlanCli(
     adapter.command,
     adapter.childEnv(
       Object.fromEntries(
-        Object.entries(parentEnv).filter(([name]) => !withheldFromChild(name)),
+        Object.entries(parentEnv).filter(
+          ([name]) => !withheldFromChild(name) && !withhold.includes(name),
+        ),
       ),
     ),
     adapter.remedies.install,
@@ -343,7 +347,11 @@ export function createPlanProvider(
 
   function ready(): Promise<RunCli> {
     preflight ??= (async () => {
-      const { run } = await preflightPlanCli(adapter, parentEnv);
+      const { run } = await preflightPlanCli(
+        adapter,
+        parentEnv,
+        options.withhold,
+      );
       const withheld = adapter.keyVariables.filter(
         (name) => (parentEnv[name] ?? "").length > 0,
       );

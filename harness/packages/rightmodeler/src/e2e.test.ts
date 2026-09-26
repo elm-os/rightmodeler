@@ -7201,4 +7201,76 @@ describe("built CLI through plan routes", () => {
     expect(await codexExecs(run.root, "codex-estimate")).toEqual([]);
     expect(modelCalls(records)).toEqual([]);
   }, 180_000);
+
+  it("keeps the run's --api-key-env variable and the gateway key variables away from every claude and codex process", async () => {
+    const stub = await startStub();
+    const baseUrl = `http://127.0.0.1:${stub.port}/v1`;
+    const gatewayKeys = {
+      AI_GATEWAY_API_KEY: "rm-gateway-dummy-key",
+      OPENROUTER_API_KEY: "rm-openrouter-dummy-key",
+    };
+    const keyNames = [apiKeyEnv, ...Object.keys(gatewayKeys)];
+    try {
+      const judged = await fixtureCopy("plan-key-env-judge");
+      const judgedResult = await runCli(
+        [
+          "init",
+          "--judge-route",
+          "claude-login",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          baseUrl,
+          "--api-key-env",
+          apiKeyEnv,
+          "--catalog-reference",
+          await writePlanPrices(judged.root),
+          "--policy",
+          await writePolicy(judged.root, 1),
+          "--output",
+          "json",
+          "--repo",
+          judged.repo,
+        ],
+        { env: planEnv(judged.root, "key-env-judge", gatewayKeys) },
+      );
+      const replayed = await codexRouteRun(
+        "codex-key-env",
+        "codex-login",
+        "api",
+      );
+      const replayedResult = await runCli(
+        replayed.args("init", [
+          "--base-url",
+          baseUrl,
+          "--api-key-env",
+          apiKeyEnv,
+        ]),
+        { env: await codexEnv(replayed.root, "codex-key-env", gatewayKeys) },
+      );
+
+      expect(judgedResult.code, judgedResult.stderr).toBe(0);
+      expect(replayedResult.code, replayedResult.stderr).toBe(0);
+      const judgeRecords = await stubRecords(judged.root, "key-env-judge");
+      expect(modelCalls(judgeRecords).length).toBeGreaterThan(0);
+      expect(
+        (await codexExecs(replayed.root, "codex-key-env")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        [
+          ...judgeRecords,
+          ...(await stubRecords(replayed.root, "codex-key-env")),
+        ]
+          .filter(({ event }) => event === "start")
+          .flatMap(({ argv, envNames }) =>
+            envNames!
+              .filter((name) => keyNames.includes(name))
+              .map((name) => `${name} reached ${argv!.slice(0, 2).join(" ")}`),
+          )
+          .filter((line, index, lines) => lines.indexOf(line) === index),
+      ).toEqual([]);
+    } finally {
+      await stub.close();
+    }
+  }, 180_000);
 });
