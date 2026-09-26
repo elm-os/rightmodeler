@@ -266,11 +266,19 @@ describe("claude-login adapter", () => {
       ]);
     }
     const plain = await planStubHarness({ fault: "schema-mismatch" });
+    const lost = await planStubHarness({ fault: "bad-model" });
 
     const error = await rejection(plain.provider.chat(turn(haiku)));
+    const judgeError = await rejection(
+      lost.provider.chat(
+        turn(haiku, "Judge this.", { responseFormat: verdictFormat }),
+      ),
+    );
 
     expect(error).toBeInstanceOf(ProviderRequestError);
     expect((error as Error).message).toBe("claude reported error_max_turns: ");
+    expect(judgeError).toBeInstanceOf(ProviderRequestError);
+    expect((judgeError as Error).message).toMatch(/^claude reported 404: /);
   });
 
   it("still records a request substitution when a judge call uses another tool or more than four turns", async () => {

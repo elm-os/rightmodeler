@@ -27050,9 +27050,10 @@ function withheldFromChild(name) {
   return name.startsWith("ANTHROPIC_") || name.startsWith("OPENAI_") || name === "CODEX_API_KEY" || name === "CLAUDECODE" || name === "CLAUDE_PID" || name === "CLAUDE_EFFORT" || name.startsWith("CLAUDE_CODE_") && name !== "CLAUDE_CODE_OAUTH_TOKEN";
 }
 function outputSchema(format11) {
-  const object4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
-  const schema = object4(object4(format11)?.json_schema)?.schema;
-  return object4(format11)?.type === "json_schema" && object4(schema) !== void 0 ? JSON.stringify(schema) : void 0;
+  if (!isRecord(format11) || format11.type !== "json_schema")
+    return void 0;
+  const schema = isRecord(format11.json_schema) ? format11.json_schema.schema : void 0;
+  return isRecord(schema) ? JSON.stringify(schema) : void 0;
 }
 function versionAtLeast(version3, minimum) {
   const have = version3.split(".").map(Number);

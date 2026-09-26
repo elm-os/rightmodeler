@@ -7262,6 +7262,62 @@ describe("built CLI through plan routes", () => {
     expect(ledger.assessments).toEqual([]);
   }, 180_000);
 
+  it("judges API candidates through claude-login with the verdict schema", async () => {
+    const { root, repo } = await fixtureCopy("plan-api-schema-judge");
+    const stub = await startStub();
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          tracesPath,
+          "--judge-route",
+          "claude-login",
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--catalog-reference",
+          await writePlanPrices(root),
+          "--policy",
+          await writePolicy(root, 1),
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        {
+          env: planEnv(root, "api-schema-judge", {
+            PLAN_STUB_FAULT: "quoted-justification",
+          }),
+        },
+      );
+
+      expect(result.code, result.stderr).toBe(0);
+      const ledger = await readLedger(
+        new FsStore(join(repo, ".rightmodeler")),
+        "project",
+      );
+      expect(spendProviders(ledger)).toEqual({
+        candidates: ["configured-provider"],
+        judge: ["claude-login"],
+      });
+      expect(judgeFailureKinds(ledger)).toEqual([]);
+      expect(ledger.executions.length).toBeGreaterThan(0);
+      expect(ledger.assessments).toHaveLength(ledger.executions.length);
+      const judgeCalls = modelCalls(
+        await stubRecords(root, "api-schema-judge"),
+      );
+      expect(judgeCalls.length).toBeGreaterThan(0);
+      for (const { argv } of judgeCalls) {
+        expect(argv!.at(-2)).toBe("--json-schema");
+        expect(JSON.parse(argv!.at(-1)!)).toEqual(verdictSchema);
+      }
+    } finally {
+      await stub.close();
+    }
+  }, 180_000);
+
   it("states the latency sentence only with a claude-login route and the Codex sentences only with a codex-login route", async () => {
     expect(routed).toBeDefined();
     const claudeReport = await storeText(

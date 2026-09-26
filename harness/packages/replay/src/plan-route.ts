@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   canonicalModelName,
+  isRecord,
   type JsonValue,
   type Substitution,
 } from "@rightmodeler/core";
@@ -168,14 +169,11 @@ function withheldFromChild(name: string): boolean {
 }
 
 function outputSchema(format: JsonValue | undefined): string | undefined {
-  const object = (value: JsonValue | undefined) =>
-    typeof value === "object" && value !== null && !Array.isArray(value)
-      ? value
-      : undefined;
-  const schema = object(object(format)?.json_schema)?.schema;
-  return object(format)?.type === "json_schema" && object(schema) !== undefined
-    ? JSON.stringify(schema)
+  if (!isRecord(format) || format.type !== "json_schema") return undefined;
+  const schema = isRecord(format.json_schema)
+    ? format.json_schema.schema
     : undefined;
+  return isRecord(schema) ? JSON.stringify(schema) : undefined;
 }
 
 function versionAtLeast(version: string, minimum: string): boolean {

@@ -75,7 +75,7 @@ A plan route measures the model inside a coding CLI, not the API request your ap
 - The CLI cannot set temperature or an output limit, so the recorded values are not applied, and an answer can be longer than on the API route.
 - It sends one user turn. Recorded cases with an earlier assistant or tool turn, or more than one user message, are left out of the replay sample with the warning `plan_route_cases_left_out`.
 - With `claude`, latency is the API time the CLI reports, without its start-up time.
-- With `claude`, rightmodeler checks which model answered on every call, and records a substitution when `claude` answers with another model, takes more than one turn or calls a tool.
+- With `claude`, rightmodeler checks which model answered on every call, and records a substitution when `claude` answers with another model, takes more than one turn or calls a tool. A judge call is expected to use the StructuredOutput tool and to report up to four turns for the first answer and two corrections, so it counts as a substitution only when `claude` calls another tool or takes more than four turns.
 
 The report's "Model routes" section, and the pull request that `apply` opens, say when a result was measured through a plan.
 
