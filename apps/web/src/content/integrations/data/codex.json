@@ -4,7 +4,7 @@
   "website": "https://github.com/openai/codex",
   "logo": "/integrations/logos/codex.svg",
   "category": "trace-source",
-  "categoryLabel": "Trace source · dedicated adapter",
+  "categoryLabel": "Trace source · replay route",
   "title": "Codex CLI integration: replay sessions on cheaper models",
   "description": "Run rightmodeler on the Codex rollouts already on disk: it reads each session as a trace and judges cheaper models against the result you accepted.",
   "h1": "rightmodeler + Codex CLI",
@@ -24,7 +24,7 @@
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you accepted",
-      "body": "Each turn is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
+      "body": "Each turn is replayed against cheaper candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route codex-login, the codex CLI you are signed in to, on your ChatGPT plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, choosing a judge from a vendor that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
@@ -33,7 +33,7 @@
     }
   ],
   "setup": {
-    "intro": "Nothing to install: npx runs the published CLI, and init finds your Codex rollouts on disk automatically. Nothing connects to your OpenAI account; the audit runs on files Codex already wrote, against whichever replay endpoint you configure.",
+    "intro": "Nothing to install: npx runs the published CLI, and init finds your Codex rollouts on disk automatically. An interactive init asks how to call models and remembers the answer for the repository: an API key for a provider or gateway, or the plans you are signed in to on this machine, through your own codex and claude CLIs. rightmodeler never reads your tokens or credential files, and it keeps API key variables away from those CLIs.",
     "commands": [
       {
         "comment": "# list your most recent Codex rollouts",
@@ -46,6 +46,14 @@
       {
         "comment": "# then run it against your replay endpoint",
         "command": "npx rightmodeler init --traces ~/.codex/sessions/2026/08/14 --base-url $BASE_URL --api-key-env PROVIDER_API_KEY --max-cost-usd 25"
+      },
+      {
+        "comment": "# or replay on your ChatGPT plan, judged through your Claude plan",
+        "command": "npx rightmodeler init --traces ~/.codex/sessions/2026/08/14 --route codex-login --judge-route claude-login"
+      },
+      {
+        "comment": "# what a plan route does, and what it cannot do",
+        "command": "npx rightmodeler docs model-routes"
       }
     ]
   },
@@ -96,6 +104,10 @@
     {
       "title": "Per-turn usage, not a running total",
       "body": "Codex reports cumulative token counts. The adapter subtracts each turn's baseline from the running total, so a turn's usage is its own rather than the session's so far, which keeps the cost side of the comparison honest."
+    },
+    {
+      "title": "Replay through your plan",
+      "body": "No API key needed: --route codex-login replays candidates through the codex CLI you are signed in to, and --judge-route claude-login has the claude CLI you are signed in to judge them, because the judge must come from a vendor other than both the candidates' and the recorded model's (an API key for a multi-vendor gateway can judge instead). The calls count against your plans' usage limits, the same limits as your own sessions: when one is reached the run stops and names the reset time, and rerunning the same command after the reset picks up where the run stopped. These calls write no session files, so they never turn up in the rollouts you audit next."
     }
   ],
   "limits": [
@@ -103,7 +115,9 @@
     "Replay needs plain-text model call sites in the repository it scans; session files are read as traces, and the audit is built for the model calls your own code makes.",
     "A turn needs a turn_context with a model, and a response item needs a turn to attach to. Items that arrive before any turn context, or with an unrecognized payload type, are dropped with a recorded reason rather than guessed at.",
     "Turns that produced no assistant output are left out entirely, so a session of interrupted turns can yield fewer steps than it appears to contain.",
-    "Codex does not log dollar cost. Historical spend is not derived from the rollout; candidate calls are priced from what your replay endpoint reports and marked as an estimate when the provider returns none.",
+    "Codex does not log dollar cost. Historical spend is not derived from the rollout; candidate calls are priced from what your replay endpoint reports and marked as an estimate when the provider returns none. Calls through a plan are priced at list price from a public model list, always as an estimate: a list-price equivalent, not a bill.",
+    "Through a plan, rightmodeler measures the model inside a coding CLI, not the API your app calls: codex adds its own context, including your global ~/.codex/AGENTS.md, to every call, cannot set temperature or an output cap, does not report which model answered, and keeps a code tool and a patch tool registered that no setting removes, so a call can include a tool step its output does not show. The report labels this. Only cases made of system or developer messages and one user message replay that way; multi-turn cases are left out with a named reason.",
+    "Plan routes run only on your own machine: rightmodeler refuses one when CI is set, and Mode B confirmation and --detach stay on an API route. Plan routes have no default limit on calls or spend: a run makes as many calls as it needs, and your plan's usage limit is the only stop.",
     "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
     "It is a report, not a gateway. Nothing sits between Codex and its provider, and there is no rightmodeler server to see your sessions."
   ],
@@ -114,7 +128,7 @@
     },
     {
       "q": "Do I need to export anything before running the audit?",
-      "a": "No. Codex already writes its rollouts to local disk, so there is no dashboard to visit and no export API to call. The only credential the audit needs is the key for whichever OpenAI-compatible endpoint you replay through."
+      "a": "No. Codex already writes its rollouts to local disk, so there is no dashboard to visit and no export API to call. Replay needs either the key for an OpenAI-compatible endpoint you replay through, or no key at all with --route codex-login --judge-route claude-login, which run through the codex and claude CLIs you are signed in to. The judge runs on the other CLI because it must come from a vendor other than both the candidates' and the recorded model's. When a plan reaches its usage limit, the run stops and names the reset time, and the same command picks up where it stopped after the reset. npx rightmodeler docs model-routes prints the full guide to both routes."
     },
     {
       "q": "Does rightmodeler change which model Codex uses?",
@@ -126,7 +140,7 @@
     },
     {
       "q": "Does my session data leave my machine?",
-      "a": "Only during replay, when step inputs go to candidate models through the endpoint you configured, under your own key, the same class of call Codex made to produce the log in the first place. There is no rightmodeler server and no account."
+      "a": "Only during replay, when step inputs go to candidate models and the judge: through the endpoint you configured, under your own key, the same class of call Codex made to produce the log in the first place, or through the codex and claude CLIs you are signed in to, where OpenAI and Anthropic handle them under your plan accounts' data settings. There is no rightmodeler server and no account."
     },
     {
       "q": "What about turns where Codex ran commands or edited files?",
