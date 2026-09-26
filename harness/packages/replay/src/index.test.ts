@@ -5117,4 +5117,183 @@ describe("Mode A replay", () => {
       "yotta/judge-2": "three_consecutive_terminal_failures",
     });
   });
+
+  async function judgePrompts(referenceOutput: JsonValue): Promise<string[]> {
+    const prompts: string[] = [];
+    const equivalent = judge();
+    await run([recordedCase({ referenceOutput })], async (request) => {
+      prompts.push(request.messages.map(({ content }) => content).join("\n"));
+      return equivalent(request);
+    });
+    return prompts;
+  }
+
+  function referenceBlock(prompt: string): string {
+    const match =
+      /<<<UNTRUSTED REFERENCE>>>\n([\s\S]*?)\n<<<END UNTRUSTED REFERENCE>>>/.exec(
+        prompt,
+      );
+    if (match === null) throw new Error("Judge prompt has no reference block");
+    return match[1]!;
+  }
+
+  it("shows the judge a gateway message's text, not its provider metadata", async () => {
+    const gatewayResponse = JSON.parse(
+      await readFile(aiGatewayChatFixtureUrl, "utf8"),
+    ) as { choices: [{ message: JsonValue }] };
+
+    const prompts = await judgePrompts(gatewayResponse.choices[0].message);
+
+    expect(prompts.map(referenceBlock)).toEqual(["Ok!", "Ok!"]);
+    for (const prompt of prompts) {
+      expect(prompt).not.toContain("provider_metadata");
+      expect(prompt).not.toContain("generationId");
+      expect(prompt).not.toContain('"role":"assistant"');
+    }
+  });
+
+  const textAnswers: Array<[string, JsonValue, string]> = [
+    [
+      "an OpenAI message with gateway fields",
+      {
+        role: "assistant",
+        content: "Ok!",
+        refusal: null,
+        annotations: [],
+        provider_metadata: { gateway: { cost: "0" } },
+      },
+      "Ok!",
+    ],
+    [
+      "a response whose only choice is a message",
+      {
+        id: "chatcmpl-1",
+        object: "chat.completion",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "Ok!" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 1 },
+      },
+      "Ok!",
+    ],
+    [
+      "one OTel message of text parts",
+      [
+        {
+          role: "assistant",
+          parts: [
+            { type: "text", content: "First" },
+            { type: "text", content: "Second" },
+          ],
+          finish_reason: "stop",
+        },
+      ],
+      "First\nSecond",
+    ],
+    [
+      "a one-item list of one message",
+      [{ role: "assistant", content: "Ok!" }],
+      "Ok!",
+    ],
+    [
+      "a message with empty tool calls and a null function call",
+      {
+        role: "assistant",
+        content: "Ok!",
+        tool_calls: [],
+        function_call: null,
+      },
+      "Ok!",
+    ],
+  ];
+  const recordedJsonAnswers: Array<[string, JsonValue]> = [
+    [
+      "a message that calls tools",
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call-1",
+            type: "function",
+            function: { name: "lookup", arguments: "{}" },
+          },
+        ],
+      },
+    ],
+    [
+      "a message with a legacy function call",
+      {
+        role: "assistant",
+        content: "Checking.",
+        function_call: { name: "lookup", arguments: "{}" },
+      },
+    ],
+    [
+      "an OpenInference message with flattened tool calls",
+      [
+        {
+          role: "assistant",
+          content: "Checking.",
+          "tool_calls.0.tool_call.function.name": "lookup",
+        },
+      ],
+    ],
+    [
+      "an OTel message with a reasoning part",
+      [
+        {
+          role: "assistant",
+          parts: [
+            { type: "reasoning", content: "Think." },
+            { type: "text", content: "Ok!" },
+          ],
+          finish_reason: "stop",
+        },
+      ],
+    ],
+    [
+      "a message with content blocks",
+      { role: "assistant", content: [{ type: "text", text: "Ok!" }] },
+    ],
+    [
+      "a response with two choices",
+      {
+        choices: [
+          { message: { role: "assistant", content: "A" } },
+          { message: { role: "assistant", content: "B" } },
+        ],
+      },
+    ],
+    ["a user message", { role: "user", content: "Ok!" }],
+    [
+      "two messages",
+      [
+        { role: "assistant", content: "A" },
+        { role: "assistant", content: "B" },
+      ],
+    ],
+  ];
+
+  it.each<[string, JsonValue, string]>([
+    ...textAnswers,
+    ...recordedJsonAnswers.map(
+      ([name, output]): [string, JsonValue, string] => [
+        name,
+        output,
+        JSON.stringify(output),
+      ],
+    ),
+  ])(
+    "shows the judge a recorded answer's text only when the answer is one assistant message of text: %s",
+    async (_name, referenceOutput, shown) => {
+      const prompts = await judgePrompts(referenceOutput);
+
+      expect(prompts.map(referenceBlock)).toEqual([shown, shown]);
+    },
+  );
 });
