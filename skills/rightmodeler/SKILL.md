@@ -42,13 +42,34 @@ Ask only for inputs that are not already known:
   local, Claude Code, and Codex files, but agent and other non-interactive runs
   should keep passing `--traces` explicitly for deterministic operation.
 - The goal and stopping stage. Use `report` for a complete recommendation run.
-- The OpenAI-compatible provider base URL and the name of the environment variable
-  that already contains its API key.
-- The maximum allowed replay spend in US dollars.
+- How to call models. By default, an API route: the OpenAI-compatible provider base URL and
+  the name of the environment variable that already contains its API key. A plan route runs
+  candidates or the judge through the user's own `claude` or `codex` CLI, signed in on this
+  machine (section 5); use one only after the user agrees, as below.
+- On an API route, the maximum allowed replay spend in US dollars, if the operator wants a
+  cap. Never ask for, suggest, or set a cap when a plan route is used, unless the user asks
+  for one.
 - Model, provider, quality, or ownership constraints that affect the run.
 
-Never ask for an API key value. The user sets the named environment variable in
-their own shell. Do not echo, persist, or inline its value.
+Never ask for, read, echo, or store an API key or login token, and never open `~/.claude`,
+the Keychain, or `~/.codex/auth.json`. The user sets the named environment variable in their
+own shell. Never inline a key's value, and never put a key in a base URL or a header.
+
+Before choosing a plan route, name the route for each role, tell the user what a plan route
+means, and get their yes:
+
+- It uses the plan's usage allowance, the same limits as the user's own Claude Code or Codex
+  sessions (and this agent's, when it runs on the same plan). It has no cap on calls or
+  spend: the run makes as many calls as it needs, and the plan's usage limit is the only stop.
+- Prompts from the traces go to Anthropic or OpenAI under the plan account's data settings.
+- The CLI adds its own context to every call (for `claude`, including the signed-in account's
+  email and the date; for `codex`, including the user's global instructions file) and cannot
+  set temperature or an output limit, so the results measure the model inside a coding CLI.
+  `rightmodeler docs model-routes` has the details.
+
+On a plan route, rightmodeler checks the sign-in itself. Never offer a plan route in CI:
+rightmodeler refuses one when `CI` is set, so use an API route there. Mode B confirmation
+(`--modeb-config`) needs an API route for both roles.
 
 ## 2. Detect onboarding state
 
@@ -83,15 +104,16 @@ fi
 "${RIGHTMODELER[@]}" --help
 "${RIGHTMODELER[@]}" init --help
 "${RIGHTMODELER[@]}" docs
-# Replace <name> with a name from the list above, for example getting-started,
-# commands, exit-codes, evaluators, modeb, gateways, github, or github-actions.
+# Replace <name> with a name from the list above, for example getting-started, commands,
+# exit-codes, evaluators, modeb, gateways, model-routes, github, or github-actions.
 "${RIGHTMODELER[@]}" docs <name>
 ```
 
 Both help commands must exit 0. If either exits 10 or greater, stop and report the
 installation or command-line failure. There is no fallback engine.
 The shipped docs describe the version actually installed and take precedence over
-this runbook if versions differ.
+this runbook if versions differ. If `init --help` does not list `--route`, the installed
+CLI predates plan routes; use an API route.
 
 ## 4. Preview the plan
 
@@ -108,31 +130,63 @@ not an empty plan.
 
 ## 5. Run through the agreed stage
 
-Set the agreed inputs. `THROUGH=report` runs the complete pipeline. The API key must
-already exist in the environment variable named by `API_KEY_ENV`.
+Set the agreed inputs. `THROUGH=report` runs the complete pipeline. On an API route the
+API key must already exist in the environment variable named by `API_KEY_ENV`.
 
 The spend cap is optional. Leave `MAX_COST_USD` empty to run uncapped: every case and
 judge cell then runs to completion, which is the right choice when completeness and
 evidence quality matter more than cost. Set a cap only when the operator wants a hard
 stop; a capped run halts at the boundary with a named remedy and resumes after the cap
-is raised.
+is raised. When a plan route is used, leave `MAX_COST_USD` empty unless the user asks for a
+cap: plan routes are uncapped, and the plan's usage limit is the only stop. A cap the user
+asks for there counts list-price equivalents, not a bill, and is soft, because a coding CLI
+sets no output limit.
 
 Use `--policy <path>` for release policy JSON covering the quality floor, shortlist size, and
 model allow and deny lists; `--pricing-file <path>` for per-token pricing when a catalog
-publishes none; `--max-concurrency <n>` for the maximum concurrent provider requests;
+publishes none; `--catalog-reference <url-or-path>` for an upstream model list that fills what
+a catalog lacks, which on a plan route is the price list (by default Vercel AI Gateway's
+public list); `--header 'name: value'`, repeatable, for a gateway that routes on request
+headers, never for a secret; `--max-concurrency <n>` for the maximum concurrent provider
+requests, or on a plan route the maximum CLI processes at once, not a limit on calls;
 `--matchers <path>` for a declarative matcher definitions JSON file; and
 `--modeb-config <path>` to select the container image, app spec, step map, and `backend`,
 `docker` by default or `cloud` for a remote sandbox. For a Mode B run, read
 `reference/harnesses/index.md` first and follow the file it routes to.
+
+Leave `ROUTE_ARGS` empty for an API route. Set it only after the user agrees to a plan route
+(section 1), and then always name both roles: a plan `--route` is refused without a
+`--judge-route`, and the judge must come from a vendor other than both the candidates' and
+the recorded model's.
+
+- Both roles on plans, with `PROVIDER_BASE_URL` empty: for traces that record an Anthropic
+  model, `ROUTE_ARGS=(--route claude-login --judge-route codex-login)`; for an OpenAI model,
+  `ROUTE_ARGS=(--route codex-login --judge-route claude-login)`.
+- Plan candidates judged through a multi-vendor gateway, keeping `PROVIDER_BASE_URL` and
+  `API_KEY_ENV`: for example `ROUTE_ARGS=(--route claude-login --judge-route api)`.
+- API candidates judged through a plan, keeping `PROVIDER_BASE_URL` and `API_KEY_ENV`: for
+  example `ROUTE_ARGS=(--route api --judge-route claude-login)`. Candidates from the judge's
+  vendor are left out. A direct OpenAI or Anthropic key serves one vendor and lists no prices:
+  judge through the other vendor's CLI and add
+  `--catalog-reference https://ai-gateway.vercel.sh/v1/models` to `ROUTE_ARGS`.
+
+This run never reads a route saved by an interactive `init` or `estimate`. To reuse one, ask
+the user for the flags that run printed.
 
 ```bash
 TRACES=/absolute/path/to/traces.json
 THROUGH=report
 PROVIDER_BASE_URL=https://provider.example/v1
 API_KEY_ENV=RIGHTMODELER_API_KEY
+ROUTE_ARGS=()
 MAX_COST_USD=
 RUN_LOG=$(mktemp)
 ERROR_LOG=$(mktemp)
+
+API_ARGS=()
+if [ -n "$PROVIDER_BASE_URL" ]; then
+  API_ARGS=(--base-url "$PROVIDER_BASE_URL" --api-key-env "$API_KEY_ENV")
+fi
 
 CAP_ARGS=()
 if [ -n "$MAX_COST_USD" ]; then
@@ -143,8 +197,8 @@ if "${RIGHTMODELER[@]}" init \
   --yes \
   --through "$THROUGH" \
   --traces "$TRACES" \
-  --base-url "$PROVIDER_BASE_URL" \
-  --api-key-env "$API_KEY_ENV" \
+  "${ROUTE_ARGS[@]}" \
+  "${API_ARGS[@]}" \
   "${CAP_ARGS[@]}" \
   --output jsonl \
   --repo "$REPO" \
@@ -189,7 +243,7 @@ Use the pipeline contract from `rightmodeler docs exit-codes`:
 - `0`: success with no actionable recommendation. Successful planning and partial
   `--through` runs also return 0.
 - `1`: a complete `init` or `report` found an actionable recommendation.
-- `2`: the run needs input at a resumable boundary.
+- `2`: the run needs input at a resumable boundary, or a plan reached its usage limit.
 - `3`: the cost budget was reached at a resumable boundary.
 - `10` or greater: command-line or runtime failure.
 
@@ -212,6 +266,26 @@ A `missing_traces_path` remedy can append up to the three newest discovered path
 and the number of additional candidates, followed by `Pass --traces <path>.`
 Treat those paths as suggestions only. In the runbook command, continue to pass
 the operator-approved trace path explicitly.
+
+Model routes add these exit-2 codes. Report the `message` and `remedy`, then:
+
+- `plan_usage_limit`: the plan reached its usage limit. Tell the user the reset time that
+  `message` quotes, or that the vendor gave none, and stop. Rerun the same command only after
+  the reset and when the user says so; completed calls are kept. Never retry in a loop, and
+  never switch routes without asking.
+- `plan_login_required`: the CLI is not signed in with a plan, would use an API key, or lost
+  its login. Ask the user to follow the remedy from their own terminal: sign in with the
+  command it names, or remove the API key setting it names. Never read or edit that setting
+  yourself. Then rerun.
+- `plan_cli_unavailable`: the CLI is missing, too old, or changed in a way rightmodeler
+  rejects, or `CI` is set. Relay the remedy. Never unset `CI` yourself; in CI, use an API
+  route.
+- `judge_family_unknown`: model ids name no vendor, so the judge's vendor cannot be checked.
+  Replay checks it before any model call. Relay the remedy and ask the user which fix to use.
+- `no_neutral_judge`: no judge is available from a vendor other than the candidates' and the
+  recorded model's. Replay checks it before any model call. Relay the remedy and ask the user
+  for a third-vendor catalog, another judge route (a plan route only after their yes), or an
+  evaluator.
 
 On exit 3, report that the configured budget boundary stopped the run. Include the
 error `message` and `remedy`, the configured `--max-cost-usd`, and the last completed
@@ -236,6 +310,13 @@ before summarizing. Include:
 Also report `reportPath`. A complete run writes `.rightmodeler/project/reports/report.md`. The
 JSON report is kept inside the versioned store rather than written as a plain file, so take the
 machine-readable outcome from the final `result` event rather than from a path.
+
+If a plan route ran, name the route that replayed candidates and the route that judged,
+relay the report's `## Model routes` section, and say that spend on a plan route is a
+list-price equivalent drawn from the plan's allowance, not a bill. Report every `warning`
+event with its `code` and `message`; on a plan route these include `plan_route_key_withheld`,
+`plan_usage_warning`, `codex_global_instructions`, `judge_vendor_candidates_dropped`, and
+`plan_route_cases_left_out`.
 
 Treat family verdicts as the decision unit. Do not promote a single successful case
 into a family recommendation. Exit 0 can still contain useful rejects and
