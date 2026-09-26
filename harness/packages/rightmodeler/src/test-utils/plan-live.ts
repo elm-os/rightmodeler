@@ -1,8 +1,15 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { accessSync, constants, existsSync, statSync } from "node:fs";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute, join, relative } from "node:path";
+import { delimiter, isAbsolute, join, relative } from "node:path";
 
 import type { Ledger } from "@rightmodeler/core";
 
@@ -147,6 +154,50 @@ export async function preparePlanLeg(
   }
   await writeFile(saved, JSON.stringify(models));
   return { repo, traces, models };
+}
+
+export async function envNameShim(
+  dir: string,
+  command: string,
+): Promise<{ readonly path: string; names(): Promise<string[][]> }> {
+  const real = (process.env.PATH ?? "")
+    .split(delimiter)
+    .map((entry) => join(entry, command))
+    .find((path) => {
+      try {
+        accessSync(path, constants.X_OK);
+        return statSync(path).isFile();
+      } catch {
+        return false;
+      }
+    });
+  const path = join(dir, "shim");
+  const record = join(dir, `${command}-env-names.txt`);
+  if (real === undefined) throw new Error(`${command} is not on PATH`);
+  if ([real, record, process.execPath].some((file) => file.includes("'"))) {
+    throw new Error("The shim cannot quote a path that contains a quote");
+  }
+  await mkdir(path, { recursive: true });
+  await rm(record, { force: true });
+  await writeFile(
+    join(path, command),
+    [
+      "#!/bin/sh",
+      `'${process.execPath}' -e 'require("node:fs").appendFileSync(process.argv[1], Object.keys(process.env).join(" ") + "\\n")' '${record}' < /dev/null`,
+      `exec '${real}' "$@"`,
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  return {
+    path,
+    async names() {
+      return (await readFile(record, "utf8").catch(() => ""))
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .map((line) => line.split(" "));
+    },
+  };
 }
 
 async function entryNames(directory: string): Promise<string[]> {

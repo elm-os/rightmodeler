@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { Writable } from "node:stream";
 
 import { FsStore, readLedger } from "@rightmodeler/core";
@@ -22,6 +22,7 @@ import {
 } from "./test-utils/gateway-live.js";
 import {
   DUMMY_KEYS,
+  envNameShim,
   legFacts,
   livePlanGate,
   planCliEnv,
@@ -33,6 +34,11 @@ import {
 import { promptAnswers } from "./test-utils/prompt-answers.js";
 
 const gate = livePlanGate();
+const childKeyNames = [
+  "AI_GATEWAY_API_KEY",
+  "OPENROUTER_API_KEY",
+  ...Object.keys(DUMMY_KEYS),
+];
 const legs = {
   a: {
     name: "A",
@@ -144,15 +150,24 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
     ];
   }
 
-  async function runLeg(leg: PlanLeg) {
+  async function runLeg(
+    leg: PlanLeg,
+    shim?: Awaited<ReturnType<typeof envNameShim>>,
+  ) {
     const config = legs[leg];
     const prepared = await preparePlanLeg(gate.dir, leg);
     const store = join(gate.dir, leg, "store");
     const hygiene = await planHygiene();
     const result = await runBuiltCli(
       legArgs("init", leg, prepared, store),
-      DUMMY_KEYS,
+      shim === undefined
+        ? DUMMY_KEYS
+        : {
+            ...DUMMY_KEYS,
+            PATH: `${shim.path}${delimiter}${process.env.PATH ?? ""}`,
+          },
     );
+    const childEnvNames = await shim?.names();
     const ledger = await readLedger(new FsStore(store), "project");
     const facts = legFacts(ledger, result.stderr, config.routes);
     const totalUsd = ledger.spendEvents.reduce(
@@ -170,6 +185,18 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
         overshootUsd:
           config.cap === undefined ? null : Math.max(0, totalUsd - config.cap),
         hygiene: checked,
+        ...(childEnvNames === undefined
+          ? {}
+          : {
+              shimmedCalls: childEnvNames.length,
+              keysReachingCli: [
+                ...new Set(
+                  childEnvNames
+                    .flat()
+                    .filter((name) => childKeyNames.includes(name)),
+                ),
+              ],
+            }),
       },
     });
     let report: string | undefined;
@@ -207,7 +234,16 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
       ({ streamOutcome }) => streamOutcome === "completed",
     );
     expect(completed.length).toBeGreaterThan(0);
-    return { result, ledger, facts, spend, codes, completed, report };
+    return {
+      result,
+      ledger,
+      facts,
+      spend,
+      codes,
+      completed,
+      report,
+      childEnvNames,
+    };
   }
 
   beforeAll(async () => {
@@ -377,13 +413,20 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
   }, 2_400_000);
 
   it("replays Vercel API candidates and judges them through claude, leaving Anthropic candidates out", async () => {
-    const leg = await runLeg("c");
+    const leg = await runLeg(
+      "c",
+      await envNameShim(join(gate.dir, "c"), "claude"),
+    );
 
     expect(
       leg.result.code === 0 ||
         (leg.result.code === 3 && leg.codes.includes("budget_cap_refusal")),
       leg.result.stderr,
     ).toBe(true);
+    expect(leg.childEnvNames!.length).toBeGreaterThan(0);
+    expect(
+      leg.childEnvNames!.flat().filter((name) => childKeyNames.includes(name)),
+    ).toEqual([]);
     expect(leg.facts.withheld).toContain("ANTHROPIC_API_KEY");
     expect(leg.facts.withheld).not.toContain("CODEX_API_KEY");
     expect(leg.facts.withheld).not.toContain("OPENAI_API_KEY");

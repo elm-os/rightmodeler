@@ -181,7 +181,11 @@ import {
   type CodeContext,
 } from "./code-graph/index.js";
 import type { GithubClient } from "./github/index.js";
-import { isApiKeyEnvName, isShareableBaseUrl } from "./guidance.js";
+import {
+  apiKeyVariables,
+  isApiKeyEnvName,
+  isShareableBaseUrl,
+} from "./guidance.js";
 import { ProtocolError, Reporter } from "./protocol.js";
 import {
   formatDeltaPct,
@@ -2580,6 +2584,7 @@ function routeHandle(context: PipelineContext, kind: RouteKind): RouteHandle {
         pricingOverrides: context.pricingOverrides,
         maxConcurrency: context.maxConcurrency,
         warning: (code, message) => context.reporter.warning(code, message),
+        withhold: [context.apiKeyEnv, ...apiKeyVariables],
       });
   }
 }

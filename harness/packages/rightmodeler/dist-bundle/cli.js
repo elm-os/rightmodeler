@@ -27149,11 +27149,11 @@ function runner(command, env, installRemedy) {
     }
   };
 }
-async function preflightPlanCli(adapter, parentEnv) {
+async function preflightPlanCli(adapter, parentEnv, withhold = []) {
   if ((parentEnv.CI ?? "").length > 0) {
     throw new PlanRouteUnavailableError("Plan routes run only on your own machine, and CI is set.", "In continuous integration, use an API route: --base-url <url> and --api-key-env <name>. If this is your own machine, unset CI and rerun.");
   }
-  const run = runner(adapter.command, adapter.childEnv(Object.fromEntries(Object.entries(parentEnv).filter(([name]) => !withheldFromChild(name)))), adapter.remedies.install);
+  const run = runner(adapter.command, adapter.childEnv(Object.fromEntries(Object.entries(parentEnv).filter(([name]) => !withheldFromChild(name) && !withhold.includes(name)))), adapter.remedies.install);
   const version3 = /\d+\.\d+\.\d+/u.exec((await run(["--version"], {
     stdin: "",
     timeoutMs: PREFLIGHT_TIMEOUT_MS
@@ -27182,7 +27182,7 @@ function createPlanProvider(adapter, options) {
   }
   function ready() {
     preflight ??= (async () => {
-      const { run } = await preflightPlanCli(adapter, parentEnv);
+      const { run } = await preflightPlanCli(adapter, parentEnv, options.withhold);
       const withheld = adapter.keyVariables.filter((name) => (parentEnv[name] ?? "").length > 0);
       if (withheld.length > 0) {
         const one = withheld.length === 1;
@@ -32577,10 +32577,10 @@ async function confirmSwapSet(input) {
 }
 
 // ../replay/dist/plan-logins.js
-async function detectPlanLogins(env) {
+async function detectPlanLogins(env, withhold = []) {
   return Promise.all([createCodexAdapter({ env }), claudeAdapter].map(async (adapter) => {
     try {
-      const { version: version3 } = await preflightPlanCli(adapter, env);
+      const { version: version3 } = await preflightPlanCli(adapter, env, withhold);
       return {
         kind: adapter.kind,
         ready: true,
@@ -44114,6 +44114,9 @@ var apiPresets = {
     apiKeyEnv: "RIGHTMODELER_API_KEY"
   }
 };
+var apiKeyVariables = Object.values(apiPresets).map(
+  ({ apiKeyEnv }) => apiKeyEnv
+);
 var singleVendorPresets = {
   openai: {
     judge: "claude-login",
@@ -47301,7 +47304,8 @@ function routeHandle(context2, kind) {
         priceList: context2.catalogReference ?? DEFAULT_PLAN_PRICE_LIST,
         pricingOverrides: context2.pricingOverrides,
         maxConcurrency: context2.maxConcurrency,
-        warning: (code, message2) => context2.reporter.warning(code, message2)
+        warning: (code, message2) => context2.reporter.warning(code, message2),
+        withhold: [context2.apiKeyEnv, ...apiKeyVariables]
       });
   }
 }
@@ -51870,7 +51874,10 @@ async function guidedPipelineOptions(global, local, reporter, runtime) {
     const route = local.yes ? saved : await promptForModelRoute({
       input: runtime.stdin,
       output: promptOutput(reporter.io, runtime.stdout.isTTY),
-      plans: local.modebConfig === void 0 ? () => detectPlanLogins(runtime.env) : void 0,
+      plans: local.modebConfig === void 0 ? () => detectPlanLogins(runtime.env, [
+        ...apiKeyVariables,
+        ...saved?.api === void 0 ? [] : [saved.api.apiKeyEnv]
+      ]) : void 0,
       saved: saved && {
         route: saved,
         flags: routeFlags(routeOptions(saved, local))
