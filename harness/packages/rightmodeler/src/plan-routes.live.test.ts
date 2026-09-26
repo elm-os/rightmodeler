@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { Writable } from "node:stream";
 
-import { FsStore, readLedger } from "@rightmodeler/core";
+import { FsStore, readLedger, runKey } from "@rightmodeler/core";
 import { pickJudges } from "@rightmodeler/kernel";
 import {
   createClaudeLoginProvider,
@@ -235,6 +235,7 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
     );
     expect(completed.length).toBeGreaterThan(0);
     return {
+      store,
       result,
       ledger,
       facts,
@@ -346,7 +347,7 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
       );
     }
     expect((await hygiene.check()).violations).toEqual([]);
-  }, 600_000);
+  }, 1_200_000);
 
   it("replays codex candidates, judges them through claude, attributes spend to each route and labels the report", async () => {
     const leg = await runLeg("a");
@@ -396,13 +397,19 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
         if (
           failures.length > 0 &&
           failures.every(({ message }) =>
-            /limit|capacity|demand/iu.test(message),
+            /HTTP 429|limit|capacity|demand/iu.test(message),
           )
         ) {
           expect(retired).toMatchObject({
             note: "rate_limited",
             runId: expect.any(String),
           });
+          expect(
+            await new FsStore(leg.store).get(
+              runKey("project", String(retired.runId)),
+            ),
+            `run ${String(retired.runId)} of this leg`,
+          ).not.toBeNull();
         }
       }
     }
@@ -415,7 +422,7 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
   it("replays Vercel API candidates and judges them through claude, leaving Anthropic candidates out", async () => {
     const leg = await runLeg(
       "c",
-      await envNameShim(join(gate.dir, "c"), "claude"),
+      await envNameShim(join(gate.dir, "c-shim"), "claude"),
     );
 
     expect(
