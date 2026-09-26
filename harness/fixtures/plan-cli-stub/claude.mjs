@@ -77,7 +77,9 @@ function missingIsolation(modelCall) {
     ["--tools", ""],
     ["--setting-sources", ""],
     ["--output-format", "stream-json"],
-    ...(modelCall ? [["--max-turns", "1"]] : []),
+    ...(modelCall
+      ? [["--max-turns", valueOf("--json-schema") === undefined ? "1" : "3"]]
+      : []),
   ];
   for (const [flag, value] of pairs) {
     if (valueOf(flag) !== value) return `${flag} ${JSON.stringify(value)}`;
@@ -149,6 +151,25 @@ function failedResult(overrides) {
   return { ...result, ...overrides };
 }
 
+function validSchema(text) {
+  const types = [
+    "string",
+    "number",
+    "integer",
+    "boolean",
+    "object",
+    "array",
+    "null",
+  ];
+  try {
+    return Object.values(JSON.parse(text)?.properties ?? {}).every(
+      ({ type }) => type === undefined || types.includes(type),
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function modelCall(stdin) {
   const model = valueOf("--model");
   const system = readFileSync(valueOf("--system-prompt-file"), "utf8");
@@ -214,14 +235,58 @@ async function modelCall(stdin) {
     return;
   }
   const served = faultValue("served") ?? model;
+  const schema = valueOf("--json-schema");
+  if (schema !== undefined && !validSchema(schema)) {
+    process.stderr.write(captured("json-schema-invalid.err"));
+    finish("json-schema-invalid", 1);
+    return;
+  }
+  const mismatch = faults.find(
+    (fault) => fault === "schema-mismatch" || fault === "schema-retries",
+  );
+  if (mismatch !== undefined) {
+    for (const event of capturedEvents("call-json-schema-mismatch.jsonl")) {
+      if (event.type === "system") {
+        emit({ ...event, model, cwd: process.cwd(), ...sentinels });
+      } else if (event.type === "assistant") {
+        emit({ ...event, message: { ...event.message, model: served } });
+      } else if (event.type === "result") {
+        emit({
+          ...event,
+          ...(mismatch === "schema-retries"
+            ? {
+                subtype: "error_max_structured_output_retries",
+                terminal_reason: "structured_output_retry_exhausted",
+                errors: [],
+              }
+            : {}),
+          modelUsage: { [served]: Object.values(event.modelUsage)[0] },
+        });
+      } else {
+        emit(event);
+      }
+    }
+    finish(mismatch, 1);
+    return;
+  }
   const digest = createHash("sha256").update(stdin).digest("hex").slice(0, 12);
-  const answer = system.startsWith("You are a strict evaluation judge.")
-    ? JSON.stringify({
-        verdict: "equivalent",
-        score: 1,
-        justification: `Deterministic judge result ${digest}.`,
-      })
-    : `Deterministic reply ${digest}`;
+  const judge = system.startsWith("You are a strict evaluation judge.");
+  const quoted = judge && hasFault("quoted-justification");
+  const verdict = {
+    verdict: "equivalent",
+    score: 1,
+    justification: quoted
+      ? 'Candidate conveys the identical meaning as the reference sentence, paraphrasing "prior to its debut performance" as "before performing it publicly for the first time".'
+      : `Deterministic judge result ${digest}.`,
+  };
+  const answer =
+    schema === undefined && !judge
+      ? `Deterministic reply ${digest}`
+      : schema === undefined && quoted
+        ? '{"verdict": "equivalent", "score": 1, "justification": "' +
+          verdict.justification +
+          '"}'
+        : JSON.stringify(verdict);
   const inputTokens = Math.ceil(Buffer.byteLength(system + stdin) / 4) + 400;
   const outputTokens = Math.ceil(Buffer.byteLength(answer) / 4);
   const usage = {
@@ -229,21 +294,40 @@ async function modelCall(stdin) {
     input_tokens: inputTokens,
     output_tokens: outputTokens,
   };
-  emit(init);
-  emit({
-    ...capturedAssistant,
-    message: {
-      ...capturedAssistant.message,
-      model: served,
-      content: [
-        { type: "text", text: answer },
-        ...(hasFault("tool-use")
-          ? [{ type: "tool_use", id: "TOOL-USE-ID", name: "Read", input: {} }]
-          : []),
-      ],
-      usage,
-    },
-  });
+  const otherTool = hasFault("tool-use")
+    ? [{ type: "tool_use", id: "TOOL-USE-ID", name: "Read", input: {} }]
+    : [];
+  const [schemaInit, thought, structured, toolResult, schemaRateLimit] =
+    schema === undefined ? [] : capturedEvents("call-json-schema.jsonl");
+  if (schema === undefined) {
+    emit(init);
+    emit({
+      ...capturedAssistant,
+      message: {
+        ...capturedAssistant.message,
+        model: served,
+        content: [{ type: "text", text: answer }, ...otherTool],
+        usage,
+      },
+    });
+  } else {
+    emit({ ...schemaInit, model, cwd: process.cwd(), ...sentinels });
+    emit({ ...thought, message: { ...thought.message, model: served, usage } });
+    emit({
+      ...structured,
+      message: {
+        ...structured.message,
+        model: served,
+        content: [
+          { ...structured.message.content[0], input: verdict },
+          ...otherTool,
+        ],
+        usage,
+      },
+    });
+    emit(toolResult);
+    emit(schemaRateLimit);
+  }
   if (hasFault("near-limit")) {
     emit(JSON.parse(captured("rate-limit-allowed-warning.json")));
   }
@@ -262,8 +346,14 @@ async function modelCall(stdin) {
   emit({
     ...capturedResult,
     duration_api_ms: 500,
-    num_turns: Number(faultValue("turns") ?? 1),
-    result: answer,
+    num_turns: Number(faultValue("turns") ?? (schema === undefined ? 1 : 2)),
+    result:
+      schema !== undefined && hasFault("result-text")
+        ? thought.message.content[0].text
+        : answer,
+    ...(schema === undefined || hasFault("no-structured-output")
+      ? {}
+      : { structured_output: verdict }),
     usage,
     modelUsage: {
       [served]: { ...capturedUsage, inputTokens, outputTokens },

@@ -264,8 +264,12 @@ export function createCodexAdapter(
     async call(run, input): Promise<PlanCallResult> {
       const instructions = join(input.dir, "instructions.md");
       const lastMessage = join(input.dir, "last-message.txt");
+      const schemaFile = join(input.dir, "output-schema.json");
       const hasInstructions = input.system.trim().length > 0;
       if (hasInstructions) await writeFile(instructions, input.system);
+      if (input.outputSchema !== undefined) {
+        await writeFile(schemaFile, input.outputSchema);
+      }
       const outcome = await run(
         [
           "exec",
@@ -290,6 +294,9 @@ export function createCodexAdapter(
             ? `model_instructions_file=${JSON.stringify(instructions)}`
             : 'instructions=""',
           ...overrides,
+          ...(input.outputSchema === undefined
+            ? []
+            : ["--output-schema", schemaFile]),
           "-o",
           lastMessage,
           "-",

@@ -27049,6 +27049,12 @@ function isSingleTurn(messages) {
 function withheldFromChild(name) {
   return name.startsWith("ANTHROPIC_") || name.startsWith("OPENAI_") || name === "CODEX_API_KEY" || name === "CLAUDECODE" || name === "CLAUDE_PID" || name === "CLAUDE_EFFORT" || name.startsWith("CLAUDE_CODE_") && name !== "CLAUDE_CODE_OAUTH_TOKEN";
 }
+function outputSchema(format11) {
+  if (!isRecord(format11) || format11.type !== "json_schema")
+    return void 0;
+  const schema = isRecord(format11.json_schema) ? format11.json_schema.schema : void 0;
+  return isRecord(schema) ? JSON.stringify(schema) : void 0;
+}
 function versionAtLeast(version3, minimum) {
   const have = version3.split(".").map(Number);
   const want = minimum.split(".").map(Number);
@@ -27251,6 +27257,7 @@ function createPlanProvider(adapter, options) {
     const pricing = entry.pricing;
     const system = request.messages.slice(0, -1).map(({ content }) => content).join("\n\n");
     const user = request.messages.at(-1).content;
+    const schema = outputSchema(request.responseFormat);
     return limiter.run(async () => {
       if (latch !== void 0)
         throw latch;
@@ -27263,7 +27270,8 @@ function createPlanProvider(adapter, options) {
           user,
           dir,
           timeoutMs: options.callTimeoutMs ?? 6e5,
-          warnOnce
+          warnOnce,
+          ...schema === void 0 ? {} : { outputSchema: schema }
         });
       } catch (error51) {
         if (!(error51 instanceof ProviderRequestError) && !(error51 instanceof PlanRouteUnavailableError) && !(error51 instanceof PlanLoginError)) {
@@ -27325,6 +27333,11 @@ var isolation = [
 ];
 var settings = ["--settings", '{"switchModelsOnFlag":false}'];
 var streamJson = ["--output-format", "stream-json", "--verbose"];
+var schemaMaxTurns = 3;
+var schemaFailures = /* @__PURE__ */ new Set([
+  "error_max_turns",
+  "error_max_structured_output_retries"
+]);
 var loginErrors = /* @__PURE__ */ new Set([
   "authentication_failed",
   "oauth_org_not_allowed",
@@ -27432,6 +27445,7 @@ var claudeAdapter = {
     return [...cliModels].map((cliModel) => ({ cliModel }));
   },
   async call(run, input) {
+    const schema = input.outputSchema;
     const systemFile = join3(input.dir, "system.txt");
     await writeFile2(systemFile, input.system);
     const seen = { models: [], toolUse: false };
@@ -27443,9 +27457,10 @@ var claudeAdapter = {
       systemFile,
       ...isolation,
       "--max-turns",
-      "1",
+      schema === void 0 ? "1" : String(schemaMaxTurns),
       ...settings,
-      ...streamJson
+      ...streamJson,
+      ...schema === void 0 ? [] : ["--json-schema", schema]
     ], {
       stdin: input.user,
       timeoutMs: input.timeoutMs,
@@ -27461,7 +27476,7 @@ var claudeAdapter = {
           if (typeof message2?.model === "string" && message2.model !== "<synthetic>") {
             seen.models.push(message2.model);
           }
-          if (Array.isArray(message2?.content) && message2.content.some((block) => object2(block)?.type === "tool_use")) {
+          if (Array.isArray(message2?.content) && message2.content.some((block) => object2(block)?.type === "tool_use" && (schema === void 0 || object2(block)?.name !== "StructuredOutput"))) {
             seen.toolUse = true;
           }
           if (typeof event.error === "string") {
@@ -27508,7 +27523,7 @@ var claudeAdapter = {
       return failed(unreportedPayment());
     }
     const text = typeof result2.result === "string" ? result2.result : "";
-    if (result2.is_error === true) {
+    if (result2.is_error === true && (schema === void 0 || !schemaFailures.has(String(result2.subtype)))) {
       const excerpt = text.slice(0, 300);
       return failed(new ProviderRequestError(`claude reported ${status ?? String(result2.subtype)}: ${excerpt}`), excerpt);
     }
@@ -27522,10 +27537,10 @@ var claudeAdapter = {
     const substitution2 = served !== void 0 ? {
       kind: "model",
       evidence: `claude served ${served} for requested ${input.cliModel}`
-    } : turns > 1 ? { kind: "request", evidence: `claude took ${turns} turns` } : toolUse ? { kind: "request", evidence: "claude called a tool" } : void 0;
+    } : turns > (schema === void 0 ? 1 : schemaMaxTurns + 1) ? { kind: "request", evidence: `claude took ${turns} turns` } : toolUse ? { kind: "request", evidence: "claude called a tool" } : void 0;
     return {
       ok: true,
-      content: text,
+      content: schema === void 0 ? text : result2.structured_output === void 0 ? "" : JSON.stringify(result2.structured_output),
       inputTokens: modelUsage.reduce((total, [, usage2]) => total + count(object2(usage2), "inputTokens") + count(object2(usage2), "cacheReadInputTokens") + count(object2(usage2), "cacheCreationInputTokens"), 0),
       outputTokens: modelUsage.reduce((total, [, usage2]) => total + count(object2(usage2), "outputTokens"), 0),
       ...modelUsage.length === 1 ? { servedModel: modelUsage[0][0] } : {},
@@ -27709,9 +27724,13 @@ ${result2.stderr}` };
     async call(run, input) {
       const instructions = join4(input.dir, "instructions.md");
       const lastMessage = join4(input.dir, "last-message.txt");
+      const schemaFile = join4(input.dir, "output-schema.json");
       const hasInstructions = input.system.trim().length > 0;
       if (hasInstructions)
         await writeFile3(instructions, input.system);
+      if (input.outputSchema !== void 0) {
+        await writeFile3(schemaFile, input.outputSchema);
+      }
       const outcome = await run([
         "exec",
         "--json",
@@ -27733,6 +27752,7 @@ ${result2.stderr}` };
         "-c",
         hasInstructions ? `model_instructions_file=${JSON.stringify(instructions)}` : 'instructions=""',
         ...overrides,
+        ...input.outputSchema === void 0 ? [] : ["--output-schema", schemaFile],
         "-o",
         lastMessage,
         "-"
@@ -48256,9 +48276,7 @@ async function executeReplay(context2, inputDigestValue, runId) {
           referenceFamily
         }).map((judgeModel) => ({
           judgeModel,
-          supportsStructuredOutput: judgeCatalog.find(
-            ({ id }) => id === judgeModel
-          ).supportsStructuredOutput,
+          supportsStructuredOutput: isPlanRouteKind(routes.judge.provider.providerId) || judgeCatalog.find(({ id }) => id === judgeModel).supportsStructuredOutput,
           ...judgeLimits(judgeCatalog, judgeModel)
         })),
         warning: (code, message2) => context2.reporter.warning(code, message2),

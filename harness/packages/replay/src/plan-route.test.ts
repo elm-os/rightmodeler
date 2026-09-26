@@ -16,6 +16,7 @@ import {
   planStubHarness,
   removePlanStubRoots,
   turn,
+  verdictFormat,
 } from "./test-utils/plan-cli-stub.js";
 
 const haiku = "anthropic/claude-haiku-4.5";
@@ -180,6 +181,28 @@ describe("plan route runtime", () => {
         latencyMs: 500,
       }),
     ]);
+  });
+
+  it("passes a verdict schema to the CLI only when the request carries one", async () => {
+    const harness = await planStubHarness();
+
+    const judged = await harness.provider.chat(
+      turn(haiku, "Judge this.", { responseFormat: verdictFormat }),
+    );
+    await harness.provider.chat(turn(haiku));
+    await harness.provider.chat(
+      turn(haiku, "Say plum.", { responseFormat: { type: "json_object" } }),
+    );
+
+    const [judge, candidate, other] = await harness.modelCalls();
+    expect(judge?.argv?.at(-2)).toBe("--json-schema");
+    expect(JSON.parse(judge!.argv!.at(-1)!)).toEqual(
+      verdictFormat.json_schema.schema,
+    );
+    expect(JSON.parse(judged.content)).toMatchObject({ verdict: "equivalent" });
+    for (const call of [candidate, other]) {
+      expect(call?.argv).not.toContain("--json-schema");
+    }
   });
 
   it("refuses a plan route when CI is set, before running the CLI", async () => {
