@@ -5209,6 +5209,7 @@ describe("Mode A replay", () => {
       },
       "Ok!",
     ],
+    ["a string answer", "Ok!", "Ok!"],
   ];
   const recordedJsonAnswers: Array<[string, JsonValue]> = [
     [
@@ -5276,6 +5277,14 @@ describe("Mode A replay", () => {
         { role: "assistant", content: "A" },
         { role: "assistant", content: "B" },
       ],
+    ],
+    [
+      "a refusal",
+      {
+        role: "assistant",
+        content: null,
+        refusal: "I cannot help with that.",
+      },
     ],
   ];
 
