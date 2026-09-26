@@ -156,6 +156,38 @@ export async function preparePlanLeg(
   return { repo, traces, models };
 }
 
+export async function captureCostUsd(dir: string): Promise<number> {
+  let total = 0;
+  for (const leg of ["a", "b", "c"] as const) {
+    const lines = (await readFile(join(dir, leg, "traces.jsonl"), "utf8"))
+      .split("\n")
+      .filter((line) => line.length > 0);
+    for (const [index, line] of lines.entries()) {
+      const cost = (
+        JSON.parse(line) as {
+          response?: {
+            choices?: Array<{
+              message?: {
+                provider_metadata?: { gateway?: { cost?: unknown } };
+              };
+            }>;
+          };
+        }
+      ).response?.choices?.[0]?.message?.provider_metadata?.gateway?.cost;
+      if (
+        (typeof cost !== "string" && typeof cost !== "number") ||
+        !Number.isFinite(Number(cost))
+      ) {
+        throw new Error(
+          `Leg ${leg}: capture line ${index + 1} has no Vercel-reported cost`,
+        );
+      }
+      total += Number(cost);
+    }
+  }
+  return total;
+}
+
 export async function envNameShim(
   dir: string,
   command: string,
