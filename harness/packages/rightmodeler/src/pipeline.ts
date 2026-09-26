@@ -3847,9 +3847,10 @@ async function executeReplay(
                 referenceFamily,
               }).map((judgeModel) => ({
                 judgeModel,
-                supportsStructuredOutput: judgeCatalog.find(
-                  ({ id }) => id === judgeModel,
-                )!.supportsStructuredOutput,
+                supportsStructuredOutput:
+                  isPlanRouteKind(routes.judge.provider.providerId) ||
+                  judgeCatalog.find(({ id }) => id === judgeModel)!
+                    .supportsStructuredOutput,
                 ...judgeLimits(judgeCatalog, judgeModel),
               })),
               warning: (code: string, message: string) =>

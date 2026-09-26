@@ -21,6 +21,7 @@ import {
   runBuiltCli,
 } from "./test-utils/gateway-live.js";
 import {
+  captureCostUsd,
   DUMMY_KEYS,
   envNameShim,
   legFacts,
@@ -66,9 +67,10 @@ const legs = {
     ],
     routes: { candidates: "configured-provider", judge: "claude-login" },
     judgeVendor: "anthropic",
-    cap: 0.1,
+    cap: 0.3,
   },
 } as const;
+const vercelAllowanceUsd = 0.3;
 
 function vendorOf(id: string): string {
   return id.split("/")[0]!;
@@ -174,6 +176,17 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
       (total, { costUsd }) => total + costUsd,
       0,
     );
+    const apiUsd = ledger.spendEvents
+      .filter(({ provider }) => provider === "configured-provider")
+      .reduce((total, { costUsd }) => total + costUsd, 0);
+    const captures =
+      config.routes.candidates === "configured-provider"
+        ? await captureCostUsd(gate.dir)
+        : undefined;
+    const vercelUsd =
+      captures === undefined
+        ? undefined
+        : { captures, api: apiUsd, total: captures + apiUsd };
     const checked = await hygiene.check();
     const { spend } = await recordLeg("plan-routes", config.name, {
       models: prepared.models,
@@ -184,6 +197,7 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
         ...facts,
         overshootUsd:
           config.cap === undefined ? null : Math.max(0, totalUsd - config.cap),
+        vercelUsd,
         hygiene: checked,
         ...(childEnvNames === undefined
           ? {}
@@ -244,6 +258,8 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
       completed,
       report,
       childEnvNames,
+      apiUsd,
+      vercelUsd,
     };
   }
 
@@ -442,10 +458,8 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
       expect(attempt.servedModel).toEqual(expect.any(String));
       expect(attempt.substitution).toBeUndefined();
     }
-    const apiUsd = leg.ledger.spendEvents
-      .filter(({ provider }) => provider === "configured-provider")
-      .reduce((total, { costUsd }) => total + costUsd, 0);
-    expect(apiUsd).toBeLessThanOrEqual(legs.c.cap + 1e-9);
+    expect(leg.apiUsd).toBeLessThanOrEqual(legs.c.cap + 1e-9);
+    expect(leg.vercelUsd!.total).toBeLessThanOrEqual(vercelAllowanceUsd);
     expect(leg.spend).toBeDefined();
     expect(leg.spend!.totalCostUsd).toBeLessThanOrEqual(
       legs.c.cap + 4 * leg.facts.largestCallUsd + 1e-9,

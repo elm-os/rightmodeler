@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"00000000-0000-7000-8000-000000000000"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Code Mode is unavailable because code-mode host is disabled. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"{\"verdict\":\"equivalent\",\"score\":1,\"justification\":\"The candidate preserves all meaning: the orchestra practiced the new symphony three times before its debut performance.\"}"}}
+{"type":"turn.completed","usage":{"input_tokens":4505,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":45,"reasoning_output_tokens":0}}

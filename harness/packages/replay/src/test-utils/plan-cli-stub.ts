@@ -27,7 +27,29 @@ export interface StubRecord {
   readonly stdin?: string;
   readonly envNames?: readonly string[];
   readonly outcome?: string;
+  readonly outputSchema?: unknown;
 }
+
+export const verdictFormat = {
+  type: "json_schema",
+  json_schema: {
+    name: "verdict",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        verdict: {
+          type: "string",
+          enum: ["equivalent", "minor_drift", "divergent"],
+        },
+        score: { type: "number", minimum: 0, maximum: 1 },
+        justification: { type: "string" },
+      },
+      required: ["verdict", "score", "justification"],
+      additionalProperties: false,
+    },
+  },
+};
 
 export interface PlanStubHarness {
   readonly root: string;

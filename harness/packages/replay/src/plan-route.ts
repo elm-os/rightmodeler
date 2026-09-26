@@ -3,7 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { canonicalModelName, type Substitution } from "@rightmodeler/core";
+import {
+  canonicalModelName,
+  isRecord,
+  type JsonValue,
+  type Substitution,
+} from "@rightmodeler/core";
 
 import {
   AdaptiveLimiter,
@@ -126,6 +131,7 @@ export interface PlanAdapter {
       readonly dir: string;
       readonly timeoutMs: number;
       readonly warnOnce: (code: string, message: string) => void;
+      readonly outputSchema?: string;
     },
   ): Promise<PlanCallResult>;
 }
@@ -160,6 +166,14 @@ function withheldFromChild(name: string): boolean {
     name === "CLAUDE_EFFORT" ||
     (name.startsWith("CLAUDE_CODE_") && name !== "CLAUDE_CODE_OAUTH_TOKEN")
   );
+}
+
+function outputSchema(format: JsonValue | undefined): string | undefined {
+  if (!isRecord(format) || format.type !== "json_schema") return undefined;
+  const schema = isRecord(format.json_schema)
+    ? format.json_schema.schema
+    : undefined;
+  return isRecord(schema) ? JSON.stringify(schema) : undefined;
 }
 
 function versionAtLeast(version: string, minimum: string): boolean {
@@ -448,6 +462,7 @@ export function createPlanProvider(
       .map(({ content }) => content)
       .join("\n\n");
     const user = request.messages.at(-1)!.content;
+    const schema = outputSchema(request.responseFormat);
     return limiter.run(async () => {
       if (latch !== undefined) throw latch;
       const dir = await mkdtemp(join(tmpdir(), "rightmodeler-plan-"));
@@ -460,6 +475,7 @@ export function createPlanProvider(
           dir,
           timeoutMs: options.callTimeoutMs ?? 600_000,
           warnOnce,
+          ...(schema === undefined ? {} : { outputSchema: schema }),
         });
       } catch (error) {
         if (

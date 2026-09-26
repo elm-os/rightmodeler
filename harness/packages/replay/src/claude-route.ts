@@ -33,6 +33,11 @@ const isolation = [
 ];
 const settings = ["--settings", '{"switchModelsOnFlag":false}'];
 const streamJson = ["--output-format", "stream-json", "--verbose"];
+const schemaMaxTurns = 3;
+const schemaFailures = new Set([
+  "error_max_turns",
+  "error_max_structured_output_retries",
+]);
 const loginErrors = new Set([
   "authentication_failed",
   "oauth_org_not_allowed",
@@ -195,6 +200,7 @@ export const claudeAdapter: PlanAdapter = {
   },
 
   async call(run, input): Promise<PlanCallResult> {
+    const schema = input.outputSchema;
     const systemFile = join(input.dir, "system.txt");
     await writeFile(systemFile, input.system);
     const seen: {
@@ -214,9 +220,10 @@ export const claudeAdapter: PlanAdapter = {
         systemFile,
         ...isolation,
         "--max-turns",
-        "1",
+        schema === undefined ? "1" : String(schemaMaxTurns),
         ...settings,
         ...streamJson,
+        ...(schema === undefined ? [] : ["--json-schema", schema]),
       ],
       {
         stdin: input.user,
@@ -239,7 +246,10 @@ export const claudeAdapter: PlanAdapter = {
             if (
               Array.isArray(message?.content) &&
               message.content.some(
-                (block) => object(block)?.type === "tool_use",
+                (block) =>
+                  object(block)?.type === "tool_use" &&
+                  (schema === undefined ||
+                    object(block)?.name !== "StructuredOutput"),
               )
             ) {
               seen.toolUse = true;
@@ -330,7 +340,10 @@ export const claudeAdapter: PlanAdapter = {
       return failed(unreportedPayment());
     }
     const text = typeof result.result === "string" ? result.result : "";
-    if (result.is_error === true) {
+    if (
+      result.is_error === true &&
+      (schema === undefined || !schemaFailures.has(String(result.subtype)))
+    ) {
       const excerpt = text.slice(0, 300);
       return failed(
         new ProviderRequestError(
@@ -352,14 +365,19 @@ export const claudeAdapter: PlanAdapter = {
             kind: "model",
             evidence: `claude served ${served} for requested ${input.cliModel}`,
           }
-        : turns > 1
+        : turns > (schema === undefined ? 1 : schemaMaxTurns + 1)
           ? { kind: "request", evidence: `claude took ${turns} turns` }
           : toolUse
             ? { kind: "request", evidence: "claude called a tool" }
             : undefined;
     return {
       ok: true,
-      content: text,
+      content:
+        schema === undefined
+          ? text
+          : result.structured_output === undefined
+            ? ""
+            : JSON.stringify(result.structured_output),
       inputTokens: modelUsage.reduce(
         (total, [, usage]) =>
           total +
