@@ -262,7 +262,8 @@ function createCodexAdapter(options: PlanProviderOptions): PlanAdapter {
     async call(run, input): Promise<PlanCallResult> {
       const instructions = join(input.dir, "instructions.md");
       const lastMessage = join(input.dir, "last-message.txt");
-      await writeFile(instructions, input.system);
+      const hasInstructions = input.system.trim().length > 0;
+      if (hasInstructions) await writeFile(instructions, input.system);
       const outcome = await run(
         [
           "exec",
@@ -283,7 +284,9 @@ function createCodexAdapter(options: PlanProviderOptions): PlanAdapter {
           "-c",
           `cli_auth_credentials_store="${store}"`,
           "-c",
-          `model_instructions_file=${JSON.stringify(instructions)}`,
+          hasInstructions
+            ? `model_instructions_file=${JSON.stringify(instructions)}`
+            : 'instructions=""',
           ...overrides,
           "-o",
           lastMessage,

@@ -27705,7 +27705,9 @@ ${result2.stderr}` };
     async call(run, input) {
       const instructions = join4(input.dir, "instructions.md");
       const lastMessage = join4(input.dir, "last-message.txt");
-      await writeFile3(instructions, input.system);
+      const hasInstructions = input.system.trim().length > 0;
+      if (hasInstructions)
+        await writeFile3(instructions, input.system);
       const outcome = await run([
         "exec",
         "--json",
@@ -27725,7 +27727,7 @@ ${result2.stderr}` };
         "-c",
         `cli_auth_credentials_store="${store}"`,
         "-c",
-        `model_instructions_file=${JSON.stringify(instructions)}`,
+        hasInstructions ? `model_instructions_file=${JSON.stringify(instructions)}` : 'instructions=""',
         ...overrides,
         "-o",
         lastMessage,

@@ -167,7 +167,10 @@ function missingIsolation() {
   if (store !== '"file"' && store !== '"keyring"') {
     return "-c cli_auth_credentials_store";
   }
-  if (config("model_instructions_file") === undefined) {
+  if (
+    config("model_instructions_file") === undefined &&
+    config("instructions") !== '""'
+  ) {
     return "-c model_instructions_file";
   }
   for (const flag of ["-m", "-o"]) {
@@ -228,10 +231,25 @@ async function exec(stdin) {
     finish("missing-isolation-setting", 96);
     return;
   }
+  const instructionsFile = config("model_instructions_file");
   const entries = readdirSync(process.cwd());
-  if (entries.length !== 1 || entries[0] !== "instructions.md") {
+  if (
+    entries.join(", ") !==
+    (instructionsFile === undefined ? "" : "instructions.md")
+  ) {
     process.stderr.write(`the working directory holds ${entries.join(", ")}\n`);
     finish("working-directory-not-empty", 96);
+    return;
+  }
+  const instructions =
+    instructionsFile === undefined
+      ? ""
+      : readFileSync(JSON.parse(instructionsFile), "utf8");
+  if (instructionsFile !== undefined && instructions.trim().length === 0) {
+    process.stderr.write(
+      `Error: model instructions file is empty: ${JSON.parse(instructionsFile)}\n`,
+    );
+    finish("empty-instructions-file", 1);
     return;
   }
   if (
@@ -243,10 +261,6 @@ async function exec(stdin) {
     return;
   }
   const model = valueOf("-m");
-  const instructions = readFileSync(
-    JSON.parse(config("model_instructions_file")),
-    "utf8",
-  );
   const previous = previousExecs();
   if (hasFault("hang")) {
     keepAlive();

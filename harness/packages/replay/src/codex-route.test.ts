@@ -252,7 +252,7 @@ describe("codex-login adapter", () => {
     ]);
   });
 
-  it("sends the instructions through model_instructions_file and the one user turn on stdin", async () => {
+  it("sends the instructions through model_instructions_file, or empty instructions when there are none, and the one user turn on stdin", async () => {
     const harness = await codexHarness();
     const system = "SYSTEM-MARK-ONE";
     const developer = "DEVELOPER-MARK-TWO";
@@ -270,8 +270,23 @@ describe("codex-login adapter", () => {
       model: luna,
       messages: [{ role: "user", content: "Say ok." }],
     });
+    const blank = await harness.provider.chat({
+      model: luna,
+      messages: [
+        { role: "system", content: " \n" },
+        { role: "user", content: "Say ok." },
+      ],
+    });
 
-    const [call, bareCall] = await harness.execs();
+    const [call, bareCall, blankCall] = await harness.execs();
+    expect(call?.argv).toContain(
+      `model_instructions_file=${JSON.stringify(join(call!.argv![12]!, "instructions.md"))}`,
+    );
+    for (const empty of [bareCall, blankCall]) {
+      expect(empty?.argv).toContain('instructions=""');
+      expect(empty?.argv?.join(" ")).not.toContain("model_instructions_file");
+    }
+    expect(blank.content).toBe(bare.content);
     expect(call?.stdin).toBe(user);
     expect(call?.argv?.join(" ")).not.toContain(system);
     expect(call?.argv?.join(" ")).not.toContain(user);
