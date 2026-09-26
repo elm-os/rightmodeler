@@ -19,6 +19,27 @@ npx rightmodeler init --traces traces.jsonl --base-url https://api.openai.com/v1
 npx rightmodeler init --traces traces.jsonl --route codex-login --judge-route claude-login
 ```
 
+## Choosing at the start
+
+Run in a terminal, `init` and `estimate` first ask how to call models, before the trace question and before any stage runs.
+
+- **Your plans:** rightmodeler lists the `claude` and `codex` CLIs on this machine, each with its status and, when it cannot be used, how to fix it. You choose the CLI that replays candidates (choose the vendor your app calls today) and where the judge runs: the other CLI, or an API key for OpenRouter, Vercel AI Gateway or another OpenAI-compatible endpoint. The first time a plan route is chosen, rightmodeler shows what it sends and asks `[y/N]`; any other answer than `y` continues with no route.
+- **An API key:** OpenRouter, Vercel AI Gateway, OpenAI, Anthropic, or another OpenAI-compatible endpoint, then the name of the environment variable that holds the key. The question checks only whether that variable is set, never its value. It accepts only a name made of capital letters, digits and underscores, so a pasted key is refused and never repeated or saved, and it refuses a base URL that carries a user name, a password or a query string.
+
+The answer is saved in the store as `project/setup/model-route.json`: route names, a base URL and a variable name, never a key. The next interactive run shows it as flags and keeps it when you press Enter; type `c` to choose again. `--yes` applies it without asking. The question and the saved answer are skipped with `--output json` or `jsonl`, without a terminal, when `--route`, `--judge-route`, `--base-url`, `--api-key-env` or `--header` is passed, with `init --plan`, and with `--through` before `replay`. Scripts pass the flags the question prints. With `--modeb-config`, only API routes through a multi-vendor endpoint are offered, because Mode B confirmation runs only through an API key. Ctrl-C or Ctrl-D at a question continues with no route: the free stages run and replay stops with `missing_provider_configuration`.
+
+## API routes
+
+| Choice            | `--base-url`                      | Key variable, by default | Also passed                                                                                         |
+| ----------------- | --------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
+| OpenRouter        | `https://openrouter.ai/api/v1`    | `OPENROUTER_API_KEY`     | nothing                                                                                             |
+| Vercel AI Gateway | `https://ai-gateway.vercel.sh/v1` | `AI_GATEWAY_API_KEY`     | nothing                                                                                             |
+| OpenAI            | `https://api.openai.com/v1`       | `OPENAI_API_KEY`         | `--route api --judge-route claude-login --catalog-reference https://ai-gateway.vercel.sh/v1/models` |
+| Anthropic         | `https://api.anthropic.com/v1`    | `ANTHROPIC_API_KEY`      | `--route api --judge-route codex-login --catalog-reference https://ai-gateway.vercel.sh/v1/models`  |
+| Another endpoint  | the URL you type                  | `RIGHTMODELER_API_KEY`   | nothing                                                                                             |
+
+OpenAI's and Anthropic's APIs serve only their own models and list no prices, so the judge runs through the other vendor's CLI signed in on this machine and prices come from the public list; without that CLI, choose a gateway. A variable that is not set yet is still saved: set it in your own shell before replay.
+
 ## Use your Claude plan
 
 `--route claude-login` and `--judge-route claude-login` run the `claude` CLI (Claude Code) already installed and signed in on this machine, version 2.1.282 or newer. Rightmodeler runs your own unmodified binary as a child process under the login it already holds. It never reads, stores or forwards a token, and never opens `~/.claude`, the macOS Keychain or a credential file.

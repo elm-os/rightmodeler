@@ -109,8 +109,8 @@ Options:
                                       "aggregate", "confirm", "report")
   --code-graph <path>                 Graphify graph.json for static code
                                       context in the report; never evidence
-  --yes                               accept the newest discovered trace without
-                                      prompting
+  --yes                               accept the newest discovered trace and the
+                                      saved model route without prompting
   -h, --help                          display help for command
 ```
 
@@ -172,8 +172,8 @@ Options:
   --evaluator-gate-metric <name>      scorer metric used for release gates
   --evaluator-gate-threshold <value>  fallback pass threshold when the evaluator
                                       omits a pass decision
-  --yes                               accept the newest discovered trace without
-                                      prompting
+  --yes                               accept the newest discovered trace and the
+                                      saved model route without prompting
   --approved-run <digest>             scope projection to one merged approved
                                       swap
   -h, --help                          display help for command

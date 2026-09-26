@@ -78,7 +78,7 @@ function unreportedPayment(): PlanRouteUnavailableError {
   );
 }
 
-const claudeAdapter: PlanAdapter = {
+export const claudeAdapter: PlanAdapter = {
   kind: "claude-login",
   command: "claude",
   minimumVersion: "2.1.282",

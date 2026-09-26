@@ -27,6 +27,13 @@ Run this from the repository you want to analyze:
 npx rightmodeler init
 ```
 
+Before it looks for traces, an interactive `init` or `estimate` that will reach
+replay asks how to call models: through the `claude` or `codex` CLI signed in on
+this machine, or through an API key for OpenRouter, Vercel AI Gateway, OpenAI,
+Anthropic or another OpenAI-compatible endpoint. It prints the equivalent flags
+and saves the answer as the next default, which `--yes` applies without asking.
+`npx rightmodeler docs model-routes` describes the choice.
+
 Rightmodeler checks conventional local trace files, Claude Code transcripts for
 the repository, and Codex sessions whose recorded working directory matches the
 repository. In an interactive terminal it lists matches newest-first with an

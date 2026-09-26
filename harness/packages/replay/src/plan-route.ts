@@ -280,6 +280,46 @@ function runner(
   };
 }
 
+export async function preflightPlanCli(
+  adapter: PlanAdapter,
+  parentEnv: NodeJS.ProcessEnv,
+): Promise<{ readonly run: RunCli; readonly version: string }> {
+  if ((parentEnv.CI ?? "").length > 0) {
+    throw new PlanRouteUnavailableError(
+      "Plan routes run only on your own machine, and CI is set.",
+      "In continuous integration, use an API route: --base-url <url> and --api-key-env <name>. If this is your own machine, unset CI and rerun.",
+    );
+  }
+  const run = runner(
+    adapter.command,
+    adapter.childEnv(
+      Object.fromEntries(
+        Object.entries(parentEnv).filter(([name]) => !withheldFromChild(name)),
+      ),
+    ),
+    adapter.remedies.install,
+  );
+  const version = /\d+\.\d+\.\d+/u.exec(
+    (
+      await run(["--version"], {
+        stdin: "",
+        timeoutMs: PREFLIGHT_TIMEOUT_MS,
+      })
+    ).stdout,
+  )?.[0];
+  if (
+    version === undefined ||
+    !versionAtLeast(version, adapter.minimumVersion)
+  ) {
+    throw new PlanRouteUnavailableError(
+      `${adapter.command} ${version ?? "(unknown version)"} is older than ${adapter.minimumVersion}, the version rightmodeler's isolation settings were verified on.`,
+      adapter.remedies.update,
+    );
+  }
+  await adapter.checkLogin(run);
+  return { run, version };
+}
+
 export function createPlanProvider(
   adapter: PlanAdapter,
   options: PlanProviderOptions,
@@ -303,41 +343,7 @@ export function createPlanProvider(
 
   function ready(): Promise<RunCli> {
     preflight ??= (async () => {
-      if ((parentEnv.CI ?? "").length > 0) {
-        throw new PlanRouteUnavailableError(
-          "Plan routes run only on your own machine, and CI is set.",
-          "In continuous integration, use an API route: --base-url <url> and --api-key-env <name>. If this is your own machine, unset CI and rerun.",
-        );
-      }
-      const run = runner(
-        adapter.command,
-        adapter.childEnv(
-          Object.fromEntries(
-            Object.entries(parentEnv).filter(
-              ([name]) => !withheldFromChild(name),
-            ),
-          ),
-        ),
-        adapter.remedies.install,
-      );
-      const version = /\d+\.\d+\.\d+/u.exec(
-        (
-          await run(["--version"], {
-            stdin: "",
-            timeoutMs: PREFLIGHT_TIMEOUT_MS,
-          })
-        ).stdout,
-      )?.[0];
-      if (
-        version === undefined ||
-        !versionAtLeast(version, adapter.minimumVersion)
-      ) {
-        throw new PlanRouteUnavailableError(
-          `${adapter.command} ${version ?? "(unknown version)"} is older than ${adapter.minimumVersion}, the version rightmodeler's isolation settings were verified on.`,
-          adapter.remedies.update,
-        );
-      }
-      await adapter.checkLogin(run);
+      const { run } = await preflightPlanCli(adapter, parentEnv);
       const withheld = adapter.keyVariables.filter(
         (name) => (parentEnv[name] ?? "").length > 0,
       );

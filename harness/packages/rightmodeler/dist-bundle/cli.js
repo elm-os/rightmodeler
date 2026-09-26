@@ -27149,6 +27149,21 @@ function runner(command, env, installRemedy) {
     }
   };
 }
+async function preflightPlanCli(adapter, parentEnv) {
+  if ((parentEnv.CI ?? "").length > 0) {
+    throw new PlanRouteUnavailableError("Plan routes run only on your own machine, and CI is set.", "In continuous integration, use an API route: --base-url <url> and --api-key-env <name>. If this is your own machine, unset CI and rerun.");
+  }
+  const run = runner(adapter.command, adapter.childEnv(Object.fromEntries(Object.entries(parentEnv).filter(([name]) => !withheldFromChild(name)))), adapter.remedies.install);
+  const version3 = /\d+\.\d+\.\d+/u.exec((await run(["--version"], {
+    stdin: "",
+    timeoutMs: PREFLIGHT_TIMEOUT_MS
+  })).stdout)?.[0];
+  if (version3 === void 0 || !versionAtLeast(version3, adapter.minimumVersion)) {
+    throw new PlanRouteUnavailableError(`${adapter.command} ${version3 ?? "(unknown version)"} is older than ${adapter.minimumVersion}, the version rightmodeler's isolation settings were verified on.`, adapter.remedies.update);
+  }
+  await adapter.checkLogin(run);
+  return { run, version: version3 };
+}
 function createPlanProvider(adapter, options) {
   const parentEnv = options.env ?? process.env;
   const vendor = planRouteVendors[adapter.kind];
@@ -27167,18 +27182,7 @@ function createPlanProvider(adapter, options) {
   }
   function ready() {
     preflight ??= (async () => {
-      if ((parentEnv.CI ?? "").length > 0) {
-        throw new PlanRouteUnavailableError("Plan routes run only on your own machine, and CI is set.", "In continuous integration, use an API route: --base-url <url> and --api-key-env <name>. If this is your own machine, unset CI and rerun.");
-      }
-      const run = runner(adapter.command, adapter.childEnv(Object.fromEntries(Object.entries(parentEnv).filter(([name]) => !withheldFromChild(name)))), adapter.remedies.install);
-      const version3 = /\d+\.\d+\.\d+/u.exec((await run(["--version"], {
-        stdin: "",
-        timeoutMs: PREFLIGHT_TIMEOUT_MS
-      })).stdout)?.[0];
-      if (version3 === void 0 || !versionAtLeast(version3, adapter.minimumVersion)) {
-        throw new PlanRouteUnavailableError(`${adapter.command} ${version3 ?? "(unknown version)"} is older than ${adapter.minimumVersion}, the version rightmodeler's isolation settings were verified on.`, adapter.remedies.update);
-      }
-      await adapter.checkLogin(run);
+      const { run } = await preflightPlanCli(adapter, parentEnv);
       const withheld = adapter.keyVariables.filter((name) => (parentEnv[name] ?? "").length > 0);
       if (withheld.length > 0) {
         const one = withheld.length === 1;
@@ -32572,6 +32576,26 @@ async function confirmSwapSet(input) {
   };
 }
 
+// ../replay/dist/plan-logins.js
+async function detectPlanLogins(env) {
+  return Promise.all([createCodexAdapter({ env }), claudeAdapter].map(async (adapter) => {
+    try {
+      const { version: version3 } = await preflightPlanCli(adapter, env);
+      return {
+        kind: adapter.kind,
+        ready: true,
+        line: `${adapter.command} ${version3}: signed in with your plan`
+      };
+    } catch (error51) {
+      return {
+        kind: adapter.kind,
+        ready: false,
+        line: error51 instanceof PlanLoginError ? `${adapter.command}: not signed in with a plan. ${error51.remedy}` : error51 instanceof PlanRouteUnavailableError ? `${adapter.command}: cannot be used here. ${error51.remedy}` : `${adapter.command}: could not be checked.`
+      };
+    }
+  }));
+}
+
 // ../replay/dist/shortlist.js
 function resolveCurrentModel(catalog, currentModel) {
   const exact = catalog.find(({ id }) => id === currentModel);
@@ -32697,7 +32721,7 @@ import { createHash as createHash12 } from "node:crypto";
 import { readFileSync as readFileSync6 } from "node:fs";
 import { mkdir as mkdir5, readFile as readFile13, readdir as readdir4, stat as stat4, writeFile as writeFile8 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
-import { dirname as dirname7, join as join18, relative as relative8, resolve as resolve8, sep as sep5 } from "node:path";
+import { dirname as dirname7, join as join18, relative as relative9, resolve as resolve9, sep as sep5 } from "node:path";
 import { promisify as promisify6 } from "node:util";
 
 // ../scanner/dist/declarative-matcher.js
@@ -44004,6 +44028,429 @@ function braintrustUrl(baseUrl, path) {
   return `${versioned}/${path}`;
 }
 
+// src/guidance.ts
+import { createInterface } from "node:readline";
+import { isAbsolute as isAbsolute3, relative as relative8, resolve as resolve8 } from "node:path";
+async function promptForTracePath(options) {
+  if (options.candidates.length === 0) {
+    options.output.write(
+      [
+        "Traces are logs that your AI tools already write.",
+        "If you use Claude Code or Codex in this project, run a few tasks there and run this command again. Rightmodeler finds those logs automatically.",
+        "If your app logs to Langfuse, Braintrust, LangSmith, Helicone, or W&B Weave, export a file and enter its path.",
+        "See the supported sources at https://www.rightmodeler.com/integrations",
+        ""
+      ].join("\n")
+    );
+    const asked2 = await question(
+      options,
+      "Trace file path (leave empty to stop): "
+    );
+    const typed = asked2.answer.trim();
+    return asked2.cancelled || typed === "" ? void 0 : resolve8(options.repo, typed);
+  }
+  options.output.write("Found trace files:\n");
+  const now = options.now ?? /* @__PURE__ */ new Date();
+  for (const [index, candidate] of options.candidates.entries()) {
+    options.output.write(
+      `${index + 1}. ${formatName(candidate.format)}, about ${candidate.approximateRecords} ${unit("model call", candidate.approximateRecords)}, ${formatAge(candidate.modifiedAt, now)}, ${shortPath(candidate.path, options.repo, options.homeDir)}
+`
+    );
+  }
+  const asked = await question(
+    options,
+    "Choose a trace file [1]: ",
+    (value) => {
+      const choice = value.trim();
+      if (/^[0-9]+$/u.test(choice)) {
+        const selected = options.candidates[Number(choice) - 1];
+        if (selected === void 0) {
+          options.output.write(
+            `Choose a number from 1 to ${options.candidates.length}.
+`
+          );
+          return false;
+        }
+      }
+      return true;
+    }
+  );
+  if (asked.cancelled) return void 0;
+  const answer = asked.answer.trim();
+  if (answer === "") return options.candidates[0].path;
+  if (/^[1-9][0-9]*$/u.test(answer)) {
+    const selected = options.candidates[Number(answer) - 1];
+    if (selected !== void 0) return selected.path;
+  }
+  return resolve8(options.repo, answer);
+}
+var apiPresets = {
+  openrouter: {
+    label: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    key: "your OpenRouter key",
+    apiKeyEnv: "OPENROUTER_API_KEY"
+  },
+  vercel: {
+    label: "Vercel AI Gateway",
+    baseUrl: "https://ai-gateway.vercel.sh/v1",
+    key: "your Vercel AI Gateway key",
+    apiKeyEnv: "AI_GATEWAY_API_KEY"
+  },
+  openai: {
+    baseUrl: "https://api.openai.com/v1",
+    key: "your OpenAI key",
+    apiKeyEnv: "OPENAI_API_KEY"
+  },
+  anthropic: {
+    baseUrl: "https://api.anthropic.com/v1",
+    key: "your Anthropic key",
+    apiKeyEnv: "ANTHROPIC_API_KEY"
+  },
+  other: {
+    label: "Another OpenAI-compatible endpoint",
+    baseUrl: void 0,
+    key: "the endpoint's key",
+    apiKeyEnv: "RIGHTMODELER_API_KEY"
+  }
+};
+var singleVendorPresets = {
+  openai: {
+    judge: "claude-login",
+    usable: "OpenAI (OpenAI models only; the judge runs through your claude login)",
+    unusable: "OpenAI (OpenAI models only; needs the claude CLI signed in to judge)",
+    explanation: "OpenAI's API serves only OpenAI models, and the judge must come from another vendor. Sign in to the claude CLI to judge through your Claude plan, or choose OpenRouter or Vercel AI Gateway."
+  },
+  anthropic: {
+    judge: "codex-login",
+    usable: "Anthropic (Claude models only; the judge runs through your codex login)",
+    unusable: "Anthropic (Claude models only; needs the codex CLI signed in to judge)",
+    explanation: "Anthropic's API serves only Claude models, and the judge must come from another vendor. Sign in to the codex CLI to judge through your ChatGPT plan, or choose OpenRouter or Vercel AI Gateway."
+  }
+};
+var planClis = {
+  "codex-login": {
+    command: "codex",
+    models: "OpenAI models",
+    plan: "your ChatGPT plan",
+    vendor: "OpenAI"
+  },
+  "claude-login": {
+    command: "claude",
+    models: "Anthropic models",
+    plan: "your Claude plan",
+    vendor: "Anthropic"
+  }
+};
+function isApiKeyEnvName(value) {
+  return /^[A-Z_][A-Z0-9_]*$/u.test(value);
+}
+function isShareableBaseUrl(value) {
+  if (!URL.canParse(value)) return false;
+  const url2 = new URL(value);
+  return (url2.protocol === "http:" || url2.protocol === "https:") && url2.username === "" && url2.password === "" && url2.search === "";
+}
+async function promptForModelRoute(options) {
+  if (options.saved !== void 0) {
+    options.output.write(
+      `Models: ${options.saved.flags} (saved for this repository)
+`
+    );
+    const asked = await question(
+      options,
+      "Press Enter to keep, or type c to choose again [keep]: ",
+      (answer) => {
+        if (/^c?$/iu.test(answer.trim())) return true;
+        options.output.write(
+          "Press Enter to keep the saved route, or type c to choose again.\n"
+        );
+        return false;
+      }
+    );
+    if (asked.cancelled) return void 0;
+    if (asked.answer.trim() === "") return options.saved.route;
+  }
+  let route;
+  if (options.plans === void 0) {
+    options.output.write(
+      "Mode B confirmation (--modeb-config) needs an API key for candidates and the judge, so only OpenRouter, Vercel AI Gateway and other endpoints are offered.\n"
+    );
+    const api = await askMultiVendorApi(options, "Which provider or gateway?");
+    route = api && { route: "api", judgeRoute: "api", api };
+  } else {
+    route = await askRoute(options, await options.plans());
+  }
+  return route !== void 0 && await consented(options, route) ? route : void 0;
+}
+async function askRoute(options, statuses) {
+  const ready = statuses.filter(({ ready: ready2 }) => ready2).map(({ kind }) => kind);
+  const way = await menu(
+    options,
+    [
+      "How should rightmodeler call models? Replay sends your recorded calls to cheaper models, and a judge model from another vendor grades each answer.",
+      ...statuses.map(({ line }) => `  ${line}`)
+    ],
+    [
+      "My plans, through the CLIs signed in on this machine",
+      "An API key for a model provider or gateway"
+    ],
+    ready.length > 0 ? 1 : 2,
+    (choice) => choice === 1 && ready.length === 0 ? "Neither CLI is ready; each line above says how to fix it. Choose 2 to use an API key." : void 0
+  );
+  if (way === void 0) return void 0;
+  if (way === 2) return askApiRoute(options, ready);
+  const candidates = await menu(
+    options,
+    ["Replay candidates through (choose the vendor your app calls today):"],
+    ready.map((kind) => `${planClis[kind].command} (${planClis[kind].models})`),
+    1
+  );
+  if (candidates === void 0) return void 0;
+  const route = ready[candidates - 1];
+  const judges = ready.filter((kind) => kind !== route);
+  const judge = await menu(
+    options,
+    ["Judge through:"],
+    [
+      ...judges.map(
+        (kind) => `${planClis[kind].command} (${planClis[kind].plan})`
+      ),
+      "An API key for a provider or gateway"
+    ],
+    1
+  );
+  if (judge === void 0) return void 0;
+  if (judge <= judges.length) return { route, judgeRoute: judges[judge - 1] };
+  const api = await askMultiVendorApi(
+    options,
+    "Which provider or gateway for judge calls?"
+  );
+  return api && { route, judgeRoute: "api", api };
+}
+async function askApiRoute(options, ready) {
+  const presets = [
+    "openrouter",
+    "vercel",
+    "openai",
+    "anthropic",
+    "other"
+  ];
+  for (; ; ) {
+    const choice = await menu(
+      options,
+      ["Which provider or gateway?"],
+      presets.map(
+        (preset2) => preset2 === "openai" || preset2 === "anthropic" ? ready.includes(singleVendorPresets[preset2].judge) ? singleVendorPresets[preset2].usable : singleVendorPresets[preset2].unusable : apiPresets[preset2].label
+      ),
+      1
+    );
+    if (choice === void 0) return void 0;
+    const preset = presets[choice - 1];
+    if (preset !== "openai" && preset !== "anthropic") {
+      const api2 = await askApi(options, preset);
+      return api2 && { route: "api", judgeRoute: "api", api: api2 };
+    }
+    const { judge, explanation } = singleVendorPresets[preset];
+    if (!ready.includes(judge)) {
+      options.output.write(`${explanation}
+`);
+      continue;
+    }
+    const api = await askApi(options, preset);
+    return api && {
+      route: "api",
+      judgeRoute: judge,
+      api: { ...api, catalogReference: options.priceList }
+    };
+  }
+}
+async function askMultiVendorApi(options, heading) {
+  const presets = ["openrouter", "vercel", "other"];
+  const choice = await menu(
+    options,
+    [heading],
+    presets.map((preset) => apiPresets[preset].label),
+    1
+  );
+  return choice === void 0 ? void 0 : askApi(options, presets[choice - 1]);
+}
+async function askApi(options, preset) {
+  const { output } = options;
+  let baseUrl = apiPresets[preset].baseUrl;
+  if (baseUrl === void 0) {
+    const asked = await question(
+      options,
+      "Base URL of the endpoint, usually ending in /v1: ",
+      (answer) => {
+        if (isShareableBaseUrl(answer.trim())) return true;
+        output.write(
+          "Enter an http or https URL without a user name, password or query string, such as https://litellm.example.com/v1.\n"
+        );
+        return false;
+      }
+    );
+    if (asked.cancelled) return void 0;
+    baseUrl = asked.answer.trim();
+  }
+  const fallback = apiPresets[preset].apiKeyEnv;
+  const named = await question(
+    options,
+    `Environment variable that holds ${apiPresets[preset].key} [${fallback}]: `,
+    (answer) => {
+      const name = answer.trim();
+      if (name === "" || isApiKeyEnvName(name)) return true;
+      output.write(
+        "Enter the variable's name, such as OPENROUTER_API_KEY, not the key itself.\n"
+      );
+      return false;
+    }
+  );
+  if (named.cancelled) return void 0;
+  const apiKeyEnv = named.answer.trim() === "" ? fallback : named.answer.trim();
+  output.write(
+    options.hasEnv(apiKeyEnv) ? `${apiKeyEnv} is set.
+` : `${apiKeyEnv} is not set in this shell. Set it in your own shell before replay; rightmodeler never asks for the key and never stores it.
+`
+  );
+  return { preset, baseUrl, apiKeyEnv };
+}
+async function consented(options, route) {
+  const kinds = [route.route, route.judgeRoute].filter(isPlanRouteKind);
+  const saved = options.saved?.route;
+  if (kinds.every((kind) => kind === saved?.route || kind === saved?.judgeRoute)) {
+    return true;
+  }
+  const through = (kind) => kind === "api" ? `${route.api.baseUrl}, billed to your key` : `${planClis[kind].command} under your own login`;
+  const used = ["claude-login", "codex-login"].filter(
+    (kind) => kinds.includes(kind)
+  );
+  const { output } = options;
+  output.write(
+    `Replays will run through ${through(route.route)} and judge calls through ${through(route.judgeRoute)}.
+`
+  );
+  output.write(
+    "- Calls through a CLI use your plan's usage limits, the same 5-hour and weekly limits as your own coding. If a limit is reached, rightmodeler stops; rerun after the reset to continue.\n"
+  );
+  output.write(
+    `- Prompts from your traces go to ${used.map((kind) => planClis[kind].vendor).join(" and ")} under your plan's data settings.
+`
+  );
+  output.write(
+    "- rightmodeler never reads your logins, and keeps API key variables away from the CLIs.\n"
+  );
+  output.write(
+    `- A coding CLI adds its own instructions to each call and cannot set temperature or an output limit.${used.includes("claude-login") ? " claude's instructions include your account email and today's date." : ""}${used.includes("codex-login") ? " codex also adds your global Codex instructions file when you have one." : ""} The report labels results measured this way.
+`
+  );
+  const asked = await question(
+    options,
+    `Send recorded prompts through your ${used.length > 1 ? "plans" : "plan"}? [y/N]: `
+  );
+  return !asked.cancelled && /^y(?:es)?$/iu.test(asked.answer.trim());
+}
+async function menu(options, heading, items, fallback, refuse = () => void 0) {
+  for (const line of heading) options.output.write(`${line}
+`);
+  for (const [index, item] of items.entries()) {
+    options.output.write(`${index + 1}. ${item}
+`);
+  }
+  let chosen = fallback;
+  const asked = await question(options, `Choose [${fallback}]: `, (answer) => {
+    const typed = answer.trim();
+    chosen = typed === "" ? fallback : /^[0-9]+$/u.test(typed) ? Number(typed) : 0;
+    if (chosen < 1 || chosen > items.length) {
+      options.output.write(`Choose a number from 1 to ${items.length}.
+`);
+      return false;
+    }
+    const refusal3 = refuse(chosen);
+    if (refusal3 !== void 0) options.output.write(`${refusal3}
+`);
+    return refusal3 === void 0;
+  });
+  return asked.cancelled ? void 0 : chosen;
+}
+function question(streams, prompt, accept = () => true) {
+  const readline = createInterface({
+    input: streams.input,
+    output: streams.output
+  });
+  return new Promise((resolveAnswer) => {
+    let settled = false;
+    const cancel = () => {
+      readline.close();
+      finish({ answer: "", cancelled: true });
+    };
+    const finish = (asked) => {
+      if (settled) return;
+      settled = true;
+      streams.input.off("close", cancel);
+      streams.output.off("close", cancel);
+      resolveAnswer(asked);
+    };
+    const ask = () => {
+      readline.question(prompt, (answer) => {
+        if (!accept(answer)) {
+          ask();
+          return;
+        }
+        finish({ answer, cancelled: false });
+        readline.close();
+      });
+    };
+    readline.once("close", () => finish({ answer: "", cancelled: true }));
+    streams.input.once("close", cancel);
+    streams.output.once("close", cancel);
+    ask();
+  });
+}
+function formatName(format11) {
+  const names = {
+    "otel-genai": "OpenTelemetry GenAI export",
+    "ai-sdk": "AI SDK telemetry export",
+    "openai-jsonl": "OpenAI log",
+    langfuse: "Langfuse export",
+    braintrust: "Braintrust export",
+    langsmith: "LangSmith export",
+    openinference: "OpenInference export",
+    helicone: "Helicone export",
+    weave: "Weave export",
+    "claude-code": "Claude Code session",
+    codex: "Codex session",
+    bifrost: "Bifrost log export"
+  };
+  return names[format11];
+}
+function shortPath(path, repo, homeDir) {
+  const fromRepo = relative8(resolve8(repo), path);
+  if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute3(fromRepo)) {
+    return `./${fromRepo}`;
+  }
+  const fromHome = relative8(resolve8(homeDir), path);
+  if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute3(fromHome)) {
+    return `~/${fromHome}`;
+  }
+  return path;
+}
+function formatAge(modifiedAt, now) {
+  const seconds = Math.max(
+    0,
+    Math.floor((now.getTime() - modifiedAt.getTime()) / 1e3)
+  );
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} ${unit("minute", minutes)} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ${unit("hour", hours)} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${unit("day", days)} ago`;
+}
+function unit(label2, value) {
+  return value === 1 ? label2 : `${label2}s`;
+}
+
 // src/protocol.ts
 var processIo = {
   stdout: (text) => process.stdout.write(text),
@@ -45554,6 +46001,47 @@ async function readIngestResumption(options) {
     ...checkpoint.traceSource === void 0 ? {} : { tracePath: checkpoint.traceSource }
   };
 }
+var routeKindSchema = external_exports.enum([
+  "api",
+  ...Object.keys(planRouteVendors)
+]);
+var savedModelRouteSchema = external_exports.strictObject({
+  version: external_exports.literal(1),
+  route: routeKindSchema,
+  judgeRoute: routeKindSchema,
+  api: external_exports.strictObject({
+    preset: external_exports.enum(["openrouter", "vercel", "openai", "anthropic", "other"]),
+    baseUrl: external_exports.string().refine(isShareableBaseUrl),
+    apiKeyEnv: external_exports.string().refine(isApiKeyEnvName),
+    catalogReference: external_exports.string().optional()
+  }).optional()
+});
+function modelRouteKey(projectId3) {
+  return `${setupPrefix(projectId3)}model-route.json`;
+}
+async function readSavedModelRoute(options) {
+  const context2 = createHeadlessContext(options);
+  const entry = await context2.store.get(modelRouteKey(context2.projectId));
+  if (entry === null) return void 0;
+  let body;
+  try {
+    body = JSON.parse(Buffer.from(entry.body).toString("utf8"));
+  } catch {
+    return void 0;
+  }
+  const parsed2 = savedModelRouteSchema.safeParse(body);
+  if (!parsed2.success) return void 0;
+  const { route, judgeRoute, api } = parsed2.data;
+  return { route, judgeRoute, ...api === void 0 ? {} : { api } };
+}
+async function saveModelRoute(options, route) {
+  const context2 = createHeadlessContext(options);
+  await putMutableJson(
+    context2.store,
+    modelRouteKey(context2.projectId),
+    savedModelRouteSchema.parse({ version: 1, ...route })
+  );
+}
 async function runPipeline(options) {
   const context2 = createContext(options);
   if (options.plan) {
@@ -45811,7 +46299,7 @@ async function evaluatorRunIdentity(context2) {
   if (context2.evaluator.provider !== "promptfoo") {
     return jsonValue2(context2.evaluator);
   }
-  const assertionsPath = resolve8(context2.evaluator.assertionsPath);
+  const assertionsPath = resolve9(context2.evaluator.assertionsPath);
   const promptfooConfigs = (await readPromptfooConfigs(assertionsPath)).map(
     ({ file: file2, bytes }) => ({ file: file2, sha256: sha256(bytes) })
   );
@@ -46328,18 +46816,18 @@ function applyCascadeStatus(status) {
   return "blocked";
 }
 function createContext(options) {
-  const repo = resolve8(options.repo);
+  const repo = resolve9(options.repo);
   const storeRoot = resolveStoreRoot(repo, options.store);
-  const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve8(options.modeBConfigPath);
-  const pricingFilePath = options.pricingFilePath === void 0 ? void 0 : resolve8(options.pricingFilePath);
-  const policyFilePath = options.policyFilePath === void 0 ? void 0 : resolve8(options.policyFilePath);
+  const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve9(options.modeBConfigPath);
+  const pricingFilePath = options.pricingFilePath === void 0 ? void 0 : resolve9(options.pricingFilePath);
+  const policyFilePath = options.policyFilePath === void 0 ? void 0 : resolve9(options.policyFilePath);
   const candidateRoute = options.route ?? (options.baseUrl === void 0 ? void 0 : "api");
   return {
     repo,
     storeRoot,
     store: new FsStore(storeRoot),
     projectId: PROJECT_ID2,
-    traces: options.traces === void 0 ? void 0 : resolve8(options.traces),
+    traces: options.traces === void 0 ? void 0 : resolve9(options.traces),
     baseUrl: options.baseUrl,
     apiKeyEnv: options.apiKeyEnv ?? API_KEY_ENV_DEFAULT,
     maxCostUsd: options.maxCostUsd,
@@ -46359,7 +46847,7 @@ function createContext(options) {
     },
     ...options.requestHeaders === void 0 ? {} : { requestHeaders: options.requestHeaders },
     ...options.catalogReference === void 0 ? {} : {
-      catalogReference: /^https?:\/\//iu.test(options.catalogReference) ? options.catalogReference : resolve8(options.catalogReference)
+      catalogReference: /^https?:\/\//iu.test(options.catalogReference) ? options.catalogReference : resolve9(options.catalogReference)
     },
     ...candidateRoute === void 0 ? {} : {
       routes: {
@@ -46369,12 +46857,12 @@ function createContext(options) {
     },
     ...policyFilePath === void 0 ? {} : { policyFilePath },
     ...options.matchersPath === void 0 ? {} : {
-      matchersPath: resolve8(options.matchersPath),
-      matchers: loadMatchers(resolve8(options.matchersPath))
+      matchersPath: resolve9(options.matchersPath),
+      matchers: loadMatchers(resolve9(options.matchersPath))
     },
     ...options.existingRunId === void 0 ? {} : { existingRunId: options.existingRunId },
     ...options.approvedRunSpecDigest === void 0 ? {} : { approvedRunSpecDigest: options.approvedRunSpecDigest },
-    ...options.codeGraphPath === void 0 ? {} : { codeGraphPath: resolve8(options.codeGraphPath) },
+    ...options.codeGraphPath === void 0 ? {} : { codeGraphPath: resolve9(options.codeGraphPath) },
     reporter: options.reporter,
     cache: { setupArtifacts: /* @__PURE__ */ new Map() }
   };
@@ -46415,7 +46903,7 @@ function readModeBConfig(path) {
     ...parsed2.data,
     appSpec: {
       ...parsed2.data.appSpec,
-      mountPath: resolve8(dirname7(path), parsed2.data.appSpec.mountPath)
+      mountPath: resolve9(dirname7(path), parsed2.data.appSpec.mountPath)
     }
   };
 }
@@ -48915,7 +49403,7 @@ async function codeContextFor(context2, callSites, warn) {
       (entry) => entry.isFile(),
       () => false
     )) {
-      const fromCwd = relative8(process.cwd(), found);
+      const fromCwd = relative9(process.cwd(), found);
       const shown = fromCwd.startsWith("..") ? found : fromCwd;
       warn(
         "code_graph_available",
@@ -49144,7 +49632,7 @@ async function walkFiles(repo) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) await visit(absolute);
       } else if (entry.isFile()) {
-        files.push(relative8(repo, absolute).split(sep5).join("/"));
+        files.push(relative9(repo, absolute).split(sep5).join("/"));
       }
     }
   }
@@ -49849,7 +50337,7 @@ async function runAuditTabulate(options) {
     })
   });
   const worksheet = options.worksheet ? auditWorksheetSchema.parse(
-    JSON.parse(await readFile13(resolve8(options.worksheet), "utf8"))
+    JSON.parse(await readFile13(resolve9(options.worksheet), "utf8"))
   ) : await loadCurrent(context2, "audit-sample", auditWorksheetSchema);
   const result2 = auditTabulate(worksheet);
   await putMutableJson(
@@ -49941,7 +50429,7 @@ async function maybeLoadCorpus(context2) {
 }
 
 // src/apply/index.ts
-import { basename as basename3, resolve as resolve9 } from "node:path";
+import { basename as basename3, resolve as resolve10 } from "node:path";
 function applySwaps2(options) {
   return runApply({
     repo: options.repo,
@@ -49951,7 +50439,7 @@ function applySwaps2(options) {
       tokenEnv: options.githubTokenEnv
     }),
     owner: options.owner,
-    githubRepo: options.githubRepo ?? basename3(resolve9(options.repo)),
+    githubRepo: options.githubRepo ?? basename3(resolve10(options.repo)),
     dryRun: options.dryRun ?? false,
     ...options.codeGraphPath === void 0 ? {} : { codeGraphPath: options.codeGraphPath },
     ...options.warning === void 0 ? {} : { warning: options.warning }
@@ -49961,15 +50449,15 @@ function applySwaps2(options) {
 // src/data/discover.ts
 import { open, readdir as readdir5, realpath as realpath4, stat as stat5 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute3, join as join19, relative as relative9, resolve as resolve10 } from "node:path";
+import { isAbsolute as isAbsolute4, join as join19, relative as relative10, resolve as resolve11 } from "node:path";
 var MAX_FILES = 50;
 var MAX_CODEX_EXAMINED = 300;
 var MAX_READ_BYTES = 64 * 1024;
 var MAX_SAMPLE_RECORDS = 20;
 var SOURCE_BUDGETS = { local: 20, claude: 15, codex: 15 };
 async function discoverTraces(options) {
-  const repo = resolve10(options.repo);
-  const homeDir = resolve10(options.homeDir ?? homedir2());
+  const repo = resolve11(options.repo);
+  const homeDir = resolve11(options.homeDir ?? homedir2());
   const candidates = await candidateFiles(repo, homeDir);
   const discovered = [];
   for (const candidate of candidates.slice(0, MAX_FILES)) {
@@ -49991,7 +50479,7 @@ async function discoverTraces(options) {
   ).map(({ sourceOrder: _sourceOrder, ...candidate }) => candidate);
 }
 function sanitizeClaudeProjectPath(repo) {
-  const absolute = resolve10(repo);
+  const absolute = resolve11(repo);
   const sanitized = absolute.replace(/[^a-zA-Z0-9]/g, "-");
   if (sanitized.length <= 200) return sanitized;
   let hash2 = 0;
@@ -50120,8 +50608,8 @@ async function jsonFiles(root, recursive) {
   ).map((entry) => join19(entry.parentPath, entry.name));
 }
 function isWithin(root, path) {
-  const fromRoot = relative9(root, path);
-  return fromRoot === "" || !fromRoot.startsWith("..") && !isAbsolute3(fromRoot);
+  const fromRoot = relative10(root, path);
+  return fromRoot === "" || !fromRoot.startsWith("..") && !isAbsolute4(fromRoot);
 }
 async function detectionHead(path, fileSize) {
   const handle = await open(path, "r");
@@ -50203,7 +50691,7 @@ function codexSessionCwd(text) {
     if (line.trim() === "") continue;
     const record2 = parseWholeJson(line);
     if (isRecord(record2) && record2.type === "session_meta" && isRecord(record2.payload) && typeof record2.payload.cwd === "string") {
-      return resolve10(record2.payload.cwd);
+      return resolve11(record2.payload.cwd);
     }
   }
   return void 0;
@@ -50222,151 +50710,6 @@ function approximateRecordCount(observed, bytesRead, fileSize) {
 }
 function unique(values) {
   return [...new Set(values)];
-}
-
-// src/guidance.ts
-import { createInterface } from "node:readline";
-import { isAbsolute as isAbsolute4, relative as relative10, resolve as resolve11 } from "node:path";
-async function promptForTracePath(options) {
-  if (options.candidates.length === 0) {
-    options.output.write(
-      [
-        "Traces are logs that your AI tools already write.",
-        "If you use Claude Code or Codex in this project, run a few tasks there and run this command again. Rightmodeler finds those logs automatically.",
-        "If your app logs to Langfuse, Braintrust, LangSmith, Helicone, or W&B Weave, export a file and enter its path.",
-        "See the supported sources at https://www.rightmodeler.com/integrations",
-        ""
-      ].join("\n")
-    );
-    const asked2 = await question(
-      options,
-      "Trace file path (leave empty to stop): "
-    );
-    const typed = asked2.answer.trim();
-    return asked2.cancelled || typed === "" ? void 0 : resolve11(options.repo, typed);
-  }
-  options.output.write("Found trace files:\n");
-  const now = options.now ?? /* @__PURE__ */ new Date();
-  for (const [index, candidate] of options.candidates.entries()) {
-    options.output.write(
-      `${index + 1}. ${formatName(candidate.format)}, about ${candidate.approximateRecords} ${unit("model call", candidate.approximateRecords)}, ${formatAge(candidate.modifiedAt, now)}, ${shortPath(candidate.path, options.repo, options.homeDir)}
-`
-    );
-  }
-  const asked = await question(
-    options,
-    "Choose a trace file [1]: ",
-    (value) => {
-      const choice = value.trim();
-      if (/^[0-9]+$/u.test(choice)) {
-        const selected = options.candidates[Number(choice) - 1];
-        if (selected === void 0) {
-          options.output.write(
-            `Choose a number from 1 to ${options.candidates.length}.
-`
-          );
-          return false;
-        }
-      }
-      return true;
-    }
-  );
-  if (asked.cancelled) return void 0;
-  const answer = asked.answer.trim();
-  if (answer === "") return options.candidates[0].path;
-  if (/^[1-9][0-9]*$/u.test(answer)) {
-    const selected = options.candidates[Number(answer) - 1];
-    if (selected !== void 0) return selected.path;
-  }
-  return resolve11(options.repo, answer);
-}
-async function promptForProviderBaseUrl(options) {
-  options.output.write(
-    "Replay calls cheaper models through any OpenAI-compatible endpoint, such as OpenRouter or the Vercel AI Gateway.\n"
-  );
-  const suffix = options.current === void 0 ? "" : ` [${options.current}]`;
-  const asked = await question(options, `Provider base URL${suffix}: `);
-  if (asked.cancelled) return options.current;
-  const answer = asked.answer.trim();
-  return answer === "" ? options.current : answer;
-}
-function question(streams, prompt, accept = () => true) {
-  const readline = createInterface({
-    input: streams.input,
-    output: streams.output
-  });
-  return new Promise((resolveAnswer) => {
-    let settled = false;
-    const finish = (asked) => {
-      if (settled) return;
-      settled = true;
-      resolveAnswer(asked);
-    };
-    const ask = () => {
-      readline.question(prompt, (answer) => {
-        if (!accept(answer)) {
-          ask();
-          return;
-        }
-        finish({ answer, cancelled: false });
-        readline.close();
-      });
-    };
-    readline.once("close", () => finish({ answer: "", cancelled: true }));
-    streams.input.once("close", () => {
-      readline.close();
-      finish({ answer: "", cancelled: true });
-    });
-    streams.output.once("close", () => {
-      readline.close();
-      finish({ answer: "", cancelled: true });
-    });
-    ask();
-  });
-}
-function formatName(format11) {
-  const names = {
-    "otel-genai": "OpenTelemetry GenAI export",
-    "ai-sdk": "AI SDK telemetry export",
-    "openai-jsonl": "OpenAI log",
-    langfuse: "Langfuse export",
-    braintrust: "Braintrust export",
-    langsmith: "LangSmith export",
-    openinference: "OpenInference export",
-    helicone: "Helicone export",
-    weave: "Weave export",
-    "claude-code": "Claude Code session",
-    codex: "Codex session",
-    bifrost: "Bifrost log export"
-  };
-  return names[format11];
-}
-function shortPath(path, repo, homeDir) {
-  const fromRepo = relative10(resolve11(repo), path);
-  if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute4(fromRepo)) {
-    return `./${fromRepo}`;
-  }
-  const fromHome = relative10(resolve11(homeDir), path);
-  if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute4(fromHome)) {
-    return `~/${fromHome}`;
-  }
-  return path;
-}
-function formatAge(modifiedAt, now) {
-  const seconds = Math.max(
-    0,
-    Math.floor((now.getTime() - modifiedAt.getTime()) / 1e3)
-  );
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} ${unit("minute", minutes)} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ${unit("hour", hours)} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} ${unit("day", days)} ago`;
-}
-function unit(label2, value) {
-  return value === 1 ? label2 : `${label2}s`;
 }
 
 // src/rollback.ts
@@ -50966,8 +51309,6 @@ function createProgram(io = processIo, runtime = processRuntime) {
     );
     const result2 = await withInputGuidance(
       prepared,
-      local,
-      runtime,
       async (options) => local.plan ? {
         ...await planPipeline(options),
         executedStages: [],
@@ -50993,15 +51334,10 @@ function createProgram(io = processIo, runtime = processRuntime) {
       reporter,
       runtime
     );
-    const result2 = await withInputGuidance(
-      prepared,
-      local,
-      runtime,
-      async (options) => {
-        await runPipeline({ ...options, through: "shortlist" });
-        return estimateReplay(options);
-      }
-    );
+    const result2 = await withInputGuidance(prepared, async (options) => {
+      await runPipeline({ ...options, through: "shortlist" });
+      return estimateReplay(options);
+    });
     reporter.result(result2);
     return 0;
   });
@@ -51389,7 +51725,7 @@ function addPipelineOptions(command, provider) {
   if (command.name() === "init" || command.name() === "estimate") {
     command.option(
       "--yes",
-      "accept the newest discovered trace without prompting"
+      "accept the newest discovered trace and the saved model route without prompting"
     );
   }
   return command;
@@ -51520,10 +51856,43 @@ function pipelineOptions(global, local, reporter) {
   };
 }
 async function guidedPipelineOptions(global, local, reporter, runtime) {
-  const options = pipelineOptions(global, local, reporter);
+  let options = pipelineOptions(global, local, reporter);
   const interactive = global.output === "human" && runtime.stdin.isTTY === true && runtime.stdout.isTTY === true;
+  if (interactive && !local.plan && (local.through === void 0 || PIPELINE_STAGES.indexOf(local.through) >= PIPELINE_STAGES.indexOf("replay")) && local.route === void 0 && local.judgeRoute === void 0 && local.baseUrl === void 0 && local.apiKeyEnv === void 0 && local.header === void 0) {
+    const stored = await readSavedModelRoute(options);
+    const saved = local.modebConfig !== void 0 && (stored?.route !== "api" || stored.judgeRoute !== "api") ? void 0 : stored;
+    if (local.yes && saved !== void 0) {
+      reporter.io.stdout(
+        `Using the saved model route: ${routeFlags(routeOptions(saved, local))}
+`
+      );
+    }
+    const route = local.yes ? saved : await promptForModelRoute({
+      input: runtime.stdin,
+      output: promptOutput(reporter.io, runtime.stdout.isTTY),
+      plans: local.modebConfig === void 0 ? () => detectPlanLogins(runtime.env) : void 0,
+      saved: saved && {
+        route: saved,
+        flags: routeFlags(routeOptions(saved, local))
+      },
+      hasEnv: (name) => (runtime.env[name] ?? "") !== "",
+      priceList: DEFAULT_PLAN_PRICE_LIST
+    });
+    if (route !== void 0) {
+      const chosen = routeOptions(route, local);
+      if (route !== saved) {
+        await saveModelRoute(options, route);
+        reporter.io.stdout(
+          `Saved for this repository. Next time, skip these questions with:
+  ${routeFlags(chosen)}
+`
+        );
+      }
+      options = pipelineOptions(global, chosen, reporter);
+    }
+  }
   if (local.traces !== void 0 || local.plan || local.through === "scan") {
-    return { options, candidates: [], interactive };
+    return { options, candidates: [] };
   }
   const resumption = await readIngestResumption(options);
   if (resumption.resumable) {
@@ -51533,7 +51902,7 @@ async function guidedPipelineOptions(global, local, reporter, runtime) {
 `
       );
     }
-    return { options, candidates: [], interactive };
+    return { options, candidates: [] };
   }
   const candidates = await discoverTraces({
     repo: global.repo,
@@ -51554,11 +51923,30 @@ async function guidedPipelineOptions(global, local, reporter, runtime) {
   return {
     options: traces === void 0 ? options : { ...options, traces },
     candidates,
-    interactive,
     ...traces === void 0 ? {} : { selectedDiscoveredTrace: traces }
   };
 }
-async function withInputGuidance(prepared, local, runtime, operation) {
+function routeOptions(route, local) {
+  return {
+    ...route.api === void 0 ? {} : {
+      baseUrl: route.api.baseUrl,
+      apiKeyEnv: route.api.apiKeyEnv,
+      catalogReference: route.api.catalogReference
+    },
+    ...route.route === "api" && route.judgeRoute === "api" ? {} : { route: route.route, judgeRoute: route.judgeRoute },
+    ...local
+  };
+}
+function routeFlags(local) {
+  return pipelineArgv({
+    route: local.route,
+    judgeRoute: local.judgeRoute,
+    baseUrl: local.baseUrl,
+    apiKeyEnv: local.apiKeyEnv,
+    catalogReference: local.catalogReference
+  }).join(" ");
+}
+async function withInputGuidance(prepared, operation) {
   try {
     return await operation(prepared.options);
   } catch (error51) {
@@ -51578,29 +51966,7 @@ async function withInputGuidance(prepared, local, runtime, operation) {
         remedy: "Rerun the command and choose a different trace file."
       });
     }
-    if (!(error51 instanceof ProtocolError) || error51.code !== "missing_provider_configuration" || !prepared.interactive) {
-      throw error51;
-    }
-    const baseUrl = await promptForProviderBaseUrl({
-      current: local.baseUrl,
-      input: runtime.stdin,
-      output: promptOutput(prepared.options.reporter.io, runtime.stdout.isTTY)
-    });
-    if (baseUrl === void 0) throw error51;
-    const apiKeyEnv = local.apiKeyEnv ?? "RIGHTMODELER_API_KEY";
-    if (!runtime.env[apiKeyEnv]) {
-      throw new ProtocolError({
-        exitCode: 2,
-        code: "missing_provider_configuration",
-        message: `Provider API key environment variable is not set: ${apiKeyEnv}.`,
-        remedy: `Set the environment variable ${apiKeyEnv} to your provider API key, then rerun.`
-      });
-    }
-    return operation({
-      ...prepared.options,
-      baseUrl,
-      apiKeyEnv
-    });
+    throw error51;
   }
 }
 function promptOutput(io, isTTY) {
@@ -51777,6 +52143,8 @@ var PIPELINE_ARG_OPTIONS = [
   { flag: "--modeb-config", key: "modebConfig", kind: "path" },
   { flag: "--base-url", key: "baseUrl", kind: "value" },
   { flag: "--api-key-env", key: "apiKeyEnv", kind: "value" },
+  { flag: "--route", key: "route", kind: "value" },
+  { flag: "--judge-route", key: "judgeRoute", kind: "value" },
   { flag: "--max-cost-usd", key: "maxCostUsd", kind: "value" },
   { flag: "--max-concurrency", key: "maxConcurrency", kind: "value" },
   { flag: "--pricing-file", key: "pricingFile", kind: "path" },

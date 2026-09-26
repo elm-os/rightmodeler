@@ -148,7 +148,9 @@ function failure(
   return new ProviderRequestError(`codex reported: ${message.slice(0, 300)}`);
 }
 
-function createCodexAdapter(options: PlanProviderOptions): PlanAdapter {
+export function createCodexAdapter(
+  options: Omit<PlanProviderOptions, "priceList">,
+): PlanAdapter {
   const env = options.env ?? process.env;
   let store: "file" | "keyring" = "file";
 

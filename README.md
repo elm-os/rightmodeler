@@ -24,15 +24,15 @@ service and no telemetry.
 
 ## What you need
 
-| You need                                            | Details                                                                                                |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Node.js 24 or newer                                 | Run `npx rightmodeler`, or install it with `npm install -g rightmodeler`.                              |
-| Your app's Git repository, with at least one commit | It is scanned for model call sites. Run from it or pass `--repo <dir>`.                                |
-| Traces of your app's model calls                    | With token usage on each call. See [Traces](#traces).                                                  |
-| An OpenAI-compatible endpoint                       | A provider or gateway with a priced model catalog. See [The endpoint](#the-endpoint).                  |
-| That endpoint's key in an environment variable      | `RIGHTMODELER_API_KEY` by default, or any variable you name with `--api-key-env`.                      |
-| A GitHub token (optional)                           | Only for the pull-request commands. See [From verdict to pull request](#from-verdict-to-pull-request). |
-| Docker with a running daemon (optional)             | Only for [Mode B confirmation](#mode-b-confirmation) on its default backend.                           |
+| You need                                            | Details                                                                                                                                                                       |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js 24 or newer                                 | Run `npx rightmodeler`, or install it with `npm install -g rightmodeler`.                                                                                                     |
+| Your app's Git repository, with at least one commit | It is scanned for model call sites. Run from it or pass `--repo <dir>`.                                                                                                       |
+| Traces of your app's model calls                    | With token usage on each call. See [Traces](#traces).                                                                                                                         |
+| A way to call models                                | An OpenAI-compatible endpoint with a priced model catalog, or the `claude` or `codex` CLI signed in on this machine. See [Two ways to call models](#two-ways-to-call-models). |
+| That endpoint's key in an environment variable      | `RIGHTMODELER_API_KEY` by default, or any variable you name with `--api-key-env`.                                                                                             |
+| A GitHub token (optional)                           | Only for the pull-request commands. See [From verdict to pull request](#from-verdict-to-pull-request).                                                                        |
+| Docker with a running daemon (optional)             | Only for [Mode B confirmation](#mode-b-confirmation) on its default backend.                                                                                                  |
 
 ## Quick start
 
@@ -75,6 +75,26 @@ cat .rightmodeler/project/reports/report.md
 Without `--max-cost-usd` a run is uncapped. Every run resumes from its checkpoints:
 when one stops for a missing input or the spend cap, fix what the message names, or
 raise the cap, and rerun the same command; do not delete `.rightmodeler/` to restart.
+
+## Two ways to call models
+
+Replay and the judge call models in one of two ways. Run in a terminal, `init` and
+`estimate` ask which before anything else, print the equivalent flags and remember
+the answer for the repository.
+
+- **An API key** for an OpenAI-compatible endpoint, as [The key](#the-key) and
+  [The endpoint](#the-endpoint) describe. It is the only way in CI and for Mode B
+  confirmation.
+- **A plan you already have**, through the `claude` or `codex` CLI signed in on this
+  machine (`--route claude-login` or `--route codex-login`). rightmodeler runs your own
+  installed CLI under the login it already holds, never reads that login, and keeps
+  API key variables away from it. The calls use your plan's usage limits, and your
+  recorded prompts go to that vendor under your plan's data settings.
+
+The judge must come from a vendor other than the models it grades, so a plan route
+always names its judge route too, such as `--route codex-login --judge-route
+claude-login`. `npx rightmodeler docs model-routes` covers both ways, what a plan
+route measures and its limits.
 
 ## The key
 
@@ -175,10 +195,12 @@ input and 3 that it hit the spend cap; `npx rightmodeler docs exit-codes` has th
 - **Local stages, `report` and `status`:** nothing. Email addresses and phone numbers
   are redacted before the replay cases are built.
 - **`estimate`:** reads your endpoint's model catalog and prices with your key, and any
-  `--catalog-reference` list without it. No model is called.
+  `--catalog-reference` list without it; on a plan route, the CLI's own model list and
+  a public price list read without a key. No model is called.
 - **Replay and Mode B confirmation:** the scrubbed recorded conversations, and the
   judge's inputs (the task, the recorded output and the candidate's), go to your
-  endpoint. During Mode B, your app's model calls go there too.
+  endpoint, or on a plan route to that vendor through its CLI. During Mode B, your
+  app's model calls go there too.
 - **Anything else:** only a service that a command, flag or config file you pass
   names, such as an external evaluator, `corpus import` or `export`, a cloud Mode B
   backend, or GitHub for the pull-request commands.
