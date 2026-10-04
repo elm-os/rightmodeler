@@ -17,19 +17,21 @@ const fieldClass =
   "min-w-0 w-full rounded-xl border border-ash-border bg-parchment-white px-4 py-3 font-sans text-body text-midnight-ink placeholder:text-fog focus:outline-none focus:ring-2 focus:ring-midnight-ink/40 focus:ring-offset-2 focus:ring-offset-parchment-white disabled:opacity-60";
 
 export function FeedbackForm() {
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
   const [state, setState] = useState<State>({ status: "idle" });
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (state.status === "submitting") return;
+    const data = new FormData(e.currentTarget);
     setState({ status: "submitting" });
     try {
       const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, message }),
+        body: JSON.stringify({
+          email: data.get("email"),
+          message: data.get("message"),
+        }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as {
@@ -42,8 +44,6 @@ export function FeedbackForm() {
         return;
       }
       setState({ status: "success" });
-      setEmail("");
-      setMessage("");
     } catch {
       setState({
         status: "error",
@@ -69,10 +69,9 @@ export function FeedbackForm() {
       </label>
       <input
         id="feedback-email"
+        name="email"
         type="email"
         required
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
         placeholder="you@company.com"
         autoComplete="email"
         disabled={submitting}
@@ -83,9 +82,8 @@ export function FeedbackForm() {
       </label>
       <textarea
         id="feedback-message"
+        name="message"
         required
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
         placeholder="What should we know? Rough edges, missing features, things you want the agent to handle."
         rows={5}
         maxLength={5000}

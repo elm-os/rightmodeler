@@ -21,18 +21,18 @@ export function WaitlistForm({
 }: {
   product?: WaitlistProduct;
 }) {
-  const [email, setEmail] = useState("");
   const [state, setState] = useState<State>({ status: "idle" });
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (state.status === "submitting") return;
+    const data = new FormData(e.currentTarget);
     setState({ status: "submitting" });
     try {
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, product }),
+        body: JSON.stringify({ email: data.get("email"), product }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as {
@@ -45,7 +45,6 @@ export function WaitlistForm({
         return;
       }
       setState({ status: "success" });
-      setEmail("");
     } catch {
       setState({
         status: "error",
@@ -72,10 +71,9 @@ export function WaitlistForm({
         </label>
         <input
           id={`waitlist-email-${product}`}
+          name="email"
           type="email"
           required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
           placeholder="you@company.com"
           autoComplete="email"
           disabled={submitting}
