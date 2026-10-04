@@ -16,15 +16,10 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
-import { createLightWash, type LightWash } from "@/components/light-wash";
+import type { LightWash } from "@/components/light-wash";
 import { Reveal } from "@/components/reveal";
-import {
-  createTraceField,
-  PALETTES,
-  type PaletteName,
-  type ShapeMask,
-  type TraceField,
-} from "@/components/trace-field-engine";
+import type { ShapeMask, TraceField } from "@/components/trace-field-engine";
+import { PALETTES, type PaletteName } from "@/components/trace-field-palettes";
 import { TRACE_SOURCES } from "@/lib/product-facts";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -173,14 +168,13 @@ export function NumbersBand() {
   // The engine mounts once the plates decode; until then only the wash shows. It
   // then lives for the component's lifetime, and visibility only starts and stops
   // its clock. Reduced motion renders settled frames instead of running a loop.
-  const [fieldReady, setFieldReady] = useState(false);
   // The light canvas stays invisible until its first WebGPU frame is on screen;
   // where init fails it never flips, and the CSS washes remain the backdrop.
   const [lightReady, setLightReady] = useState(false);
-  const stateRef = useRef({ active, palette });
+  const stateRef = useRef({ active, palette, inView });
   useEffect(() => {
-    stateRef.current = { active, palette };
-  }, [active, palette]);
+    stateRef.current = { active, palette, inView };
+  }, [active, palette, inView]);
 
   // Two GPU contexts, four plate fetches and the particle sampling pass, all below the
   // fold: nothing is built until the band is about to be seen. `armed` never goes back.
@@ -199,30 +193,36 @@ export function NumbersBand() {
     ).matches;
     let cancelled = false;
     let field: TraceField | null = null;
-    const lightCanvas = lightCanvasRef.current;
-    const light = lightCanvas
-      ? createLightWash(lightCanvas, {
+    let light: LightWash | null = null;
+    void import("@/components/light-wash")
+      .then(({ createLightWash }) => {
+        const lightCanvas = lightCanvasRef.current;
+        if (cancelled || !lightCanvas) return;
+        light = createLightWash(lightCanvas, {
           palette: stateRef.current.palette,
           reducedMotion: reduce ?? false,
           onReady: () => {
             if (!cancelled) setLightReady(true);
           },
-        })
-      : null;
-    lightRef.current = light;
-    light?.start();
-    loadPlates().then((masks) => {
-      const canvas = canvasRef.current;
-      if (cancelled || !canvas) return;
-      field = createTraceField(canvas, {
-        palette: stateRef.current.palette,
-        reducedMotion: reduce ?? false,
-        initialShape: stateRef.current.active,
-        masks: masks ?? undefined,
-      });
-      fieldRef.current = field;
-      setFieldReady(true);
-    });
+        });
+        lightRef.current = light;
+        if (stateRef.current.inView) light.start();
+      })
+      .catch((error) => console.error("light-wash:", error));
+    void Promise.all([import("@/components/trace-field-engine"), loadPlates()])
+      .then(([{ createTraceField }, masks]) => {
+        const canvas = canvasRef.current;
+        if (cancelled || !canvas) return;
+        field = createTraceField(canvas, {
+          palette: stateRef.current.palette,
+          reducedMotion: reduce ?? false,
+          initialShape: stateRef.current.active,
+          masks: masks ?? undefined,
+        });
+        fieldRef.current = field;
+        if (stateRef.current.inView) field?.start();
+      })
+      .catch((error) => console.error("trace-field:", error));
     return () => {
       cancelled = true;
       fieldRef.current = null;
@@ -246,7 +246,7 @@ export function NumbersBand() {
       field?.stop();
       light?.stop();
     }
-  }, [inView, fieldReady]);
+  }, [inView]);
 
   const selectStat = useCallback(
     (index: number) => {

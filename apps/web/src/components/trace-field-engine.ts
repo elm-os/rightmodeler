@@ -16,7 +16,9 @@
 // Coordinates: x in [-aspect, aspect], y in [-1, 1], y up. The canvas is transparent;
 // the section supplies the paper wash behind it.
 
-export type PaletteName = "duet" | "violet" | "ember" | "dawn";
+import { PALETTES, type PaletteName } from "@/components/trace-field-palettes";
+
+export type { PaletteName } from "@/components/trace-field-palettes";
 export type ShapeName = "confluence" | "descent" | "ring" | "slipstream";
 
 export const SHAPE_ORDER: ShapeName[] = [
@@ -31,34 +33,6 @@ export type ShapeMask = {
   data: Uint8ClampedArray;
   width: number;
   height: number;
-};
-
-// Illustration-only accent recipes (docs/design.md: accents never touch UI chrome).
-// Stops run along the gradient axis; wash tints the CSS backdrop behind the canvas.
-export const PALETTES: Record<
-  PaletteName,
-  { label: string; stops: [string, string, string]; wash: [string, string] }
-> = {
-  duet: {
-    label: "Duet",
-    stops: ["#0447ff", "#7a5cff", "#ff4704"],
-    wash: ["#0447ff", "#ff4704"],
-  },
-  violet: {
-    label: "Violet",
-    stops: ["#0447ff", "#5f7bff", "#a5b6ff"],
-    wash: ["#0447ff", "#6f86ff"],
-  },
-  ember: {
-    label: "Ember",
-    stops: ["#e63c00", "#ff6a2e", "#ffb488"],
-    wash: ["#ff4704", "#ff7a45"],
-  },
-  dawn: {
-    label: "Dawn",
-    stops: ["#6f5ae8", "#b58fd6", "#ff8c52"],
-    wash: ["#b3aaff", "#ffc4a0"],
-  },
 };
 
 // Motion constants. The flight is deliberately slower than UI motion (it is
@@ -831,6 +805,7 @@ export function createTraceField(
   let pointerK = 0;
   let dpr = 1;
   let pixelScale = 1;
+  let needsResize = true;
   let raf = 0;
   let running = false;
   let now = 0;
@@ -868,6 +843,7 @@ export function createTraceField(
       uploadTo(toShape);
     }
     gl.viewport(0, 0, w, h);
+    needsResize = false;
   }
 
   function bindPass(pass: Pass, stride: number) {
@@ -910,7 +886,13 @@ export function createTraceField(
 
   function draw(t: number) {
     if (!res || contextLost) return;
-    resize(t);
+    if (
+      needsResize ||
+      !ro ||
+      dpr !== Math.min(window.devicePixelRatio || 1, MAX_DPR)
+    ) {
+      resize(t);
+    }
     const frameDt = lastDrawT ? Math.min(t - lastDrawT, 100) : 16;
     lastDrawT = t;
     const progress = progressAt(t);
@@ -1046,6 +1028,7 @@ export function createTraceField(
   };
   const onContextRestored = () => {
     contextLost = false;
+    needsResize = true;
     if (initGL()) {
       draw(performance.now());
     }
@@ -1053,13 +1036,18 @@ export function createTraceField(
   canvas.addEventListener("webglcontextlost", onContextLost);
   canvas.addEventListener("webglcontextrestored", onContextRestored);
 
-  // Under reduced motion no loop runs, so a static frame must be re-rendered
-  // whenever layout resizes the canvas; otherwise the last frame stretches.
+  // Layout reads belong to size changes, not every animation frame. Under reduced
+  // motion no loop runs, so resize also redraws the settled image.
+  const onResize = () => {
+    needsResize = true;
+    if (reduced) draw(performance.now());
+  };
   let ro: ResizeObserver | null = null;
-  if (reduced && typeof ResizeObserver !== "undefined") {
-    ro = new ResizeObserver(() => draw(performance.now()));
+  if (typeof ResizeObserver !== "undefined") {
+    ro = new ResizeObserver(onResize);
     ro.observe(canvas);
   }
+  window.addEventListener("resize", onResize);
 
   const field: TraceField = {
     setShape(index) {
@@ -1137,6 +1125,7 @@ export function createTraceField(
       cancelAnimationFrame(raf);
       canvas.removeEventListener("webglcontextlost", onContextLost);
       canvas.removeEventListener("webglcontextrestored", onContextRestored);
+      window.removeEventListener("resize", onResize);
       ro?.disconnect();
       if (res) {
         gl.deleteBuffer(res.fromBuf);

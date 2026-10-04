@@ -9,10 +9,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowRightIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
+import { useInView } from "@/components/use-in-view";
 import { CASE_STUDIES } from "@/content/case-studies";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -20,22 +21,25 @@ const ROTATE_MS = 8000;
 
 export function TestimonialBand() {
   const reduce = useReducedMotion();
+  const ref = useRef<HTMLElement>(null);
+  const inView = useInView(ref);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const active = CASE_STUDIES[index];
 
   // One slow advance per beat. Hover/focus pauses; clicking a tab resets the clock via `index`.
   useEffect(() => {
-    if (reduce || paused) return;
+    if (reduce || paused || !inView) return;
     const timer = setTimeout(
       () => setIndex((i) => (i + 1) % CASE_STUDIES.length),
       ROTATE_MS,
     );
     return () => clearTimeout(timer);
-  }, [index, paused, reduce]);
+  }, [index, paused, reduce, inView]);
 
   return (
     <section
+      ref={ref}
       className="bg-parchment-white"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
