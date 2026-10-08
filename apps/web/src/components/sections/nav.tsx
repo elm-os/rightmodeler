@@ -15,9 +15,6 @@ const NAV_CSS = `
 // homeHref: the brand lockup points at "#top" on the landing page (smooth scroll to top) but at "/"
 // on nested routes like the blog, where "home" means navigating back to the landing page.
 export function Nav({ homeHref = "#top" }: { homeHref?: string }) {
-  const homeIsAnchor = homeHref.startsWith("#");
-  const HomeLink = homeIsAnchor ? "a" : Link;
-
   return (
     <header className="sticky top-0 z-50 border-b border-ash-border bg-parchment-white/80 backdrop-blur">
       <style>{NAV_CSS}</style>
@@ -26,15 +23,15 @@ export function Nav({ homeHref = "#top" }: { homeHref?: string }) {
         aria-label="Primary"
         className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6"
       >
-        <HomeLink
+        <Link
           href={homeHref}
-          prefetch={homeIsAnchor ? undefined : false}
+          prefetch={false}
           aria-label="rightmodeler, home"
           className="rm-focus inline-flex items-center gap-2 self-stretch text-midnight-ink"
         >
           <LogoMark height={18} />
           <span className="wordmark">rightmodeler</span>
-        </HomeLink>
+        </Link>
 
         <div className="flex items-center gap-6 sm:gap-8">
           {/* The two product pages — hidden on the smallest screens so the mobile masthead stays
