@@ -3,6 +3,9 @@ import { Analytics } from "@vercel/analytics/next";
 import { Inter, DM_Sans, Space_Grotesk, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+// Public pages must remain fully prerendered, including client navigations.
+export const ensureStatic = "navigation";
+
 // Functional / UI face — nav, buttons, body copy, labels, inputs, captions.
 const inter = Inter({
   variable: "--font-inter",

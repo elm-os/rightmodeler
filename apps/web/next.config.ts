@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   // Both are opt-in previews that will become defaults in a future major.
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    agentUpgrade: "latest",
+  },
 
   // Response header rules live in vercel.json because that is the layer the deployment platform
   // honours. See the response headers section in AGENTS.md for the separately verified local and
