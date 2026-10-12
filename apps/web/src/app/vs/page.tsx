@@ -12,7 +12,7 @@ import { SITE_URL } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "rightmodeler vs alternatives",
   description:
-    "Where rightmodeler ends and gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, and benchmarks begin.",
+    "Where rightmodeler ends and gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, benchmarks, and coding agents begin.",
   path: "/vs",
 });
 
@@ -67,6 +67,12 @@ const BANDS: { title: string; intro: string; category: string }[] = [
       "They rank models on benchmark test sets, shared or your own. rightmodeler decides which model each step in your code calls and proposes the change as a pull request you review.",
     category: "benchmarks",
   },
+  {
+    title: "The engineers",
+    intro:
+      "They write the code change themselves, from a logged error, a ticket, or a review comment. rightmodeler proposes one kind of change: which model a step calls, measured on your traces first.",
+    category: "coding",
+  },
 ];
 
 export default function VsPage() {
@@ -92,7 +98,7 @@ export default function VsPage() {
       <PageHero
         eyebrow="Comparisons"
         title="Different question, different tool."
-        lede="rightmodeler is an offline audit that measures cheaper models against outputs you already accepted. Gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, and benchmarks each answer a different question; rightmodeler reads traces from some and replays through others. Each page draws the line."
+        lede="rightmodeler is an offline audit that measures cheaper models against outputs you already accepted. Gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, benchmarks, and coding agents each answer a different question; rightmodeler reads traces from some and replays through others. Each page draws the line."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />

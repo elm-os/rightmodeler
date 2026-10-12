@@ -39,7 +39,8 @@
         "spend",
         "context",
         "training",
-        "benchmarks"
+        "benchmarks",
+        "coding"
       ]
     },
     "verdict": { "enum": ["complement", "competitor", "different-job"] },
