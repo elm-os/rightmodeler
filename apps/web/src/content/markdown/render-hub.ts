@@ -28,7 +28,7 @@ export function renderVsIndexMarkdown(): string {
   return [
     "# Different question, different tool",
     "",
-    `Honest comparisons with gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, and benchmarks: when to use which.`,
+    `Honest comparisons with gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, benchmarks, and coding agents: when to use which.`,
     "",
     ...getAllComparisons().map((comparison) =>
       link(

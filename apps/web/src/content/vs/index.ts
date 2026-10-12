@@ -3,7 +3,7 @@
 // VsPageData here (a wrong or missing field fails `pnpm check-types`); the hub, the [slug] route,
 // the sitemap, and llms.txt all resolve from this list. To add a comparison: create a JSON file
 // and add one import + one entry below. Listed in hub display order: rails, observers, graders,
-// routers, meters, coaches, trainers, scorekeepers.
+// routers, meters, coaches, trainers, scorekeepers, engineers.
 
 import type { VsPageData } from "@/content/vs/types";
 import openrouter from "@/content/vs/data/openrouter.json";
@@ -35,6 +35,7 @@ import thirdbrainLabs from "@/content/vs/data/thirdbrain-labs.json";
 import valsAi from "@/content/vs/data/vals-ai.json";
 import openFrontier from "@/content/vs/data/open-frontier.json";
 import artificialAnalysis from "@/content/vs/data/artificial-analysis.json";
+import jardinero from "@/content/vs/data/jardinero.json";
 
 const comparisons: VsPageData[] = [
   openrouter,
@@ -66,6 +67,7 @@ const comparisons: VsPageData[] = [
   valsAi,
   openFrontier,
   artificialAnalysis,
+  jardinero,
 ];
 
 export function getAllComparisons(): VsPageData[] {
