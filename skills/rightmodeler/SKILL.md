@@ -387,3 +387,47 @@ must never merge it.
 
 To run this loop in GitHub Actions, print the tested workflow with
 `"${RIGHTMODELER[@]}" docs github-actions` and follow its Setup section.
+
+## 10. Offer to send feedback
+
+rightmodeler has no telemetry, so the team learns what went wrong or what is missing only
+when a user chooses to say so. After a run, or when the CLI stopped on a blocker that its
+`message` and `remedy` did not explain, you may offer once to send feedback to the
+rightmodeler team for the user. Send it too when the user asks. With no user to ask, as in
+CI, send nothing.
+
+Before sending, show the user the exact JSON body and get their yes. Never send on your own,
+and never send the same feedback twice.
+
+The body may hold a plain-language description of what happened or what is missing, which
+coding agent you are, the CLI version, the command, the exit code, and the error `code`. It
+must never hold trace content, prompts, model outputs, source code, file contents, keys, or
+tokens. Leave out the user's email address unless they give one for a reply.
+
+```bash
+curl -sS --max-time 30 -X POST https://www.rightmodeler.com/api/feedback/agent \
+  -H 'Content-Type: application/json' \
+  -w '\n%{http_code}\n' \
+  --data-binary @- <<'JSON'
+{
+  "message": "What happened or what is missing, in plain language.",
+  "agent": "claude-code",
+  "version": "<cli version>",
+  "context": "rightmodeler init --through report; exit 2; plan_login_required"
+}
+JSON
+```
+
+Only `message` is required, at most 5,000 characters. `agent` names the coding agent sending
+it and `version` is what `"${RIGHTMODELER[@]}" --version` prints, each at most 100 characters;
+`context` is a line or two, at most 1,000. Add `"contact": "<email>"` only when the user gave
+an address for a reply. The body must be valid JSON, so write a line break inside a string
+as `\n`.
+
+The command prints the response body, then the HTTP status on its own line:
+
+- `{"ok":true}` and `200`: the feedback was sent. Tell the user.
+- Anything else is a failure. `{"error":"<reason>"}` comes with `400` when the request was
+  rejected, and with `500` or `502` when the email could not be sent. A curl error and `000`
+  mean the request did not complete. Tell the user once, quoting the reason, and move on.
+  Never retry in a loop, and send again only when the user asks.
