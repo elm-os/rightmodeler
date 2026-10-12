@@ -10,5 +10,5 @@ From the repository root:
     pnpm --filter web run build   # production build; scripts/check-html.test.mjs reads .next
     pnpm --filter web run test    # node --test over scripts/*.test.mjs
 
-Do not start the dev server unless asked. Copy `.env.example` to `.env.local` for the two
+Do not start the dev server unless asked. Copy `.env.example` to `.env.local` for the three
 API routes that send email.

@@ -8,7 +8,7 @@ Legal
 
 What this site collects (very little), how it is used, and the choices you have.
 
-Last updated September 22, 2026
+Last updated October 12, 2026
 
 The short version: we collect almost nothing, what you hand us stays with the team, and every list we run is one email away from removal.
 
@@ -20,7 +20,7 @@ rightmodeler is an ELM-OS project (referred to here as rightmodeler, we, or us).
 
 Two kinds of information, both small.
 
-- Information you give us. If you join the Crucible or hosted rightmodeler agent waitlist, we collect your email address. If you send feedback, we collect your email address and your message.
+- Information you give us. If you join the Crucible or hosted rightmodeler agent waitlist, we collect your email address. If you send feedback, we collect your email address and your message. If you have a coding agent send it for you, we collect the message and, when the agent adds them, its name, the rightmodeler version, a line of context such as the command that ran, and an email address for a reply.
 - Information collected automatically. We use Vercel Analytics to understand aggregate site usage: pages viewed, referrers, country, and device type. It is anonymized, does not use advertising cookies, and does not follow you across other sites.
 
 ## How we use it
@@ -37,7 +37,7 @@ Waitlist and feedback submissions are delivered by Resend as email to the foundi
 
 ## Third parties
 
-Two services process data on our behalf: Vercel (hosting and anonymized analytics) and Resend (email delivery for form submissions). Links that leave this site, to GitHub or LinkedIn for example, are governed by those sites' own policies.
+Two services process data on our behalf: Vercel (hosting and anonymized analytics) and Resend (email delivery for waitlist and feedback submissions). Links that leave this site, to GitHub or LinkedIn for example, are governed by those sites' own policies.
 
 ## Your choices
 

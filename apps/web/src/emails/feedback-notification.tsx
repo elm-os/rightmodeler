@@ -1,5 +1,6 @@
-// Internal notification email sent to the team when someone submits the feedback form (see
-// app/api/feedback/route.ts). Built with React Email components so it renders cleanly across mail
+// Internal notification email sent to the team when someone submits the feedback form, or when a
+// coding agent sends feedback for its user (see lib/handle-feedback.ts; lib/feedback.ts writes the
+// lines it shows). Built with React Email components so it renders cleanly across mail
 // clients; kept plain and monochrome — it's an ops notification, not a marketing send. Colours are
 // the design tokens from docs/design.md, inlined (email clients don't get the app's CSS).
 
@@ -12,22 +13,19 @@ import {
   Preview,
   Text,
 } from "@react-email/components";
+import { feedbackLines, type Feedback } from "@/lib/feedback";
 
-interface FeedbackNotificationProps {
-  email: string;
-  message: string;
-  submittedAt: string;
-}
+type FeedbackNotificationProps = Feedback & { submittedAt: string };
 
 export function FeedbackNotification({
-  email,
-  message,
   submittedAt,
+  ...feedback
 }: FeedbackNotificationProps) {
+  const { subject, details, footer } = feedbackLines(feedback, submittedAt);
   return (
     <Html lang="en">
       <Head />
-      <Preview>New feedback from {email}</Preview>
+      <Preview>{subject}</Preview>
       <Body
         style={{
           backgroundColor: "#fdfcfc",
@@ -49,18 +47,33 @@ export function FeedbackNotification({
               margin: "0 0 8px",
             }}
           >
-            Feedback
+            {feedback.via === "agent" ? "Agent feedback" : "Feedback"}
           </Text>
           <Heading
             style={{ fontSize: "18px", fontWeight: 600, margin: "0 0 12px" }}
           >
             New message
           </Heading>
-          <Text
-            style={{ fontSize: "16px", margin: "0 0 12px", color: "#000000" }}
-          >
-            {email}
-          </Text>
+          {feedback.email && (
+            <Text
+              style={{ fontSize: "16px", margin: "0 0 12px", color: "#000000" }}
+            >
+              {feedback.email}
+            </Text>
+          )}
+          {details.length > 0 && (
+            <Text
+              style={{
+                fontSize: "14px",
+                lineHeight: "1.5",
+                margin: "0 0 12px",
+                color: "#777169",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {details.join("\n")}
+            </Text>
+          )}
           <Text
             style={{
               fontSize: "14px",
@@ -74,10 +87,10 @@ export function FeedbackNotification({
               whiteSpace: "pre-wrap",
             }}
           >
-            {message}
+            {feedback.message}
           </Text>
           <Text style={{ fontSize: "12px", margin: 0, color: "#a59f97" }}>
-            Submitted {submittedAt} · www.rightmodeler.com/feedback
+            {footer}
           </Text>
         </Container>
       </Body>

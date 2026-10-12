@@ -201,6 +201,10 @@ input and 3 that it hit the spend cap; `npx rightmodeler docs exit-codes` has th
   judge's inputs (the task, the recorded output and the candidate's), go to your
   endpoint, or on a plan route to that vendor through its CLI. During Mode B, your
   app's model calls go there too.
+- **Feedback through the coding-agent skill:** nothing unless you say yes. The agent
+  first shows you the exact text it would send to rightmodeler.com, which the skill
+  limits to what happened, the agent's name, the CLI version, the command, the exit
+  code and the error code, plus a reply address if you give one.
 - **Anything else:** only a service that a command, flag or config file you pass
   names, such as an external evaluator, `corpus import` or `export`, a cloud Mode B
   backend, or GitHub for the pull-request commands.
