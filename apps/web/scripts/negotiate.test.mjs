@@ -5,6 +5,7 @@
 // author ships. Node 24 strips types natively, so the .ts module imports directly.
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 import {
   decideProxyAction,
@@ -211,5 +212,89 @@ test("Vary carries Accept alongside every token Next sets itself", () => {
       1,
       `Vary should list ${required} exactly once`,
     );
+  }
+});
+
+// The proxy's matcher leaves out requests it can answer without running (src/proxy.ts): those
+// whose Accept names text/html outright. That is only sound if every header it leaves out is one
+// the negotiator would have answered with HTML anyway. Next matches a matcher value against the
+// whole header (prepare-destination.js, matchHas), hence the anchors.
+const skipLiteral = /key: "accept",\s*value: ("(?:[^"\\]|\\.)*")/.exec(
+  fs.readFileSync(new URL("../src/proxy.ts", import.meta.url), "utf8"),
+);
+const skipsProxy = (header) =>
+  new RegExp(`^${JSON.parse(skipLiteral[1])}$`).test(header);
+
+test("the proxy only leaves out requests the negotiator answers with HTML", () => {
+  assert.ok(skipLiteral, "no Accept condition found in the proxy matcher");
+  for (const [header, expected, why] of VECTORS) {
+    if (header === null || !skipsProxy(header)) continue;
+    assert.equal(expected, HTML, `left out, but ${why}: ${header}`);
+  }
+  // Every pairing and a spread of triples built from the ranges, parameters and spacings a
+  // client can send, including the ones written to trip a careless pattern.
+  const types = [
+    "text/html",
+    "text/markdown",
+    "text/x-markdown",
+    "text/*",
+    "*/*",
+    "application/json",
+    "application/xhtml+xml",
+    "TEXT/HTML",
+    "text/htmlx",
+    "x-text/html",
+    "text/html ",
+  ];
+  const params = [
+    "",
+    ";q=0",
+    ";q=0.0",
+    ";q=0.5",
+    ";q=0.9",
+    ";q=1",
+    ";charset=utf-8",
+    "; q=0",
+    " ;q=0",
+    ";q=abc",
+    ";level=1;q=0.2",
+  ];
+  const ranges = types.flatMap((type) => params.map((param) => type + param));
+  const headers = [...ranges];
+  for (const a of ranges)
+    for (const b of ranges)
+      for (const sep of [",", ", ", " , "]) headers.push(a + sep + b);
+  for (let i = 0; i < ranges.length; i += 3)
+    for (let j = 1; j < ranges.length; j += 5)
+      for (let k = 2; k < ranges.length; k += 7)
+        headers.push(`${ranges[i]},${ranges[j]}, ${ranges[k]}`);
+  let leftOut = 0;
+  for (const header of headers) {
+    if (!skipsProxy(header)) continue;
+    leftOut += 1;
+    assert.equal(selectRepresentation(header), HTML, header);
+  }
+  assert.ok(leftOut > 0, "the pattern never matched: the test proved nothing");
+});
+
+test("browser navigations skip the proxy, and nothing that needs it does", () => {
+  for (const navigation of [
+    // Chrome, Safari, Firefox, Googlebot
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8",
+    "text/html,application/xhtml+xml,application/signed-exchange;v=b3,application/xml;q=0.9,*/*;q=0.8",
+  ]) {
+    assert.ok(skipsProxy(navigation), `still invokes the proxy: ${navigation}`);
+  }
+  for (const needsProxy of [
+    MD,
+    "text/markdown, text/html;q=0.9",
+    "text/html;q=0, */*",
+    "application/json",
+    "*/*",
+    "text/*",
+  ]) {
+    assert.ok(!skipsProxy(needsProxy), `left out of the proxy: ${needsProxy}`);
   }
 });
