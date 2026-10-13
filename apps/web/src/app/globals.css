@@ -124,3 +124,37 @@ body {
     transform: none !important;
   }
 }
+
+/* <Reveal lcp> (components/reveal.tsx): Reveal's entrance as keyframes. It starts at 0.01,
+   not 0, because Chrome does not count text at zero opacity as painted and a compositor
+   fade never repaints it: a fade from 0 is only credited as the largest paint as it ends. */
+@keyframes reveal-rise {
+  from {
+    opacity: 0.01;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes reveal-fade {
+  from {
+    opacity: 0.01;
+  }
+}
+
+@utility reveal-lcp {
+  animation: reveal-rise 500ms var(--ease-out-strong) backwards;
+  @media (prefers-reduced-motion: reduce) {
+    animation-name: reveal-fade;
+  }
+}
+
+/* Unlayered, so these outrank the utility. Hidden until revealed; no replay when a page
+   Next had hidden is shown again. */
+.reveal-lcp:not([data-shown]) {
+  animation: none;
+  opacity: 0;
+}
+
+.reveal-lcp[data-shown="done"] {
+  animation: none;
+}

@@ -150,7 +150,7 @@ export function Hero() {
 
         <div className="mx-auto max-w-5xl px-6 py-20 sm:px-8 sm:py-28">
           {/* ── Copy column: left-aligned editorial argument on a feathered parchment scrim ── */}
-          <Reveal className="relative max-w-3xl">
+          <Reveal lcp className="relative max-w-3xl">
             <div className="relative">
               <p className="font-mono text-caption text-fog uppercase">
                 Evidence-backed model decisions
