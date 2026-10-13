@@ -1,19 +1,5 @@
 "use client";
 
-// Numbers band: the proof section. Four numbers drive one WebGL field of particles
-// (trace-field-engine) that settles into a different etched plate per stat: a braided
-// river delta (many formats, one schema), descending terraces (cost stepping down), a
-// planetary ring (quality holding), and a suspension bridge (speed and throughput).
-// The answer to Stripe's morphing stats section, in the house voice: ink chrome on
-// paper, accent hues confined to the illustration.
-//
-// Rules honored here: the stat buttons, indicator, and palette control stay strictly
-// monochrome (accents are decorative only); the format count comes from the
-// product-facts registry; the graphic pauses off-screen and under reduced motion
-// swaps plates with a quiet crossfade instead of flight. The rotation pattern (one
-// slow advance per beat, paused on hover or focus, none under reduced motion) is
-// TestimonialBand's, at the same calm cadence.
-
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
 import type { LightWash } from "@/components/light-wash";
@@ -26,15 +12,8 @@ const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 const ROTATE_MS = 9000;
 const PALETTE_ORDER: PaletteName[] = ["duet", "violet", "ember", "dawn"];
 
-// The bloom behind the particles: one circular light source at the exact center
-// of the bottom border, the way the reference scenes stage theirs. A hot core
-// cools outward through the palette's hues, and the final stop stays tinted so
-// color reaches the panel's corners instead of fading to paper. Alphas live in
-// the stops; the container only crossfades.
-//
-// These CSS washes are now the SSR/no-WebGPU fallback: where WebGPU initializes,
-// the light-wash canvas (a vgpu pass rendering the same staging as one physical
-// light source) fades in over them and becomes the backdrop.
+// SSR and no-WebGPU fallback: the light-wash canvas renders the same staging and fades in on top.
+// Alphas live in the stops; the container only crossfades.
 const WASHES: Record<PaletteName, string> = {
   duet: "radial-gradient(circle at 50% 102%, #ffb4888c 0%, #ff6a2e59 22%, #7a5cff4d 48%, #b3aaff2e 78%)",
   violet:
@@ -44,13 +23,10 @@ const WASHES: Record<PaletteName, string> = {
   dawn: "radial-gradient(circle at 50% 102%, #ff9e6685 0%, #ff8c5250 24%, #b58fd642 50%, #d8c8f22b 80%)",
 };
 
-// The four etched plates the particles settle into, one per stat: a railway throat
-// merging ten tracks into one line, descending terraces, a planetary ring, a
-// suspension bridge.
+// The etched plates the particles settle into, one per stat, in STATS order.
 const PLATES = ["merge", "terraces", "ring", "bridge"] as const;
 
-// Decode the plates into pixel masks for the engine's density sampler. Any failure
-// returns null and the engine falls back to procedural silhouettes.
+// Any failure returns null and the engine falls back to procedural silhouettes.
 async function loadPlates(): Promise<ShapeMask[] | null> {
   try {
     return await Promise.all(
@@ -74,9 +50,7 @@ async function loadPlates(): Promise<ShapeMask[] | null> {
   }
 }
 
-// The format count interpolates from the product-facts registry; the percentage
-// figures are quoted verbatim from a customer engagement write-up
-// (content/case-studies.ts), with the captions kept generic.
+// The percentages are quoted verbatim from content/case-studies.ts; the captions stay generic.
 const STATS: { value: string; caption: string }[] = [
   {
     value: `${TRACE_SOURCES.length}`,
@@ -96,8 +70,6 @@ const STATS: { value: string; caption: string }[] = [
   },
 ];
 
-// Monochrome glyphs for the palette menu: two moons for the duet, a full disc for
-// violet, a radiant disc for ember, a horizon for dawn. Ink strokes only.
 function PaletteIcon({ name }: { name: PaletteName }) {
   const common = {
     width: 16,
@@ -165,19 +137,14 @@ export function NumbersBand() {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
 
-  // The engine mounts once the plates decode; until then only the wash shows. It
-  // then lives for the component's lifetime, and visibility only starts and stops
-  // its clock. Reduced motion renders settled frames instead of running a loop.
-  // The light canvas stays invisible until its first WebGPU frame is on screen;
-  // where init fails it never flips, and the CSS washes remain the backdrop.
+  // Flips on the first WebGPU frame. Where init fails it never does, and the CSS washes remain.
   const [lightReady, setLightReady] = useState(false);
   const stateRef = useRef({ active, palette, inView });
   useEffect(() => {
     stateRef.current = { active, palette, inView };
   }, [active, palette, inView]);
 
-  // Two GPU contexts, four plate fetches and the particle sampling pass, all below the
-  // fold: nothing is built until the band is about to be seen. `armed` never goes back.
+  // Nothing is built until the band is about to be seen. `armed` never goes back.
   const [armed, setArmed] = useState(false);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -186,8 +153,7 @@ export function NumbersBand() {
 
   useEffect(() => {
     if (!armed) return;
-    // Hover yield is gated to devices with a real cursor: touch fires pointer
-    // events on tap and would read as false positives.
+    // Hover yield needs a real cursor: touch fires pointer events on tap (false positives).
     finePointer.current = window.matchMedia(
       "(hover: hover) and (pointer: fine)",
     ).matches;
@@ -231,8 +197,7 @@ export function NumbersBand() {
       field?.destroy();
       light?.destroy();
     };
-    // The engine is deliberately not rebuilt when `reduce` flips mid-visit; the
-    // preference is read once per mount, which matches how the OS setting behaves.
+    // Deliberately not rebuilt when `reduce` flips mid-visit: it is read once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [armed]);
 
@@ -254,9 +219,7 @@ export function NumbersBand() {
       const field = fieldRef.current;
       if (!field) return;
       if (reduce) {
-        // No flight: a quiet dip while the settled diagram swaps. Rapid clicks
-        // retarget the same pending swap instead of stacking timers, and the ref
-        // read inside the callback keeps an unmounted engine out of reach.
+        // The ref is read inside the callback so an unmounted engine stays out of reach.
         if (dimTimer.current !== null) window.clearTimeout(dimTimer.current);
         setCanvasDim(true);
         dimTimer.current = window.setTimeout(() => {
@@ -271,9 +234,7 @@ export function NumbersBand() {
     [reduce],
   );
 
-  // One slow advance per beat, TestimonialBand's cadence exactly: a manual stat
-  // click resets the clock through `active`; hover, focus, or leaving the viewport
-  // holds it; reduced motion turns it off.
+  // TestimonialBand's rotation pattern: a manual stat click resets the clock through `active`.
   useEffect(() => {
     if (reduce || paused || !inView) return;
     const timer = window.setTimeout(() => {
@@ -292,7 +253,6 @@ export function NumbersBand() {
     menuButtonRef.current?.focus();
   }, []);
 
-  // Escape and outside-click close the palette menu.
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -340,8 +300,6 @@ export function NumbersBand() {
           </h2>
         </Reveal>
 
-        {/* The stat menu: all four numbers stay readable; the active one is ink and
-            carries a sliding hairline overhead, the way a ledger rules its columns. */}
         <Reveal>
           <div className="mt-7 grid grid-cols-2 gap-x-4 gap-y-6 sm:mt-8 lg:grid-cols-4">
             {STATS.map((stat, i) => {
@@ -392,11 +350,7 @@ export function NumbersBand() {
           </div>
         </Reveal>
 
-        {/* The trace field. One soft bloom rises from the floor of the panel behind
-            the particles, the way the reference section stages its scene. One wash
-            layer per palette, and only opacity crossfades between them: gradients
-            are not interpolable in CSS, so swapping one background would snap while
-            the particles fade. Decorative throughout, so aria-hidden. */}
+        {/* One wash layer per palette, crossfaded by opacity: CSS cannot interpolate gradients. */}
         <Reveal>
           <div className="relative mt-10 overflow-hidden rounded-2xl border border-ash-border">
             {PALETTE_ORDER.map((name) => (
@@ -409,8 +363,6 @@ export function NumbersBand() {
                 style={{ background: WASHES[name] }}
               />
             ))}
-            {/* The vgpu light: fades in over the washes once its first WebGPU
-                frame is on screen; stays invisible wherever init fails. */}
             <canvas
               ref={lightCanvasRef}
               aria-hidden
@@ -437,8 +389,6 @@ export function NumbersBand() {
               }}
             />
 
-            {/* Palette control, top right like the section it answers. Monochrome
-                chrome: the accents live in the illustration alone. */}
             <div className="absolute right-3 top-3">
               <button
                 ref={menuButtonRef}

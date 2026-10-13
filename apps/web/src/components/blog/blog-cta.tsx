@@ -1,7 +1,4 @@
-// Closing call-to-action — mirrors the landing page cta-band so the blog ends on the same note the
-// homepage does: the product's real first step as a copy-able command, one honest caveat, and the
-// ink "View on GitHub" button. No new patterns, no accent hues; reuses CopyCommand and the exact
-// button treatment from sections/cta-band.tsx.
+// Mirrors sections/cta-band.tsx: same command, caveat and button treatment.
 
 import { CopyCommand } from "@/components/copy-command";
 import { GitHubIcon } from "@/components/icons";

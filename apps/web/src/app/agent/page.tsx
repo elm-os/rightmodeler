@@ -19,8 +19,6 @@ export const metadata: Metadata = pageMetadata({
   image: "/social/agent.png",
 });
 
-// The guardrails record — the agent moves only inside these. Rendered as an illustrative config
-// slab in the policy section; label/value rows keep the mono block aligned like a real file.
 const POLICY: { key: string; value: string }[] = [
   {
     key: "quality_floor",
@@ -78,7 +76,6 @@ export default function AgentPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {/* The feature spread — the deliverable and the loop, filling the framed column. */}
       <section className="bg-parchment-white">
         <div className="px-4 py-14 sm:px-6 sm:py-20">
           <AgentShowcase />
@@ -87,7 +84,6 @@ export default function AgentPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {/* Guardrails + where it runs + the honesty ethos. */}
       <section className="bg-parchment-white">
         <div className="mx-auto max-w-3xl px-6 py-16 sm:px-10 sm:py-20">
           <Reveal className="max-w-xl">

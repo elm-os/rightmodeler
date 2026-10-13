@@ -14,8 +14,6 @@ export const metadata: Metadata = pageMetadata({
   path: "/privacy",
 });
 
-// Legal pages stay quiet: no gradient masthead, the prose primitives for rhythm, and a dated
-// mono kicker so readers can tell at a glance whether anything changed since their last visit.
 export default function PrivacyPage() {
   return (
     <PageShell>

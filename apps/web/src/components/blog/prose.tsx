@@ -1,24 +1,14 @@
-// Long-form article typography, built from the semantic type tokens (docs/design.md) rather than a
-// `prose`/typography plugin — the plugin would hand-set leading/tracking, which the design system
-// forbids. Compose a post Body from these blocks; <Prose> sets the reading measure + vertical rhythm.
-//
-// Motion (Emil bar): running paragraphs stay static — you read them in a continuous scroll, so an
-// entrance on each would be the "animate something seen constantly" mistake. Only the deliberate
-// beats (section headings, pull quotes, figures) reveal once as they enter. All monochrome: ink
-// headings, driftwood body, fog captions; accent hues never appear in text.
+// No typography plugin: it would hand-set leading and tracking, which docs/design.md forbids.
 
 import type { ReactNode } from "react";
 import { Reveal } from "@/components/reveal";
 
-// One reading column, ~42rem, with a steady 24px rhythm between blocks. Headings and quotes add their
-// own extra breathing room on top of the rhythm via padding, so the gap above them reads as a break.
 export function Prose({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-6 sm:px-8">{children}</div>
   );
 }
 
-// The opening paragraph — one size up, sets the tone.
 export function Lead({ children }: { children: ReactNode }) {
   return <p className="text-subheading text-driftwood">{children}</p>;
 }
@@ -45,7 +35,6 @@ export function H3({ children }: { children: ReactNode }) {
   );
 }
 
-// A single emphasised line lifted out of the body — ink on an ash-border rule, display face.
 export function PullQuote({ children }: { children: ReactNode }) {
   return (
     <Reveal className="py-2">
@@ -69,10 +58,8 @@ export function LI({ children }: { children: ReactNode }) {
   );
 }
 
-// A multi-line config or response excerpt: mono on the warm-sand window the case-study Artifact
-// uses. The text is the only child, so the Markdown twin's indented block carries the same
-// characters, and long lines scroll inside the window instead of widening the page. The window
-// takes keyboard focus so those lines can be scrolled without a pointer.
+// The text is the only child so the Markdown twin's indented block carries the same characters.
+// tabIndex lets the scrolling window be reached and scrolled without a pointer.
 export function Code({ children }: { children: string }) {
   return (
     <pre
@@ -88,12 +75,10 @@ export function Hr() {
   return <hr className="border-0 border-t border-ash-border" />;
 }
 
-// Emphasis inside a paragraph — lifts a phrase from driftwood body to ink.
 export function Strong({ children }: { children: ReactNode }) {
   return <strong className="font-medium text-midnight-ink">{children}</strong>;
 }
 
-// Inline link — underline affordance that deepens on hover, never an accent hue (design.md).
 export function A({ href, children }: { href: string; children: ReactNode }) {
   const external = href.startsWith("http");
   return (

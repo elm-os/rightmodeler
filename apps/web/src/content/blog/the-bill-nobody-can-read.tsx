@@ -1,9 +1,3 @@
-// Post: "The bill nobody can read" — part one of the vision series (Crucible). A typed post
-// module: `meta` (data) plus a `Body` composed from the prose primitives. Registered in ./index.
-// Voice matches the founding story: measured, honest, story-first. The scene is a composite of
-// launches we have watched (and run) ourselves; no named customers, no invented figures beyond the
-// story's own furniture. No accent hues in the copy; the accents live in the hero art.
-
 import { A, H2, Lead, P, Prose, PullQuote } from "@/components/blog/prose";
 import type { PostMeta } from "@/content/blog/types";
 
@@ -137,8 +131,7 @@ export function Body() {
   );
 }
 
-// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
-// Body above by hand.
+// Kept in sync with Body above by hand.
 export const markdown = `# The bill nobody can read.
 
 Three weeks after the launch, finance forwarded the invoice with a one-line email: is this right? Nobody on the team could answer. Not because the number was secret, but because the number was one number, and the thing that produced it was not one thing.

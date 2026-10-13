@@ -1,10 +1,3 @@
-// Platform — the trio as a gallery row: three tall link-cards spanning the framed column edge to
-// edge, each with a bespoke line-art diagram floating in the upper field and the words anchored
-// low (chip, name, one-liner, quiet arrow CTA). The diagrams are generated ink-line drawings on
-// white; mix-blend-multiply melts the white into whichever surface the card shows, so hover can
-// deepen the card without a pale rectangle appearing. Status chips tell the truth about
-// availability; everything stays monochrome. Server component — Reveal is the client leaf.
-
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRightIcon } from "@/components/icons";
@@ -57,8 +50,8 @@ const cardClass =
 function OfferingCard({ offering }: { offering: Offering }) {
   const inner = (
     <>
-      {/* The diagram — centered in the upper field, white ground melted away by multiply. Height
-          is capped so the words below always stay inside the card, whatever the column width. */}
+      {/* mix-blend-multiply melts the art's white ground into the card, so hover shows no pale
+          rectangle. The height cap keeps the words below inside the card. */}
       <div className="flex min-h-0 flex-1 items-center justify-center px-6 pt-8">
         <Image
           src={offering.art}
@@ -80,10 +73,7 @@ function OfferingCard({ offering }: { offering: Offering }) {
         >
           {offering.chip}
         </span>
-        {/* h3 under the section's h2. `block` was already on the class list, so this renders
-            identically; the same pattern already ships on /how-it-works. A heading inside an
-            anchor is valid HTML5: anchors take flow content, only nested interactive content
-            is forbidden. */}
+        {/* A heading inside an anchor is valid HTML5: anchors take flow content. */}
         <h3 className="mt-4 block font-sans text-heading-sm text-midnight-ink">
           {offering.name}
         </h3>

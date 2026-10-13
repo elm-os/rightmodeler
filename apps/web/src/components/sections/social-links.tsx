@@ -1,6 +1,4 @@
-// Social handles, icon-only — no text label, no trailing arrow (house rule for every social link).
-// Monochrome per docs/design.md: driftwood glyph that deepens to ink on hover, ink focus ring. The
-// accessible name lives on aria-label since the icon carries no visible text.
+// House rule for every social link: icon only, no text label, no trailing arrow.
 
 import {
   GitHubIcon,

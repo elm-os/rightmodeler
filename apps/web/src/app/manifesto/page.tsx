@@ -39,14 +39,10 @@ const FAQ: FaqItem[] = [
   },
 ];
 
-// ── The three mockups, layer by layer, in house tokens only. Each one is a still of the product's
-// world (a bill with no author, the audit's decision tree, the review that ends it) tucked into
-// its card and clipped by the card edge, the way the reference clips its windows. Every figure is
-// stamped illustrative on the artifact that shows one. Soft shadows are illustration-only.
+// Every figure is stamped illustrative on its artifact. Soft shadows are illustration-only.
 
 const MOCKUP_SHADOW = "shadow-[0_12px_32px_rgba(41,36,31,0.08)]";
 
-// A tiny identity seat for mockup headers: the brand mark in a bordered square.
 function AvatarSeat({ size = 7 }: { size?: 6 | 7 }) {
   return (
     <span
@@ -57,8 +53,6 @@ function AvatarSeat({ size = 7 }: { size?: 6 | 7 }) {
   );
 }
 
-// Card one — the bill: four steps, one frontier model, a total that keeps climbing. The window
-// runs off the bottom of the card mid-ledger.
 function UsageMockup() {
   const rows: { step: string; cost: string }[] = [
     { step: "route", cost: "$1,180" },
@@ -112,9 +106,7 @@ function UsageMockup() {
   );
 }
 
-// Card two — the audit's decision tree, drawn as one SVG so nodes, capsules, and connectors stay
-// perfectly registered at every width: a trace comes in, candidates replay, and the two verdicts
-// land on opposite branches.
+// One SVG so nodes, capsules, and connectors stay registered at every width.
 function FlowMockup() {
   return (
     <div className="relative mx-2 mb-4 mt-2 sm:mx-3">
@@ -151,7 +143,6 @@ function FlowMockup() {
           <path d="M352 216 v22" />
         </g>
 
-        {/* start node */}
         <rect
           x="181"
           y="4"
@@ -178,7 +169,6 @@ function FlowMockup() {
           new trace
         </text>
 
-        {/* replay node */}
         <rect
           x="132"
           y="78"
@@ -205,7 +195,6 @@ function FlowMockup() {
           replay the candidates
         </text>
 
-        {/* verdict capsules — ink, like the reference's black pills */}
         <rect
           x="59"
           y="186"
@@ -244,7 +233,6 @@ function FlowMockup() {
           below the floor
         </text>
 
-        {/* leaf nodes */}
         <rect
           x="34"
           y="238"
@@ -305,9 +293,6 @@ function FlowMockup() {
   );
 }
 
-// Card three — the review that ends the argument: the agent's finding quoted inside a review
-// panel, evidence named, and the only two buttons that matter. The panel runs off the card's
-// right edge, so the ink button sits against the clip like the reference.
 function ReviewMockup() {
   return (
     <div className="relative -mr-5 mb-5 ml-4 mt-3 sm:-mr-6 sm:ml-5">
@@ -356,7 +341,6 @@ function ReviewMockup() {
   );
 }
 
-// The argument, one card per claim, each with its mockup tucked into the card edge.
 const CLAIMS: {
   title: string;
   body: string;
@@ -379,7 +363,6 @@ const CLAIMS: {
   },
 ];
 
-// The quiet second band: three commitments under the claims, each marked by a bespoke glyph.
 const PILLARS: {
   Icon: typeof QualityFloorIcon;
   title: string;
@@ -416,7 +399,6 @@ export default function ManifestoPage() {
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
       <section className="bg-parchment-white">
-        {/* ── The claims: three cards, each holding a layered still of the product's world. ── */}
         <div className="px-4 py-14 sm:px-6 sm:py-16">
           <div className="grid gap-4 sm:gap-5 md:grid-cols-3">
             {CLAIMS.map((claim, i) => (
@@ -439,7 +421,6 @@ export default function ManifestoPage() {
           </div>
         </div>
 
-        {/* ── The commitments: an icon-marked column band, hairlined and dotted at the joins. ── */}
         <div className="relative border-t border-ash-border">
           <span
             aria-hidden

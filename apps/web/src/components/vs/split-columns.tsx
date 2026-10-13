@@ -1,11 +1,5 @@
-// Two-column split band — the use-case page's before/after grammar (two full-bleed columns split
-// by the center hairline, dotted rules between rows) generalized for the /vs pages, where the same
-// skeleton carries two registers:
-//   "contrast"  ✕ (fog) rows on the left answered by ✓ (ink) rows on the right, as the reference
-//   "none"      plain rows on dotted rules (positioning pairs, use-when forks); per house rule,
-//               list rows carry no marker glyphs unless the reference design shows them
-// The rightmodeler column is always the right one and always carries the ink. Server component;
-// motion is the house Reveal pair (left first, right +0.06s).
+// The rightmodeler column is always the right one and always carries the ink.
+// House rule: list rows carry no marker glyphs unless the reference design shows them.
 
 import { Reveal } from "@/components/reveal";
 

@@ -1,7 +1,5 @@
-// /vs/[slug] as Markdown, generated from the same JSON the page renders from, so a comparison can
-// never say one thing in HTML and another in Markdown. One case per block type in
-// vs-page.schema.json; scripts/markdown.test.mjs fails if the schema grows a type this misses.
-// The site origin is passed in rather than imported, so the Node tests can load this module as is.
+// One case per block type in vs-page.schema.json: scripts/markdown.test.mjs fails if one is missed.
+// The site origin is passed in, not imported, so the Node tests can load this module as is.
 
 import type { VsBlock, VsPageData, VsSide } from "@/content/vs/types";
 
@@ -101,8 +99,7 @@ function block(
     }
 
     default:
-      // Fail closed, matching the posture of check-vs.test.mjs: an unhandled block would
-      // silently drop content from the Markdown representation.
+      // Fail closed: an unhandled block would silently drop out of the Markdown representation.
       throw new Error(`render-vs: unhandled block type "${item.type}"`);
   }
 }

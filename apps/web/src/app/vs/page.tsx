@@ -16,8 +16,6 @@ export const metadata: Metadata = pageMetadata({
   path: "/vs",
 });
 
-// The catalog bands: grouping is presentation only — the ItemList JSON-LD below stays flat so
-// every comparison keeps its own entry. Bands with no registered entries simply don't render.
 const BANDS: { title: string; intro: string; category: string }[] = [
   {
     title: "The rails",
@@ -118,9 +116,7 @@ export default function VsPage() {
                 <p className="mt-2 text-body text-driftwood">{band.intro}</p>
               </Reveal>
             </div>
-            {/* Card grid in the reference's grammar: one rounded frame, cells separated by dotted
-                hairlines. Every cell draws a dotted top+left edge; the -ml/-mt shift tucks the
-                outer ones under the frame so only the internal grid lines show. */}
+            {/* Cells draw top+left edges; -ml-px/-mt-px tucks the outer ones under the frame. */}
             <div className="px-4 py-10 sm:px-6 sm:py-12">
               <div className="overflow-hidden rounded-2xl border border-ash-border">
                 <div className="-ml-px -mt-px grid sm:grid-cols-2 lg:grid-cols-3">
@@ -134,7 +130,6 @@ export default function VsPage() {
                         href={`/vs/${comparison.slug}`}
                         className="flex h-full flex-col items-center px-6 py-10 text-center transition-colors duration-150 ease-out hover:bg-warm-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-midnight-ink/40 sm:px-8 sm:py-12"
                       >
-                        {/* Official mark, unboxed per the design brief; the link text names the tool. */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={comparison.logo}

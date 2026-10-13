@@ -1,12 +1,3 @@
-// Post: "Bifrost vs LiteLLM: a practical evaluation checklist." A practitioner checklist for readers
-// choosing between the two open-source gateways: setup and keys, what /v1/models returns, log
-// exports, routing controls, and what a replay through each returns. A typed post module: `meta`
-// (data) plus a `Body` composed from the prose primitives, with a faithful Markdown twin.
-// Sourcing: every vendor fact comes from Bifrost's and LiteLLM's own docs as fetched on 2026-09-24;
-// vendor performance figures are attributed to the vendor, never presented as our results; Bifrost
-// replay behaviour cites the pinned v2.2.1 fixtures and live acceptance test at 27e877e; LiteLLM
-// replay behaviour follows the LiteLLM integration page and the getting-started guide. No ranking.
-
 import {
   A,
   H2,
@@ -622,8 +613,7 @@ export function Body() {
   );
 }
 
-// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
-// Body above by hand.
+// Kept in sync with Body above by hand.
 export const markdown = `# Bifrost vs LiteLLM: a practical evaluation checklist.
 
 Bifrost and LiteLLM solve the same first problem: one OpenAI-compatible endpoint in front of many model providers, so your application stops caring whose SDK it talks to. Both start with a single command. The differences arrive later: where provider keys live, whether the model list says what anything costs, what the logs keep, and which routing features can quietly change the model that answers.

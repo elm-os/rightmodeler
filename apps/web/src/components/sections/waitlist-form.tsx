@@ -1,11 +1,5 @@
 "use client";
 
-// Waitlist capture — a single email field + submit that POSTs to /api/waitlist, which sends the
-// team a real notification via Resend. No fake success: the confirmation renders only after the
-// API responds ok. Monochrome per docs/design.md — parchment field with an ash-border hairline, ink
-// button with press-scale; state is communicated through copy, not colour (no green/red).
-// `product` tags which waitlist the signup belongs to (Crucible by default, or the agent).
-
 import { useState } from "react";
 
 export type WaitlistProduct = "crucible" | "agent";

@@ -1,7 +1,3 @@
-// Case-study index: the two customer stories as full-card links, in the blog frame. Static and
-// registry-driven (src/content/case-studies.ts), so a new study means one registry entry and its
-// route file, and this page, the landing band, sitemap, and llms.txt stay in step.
-
 import type { Metadata } from "next";
 import { BlogShell } from "@/components/blog/blog-shell";
 import { CaseStudyCard } from "@/components/case-study/artifacts";

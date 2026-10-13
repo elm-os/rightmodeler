@@ -1,7 +1,5 @@
-// Assertions against the prerendered HTML, which is the artifact crawlers and agents actually
-// read. Root `pnpm check` runs through turbo, whose `check` task dependsOn `build`, so the output
-// is always present in CI. A bare local `pnpm test` on a clean tree has no .next, and skipping
-// there beats a false red.
+// Assertions against the prerendered HTML. Root `pnpm check` builds first; a bare local
+// `pnpm test` on a clean tree has no .next, and skipping there beats a false red.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -63,8 +61,7 @@ gate(
 );
 
 gate("no prerendered page ships a counter frozen at zero", () => {
-  // useReducedMotion() returns null on the server, so branching rendered output on it used to
-  // server-render the proof numbers as 0. A no-JS reader saw "0%" where the evidence belongs.
+  // A server-rendered 0 is what a no-JS reader would see in place of the figure.
   for (const file of allBuiltHtml()) {
     for (const match of read(file).matchAll(
       /<span class="tabular-nums[^"]*">([^<]*)</g,
@@ -120,9 +117,7 @@ gate("the home hero's copy enters through keyframes the page ships", () => {
 });
 
 gate("nothing server-renders invisible without a no-JS escape hatch", () => {
-  // Reveal enters with whileInView, which needs JavaScript. Without the noscript rule in
-  // app/layout.tsx every revealed element sits at opacity:0 forever and a reader with JS off
-  // sees a blank page.
+  // Without the noscript rule in app/layout.tsx a revealed element stays at opacity:0 with JS off.
   for (const file of allBuiltHtml()) {
     const html = read(file);
     if (!/style="[^"]*opacity:0/.test(html)) continue;
@@ -213,9 +208,8 @@ gate("the templated twins say what their pages say", () => {
 gate(
   "content efficiency is reported, and the agent-facing pages hold their floor",
   () => {
-    // Finding 6 of the audit. The home page is knowingly below 5% until it gains prose; this
-    // records the number every build so the gap stays visible instead of being forgotten, and
-    // fails if a page that already clears the bar regresses below it.
+    // The home page is knowingly below 5% until it gains prose. This records the number every
+    // build and fails if a page that already clears the bar regresses below it.
     const FLOOR = { "how-it-works.html": 0.05 };
     const rows = [];
     for (const file of allBuiltHtml()) {

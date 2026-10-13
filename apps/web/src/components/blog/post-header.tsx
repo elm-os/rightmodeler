@@ -1,7 +1,3 @@
-// Article masthead: a mono kicker, the display title, a mono meta line (byline · date · read time),
-// and the framed grain-gradient hero banner. Server component — the hero is a static next/image; the
-// copy fades in on load via Reveal (a first-time, page-load moment, so an entrance is earned).
-
 import Image from "next/image";
 import { Reveal } from "@/components/reveal";
 import type { PostMeta } from "@/content/blog/types";

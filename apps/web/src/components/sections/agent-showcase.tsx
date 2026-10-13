@@ -1,13 +1,3 @@
-// AgentShowcase: the /agent feature spread, two equal panels over a four-box step row, filling
-// the framed column edge to edge. The left panel is the deliverable: the PR-card artifact inset
-// from the left and bleeding off the right edge (clipped by the panel), over a grainy
-// brand-gradient image that stays visible along the left sliver and bottom band, where the
-// caption sits. The right panel carries the TL;DR in a parchment inset box with its own caption
-// anchored bottom. Below, the four decision steps as equal boxes (square at desktop), each marked
-// by a bespoke stroke glyph from the house icon set in a squircle seat. The accent hues live only
-// inside the generated grain image; every control and every word stays monochrome. Server
-// component. Reveal and the PR card are the client leaves.
-
 import Image from "next/image";
 import {
   PullRequestIcon,
@@ -50,11 +40,9 @@ export function AgentShowcase() {
     <div>
       <h2 className="sr-only">How it decides</h2>
 
-      {/* ── The two feature panels: same size, equal-height columns on desktop. ── */}
       <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
         <Reveal className="h-full">
           <div className="relative isolate flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand lg:aspect-square">
-            {/* Grainy brand-gradient backdrop (decorative; the only place the accents live). */}
             <Image
               src="/agent/showcase-grain.jpg"
               alt=""
@@ -63,14 +51,12 @@ export function AgentShowcase() {
               className="-z-10 object-cover object-left-bottom"
               sizes="(min-width: 1024px) 50vw, 100vw"
             />
-            {/* The artifact: inset left so the grain shows as a sliver, flush to the top, and
-                bleeding off the right edge on desktop like a window onto a wider screen. */}
+            {/* Bleeds off the right edge on desktop on purpose: the panel clips it. */}
             <div className="ml-4 sm:ml-8 lg:-mr-16">
               <AgentPrCard />
             </div>
 
-            {/* Caption: left edge aligned to the artifact's inset; the body reserves two lines
-                so this kicker sits on the same line as the right panel's, whatever wraps. */}
+            {/* min-h-12 reserves two lines so both panels' kickers sit level, whatever wraps. */}
             <div className="mt-auto max-w-lg px-4 pb-4 pt-6 sm:px-8 sm:pb-8">
               <p className="font-mono text-caption uppercase text-driftwood">
                 The deliverable
@@ -97,8 +83,6 @@ export function AgentShowcase() {
               </p>
             </div>
 
-            {/* Caption: same inset scale and reserved two-line body as the left panel's, so the
-                two kickers and bodies align across the pair. */}
             <div className="mt-auto max-w-md pt-10">
               <p className="font-mono text-caption uppercase text-driftwood">
                 The loop
@@ -112,7 +96,6 @@ export function AgentShowcase() {
         </Reveal>
       </div>
 
-      {/* ── The four steps: equal boxes, square at desktop, chip up top and copy anchored low. ── */}
       <div className="mt-4 grid gap-4 sm:mt-5 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
         {STEPS.map((step, i) => (
           <Reveal key={step.name} delay={i * 0.06} className="h-full">
@@ -120,8 +103,7 @@ export function AgentShowcase() {
               <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-ash-border bg-parchment-white text-driftwood">
                 <step.Icon size={19} />
               </span>
-              {/* Fixed offset from the chip (not bottom-anchored) so the four titles sit on the
-                  same line across the row regardless of body length. */}
+              {/* A fixed offset, not bottom-anchored, so the four titles share a line. */}
               <div className="mt-8 sm:mt-10">
                 <h3 className="font-sans text-heading-sm text-midnight-ink">
                   {step.name}

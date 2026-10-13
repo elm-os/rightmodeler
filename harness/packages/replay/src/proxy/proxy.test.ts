@@ -1031,9 +1031,8 @@ describe("Mode B proxy and host egress", () => {
   });
 
   it("uses the spawned hard-deadline override for upstream response headers", async () => {
-    // No wall-clock assertion: the outcome alone discriminates. Only the 20ms deadline firing
-    // can produce a 502; if the override were inert the stub's hold would elapse and the
-    // upstream 200 would come back, however slow the machine.
+    // No wall-clock assertion: only the 20ms deadline firing can produce a 502. If the override
+    // were inert, the stub's hold would elapse and the upstream 200 would come back.
     const pair = await startPair({ streamHardDeadlineMs: 20 });
     const response = await callProxy(
       pair.runtime,
@@ -1099,10 +1098,8 @@ describe("Mode B proxy and host egress", () => {
   });
 
   it("uses the spawned idle-timeout override between stream events", async () => {
-    // No wall-clock assertion: the stall and hard deadline are set far beyond the suite
-    // timeout, so the ONLY way this test can complete with a truncated attempt is the 20ms
-    // idle override firing between stream events. An inert override hangs into the test
-    // timeout instead of passing, however slow the machine.
+    // No wall-clock assertion: the stall and hard deadline are set far beyond the suite timeout,
+    // so only the 20ms idle override can produce the truncated attempt. An inert override hangs.
     const pair = await startPair({
       streamIdleTimeoutMs: 20,
       streamHardDeadlineMs: 600_000,

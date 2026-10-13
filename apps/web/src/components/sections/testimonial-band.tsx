@@ -1,12 +1,5 @@
 "use client";
 
-// Testimonial band: one leadership quote at a time, avatar on top, over a two-logo tab strip.
-// The classic customer carousel translated into the house system: monochrome throughout, the
-// customer logos as grayscale silhouettes (active near-ink, inactive fog), no progress meter,
-// just a slow quiet rotation that pauses while the band is hovered or focused. Clicking a logo
-// switches immediately. Under reduced motion there is no auto-rotation and the swap is
-// opacity-only. Quotes live in the case-study registry so this band and the articles never drift.
-
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -51,8 +44,6 @@ export function TestimonialBand() {
       }}
     >
       <div className="px-6 pt-12 pb-6 sm:px-10 sm:pt-14 sm:pb-8">
-        {/* The band is a rotating figure with no visible title, which left a gap in the
-            document outline. Named here for assistive tech and for crawlers; zero pixels. */}
         <h2 className="sr-only">What teams measured with rightmodeler</h2>
         {/* Fixed-height stage so the two quotes swap without the page reflowing. */}
         <Reveal>
@@ -89,8 +80,8 @@ export function TestimonialBand() {
                   </span>
                 </figcaption>
 
-                {/* Company voice, not the customer's. The quote above is reproduced verbatim,
-                    so the sample size behind its figures belongs beside it, not inside it. */}
+                {/* Company voice, not the customer's: the quote is verbatim, so the sample size
+                    behind its figures sits beside it, not inside it. */}
                 {active.testimonial.evidenceNote ? (
                   <p className="mt-2 text-caption text-fog">
                     {active.testimonial.evidenceNote}
@@ -111,7 +102,6 @@ export function TestimonialBand() {
           </figure>
         </Reveal>
 
-        {/* Logo tab strip: dotted rule across, silhouettes grey out except the active company. */}
         <Reveal delay={0.06} className="mx-auto mt-6 max-w-4xl sm:mt-8">
           <div className="grid grid-cols-2">
             {CASE_STUDIES.map((study, i) => {

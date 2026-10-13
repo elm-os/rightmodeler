@@ -38,9 +38,7 @@ const websiteLd = {
   url: SITE_URL,
 };
 
-// The product itself, so the site and the published package resolve to each other:
-// the npm manifest points its homepage here, and this points install and download at
-// npm. Only facts that hold today, with no version pin to go stale and no ratings.
+// Only facts that hold today, with no version pin to go stale and no ratings.
 const softwareLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
@@ -56,8 +54,6 @@ const softwareLd = {
   license: LICENSE_URL,
   isAccessibleForFree: true,
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  // Where the command reference, trace-format list, and exit codes actually live. Named so a
-  // model answering "where are rightmodeler's docs" has a URL to give.
   softwareHelp: {
     "@type": "CreativeWork",
     name: "rightmodeler CLI documentation",
@@ -90,18 +86,11 @@ export const metadata: Metadata = {
   },
 };
 
-// The hero + works-with bar sit in a max-width column with left/right hairline rules, then the
-// platform trio in its own framed block. Full-bleed horizontal rules (edge to edge) separate the
-// blocks and bracket the CTA top and bottom; every block keeps its side rules, and the footer +
-// overscroll gradient break out full-screen with no side rules.
-// data-overscroll-content: at the absolute bottom, <OverscrollSpring/> eases this whole block UP to
-// open the gradient beneath it (the nav is a sticky sibling and stays put).
+// data-overscroll-content is the hook OverscrollSpring translates on pull.
 export default function Home() {
   return (
     <>
       <JsonLd data={websiteLd} />
-      {/* The Organization also renders on /about and /contact under the same @id, so the three
-          merge into one entity. It belongs here because verifiers look at the home page. */}
       <JsonLd data={organizationLd()} />
       <JsonLd data={softwareLd} />
       <span id="top" aria-hidden className="sr-only" />

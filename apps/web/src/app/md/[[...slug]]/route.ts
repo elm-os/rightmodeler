@@ -1,10 +1,5 @@
-// The Markdown representation of every page, per acceptmarkdown.com. Reached two ways, both of
-// which land here so there is exactly one implementation:
-//   - src/proxy.ts rewrites here when Accept prefers text/markdown
-//   - next.config.ts rewrites /<path>.md here, regardless of Accept
-//
-// Never reads the request: doing so would opt this handler out of the prerender under Cache
-// Components. Everything comes from params, so all ~44 representations are static.
+// Reached by rewrite: src/proxy.ts when Accept prefers Markdown, next.config.ts for /<path>.md.
+// Never read the request: that opts this handler out of the prerender under Cache Components.
 
 import {
   allMarkdownPaths,
@@ -15,8 +10,7 @@ import { pathFromSlug, slugFromPath } from "@/lib/markdown-routes";
 
 export function generateStaticParams() {
   return allMarkdownPaths().map((path) => {
-    // The completeness gate. A page that ships without a Markdown representation fails the
-    // build here rather than 404ing for agents in production.
+    // The completeness gate: a page without a Markdown representation fails the build here.
     if (!getMarkdown(path)) {
       throw new Error(
         `No Markdown representation for ${path}. Add a co-located markdown export in ` +
@@ -36,9 +30,7 @@ export async function GET(
   const markdown = getMarkdown(path);
 
   if (!markdown) {
-    // A real 404 with a Markdown body an agent can act on. This is a route handler returning a
-    // literal Response, so the not-found.js streaming caveat does not apply: the status is
-    // exactly what is written here.
+    // A literal Response, so the not-found.js streaming caveat does not apply: this is a real 404.
     return new Response(notFoundMarkdown(path), {
       status: 404,
       headers: {

@@ -1,12 +1,5 @@
 "use client";
 
-// Hero signature — a Paper Design grain-gradient backdrop. The two decorative accent hues bloom
-// softly over a parchment base with grain noise (echoing the paper identity). Tuned LIGHT so black
-// ink stays legible; the hero section adds a parchment veil behind the text. Decorative + aria-hidden.
-// Under reduced-motion the shader freezes to a static frame.
-// The shader first loads within a 160 px viewport margin, then stays mounted with its clock
-// stopped whenever it leaves that margin.
-
 import dynamic from "next/dynamic";
 import { useRef } from "react";
 import { useInView } from "@/components/use-in-view";

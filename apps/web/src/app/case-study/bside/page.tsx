@@ -1,8 +1,4 @@
-// Case study: B:Side Assist. AI Assist's 11 layers moved from a single all-Terra/xhigh default to
-// a per-workload routing policy. Wears the blog article surface (BlogShell, prose kit, BlogCta)
-// with the case-study kit for the masthead and figure windows; the two bespoke tables here (the
-// 4-column evaluation ledger) stay local. Fully static; every figure is quoted verbatim from the
-// engagement write-up, baseline stamped assumed/projected and right-sized quality stamped measured.
+// Figures are verbatim from the engagement write-up: baseline assumed/projected, quality measured.
 
 import type { Metadata } from "next";
 import { AnimatedNumber } from "@/components/animated-number";
@@ -107,7 +103,6 @@ const breadcrumbLd = {
   ],
 };
 
-// The routing policy rightmodeler produced: 11 layers folded into six routes.
 const POLICY = [
   { route: "luna · low", covers: "quick responses, follow-ups, summaries" },
   { route: "luna · medium", covers: "document extraction and vision" },
@@ -117,7 +112,6 @@ const POLICY = [
   { route: "sol", covers: "reserved for demanding fallbacks" },
 ];
 
-// Per-20-query evaluation, verbatim. The quality row is the punchline and renders emphasised.
 const METRICS = [
   {
     label: "inference cost",
@@ -301,7 +295,6 @@ export default function BsideCaseStudyPage() {
             meta="per 20 queries · 11 workloads"
             footer="modeled from actual benchmark traces · current OpenAI pricing · observed xhigh uplift from grounded research"
           >
-            {/* Desktop ledger */}
             <div className="hidden sm:block">
               <div
                 className="grid h-9 items-center gap-x-3 border-b border-ash-border px-4 font-mono text-caption text-fog"
@@ -360,7 +353,6 @@ export default function BsideCaseStudyPage() {
               </div>
             </div>
 
-            {/* Mobile: stacked records so nothing scrolls sideways */}
             <div className="divide-y divide-ash-border sm:hidden">
               {METRICS.map((m) => (
                 <div key={m.label} className="px-4 py-3">

@@ -16,8 +16,7 @@ export const metadata: Metadata = pageMetadata({
   image: "/social/glossary.png",
 });
 
-// Each term is anchor-linkable (#slug) so it can be cited directly. The visible catalog and the
-// DefinedTermSet JSON-LD below share the same full definition, so neither representation can drift.
+// Each term is anchor-linkable (#slug) so it can be cited directly.
 const TERMS: { term: string; slug: string; def: string }[] = [
   {
     term: "Evidence-backed model downgrading",
@@ -68,8 +67,6 @@ const TERMS: { term: string; slug: string; def: string }[] = [
 
 const byIdSlug = (slug: string) => TERMS.find((t) => t.slug === slug)!;
 
-// The catalog rows: three themes, three terms each. Grouping is presentation only; the LD stays
-// flat so every term keeps its own DefinedTerm entry and anchor.
 const THEMES: { title: string; intro: string; slugs: string[] }[] = [
   {
     title: "The decision",
@@ -106,14 +103,7 @@ const definedTermSetLd = {
   })),
 };
 
-// ── Right-cell artifacts, standing where the reference shows code panels. Rows one and three are
-// code snippets in monochrome "syntax" (comments in fog, structure in driftwood, the values that
-// matter in ink; no hue, per the design system). Row two is a hand-drawn SVG: candidate models
-// crossing the cell diagonally, with only the front one clearing the floor. All decorative.
-
-// Fills its cell like the reference's code panels. Every line is kept short enough that the card
-// never scrolls sideways; the mono size steps down a notch on the smallest screens so the longest
-// line still fits.
+// Every line is kept short enough that the card never scrolls sideways.
 function CodeCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-full w-full rounded-2xl border border-ash-border bg-warm-sand p-6 sm:p-8">
@@ -137,8 +127,6 @@ const V = ({ children }: { children: React.ReactNode }) => (
   <span className="text-midnight-ink">{children}</span>
 );
 
-// The decision, as it lands in a repo: the frontier model commented out, the recommended swap in its
-// place, the receipts in the trailing comments.
 function DecisionArtifact() {
   return (
     <CodeCard>
@@ -171,9 +159,6 @@ function DecisionArtifact() {
   );
 }
 
-// The reference's tilted-pills illustration, redrawn by hand: candidate models climb the cell on
-// a diagonal, faint gray where they fell below the floor and sliding off-canvas, one crisp white
-// pill with a soft shadow where a candidate cleared it. Labels read along the pills, staggered.
 function FloorArtifact() {
   return (
     <svg
@@ -204,7 +189,6 @@ function FloorArtifact() {
       </defs>
 
       <g transform="translate(70 40)">
-        {/* faint construction diagonals, one crossing the flow */}
         <line
           x1="360"
           y1="-70"
@@ -224,7 +208,6 @@ function FloorArtifact() {
             strokeWidth="1"
           />
 
-          {/* below the floor, fading back and running off-canvas */}
           <g opacity="0.5">
             <rect
               x="-300"
@@ -271,7 +254,6 @@ function FloorArtifact() {
             {`gpt-5.4-nano · ${ILLUSTRATIVE_SCORECARD.middle}`}
           </text>
 
-          {/* the one that cleared it: white pill, rounded cap, soft shadow, ink label */}
           <rect
             x="-300"
             y="86"
@@ -297,7 +279,6 @@ function FloorArtifact() {
   );
 }
 
-// The evidence, as configuration: what gets measured, against what, and by whom.
 function EvidenceArtifact() {
   return (
     <CodeCard>
@@ -350,9 +331,6 @@ export default function GlossaryPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {/* The catalog — full-bleed rows between the frame's side rules: terms on the left, the
-          artifact that shows them on the right, split by a center hairline with a junction dot
-          where the rules cross. */}
       <section className="bg-parchment-white">
         <div className="divide-y divide-ash-border">
           {THEMES.map((theme, i) => {

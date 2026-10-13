@@ -1,20 +1,5 @@
-// The trace field: a bespoke WebGL1 particle engine for the numbers band. One cloud of
-// particles settles into a different etched plate per stat: a braided river delta
-// (many formats, one schema), descending terraces (cost stepping down), a planetary
-// ring (quality holding), and a suspension bridge (speed and throughput). The resting
-// positions are density-sampled from fine line-art images, the same technique Stripe's
-// stats scene uses (their dot-generation worker samples an image mask); the flight
-// between plates is closed-form on the GPU and untouched by where the dots land.
-//
-// Why hand-rolled: Stripe's scene is likewise raw WebGL (custom GLSL, no three.js in
-// that scene), and this repo's rule is minimum code over speculative dependencies.
-// The vertex shader evaluates position(progress, time) twice, once at now and once a
-// beat earlier, and draws the segment between the two, so comet trails during flight
-// cost zero per-frame CPU. On a retarget mid-flight the CPU mirrors the same math
-// once to snapshot current positions, keeping every transition interruptible.
-//
-// Coordinates: x in [-aspect, aspect], y in [-1, 1], y up. The canvas is transparent;
-// the section supplies the paper wash behind it.
+// The numbers band's WebGL1 particle engine.
+// Coordinates: x in [-aspect, aspect], y in [-1, 1], y up.
 
 import { PALETTES, type PaletteName } from "@/components/trace-field-palettes";
 
@@ -35,17 +20,13 @@ export type ShapeMask = {
   height: number;
 };
 
-// Motion constants. The flight is deliberately slower than UI motion (it is
-// illustration, not interface): a 1.5s glide with a large stagger window reads as
-// one coherent wave. The flight math is settled; the rest states around it change
-// freely, the flight itself does not.
+// Deliberately slower than UI motion: this is illustration, not interface.
+// The flight math is settled: only the rest states around it change.
 const MORPH_MS = 900;
 const STAGGER_SPAN = 0.3;
 const TRAIL_SECONDS = 0.085; // two-time evaluation gap while in flight
 const PALETTE_FADE_MS = 450;
 const MAX_DPR = 2;
-
-// --- tiny deterministic rng ------------------------------------------------------
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -58,10 +39,8 @@ function mulberry32(seed: number) {
   };
 }
 
-// --- shape data ------------------------------------------------------------------
-// Every shape is N particles of (x, y, packed w) where w carries the assembly order
-// (8 bits), a brightness level (2 bits: 0 anchors the darkest ink, 3 is paper dust)
-// and the local ink darkness (fraction): w = (order256 * 4 + level) + darkness.
+// Every shape is N particles of (x, y, packed w): w = (order256 * 4 + level) + darkness.
+// order is 8 bits, level 2 bits (0 the darkest ink, 3 paper dust), darkness the fraction.
 
 type ShapePoint = {
   x: number;
@@ -79,18 +58,12 @@ function pack(p: ShapePoint): number {
 
 type OrderMode = "x" | "diag" | "angle" | "centerOut";
 const MASK_ORDER: OrderMode[] = ["x", "diag", "angle", "centerOut"];
-// Contrast exponent per plate: high values favor the darkest strokes (the delta is
-// uniformly detailed and needs hierarchy), low values lift thin light threads (the
-// ring is drawn in fine hairlines).
+// Contrast exponent per plate: high favors the darkest strokes, low lifts thin light threads.
 const MASK_GAMMA = [1.6, 1.6, 1.45, 1.7];
-// Pre-blur radius per plate (pixels). Blurring the weight map turns "uniform fine
-// detail" into "density of detail", so a uniformly busy drawing like the delta
-// resolves into its main channels instead of noise.
+// Pre-blur radius per plate (pixels): resolves a uniformly busy drawing into its main channels.
 const MASK_BLUR = [1, 0, 0, 0];
 
-// Density-sample one etched plate. Weight follows ink density, so particles trace
-// the drawing's strokes; a flatter-weighted tail slice becomes the paper dust
-// around the drawing.
+// Density-samples one plate: particles follow ink density, and a tail slice becomes paper dust.
 function maskShape(
   mask: ShapeMask,
   n: number,
@@ -144,8 +117,7 @@ function maskShape(
     peak = 0;
     for (let i = 0; i < px; i++) if (weight[i] > peak) peak = weight[i];
   }
-  // Normalize before the contrast curve so plates drawn in light hairlines carry
-  // the same presence as plates drawn in heavy ink.
+  // Normalize before the contrast curve so hairline plates carry the presence of heavy-ink ones.
   const inv = peak > 0 ? 1 / peak : 1;
   for (let i = 0; i < px; i++) {
     if (weight[i] > 0) weight[i] = Math.pow(weight[i] * inv, gamma);
@@ -158,9 +130,7 @@ function maskShape(
   }
 
   const imgAspect = width / height;
-  // Fit the plate inside the viewport, height-first. Wide canvases keep a paper
-  // margin; narrow (phone) canvases may crop a few percent of the plate's own
-  // baked-in margins so the drawing keeps its presence.
+  // Height-first fit: wide canvases keep a paper margin, narrow ones crop into the plate's own.
   const scaleY = Math.min((1.06 * aspect) / imgAspect, 0.9);
   const pick = (r: number) => {
     const target = r * acc;
@@ -246,9 +216,6 @@ function scatter(n: number, a: number, rand: () => number): ShapePoint[] {
   return pts;
 }
 
-// Procedural fallbacks, one silhouette per stat, used only when the plates fail to
-// load or decode. Deliberately simple: a stream fan, a falling glide, a rim, and
-// speed lanes.
 function fallbackShape(
   which: number,
   n: number,
@@ -298,14 +265,12 @@ function fallbackShape(
 const SCATTER_INDEX = 4;
 const SHAPE_COUNT = 5;
 
-// --- shared math, mirrored between GLSL and the JS snapshot ----------------------
+// Shared math, mirrored between GLSL and the JS snapshot: change one, change both.
 
 function flightEase(p: number): number {
   return 1 - Math.pow(1 - p, 3);
 }
 
-// One near-still ambient for every plate: the rest states are drawings, so they
-// breathe rather than move. Mirrored in GLSL; change one, change both.
 function ambientJs(seed: number, t: number): [number, number] {
   const ph = seed * 6.2832;
   return [
@@ -324,8 +289,7 @@ type FlightUniforms = {
   pointerK: number;
 };
 
-// Head position at (progress, time) for one particle: the JS twin of the GLSL
-// below, used once per retarget to snapshot an in-flight cloud.
+// The JS twin of the GLSL flight(), used once per retarget to snapshot an in-flight cloud.
 function positionJs(
   fx: number,
   fy: number,
@@ -372,10 +336,7 @@ function positionJs(
   return { x, y };
 }
 
-// --- GLSL ------------------------------------------------------------------------
-
-// Vertex chunk. highp is mandatory in WebGL1 vertex shaders and required here: the
-// order+level packing in a_*.w needs far more mantissa than fp16 mediump offers.
+// highp is required: the order+level packing in a_*.w needs more mantissa than fp16 mediump offers.
 const SHARED_GLSL = `
 precision highp float;
 
@@ -470,8 +431,6 @@ vec4 shade(vec2 pos, float seed, float alphaScale) {
 }
 `;
 
-// Comet streaks, alive only while a particle is actually flying. At rest this pass
-// contributes nothing: the settled plate is carried by the dots alone.
 const STREAK_VERT = `${SHARED_GLSL}
 void main() {
   vec3 head = flight(u_progress, u_time);
@@ -536,8 +495,6 @@ void main() {
 }
 `;
 
-// --- engine ----------------------------------------------------------------------
-
 function hexToRgb(hex: string): [number, number, number] {
   const v = parseInt(hex.slice(1), 16);
   return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
@@ -549,8 +506,7 @@ function compile(gl: WebGLRenderingContext, type: number, src: string) {
   gl.shaderSource(s, src);
   gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    // Surfacing the log matters more than gracefulness here: a silent blank canvas is
-    // the one failure mode this component must never ship.
+    // Surface the log: a silent blank canvas is the one failure this component must never ship.
     console.error("trace-field shader:", gl.getShaderInfoLog(s));
     gl.deleteShader(s);
     return null;
@@ -612,18 +568,14 @@ export function createTraceField(
   const masks =
     options.masks && options.masks.length === 4 ? options.masks : null;
 
-  // Particle count scales with rendered area, clamped for phones and 5K monitors
-  // alike. The plates want density: they are drawings made of dots.
   const rect = canvas.getBoundingClientRect();
   const area = Math.max(rect.width * rect.height, 1);
-  // One density for every size: the phone ratio, where dots overlap along the
-  // plate strokes into continuous ink. Desktop simply gets more particles.
+  // One density for every size: the phone ratio, where dots overlap into continuous ink.
   const count = Math.round(Math.min(12000, Math.max(1200, area / 50)));
   let aspect = Math.max(rect.width / Math.max(rect.height, 1), 0.1);
 
   const rand = mulberry32(0x5eed);
 
-  // Static per-particle meta, shared by every shape.
   const seeds = new Float32Array(count);
   const sizes = new Float32Array(count);
   const alphas = new Float32Array(count);
@@ -669,10 +621,8 @@ export function createTraceField(
   }
   let shapeData = buildShapes(genAspect);
 
-  // CPU mirrors of the GPU buffers. The streak pass reads two copies of each
-  // particle (head + tail flag in meta.w); the point pass reads the head copies
-  // with a doubled stride. Keeping these arrays current is what makes context
-  // restoration a plain re-upload.
+  // CPU mirrors of the GPU buffers, two copies per particle (head, tail): the point pass reads the
+  // heads at a doubled stride. Keeping them current makes context restoration a plain re-upload.
   const fromArr = new Float32Array(count * 8);
   const toArr = new Float32Array(count * 8);
   const metaArr = new Float32Array(count * 8);
@@ -753,8 +703,7 @@ export function createTraceField(
     };
   }
 
-  // Builds every GL-side resource from current CPU state. Runs once at creation and
-  // again after webglcontextrestored, so a driver reset never leaves a blank panel.
+  // Builds every GL resource from current CPU state: it runs again after webglcontextrestored.
   function initGL(): boolean {
     const streak = makePass(STREAK_VERT, STREAK_FRAG);
     const point = makePass(POINT_VERT, POINT_FRAG);
@@ -778,23 +727,17 @@ export function createTraceField(
 
   if (!initGL()) return null;
 
-  // Palette state, CPU-lerped over the fade window.
   let paletteFrom = PALETTES[options.palette ?? "duet"].stops.map(hexToRgb);
   let paletteTo = paletteFrom;
   let paletteStart = -1e9;
 
-  // Morph clock. progressAt(t) is what both GPU passes and the JS snapshot use, so
-  // trails and retargets always agree with what is on screen.
+  // progressAt(t) feeds both GPU passes and the JS snapshot, so all three agree with the screen.
   let morphStart = 0;
   let intro = !reduced;
-  // 1 while a_from holds settled base geometry; 0 while it holds an on-screen
-  // snapshot whose ambient displacement is already baked into the positions.
+  // 1 while a_from holds settled base geometry, 0 while it holds a snapshot with ambient baked in.
   let fromAmbientK = 1;
   let globalAlpha = reduced ? 1 : 0;
   let lastDrawT = 0;
-  // Cursor spring (Emil: never tie visuals to the raw mouse; interpolate with
-  // spring physics so the yield is alive and interruptible). Near-critical
-  // damping, a whisker under, so the settle has a breath of life.
   let pointerTX = 0;
   let pointerTY = 0;
   let pointerActive = false;
@@ -819,8 +762,7 @@ export function createTraceField(
     const r = canvas.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) return;
     dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
-    // Dots on a wide canvas are relatively smaller than the same dots on a
-    // phone; a modest boost keeps the perceived weight consistent.
+    // Dots read smaller on a wide canvas: a modest boost keeps the perceived weight consistent.
     pixelScale = dpr * (r.width > 900 ? 1.1 : 1);
     const w = Math.round(r.width * dpr);
     const h = Math.round(r.height * dpr);
@@ -829,9 +771,7 @@ export function createTraceField(
       canvas.height = h;
     }
     aspect = r.width / Math.max(r.height, 1);
-    // Rotation or a drastic reflow reshapes the plates themselves. The old geometry
-    // (and any in-flight snapshot of it) is meaningless in the new frame, so the
-    // flight lands immediately rather than flying to remapped targets.
+    // A drastic reflow reshapes the plates and voids old snapshots, so the flight lands at once.
     if (Math.abs(aspect - genAspect) > 0.25) {
       genAspect = aspect;
       shapeData = buildShapes(genAspect);
@@ -911,14 +851,11 @@ export function createTraceField(
     ]) as [number, number, number][];
 
     if (intro && progress >= 1) intro = false;
-    // The fade-in rides its own clock, so an early retarget can neither freeze it
-    // below 1 nor pop it to 1 in a single frame.
+    // The fade-in rides its own clock, so an early retarget can neither freeze it nor pop it to 1.
     if (globalAlpha < 1) globalAlpha = Math.min(1, globalAlpha + frameDt / 500);
 
     const dtS = Math.min(frameDt, 50) / 1000;
-    // Stiff, critically damped cursor spring: the yield reads as immediate
-    // (bulk of the motion lands within ~100ms) while still gliding, never
-    // snapping or overshooting.
+    // Stiff cursor spring, a whisker under critical damping: immediate, yet it still glides.
     const STIFF = 170;
     const DAMP = 26;
     pointerVX += (pointerTX * aspect - pointerPX) * STIFF * dtS;
@@ -965,9 +902,7 @@ export function createTraceField(
     if (running) raf = requestAnimationFrame(frame);
   }
 
-  // Snapshot the in-flight cloud into the from-buffer so a retarget mid-morph
-  // continues from exactly what is on screen. Must be called BEFORE any state that
-  // feeds progressAt or the ambient blend (intro, fromAmbientK) changes.
+  // Call BEFORE changing state that feeds progressAt or the ambient blend (intro, fromAmbientK).
   function snapshot(t: number) {
     const u: FlightUniforms = {
       progress: progressAt(t),
@@ -997,8 +932,7 @@ export function createTraceField(
       );
       out[i * 4] = p.x;
       out[i * 4 + 1] = p.y;
-      // Carry the destination's packed order/level/darkness: it is what the eye has
-      // been converging toward, and the from-side ambient is gated off anyway.
+      // Carry the destination's packed w: it is what the eye has been converging toward.
       out[i * 4 + 3] = tw;
     }
     return out;
@@ -1018,9 +952,7 @@ export function createTraceField(
     gl.bufferData(gl.ARRAY_BUFFER, toArr, gl.DYNAMIC_DRAW);
   }
 
-  // Context loss handling. preventDefault opts into restoration; the restored
-  // handler rebuilds every GPU resource from the CPU mirrors, honoring this file's
-  // own rule that a silent blank canvas must never ship.
+  // preventDefault opts into restoration; the restored handler rebuilds from the CPU mirrors.
   const onContextLost = (e: Event) => {
     e.preventDefault();
     contextLost = true;
@@ -1036,8 +968,7 @@ export function createTraceField(
   canvas.addEventListener("webglcontextlost", onContextLost);
   canvas.addEventListener("webglcontextrestored", onContextRestored);
 
-  // Layout reads belong to size changes, not every animation frame. Under reduced
-  // motion no loop runs, so resize also redraws the settled image.
+  // Layout is read on resize, not per frame. Reduced motion runs no loop, so resize also redraws.
   const onResize = () => {
     needsResize = true;
     if (reduced) draw(performance.now());
@@ -1071,8 +1002,7 @@ export function createTraceField(
         fromAmbientK = 1;
         uploadFrom(shapeData[fromShape]);
       } else {
-        // In flight: freeze the current cloud as the origin. The snapshot must see
-        // the intro flag and ambient scale exactly as the last drawn frame did.
+        // In flight: the snapshot must see intro and the ambient scale as the last drawn frame did.
         const snap = snapshot(t);
         intro = false;
         uploadFrom(snap);

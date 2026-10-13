@@ -1,8 +1,4 @@
-// Internal notification email sent to the team when someone submits the feedback form, or when a
-// coding agent sends feedback for its user (see lib/handle-feedback.ts; lib/feedback.ts writes the
-// lines it shows). Built with React Email components so it renders cleanly across mail
-// clients; kept plain and monochrome — it's an ops notification, not a marketing send. Colours are
-// the design tokens from docs/design.md, inlined (email clients don't get the app's CSS).
+// Colours are the docs/design.md tokens, inlined: email clients don't get the app's CSS.
 
 import {
   Body,

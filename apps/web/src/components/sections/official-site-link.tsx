@@ -1,11 +1,5 @@
-// "Visit <name>": the hero link to a vendor's official site on the /vs and /integrations detail
-// pages. Same quiet treatment as the landing hero's repo link (sections/hero.tsx), with a 44px
-// touch target. rel is "noopener" alone on purpose: no noreferrer, so the vendor sees the
-// referral, and no nofollow.
-//
-// Below sm the link sits on the densest band of the hero gradient, so it takes the ink color
-// there. The label and arrow are one line of text, joined by a no-break space, so a name long
-// enough to wrap keeps the arrow after its last word.
+// rel is "noopener" alone on purpose: no noreferrer (the vendor sees the referral) and no nofollow.
+// Below sm the link sits on the densest band of the hero gradient, so it is ink there.
 
 import { ArrowRightIcon } from "@/components/icons";
 

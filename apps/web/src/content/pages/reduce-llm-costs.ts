@@ -1,5 +1,4 @@
-// Markdown twin of /use-cases/reduce-llm-costs (src/app/use-cases/reduce-llm-costs/page.tsx).
-// Keep this file in sync with that page whenever its copy, mockups, or FAQ change.
+// Markdown twin of src/app/use-cases/reduce-llm-costs/page.tsx. Keep the two in sync.
 
 import { ILLUSTRATIVE_SCORECARD, TRACE_SOURCES } from "@/lib/product-facts";
 import { REPO_URL } from "@/lib/site";

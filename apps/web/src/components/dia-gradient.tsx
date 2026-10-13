@@ -1,14 +1,6 @@
 "use client";
 
-// Dia Browser's signature gradient — implemented exactly as the reference guide
-// (https://www.arlan.me/vault/dia-gradient): a row of N tall, heavily-blurred columns share one
-// vertical rainbow gradient, arranged in a symmetric bell curve (short at the edges, tallest in
-// the middle). The field is anchored to the floor and RISES on a scaleY(0) → 1 transform
-// (transform-origin: bottom) with a spring-like ease, so it unfurls from the floor. One inline
-// <svg> — no canvas, no per-frame work. Decorative + aria-hidden.
-//
-// The one adaptation for the footer: it rises when scrolled into view (rather than on mount) so
-// the animation is actually seen at the foot of the page. Reduced-motion fades it in instead.
+// Dia Browser's signature gradient, built to https://www.arlan.me/vault/dia-gradient.
 
 import { useRef } from "react";
 import { useInView } from "@/components/use-in-view";
@@ -16,30 +8,27 @@ import { usePrefersReducedMotion } from "@/components/use-prefers-reduced-motion
 
 type Stop = { offset: number; color: string };
 
-// Brand recolor of Dia's stops — same structure (bottom → top), but only rightmodeler's two
-// decorative accent hues through a parchment core, matching the hero/CTA gradient palette:
-// void-violet floor → light violet → parchment core → ember → transparent ember at the top.
+// Offsets run bottom to top: void-violet floor, ember-orange fading out at the top.
 const DIA_STOPS: Stop[] = [
-  { offset: 0, color: "#0447ff" }, // void-violet — the floor
-  { offset: 0.22, color: "#6f86ff" }, // light violet
-  { offset: 0.44, color: "#b3aaff" }, // pale violet
-  { offset: 0.58, color: "#ffc4a0" }, // pale ember
-  { offset: 0.76, color: "#ff7a45" }, // light ember
-  { offset: 0.9, color: "#ff4704" }, // ember-orange
-  { offset: 1, color: "#ff470400" }, // transparent ember at the top
+  { offset: 0, color: "#0447ff" },
+  { offset: 0.22, color: "#6f86ff" },
+  { offset: 0.44, color: "#b3aaff" },
+  { offset: 0.58, color: "#ffc4a0" },
+  { offset: 0.76, color: "#ff7a45" },
+  { offset: 0.9, color: "#ff4704" },
+  { offset: 1, color: "#ff470400" },
 ];
 
 const VBW = 1271;
 const VBH = 599;
 
-// Height curve fitted to the real Dia footer: a gentle power falloff (not a cosine bell), giving
-// the flatter, pyramid-like rise of the original.
+// A power falloff fitted to the real Dia footer, not a cosine bell.
 function bellHeights(n: number, peak: number, valley: number): number[] {
   const out: number[] = [];
   const mid = (n - 1) / 2;
   for (let i = 0; i < n; i++) {
-    const t = mid === 0 ? 0 : Math.abs(i - mid) / mid; // 0 center → 1 edge
-    const eased = 1 - Math.pow(t, 1.24); // 1 at center → 0 at edge
+    const t = mid === 0 ? 0 : Math.abs(i - mid) / mid;
+    const eased = 1 - Math.pow(t, 1.24);
     out.push(peak * VBH * (valley + (1 - valley) * eased));
   }
   return out;
@@ -68,16 +57,14 @@ export function DiaGradient({
     once: true,
     rootMargin: "0px 0px -8% 0px",
   });
-  // rise=false renders it statically (fully shown) — used when something else (the overscroll
-  // spring) provides the reveal motion.
+  // rise=false shows it statically: the overscroll spring provides the motion instead.
   const shown = rise ? inView : true;
 
   const heights = bellHeights(bars, peak, valley);
   const colW = VBW / bars;
 
   return (
-    // Outer element is the IntersectionObserver target — never transformed, so its layout box
-    // stays full-height and the observer can fire before the inner element has risen.
+    // The observer target: never transform it, or it cannot intersect before the inner one rises.
     <div ref={ref} aria-hidden style={{ height: "100%", width: "100%" }}>
       <div
         style={{
@@ -103,8 +90,7 @@ export function DiaGradient({
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
-            {/* objectBoundingBox units: the gradient maps to each rect's own box, so every bar
-                shows the full rainbow over its own height — the way the real Dia footer does it. */}
+            {/* objectBoundingBox units: every bar shows the full gradient over its own height. */}
             <linearGradient id="dia-grad" x1="0" y1="1" x2="0" y2="0">
               {stops.map((s, i) => (
                 <stop key={i} offset={s.offset} stopColor={s.color} />

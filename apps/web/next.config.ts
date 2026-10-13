@@ -1,27 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Cache Components + Partial Prefetching (Next.js 16.3 "Instant Navigations").
-  // Both are opt-in previews that will become defaults in a future major.
   cacheComponents: true,
   partialPrefetching: true,
   experimental: {
     agentUpgrade: "latest",
   },
 
-  // Response header rules live in vercel.json because that is the layer the deployment platform
-  // honours. See the response headers section in AGENTS.md for the separately verified local and
-  // platform behaviour.
+  // Header rules live in vercel.json, the layer the deployment platform honours: see AGENTS.md.
 
-  // The .md siblings advertised by <link rel="alternate" type="text/markdown">. These serve
-  // Markdown regardless of Accept, which is what a crawler that follows rel="alternate" needs,
-  // since it may send no Accept header at all.
-  //
-  // afterFiles, so a real file in public/ could never be shadowed. Handled entirely in the
-  // routing layer, so a .md request costs no function invocation. src/proxy.ts skips dotted
-  // paths, which is why these land here and not there.
-  //
-  // Deepest real route is two segments (/use-cases/reduce-llm-costs); the third is headroom.
+  // The .md siblings. afterFiles so a real file in public/ is never shadowed; here because
+  // src/proxy.ts skips dotted paths. Deepest real route is two segments; the third is headroom.
   rewrites: async () => ({
     beforeFiles: [],
     afterFiles: [

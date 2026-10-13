@@ -1,15 +1,8 @@
-// Shared masthead for the marketing / SEO pages — the landing hero's opening move distilled to a
-// reusable header: an optional grain-gradient backdrop under a parchment legibility veil (identical
-// to sections/hero.tsx and blog/page.tsx, so every page reads as one system), a mono eyebrow, the
-// page's single <h1> in the display face, an optional subheading lede, and an optional CTA slot.
-// Server component — it composes the client primitives (HeroGradient, Reveal).
-
 import type { ReactNode } from "react";
 import { HeroGradient } from "@/components/hero-gradient";
 import { Reveal } from "@/components/reveal";
 
-// Same veil as the landing hero — parchment densest behind the top-left copy, fading into the
-// gradient toward the bottom-right, so it never reads as a boxed panel.
+// Legibility veil: parchment densest behind the top-left copy, fading into the gradient.
 const VEIL =
   "radial-gradient(130% 115% at 24% 30%, rgba(253,252,252,0.82) 0%, rgba(253,252,252,0.34) 46%, rgba(253,252,252,0) 74%)";
 

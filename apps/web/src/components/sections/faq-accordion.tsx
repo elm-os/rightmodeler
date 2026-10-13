@@ -1,9 +1,4 @@
-// FAQ accordion — the integration pages' Q&A block: the display title on the left, collapsible
-// question rows on the right (ElevenLabs-style), dotted hairlines between items. Built on native
-// <details>/<summary> so it ships zero JS and every answer still lands in the initial HTML for
-// search + AI crawlers (the same rationale as sections/faq.tsx, which stays fully expanded).
-// Motion is the chevron only: transform-based rotation on the house strong ease-out, under 300ms,
-// stilled under reduced motion. The disclosure itself is instant. Server component.
+// Native <details>: no JS for the disclosure, and every answer is in the initial HTML for crawlers.
 
 import { ChevronDownIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";

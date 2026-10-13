@@ -1,15 +1,5 @@
 "use client";
 
-// CrucibleShowcase — the six Crucible features as a tabbed gallery: a centered pill toggle over a
-// three-column grid of full-bleed image cards (the center column runs wider, the sides carry a
-// half-width empty tile so the columns stagger), in the spirit of an editorial news wall. The two
-// tabs mirror each other's arrangement, so switching visibly re-choreographs the wall. The accent
-// hues live only inside the two generated grain-gradient images; every control stays monochrome.
-// Motion: the whole grid crossfades per tab via AnimatePresence popLayout (exit snaps out as one
-// unit, cards re-enter with a short stagger — asymmetric, interruptible, transform/opacity only),
-// and the toggle thumb slides between labels as a shared element. Reduced motion drops movement
-// and stagger, keeping only opacity.
-
 import Image from "next/image";
 import { useId, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -66,8 +56,7 @@ const KEYS: Feature = {
   img: "/crucible/keys.jpg",
 };
 
-// Column recipe per tab — [big, tile] against [tile, big] on the opposite side is what makes the
-// wall stagger, and the second tab mirrors the first so the swap reads as a re-choreography.
+// [card, tile] facing [tile, card] is what staggers the wall; the second tab mirrors the first.
 const TABS: TabDef[] = [
   {
     id: "instruments",
@@ -162,8 +151,6 @@ export function CrucibleShowcase() {
     tabRefs.current[next]?.focus();
   }
 
-  // The exiting grid leaves as one fast unit; the entering cards land with a short stagger
-  // (asymmetric timing). Under reduced motion both collapse to a plain opacity fade.
   const gridVariants = reduce
     ? {
         enter: { opacity: 0 },

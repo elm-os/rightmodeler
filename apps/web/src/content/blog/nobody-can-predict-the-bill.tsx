@@ -1,8 +1,4 @@
-// Post: "Nobody can predict the bill" — research notes on Bai et al., arXiv:2604.22750, "How Do AI
-// Agents Spend Your Money?". A typed post module: `meta` (data) plus a `Body` composed from the
-// prose primitives. Registered in ./index. Voice matches the vision series: measured, story-first,
-// plain-language. Every figure quoted here was checked against the paper. The section on where the
-// variance finding cuts against our own method is deliberate and stays in.
+// The section on where the variance finding cuts against our own method is deliberate and stays in.
 
 import { A, H2, Lead, P, Prose, PullQuote } from "@/components/blog/prose";
 import type { PostMeta } from "@/content/blog/types";
@@ -227,8 +223,7 @@ export function Body() {
   );
 }
 
-// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
-// Body above by hand.
+// Kept in sync with Body above by hand.
 export const markdown = `# Nobody can predict the bill.
 
 You approve the agent to go fix a bug. It reads the repository, runs the tests, edits a file, runs the tests again, and somewhere in there it spends your money. Twenty cents or twenty dollars, you will not know which until it stops. Here is the part that should bother you more: neither will the agent.

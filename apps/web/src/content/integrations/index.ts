@@ -1,10 +1,3 @@
-// Integration registry — the single source of truth for /integrations. Each tool is one JSON file
-// in ./data, typed against IntegrationData here (a wrong or missing field fails `pnpm check-types`);
-// the hub, the [slug] route, the sitemap, and llms.txt all resolve from this list. To add an
-// integration: create a JSON file and add one import + one entry below. Listed in hub display
-// order: trace sources first, then evaluators, replay infrastructure, source control and CI, code
-// context, then coming soon.
-
 import type { IntegrationData } from "@/content/integrations/types";
 import langsmith from "@/content/integrations/data/langsmith.json";
 import langfuse from "@/content/integrations/data/langfuse.json";
@@ -30,6 +23,7 @@ import githubActions from "@/content/integrations/data/github-actions.json";
 import graphify from "@/content/integrations/data/graphify.json";
 import modaic from "@/content/integrations/data/modaic.json";
 
+// Listed in hub display order.
 const integrations: IntegrationData[] = [
   claudeCode,
   codex,
