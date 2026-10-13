@@ -1,6 +1,4 @@
-// /integrations/[slug] as Markdown, generated from the same JSON the page renders from. The flat
-// shape means there is no block dispatch here: every section is a fixed field, and an empty
-// array or string hides its section exactly as it does in the page component.
+// Mirrors app/integrations/[slug]/page.tsx section for section: keep the two in step.
 
 import type { IntegrationData } from "@/content/integrations/types";
 import { SKILL_COMMAND } from "@/lib/site";

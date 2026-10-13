@@ -1,9 +1,3 @@
-// Post: "The Tuesday problem" — part two of the vision series (rightmodeler agent). A typed post
-// module: `meta` (data) plus a `Body` composed from the prose primitives. Registered in ./index.
-// Voice matches the founding story: measured, honest, story-first. The Tuesday scene is a
-// composite every agent team will recognize; no named customers, no invented traction. No accent
-// hues in the copy; the accents live in the hero art.
-
 import { A, H2, Lead, P, Prose, PullQuote } from "@/components/blog/prose";
 import type { PostMeta } from "@/content/blog/types";
 
@@ -141,8 +135,7 @@ export function Body() {
   );
 }
 
-// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
-// Body above by hand.
+// Kept in sync with Body above by hand.
 export const markdown = `# The Tuesday problem.
 
 The new model dropped on a Tuesday, because they always seem to drop on a Tuesday. By ten the group chat was a wall of benchmark screenshots. By quarter past, someone had asked the only question that matters: so, are we switching? And then everyone went quiet and looked at the one engineer who owns the model configs.

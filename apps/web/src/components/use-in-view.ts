@@ -9,8 +9,7 @@ const observers = new Map<
   }
 >();
 
-// Reveals share the same viewport options. One observer can watch all of them,
-// including multiple subscriptions to the same element (live visibility + once).
+// One observer per rootMargin, shared across elements and across subscriptions to the same element.
 function observe(el: Element, rootMargin: string, listener: Listener) {
   let group = observers.get(rootMargin);
   if (!group) {

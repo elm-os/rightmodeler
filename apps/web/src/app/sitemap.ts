@@ -1,4 +1,3 @@
-// Native App Router sitemap, resolved from the same post and integration registries the routes use.
 // Omit lastmod until the content sources track modification time separately from publication time.
 
 import type { MetadataRoute } from "next";
@@ -15,14 +14,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     images: [`${SITE_URL}${post.meta.hero.src}`],
   }));
 
-  // Integration pages, resolved from the same registry the /integrations routes use.
   const integrationEntries: MetadataRoute.Sitemap = getAllIntegrations().map(
     (integration) => ({
       url: `${SITE_URL}/integrations/${integration.slug}`,
     }),
   );
 
-  // Comparison pages, resolved from the same registry the /vs routes use.
   const vsEntries: MetadataRoute.Sitemap = getAllComparisons().map(
     (comparison) => ({
       url: `${SITE_URL}/vs/${comparison.slug}`,

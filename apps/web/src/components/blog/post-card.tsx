@@ -1,8 +1,4 @@
-// /blog index card — the whole card is one quiet link. Horizontal on >= sm (hero left, copy right)
-// so the index reads well with a single post and scales cleanly to many; stacks on mobile. Hover
-// deepens the surface to warm-sand (no accent, per design.md); press gives a subtle scale for
-// feedback. Monochrome focus ring. The hero is decorative here, so its alt is empty (the title is
-// the accessible link text).
+// The hero is decorative here, so its alt is empty: the title is the accessible link text.
 
 import Image from "next/image";
 import Link from "next/link";

@@ -1,12 +1,7 @@
 "use client";
 
-// Number ticker: counts from 0 → value on the strong ease-out curve once on mount. Tabular
-// numerals so digits don't jitter. Under reduced-motion it renders the final value immediately.
-//
-// The final value is what renders, on the server and on every React pass. Branching the rendered
-// output on a client-only motion preference would server-render a 0:
-// a reader without JavaScript saw "0%" where the proof number belongs. The count-up is driven
-// imperatively against the DOM node instead, which keeps it out of the render path entirely.
+// Counts 0 → value once on mount. The final value is what renders, on the server and on every
+// React pass (a rendered 0 is what a no-JS reader would see): the count-up writes to the DOM node.
 
 import { useEffect, useRef } from "react";
 import { usePrefersReducedMotion } from "@/components/use-prefers-reduced-motion";

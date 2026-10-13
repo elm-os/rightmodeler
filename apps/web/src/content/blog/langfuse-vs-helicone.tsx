@@ -1,10 +1,5 @@
-// Post: "Langfuse vs Helicone", a practitioner comparison of the two products, built only from
-// each vendor's own documentation and announcements as read on 2026-09-24. A typed post module:
-// `meta` (data) plus a `Body` composed from the prose primitives. Vendor figures (latency,
-// markup, model counts, accuracy labels) are attributed to the vendor, never presented as ours.
-// rightmodeler appears only in the final section, where model-substitution testing belongs. The
-// comparison is a list and prose rather than CompareTable: that component styles its right column
-// as "ours", and the blog parity check rejects self-closing components in Body.
+// A list and prose rather than CompareTable: that component styles its right column as "ours", and
+// the blog parity check rejects self-closing components in Body.
 
 import { A, H2, LI, Lead, P, Prose, Strong, UL } from "@/components/blog/prose";
 import type { PostMeta } from "@/content/blog/types";
@@ -539,8 +534,7 @@ export function Body() {
   );
 }
 
-// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
-// Body above by hand; the parity check in scripts/check-content.mjs enforces it.
+// Kept in sync with Body above by hand; the parity check in scripts/check-content.mjs enforces it.
 export const markdown = `# Langfuse vs Helicone: tracing, evaluation, gateways, and cost analysis.
 
 You want to see what your LLM application is doing and what it costs. Langfuse and Helicone are both open-source answers to that question, and they start from opposite ends. Langfuse instruments your application code. Helicone sits in the request path as a gateway. Almost every difference below follows from that one choice.

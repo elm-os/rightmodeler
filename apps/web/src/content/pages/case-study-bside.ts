@@ -1,6 +1,5 @@
 // Markdown twin of /case-study/bside (app/case-study/bside/page.tsx). Keep in sync with that page:
-// every figure here is quoted verbatim from the engagement write-up, baseline stamped
-// assumed/projected and right-sized quality stamped measured.
+// figures verbatim, baseline stamped assumed/projected, right-sized quality stamped measured.
 
 import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 

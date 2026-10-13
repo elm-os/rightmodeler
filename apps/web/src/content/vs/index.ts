@@ -1,10 +1,3 @@
-// Comparison registry — the single source of truth for /vs. Each product is one JSON file in
-// ./data, validated against ./vs-page.schema.json by scripts/check-vs.test.mjs and typed against
-// VsPageData here (a wrong or missing field fails `pnpm check-types`); the hub, the [slug] route,
-// the sitemap, and llms.txt all resolve from this list. To add a comparison: create a JSON file
-// and add one import + one entry below. Listed in hub display order: rails, observers, graders,
-// routers, meters, coaches, trainers, scorekeepers, engineers.
-
 import type { VsPageData } from "@/content/vs/types";
 import openrouter from "@/content/vs/data/openrouter.json";
 import litellm from "@/content/vs/data/litellm.json";
@@ -37,6 +30,7 @@ import openFrontier from "@/content/vs/data/open-frontier.json";
 import artificialAnalysis from "@/content/vs/data/artificial-analysis.json";
 import jardinero from "@/content/vs/data/jardinero.json";
 
+// Listed in hub display order.
 const comparisons: VsPageData[] = [
   openrouter,
   litellm,

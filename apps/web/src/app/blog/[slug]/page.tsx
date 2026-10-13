@@ -7,15 +7,12 @@ import { getAllSlugs, getPost } from "@/content/blog";
 import { alternatesFor } from "@/lib/seo";
 import { SITE_AUTHOR, SITE_NAME, SITE_URL } from "@/lib/site";
 
-// Prerender every post at build time. Cache Components requires generateStaticParams to return at
-// least one param; unknown slugs are handled by notFound() in the page below.
+// Cache Components requires generateStaticParams to return at least one param.
 export function generateStaticParams() {
   return getAllSlugs().map((slug) => ({ slug }));
 }
 
-// Every real post is statically prerendered above, so navigating to one is already instant; the only
-// non-instant path is the fallback for an unknown slug, which immediately 404s. Opt this segment out
-// of Cache Components' instant-navigation validation rather than caching a shell that is never served.
+// Opts out of instant-navigation validation: only an unknown slug is not prerendered, and it 404s.
 export const instant = false;
 
 export async function generateMetadata({

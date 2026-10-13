@@ -21,15 +21,12 @@ import type { VsBlock } from "@/content/vs/types";
 import { pageMetadata } from "@/lib/seo";
 import { RUN_COMMAND, SITE_URL } from "@/lib/site";
 
-// Prerender every comparison at build time. Cache Components requires generateStaticParams to
-// return at least one param; unknown slugs are handled by notFound() in the page below.
+// Cache Components requires generateStaticParams to return at least one param.
 export function generateStaticParams() {
   return getAllSlugs().map((slug) => ({ slug }));
 }
 
-// Every real comparison is statically prerendered above, so navigating to one is already instant;
-// the only non-instant path is the fallback for an unknown slug, which immediately 404s. Opt this
-// segment out of Cache Components' instant-navigation validation, as integrations/[slug] does.
+// Opts out of instant-navigation validation: only an unknown slug is not prerendered, and it 404s.
 export const instant = false;
 
 export async function generateMetadata({
@@ -47,15 +44,13 @@ export async function generateMetadata({
   });
 }
 
-// Same ink pill as the use-cases CTA cards — page-local by house convention.
+// Same ink pill as the use-cases CTA cards: page-local by house convention.
 const pillPrimary =
   "inline-flex items-center justify-center rounded-xl bg-midnight-ink px-5 py-3 text-body font-medium text-parchment-white transition-transform duration-150 ease-out-strong active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white";
 
 const rule = <div aria-hidden className="h-px w-full bg-ash-border" />;
 
-// Every content band shares one skeleton — the same left-rail spine as the integration pages:
-// section heading (and optional intro) in the left rail, content in the right cell, so the whole
-// page keeps a single spine. First rows drop their top padding to top-align with the heading.
+// First rows drop their top padding to top-align with the heading.
 function Band({
   heading,
   intro,
@@ -84,12 +79,8 @@ function Band({
   );
 }
 
-// One command block: a mono comment over the copyable command, the same grammar as the hero CTA.
-// The block renderer: JSON block type -> section. The schema (content/vs/vs-page.schema.json,
-// enforced in `pnpm check`) guarantees each type carries exactly the fields it renders, so the
-// guards below are unreachable fallbacks, not content switches. Winner labels stay lowercase
-// "rightmodeler" (no CSS uppercase), per the brand rule.
-// A stack block ends with a link to the integration's setup guide when the page names one.
+// content/vs/vs-page.schema.json (enforced in `pnpm check`) guarantees each type's fields, so the
+// guards are unreachable fallbacks. Winner labels stay lowercase "rightmodeler": no CSS uppercase.
 function BlockSection({
   block,
   name,
@@ -283,12 +274,10 @@ export default async function VsDetailPage({
   if (!comparison) notFound();
 
   const data = comparison;
-  // Resolve related slugs against the registry; a slug that isn't registered yet simply drops out.
   const related = data.related.flatMap((relatedSlug) => {
     const entry = getComparison(relatedSlug);
     return entry ? [entry] : [];
   });
-  // The label reads as the integration page's own H1, "rightmodeler + <name>".
   const integration = data.integrationSlug
     ? getIntegration(data.integrationSlug)
     : undefined;
@@ -347,7 +336,6 @@ export default async function VsDetailPage({
 
       {rule}
 
-      {/* ── CTA: run the skill today, or line up the Crucible integration. ── */}
       <section className="bg-parchment-white">
         <div className="px-4 py-14 sm:px-6 sm:py-16">
           <Reveal>

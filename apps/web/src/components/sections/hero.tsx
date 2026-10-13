@@ -1,15 +1,6 @@
 "use client";
 
-// The hero — a thesis, not a claim. The most characteristic artifact in rightmodeler's world is
-// the per-step swap plan where a human ratifies each downgrade against evidence, so THAT is the
-// hero: a faithful, monochrome `rightmodeler · per-step approval` ledger on an opaque warm-sand
-// window, with the HeroGradient reduced to paper matting in the gutters. One bold move only — an
-// ink "reading head" caret that walks the pipeline as the ledger fills and comes to rest on the
-// abstain row (Step 5), making the product's most honest behaviour ("it tells you when NOT to
-// switch") kinetic. Everything else stays quiet: left-aligned editorial copy on a feathered
-// parchment scrim, a labelled + hedged proof number that rhymes to Row 1, a copy-able command.
-// Every figure is stamped illustrative; the UI is strictly black-on-paper (accent hues live only
-// inside HeroGradient). Row entrances and the caret honour prefers-reduced-motion.
+// The home hero: editorial copy over a per-step approval ledger. Every figure is illustrative.
 
 import { motion, useReducedMotion } from "motion/react";
 import { AnimatedNumber } from "@/components/animated-number";
@@ -24,18 +15,17 @@ import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 // Strong ease-out curve (docs/design.md § Motion) as a motion-friendly tuple.
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-// Fixed ledger geometry so the reading-head caret aligns to each row deterministically (rows never
-// wrap — they live in an overflow-x-auto lane and keep a single mono line).
-const ROW_H = 44; // px, uniform data-row height
-const CARET_H = 20; // px, slightly shorter than the row
-const CARET_TOP = (ROW_H - CARET_H) / 2; // vertical centring inside a row
+// Fixed geometry: the caret aligns to rows by arithmetic, so rows must never wrap.
+const ROW_H = 44; // px
+const CARET_H = 20; // px
+const CARET_TOP = (ROW_H - CARET_H) / 2;
 const GRID = "14px 40px 30px 132px 244px 54px 58px 132px 156px"; // caret · status · Step · Family · Current → Candidate · Save · Quality · Evidence · Flag
 
 type Flag = { label: string; strong?: boolean } | null;
 
 type LedgerRow = {
   key: string;
-  glyph: string; // ✓ ⚙ ✕ — terminal status glyphs, monochrome
+  glyph: string; // ✓ ⚙ ✕
   status: "approved" | "pending" | "abstained";
   srStatus: string; // spoken status (glyph alone is not accessible)
   step: string;
@@ -46,12 +36,10 @@ type LedgerRow = {
   quality: string;
   evidence: string;
   flag: Flag;
-  dim?: boolean; // the abstain row is de-emphasised to fog; its verdict stays ink
+  dim?: boolean; // the abstain row: fog, with its verdict in ink
 };
 
-// The exact five illustrative rows from the brief. Row 2 sits below the quality floor stated in
-// the title bar — which is why it is still ⚙ pending with a CASCADE hold rather
-// than an auto-✓. Row 5 is the pratfall/trust payoff: the tool declining to gamble.
+// Row 2 is below the quality floor in the title bar, hence pending. Row 5 is the abstention.
 const ROWS: LedgerRow[] = [
   {
     key: "pr_summary",
@@ -133,12 +121,9 @@ export function Hero() {
   return (
     <section className="bg-parchment-white">
       <div className="relative isolate overflow-hidden">
-        {/* Grain-gradient backdrop spans the full framed column, edge to edge — reaching the
-            frame's side rules with no inner boundary. The two accent hues live only in here. */}
+        {/* The two accent hues live only in here. */}
         <HeroGradient className="absolute inset-0 -z-10" />
-        {/* Legibility veil — a parchment wash densest behind the top-left copy, fading into the
-            vivid gradient toward the bottom-right. Edge-to-edge, no box, so it never reads as an
-            inner panel. */}
+        {/* Legibility veil: parchment densest behind the top-left copy, fading into the gradient. */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 -z-10"
@@ -149,7 +134,6 @@ export function Hero() {
         />
 
         <div className="mx-auto max-w-5xl px-6 py-20 sm:px-8 sm:py-28">
-          {/* ── Copy column: left-aligned editorial argument on a feathered parchment scrim ── */}
           <Reveal lcp className="relative max-w-3xl">
             <div className="relative">
               <p className="font-mono text-caption text-fog uppercase">
@@ -167,9 +151,7 @@ export function Hero() {
                 abstention.
               </p>
 
-              {/* Labelled proof number. Not boxed (the ledger is the only framed artifact) and
-                deliberately hedged — its caption reads "PR summary", so it rhymes straight to
-                Row 1 of the ledger below rather than floating free as a lone hero stat. */}
+              {/* The caption names "PR summary" so the figure reads against Row 1 of the ledger. */}
               <div className="mt-9">
                 <AnimatedNumber
                   value={72}
@@ -182,7 +164,6 @@ export function Hero() {
                 </p>
               </div>
 
-              {/* CTA row — the trivial first step (a copy-able command) plus a quiet repo link. */}
               <div className="mt-8 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
                 <CopyCommand command={RUN_COMMAND} />
                 <a
@@ -199,7 +180,6 @@ export function Hero() {
             </div>
           </Reveal>
 
-          {/* ── The star artifact: the per-step approval ledger, wider than the copy measure ── */}
           <div className="mt-14 sm:mt-16">
             <div className="mb-3 flex justify-end">
               <span className="font-mono text-caption text-fog">
@@ -214,19 +194,13 @@ export function Hero() {
   );
 }
 
-// ── ApprovalTable ─────────────────────────────────────────────────────────────────────────────
-// A faithful HTML/CSS rendering of the CLI's per-step swap plan: opaque warm-sand window,
-// ash-border hairlines, strict monochrome status glyphs (no traffic-light dots, no semantic hue). Rows
-// stagger in on load (50ms) as the ledger populates; a single ink reading-head caret walks down
-// the status gutter and rests on the abstain row. Nothing here fakes a live measurement — it is a
-// still artifact with one explanatory entrance.
+// The CLI's per-step swap plan as a still artifact: nothing here is a live measurement.
 function ApprovalTable() {
   const reduce = useReducedMotion();
 
   return (
     <div className="relative overflow-hidden rounded-xl border border-ash-border bg-warm-sand">
-      {/* Title bar — artifact name (left) and a real methodology fact (right): the default quality
-          floor, which explains why Row 2 is held rather than approved. */}
+      {/* The quality floor on the right is why Row 2 is held rather than approved. */}
       <div className="flex items-center justify-between gap-4 border-b border-ash-border px-4 py-3">
         <span className="min-w-0 truncate font-mono text-caption text-driftwood">
           rightmodeler · per-step approval
@@ -236,11 +210,7 @@ function ApprovalTable() {
         </span>
       </div>
 
-      {/* ── Mobile ledger (< sm): the same five steps as stacked records, so nothing scrolls
-          sideways on a phone. The wide ledger grid below is desktop-only; here each row carries the
-          whole verdict — status, family, the model swap, and the numbers that back it — and the
-          abstain row keeps its de-emphasis + emphasised flag so the "it declines to gamble"
-          payoff still lands. A static ink marker stands in for the desktop reading-head caret. */}
+      {/* < sm: the same five steps as stacked cards, so nothing scrolls sideways. */}
       <div className="divide-y divide-ash-border sm:hidden">
         {ROWS.map((row, i) => {
           const glyphColor =
@@ -263,7 +233,7 @@ function ApprovalTable() {
                 ease: EASE,
               }}
             >
-              {/* Where the reading head rests on desktop — a still ink tick on the abstain row. */}
+              {/* Stands in for the desktop caret. */}
               {row.dim && (
                 <span
                   aria-hidden
@@ -271,7 +241,6 @@ function ApprovalTable() {
                 />
               )}
 
-              {/* Line 1 — status glyph + family, flag docked right (dropped when there is none). */}
               <div className="flex items-baseline justify-between gap-3">
                 <span className="flex min-w-0 items-baseline gap-2">
                   <span
@@ -294,7 +263,6 @@ function ApprovalTable() {
                 )}
               </div>
 
-              {/* Line 2 — the candidate swap. */}
               <div className="mt-1.5 font-mono text-[13px]">
                 <span className={row.dim ? "text-fog" : "text-midnight-ink"}>
                   {row.from}
@@ -305,7 +273,6 @@ function ApprovalTable() {
                 </span>
               </div>
 
-              {/* Line 3 — the numbers behind the verdict, labelled in place of column headers. */}
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-caption text-fog">
                 <span>
                   save{" "}
@@ -330,11 +297,9 @@ function ApprovalTable() {
         })}
       </div>
 
-      {/* Horizontal scroll lane (>= sm): the mono grid keeps its columns and scrolls like a real
-          wide terminal ledger on tablet/desktop; the page body itself never scrolls sideways. */}
+      {/* >= sm: the grid scrolls inside this lane, so the page itself never scrolls sideways. */}
       <div className="hidden overflow-x-auto sm:block">
         <div className="w-max px-4">
-          {/* Column headers */}
           <div
             className="grid h-9 items-center gap-x-3 border-b border-ash-border font-mono text-caption text-fog"
             style={{ gridTemplateColumns: GRID }}
@@ -350,7 +315,7 @@ function ApprovalTable() {
             <span>Flag</span>
           </div>
 
-          {/* Rows track (relative) — hosts the absolutely-positioned reading-head caret. */}
+          {/* relative: positions the caret */}
           <div className="relative" style={{ height: ROWS.length * ROW_H }}>
             {ROWS.map((row, i) => (
               <motion.div
@@ -366,10 +331,9 @@ function ApprovalTable() {
                   ease: EASE,
                 }}
               >
-                {/* caret gutter (empty — the caret floats over it) */}
+                {/* caret gutter */}
                 <span aria-hidden />
 
-                {/* status glyph + spoken label */}
                 <span className="flex items-center justify-center">
                   <span
                     aria-hidden
@@ -425,9 +389,7 @@ function ApprovalTable() {
               </motion.div>
             ))}
 
-            {/* Reading-head caret: an ink block that walks the ledger as it fills and settles on
-                Row 5 (abstain). One-shot, GPU transform only; under reduced motion it is placed
-                statically on Row 5 with zero travel so the meaning survives without movement. */}
+            {/* Reading-head caret. Under reduced motion it starts at rest on Row 5. */}
             <motion.span
               aria-hidden
               className="pointer-events-none absolute left-1 z-10 w-[3px] rounded-[1px] bg-midnight-ink"
@@ -447,14 +409,12 @@ function ApprovalTable() {
             />
           </div>
 
-          {/* Empty tail — implies these five are a slice of a longer run, and gives the bottom
-              ProgressiveBlur a region to soften without ever touching the abstain row. */}
+          {/* Room for the bottom ProgressiveBlur, so it never touches the abstain row. */}
           <div aria-hidden style={{ height: 64 }} />
         </div>
       </div>
 
-      {/* Melt the window's lower edge into the parchment canvas (desktop lane only — on mobile the
-          stacked cards end on the abstain row, which must never be blurred). maxBlur 3 (Safari-cheap). */}
+      {/* Desktop only: the stacked cards end on the abstain row, which must never be blurred. */}
       <ProgressiveBlur
         side="bottom"
         height="3.5rem"
@@ -465,8 +425,7 @@ function ApprovalTable() {
   );
 }
 
-// Flags are monochrome hairline tags (never colour-coded pills). "·" is a quiet fog middot; the
-// abstain verdict is emphasised to ink so the stop reads as intentional, not missing data.
+// Monochrome hairline tags, never colour-coded. The abstain verdict is ink: a stop, not a gap.
 function FlagCell({ flag }: { flag: Flag }) {
   if (!flag) {
     return <span className="text-[13px] text-fog">·</span>;

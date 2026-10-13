@@ -1,10 +1,3 @@
-// Build gate for the /vs comparison pages: every data file must validate against the JSON Schema
-// (content/vs/vs-page.schema.json is the real contract; content/vs/types.ts stays permissive
-// because JSON imports widen literals), stay registered, point at a real logo and real sibling
-// pages, and keep the honesty rule that at least one scenario per block names the other tool as
-// the right hire. Runs with `pnpm test` next to
-// check-content.test.mjs, so a bad data file fails `pnpm check` before the build.
-
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";

@@ -1,8 +1,4 @@
-// Build gate for the /integrations pages, the counterpart of check-vs.test.mjs. There is no JSON
-// Schema here (tsc checks the shape through IntegrationData), so this covers what tsc cannot: every
-// data file is named for its slug, stays registered, links a real https site and a real logo,
-// points its related row at real pages, and uses a category the hub has a band for. Runs with
-// `pnpm test`, so a bad data file fails `pnpm check` before the build.
+// No JSON Schema here, unlike check-vs.test.mjs: tsc checks the shape through IntegrationData.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";

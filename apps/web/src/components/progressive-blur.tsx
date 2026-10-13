@@ -1,7 +1,4 @@
-// Progressive edge blur (Rauno technique, adapted): a stack of backdrop-blur layers, each
-// masked to a progressive band so the blur intensifies toward one edge. Used to melt the
-// approval-table's bottom edge and the footer gradient's top edge into the parchment.
-// Purely decorative; blur stays well under 20px (cheap in Safari).
+// Keep the blur well under 20px so it stays cheap in Safari.
 
 export function ProgressiveBlur({
   className,

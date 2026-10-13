@@ -1,13 +1,9 @@
-// POST /api/waitlist — the "get early access" backend for both waitlists (Crucible and the agent).
-// Validates the submitted email and sends the team a real notification via Resend (no fake success;
-// the client only shows a confirmation after this responds ok). Runs on the Node.js runtime
-// (default) because React Email rendering isn't Edge-safe; it reads the request body, so it's
-// dynamic — fine under Cache Components.
+// Answers ok only after Resend takes the email: no fake success.
+// Node.js runtime: React Email rendering isn't Edge-safe.
 
 import { Resend } from "resend";
 import { WaitlistNotification } from "@/emails/waitlist-notification";
 
-// The team recipients for waitlist notifications.
 const RECIPIENTS = ["me@aakashharish.com", "me@ameyalambat.com"];
 // Verified Resend sending domain (rightmodeler.com).
 const FROM = "rightmodeler <inquiry@rightmodeler.com>";
@@ -38,7 +34,6 @@ export async function POST(request: Request) {
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    // Missing config is our fault, not the visitor's — log loudly, fail honestly.
     console.error("RESEND_API_KEY is not set: cannot send waitlist email.");
     return Response.json(
       { error: "Waitlist is temporarily unavailable. Please try again later." },
@@ -50,14 +45,12 @@ export async function POST(request: Request) {
   const submittedAt = new Date().toISOString();
   const resend = new Resend(apiKey);
 
-  // Lenient product tag: missing or unknown values fall back to Crucible so older clients and
-  // hand-rolled POSTs keep working with no new 400 paths.
+  // Lenient: a missing or unknown product falls back to Crucible, so older clients keep working.
   const which =
     product === "agent" ? ("agent" as const) : ("crucible" as const);
   const label = which === "agent" ? "rightmodeler agent" : "Crucible";
 
-  // Pass the React Email template as a function call (Resend renders it) so this stays a plain
-  // route.ts with no JSX. Resend also derives the plain-text part from the same component.
+  // The template is called as a function (Resend renders it) so this stays a route.ts with no JSX.
   const { error } = await resend.emails.send({
     from: FROM,
     to: RECIPIENTS,

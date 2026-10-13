@@ -1,9 +1,4 @@
-// Case study: iAM360. The AI coach behind a fitness and wellness platform moved from a modeled
-// all-Terra/xhigh default to a routed architecture that concentrates intelligence: Sol for the
-// hardest coaching paths, Terra for moderate analysis, small validated models for routine work.
-// Wears the blog article surface with the case-study kit; the before/after grid stays local.
-// Fully static; figures are quoted verbatim from the engagement write-up and stamped as modeled,
-// including the sensitivity of the headline number to the xhigh output assumption.
+// Figures are verbatim from the engagement write-up and stamped as modeled.
 
 import type { Metadata } from "next";
 import { BlogCta } from "@/components/blog/blog-cta";
@@ -108,8 +103,6 @@ const breadcrumbLd = {
   ],
 };
 
-// Each job assigned to the appropriate level of AI. Note the direction goes both ways: the
-// hardest paths were upgraded to Sol while validated routine work moved to small models.
 const POLICY = [
   {
     route: "gpt-5.6-sol",
@@ -123,7 +116,6 @@ const POLICY = [
   { route: "gpt-oss-120b", covers: "a small number of controlled fallbacks" },
 ];
 
-// Previously modeled approach vs the current one, pairwise.
 const CHANGES = [
   {
     before: "The same expensive model handled everything",

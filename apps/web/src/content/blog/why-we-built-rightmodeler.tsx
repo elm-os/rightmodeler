@@ -1,7 +1,3 @@
-// Post: "Why we built rightmodeler" — the founding story. A typed post module: `meta` (data) plus a
-// `Body` composed from the prose primitives. Registered in ./index. Voice matches the landing page:
-// measured, honest, evidence-driven. No accent hues in the copy; the accents live in the hero art.
-
 import { A, H2, Lead, P, Prose, PullQuote } from "@/components/blog/prose";
 import type { PostMeta } from "@/content/blog/types";
 
@@ -175,8 +171,7 @@ export function Body() {
   );
 }
 
-// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
-// Body above by hand (there is one post; if the blog grows, generate this from a shared source).
+// Kept in sync with Body above by hand.
 export const markdown = `# We were picking models by vibes. Then the bill arrived.
 
 For most of our careers, we picked the model behind every agent the same way. We guessed. That is an awkward thing to admit, because we build agentic systems for a living, and across all of that work there was never a well known, rigorous way to decide which model belongs at which step in the stack.

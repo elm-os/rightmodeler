@@ -1,24 +1,16 @@
-// Final call-to-action band — the full-bleed break in the framed column, carrying the SAME
-// grain-gradient effect as the hero so the page opens and closes on the same note. Legibility
-// comes from a parchment veil (as in the hero), not a boxed panel. Strictly monochrome content;
-// the accent hues live only inside the gradient. Server component — it composes the client
-// primitives (HeroGradient, Reveal, CopyCommand).
-
 import { CopyCommand } from "@/components/copy-command";
 import { HeroGradient } from "@/components/hero-gradient";
 import { GitHubIcon } from "@/components/icons";
 import { Reveal } from "@/components/reveal";
 import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 
-// Legibility veil — parchment densest behind the top-left copy, fading into the gradient. Same
-// treatment as the hero, so it never reads as a card.
+// Legibility veil: parchment densest behind the top-left copy, fading into the gradient.
 const VEIL =
   "radial-gradient(130% 120% at 22% 34%, rgba(253,252,252,0.84) 0%, rgba(253,252,252,0.36) 48%, rgba(253,252,252,0) 76%)";
 
 export function CtaBand() {
   return (
     <section className="relative isolate overflow-hidden bg-parchment-white">
-      {/* Same grain-gradient effect as the hero. */}
       <HeroGradient className="absolute inset-0 -z-10" />
       <div
         aria-hidden

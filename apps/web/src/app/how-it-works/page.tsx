@@ -29,8 +29,6 @@ export const metadata: Metadata = pageMetadata({
   image: "/social/how-it-works.png",
 });
 
-// The three-step spine, Detect → Measure → Review. `line` is the machine-vernacular substance slab under
-// each card (mono, ink-on-recessed-slab).
 const STEPS: {
   n: string;
   name: string;
@@ -88,9 +86,7 @@ const FAQ: FaqItem[] = [
   },
 ];
 
-// ── The first-run transcript: the guided CLI session as it actually renders, in the glossary's
-// monochrome "syntax" (mundane lines in driftwood, the values that matter in ink, guidance in
-// fog). Every line is real 0.2.0 output; the story it tells is the free/paid split.
+// The first-run transcript: every line is real 0.2.0 output.
 const Ln = ({ children }: { children?: React.ReactNode }) =>
   children ? (
     <div className="text-driftwood">{children}</div>
@@ -156,8 +152,6 @@ function FirstRunTranscript() {
   );
 }
 
-// ── One run-mode card: icon seat up top (the agent page's grammar), words in the middle, and the
-// command or link anchored to the bottom edge so the four actions sit level across the row.
 function RunModeCard({
   Icon,
   name,
@@ -176,8 +170,6 @@ function RunModeCard({
 }) {
   return (
     <div className="relative isolate flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand p-5 sm:p-6">
-      {/* Grainy brand-gradient backdrop, shared with the agent page's deliverable panel; the
-          accent hues live only inside this generated image. */}
       {grain !== undefined && (
         <Image
           src={grain}
@@ -214,9 +206,6 @@ export default function HowItWorksPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {/* ── Run it: the four surfaces, commands first. The terminal pair leads at panel scale
-          (mode card + the first-run transcript, the page's one artifact); the other three modes
-          sit as equal boxes below, the agent page's card grammar throughout. ── */}
       <section className="bg-parchment-white">
         <div className="px-4 py-14 sm:px-6 sm:py-20">
           <Reveal>
@@ -314,8 +303,6 @@ export default function HowItWorksPage() {
             </Tldr>
           </Reveal>
 
-          {/* Where traces come from — the plain-language beat for readers who have never met the
-              word. It sits before the pipeline so "raw traces" below already means something. */}
           <Reveal
             delay={0.06}
             className="mt-12 border-t border-ash-border pt-8"
@@ -340,11 +327,6 @@ export default function HowItWorksPage() {
             </Link>
           </Reveal>
 
-          {/* The pipeline: one continuous hairline spine with numbered nodes.
-              No card fills; warm-sand barely separates from the canvas, so depth
-              comes from the spine, the display-face step titles, and a
-              hairline-topped machine-output line per step. Numbering is earned:
-              this is a real Detect -> Measure -> Review sequence. */}
           <div className="relative mt-14">
             <div
               aria-hidden

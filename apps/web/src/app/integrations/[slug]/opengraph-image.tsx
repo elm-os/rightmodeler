@@ -1,14 +1,5 @@
-// Open Graph card for every integration page, generated from the registry at build time. The
-// twitter card inherits it (see pageMetadata's `image: null` in @/lib/seo), so a new integration
-// needs no hand-made image.
-//
-// Layout and colors reproduce the original hand-made cards; tokens are from docs/design.md. Type is
-// the site's own faces: the display face for the title, the wordmark face for the lockup, and the
-// UI face for the eyebrow and the tagline. ImageResponse only reads ttf/otf/woff and renders a
-// variable font at its default instance, so src/assets/og holds static instances of the exact
-// weights, subset to the same latin range next/font loads (licence: OFL.txt beside them).
-// The right-hand panel (glow, dot grid, trace illustration) is identical on every card and is
-// embedded as the original raster, since its layered blurred glow has no ImageResponse equivalent.
+// ImageResponse reads only ttf/otf/woff and renders a variable font at its default instance, so
+// src/assets/og holds static latin-subset instances. The panel's blurred glow has to be a raster.
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -20,7 +11,6 @@ export const alt = "rightmodeler integration social preview";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Prerender one card per integration, the same params the page itself prerenders.
 export function generateStaticParams() {
   return getAllSlugs().map((slug) => ({ slug }));
 }
@@ -48,8 +38,7 @@ export default async function Image({
   const { slug } = await params;
   const integration = getIntegration(slug);
   if (!integration) notFound();
-  // At 95px a name longer than about 20 characters, such as "Agent Router (formerly Envoy AI
-  // Gateway)", wraps to three lines and runs into the tagline; 72px fits three above it.
+  // At 95px a name over about 20 characters wraps to three lines and hits the tagline; 72px fits.
   const longName = integration.name.length > 20;
 
   return new ImageResponse(
@@ -71,7 +60,6 @@ export default async function Image({
         style={{ position: "absolute", left: 744, top: 2 }}
       />
 
-      {/* Brand lockup: the two-bar mark as drawn on the original cards, then the wordmark. */}
       <svg
         width={39.3}
         height={44}
@@ -105,8 +93,7 @@ export default async function Image({
           width: 672,
           height: 1,
           backgroundColor: ASH_BORDER,
-          // The originals sit this hairline on a half pixel; Satori rounds a fractional top, but
-          // not a transform.
+          // Half a pixel via transform: Satori rounds a fractional top, but not a transform.
           transform: "translateY(0.5px)",
         }}
       />
@@ -127,7 +114,6 @@ export default async function Image({
         Integration
       </div>
 
-      {/* The page H1 ("rightmodeler + <name>"), broken after the plus as on the originals. */}
       <div
         style={{
           position: "absolute",

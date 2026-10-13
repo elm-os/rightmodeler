@@ -1,6 +1,3 @@
-// Small structured-data + metadata helpers shared by the marketing / SEO pages, so schema.org markup
-// and canonical URLs stay consistent with the blog's pattern (see app/blog/[slug]/page.tsx).
-
 import type { Metadata } from "next";
 import {
   CONTACT_EMAIL,
@@ -17,7 +14,6 @@ import {
 } from "@/lib/site";
 import { markdownSiblingPath } from "@/lib/markdown-routes";
 
-// BreadcrumbList JSON-LD for a top-level page: Home → this page.
 export function breadcrumbLd(name: string, path: string) {
   return {
     "@context": "https://schema.org",
@@ -29,11 +25,7 @@ export function breadcrumbLd(name: string, path: string) {
   };
 }
 
-// Discovery hints for the alternate representations of a page. `alternates` replaces the object
-// wholesale rather than merging with the layout's, so the plain-text entries have to be repeated
-// here: without them the layout's /llms.txt and /humans.txt hints reach no real page.
-// text/markdown points at the .md sibling; the same content is also reachable at this URL via
-// Accept negotiation (see src/proxy.ts).
+// `alternates` replaces the layout's wholesale, so the /llms.txt and /humans.txt hints repeat here.
 export function alternatesFor(
   path: string,
 ): NonNullable<Metadata["alternates"]> {
@@ -51,10 +43,8 @@ export function alternatesFor(
   };
 }
 
-// The one Organization node for the whole graph. Emitted on the home page (where verifiers look)
-// and on /about and /contact; the shared @id merges them into a single entity instead of reading
-// as three organizations. No postal address: the project does not publish one, and a fabricated
-// address is worse than none.
+// The shared @id merges the Organization nodes on / (where verifiers look), /about and /contact
+// into one entity. No postal address: the project does not publish one.
 export const ORGANIZATION_ID = `${SITE_URL}/#organization`;
 
 export function organizationLd() {
@@ -114,12 +104,8 @@ export function socialImage(url: string, alt: string) {
   };
 }
 
-// Page metadata in the house style: the layout template appends "· rightmodeler" to `title`; the
-// OG/Twitter cards carry the fully-branded title and a large social image. `path` is the canonical
-// route (e.g. "/how-it-works"); lower-priority pages fall back to the site-wide social card.
-// `image: null` leaves the card to the route's own opengraph-image file: Next only applies a
-// file-based image when openGraph.images is absent (the twitter card then inherits it), so the key
-// is left out entirely rather than defaulted.
+// `title` is unbranded: the layout template appends the brand, and the cards carry it in full.
+// `image: null` leaves `images` out, since Next applies a route's opengraph-image file only then.
 export function pageMetadata({
   title,
   description,

@@ -1,9 +1,3 @@
-// Post: "How an AI gateway can invalidate your model evaluation." An engineering guide built on the
-// gateway provenance fixtures in harness/fixtures/gateways and the tests that read them. Every
-// response shown is a fixture at the pinned commit, labeled by how it was produced (captured from a
-// running gateway, written from pinned vendor source, hermetic stub test, live provider test). Vendor
-// behavior is attributed to the vendor's own docs or source at the pinned tag. Registered in ./index.
-
 import {
   A,
   Code,
@@ -930,8 +924,7 @@ pnpm --filter @rightmodeler/replay exec vitest run src/provenance.test.ts`}</Cod
   );
 }
 
-// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
-// Body above by hand.
+// Kept in sync with Body above by hand.
 export const markdown = `# How an AI gateway can invalidate your model evaluation.
 
 You want to know whether a cheaper model can take over a step in your application. So you send the step's recorded inputs to the candidate through the gateway that already fronts your traffic, grade what comes back, and read the score. Every call returns HTTP 200. Some of those answers were not written by the candidate.

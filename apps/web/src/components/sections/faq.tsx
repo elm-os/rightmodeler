@@ -1,5 +1,4 @@
-// FAQ block: a visible, crawlable list of Q&As. Monochrome <dl> with ash-border dividers; no
-// accordion JS, so every answer ships in the initial HTML for search and AI crawlers.
+// No accordion JS: every answer ships in the initial HTML for search and AI crawlers.
 
 import { Reveal } from "@/components/reveal";
 

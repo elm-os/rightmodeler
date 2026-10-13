@@ -1,14 +1,7 @@
 "use client";
 
-// AgentPrCard — the /agent page's signature artifact: the pull request the agent opens, rendered
-// as a faithful monochrome record (product vernacular, not GitHub cosplay: no avatars, no merge
-// button, no traffic-light hues). The one bold move is the assembly order — the card builds its
-// case the way the agent does, evidence rows before the verdict number — via a single staggered
-// whileInView cascade. The savings figure is gated by useInView so the count-up runs when seen,
-// not on mount, with an invisible twin reserving the final width. The model pair and the 85% are
-// factual: OpenAI list prices as of July 2026 put gpt-5.6 at $5/$30 per 1M tokens and
-// gpt-5.4-mini at $0.75/$4.50, an 85% per-token cut on both input and output. Quality, latency,
-// and trace-count figures remain illustrative and the title bar stamps them as such.
+// The model pair and the 85% are factual: OpenAI list prices as of July 2026.
+// Quality, latency and trace-count figures are illustrative, and the title bar stamps them as such.
 
 import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
@@ -18,8 +11,6 @@ import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 // Strong ease-out curve (docs/design.md § Motion) as a motion-friendly tuple.
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-// One label/value line in the evidence block. The fixed label column keeps values aligned so the
-// rows read as one record, without hand-set leading or an off-scale grid.
 function Row({
   label,
   children,
@@ -35,7 +26,6 @@ function Row({
   );
 }
 
-// A passed check: ink glyph for the eye, spoken label for screen readers.
 function Check({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-baseline gap-1.5 font-mono text-[13px] text-driftwood">
@@ -51,11 +41,8 @@ function Check({ children }: { children: React.ReactNode }) {
 export function AgentPrCard() {
   const reduce = useReducedMotion();
   const numberRef = useRef<HTMLDivElement>(null);
-  // Fire the count-up when the savings block is actually seen (once), not on page mount.
   const numberInView = useInView(numberRef, { once: true, margin: "-64px" });
 
-  // Parent orchestrates; children share one variant pair. Under reduced motion the cascade keeps
-  // its meaning (the card still builds its case) but moves nothing — opacity only, tighter stagger.
   const container = {
     hidden: {},
     show: {
@@ -82,7 +69,6 @@ export function AgentPrCard() {
       whileInView="show"
       viewport={{ once: true, margin: "-64px" }}
     >
-      {/* Title bar — artifact name (left), honesty stamp (right). Same grammar as the hero ledger. */}
       <div className="flex items-center justify-between gap-4 border-b border-ash-border px-4 py-2">
         <span className="min-w-0 truncate font-mono text-caption text-driftwood">
           rightmodeler agent · pull request
@@ -93,14 +79,12 @@ export function AgentPrCard() {
       </div>
 
       <div className="divide-y divide-ash-border">
-        {/* PR title. */}
         <motion.div data-reveal variants={block} className="px-4 py-3">
           <p className="font-sans text-body font-medium text-midnight-ink">
             swap: summarize step to gpt-5.4-mini
           </p>
         </motion.div>
 
-        {/* Evidence rows — the case, before the verdict. */}
         <motion.div
           data-reveal
           variants={block}
@@ -122,7 +106,6 @@ export function AgentPrCard() {
           </Row>
         </motion.div>
 
-        {/* The diff itself — recessed mono slab, glyphs and ink only (no red/green, ever). */}
         <motion.div data-reveal variants={block} className="px-4 py-3">
           <div className="overflow-x-auto rounded-lg border border-ash-border bg-midnight-ink/5 p-2.5 font-mono text-[13px]">
             <div className="min-w-max">
@@ -137,8 +120,7 @@ export function AgentPrCard() {
           </div>
         </motion.div>
 
-        {/* The verdict number — counts up only once it is actually in view. The invisible twin
-            reserves the final width so the line never reflows as digits grow. */}
+        {/* The invisible twin reserves the final width so the line never reflows. */}
         <motion.div data-reveal variants={block} className="px-4 py-3">
           <div ref={numberRef}>
             <span className="relative inline-block font-display text-heading text-midnight-ink">
@@ -160,7 +142,6 @@ export function AgentPrCard() {
         </motion.div>
       </div>
 
-      {/* Footer — the checks that ran before this PR existed. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-ash-border px-4 py-2">
         <Check>replay: 214 traces</Check>
         <Check>judge: pass</Check>

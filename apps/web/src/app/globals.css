@@ -1,12 +1,6 @@
 @import "tailwindcss";
 
-/*
-  rightmodeler design tokens — see docs/design.md for the full system.
-
-  Warm, paper-toned, editorial. Interactive UI is strictly monochrome; the two
-  accent hues (Void Violet, Ember Orange) are decorative/illustration only and
-  never appear on buttons, links, or state. Light theme only — no dark variant.
-*/
+/* Design tokens: see docs/design.md. Light theme only. */
 @theme {
   /* Colors */
   --color-parchment-white: #fdfcfc; /* page canvas — dominant background */
@@ -19,9 +13,8 @@
   --color-void-violet: #0447ff; /* decorative accent — illustration only */
   --color-ember-orange: #ff4704; /* decorative accent — illustration only */
 
-  /* Font families — loaded via next/font in app/layout.tsx. The licensed brand
-     face leads each stack; the free substitute follows, so dropping in real
-     Waldenburg / WaldenburgFH files later needs no code change here. */
+  /* Loaded via next/font in app/layout.tsx. The licensed brand face leads each stack,
+     so the real files can be dropped in without a change here. */
   --font-sans:
     var(--font-inter), ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -35,9 +28,7 @@
     var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
 
-  /* Type scale — each size carries its own line-height and letter-spacing (and
-     weight, for the display sizes). Use the semantic text-* utilities so leading
-     and tracking never need ad-hoc values. */
+  /* Each size carries its own line-height and letter-spacing: use the text-* utilities. */
   --text-caption: 10px;
   --text-caption--line-height: 1.4;
   --text-caption--letter-spacing: 0.1px;
@@ -69,11 +60,7 @@
   --text-display--letter-spacing: -0.96px;
   --text-display--font-weight: 300;
 
-  /* Motion — strong custom easings for deliberate/signature motion (see
-     docs/design.md § Motion & interaction). Exposed both as utilities
-     (ease-out-strong / ease-in-out-strong / ease-drawer) and as var(--ease-*).
-     Tailwind's built-in ease-out / ease-in-out utilities are untouched.
-     UI motion stays crisp and under 300ms; never use ease-in for UI. */
+  /* See docs/design.md § Motion. Tailwind's own ease-out / ease-in-out are untouched. */
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
@@ -109,9 +96,7 @@ body {
   letter-spacing: 0.05em;
 }
 
-/* Continuous marquee for the "works-with" source row. Duplicate the content and
-   translate by -50% so the loop is seamless. Decorative — pauses on hover and
-   is disabled under reduced-motion. */
+/* Marquee for the sources row: the content is duplicated and translated by -50%. */
 @keyframes marquee {
   to {
     transform: translateX(-50%);

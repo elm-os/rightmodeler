@@ -1,36 +1,19 @@
-// The shape every integration page renders from: one JSON file per tool in ./data, typed here and
-// collected by the registry (./index) so the /integrations hub and each /integrations/[slug] route
-// resolve from one source. Add an integration = add a JSON file + one line in ./index.
-//
-// The type is deliberately JSON-friendly: plain strings, booleans, arrays, nested objects, and no
-// literal unions (a JSON import infers its strings as `string`, which would not assign to a union).
-// Allowed values for the string "enums" are documented on each field instead.
+// No literal unions on purpose: a JSON import infers its strings as `string`, which would not
+// assign to one. Allowed values for the string "enums" are documented on each field instead.
 
 export type IntegrationData = {
-  /** URL segment: /integrations/<slug>. Also the sitemap + canonical key. */
   slug: string;
-  /** Display name, e.g. "LangSmith". Feeds "rightmodeler + <name>", hub rows, and related links. */
   name: string;
   /** The vendor's official site, linked from the hero and the Markdown twin. Must be https://. */
   website: string;
-  /**
-   * Official mark shown on the hub card: a file under public/integrations/logos, e.g.
-   * "/integrations/logos/langsmith.svg".
-   */
+  /** A file under public/integrations/logos, e.g. "/integrations/logos/langsmith.svg". */
   logo: string;
   /**
-   * How the tool relates to rightmodeler; switches which sections render and picks the hub band.
-   * scripts/check-integrations.test.mjs rejects any value not listed here.
-   * One of: "trace-source" (dedicated ingest adapter) | "trace-source-generic" (autodetected,
-   * generic adapter) | "replay-engine" (OpenRouter or Vercel AI Gateway) |
-   * "replay-method" (LiteLLM proxy) | "execution-backend" (where confirmation runs your
-   * pipeline) | "evaluator" (external scorers that grade the replays) | "source-control" (where
-   * the swap pull request opens) | "ci-recipe" (running the audit from CI) | "code-context"
-   * (static code context beside the evidence) | "coming-soon" (not built yet; the page says
-   * exactly what exists today).
+   * Picks the hub band. One of: "trace-source" | "trace-source-generic" | "replay-engine" |
+   * "replay-method" | "execution-backend" | "evaluator" | "source-control" | "ci-recipe" |
+   * "code-context" | "coming-soon". scripts/check-integrations.test.mjs rejects any other value.
    */
   category: string;
-  /** Mono kicker under the eyebrow, e.g. "Trace source · dedicated adapter", "Replay engine". */
   categoryLabel: string;
   /** <title> (the layout appends "· rightmodeler"). Keyword-rich, ≈45–55 chars; may differ from H1. */
   title: string;
@@ -38,31 +21,19 @@ export type IntegrationData = {
   description: string;
   /** The page H1, fixed pattern: "rightmodeler + <Name>". */
   h1: string;
-  /** Hero lede: one or two tool-specific sentences under the H1. */
   lede: string;
-  /** TL;DR paragraph near the top: the direct answer to the search intent. */
   tldr: string;
   /** "How it works with <name>": 3–5 steps. `label` is the mono tag, e.g. "01 · Export". */
   steps: { label: string; title: string; body: string }[];
-  /**
-   * Setup block. The standard install command renders first on every page (from lib/site
-   * RUN_COMMAND, so it can never drift); `commands` lists the tool-specific ones after it.
-   */
   setup: { intro: string; commands: { comment: string; command: string }[] };
-  /**
-   * "What rightmodeler reads from <name>": normalized-field → source-field rows, taken from the
-   * skill's trace-format mapping. Empty array hides the section (non-trace categories).
-   */
+  /** Empty array hides the section (non-trace categories). */
   reads: { field: string; source: string }[];
-  /** Autodetection keys shown as mono chips, e.g. "run_type · trace_id · parent_run_id". Empty string hides. */
+  /** Autodetection keys, e.g. "run_type · trace_id · parent_run_id". Empty string hides. */
   detection: string;
-  /** 2–4 concrete use cases for the combination. */
   useCases: { title: string; body: string }[];
   /** "The honest part": limits and what-this-is-not, in complete sentences. At least two. */
   limits: string[];
-  /** FAQ, 4–6 items, rendered as the visible accordion. */
   faq: { q: string; a: string }[];
-  /** 2–3 sibling slugs for the Related row (resolved to names at render time). */
   related: string[];
   /** CTA variant. One of: "github" (live skill install) | "crucible" (waitlist). */
   cta: string;

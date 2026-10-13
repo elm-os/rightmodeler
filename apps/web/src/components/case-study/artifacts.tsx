@@ -1,10 +1,3 @@
-// Case-study kit: the article masthead, the framed mono "window" artifacts (stats, routing
-// policies, key-value ledgers), and the listing card used on the landing band and /case-study
-// index. Follows the hero ApprovalTable grammar (warm-sand window, ash-border hairlines, mono
-// data, tabular numerals) and the blog PostHeader/post-card treatments, so a case study reads
-// as the same product surface as a post. Server components composing client primitives only;
-// strictly monochrome, with the customer's own mark confined to the logo plate and cards.
-
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -13,9 +6,7 @@ import { Reveal } from "@/components/reveal";
 import type { CaseStudy } from "@/content/case-studies";
 import { formatPostDate } from "@/lib/site";
 
-// Article masthead: PostHeader's markup with the company byline in the author slot, and the hero
-// art carrying a small parchment plate with the customer's logo (the mark stays crisp, never
-// baked into the artwork).
+// PostHeader's markup (blog/post-header.tsx) with the company byline in the author slot.
 export function CaseStudyHeader({ study }: { study: CaseStudy }) {
   return (
     <header className="pt-16 pb-10 sm:pt-24 sm:pb-14">
@@ -65,8 +56,6 @@ export function CaseStudyHeader({ study }: { study: CaseStudy }) {
   );
 }
 
-// The framed mono window every case-study figure sits in: title bar with the artifact name (left)
-// and a methodology fact (right), hairline-divided body, optional provenance footer.
 export function Artifact({
   title,
   meta,
@@ -102,8 +91,6 @@ export function Artifact({
   );
 }
 
-// One big number and its mono label. The value renders as children so a page can pass either a
-// static tabular span or an AnimatedNumber; both inherit the display face from the wrapper.
 export function StatCell({
   label,
   children,
@@ -123,8 +110,6 @@ export function StatCell({
 
 const ROUTE_GRID = "11rem minmax(0, 1fr)";
 
-// Routing-policy rows: mono route id (ink) against what it covers (driftwood). Desktop keeps a
-// two-column grid with a header row; on phones each route stacks so nothing scrolls sideways.
 export function RouteRows({
   rows,
 }: {
@@ -170,8 +155,6 @@ export function RouteRows({
   );
 }
 
-// Key-value ledger rows (label left, tabular value right). A `strong` row is the punchline and
-// lifts to ink + medium, the same emphasis move the hero ledger uses for its abstain verdict.
 export function KVRows({
   rows,
 }: {
@@ -204,8 +187,7 @@ export function KVRows({
   );
 }
 
-// Listing card for the landing band and the /case-study index: the post-card treatment (whole
-// card is the link, hover deepens the surface, press compresses) with the customer logo up top.
+// The blog/post-card.tsx treatment with the customer logo up top.
 export function CaseStudyCard({
   study,
   titleAs: Title = "h3",

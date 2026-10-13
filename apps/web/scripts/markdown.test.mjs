@@ -1,9 +1,4 @@
-// Structural gates for the Markdown representation. Filesystem and source-text assertions only,
-// in the style of check-vs.test.mjs: the content modules are .tsx importing React components and
-// cannot load in plain Node.
-//
-// The point of these tests is that adding a page and forgetting one of its registration points
-// turns the suite red instead of shipping a page agents cannot read.
+// Content modules that import React cannot load in plain Node: assert on their source text instead.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -106,8 +101,7 @@ test("every marketing route is registered in the sitemap, llms.txt, and the foot
   const llms = read("src/lib/llms.ts");
   const footer = read("src/components/sections/footer.tsx");
 
-  // /feedback is deliberately noindex, so the sitemap omits it. The hubs are listed by their own
-  // sections rather than in the flat page arrays.
+  // /feedback is deliberately noindex, so the sitemap omits it.
   const SITEMAP_EXEMPT = new Set([
     "/",
     "/feedback",
@@ -176,7 +170,6 @@ test("markdownSiblingPath and markdownHandlerPath agree on the root", () => {
   assert.equal(markdownHandlerPath("/"), "/md");
   assert.equal(markdownSiblingPath("/about"), "/about.md");
   assert.equal(markdownHandlerPath("/about"), "/md/about");
-  // Trailing slashes are normalized away before either mapping.
   assert.equal(markdownHandlerPath("/about/"), "/md/about");
 });
 
@@ -249,10 +242,7 @@ test("the 404 body points agents at the index files", () => {
 });
 
 test("the Markdown handler stays out of /api/, and robots keeps it uncrawlable", () => {
-  // Regression guard. When this handler lived at /api/markdown it returned 200 on GET, which
-  // readiness scanners read as evidence of a public HTTP API. This site has none, and being
-  // judged as though it did activated checks it cannot pass. Keep the rewrite target off /api/
-  // and out of the crawl.
+  // Readiness scanners read a GET-serving /api/* path as a public HTTP API, and this site has none.
   assert.ok(
     !MARKDOWN_HANDLER_BASE.startsWith("/api"),
     `the Markdown handler is at ${MARKDOWN_HANDLER_BASE}; a GET-serving /api/* path reads as a public API`,
@@ -270,7 +260,6 @@ test("the Markdown handler stays out of /api/, and robots keeps it uncrawlable",
     );
   }
 
-  // The public .md siblings must stay crawlable: they are the advertised representation.
   assert.ok(
     !robots.includes('".md"'),
     "the .md siblings must not be disallowed; they are what rel=alternate points at",
@@ -347,8 +336,7 @@ test("a comparison with an integration ends its stack section with the setup gui
       continue;
     }
     const line = `Setup guide: ${SITE_URL}/integrations/${page.integrationSlug}`;
-    // Blocks such as positioning carry no h2, so anchor on the stack's own last line instead of
-    // slicing to the next heading: the setup guide must follow it directly.
+    // Blocks such as positioning carry no h2, so anchor on the stack's own last line.
     for (const block of page.blocks.filter((b) => b.type === "stack")) {
       const last = block.commands?.length
         ? `${block.commands.at(-1).command}\n\`\`\``

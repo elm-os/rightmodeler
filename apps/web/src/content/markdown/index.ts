@@ -1,13 +1,4 @@
-// One entry point resolving any site path to its Markdown representation.
-//
-// Three sources, in order of fidelity:
-//   1. Templated families resolve from their own registries, so adding a page to a family
-//      (a new /vs, /integrations, or blog entry) yields Markdown with no extra work.
-//   2. Hub pages render from the same registries their routes use.
-//   3. One-off pages carry a co-located `markdown` export next to their copy in ./pages.
-//
-// The markdown route handler throws at build time for any known route this returns undefined
-// for, so a page can never ship without a Markdown representation.
+// The /md route handler throws at build time for any known route getMarkdown leaves undefined.
 
 import { getPost } from "@/content/blog";
 import {
@@ -35,8 +26,7 @@ const HUBS: Record<string, () => string> = {
   "/case-study": renderCaseStudyIndexMarkdown,
 };
 
-// Prefix every representation with its canonical URL. This is the Markdown-native stand-in for a
-// canonical link, and it is the convention buildLlmsContext() already uses.
+// The Markdown stand-in for a canonical link, in the format buildLlmsContext() already uses.
 function withSource(path: string, body: string): string {
   return `Source: ${SITE_URL}${path}\n\n${body}\n`;
 }
@@ -72,7 +62,6 @@ export function getMarkdown(pathname: string): string | undefined {
   return undefined;
 }
 
-// Every path that has a Markdown representation, for generateStaticParams.
 export function allMarkdownPaths(): string[] {
   return [
     ...STATIC_MARKDOWN_PATHS,
@@ -82,8 +71,6 @@ export function allMarkdownPaths(): string[] {
   ];
 }
 
-// The recovery document an agent gets on an unknown path. Generated rather than authored so the
-// links can never drift from the routes that exist.
 export function notFoundMarkdown(pathname: string): string {
   return `# 404: not found
 
