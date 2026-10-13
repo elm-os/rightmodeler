@@ -1,21 +1,14 @@
-// HTTP content negotiation for the Markdown representation of every page, per acceptmarkdown.com
-// (RFC 9110 section 12.5.1, RFC 7763). Pure and import-free on purpose: src/proxy.ts stays a thin
-// shell, and scripts/negotiate.test.mjs imports this file directly under Node's type stripping.
+// Import-free on purpose: scripts/negotiate.test.mjs loads this file under Node's type stripping.
 
-// The representations this site can produce, in server-preference order. A tie on both q and
-// specificity resolves to the first entry, so a bare `text/*` or `*/*` gets HTML.
+// Server-preference order: a tie on q and specificity goes to the first, so a bare `*/*` gets HTML.
 export const PRODUCES = ["text/html", "text/markdown"] as const;
 export type Representation = (typeof PRODUCES)[number];
 
 // Deprecated pre-registration spelling (RFC 7763 superseded it). Accepting it costs nothing.
 const MARKDOWN_ALIASES = new Set(["text/markdown", "text/x-markdown"]);
 
-// Next emits these four itself (base-server.js setVaryHeader, via appendHeader). We write the
-// union rather than just "Accept" so the header stays correct whether the platform appends ours
-// to Next's or replaces them. Duplicate tokens are legal: Vary is a token set, and Next
-// explicitly whitelists multi-value vary in send-response.js. Next-URL is deliberately absent:
-// it is only added for interception routes, and this app has none, so listing it would fragment
-// the RSC cache for nothing.
+// Accept plus the four Next emits itself, so the header holds whether the platform appends ours or
+// replaces Next's (duplicates are legal). No Next-URL: Next adds it only for interception routes.
 export const VARY =
   "Accept, RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Router-Segment-Prefetch";
 
@@ -27,8 +20,6 @@ export type AcceptRange = {
   specificity: 1 | 2 | 3;
 };
 
-// Split an Accept header into ranges, preserving client order. Unparseable entries are dropped
-// rather than throwing: a malformed header means "no usable constraint", never a 406.
 export function parseAccept(header: string | null | undefined): AcceptRange[] {
   if (!header) return [];
   const ranges: AcceptRange[] = [];
@@ -43,8 +34,7 @@ export function parseAccept(header: string | null | undefined): AcceptRange[] {
     const subtype = mediaType.slice(slash + 1);
     if (type.includes(" ") || subtype.includes(" ")) continue;
 
-    // Find the parameter literally named q. It is not always first: a client may legitimately
-    // send `text/markdown;charset=utf-8;q=0.9`.
+    // q is not always the first parameter: `text/markdown;charset=utf-8;q=0.9` is legal.
     let q = 1;
     for (const param of parts.slice(1)) {
       const eq = param.indexOf("=");
@@ -68,18 +58,14 @@ function rangeMatches(range: AcceptRange, mediaType: string): boolean {
   if (range.type !== type) return false;
   if (range.subtype === "*") return true;
   if (range.subtype === subtype) return true;
-  // `Accept: text/x-markdown` should reach the markdown representation.
   return (
     mediaType === "text/markdown" &&
     MARKDOWN_ALIASES.has(`${range.type}/${range.subtype}`)
   );
 }
 
-// The single most specific range that matches `mediaType`, which is the one whose q counts.
-// RFC 9110 12.5.1: a more specific range overrides a less specific one regardless of q, so
-// `text/html;q=0, */*;q=1` rejects HTML instead of letting the wildcard rescue it. Among ranges
-// of equal specificity the highest q wins (the RFC leaves duplicates open; being generous to the
-// client is the safer reading).
+// RFC 9110 12.5.1: the most specific matching range decides whatever its q, so `text/html;q=0, */*`
+// rejects HTML. Among equally specific ranges the highest q wins (the RFC leaves duplicates open).
 export function matchRange(
   mediaType: string,
   ranges: AcceptRange[],
@@ -144,8 +130,6 @@ export type ProxyAction =
   | { type: "rewrite"; destination: string }
   | { type: "reject"; status: 406; body: string; contentType: string };
 
-// The whole proxy decision as a pure function, so the routing logic is unit-testable and
-// src/proxy.ts holds nothing but NextResponse plumbing.
 export function decideProxyAction(input: {
   pathname: string;
   accept: string | null | undefined;

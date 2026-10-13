@@ -1,11 +1,5 @@
-// Markdown representations for the one-off pages: the ones that are not members of a templated
-// family (/blog, /vs, /integrations) and so have no registry to generate from.
-//
-// Adding a page: create ./<slug>.ts exporting `markdown`, register it below, and add the route
-// to STATIC_MARKDOWN_PATHS in @/lib/markdown-routes. The build fails until all three are done.
-//
-// Keep each twin faithful to the page it mirrors. scripts/markdown.test.mjs asserts the page's
-// title, lede, and every string in its top-level content constants appear here.
+// Adding a page: create ./<slug>.ts exporting `markdown`, register it below, and add the route to
+// STATIC_MARKDOWN_PATHS in @/lib/markdown-routes. The build fails until all three are done.
 
 import { markdown as home } from "@/content/pages/home";
 import { markdown as about } from "@/content/pages/about";

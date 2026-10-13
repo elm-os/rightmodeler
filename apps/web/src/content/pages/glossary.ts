@@ -1,5 +1,4 @@
-// Markdown twin of the /glossary route (src/app/glossary/page.tsx). Keep in sync with the TERMS
-// and THEMES constants there: every term, every definition, and every theme intro.
+// Markdown twin of /glossary: keep in sync with TERMS and THEMES in src/app/glossary/page.tsx.
 
 import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 

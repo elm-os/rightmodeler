@@ -14,7 +14,6 @@ export const metadata: Metadata = pageMetadata({
   path: "/terms",
 });
 
-// Same quiet treatment as the privacy policy: no gradient, prose primitives, dated mono kicker.
 export default function TermsPage() {
   return (
     <PageShell>

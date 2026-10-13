@@ -1,5 +1,4 @@
-// Compatibility redirect for the former, overstated /llms-full.txt name. The underlying bundle is
-// a curated overview and full blog archive, now served at the accurately named /llms-context.txt.
+// Compatibility redirect: /llms-full.txt is the old name of /llms-context.txt.
 
 export function GET() {
   return new Response("This file moved to /llms-context.txt.\n", {

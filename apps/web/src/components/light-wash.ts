@@ -1,18 +1,4 @@
-// The light wash: the numbers band's backdrop, painted by a WebGPU fullscreen pass
-// (vgpu) as one physical light source at the center of the panel's bottom edge.
-// The CSS radial-gradient washes it replaces interpolate their stops in gamma space
-// along a piecewise-linear ramp, which reads as a flat banded tint; this pass
-// computes radiance in linear light with an analytic falloff (inverse-square with a
-// soft core, plus a wide ambient term so the far corners keep a faint tint), cools
-// the hue with distance, rolls the result through an exponential shoulder that
-// always leaves paper showing, then gamma-encodes and dithers. It reads as light.
-//
-// The component keeps its CSS washes as the no-WebGPU/SSR fallback; this canvas
-// fades in over them once the first frame is on screen. Palette crossfades are
-// CPU-lerped in linear space over the same 450ms window the particle engine uses,
-// so backdrop and particles move in lockstep. The light also leans gently toward
-// the pointer the particles already track, so the two read as one scene. Reduced
-// motion renders settled frames at a breath-neutral phase and never runs a loop.
+// The numbers band's WebGPU backdrop (vgpu). Its CSS washes remain the SSR and no-WebGPU fallback.
 
 import { clock, effect, frame, frameLoop, init, surface } from "vgpu";
 import type { Clock, Effect, FrameLoopHandle, Gpu, Surface } from "vgpu";
@@ -20,23 +6,16 @@ import type { PaletteName } from "@/components/trace-field-engine";
 
 // Matches the particle engine's crossfade window so the two fade in lockstep.
 const PALETTE_FADE_MS = 450;
-// Settled-frame time: the breath term is exactly neutral (sin(2*pi*12/8) = 0) and
-// the shimmer lobes land in a pleasing asymmetric pose. Same idea as the hero's
-// frozen grain frame.
+// Settled-frame time in seconds: the breath term is exactly neutral (sin(2*pi*12/8) = 0).
 const FROZEN_T = 12;
 // The pass is ~20 ALU ops; 60fps keeps the pointer-following sway silky.
 const FPS = 60;
-// Pointer smoothing rates, per second. High rates so the response reads as
-// immediate (a follow time constant near 55ms) while still gliding; the energy
-// blooms in fast and lets go more gently, so leaving never snaps.
+// Pointer smoothing rates, per second.
 const POINTER_FOLLOW = 18;
 const ENERGY_ATTACK = 14;
 const ENERGY_RELEASE = 4;
 
-// The light's palette: the CSS wash stops compressed to three hues plus exposure.
-// Core absorbs the wash's warm near stops (a hot core desaturates toward white),
-// mid carries the palette's identity, far is the terminal tint that reaches the
-// corners. Exposure trims perceived weight (deep blue carries more per unit).
+// Hues by distance from the light; exposure trims perceived weight (deep blue carries more).
 const LIGHT_PALETTES: Record<
   PaletteName,
   { core: string; mid: string; far: string; exposure: number }
@@ -54,9 +33,7 @@ type LightColors = {
   exposure: number;
 };
 
-// Colors go to the shader in linear light, converted once here, so the crossfade
-// lerp happens in linear space (gamma-space lerping is what muddies CSS washes)
-// and the shader does zero decode work.
+// Colors reach the shader in linear light, so the crossfade lerps in linear space.
 function hexToLinear(hex: string): [number, number, number] {
   const v = parseInt(hex.slice(1), 16);
   return [
@@ -93,8 +70,7 @@ function mixColors(a: LightColors, b: LightColors, k: number): LightColors {
   };
 }
 
-// Kept free of template interpolation so the exact string can be extracted and
-// validated with `npx vgpu check` (next build never validates WGSL).
+// No template interpolation: `npx vgpu check` validates this exact string (next build never does).
 const LIGHT_WGSL = /* wgsl */ `
 struct Params {
   frame: vec4f,   // x,y canvas size in physical px; z time in seconds; w unused
@@ -250,7 +226,6 @@ export function createLightWash(
   let paletteTo = paletteFrom;
   let paletteStart = -1e9;
 
-  // Pointer follow state: raw target from events, smoothed values in the shader.
   let targetX = 0;
   let targetY = 0;
   let targetEnergy = 0;
@@ -289,7 +264,6 @@ export function createLightWash(
     });
   };
 
-  // Renders one settled frame; resolves once the submitted GPU work completes.
   const renderOnce = (): Promise<void> | undefined => {
     const g = gpu;
     const s = canvasSurface;
@@ -347,23 +321,18 @@ export function createLightWash(
       fx = e;
       time = clock(g);
       unsubResize = s.onResize(() => {
-        // Resize callbacks land inside a frame boundary, where a synchronous
-        // frame() would nest and throw; queue the settled-frame redraw instead.
-        // The animated loop reads the new size on its next tick by itself.
+        // Resize callbacks land inside a frame boundary, where a synchronous frame() would throw.
         requestAnimationFrame(() => {
           if (!disposed && !running) renderOnce();
         });
       });
-      // Ready once the first frame's GPU work completes, so the canvas holds a
-      // real image before the component fades it in over the CSS washes. The
-      // frame's own done promise, not requestAnimationFrame: rAF never fires
+      // Await the frame's own done promise, not requestAnimationFrame: rAF never fires
       // in an occluded window, and readiness must not depend on visibility.
       await renderOnce();
       if (!disposed) options.onReady?.();
       if (shouldRun && !reduced) startLoop();
     } catch (err) {
-      // Unlike a missing-WebGPU init throw (expected, silent), a failure after
-      // init is a bug worth surfacing; the CSS washes still cover the visuals.
+      // A failure after init is a bug worth surfacing; the CSS washes still cover the visuals.
       console.error("light-wash:", err);
       g.dispose();
       gpu = undefined;
@@ -371,8 +340,7 @@ export function createLightWash(
   })();
 
   return {
-    // Mirrors TraceField.setPalette: fold the current mid-fade color into the
-    // new fade's start, so rapid palette clicks never snap.
+    // Mirrors TraceField.setPalette: fading from the mid-fade color means rapid clicks never snap.
     setPalette(name) {
       const now = performance.now();
       paletteFrom = mixColors(paletteFrom, paletteTo, fadeK(now));

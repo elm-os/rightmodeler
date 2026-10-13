@@ -313,9 +313,7 @@ export function toWireMessages(
 
 // The judge compares the candidate's text with the recorded answer's text. A
 // recorded output that is one assistant message of text (alone, as a
-// response's only choice, or as a one-item list) is shown as that text, read
-// the way toWireMessages reads a recorded message. Tool calls, parts other than
-// text and several messages keep the recorded JSON.
+// response's only choice, or as a one-item list) is shown as that text.
 function recordedAnswerText(output: JsonValue): string {
   if (typeof output === "string") return output;
   const objectOf = (value: JsonValue | undefined) =>

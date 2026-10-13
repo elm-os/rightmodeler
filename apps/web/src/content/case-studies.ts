@@ -1,19 +1,12 @@
-// Case-study registry: the card-level facts each surface needs (landing band, /case-study index,
-// metadata, JSON-LD). The full article bodies live in their route files under app/case-study/;
-// this file only carries what is shared, so the two never drift. Every figure here is quoted
-// verbatim from the customer engagement write-ups.
+// Every figure here is quoted verbatim from the customer engagement write-ups.
 
 export type CaseStudy = {
   slug: string;
   company: string;
   website: string;
-  /** Article h1, also the OG/JSON-LD headline. */
   title: string;
-  /** Card headline: the anchor number first. */
   headline: string;
-  /** Card supporting line. */
   excerpt: string;
-  /** Mono footer line on the card. */
   tagline: string;
   /** Meta description, shared with llms.txt. */
   description: string;
@@ -21,9 +14,7 @@ export type CaseStudy = {
   readingMinutes: number;
   logo: { src: string; alt: string; width: number; height: number };
   hero: { src: string; alt: string };
-  /** Leadership quote for the landing testimonial band and the article close. The identity
-      fields feed the schema.org Person on the case-study Article (researched, verified links
-      only; a wrong sameAs is worse than none). */
+  /** sameAs feeds the schema.org Person: verified links only, a wrong one is worse than none. */
   testimonial: {
     quote: string;
     name: string;
@@ -32,9 +23,7 @@ export type CaseStudy = {
     jobTitle: string;
     sameAs: string[];
     org: { name: string; url: string; sameAs: string[] };
-    /** Our own note on what the customer's figures rest on. The quote is theirs and is
-        reproduced verbatim; this line is company voice, so it carries the sample size a
-        reader needs to weigh the numbers. */
+    /** Company voice, unlike the verbatim quote: carries the sample size the figures rest on. */
     evidenceNote?: string;
   };
 };

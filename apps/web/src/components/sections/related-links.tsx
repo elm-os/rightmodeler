@@ -1,6 +1,4 @@
-// Cross-links to sibling pages — plain text links, not buttons. Underline affordance that deepens on
-// hover (the same treatment as inline prose links in blog/prose.tsx), a quiet mono "Related" kicker,
-// and no arrows. Keeps the internal link graph tight for readers and crawlers without decoration.
+// The same link treatment as the inline prose links in blog/prose.tsx.
 
 import Link from "next/link";
 import { Reveal } from "@/components/reveal";

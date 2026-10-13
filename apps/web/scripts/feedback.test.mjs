@@ -1,8 +1,4 @@
-// Tests for the rules both feedback routes share (src/lib/feedback.ts): how the form's body and a
-// coding agent's body are read, each rejection and its message, the caps, and the email a
-// submission becomes. Each route is one call into that module, so reading a body here is the
-// validation the route performs. Nothing here calls Resend or sends email. Node 24 strips types
-// natively, so the .ts module imports directly.
+// Node 24 strips types natively, so the .ts module imports directly.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -32,8 +28,6 @@ const NO_CONTACT = "The contact field must be a valid email address.";
 const capped = (name, max) =>
   `The ${name} field must be a string of at most ${max} characters.`;
 
-// The website form.
-
 test("the form's body is read into trimmed feedback", () => {
   assert.deepEqual(
     readFormFeedback(
@@ -49,7 +43,6 @@ test("the form's body is read into trimmed feedback", () => {
   );
 });
 
-// [raw body, expected error, why]
 const FORM_REJECTIONS = [
   ["{not json", "Invalid request.", "a body that is not JSON"],
   ["", "Invalid request.", "an empty body"],
@@ -116,8 +109,6 @@ test("the form's textarea stops at the cap the server enforces", () => {
     "feedback-form.tsx no longer caps its textarea at 5000 characters",
   );
 });
-
-// A coding agent.
 
 test("an agent needs only a message, and no email", () => {
   assert.deepEqual(readAgentFeedback(body({ message: " The run stopped. " })), {
@@ -193,7 +184,6 @@ test("every agent field is accepted at exactly its cap", () => {
   });
 });
 
-// [raw body, expected error, why]
 const AGENT_REJECTIONS = [
   ["{not json", NOT_JSON, "a body that is not JSON"],
   ["", NOT_JSON, "an empty body"],
@@ -248,8 +238,6 @@ for (const [raw, error, why] of AGENT_REJECTIONS) {
     assert.deepEqual(readAgentFeedback(raw), { error });
   });
 }
-
-// The email a submission becomes.
 
 const FORM_FEEDBACK = {
   via: "form",

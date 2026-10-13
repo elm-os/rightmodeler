@@ -1,8 +1,3 @@
-// Builders for the LLM-facing text endpoints (/llms.txt and /llms-context.txt), following the
-// llmstxt.org convention. Generated from the same site constants and post registry the rest of the
-// app uses, so they stay in sync as posts are added. The route handlers serve the output as
-// text/plain; charset=utf-8.
-
 import { getAllPosts } from "@/content/blog";
 import { getAllIntegrations } from "@/content/integrations";
 import { getAllComparisons } from "@/content/vs";
@@ -17,8 +12,7 @@ import {
   SKILL_COMMAND,
 } from "@/lib/site";
 
-// One-paragraph summary for the llms.txt blockquote. Stands alone: an LLM should grasp the whole
-// platform (skill, agent, Crucible) and the key caveat (the skill is a report, not a gateway).
+// The llms.txt blockquote. Stands alone: the whole platform, and the report-not-gateway caveat.
 const SUMMARY =
   "rightmodeler keeps AI agents on the right model at every step. The rightmodeler CLI, published on npm as rightmodeler, replays your real agent traces through cheaper models, measures each candidate against the output you accepted, reports the evidence, sample size, and abstentions, and ships approved swaps as a pull request you can roll back byte-exact. npx rightmodeler init finds the traces Claude Code and Codex already left on disk and runs free through shortlist; a coding-agent skill lets Claude Code and Codex-class agents drive the same CLI end to end. rightmodeler agent, MIT licensed in the same repo and self-hosted today (a hosted version has a waitlist), rechecks the provider catalog and prices weekly, watches approved swaps for drift, and opens evidence-backed model-change pull requests in your repo. Crucible, in development with a waitlist, is the analytics and optimization suite being built to show what every layer of your agent system costs, how fast it runs, and where it fails, and to keep your stack right-sized continuously. The CLI produces a report you run on your own traces, not a runtime gateway.";
 
@@ -47,7 +41,6 @@ Run it on your own traces:
 
 Source: ${REPO_URL} (open source, MIT licensed)`;
 
-// Marketing / SEO pages, listed so language models can discover and cite them alongside the posts.
 const PAGES: { path: string; title: string; description: string }[] = [
   {
     path: "/how-it-works",
@@ -146,9 +139,6 @@ const PAGES: { path: string; title: string; description: string }[] = [
   },
 ];
 
-// The developer surface, named so a model asked for rightmodeler's API docs, CLI reference, or
-// agent skill has real URLs to return. These files ship inside the published npm tarball; the
-// canonical copies live in the repository.
 const DEVELOPER_RESOURCES = `- [CLI documentation](${DOCS_URL}): Command reference, getting started, exit codes, evaluators, and Mode B. Ships with the npm package.
 - [Getting started](${docsFileUrl("getting-started.md")}): Install, point it at traces, and read the first report.
 - [Command reference](${docsFileUrl("commands.md")}): Every command and flag, generated from the CLI itself.
@@ -162,7 +152,6 @@ const pageLinks = PAGES.map(
   (page) => `- [${page.title}](${SITE_URL}${page.path}): ${page.description}`,
 ).join("\n");
 
-// Integration pages, resolved from the same registry the /integrations routes use.
 const integrationLinks = getAllIntegrations()
   .map(
     (integration) =>
@@ -170,7 +159,6 @@ const integrationLinks = getAllIntegrations()
   )
   .join("\n");
 
-// Comparison pages, resolved from the same registry the /vs routes use.
 const vsLinks = getAllComparisons()
   .map(
     (comparison) =>
@@ -178,8 +166,7 @@ const vsLinks = getAllComparisons()
   )
   .join("\n");
 
-// /llms.txt — curated index: H1, blockquote summary, a non-heading context line, then annotated
-// link sections. The reserved "## Optional" section points at the companion context file.
+// llmstxt.org layout: H1, blockquote, a non-heading line, link sections. "## Optional" is reserved.
 export function buildLlmsTxt(): string {
   const postLinks = getAllPosts()
     .map(
@@ -226,8 +213,7 @@ ${postLinks}
 `;
 }
 
-// /llms-context.txt: a curated product overview and annotated site index, followed by the complete
-// blog archive. It is intentionally not described as a page-by-page mirror of the rendered site.
+// Intentionally not described as a page-by-page mirror of the rendered site.
 export function buildLlmsContext(): string {
   const sections = getAllPosts()
     .map(

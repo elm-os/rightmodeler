@@ -28,8 +28,6 @@ export const metadata: Metadata = pageMetadata({
   path: "/contact",
 });
 
-// ContactPage points at the same Organization node the home page and /about emit, so the graph
-// carries one entity with one set of contact points rather than three copies.
 const contactPageLd = {
   "@context": "https://schema.org",
   "@type": "ContactPage",
@@ -80,9 +78,6 @@ export default function ContactPage() {
             straight to the people deciding what ships next.
           </Lead>
 
-          {/* Sorted by what you are writing about rather than by channel: each route has a
-              different destination and a different honest expectation, and that is the part
-              worth knowing before you pick one. */}
           <H2>Email</H2>
           <P>
             Write to <A href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</A>{" "}

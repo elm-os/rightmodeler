@@ -382,14 +382,12 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
       const first = await gateGrades(work.store, kind.evaluatorId);
       expect(first.length).toBeGreaterThan(0);
       const firstRunIds = new Set(first.map(providerRunId));
-      // A1
       for (const grade of first) {
         expect(grade.evaluatorIdentity).toMatch(/^[0-9a-f]{64}$/u);
       }
       const identities = new Set(first.map((grade) => grade.evaluatorIdentity));
       expect(identities.size).toBe(1);
       const identityBefore = [...identities][0]!;
-      // A2
       expect(
         firstRun.result.verdicts.some((verdict) =>
           verdict.evaluatorKinds.some(
@@ -400,18 +398,14 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
       ).toBe(true);
 
       const unchanged = await run(work, before);
-      // A3
       expect(unchanged.result.executedStages).toEqual([]);
       expect(providerStub.getHitCount()).toBe(chat);
       expect(await gateGrades(work.store, kind.evaluatorId)).toEqual(first);
       expect(unchanged.regrades).toEqual([]);
 
       const changed = await run(work, await after());
-      // A4
       expect(changed.result.executedStages).toEqual(["replay", "aggregate"]);
-      // A5
       expect(providerStub.getHitCount()).toBe(chat);
-      // A6
       const regraded = await gateGrades(work.store, kind.evaluatorId);
       expect(regraded).toHaveLength(2 * first.length);
       const regradedIds = new Set(regraded.map((grade) => grade.assessmentId));
@@ -436,11 +430,9 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
           ),
         ).toHaveLength(1);
       }
-      // A7
       for (const grade of added) {
         expect(firstRunIds.has(providerRunId(grade))).toBe(false);
       }
-      // A8
       expect(changed.regrades.length).toBeGreaterThan(0);
       for (const { message } of changed.regrades) {
         const match = REGRADE_WARNING.exec(message);
@@ -450,17 +442,14 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
         expect(message).not.toContain("before rightmodeler recorded");
       }
       expect(regradeCounts(changed.regrades)).toBe(first.length);
-      // A9
       expect((await replayEvaluation(work.store)).evaluatorIdentity).toBe(
         identityAfter,
       );
-      // A10
       expect(projectedVerdicts(changed.result.verdicts)).toEqual(
         projectedVerdicts(firstRun.result.verdicts),
       );
 
       const again = await run(work, await after());
-      // A11
       expect(again.result.executedStages).toEqual([]);
       expect(await gateGrades(work.store, kind.evaluatorId)).toHaveLength(
         regraded.length,
@@ -510,10 +499,8 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
     }
 
     const legacy = await run(work, config, storeB);
-    // L1
     expect(legacy.result.executedStages).toEqual(["replay", "aggregate"]);
     expect(providerStub.getHitCount()).toBe(chat);
-    // L2
     expect(regradeCounts(legacy.regrades)).toBe(first.length);
     for (const { message } of legacy.regrades) {
       expect(message).toContain(
@@ -523,7 +510,6 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
         "under a different evaluator configuration",
       );
     }
-    // L3
     const grades = await gateGrades(storeB, "promptfoo");
     expect(
       grades.filter((grade) => grade.evaluatorIdentity === undefined),
@@ -557,7 +543,6 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
       },
     });
 
-    // X1
     const trials = evalStub
       .getExperimentEvents()
       .filter(({ metadata }) => metadata.kind === "rightmodeler_trial");
@@ -598,11 +583,9 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
       scorers: ["output_similarity", "secondary_similarity"],
       gateMetric: "output_similarity",
     });
-    // Q1
     expect(widened.result.executedStages).toContain("shortlist");
     expect(widened.result.executedStages).toContain("replay");
     expect(widened.regrades).toEqual([]);
-    // Q2
     const created = (
       await readLedger(new FsStore(work.store), "project")
     ).executions.filter(({ executionId }) => !firstExecutions.has(executionId));
@@ -632,15 +615,12 @@ describe("evaluator re-grading", { timeout: 180_000 }, () => {
     await writeFile(assertions, original);
     const reverted = await run(work, config);
 
-    // R1
     expect(reverted.result.executedStages).toEqual(["replay", "aggregate"]);
     expect(providerStub.getHitCount()).toBe(chat);
-    // R2
     expect(reverted.regrades).toEqual([]);
     expect(await gateGrades(work.store, "promptfoo")).toHaveLength(
       2 * first.length,
     );
-    // R3
     expect((await replayEvaluation(work.store)).evaluatorIdentity).toBe(
       identityBefore,
     );

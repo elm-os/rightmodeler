@@ -18,9 +18,6 @@ export const metadata: Metadata = pageMetadata({
   image: "/social/reduce-llm-costs.png",
 });
 
-// ── The before/after band: five muted failures against five measured answers, item for item,
-// separated by dotted hairlines the way the reference draws them.
-
 const BEFORE: string[] = [
   "Every step runs the frontier model, because nobody has measured a cheaper candidate on accepted outputs.",
   "Swaps happen on vibes: a leaderboard, a launch thread, a hunch. Regressions ship silently.",
@@ -56,12 +53,10 @@ const FAQ: { q: string; a: string }[] = [
   },
 ];
 
-// ── The two mockups tucked into the CTA cards, clipped by the card edges like the reference's
-// chat window and code panel. Figures are stamped illustrative; shadows are illustration-only.
+// Figures are stamped illustrative; shadows are illustration-only.
 
 const MOCKUP_SHADOW = "shadow-[0_12px_32px_rgba(41,36,31,0.08)]";
 
-// Left card: the per-step report, mid-scroll. The abstain row keeps the honest beat.
 function LedgerMockup() {
   const rows: { step: string; swap: string; meta: string; dim?: boolean }[] = [
     {
@@ -127,8 +122,6 @@ function LedgerMockup() {
   );
 }
 
-// Monochrome "syntax" tones for the config panel: structure in driftwood, comments in fog,
-// values in ink.
 const Ln = ({ children }: { children: React.ReactNode }) => (
   <div className="whitespace-pre text-driftwood">{children}</div>
 );
@@ -139,8 +132,6 @@ const V = ({ children }: { children: React.ReactNode }) => (
   <span className="text-midnight-ink">{children}</span>
 );
 
-// Right card: the audit as configuration, running off the card's corner like the reference's
-// code panel.
 function ConfigMockup() {
   return (
     <div className="relative -mr-6 mb-0 ml-4 mt-6 sm:-mr-8 sm:ml-6">
@@ -203,8 +194,6 @@ export default function ReduceLlmCostsPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {/* ── Before / after: two full-bleed columns split by the center hairline, five muted
-          failures answered item for item, dotted rules between entries like the reference. ── */}
       <section className="bg-parchment-white">
         <div className="relative grid lg:grid-cols-2 lg:divide-x lg:divide-ash-border">
           <div className="p-6 sm:p-10 lg:p-12">
@@ -257,14 +246,11 @@ export default function ReduceLlmCostsPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {/* ── Two ways in: run the audit now, or line up the continuous versions. Each card holds
-          its mockup clipped by the card edge. ── */}
       <section className="bg-parchment-white">
         <div className="px-4 py-14 sm:px-6 sm:py-16">
           <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
             <Reveal className="h-full">
               <div className="relative isolate flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand">
-                {/* Same subtle grain as the agent page's deliverable panel. */}
                 <Image
                   src="/agent/showcase-grain.jpg"
                   alt=""
@@ -325,7 +311,6 @@ export default function ReduceLlmCostsPage() {
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {/* ── FAQ: the display title on the left, dotted-ruled answers on the right. ── */}
       <section className="bg-parchment-white">
         <div className="px-6 py-14 sm:px-10 sm:py-16 lg:px-12">
           <div className="grid gap-10 lg:grid-cols-[1fr_2fr] lg:gap-16">

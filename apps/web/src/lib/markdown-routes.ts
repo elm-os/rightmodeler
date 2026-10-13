@@ -1,11 +1,7 @@
-// Path arithmetic for the Markdown representation, shared by src/proxy.ts, the markdown route
-// handler, src/lib/seo.ts, and scripts/markdown.test.mjs. Import-free so the tests can load it
-// directly under Node's type stripping.
+// Import-free so the tests can load it directly under Node's type stripping.
 
-// Routes whose page is a one-off rather than a member of a templated family. Templated families
-// (/blog/[slug], /vs/[slug], /integrations/[slug]) resolve from their own registries instead, so
-// adding a page to a family never touches this list. scripts/markdown.test.mjs walks src/app and
-// fails if a page.tsx exists that is not accounted for here or by a family.
+// One-off pages only: the templated families (/blog, /vs, /integrations) resolve from their own
+// registries. scripts/markdown.test.mjs fails if a page.tsx is covered by neither.
 export const STATIC_MARKDOWN_PATHS: readonly string[] = [
   "/",
   "/about",
@@ -27,12 +23,10 @@ export const STATIC_MARKDOWN_PATHS: readonly string[] = [
   "/vs",
 ];
 
-// Deliberately NOT under /api/. A GET-serving /api/* path reads as a public HTTP API to crawlers
-// and readiness scanners, and this site has none: /md is the internal target the .md siblings and
-// the Accept negotiation rewrite to, and robots.txt disallows it so it is never crawled directly.
+// Deliberately NOT under /api/: a GET-serving /api/* path reads as a public HTTP API to crawlers
+// and readiness scanners. /md is an internal rewrite target, and robots.txt disallows it.
 export const MARKDOWN_HANDLER_BASE = "/md";
 
-// "/about" -> "/md/about"; "/" -> "/md"
 export function markdownHandlerPath(pathname: string): string {
   const trimmed = pathname.replace(/\/+$/, "");
   return trimmed === ""
@@ -40,14 +34,12 @@ export function markdownHandlerPath(pathname: string): string {
     : `${MARKDOWN_HANDLER_BASE}${trimmed}`;
 }
 
-// "/about" -> "/about.md"; "/" -> "/index.md". The root spelling matches the convention
-// acceptmarkdown.com itself advertises in its Link: rel="alternate" header.
+// The root is "/index.md", the spelling acceptmarkdown.com advertises in its own Link header.
 export function markdownSiblingPath(pathname: string): string {
   const trimmed = pathname.replace(/\/+$/, "");
   return trimmed === "" ? "/index.md" : `${trimmed}.md`;
 }
 
-// The reverse of markdownHandlerPath, for the route handler's catch-all segments.
 export function pathFromSlug(slug: string[] | undefined): string {
   return slug && slug.length > 0 ? `/${slug.join("/")}` : "/";
 }

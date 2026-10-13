@@ -1,7 +1,4 @@
-// Markdown content negotiation, per acceptmarkdown.com. Next 16 renamed this file convention from
-// middleware to proxy; it runs on the Node.js runtime and must not export `runtime`.
-//
-// All logic lives in @/lib/negotiate so it can be unit-tested; this file is plumbing only.
+// Markdown content negotiation (acceptmarkdown.com). Node.js runtime; must not export `runtime`.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { decideProxyAction, VARY } from "@/lib/negotiate";
@@ -34,14 +31,9 @@ export function proxy(request: NextRequest) {
       ? NextResponse.rewrite(new URL(action.destination, request.url))
       : NextResponse.next();
 
-  // Deliberately NOT NextResponse.next({ request: { headers } }): that emits
-  // x-middleware-override-headers, and the router then deletes every request header absent from
-  // that list. Next strips rsc / next-router-* from request.headers inside the proxy, so the
-  // clone would be missing them and they would be dropped upstream.
-  // Carries Vary on the Markdown branch and the 406. It does NOT reach a prerendered HTML
-  // response: under next start in 16.3.4 those are served from the incremental cache
-  // with their stored headers, and anything set here is dropped. The HTML branch relies on the
-  // Vary rule in vercel.json instead; AGENTS.md records what the platform honours of it.
+  // Not NextResponse.next({ request: { headers } }): x-middleware-override-headers makes the router
+  // drop every request header absent from it, and Next strips rsc / next-router-* inside the proxy.
+  // Vary set here never reaches prerendered HTML, which relies on vercel.json (see AGENTS.md).
   response.headers.set("vary", VARY);
   return response;
 }
@@ -49,27 +41,18 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      // Every routable page. Excluded: Next internals; Vercel analytics beacons (@vercel/analytics
-      // posts to /_vercel/insights/view, which has no dot and would otherwise be proxied on every
-      // pageview); the markdown handler itself; and any path containing a dot, which covers the
-      // .md siblings plus robots.txt, sitemap.xml, manifest.webmanifest, llms*.txt, humans.txt,
-      // and every asset under public/. Also the generated opengraph-image routes, which have no
-      // dot: an image fetcher that sends only `Accept: image/*` would otherwise get the 406.
+      // Anything with a dot is skipped: .md siblings, metadata files, public/ assets. Less obvious:
+      // /_vercel/ analytics beacons have no dot; opengraph-image would 406 on `Accept: image/*`.
       source: "/((?!_next/|_vercel/|api/|md/|.*\\.|.*opengraph-image).*)",
-      // Keep RSC navigation, prefetch, and PPR resume traffic off the proxy entirely: same
-      // behaviour as before this file existed, no extra invocations, and no chance of
-      // negotiating a Flight response. next-resume comes from routes-manifest ppr.chain.headers.
+      // Keeps RSC navigation, prefetch and PPR resume traffic off the proxy, so a Flight response
+      // is never negotiated. next-resume comes from routes-manifest ppr.chain.headers.
       missing: [
         { type: "header", key: "rsc" },
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "next-resume" },
         { type: "header", key: "purpose", value: "prefetch" },
-        // A browser navigation names text/html outright, with no parameters. That range cannot
-        // lose: it matches HTML exactly at q=1, and Markdown only wins on a higher q or a more
-        // specific range (lib/negotiate.ts). So the answer is already HTML, and the page is
-        // served without invoking the proxy at all. The value is matched against the whole
-        // header. Anything subtler still comes through here: a q on text/html, a wildcard, no
-        // Accept. scripts/negotiate.test.mjs holds this pattern to the negotiator.
+        // A bare text/html range always wins the negotiation, so those requests skip the proxy.
+        // Matched against the whole header. scripts/negotiate.test.mjs holds it to the negotiator.
         {
           type: "header",
           key: "accept",

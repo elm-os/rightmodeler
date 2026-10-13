@@ -1,8 +1,3 @@
-// The closing colophon, the report's sign-off. Clean by default (no gradient): Dia Browser's
-// signature gradient lives in <OverscrollSpring/> and only rises up from the floor when you pull
-// past the absolute bottom of the page (the whole page eases up to expose it), then snaps back.
-// Server component: it composes client primitives only.
-
 import Link from "next/link";
 import { LogoMark } from "@/components/icons";
 import { Reveal } from "@/components/reveal";

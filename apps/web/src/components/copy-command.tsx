@@ -1,9 +1,5 @@
 "use client";
 
-// Primary CTA field — a copy-able command (adapted from Skiper's smooth-caret input, re-branded
-// monochrome). Click copies to the clipboard and the copy glyph morphs to a check. Mono 13px on
-// a warm-sand surface with an ash-border hairline; press-scale for physical feedback.
-
 import { Fragment, useRef, useState } from "react";
 import { CheckIcon, CopyIcon } from "@/components/icons";
 
@@ -38,8 +34,7 @@ export function CopyCommand({
       <span aria-hidden className="select-none font-mono text-[13px] text-fog">
         $
       </span>
-      {/* Each token is an inline-block, so lines break only at the spaces between them and a flag
-          or URL never splits at its own hyphens; a token wider than the line still wraps inside. */}
+      {/* Tokens are inline-blocks so lines break only at spaces, never inside a flag or URL. */}
       <code className="font-mono text-[13px] text-midnight-ink">
         {command.split(" ").map((token, i) => (
           <Fragment key={i}>

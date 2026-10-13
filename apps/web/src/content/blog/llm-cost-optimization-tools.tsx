@@ -1,11 +1,4 @@
-// Post: "LLM cost optimization tools: which approach fits your workload?" A practitioner guide that
-// sorts six cost levers (model substitution, routing, caching, compression, batching, fine-tuning)
-// by the problem each one solves, with prerequisites, rollout evidence, tradeoffs, and how they
-// stack. A typed post module: `meta` (data) plus a `Body` composed from the prose primitives.
-// Every vendor mechanic is attributed to the vendor's own documentation as of 2026-09-24; every
-// rightmodeler claim matches harness/packages/rightmodeler/docs and the integration pages. No
-// vendor ranking. Tables are written as lists because the blog parity check reads only literal
-// JSX text.
+// Tables are written as lists because the blog parity check reads only literal JSX text.
 
 import {
   A,
@@ -570,8 +563,7 @@ export function Body() {
   );
 }
 
-// The same post as clean Markdown, for llms-context.txt and any LLM-facing surface. Kept in sync with
-// Body above by hand.
+// Kept in sync with Body above by hand.
 export const markdown = `# LLM cost optimization tools: which approach fits your workload?
 
 Search for LLM cost optimization tools and you get a list: gateways, routers, caches, compressors, fine-tuning platforms. The list hides the useful part. Each category fixes a different problem, and a tool pointed at a problem you do not have costs engineering time and saves nothing, or saves money by quietly lowering quality.

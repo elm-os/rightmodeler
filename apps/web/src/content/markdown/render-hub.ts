@@ -1,6 +1,4 @@
-// The four index pages as Markdown, generated from the same registries their routes resolve from.
-// Deliberately reuses the annotated-link line format lib/llms.ts already uses, so an agent that
-// has read /llms.txt meets the same shape here.
+// Reuses the annotated-link line format of lib/llms.ts so /llms.txt readers meet the same shape.
 
 import { getAllPosts } from "@/content/blog";
 import { getAllIntegrations } from "@/content/integrations";

@@ -1,6 +1,4 @@
-// Primary "View on GitHub" action — the same ink button used in the landing CTA band
-// (sections/cta-band.tsx), extracted so every marketing page closes on the identical control.
-// Points at the canonical repo from lib/site.ts.
+// The same ink button as the landing CTA band (sections/cta-band.tsx).
 
 import { GitHubIcon } from "@/components/icons";
 import { REPO_URL } from "@/lib/site";

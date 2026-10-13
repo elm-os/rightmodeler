@@ -1,10 +1,6 @@
-// The rules both feedback routes share: app/api/feedback takes the website form, and
-// app/api/feedback/agent takes a coding agent's POST. This file is the one place that says who
-// gets the email, who it is from, the size caps, how each body is read, and what the notification
-// shows. Pure and import-free on purpose: lib/handle-feedback.ts adds the Resend call, and
-// scripts/feedback.test.mjs imports this file directly under Node's type stripping.
+// Import-free on purpose: scripts/feedback.test.mjs loads this file under Node's type stripping.
 
-// The team recipients for feedback notifications (same inboxes as the waitlist).
+// Same inboxes as the waitlist (app/api/waitlist/route.ts).
 export const FEEDBACK_RECIPIENTS = [
   "me@aakashharish.com",
   "me@ameyalambat.com",
@@ -16,7 +12,6 @@ const FROM = "rightmodeler <inquiry@rightmodeler.com>";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // The form's textarea carries the same cap (maxLength in components/sections/feedback-form.tsx).
 const MAX_MESSAGE_LENGTH = 5000;
-// The optional fields a coding agent may send, with the cap on each.
 const AGENT_FIELD_LIMITS = {
   agent: 100,
   version: 100,
@@ -26,11 +21,8 @@ const AGENT_FIELD_LIMITS = {
 type AgentField = keyof typeof AGENT_FIELD_LIMITS;
 
 export type Feedback = {
-  // Which route took it: the website form, or a coding agent's POST.
   via: "form" | "agent";
   message: string;
-  // The address to reply to. The form requires it; an agent sends one, as `contact`, only when
-  // its user gave it.
   email?: string;
   agent?: string;
   version?: string;
@@ -39,8 +31,7 @@ export type Feedback = {
 
 export type FeedbackResult = { feedback: Feedback } | { error: string };
 
-// The body's top-level fields, or null when the body is not JSON. JSON that is not an object has
-// no fields, so it fails on the first required one.
+// null when the body is not JSON. Non-object JSON has no fields, so the first required one fails.
 function fieldsOf(body: string): Record<string, unknown> | null {
   let parsed: unknown;
   try {
@@ -67,7 +58,6 @@ function readMessage(
   return { message: message.trim() };
 }
 
-// The website form: an email address and a message, both required.
 export function readFormFeedback(body: string): FeedbackResult {
   const sent = fieldsOf(body);
   if (!sent) return { error: "Invalid request." };
@@ -85,9 +75,7 @@ export function readFormFeedback(body: string): FeedbackResult {
   };
 }
 
-// A coding agent: only the message is required, because an agent has no email address and
-// rightmodeler has no accounts. An optional field that is absent, null or blank counts as not
-// sent, and a field this route does not know is ignored.
+// Only the message is required: an agent has no email address and rightmodeler has no accounts.
 export function readAgentFeedback(body: string): FeedbackResult {
   const sent = fieldsOf(body);
   if (!sent) return { error: "The request body must be valid JSON." };
@@ -122,8 +110,7 @@ export function readAgentFeedback(body: string): FeedbackResult {
   };
 }
 
-// The lines the notification shows, shared by its plain-text part and the React Email template
-// (emails/feedback-notification.tsx) so the two cannot drift apart.
+// Shared by the plain-text part and emails/feedback-notification.tsx so the two cannot drift apart.
 export function feedbackLines(
   { via, email, agent, version, context }: Feedback,
   submittedAt: string,
@@ -140,8 +127,6 @@ export function feedbackLines(
   };
 }
 
-// Everything Resend needs for the notification except the rendered template. replyTo is set only
-// when there is an address to reply to.
 export function feedbackEmail(feedback: Feedback, submittedAt: string) {
   const { subject, details, footer } = feedbackLines(feedback, submittedAt);
   return {

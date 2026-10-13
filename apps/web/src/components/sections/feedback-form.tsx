@@ -1,10 +1,5 @@
 "use client";
 
-// Feedback capture — email + message POSTed to /api/feedback, which sends the team a real
-// notification via Resend (same pattern as the waitlist form: no fake success, the confirmation
-// renders only after the API responds ok). Monochrome per docs/design.md — parchment fields with
-// ash-border hairlines, ink button with press-scale; state communicated through copy, not colour.
-
 import { useState } from "react";
 
 type State =

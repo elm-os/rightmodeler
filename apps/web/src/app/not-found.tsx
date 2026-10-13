@@ -4,7 +4,6 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 
-// The index files an agent recovers from, which the marketing nav does not carry.
 const AGENT_ROUTES = [
   { href: "/sitemap.xml", label: "Sitemap" },
   { href: "/llms.txt", label: "llms.txt" },
@@ -52,12 +51,7 @@ export default function NotFound() {
             ]}
           />
 
-          {/*
-            The machine-readable way out. An agent that lands here needs the index files, not the
-            marketing nav, and none of them were reachable from this page before. Same RelatedLinks
-            treatment so it reads as one system; these are files rather than routes, so they use
-            plain anchors instead of next/link.
-          */}
+          {/* Files rather than routes, so plain anchors instead of next/link. */}
           <Reveal className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
             <span className="font-mono text-caption uppercase text-fog">
               For agents

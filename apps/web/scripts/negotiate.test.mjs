@@ -1,8 +1,5 @@
-// Conformance tests for the Accept negotiator (src/lib/negotiate.ts).
-//
-// The expectations are not invented: every row was captured by probing acceptmarkdown.com's own
-// reference implementation with curl, so "what the spec means" is settled by what the spec's
-// author ships. Node 24 strips types natively, so the .ts module imports directly.
+// Every expectation was captured by probing acceptmarkdown.com's own reference implementation.
+// Node 24 strips types natively, so the .ts module imports directly.
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -20,7 +17,6 @@ const HTML = "text/html";
 const MD = "text/markdown";
 const NONE = "not-acceptable";
 
-// [Accept header, expected representation, why it matters]
 const VECTORS = [
   // The six vectors acceptmarkdown.com's scorecard checks directly.
   [MD, MD, "bare markdown request"],
@@ -31,7 +27,6 @@ const VECTORS = [
   ["*/*", HTML, "wildcard means no constraint"],
 
   // RFC 9110 12.5.1: a more specific range overrides a less specific one regardless of q.
-  // These are the cases a substring or naive-sort implementation gets wrong.
   [
     "text/html;q=0, */*;q=1",
     MD,
@@ -47,7 +42,6 @@ const VECTORS = [
   ["text/markdown, text/*", MD, "equal q, exact beats text/*"],
   ["text/*", HTML, "equal q and equal specificity falls to server preference"],
 
-  // q handling.
   ["text/markdown;q=0.5, text/html;q=0.4", MD, "higher q wins"],
   ["text/markdown;q=0.4, text/html;q=0.5", HTML, "higher q wins the other way"],
   [
@@ -79,7 +73,6 @@ const VECTORS = [
   ["text/markdown;q=1.5", MD, "q above 1 clamps to 1"],
   ["text/markdown;q=-1", NONE, "q below 0 clamps to 0, which is a rejection"],
 
-  // 406: every representation is either unmatched or explicitly rejected.
   ["application/json", NONE, "we produce neither"],
   ["application/pdf", NONE, "we produce neither"],
   ["image/png, application/pdf", NONE, "we produce neither"],
@@ -94,7 +87,6 @@ const VECTORS = [
   ["garbage", HTML, "no slash, unparseable"],
   [",,;q=,", HTML, "entirely malformed"],
 
-  // Real clients.
   [
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     HTML,
@@ -107,7 +99,6 @@ const VECTORS = [
   ],
   ["text/plain, */*;q=0.1", HTML, "a lazy client that still allows anything"],
 
-  // The deprecated pre-registration spelling still reaches markdown.
   [
     "text/x-markdown",
     MD,
@@ -215,10 +206,7 @@ test("Vary carries Accept alongside every token Next sets itself", () => {
   }
 });
 
-// The proxy's matcher leaves out requests it can answer without running (src/proxy.ts): those
-// whose Accept names text/html outright. That is only sound if every header it leaves out is one
-// the negotiator would have answered with HTML anyway. Next matches a matcher value against the
-// whole header (prepare-destination.js, matchHas), hence the anchors.
+// Next's matchHas (prepare-destination.js) tests the whole header, hence the anchors.
 const skipLiteral = /key: "accept",\s*value: ("(?:[^"\\]|\\.)*")/.exec(
   fs.readFileSync(new URL("../src/proxy.ts", import.meta.url), "utf8"),
 );
@@ -231,8 +219,7 @@ test("the proxy only leaves out requests the negotiator answers with HTML", () =
     if (header === null || !skipsProxy(header)) continue;
     assert.equal(expected, HTML, `left out, but ${why}: ${header}`);
   }
-  // Every pairing and a spread of triples built from the ranges, parameters and spacings a
-  // client can send, including the ones written to trip a careless pattern.
+  // Every pairing and a spread of triples, including ranges written to trip a careless pattern.
   const types = [
     "text/html",
     "text/markdown",

@@ -7,9 +7,7 @@ import { getAllPosts } from "@/content/blog";
 import { alternatesFor, socialImage } from "@/lib/seo";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
-// Parchment legibility veil over the grain-gradient hero — densest behind the top-left masthead copy,
-// fading into the gradient toward the bottom-right. Identical to the landing hero (sections/hero.tsx)
-// so the two pages read as one system.
+// Identical to the landing hero's veil (sections/hero.tsx), so the two pages read as one system.
 const VEIL =
   "radial-gradient(130% 115% at 24% 30%, rgba(253,252,252,0.82) 0%, rgba(253,252,252,0.34) 46%, rgba(253,252,252,0) 74%)";
 
@@ -66,9 +64,6 @@ export default function BlogIndexPage() {
       />
 
       <section className="relative isolate overflow-hidden bg-parchment-white">
-        {/* Same live grain-gradient shader as the landing hero (sections/hero.tsx, cta-band.tsx), so
-            the blog masthead reads as one system with the marketing page. The accent hues live only
-            in here. */}
         <HeroGradient className="absolute inset-0 -z-10" />
         <div
           aria-hidden

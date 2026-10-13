@@ -1,7 +1,4 @@
-// Internal notification email sent to the team when someone joins a waitlist (Crucible or the
-// agent; see app/api/waitlist/route.ts). Built with React Email components so it renders cleanly across mail
-// clients; kept plain and monochrome — it's an ops notification, not a marketing send. Colours are
-// the design tokens from docs/design.md, inlined (email clients don't get the app's CSS).
+// Colours are the docs/design.md tokens, inlined: email clients don't get the app's CSS.
 
 import {
   Body,

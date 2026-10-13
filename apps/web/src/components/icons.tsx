@@ -1,16 +1,9 @@
-// Shared icon set. Icons inherit color from `currentColor`, so they always take a brand text
-// color (ink / driftwood / fog) — never an accent hue. Stroke icons use a 1.5 weight to match
-// the light, editorial type.
-
 type IconProps = React.SVGProps<SVGSVGElement> & { size?: number };
 
 type LogoMarkProps = React.SVGProps<SVGSVGElement> & { height?: number };
 
-// rightmodeler brand mark — the two-bar glyph from public/logo.png, reproduced as a transparent
-// vector so it inherits the current ink color (monochrome, per docs/design.md) and stays crisp at
-// any size. The viewBox is the exact pixel bounding box of the mark in the source art; height drives
-// size and width follows the mark's portrait aspect ratio. Decorative — pair it with the wordmark
-// inside a labelled link/heading, so it stays aria-hidden.
+// The viewBox is the pixel bounding box of the mark in public/logo.png.
+// Decorative (aria-hidden): pair it with the wordmark inside a labelled link or heading.
 export function LogoMark({ height = 20, ...props }: LogoMarkProps) {
   return (
     <svg
@@ -164,11 +157,6 @@ export function ChevronDownIcon({ size = 16, ...props }: IconProps) {
   );
 }
 
-// ── Bespoke glyphs for the agent's decision loop (agent-showcase.tsx). Hand-drawn in the house
-// stroke grammar (1.5 weight, round caps, currentColor) rather than pulled from an icon library,
-// so each one says something specific about the step it marks. All decorative — aria-hidden.
-
-// Watch — a signal dot with two radar arcs: releases being tracked as they ship.
 export function WatchSignalIcon({ size = 18, ...props }: IconProps) {
   return (
     <svg
@@ -190,7 +178,6 @@ export function WatchSignalIcon({ size = 18, ...props }: IconProps) {
   );
 }
 
-// Replay — a run that loops back on itself: the same traces, run again.
 export function ReplayLoopIcon({ size = 18, ...props }: IconProps) {
   return (
     <svg
@@ -211,7 +198,6 @@ export function ReplayLoopIcon({ size = 18, ...props }: IconProps) {
   );
 }
 
-// Judge — two outputs measured against a dashed quality floor: one clears it, one does not.
 export function QualityFloorIcon({ size = 18, ...props }: IconProps) {
   return (
     <svg
@@ -233,7 +219,6 @@ export function QualityFloorIcon({ size = 18, ...props }: IconProps) {
   );
 }
 
-// Open the PR — a branch merging home: the swap arriving as a pull request.
 export function PullRequestIcon({ size = 18, ...props }: IconProps) {
   return (
     <svg
@@ -258,7 +243,6 @@ export function PullRequestIcon({ size = 18, ...props }: IconProps) {
   );
 }
 
-// Terminal — a prompt waiting: the chevron and the line where the command goes.
 export function TerminalIcon({ size = 18, ...props }: IconProps) {
   return (
     <svg
@@ -279,7 +263,6 @@ export function TerminalIcon({ size = 18, ...props }: IconProps) {
   );
 }
 
-// Coding agent — a spark: the assistant that reads the runbook and drives the loop.
 export function AgentSparkIcon({ size = 18, ...props }: IconProps) {
   return (
     <svg
@@ -306,7 +289,6 @@ export function AgentSparkIcon({ size = 18, ...props }: IconProps) {
   );
 }
 
-// Scheduled CI — a clock about to strike: the audit that runs itself on a cadence.
 export function ScheduleIcon({ size = 18, ...props }: IconProps) {
   return (
     <svg
@@ -327,7 +309,6 @@ export function ScheduleIcon({ size = 18, ...props }: IconProps) {
   );
 }
 
-// Self-hosted — two racked machines: the agent on a host you run.
 export function ServerRackIcon({ size = 18, ...props }: IconProps) {
   return (
     <svg

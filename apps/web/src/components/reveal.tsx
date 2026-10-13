@@ -1,12 +1,6 @@
 "use client";
 
-// Scroll-into-view reveal: an observer triggers a small opacity + translateY(8px) CSS transition
-// on the strong ease-out curve, once. Stagger by passing an incremental `delay`. Under
-// reduced-motion it becomes opacity-only (no movement).
-//
-// data-reveal is the hook the <noscript> rule in app/layout.tsx targets. The observer needs
-// JavaScript, so without it every revealed element would sit at opacity:0 forever and a
-// no-JS reader would see a blank page.
+// data-reveal is the hook for the <noscript> rule in app/layout.tsx: keep both.
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { useInView } from "@/components/use-in-view";

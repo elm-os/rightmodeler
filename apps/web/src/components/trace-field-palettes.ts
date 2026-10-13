@@ -1,6 +1,5 @@
 export type PaletteName = "duet" | "violet" | "ember" | "dawn";
 
-// Illustration-only accent recipes (docs/design.md: accents never touch UI chrome).
 // Kept separate so palette controls do not load the particle engine.
 export const PALETTES: Record<
   PaletteName,

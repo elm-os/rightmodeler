@@ -17,15 +17,12 @@ import { getComparison } from "@/content/vs";
 import { pageMetadata } from "@/lib/seo";
 import { RUN_COMMAND, SITE_URL, SKILL_COMMAND } from "@/lib/site";
 
-// Prerender every integration at build time. Cache Components requires generateStaticParams to
-// return at least one param; unknown slugs are handled by notFound() in the page below.
+// Cache Components requires generateStaticParams to return at least one param.
 export function generateStaticParams() {
   return getAllSlugs().map((slug) => ({ slug }));
 }
 
-// Every real integration is statically prerendered above, so navigating to one is already instant;
-// the only non-instant path is the fallback for an unknown slug, which immediately 404s. Opt this
-// segment out of Cache Components' instant-navigation validation, as blog/[slug] does.
+// Opts out of instant-navigation validation: only an unknown slug is not prerendered, and it 404s.
 export const instant = false;
 
 export async function generateMetadata({
@@ -45,15 +42,13 @@ export async function generateMetadata({
   });
 }
 
-// Same ink pill as the use-cases CTA cards — page-local by house convention.
+// Same ink pill as the use-cases CTA cards: page-local by house convention.
 const pillPrimary =
   "inline-flex items-center justify-center rounded-xl bg-midnight-ink px-5 py-3 text-body font-medium text-parchment-white transition-transform duration-150 ease-out-strong active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white";
 
 const rule = <div aria-hidden className="h-px w-full bg-ash-border" />;
 
-// Every content band shares one skeleton — the catalog grid the FAQ and the hub already use:
-// section heading (and optional intro) in the left rail, content in the right cell, so the whole
-// page keeps a single spine. First rows drop their top padding to top-align with the heading.
+// First rows drop their top padding to top-align with the heading.
 function Band({
   heading,
   intro,
@@ -92,7 +87,6 @@ export default async function IntegrationPage({
   if (!integration) notFound();
 
   const data = integration;
-  // Resolve related slugs against the registry; a slug that isn't registered yet simply drops out.
   const related = data.related.flatMap((relatedSlug) => {
     const entry = getIntegration(relatedSlug);
     return entry ? [entry] : [];
@@ -147,7 +141,6 @@ export default async function IntegrationPage({
 
       {rule}
 
-      {/* ── How it works with <name>: numbered rows, dotted hairlines between steps. ── */}
       <Band heading={`How it works with ${data.name}`}>
         {data.steps.map((step, i) => (
           <Reveal key={step.label} delay={i * 0.04}>
@@ -170,8 +163,6 @@ export default async function IntegrationPage({
 
       {rule}
 
-      {/* ── Setup: the tool-specific commands from the data file (npx runs the published CLI, so
-          there is nothing to install first), then the coding-agent option. ── */}
       <Band heading="Setup" intro={data.setup.intro}>
         <div className="space-y-6">
           {data.setup.commands.map((entry) => (
@@ -190,8 +181,6 @@ export default async function IntegrationPage({
 
       {rule}
 
-      {/* ── What rightmodeler reads: the adapter's field mapping, rendered as the normalized
-          ledger it produces. Factual rows; hidden for non-trace integrations. ── */}
       {data.reads.length > 0 && (
         <>
           <Band
@@ -228,7 +217,6 @@ export default async function IntegrationPage({
         </>
       )}
 
-      {/* ── Use cases for the combination. ── */}
       <Band heading="Use cases">
         {data.useCases.map((useCase, i) => (
           <Reveal key={useCase.title} delay={i * 0.04}>
@@ -248,7 +236,6 @@ export default async function IntegrationPage({
 
       {rule}
 
-      {/* ── The honest part: what this integration is not. The abstain beat, kept load-bearing. ── */}
       <Band heading="The honest part">
         <ul>
           {data.limits.map((limit, i) => (
@@ -273,7 +260,6 @@ export default async function IntegrationPage({
 
       {rule}
 
-      {/* ── CTA: run the skill today, or line up the Crucible integration. ── */}
       <section className="bg-parchment-white">
         <div className="px-4 py-14 sm:px-6 sm:py-16">
           <Reveal>
@@ -299,8 +285,6 @@ export default async function IntegrationPage({
                   <h2 className="font-sans text-heading-sm text-midnight-ink">
                     Run the audit on your own traces
                   </h2>
-                  {/* Only a trace source supplies the traces; every other integration works on
-                      whichever traces you already have. */}
                   <p className="mt-2 max-w-md text-body text-driftwood">
                     {data.reads.length > 0 ? (
                       <>
@@ -336,7 +320,6 @@ export default async function IntegrationPage({
                 href: `/integrations/${entry.slug}`,
                 label: entry.name,
               })),
-              // When the same tool also has a comparison page, cross-link the two intents.
               ...(getComparison(data.slug)
                 ? [
                     {

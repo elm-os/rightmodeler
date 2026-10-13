@@ -72,8 +72,6 @@ export default function CruciblePage() {
           </Reveal>
         </div>
 
-        {/* The feature wall runs the full framed column, wider than the prose bands around it,
-            the same move as the /agent feature spread. */}
         <div className="px-4 py-14 sm:px-6 sm:py-16">
           <Reveal>
             <CrucibleShowcase />
@@ -81,7 +79,6 @@ export default function CruciblePage() {
         </div>
 
         <div className="mx-auto max-w-3xl px-6 pb-16 sm:px-10 sm:pb-20">
-          {/* Closing note as a quiet surface card, echoing the wall's card language above. */}
           <Reveal delay={0.1}>
             <div className="rounded-2xl border border-ash-border bg-warm-sand p-6 sm:p-8">
               <p className="font-mono text-caption uppercase text-fog">
