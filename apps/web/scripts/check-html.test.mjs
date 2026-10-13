@@ -77,6 +77,48 @@ gate("no prerendered page ships a counter frozen at zero", () => {
   }
 });
 
+// The home hero's copy enters through <Reveal lcp>: CSS keyframes that start at 0.01, so the
+// headline counts as the largest paint when it starts to appear. Nothing else would notice a
+// rule going missing: the copy would simply never show.
+gate("the home hero's copy enters through keyframes the page ships", () => {
+  const html = read(path.join(appDir, "index.html"));
+  // An inline opacity:0 on the headline, the lede or an ancestor means a fade from zero, which
+  // Chrome only credits as the largest paint once it has all but ended.
+  const start = html.indexOf("<main");
+  const h1End = html.indexOf("</h1>", start);
+  const end = html.indexOf("</p>", h1End);
+  assert.ok(
+    start !== -1 && h1End !== -1 && end !== -1,
+    "no main, h1 or lede found",
+  );
+  assert.doesNotMatch(
+    html.slice(start, end),
+    /style="[^"]*opacity:0(?![.\d])/,
+    "something between <main> and the lede server-renders at opacity:0",
+  );
+  assert.match(
+    html.slice(start, end),
+    /<div data-reveal="true" class="reveal-lcp /,
+    "the hero copy is not a <Reveal lcp> with the no-JS hook",
+  );
+  const sheets = [
+    ...html.matchAll(/<link rel="stylesheet" href="\/_next\/([^"?]+\.css)/g),
+  ]
+    .map((m) => read(path.join(webRoot, ".next", m[1])))
+    .join("\n");
+  for (const rule of [
+    "@keyframes reveal-rise{0%{opacity:.01;",
+    ".reveal-lcp{animation:",
+    ".reveal-lcp:not([data-shown]){",
+    ".reveal-lcp[data-shown=done]{animation:none}",
+  ]) {
+    assert.ok(
+      sheets.includes(rule),
+      `the home page's stylesheet has no "${rule}" rule`,
+    );
+  }
+});
+
 gate("nothing server-renders invisible without a no-JS escape hatch", () => {
   // Reveal enters with whileInView, which needs JavaScript. Without the noscript rule in
   // app/layout.tsx every revealed element sits at opacity:0 forever and a reader with JS off
