@@ -70,12 +70,15 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {/*
-          Reveal and the phone-width hero ledger server-render at opacity:0, and the home hero's
-          CSS entrance waits to be started: all need JavaScript, and these rules show them without
-          it. Scoped by selector: a blanket transform:none would also stop the CSS marquee.
+          Reveal and the hero ledger enter with motion's whileInView, which needs JavaScript, so
+          they server-render at opacity:0. Without this rule a reader or crawler with JS off sees
+          a blank page: the h1, the lede, every section heading, and the whole ledger stay
+          invisible. An !important author rule outranks the inline non-important declaration.
+          Scoped to [data-reveal] on purpose: a blanket transform:none would also stop the
+          trace-source marquee, which is pure CSS and should keep running without JS.
         */}
         <noscript>
-          <style>{`[data-reveal]{opacity:1!important;transform:none!important}.hero-copy-in{opacity:1!important}.hero-row-in{animation:none!important;transform:none!important}`}</style>
+          <style>{`[data-reveal]{opacity:1!important;transform:none!important}`}</style>
         </noscript>
         {children}
         <Analytics />

@@ -95,10 +95,11 @@ gate("the home hero's entrance ships whole", () => {
     /style="[^"]*opacity:0(?![.\d])/,
     "something between <main> and the lede server-renders at opacity:0",
   );
-  assert.match(
+  // With JavaScript off the [data-reveal] noscript rule is what shows them.
+  assert.doesNotMatch(
     html,
-    /<noscript><style>[^<]*\.hero-copy-in\{opacity:1!important\}\.hero-row-in\{animation:none!important;transform:none!important\}/,
-    "no noscript rule shows the hero's copy and ledger rows",
+    /<div(?![^>]*data-reveal)[^>]*class="[^"]*\b(?:reveal-lcp|hero-row-in)\b/,
+    "a hero element waits for its CSS entrance without data-reveal",
   );
   const sheets = [
     ...html.matchAll(/<link rel="stylesheet" href="\/_next\/([^"?]+\.css)/g),
@@ -106,15 +107,15 @@ gate("the home hero's entrance ships whole", () => {
     .map((m) => read(path.join(webRoot, ".next", m[1])))
     .join("\n");
   for (const rule of [
-    "@keyframes hero-copy-rise{0%{opacity:.01;",
+    "@keyframes reveal-rise{0%{opacity:.01;",
     "@keyframes hero-row-rise{",
     "@keyframes hero-caret{",
-    ".hero-copy-in{animation:",
+    ".reveal-lcp{animation:",
     ".hero-row-in{animation:",
     ".hero-caret-walk{animation:",
-    ".hero-copy-in:not([data-shown]){",
+    ".reveal-lcp:not([data-shown]){",
     ".hero:not([data-entrance]) :is(.hero-row-in,.hero-caret-walk){animation-play-state:paused}",
-    ".hero-copy-in[data-shown=done]",
+    ".reveal-lcp[data-shown=done]",
     ".hero[data-ledger=shown] :is(.hero-row-in,.hero-caret-walk)",
   ]) {
     assert.ok(

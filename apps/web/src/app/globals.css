@@ -125,21 +125,23 @@ body {
   }
 }
 
-/* Home hero entrance (sections/hero.tsx). The copy starts at 0.01, not 0: Chrome does not
-   count text at zero opacity as painted, and a compositor fade never repaints it, so a
-   fade from 0 is only credited as the largest paint when it ends. */
-@keyframes hero-copy-rise {
+/* <Reveal lcp> (components/reveal.tsx): Reveal's entrance as keyframes. It starts at 0.01,
+   not 0, because Chrome does not count text at zero opacity as painted and a compositor
+   fade never repaints it: a fade from 0 is only credited as the largest paint as it ends. */
+@keyframes reveal-rise {
   from {
     opacity: 0.01;
     transform: translateY(8px);
   }
 }
 
-@keyframes hero-copy-fade {
+@keyframes reveal-fade {
   from {
     opacity: 0.01;
   }
 }
+
+/* The home hero's ledger (sections/hero.tsx). */
 
 @keyframes hero-row-rise {
   from {
@@ -170,10 +172,10 @@ body {
   }
 }
 
-@utility hero-copy-in {
-  animation: hero-copy-rise 500ms var(--ease-out-strong) backwards;
+@utility reveal-lcp {
+  animation: reveal-rise 500ms var(--ease-out-strong) backwards;
   @media (prefers-reduced-motion: reduce) {
-    animation-name: hero-copy-fade;
+    animation-name: reveal-fade;
   }
 }
 
@@ -195,9 +197,9 @@ body {
   }
 }
 
-/* Hero state, in attributes set by sections/hero.tsx. Unlayered, so these outrank the
-   utilities above. Until hydration: copy hidden, ledger held on its first frame. */
-.hero-copy-in:not([data-shown]) {
+/* State, in attributes set by reveal.tsx and sections/hero.tsx. Unlayered, so these outrank
+   the utilities above. Until hydration: copy hidden, ledger held on its first frame. */
+.reveal-lcp:not([data-shown]) {
   animation: none;
   opacity: 0;
 }
@@ -213,9 +215,9 @@ body {
   }
 }
 
-/* No replay when a hidden hero is shown again: the copy for good, the ledger until the
+/* No replay when a hidden page is shown again: the copy for good, the ledger until the
    page is next hidden. */
-.hero-copy-in[data-shown="done"] {
+.reveal-lcp[data-shown="done"] {
   animation: none;
 }
 

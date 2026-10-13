@@ -11,15 +11,16 @@
 // Every figure is stamped illustrative; the UI is strictly black-on-paper (accent hues live only
 // inside HeroGradient). Row entrances and the caret honour prefers-reduced-motion.
 //
-// The entrance is CSS (hero-* in app/globals.css), started from the effect in Hero.
+// The ledger's entrance is CSS (hero-* in app/globals.css), released from the effects in Hero.
 
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { AnimatedNumber } from "@/components/animated-number";
 import { CopyCommand } from "@/components/copy-command";
 import { HeroGradient } from "@/components/hero-gradient";
 import { ArrowRightIcon, GitHubIcon } from "@/components/icons";
 import { ProgressiveBlur } from "@/components/progressive-blur";
+import { Reveal } from "@/components/reveal";
 import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
 import { REPO_URL, RUN_COMMAND } from "@/lib/site";
 
@@ -132,35 +133,21 @@ const ROWS: LedgerRow[] = [
 // repeated in the hero-caret keyframes (app/globals.css).
 const STOPS = ROWS.map((_, i) => i * ROW_H + CARET_TOP);
 
-// Starts the hero once. The copy enters when 64px into view (the rule <Reveal> applied) and is
-// then marked done, so it never replays.
-function enterHero(hero: HTMLElement) {
-  if (hero.dataset.entrance) return;
-  hero.dataset.entrance = "go";
-  const copy = hero.querySelector<HTMLElement>(".hero-copy-in");
-  if (!copy) return;
-  const done = (event: AnimationEvent) => {
-    if (event.target === copy) copy.dataset.shown = "done";
-  };
-  copy.addEventListener("animationend", done);
-  copy.addEventListener("animationcancel", done);
-  new IntersectionObserver(
-    (entries, observer) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      observer.disconnect();
-      copy.dataset.shown = "";
-    },
-    { rootMargin: "-64px" },
-  ).observe(copy);
-}
-
 export function Hero() {
   const root = useRef<HTMLElement>(null);
+
+  // Releases the ledger on the first frame after the commit, as motion did: a tab that loads in
+  // the background gets no frames, so the ledger plays when it is first shown.
+  useLayoutEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (root.current) root.current.dataset.entrance = "go";
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     const el = root.current;
     if (!el) return;
-    enterHero(el);
     // CSS animations replay when a hidden element is shown again. The ledger should replay on a
     // return to the page but not on a resize: off once played, back on when Next hides the page.
     const running = el
@@ -197,7 +184,7 @@ export function Hero() {
 
         <div className="mx-auto max-w-5xl px-6 py-20 sm:px-8 sm:py-28">
           {/* ── Copy column: left-aligned editorial argument on a feathered parchment scrim ── */}
-          <div className="hero-copy-in relative max-w-3xl">
+          <Reveal lcp className="relative max-w-3xl">
             <div className="relative">
               <p className="font-mono text-caption text-fog uppercase">
                 Evidence-backed model decisions
@@ -244,7 +231,7 @@ export function Hero() {
                 </a>
               </div>
             </div>
-          </div>
+          </Reveal>
 
           {/* ── The star artifact: the per-step approval ledger, wider than the copy measure ── */}
           <div className="mt-14 sm:mt-16">
@@ -402,6 +389,7 @@ function ApprovalTable() {
             {ROWS.map((row, i) => (
               <div
                 key={row.key}
+                data-reveal
                 suppressHydrationWarning
                 className="hero-row-in grid items-center gap-x-3 border-b border-ash-border font-mono text-[13px]"
                 style={
