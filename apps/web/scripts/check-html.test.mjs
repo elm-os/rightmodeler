@@ -77,6 +77,53 @@ gate("no prerendered page ships a counter frozen at zero", () => {
   }
 });
 
+// The home hero enters through CSS that React starts (sections/hero.tsx). Nothing else would
+// notice a rule going missing: the hero would simply never appear, or never appear without JS.
+gate("the home hero's entrance ships whole", () => {
+  const html = read(path.join(appDir, "index.html"));
+  // An inline opacity:0 on the headline, the lede or an ancestor means a fade from zero, which
+  // Chrome only credits as the largest paint once it has ended.
+  const start = html.indexOf("<main");
+  const h1End = html.indexOf("</h1>", start);
+  const end = html.indexOf("</p>", h1End);
+  assert.ok(
+    start !== -1 && h1End !== -1 && end !== -1,
+    "no main, h1 or lede found",
+  );
+  assert.doesNotMatch(
+    html.slice(start, end),
+    /style="[^"]*opacity:0(?![.\d])/,
+    "something between <main> and the lede server-renders at opacity:0",
+  );
+  assert.match(
+    html,
+    /<noscript><style>[^<]*\.hero-copy-in\{opacity:1!important\}\.hero-row-in\{animation:none!important;transform:none!important\}/,
+    "no noscript rule shows the hero's copy and ledger rows",
+  );
+  const sheets = [
+    ...html.matchAll(/<link rel="stylesheet" href="\/_next\/([^"?]+\.css)/g),
+  ]
+    .map((m) => read(path.join(webRoot, ".next", m[1])))
+    .join("\n");
+  for (const rule of [
+    "@keyframes hero-copy-rise{0%{opacity:.01;",
+    "@keyframes hero-row-rise{",
+    "@keyframes hero-caret{",
+    ".hero-copy-in{animation:",
+    ".hero-row-in{animation:",
+    ".hero-caret-walk{animation:",
+    ".hero-copy-in:not([data-shown]){",
+    ".hero:not([data-entrance]) :is(.hero-row-in,.hero-caret-walk){animation-play-state:paused}",
+    ".hero-copy-in[data-shown=done]",
+    ".hero[data-ledger=shown] :is(.hero-row-in,.hero-caret-walk)",
+  ]) {
+    assert.ok(
+      sheets.includes(rule),
+      `the home page's stylesheet has no "${rule}" rule`,
+    );
+  }
+});
+
 gate("nothing server-renders invisible without a no-JS escape hatch", () => {
   // Reveal enters with whileInView, which needs JavaScript. Without the noscript rule in
   // app/layout.tsx every revealed element sits at opacity:0 forever and a reader with JS off

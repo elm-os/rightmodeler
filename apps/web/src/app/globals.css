@@ -124,3 +124,101 @@ body {
     transform: none !important;
   }
 }
+
+/* Home hero entrance (sections/hero.tsx). The copy starts at 0.01, not 0: Chrome does not
+   count text at zero opacity as painted, and a compositor fade never repaints it, so a
+   fade from 0 is only credited as the largest paint when it ends. */
+@keyframes hero-copy-rise {
+  from {
+    opacity: 0.01;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes hero-copy-fade {
+  from {
+    opacity: 0.01;
+  }
+}
+
+@keyframes hero-row-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes hero-row-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The first four STOPS (sections/hero.tsx); the fifth is the caret's own transform. */
+@keyframes hero-caret {
+  0% {
+    transform: translateY(12px);
+  }
+  25% {
+    transform: translateY(56px);
+  }
+  50% {
+    transform: translateY(100px);
+  }
+  75% {
+    transform: translateY(144px);
+  }
+}
+
+@utility hero-copy-in {
+  animation: hero-copy-rise 500ms var(--ease-out-strong) backwards;
+  @media (prefers-reduced-motion: reduce) {
+    animation-name: hero-copy-fade;
+  }
+}
+
+/* --i is the row's index, set inline. */
+@utility hero-row-in {
+  animation: hero-row-rise 320ms var(--ease-out-strong)
+    calc(150ms + var(--i, 0) * 50ms) backwards;
+  @media (prefers-reduced-motion: reduce) {
+    animation: hero-row-fade 200ms var(--ease-out-strong) backwards;
+    /* Carried over, not designed: server-rendered rows have always rested 6px low here. */
+    transform: var(--rest, none);
+  }
+}
+
+@utility hero-caret-walk {
+  animation: hero-caret 720ms var(--ease-out-strong) 220ms backwards;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* Hero state, in attributes set by sections/hero.tsx. Unlayered, so these outrank the
+   utilities above. Until hydration: copy hidden, ledger held on its first frame. */
+.hero-copy-in:not([data-shown]) {
+  animation: none;
+  opacity: 0;
+}
+
+.hero:not([data-entrance]) :is(.hero-row-in, .hero-caret-walk) {
+  animation-play-state: paused;
+}
+
+/* With no walk to hold on its first frame, the caret still waits on row 1. */
+@media (prefers-reduced-motion: reduce) {
+  .hero:not([data-entrance]) .hero-caret-walk {
+    transform: translateY(12px) !important;
+  }
+}
+
+/* No replay when a hidden hero is shown again: the copy for good, the ledger until the
+   page is next hidden. */
+.hero-copy-in[data-shown="done"] {
+  animation: none;
+}
+
+.hero[data-ledger="shown"] :is(.hero-row-in, .hero-caret-walk) {
+  animation: none;
+}
