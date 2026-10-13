@@ -64,6 +64,17 @@ export const config = {
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "next-resume" },
         { type: "header", key: "purpose", value: "prefetch" },
+        // A browser navigation names text/html outright, with no parameters. That range cannot
+        // lose: it matches HTML exactly at q=1, and Markdown only wins on a higher q or a more
+        // specific range (lib/negotiate.ts). So the answer is already HTML, and the page is
+        // served without invoking the proxy at all. The value is matched against the whole
+        // header. Anything subtler still comes through here: a q on text/html, a wildcard, no
+        // Accept. scripts/negotiate.test.mjs holds this pattern to the negotiator.
+        {
+          type: "header",
+          key: "accept",
+          value: "(?:.*,)?\\s*text/html\\s*(?:,.*)?",
+        },
       ],
     },
   ],
