@@ -77,12 +77,13 @@ gate("no prerendered page ships a counter frozen at zero", () => {
   }
 });
 
-// The home hero enters through CSS that React starts (sections/hero.tsx). Nothing else would
-// notice a rule going missing: the hero would simply never appear, or never appear without JS.
-gate("the home hero's entrance ships whole", () => {
+// The home hero's copy enters through <Reveal lcp>: CSS keyframes that start at 0.01, so the
+// headline counts as the largest paint when it starts to appear. Nothing else would notice a
+// rule going missing: the copy would simply never show.
+gate("the home hero's copy enters through keyframes the page ships", () => {
   const html = read(path.join(appDir, "index.html"));
   // An inline opacity:0 on the headline, the lede or an ancestor means a fade from zero, which
-  // Chrome only credits as the largest paint once it has ended.
+  // Chrome only credits as the largest paint once it has all but ended.
   const start = html.indexOf("<main");
   const h1End = html.indexOf("</h1>", start);
   const end = html.indexOf("</p>", h1End);
@@ -95,11 +96,10 @@ gate("the home hero's entrance ships whole", () => {
     /style="[^"]*opacity:0(?![.\d])/,
     "something between <main> and the lede server-renders at opacity:0",
   );
-  // With JavaScript off the [data-reveal] noscript rule is what shows them.
-  assert.doesNotMatch(
-    html,
-    /<div(?![^>]*data-reveal)[^>]*class="[^"]*\b(?:reveal-lcp|hero-row-in)\b/,
-    "a hero element waits for its CSS entrance without data-reveal",
+  assert.match(
+    html.slice(start, end),
+    /<div data-reveal="true" class="reveal-lcp /,
+    "the hero copy is not a <Reveal lcp> with the no-JS hook",
   );
   const sheets = [
     ...html.matchAll(/<link rel="stylesheet" href="\/_next\/([^"?]+\.css)/g),
@@ -108,15 +108,9 @@ gate("the home hero's entrance ships whole", () => {
     .join("\n");
   for (const rule of [
     "@keyframes reveal-rise{0%{opacity:.01;",
-    "@keyframes hero-row-rise{",
-    "@keyframes hero-caret{",
     ".reveal-lcp{animation:",
-    ".hero-row-in{animation:",
-    ".hero-caret-walk{animation:",
     ".reveal-lcp:not([data-shown]){",
-    ".hero:not([data-entrance]) :is(.hero-row-in,.hero-caret-walk){animation-play-state:paused}",
-    ".reveal-lcp[data-shown=done]",
-    ".hero[data-ledger=shown] :is(.hero-row-in,.hero-caret-walk)",
+    ".reveal-lcp[data-shown=done]{animation:none}",
   ]) {
     assert.ok(
       sheets.includes(rule),

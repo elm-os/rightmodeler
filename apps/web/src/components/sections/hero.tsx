@@ -10,10 +10,7 @@
 // parchment scrim, a labelled + hedged proof number that rhymes to Row 1, a copy-able command.
 // Every figure is stamped illustrative; the UI is strictly black-on-paper (accent hues live only
 // inside HeroGradient). Row entrances and the caret honour prefers-reduced-motion.
-//
-// The ledger's entrance is CSS (hero-* in app/globals.css), released from the effects in Hero.
 
-import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { AnimatedNumber } from "@/components/animated-number";
 import { CopyCommand } from "@/components/copy-command";
@@ -129,43 +126,12 @@ const ROWS: LedgerRow[] = [
   },
 ];
 
-// Caret rest points, one per row, measured from the top of the rows track. The first four are
-// repeated in the hero-caret keyframes (app/globals.css).
+// Caret rest points, one per row, measured from the top of the rows track.
 const STOPS = ROWS.map((_, i) => i * ROW_H + CARET_TOP);
 
 export function Hero() {
-  const root = useRef<HTMLElement>(null);
-
-  // Releases the ledger on the first frame after the commit, as motion did: a tab that loads in
-  // the background gets no frames, so the ledger plays when it is first shown.
-  useLayoutEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      if (root.current) root.current.dataset.entrance = "go";
-    });
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    const el = root.current;
-    if (!el) return;
-    // CSS animations replay when a hidden element is shown again. The ledger should replay on a
-    // return to the page but not on a resize: off once played, back on when Next hides the page.
-    const running = el
-      .getAnimations({ subtree: true })
-      .filter((animation) => animation instanceof CSSAnimation);
-    void Promise.allSettled(
-      running.map((animation) => animation.finished),
-    ).then(() => {
-      if (el.getClientRects().length > 0) el.dataset.ledger = "shown";
-    });
-    return () => {
-      // Not on Strict Mode's rehearsed unmount, which leaves the hero on screen.
-      if (el.getClientRects().length === 0) delete el.dataset.ledger;
-    };
-  }, []);
-
   return (
-    <section ref={root} className="hero bg-parchment-white">
+    <section className="bg-parchment-white">
       <div className="relative isolate overflow-hidden">
         {/* Grain-gradient backdrop spans the full framed column, edge to edge — reaching the
             frame's side rules with no inner boundary. The two accent hues live only in here. */}
@@ -387,24 +353,18 @@ function ApprovalTable() {
           {/* Rows track (relative) — hosts the absolutely-positioned reading-head caret. */}
           <div className="relative" style={{ height: ROWS.length * ROW_H }}>
             {ROWS.map((row, i) => (
-              <div
+              <motion.div
                 key={row.key}
                 data-reveal
-                suppressHydrationWarning
-                className="hero-row-in grid items-center gap-x-3 border-b border-ash-border font-mono text-[13px]"
-                style={
-                  {
-                    gridTemplateColumns: GRID,
-                    height: ROW_H,
-                    "--i": i,
-                    // Read under reduced motion only (app/globals.css). Hydration keeps the
-                    // server's value; rows React creates in the browser get none.
-                    "--rest":
-                      typeof window === "undefined"
-                        ? "translateY(6px)"
-                        : "none",
-                  } as CSSProperties
-                }
+                className="grid items-center gap-x-3 border-b border-ash-border font-mono text-[13px]"
+                style={{ gridTemplateColumns: GRID, height: ROW_H }}
+                initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                transition={{
+                  delay: reduce ? 0 : 0.15 + i * 0.05,
+                  duration: reduce ? 0.2 : 0.32,
+                  ease: EASE,
+                }}
               >
                 {/* caret gutter (empty — the caret floats over it) */}
                 <span aria-hidden />
@@ -462,21 +422,28 @@ function ApprovalTable() {
                 <span className="flex min-w-0 items-center">
                   <FlagCell flag={row.flag} />
                 </span>
-              </div>
+              </motion.div>
             ))}
 
             {/* Reading-head caret: an ink block that walks the ledger as it fills and settles on
                 Row 5 (abstain). One-shot, GPU transform only; under reduced motion it is placed
-                statically on Row 5 with zero travel so the meaning survives without movement.
-                Its own transform is that resting place; hero-caret-walk animates up to it. */}
-            <span
+                statically on Row 5 with zero travel so the meaning survives without movement. */}
+            <motion.span
               aria-hidden
-              className="hero-caret-walk pointer-events-none absolute left-1 z-10 w-[3px] rounded-[1px] bg-midnight-ink"
-              style={{
-                top: 0,
-                height: CARET_H,
-                transform: `translateY(${STOPS[STOPS.length - 1]}px)`,
-              }}
+              className="pointer-events-none absolute left-1 z-10 w-[3px] rounded-[1px] bg-midnight-ink"
+              style={{ top: 0, height: CARET_H }}
+              initial={{ y: reduce ? STOPS[STOPS.length - 1] : STOPS[0] }}
+              animate={{ y: reduce ? STOPS[STOPS.length - 1] : STOPS }}
+              transition={
+                reduce
+                  ? { duration: 0 }
+                  : {
+                      delay: 0.22,
+                      duration: 0.72,
+                      times: [0, 0.25, 0.5, 0.75, 1],
+                      ease: EASE,
+                    }
+              }
             />
           </div>
 
