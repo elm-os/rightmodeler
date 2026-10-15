@@ -729,7 +729,7 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
     )
     .option(
       "--candidate <id>",
-      "replay this catalog model instead of the automatic shortlist, wherever it costs less than the recorded model (repeatable)",
+      "replay this catalog model instead of the automatic shortlist, in each family where it is cheaper than the recorded models and fits every call site (repeatable)",
       collectOption,
     )
     .option(

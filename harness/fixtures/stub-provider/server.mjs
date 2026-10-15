@@ -55,7 +55,7 @@ const freeModel = {
   supported_parameters: ["max_tokens", "temperature"],
 };
 
-// Cheaper models are newer, so the release-window ranking keeps the price order.
+// Cheaper acme models are newer, so the release-window ranking keeps their price order.
 const releasedDaysAgo = {
   "acme/free-1": 1,
   "acme/lite-1": 2,
@@ -85,6 +85,7 @@ export async function startStubProvider({
   bareModelIds = false,
   catalogPageSize,
   catalogTotalCount,
+  contextLengths = {},
   errorModels = [],
   includeFreeModel = false,
   malformedJudgeModels = [],
@@ -108,6 +109,9 @@ export async function startStubProvider({
     .map((model) => ({
       ...model,
       released: today - daysAgo[model.id] * 86_400,
+      ...(contextLengths[model.id] === undefined
+        ? {}
+        : { context_length: contextLengths[model.id] }),
     }))
     .map((model) =>
       bareModelIds && model.id.startsWith("acme/")

@@ -1095,20 +1095,28 @@ export async function estimateReplay(options: PipelineOptions): Promise<
       ? undefined
       : await routeCatalog(() => routes.candidates.callable());
   const window = candidateReleaseWindow(context, plan, known);
-  const candidates = dropJudgeVendorCandidates(
-    context,
+  const selection =
     context.approvedRunSpecDigest === undefined
       ? replayCandidates(plan, known, callable, window)
-      : await approvedReplayCandidates(
-          context,
-          plan,
-          callable ?? known,
-          context.approvedRunSpecDigest,
-        ),
-  );
+      : {
+          shortlists: await approvedReplayCandidates(
+            context,
+            plan,
+            callable ?? known,
+            context.approvedRunSpecDigest,
+          ),
+          emptiedByWindow: new Set<string>(),
+        };
+  const candidates = dropJudgeVendorCandidates(context, selection.shortlists);
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
-  reportCandidateSelection(context, plan, candidates, window);
+  reportCandidateSelection(
+    context,
+    plan,
+    candidates,
+    window,
+    selection.emptiedByWindow,
+  );
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
@@ -3628,7 +3636,10 @@ function replayCandidates(
   catalog: readonly ModelCatalogEntry[],
   callable: readonly ModelCatalogEntry[] | undefined,
   window: ReleaseWindow | undefined,
-): StepShortlist[] {
+): {
+  readonly shortlists: StepShortlist[];
+  readonly emptiedByWindow: ReadonlySet<string>;
+} {
   const callableById = new Map(
     (callable ?? []).map((model) => [model.id, model] as const),
   );
@@ -3675,7 +3686,17 @@ function replayCandidates(
     ...assignment,
     candidates: assignment.candidates.map(({ id }) => catalogById.get(id)!),
   }));
-  return shortlisted.map((assignment) => {
+  const emptiedByWindow = new Set(
+    shortlisted
+      .filter(
+        ({ candidates, droppedByReleaseWindow, abstention }) =>
+          abstention === undefined &&
+          candidates.length === 0 &&
+          droppedByReleaseWindow > 0,
+      )
+      .map(({ stepId }) => stepId),
+  );
+  const shortlists = shortlisted.map((assignment) => {
     const family = plan.steps.find(
       ({ stepId }) => stepId === assignment.stepId,
     )?.family;
@@ -3703,6 +3724,7 @@ function replayCandidates(
       candidates: assignment.candidates.filter(({ id }) => commonIds.has(id)),
     };
   });
+  return { shortlists, emptiedByWindow };
 }
 
 function dropJudgeVendorCandidates(
@@ -3800,6 +3822,7 @@ function reportCandidateSelection(
   plan: z.infer<typeof replayPlanSchema>,
   candidates: readonly StepShortlist[],
   window: ReleaseWindow | undefined,
+  emptiedByWindow: ReadonlySet<string>,
 ): void {
   const familyByStepId = new Map(
     plan.steps.map(({ stepId, family }) => [stepId, family] as const),
@@ -3821,7 +3844,10 @@ function reportCandidateSelection(
       ({ stepId }) => familyByStepId.get(stepId) === family,
     );
     const droppedByWindow = Math.max(
-      ...familySteps.map((step) => step.droppedByReleaseWindow),
+      0,
+      ...familySteps
+        .filter(({ stepId }) => emptiedByWindow.has(stepId))
+        .map((step) => step.droppedByReleaseWindow),
     );
     if (
       familySteps.every((step) => step.candidates.length === 0) &&
@@ -3849,7 +3875,7 @@ function reportCandidateSelection(
     }
   }
   if (steps.some((step) => step.candidates.length > 0)) return;
-  if (steps.some((step) => step.droppedByReleaseWindow > 0)) {
+  if (steps.some(({ stepId }) => emptiedByWindow.has(stepId))) {
     throw new ProtocolError({
       exitCode: 2,
       code: "no_recent_candidates",
@@ -4022,20 +4048,28 @@ async function executeReplay(
       ? undefined
       : await routeCatalog(() => routes.candidates.callable());
   const window = candidateReleaseWindow(context, plan, known);
-  const candidates = dropJudgeVendorCandidates(
-    context,
+  const selection =
     context.approvedRunSpecDigest === undefined
       ? replayCandidates(plan, known, callable, window)
-      : await approvedReplayCandidates(
-          context,
-          plan,
-          callable ?? known,
-          context.approvedRunSpecDigest,
-        ),
-  );
+      : {
+          shortlists: await approvedReplayCandidates(
+            context,
+            plan,
+            callable ?? known,
+            context.approvedRunSpecDigest,
+          ),
+          emptiedByWindow: new Set<string>(),
+        };
+  const candidates = dropJudgeVendorCandidates(context, selection.shortlists);
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
-  reportCandidateSelection(context, plan, candidates, window);
+  reportCandidateSelection(
+    context,
+    plan,
+    candidates,
+    window,
+    selection.emptiedByWindow,
+  );
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,

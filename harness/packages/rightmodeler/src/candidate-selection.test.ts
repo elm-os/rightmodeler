@@ -55,6 +55,7 @@ interface StubProviderModule {
     port: number;
     includeFreeModel?: boolean;
     omitCatalogModels?: string[];
+    contextLengths?: Record<string, number>;
   }): Promise<StubProvider>;
 }
 
@@ -462,6 +463,46 @@ describe("candidate selection", { timeout: 120_000 }, () => {
           "Family summarize: no model cheaper than the current model was released on or after 2026-07-17 (1 cheaper model left out); pass an earlier --released-since, or name models with --candidate.",
       },
     ]);
+  });
+
+  it("does not blame the window when the family intersection empties the family", async () => {
+    const narrowStub = await stubModule.startStubProvider({
+      port: 0,
+      includeFreeModel: true,
+      contextLengths: { "acme/lite-1": 32 },
+    });
+    try {
+      const { estimate, warnings } = await project({
+        port: narrowStub.port,
+        released: { "acme/free-1": "2025-01-01" },
+      });
+      const policyDirectory = await mkdtemp(
+        join(tmpdir(), "rightmodeler-candidates-policy-"),
+      );
+      temporaryDirectories.push(policyDirectory);
+      const policyFilePath = join(policyDirectory, "policy.json");
+      await writeFile(policyFilePath, JSON.stringify({ shortlistTop: 1 }));
+
+      const result = await estimate({
+        policyFilePath,
+        includeFreeModels: true,
+      });
+
+      expect(
+        result.shortlist.map(({ candidateIds, droppedByReleaseWindow }) => ({
+          candidateIds,
+          droppedByReleaseWindow,
+        })),
+      ).toEqual([
+        { candidateIds: [], droppedByReleaseWindow: 1 },
+        { candidateIds: [], droppedByReleaseWindow: 1 },
+      ]);
+      expect(warnings.map(({ code }) => code)).not.toContain(
+        "shortlist_no_recent_candidates",
+      );
+    } finally {
+      await narrowStub.close();
+    }
   });
 
   it("names every --candidate the catalog does not list", async () => {

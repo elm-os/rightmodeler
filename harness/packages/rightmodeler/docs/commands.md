@@ -64,8 +64,9 @@ Options:
                                       before this UTC date (YYYY-MM-DD); alone,
                                       it ends a 90-day window
   --candidate <id>                    replay this catalog model instead of the
-                                      automatic shortlist, wherever it costs
-                                      less than the recorded model (repeatable)
+                                      automatic shortlist, in each family where
+                                      it is cheaper than the recorded models and
+                                      fits every call site (repeatable)
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -145,8 +146,9 @@ Options:
                                       before this UTC date (YYYY-MM-DD); alone,
                                       it ends a 90-day window
   --candidate <id>                    replay this catalog model instead of the
-                                      automatic shortlist, wherever it costs
-                                      less than the recorded model (repeatable)
+                                      automatic shortlist, in each family where
+                                      it is cheaper than the recorded models and
+                                      fits every call site (repeatable)
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -221,8 +223,9 @@ Options:
                                    this UTC date (YYYY-MM-DD); alone, it ends a
                                    90-day window
   --candidate <id>                 replay this catalog model instead of the
-                                   automatic shortlist, wherever it costs less
-                                   than the recorded model (repeatable)
+                                   automatic shortlist, in each family where it
+                                   is cheaper than the recorded models and fits
+                                   every call site (repeatable)
   --modeb-config <path>            versioned Mode B runtime configuration JSON
                                    file
   -h, --help                       display help for command
@@ -248,8 +251,9 @@ Options:
                                    this UTC date (YYYY-MM-DD); alone, it ends a
                                    90-day window
   --candidate <id>                 replay this catalog model instead of the
-                                   automatic shortlist, wherever it costs less
-                                   than the recorded model (repeatable)
+                                   automatic shortlist, in each family where it
+                                   is cheaper than the recorded models and fits
+                                   every call site (repeatable)
   --modeb-config <path>            versioned Mode B runtime configuration JSON
                                    file
   -h, --help                       display help for command
@@ -275,8 +279,9 @@ Options:
                                    this UTC date (YYYY-MM-DD); alone, it ends a
                                    90-day window
   --candidate <id>                 replay this catalog model instead of the
-                                   automatic shortlist, wherever it costs less
-                                   than the recorded model (repeatable)
+                                   automatic shortlist, in each family where it
+                                   is cheaper than the recorded models and fits
+                                   every call site (repeatable)
   --modeb-config <path>            versioned Mode B runtime configuration JSON
                                    file
   -h, --help                       display help for command
@@ -302,8 +307,9 @@ Options:
                                    this UTC date (YYYY-MM-DD); alone, it ends a
                                    90-day window
   --candidate <id>                 replay this catalog model instead of the
-                                   automatic shortlist, wherever it costs less
-                                   than the recorded model (repeatable)
+                                   automatic shortlist, in each family where it
+                                   is cheaper than the recorded models and fits
+                                   every call site (repeatable)
   --modeb-config <path>            versioned Mode B runtime configuration JSON
                                    file
   -h, --help                       display help for command
@@ -329,8 +335,9 @@ Options:
                                    this UTC date (YYYY-MM-DD); alone, it ends a
                                    90-day window
   --candidate <id>                 replay this catalog model instead of the
-                                   automatic shortlist, wherever it costs less
-                                   than the recorded model (repeatable)
+                                   automatic shortlist, in each family where it
+                                   is cheaper than the recorded models and fits
+                                   every call site (repeatable)
   --modeb-config <path>            versioned Mode B runtime configuration JSON
                                    file
   -h, --help                       display help for command
@@ -356,8 +363,9 @@ Options:
                                       before this UTC date (YYYY-MM-DD); alone,
                                       it ends a 90-day window
   --candidate <id>                    replay this catalog model instead of the
-                                      automatic shortlist, wherever it costs
-                                      less than the recorded model (repeatable)
+                                      automatic shortlist, in each family where
+                                      it is cheaper than the recorded models and
+                                      fits every call site (repeatable)
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -431,8 +439,9 @@ Options:
                                    this UTC date (YYYY-MM-DD); alone, it ends a
                                    90-day window
   --candidate <id>                 replay this catalog model instead of the
-                                   automatic shortlist, wherever it costs less
-                                   than the recorded model (repeatable)
+                                   automatic shortlist, in each family where it
+                                   is cheaper than the recorded models and fits
+                                   every call site (repeatable)
   --modeb-config <path>            versioned Mode B runtime configuration JSON
                                    file
   -h, --help                       display help for command
@@ -458,8 +467,9 @@ Options:
                                       before this UTC date (YYYY-MM-DD); alone,
                                       it ends a 90-day window
   --candidate <id>                    replay this catalog model instead of the
-                                      automatic shortlist, wherever it costs
-                                      less than the recorded model (repeatable)
+                                      automatic shortlist, in each family where
+                                      it is cheaper than the recorded models and
+                                      fits every call site (repeatable)
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -530,8 +540,9 @@ Options:
                                    this UTC date (YYYY-MM-DD); alone, it ends a
                                    90-day window
   --candidate <id>                 replay this catalog model instead of the
-                                   automatic shortlist, wherever it costs less
-                                   than the recorded model (repeatable)
+                                   automatic shortlist, in each family where it
+                                   is cheaper than the recorded models and fits
+                                   every call site (repeatable)
   --modeb-config <path>            versioned Mode B runtime configuration JSON
                                    file
   -h, --help                       display help for command
@@ -613,8 +624,9 @@ Options:
                                    this UTC date (YYYY-MM-DD); alone, it ends a
                                    90-day window
   --candidate <id>                 replay this catalog model instead of the
-                                   automatic shortlist, wherever it costs less
-                                   than the recorded model (repeatable)
+                                   automatic shortlist, in each family where it
+                                   is cheaper than the recorded models and fits
+                                   every call site (repeatable)
   --modeb-config <path>            versioned Mode B runtime configuration JSON
                                    file
   -h, --help                       display help for command

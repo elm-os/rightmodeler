@@ -46269,18 +46269,25 @@ async function estimateReplay(options) {
   const judgeCatalog = context2.existingRunId === void 0 ? await routeCatalog(() => routes.judge.callable()) : known;
   const callable = planCandidateRoute(context2) === void 0 ? void 0 : await routeCatalog(() => routes.candidates.callable());
   const window = candidateReleaseWindow(context2, plan, known);
-  const candidates = dropJudgeVendorCandidates(
-    context2,
-    context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable, window) : await approvedReplayCandidates(
+  const selection = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable, window) : {
+    shortlists: await approvedReplayCandidates(
       context2,
       plan,
       callable ?? known,
       context2.approvedRunSpecDigest
-    )
-  );
+    ),
+    emptiedByWindow: /* @__PURE__ */ new Set()
+  };
+  const candidates = dropJudgeVendorCandidates(context2, selection.shortlists);
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
-  reportCandidateSelection(context2, plan, candidates, window);
+  reportCandidateSelection(
+    context2,
+    plan,
+    candidates,
+    window,
+    selection.emptiedByWindow
+  );
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
@@ -48218,7 +48225,12 @@ function replayCandidates(plan, catalog, callable, window) {
     ...assignment,
     candidates: assignment.candidates.map(({ id }) => catalogById.get(id))
   }));
-  return shortlisted.map((assignment) => {
+  const emptiedByWindow = new Set(
+    shortlisted.filter(
+      ({ candidates, droppedByReleaseWindow, abstention: abstention2 }) => abstention2 === void 0 && candidates.length === 0 && droppedByReleaseWindow > 0
+    ).map(({ stepId }) => stepId)
+  );
+  const shortlists = shortlisted.map((assignment) => {
     const family = plan.steps.find(
       ({ stepId }) => stepId === assignment.stepId
     )?.family;
@@ -48241,6 +48253,7 @@ function replayCandidates(plan, catalog, callable, window) {
       candidates: assignment.candidates.filter(({ id }) => commonIds.has(id))
     };
   });
+  return { shortlists, emptiedByWindow };
 }
 function dropJudgeVendorCandidates(context2, candidates) {
   const judgeKind = context2.routes?.judge;
@@ -48304,7 +48317,7 @@ function assertPricedCandidates(baseUrl, candidates) {
     });
   }
 }
-function reportCandidateSelection(context2, plan, candidates, window) {
+function reportCandidateSelection(context2, plan, candidates, window, emptiedByWindow) {
   const familyByStepId = new Map(
     plan.steps.map(({ stepId, family }) => [stepId, family])
   );
@@ -48318,7 +48331,8 @@ function reportCandidateSelection(context2, plan, candidates, window) {
       ({ stepId }) => familyByStepId.get(stepId) === family
     );
     const droppedByWindow = Math.max(
-      ...familySteps.map((step) => step.droppedByReleaseWindow)
+      0,
+      ...familySteps.filter(({ stepId }) => emptiedByWindow.has(stepId)).map((step) => step.droppedByReleaseWindow)
     );
     if (familySteps.every((step) => step.candidates.length === 0) && droppedByWindow > 0) {
       context2.reporter.warning(
@@ -48343,7 +48357,7 @@ function reportCandidateSelection(context2, plan, candidates, window) {
     }
   }
   if (steps.some((step) => step.candidates.length > 0)) return;
-  if (steps.some((step) => step.droppedByReleaseWindow > 0)) {
+  if (steps.some(({ stepId }) => emptiedByWindow.has(stepId))) {
     throw new ProtocolError({
       exitCode: 2,
       code: "no_recent_candidates",
@@ -48465,18 +48479,25 @@ async function executeReplay(context2, inputDigestValue, runId) {
   }));
   const callable = planCandidateRoute(context2) === void 0 ? void 0 : await routeCatalog(() => routes.candidates.callable());
   const window = candidateReleaseWindow(context2, plan, known);
-  const candidates = dropJudgeVendorCandidates(
-    context2,
-    context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable, window) : await approvedReplayCandidates(
+  const selection = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable, window) : {
+    shortlists: await approvedReplayCandidates(
       context2,
       plan,
       callable ?? known,
       context2.approvedRunSpecDigest
-    )
-  );
+    ),
+    emptiedByWindow: /* @__PURE__ */ new Set()
+  };
+  const candidates = dropJudgeVendorCandidates(context2, selection.shortlists);
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
-  reportCandidateSelection(context2, plan, candidates, window);
+  reportCandidateSelection(
+    context2,
+    plan,
+    candidates,
+    window,
+    selection.emptiedByWindow
+  );
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
@@ -48661,8 +48682,8 @@ async function executeReplay(context2, inputDigestValue, runId) {
           ({ stepId }) => stepId === assignment.stepId
         )?.family;
         if (family === void 0) return false;
-        const selection = shortlistSelections.get(family);
-        return selection?.status === "confirmation_required" && selection.confirmedCandidateId === candidate.id;
+        const selection2 = shortlistSelections.get(family);
+        return selection2?.status === "confirmation_required" && selection2.confirmedCandidateId === candidate.id;
       })
     }));
     await runCells("holdout", holdoutCandidates);
@@ -51977,7 +51998,7 @@ function addPipelineOptions(command, provider) {
     "shortlist only models released on or before this UTC date (YYYY-MM-DD); alone, it ends a 90-day window"
   ).option(
     "--candidate <id>",
-    "replay this catalog model instead of the automatic shortlist, wherever it costs less than the recorded model (repeatable)",
+    "replay this catalog model instead of the automatic shortlist, in each family where it is cheaper than the recorded models and fits every call site (repeatable)",
     collectOption
   ).option(
     "--modeb-config <path>",
