@@ -19,6 +19,11 @@ export const replayStartInputSchema = harnessInputSchema.extend({
   pricingFile: z.string().min(1).optional(),
   policy: z.string().min(1).optional(),
   includeFree: z.boolean().optional(),
+  releasedSince: z
+    .union([z.iso.date(), z.string().regex(/^[1-9]\d{0,4}d$/u)])
+    .optional(),
+  releasedUntil: z.iso.date().optional(),
+  candidates: z.array(z.string().min(1)).min(1).optional(),
   approvedRun: z
     .string()
     .regex(/^[0-9a-f]{64}$/u)

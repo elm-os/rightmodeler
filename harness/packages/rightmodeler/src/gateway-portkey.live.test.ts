@@ -49,6 +49,9 @@ describe.skipIf(!gate.run)(`Portkey 1.15.2 live (${gate.reason})`, () => {
     "--api-key-env",
     "AI_GATEWAY_API_KEY",
     ...route,
+    // The cheapest live models are often older than the default release window.
+    "--released-since",
+    "2000-01-01",
     "--policy",
     policy,
     "--max-cost-usd",

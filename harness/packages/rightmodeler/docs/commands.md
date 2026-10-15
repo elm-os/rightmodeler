@@ -56,6 +56,16 @@ Options:
   --matchers <path>                   declarative matcher definitions JSON file
   --include-free                      include zero-priced models in candidate
                                       shortlists
+  --released-since <date-or-days>     shortlist only models released on or after
+                                      this UTC date (YYYY-MM-DD) or this many
+                                      days before the shortlist is planned
+                                      (180d); 90d when omitted
+  --released-until <date>             shortlist only models released on or
+                                      before this UTC date (YYYY-MM-DD); alone,
+                                      it ends a 90-day window
+  --candidate <id>                    replay this catalog model instead of the
+                                      automatic shortlist, wherever it costs
+                                      less than the recorded model (repeatable)
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -82,7 +92,8 @@ Options:
                                       request, as 'name: value' (repeatable)
   --catalog-reference <url-or-path>   upstream /models URL or file that fills
                                       pricing, context and capabilities the
-                                      provider catalog lacks
+                                      provider catalog lacks, and supplies
+                                      release dates
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -126,6 +137,16 @@ Options:
   --matchers <path>                   declarative matcher definitions JSON file
   --include-free                      include zero-priced models in candidate
                                       shortlists
+  --released-since <date-or-days>     shortlist only models released on or after
+                                      this UTC date (YYYY-MM-DD) or this many
+                                      days before the shortlist is planned
+                                      (180d); 90d when omitted
+  --released-until <date>             shortlist only models released on or
+                                      before this UTC date (YYYY-MM-DD); alone,
+                                      it ends a 90-day window
+  --candidate <id>                    replay this catalog model instead of the
+                                      automatic shortlist, wherever it costs
+                                      less than the recorded model (repeatable)
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -152,7 +173,8 @@ Options:
                                       request, as 'name: value' (repeatable)
   --catalog-reference <url-or-path>   upstream /models URL or file that fills
                                       pricing, context and capabilities the
-                                      provider catalog lacks
+                                      provider catalog lacks, and supplies
+                                      release dates
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -187,11 +209,23 @@ Usage: rightmodeler scan [options]
 run through the scan stage
 
 Options:
-  --traces <path>        trace input file or directory
-  --matchers <path>      declarative matcher definitions JSON file
-  --include-free         include zero-priced models in candidate shortlists
-  --modeb-config <path>  versioned Mode B runtime configuration JSON file
-  -h, --help             display help for command
+  --traces <path>                  trace input file or directory
+  --matchers <path>                declarative matcher definitions JSON file
+  --include-free                   include zero-priced models in candidate
+                                   shortlists
+  --released-since <date-or-days>  shortlist only models released on or after
+                                   this UTC date (YYYY-MM-DD) or this many days
+                                   before the shortlist is planned (180d); 90d
+                                   when omitted
+  --released-until <date>          shortlist only models released on or before
+                                   this UTC date (YYYY-MM-DD); alone, it ends a
+                                   90-day window
+  --candidate <id>                 replay this catalog model instead of the
+                                   automatic shortlist, wherever it costs less
+                                   than the recorded model (repeatable)
+  --modeb-config <path>            versioned Mode B runtime configuration JSON
+                                   file
+  -h, --help                       display help for command
 ```
 
 ## `rightmodeler ingest`
@@ -202,11 +236,23 @@ Usage: rightmodeler ingest [options]
 run through the ingest stage
 
 Options:
-  --traces <path>        trace input file or directory
-  --matchers <path>      declarative matcher definitions JSON file
-  --include-free         include zero-priced models in candidate shortlists
-  --modeb-config <path>  versioned Mode B runtime configuration JSON file
-  -h, --help             display help for command
+  --traces <path>                  trace input file or directory
+  --matchers <path>                declarative matcher definitions JSON file
+  --include-free                   include zero-priced models in candidate
+                                   shortlists
+  --released-since <date-or-days>  shortlist only models released on or after
+                                   this UTC date (YYYY-MM-DD) or this many days
+                                   before the shortlist is planned (180d); 90d
+                                   when omitted
+  --released-until <date>          shortlist only models released on or before
+                                   this UTC date (YYYY-MM-DD); alone, it ends a
+                                   90-day window
+  --candidate <id>                 replay this catalog model instead of the
+                                   automatic shortlist, wherever it costs less
+                                   than the recorded model (repeatable)
+  --modeb-config <path>            versioned Mode B runtime configuration JSON
+                                   file
+  -h, --help                       display help for command
 ```
 
 ## `rightmodeler reconcile`
@@ -217,11 +263,23 @@ Usage: rightmodeler reconcile [options]
 run through the reconcile stage
 
 Options:
-  --traces <path>        trace input file or directory
-  --matchers <path>      declarative matcher definitions JSON file
-  --include-free         include zero-priced models in candidate shortlists
-  --modeb-config <path>  versioned Mode B runtime configuration JSON file
-  -h, --help             display help for command
+  --traces <path>                  trace input file or directory
+  --matchers <path>                declarative matcher definitions JSON file
+  --include-free                   include zero-priced models in candidate
+                                   shortlists
+  --released-since <date-or-days>  shortlist only models released on or after
+                                   this UTC date (YYYY-MM-DD) or this many days
+                                   before the shortlist is planned (180d); 90d
+                                   when omitted
+  --released-until <date>          shortlist only models released on or before
+                                   this UTC date (YYYY-MM-DD); alone, it ends a
+                                   90-day window
+  --candidate <id>                 replay this catalog model instead of the
+                                   automatic shortlist, wherever it costs less
+                                   than the recorded model (repeatable)
+  --modeb-config <path>            versioned Mode B runtime configuration JSON
+                                   file
+  -h, --help                       display help for command
 ```
 
 ## `rightmodeler scrub`
@@ -232,11 +290,23 @@ Usage: rightmodeler scrub [options]
 run through the scrub stage
 
 Options:
-  --traces <path>        trace input file or directory
-  --matchers <path>      declarative matcher definitions JSON file
-  --include-free         include zero-priced models in candidate shortlists
-  --modeb-config <path>  versioned Mode B runtime configuration JSON file
-  -h, --help             display help for command
+  --traces <path>                  trace input file or directory
+  --matchers <path>                declarative matcher definitions JSON file
+  --include-free                   include zero-priced models in candidate
+                                   shortlists
+  --released-since <date-or-days>  shortlist only models released on or after
+                                   this UTC date (YYYY-MM-DD) or this many days
+                                   before the shortlist is planned (180d); 90d
+                                   when omitted
+  --released-until <date>          shortlist only models released on or before
+                                   this UTC date (YYYY-MM-DD); alone, it ends a
+                                   90-day window
+  --candidate <id>                 replay this catalog model instead of the
+                                   automatic shortlist, wherever it costs less
+                                   than the recorded model (repeatable)
+  --modeb-config <path>            versioned Mode B runtime configuration JSON
+                                   file
+  -h, --help                       display help for command
 ```
 
 ## `rightmodeler shortlist`
@@ -247,11 +317,23 @@ Usage: rightmodeler shortlist [options]
 run through the shortlist stage
 
 Options:
-  --traces <path>        trace input file or directory
-  --matchers <path>      declarative matcher definitions JSON file
-  --include-free         include zero-priced models in candidate shortlists
-  --modeb-config <path>  versioned Mode B runtime configuration JSON file
-  -h, --help             display help for command
+  --traces <path>                  trace input file or directory
+  --matchers <path>                declarative matcher definitions JSON file
+  --include-free                   include zero-priced models in candidate
+                                   shortlists
+  --released-since <date-or-days>  shortlist only models released on or after
+                                   this UTC date (YYYY-MM-DD) or this many days
+                                   before the shortlist is planned (180d); 90d
+                                   when omitted
+  --released-until <date>          shortlist only models released on or before
+                                   this UTC date (YYYY-MM-DD); alone, it ends a
+                                   90-day window
+  --candidate <id>                 replay this catalog model instead of the
+                                   automatic shortlist, wherever it costs less
+                                   than the recorded model (repeatable)
+  --modeb-config <path>            versioned Mode B runtime configuration JSON
+                                   file
+  -h, --help                       display help for command
 ```
 
 ## `rightmodeler replay`
@@ -266,6 +348,16 @@ Options:
   --matchers <path>                   declarative matcher definitions JSON file
   --include-free                      include zero-priced models in candidate
                                       shortlists
+  --released-since <date-or-days>     shortlist only models released on or after
+                                      this UTC date (YYYY-MM-DD) or this many
+                                      days before the shortlist is planned
+                                      (180d); 90d when omitted
+  --released-until <date>             shortlist only models released on or
+                                      before this UTC date (YYYY-MM-DD); alone,
+                                      it ends a 90-day window
+  --candidate <id>                    replay this catalog model instead of the
+                                      automatic shortlist, wherever it costs
+                                      less than the recorded model (repeatable)
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -292,7 +384,8 @@ Options:
                                       request, as 'name: value' (repeatable)
   --catalog-reference <url-or-path>   upstream /models URL or file that fills
                                       pricing, context and capabilities the
-                                      provider catalog lacks
+                                      provider catalog lacks, and supplies
+                                      release dates
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -326,11 +419,23 @@ Usage: rightmodeler aggregate [options]
 run through the aggregate stage
 
 Options:
-  --traces <path>        trace input file or directory
-  --matchers <path>      declarative matcher definitions JSON file
-  --include-free         include zero-priced models in candidate shortlists
-  --modeb-config <path>  versioned Mode B runtime configuration JSON file
-  -h, --help             display help for command
+  --traces <path>                  trace input file or directory
+  --matchers <path>                declarative matcher definitions JSON file
+  --include-free                   include zero-priced models in candidate
+                                   shortlists
+  --released-since <date-or-days>  shortlist only models released on or after
+                                   this UTC date (YYYY-MM-DD) or this many days
+                                   before the shortlist is planned (180d); 90d
+                                   when omitted
+  --released-until <date>          shortlist only models released on or before
+                                   this UTC date (YYYY-MM-DD); alone, it ends a
+                                   90-day window
+  --candidate <id>                 replay this catalog model instead of the
+                                   automatic shortlist, wherever it costs less
+                                   than the recorded model (repeatable)
+  --modeb-config <path>            versioned Mode B runtime configuration JSON
+                                   file
+  -h, --help                       display help for command
 ```
 
 ## `rightmodeler confirm`
@@ -345,6 +450,16 @@ Options:
   --matchers <path>                   declarative matcher definitions JSON file
   --include-free                      include zero-priced models in candidate
                                       shortlists
+  --released-since <date-or-days>     shortlist only models released on or after
+                                      this UTC date (YYYY-MM-DD) or this many
+                                      days before the shortlist is planned
+                                      (180d); 90d when omitted
+  --released-until <date>             shortlist only models released on or
+                                      before this UTC date (YYYY-MM-DD); alone,
+                                      it ends a 90-day window
+  --candidate <id>                    replay this catalog model instead of the
+                                      automatic shortlist, wherever it costs
+                                      less than the recorded model (repeatable)
   --modeb-config <path>               versioned Mode B runtime configuration
                                       JSON file
   --base-url <url>                    OpenAI-compatible provider base URL
@@ -371,7 +486,8 @@ Options:
                                       request, as 'name: value' (repeatable)
   --catalog-reference <url-or-path>   upstream /models URL or file that fills
                                       pricing, context and capabilities the
-                                      provider catalog lacks
+                                      provider catalog lacks, and supplies
+                                      release dates
   --policy <path>                     release policy JSON file: quality floor,
                                       shortlist size, model allow and deny lists
   --evaluator <provider>              external evaluator provider (choices:
@@ -402,14 +518,26 @@ Usage: rightmodeler corpus [options] [command]
 build or import the replay corpus
 
 Options:
-  --traces <path>        trace input file or directory
-  --matchers <path>      declarative matcher definitions JSON file
-  --include-free         include zero-priced models in candidate shortlists
-  --modeb-config <path>  versioned Mode B runtime configuration JSON file
-  -h, --help             display help for command
+  --traces <path>                  trace input file or directory
+  --matchers <path>                declarative matcher definitions JSON file
+  --include-free                   include zero-priced models in candidate
+                                   shortlists
+  --released-since <date-or-days>  shortlist only models released on or after
+                                   this UTC date (YYYY-MM-DD) or this many days
+                                   before the shortlist is planned (180d); 90d
+                                   when omitted
+  --released-until <date>          shortlist only models released on or before
+                                   this UTC date (YYYY-MM-DD); alone, it ends a
+                                   90-day window
+  --candidate <id>                 replay this catalog model instead of the
+                                   automatic shortlist, wherever it costs less
+                                   than the recorded model (repeatable)
+  --modeb-config <path>            versioned Mode B runtime configuration JSON
+                                   file
+  -h, --help                       display help for command
 
 Commands:
-  import [options]       import a curated provider dataset
+  import [options]                 import a curated provider dataset
 ```
 
 ## `rightmodeler corpus import`
@@ -473,11 +601,23 @@ Usage: rightmodeler audit sample [options]
 write the audit worksheet without blocking
 
 Options:
-  --traces <path>        trace input file or directory
-  --matchers <path>      declarative matcher definitions JSON file
-  --include-free         include zero-priced models in candidate shortlists
-  --modeb-config <path>  versioned Mode B runtime configuration JSON file
-  -h, --help             display help for command
+  --traces <path>                  trace input file or directory
+  --matchers <path>                declarative matcher definitions JSON file
+  --include-free                   include zero-priced models in candidate
+                                   shortlists
+  --released-since <date-or-days>  shortlist only models released on or after
+                                   this UTC date (YYYY-MM-DD) or this many days
+                                   before the shortlist is planned (180d); 90d
+                                   when omitted
+  --released-until <date>          shortlist only models released on or before
+                                   this UTC date (YYYY-MM-DD); alone, it ends a
+                                   90-day window
+  --candidate <id>                 replay this catalog model instead of the
+                                   automatic shortlist, wherever it costs less
+                                   than the recorded model (repeatable)
+  --modeb-config <path>            versioned Mode B runtime configuration JSON
+                                   file
+  -h, --help                       display help for command
 ```
 
 ## `rightmodeler audit tabulate`

@@ -14,6 +14,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { FsStore, compareText, computeRunSpecDigest } from "@rightmodeler/core";
+import {
+  MIN_DISTINCT_STEPS,
+  minimumTrialsForFloor,
+} from "@rightmodeler/kernel";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { runPipeline, type PipelineOptions } from "./pipeline.js";
@@ -96,6 +100,21 @@ const cases = [
     name: "the release policy changes",
     mutation: "policy-file",
     expected: ["shortlist"],
+  },
+  {
+    name: "an explicit release range is set",
+    mutation: "release-range",
+    expected: ["shortlist"],
+  },
+  {
+    name: "candidates are named",
+    mutation: "named-candidates",
+    expected: ["shortlist"],
+  },
+  {
+    name: "the run repeats on a later day",
+    mutation: "later-day",
+    expected: [],
   },
   {
     name: "an approved run digest is missing",
@@ -281,6 +300,15 @@ describe("pipeline staleness", { timeout: 120_000 }, () => {
       await writeFile(policyFilePath, JSON.stringify({ shortlistTop: 5 }));
       overrides = { policyFilePath };
     }
+    if (mutation === "release-range") {
+      overrides = { releasedSince: "2026-01-01", releasedUntil: "2026-03-31" };
+    }
+    if (mutation === "named-candidates") {
+      overrides = { namedCandidates: ["acme/small-1"] };
+    }
+    if (mutation === "later-day") {
+      overrides = { now: new Date("2099-01-01T00:00:00.000Z") };
+    }
     if (mutation === "missing-approved-run") {
       const reporter = new Reporter("json", {
         stdout: () => undefined,
@@ -457,6 +485,47 @@ describe("pipeline staleness", { timeout: 120_000 }, () => {
           },
         }),
         approvedRunSpecDigest: null,
+      }),
+    );
+  });
+
+  it("keeps a default store's shortlist checkpoint digest", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-staleness-"));
+    temporaryDirectories.push(root);
+    const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+    const store = join(root, "store");
+    const traces = join(root, "traces.json");
+    await writeFile(traces, await readFile(traceFixturePath));
+    await runPipeline({
+      repo,
+      store,
+      traces,
+      through: "shortlist",
+      reporter: new Reporter("json", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      }),
+    });
+    const { stages } = await readSetupState(new FsStore(store), "project");
+
+    expect(stages.shortlist!.inputDigest).toBe(
+      computeRunSpecDigest({
+        stage: "shortlist",
+        upstream: stages["audit-sample"]!.inputDigest,
+        policy: {
+          qualityFloor: 0.85,
+          shortlistTop: 3,
+          allowModels: [],
+          denyModels: [],
+        },
+        includeFreeModels: false,
+        stepsPerFamily: MIN_DISTINCT_STEPS,
+        minimumHoldoutCases: minimumTrialsForFloor(0.85, 1),
+        approvedRunSpecDigest: null,
+        evaluatorPlan: {
+          evaluatorKind: "judge",
+          gateMetric: "replacement-quality",
+        },
       }),
     );
   });

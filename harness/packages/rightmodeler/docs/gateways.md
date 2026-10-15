@@ -5,7 +5,7 @@ Rightmodeler replays and judges through any OpenAI-compatible base URL, so a gat
 ## What a replay route needs
 
 - `--base-url` is the gateway's OpenAI-compatible root, ending in `/v1`, and `--api-key-env` names the variable holding the key the gateway expects.
-- The gateway's `/v1/models` lists the replay models. When it lists ids without prices or capabilities, pass `--catalog-reference` with the upstream's public model list; see [Catalogs without pricing or capabilities](getting-started.md#catalogs-without-pricing-or-capabilities).
+- The gateway's `/v1/models` lists the replay models. When it lists ids without prices, capabilities or release dates, pass `--catalog-reference` with the upstream's public model list; see [Catalogs without pricing or capabilities](getting-started.md#catalogs-without-pricing-or-capabilities). Release dates also bound which candidates are tried, by default those released in the last 90 days; see [Which models are tried](getting-started.md#which-models-are-tried).
 - Headers the gateway reads per request are passed with `--header 'name: value'`; see [Gateways that route by header](getting-started.md#gateways-that-route-by-header).
 - The replay route runs no fallbacks, model aliases, response caching or request plugins for the replay models. Rightmodeler never asks a gateway for them, and it checks each replayed response (in Mode B, each response to a step whose model it sets): one that names another model, reports a cache hit, or reports a changed request is left out of the evidence as `attribution_substituted`; see [Which model answered](getting-started.md#which-model-answered).
 - Replay latency includes the gateway hop; rightmodeler does not separate the gateway's share.
@@ -39,7 +39,7 @@ As a replay route:
 
 - Declare each replay model as an `Exact` `x-ai-eg-model` match under the upstream's own id, one `backendRef`, no `modelNameOverride`, no priority fallback and no `BackendTrafficPolicy` retries on the replay route. A fallback or an override answers with another model, so a replayed response it answers is left out as `attribution_substituted`.
 - Raise the Gateway's `ClientTrafficPolicy` `bufferLimit` (Envoy Gateway's 32 KiB default is too small for real prompts) and the route's `timeouts.request` for slow models.
-- The gateway lists only the declared ids at `/v1/models`, so pass `--catalog-reference` with the upstream's public list.
+- The gateway lists only the declared ids at `/v1/models`, so pass `--catalog-reference` with the upstream's public list, which also gives the release dates that bound the candidates.
 - The gateway replaces `Authorization` with the route's key, so `--api-key-env` may name any non-empty variable.
 
 ```sh
@@ -76,7 +76,7 @@ As a replay route:
 - Model ids are `<provider>/<upstream id>`, for example `vercel/openai/gpt-4o-mini` for Vercel AI Gateway configured as an OpenAI-typed custom provider. Bifrost answers with the upstream id, which rightmodeler accepts as the requested model.
 - Set every `compat` flag to `false` in the `client` block: a `client` block that omits them turns them all on, and the compat plugin can drop parameters such as `response_format` while answering 200.
 - Configure no key `aliases` or routing rules for replay models; an alias answers with another model and is left out as `attribution_substituted`.
-- Pass `--catalog-reference` with the upstream's public list. A custom provider lists ids and context only, with no prices or capabilities, and through Vercel AI Gateway every model carries the same `created` date: Bifrost copies Vercel's `created`, one placeholder for all models, and drops the real `released` date. Rightmodeler ranks judges partly by release date, and the reference's release dates win over the gateway's, so judges rank as they do on Vercel itself instead of the most expensive first. Bifrost's own pricing sheet is not used.
+- Pass `--catalog-reference` with the upstream's public list. A custom provider lists ids and context only, with no prices or capabilities, and through Vercel AI Gateway every model carries the same `created` date: Bifrost copies Vercel's `created`, one placeholder for all models, and drops the real `released` date. Rightmodeler ranks judges partly by release date and by default tries only candidates released in the last 90 days, and the reference's release dates win over the gateway's, so judges rank as they do on Vercel itself instead of the most expensive first, and the default release window applies, which one placeholder date for every model would turn off (`release_window_skipped`). Bifrost's own pricing sheet is not used.
 - The billed cost comes from the upstream through Bifrost's `usage.cost.total_cost`.
 - Send `x-bf-cache-no-store: true` and `x-bf-dim-rightmodeler: replay` with rightmodeler's replays (`--header`): the first keeps replays out of a semantic cache (a cache hit is still detected and left out), the second tags them so a later log export leaves them out.
 

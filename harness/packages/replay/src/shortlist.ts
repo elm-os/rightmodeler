@@ -2,6 +2,7 @@ import {
   blendedPrice,
   canonicalModelName,
   catalogFamily,
+  compareText,
   withoutFastTiers,
 } from "@rightmodeler/core";
 import type { ModelCatalogEntry } from "./provider.js";
@@ -24,6 +25,8 @@ export interface ShortlistOptions {
   deny?: readonly string[];
   top?: number;
   includeFreeModels?: boolean;
+  releasedWithin?: { readonly since: number; readonly before?: number };
+  named?: readonly string[];
 }
 
 export interface ShortlistAbstention {
@@ -38,7 +41,9 @@ export interface StepShortlist {
   droppedByTop: number;
   droppedFreeModels: number;
   droppedByOutputCeiling: number;
+  droppedByReleaseWindow: number;
   resolvedCurrentModelId?: string;
+  namedCandidatesLeftOut?: readonly { modelId: string; reason: string }[];
   abstention?: ShortlistAbstention;
 }
 
@@ -86,14 +91,20 @@ export function shortlist(
   catalog: readonly ModelCatalogEntry[],
   options: ShortlistOptions = {},
 ): StepShortlist[] {
-  const top = options.top ?? 8;
+  const named =
+    options.named === undefined || options.named.length === 0
+      ? undefined
+      : new Set(options.named);
+  const top = named?.size ?? options.top ?? 8;
   if (!Number.isSafeInteger(top) || top < 1) {
     throw new Error("top must be a positive integer");
   }
   const allow =
     options.allow === undefined ? undefined : new Set(options.allow);
   const deny = new Set(options.deny ?? []);
-  const rankable = withoutFastTiers(catalog);
+  const window = named === undefined ? options.releasedWithin : undefined;
+  const rankable = withoutBatchTiers(withoutFastTiers(catalog));
+  const rankableIds = new Set(rankable.map(({ id }) => id));
 
   return stepRecords.map((step) => {
     if (
@@ -110,6 +121,7 @@ export function shortlist(
         droppedByTop: 0,
         droppedFreeModels: 0,
         droppedByOutputCeiling: 0,
+        droppedByReleaseWindow: 0,
         abstention: {
           kind: "current-model-ambiguous",
           message: `Recorded model ${step.currentModel} matches more than one catalog model: ${[...resolution.matches].sort().join(", ")}`,
@@ -123,6 +135,7 @@ export function shortlist(
         droppedByTop: 0,
         droppedFreeModels: 0,
         droppedByOutputCeiling: 0,
+        droppedByReleaseWindow: 0,
         abstention: {
           kind: "current-model-absent",
           message: `Current model is absent from the provider catalog: ${step.currentModel ?? "unknown"}`,
@@ -136,6 +149,7 @@ export function shortlist(
     const capable = rankable.filter(
       (candidate) =>
         candidate.id !== current.id &&
+        (named === undefined || named.has(candidate.id)) &&
         (allow === undefined || allow.has(candidate.id)) &&
         !deny.has(candidate.id) &&
         (!step.needsTools || candidate.supportsTools) &&
@@ -165,15 +179,12 @@ export function shortlist(
       : qualifiedBeforeFreePolicy.filter(
           (candidate) => blendedPrice(candidate) === 0,
         ).length;
-    const qualified = qualifiedBeforeFreePolicy
-      .filter(
-        (candidate) =>
-          options.includeFreeModels || blendedPrice(candidate) !== 0,
-      )
-      .sort((left, right) => blendedPrice(left)! - blendedPrice(right)!);
+    const qualified = qualifiedBeforeFreePolicy.filter(
+      (candidate) => options.includeFreeModels || blendedPrice(candidate) !== 0,
+    );
     if (
       qualified.length === 0 &&
-      (currentPrice === null || unpricedCandidates > 0)
+      (currentPrice === null || (named === undefined && unpricedCandidates > 0))
     ) {
       return {
         stepId: step.stepId,
@@ -181,6 +192,7 @@ export function shortlist(
         droppedByTop: 0,
         droppedFreeModels,
         droppedByOutputCeiling,
+        droppedByReleaseWindow: 0,
         ...(resolvedCurrentModelId === undefined
           ? {}
           : { resolvedCurrentModelId }),
@@ -191,15 +203,125 @@ export function shortlist(
         },
       };
     }
+    const inWindow =
+      window === undefined
+        ? qualified
+        : qualified.filter(
+            ({ releasedAt }) =>
+              typeof releasedAt === "number" &&
+              releasedAt >= window.since &&
+              (window.before === undefined || releasedAt < window.before),
+          );
+    const ranked =
+      window === undefined
+        ? inWindow.sort(
+            (left, right) =>
+              blendedPrice(left)! - blendedPrice(right)! ||
+              compareText(left.id, right.id),
+          )
+        : cheaperAndNewerFirst(inWindow);
+    const candidates = ranked.slice(0, top);
+    const perMillion = (price: number): number =>
+      Number((price * 1e6).toPrecision(4));
+    const leftOutReason = (model: ModelCatalogEntry): string => {
+      const price = blendedPrice(model);
+      if (model.id === current.id) return "it is the current model";
+      if (!rankableIds.has(model.id)) {
+        const base = model.id.replace(/(?:-fast|[-:]batch)$/u, "");
+        return `it is a service tier of ${base}; name ${base} instead`;
+      }
+      if ((allow !== undefined && !allow.has(model.id)) || deny.has(model.id)) {
+        return "the release policy or the route's model list does not allow it";
+      }
+      if (step.needsTools && !model.supportsTools) {
+        return "it does not support tool calls, which this call site needs";
+      }
+      if (step.needsStructuredOutput && !model.supportsStructuredOutput) {
+        return "it does not support structured output, which this call site needs";
+      }
+      if (model.contextLength < step.observedContextTokens) {
+        return `its context window is smaller than the ${step.observedContextTokens} tokens this call site sent`;
+      }
+      if (!fitsCeiling(model)) {
+        return `its output limit is below the ${step.recordedMaxOutputTokens} tokens this call site needs`;
+      }
+      if (price === null) return "the catalog gives it no per-token price";
+      if (price >= currentPrice!) {
+        return `it is not cheaper than the current model ${current.id} (${perMillion(price)} vs ${perMillion(currentPrice!)} USD per million tokens)`;
+      }
+      return "it is zero-priced; pass --include-free to try it";
+    };
+    const namedCandidatesLeftOut = [...(named ?? [])]
+      .filter((modelId) => !candidates.some(({ id }) => id === modelId))
+      .map((modelId) => ({
+        modelId,
+        reason: leftOutReason(catalog.find(({ id }) => id === modelId)!),
+      }));
     return {
       stepId: step.stepId,
-      candidates: qualified.slice(0, top),
-      droppedByTop: Math.max(0, qualified.length - top),
+      candidates,
+      droppedByTop: Math.max(0, inWindow.length - top),
       droppedFreeModels,
       droppedByOutputCeiling,
+      droppedByReleaseWindow: qualified.length - inWindow.length,
       ...(resolvedCurrentModelId === undefined
         ? {}
         : { resolvedCurrentModelId }),
+      ...(namedCandidatesLeftOut.length === 0
+        ? {}
+        : { namedCandidatesLeftOut }),
     };
   });
+}
+
+export function releaseDateCount(
+  catalog: readonly ModelCatalogEntry[],
+): number | undefined {
+  const priced = withoutBatchTiers(withoutFastTiers(catalog)).filter(
+    ({ pricing }) => pricing !== null,
+  );
+  if (priced.length === 0) return undefined;
+  return new Set(
+    priced
+      .map(({ releasedAt }) => releasedAt ?? 0)
+      .filter((releasedAt) => releasedAt > 0),
+  ).size;
+}
+
+function withoutBatchTiers(
+  catalog: readonly ModelCatalogEntry[],
+): ModelCatalogEntry[] {
+  const ids = new Set(catalog.map(({ id }) => id));
+  return catalog.filter(
+    ({ id }) =>
+      !/[-:]batch$/u.test(id) || !ids.has(id.slice(0, -"-batch".length)),
+  );
+}
+
+// Rounds rank a model behind every model that costs no more and is no older.
+function cheaperAndNewerFirst(
+  candidates: readonly ModelCatalogEntry[],
+): ModelCatalogEntry[] {
+  let remaining = [...candidates].sort(
+    (left, right) =>
+      blendedPrice(left)! - blendedPrice(right)! ||
+      (right.releasedAt ?? 0) - (left.releasedAt ?? 0) ||
+      compareText(left.id, right.id),
+  );
+  const ranked: ModelCatalogEntry[] = [];
+  while (remaining.length > 0) {
+    const later: ModelCatalogEntry[] = [];
+    let latest = -Infinity;
+    for (const candidate of remaining) {
+      const releasedAt = candidate.releasedAt ?? 0;
+      if (releasedAt > latest) {
+        ranked.push(candidate);
+        latest = releasedAt;
+      } else {
+        later.push(candidate);
+      }
+    }
+    remaining = later;
+  }
+  return ranked;
 }

@@ -131,6 +131,9 @@ describe.skipIf(!gate.run)(
       "AIGW_CLIENT_KEY",
       "--catalog-reference",
       "https://ai-gateway.vercel.sh/v1/models",
+      // The cheapest live models are often older than the default release window.
+      "--released-since",
+      "2000-01-01",
       ...replayTag,
       "--policy",
       policyFile,

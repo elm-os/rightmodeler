@@ -33,8 +33,10 @@ import {
   releasePolicy,
   requestHeaderIdentity,
   runPipeline,
+  type PipelineOptions,
 } from "./pipeline.js";
 import { Reporter } from "./protocol.js";
+import { readJson, readSetupState } from "./state.js";
 import { makeGitFixture } from "./test-utils/git-fixture.js";
 
 const temporaryDirectories: string[] = [];
@@ -476,6 +478,55 @@ describe("detached replay provider identity", () => {
     },
   );
 
+  it(
+    "keys a detached replay to its release window and named candidates, not to the day it is claimed",
+    { timeout: 30_000 },
+    async () => {
+      const root = await mkdtemp(
+        join(tmpdir(), "rightmodeler-detached-window-"),
+      );
+      temporaryDirectories.push(root);
+      const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+      const store = join(root, "store");
+      const traces = join(root, "traces.json");
+      await copyFile(tracesPath, traces);
+      const reporter = new Reporter("json", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      });
+
+      const stubModule = (await import(stubModuleUrl)) as StubProviderModule;
+      const stub = await stubModule.startStubProvider({ port: 0 });
+      const apiKeyEnv = "RIGHTMODELER_DETACHED_WINDOW_TEST_API_KEY";
+      process.env[apiKeyEnv] = "fixture-key";
+      const claim = (overrides: Partial<PipelineOptions>) =>
+        claimDetachedReplay({
+          repo,
+          store,
+          traces,
+          baseUrl: `http://127.0.0.1:${stub.port}/v1`,
+          apiKeyEnv,
+          reporter,
+          ...overrides,
+        });
+      try {
+        const bare = await claim({ now: new Date("2026-10-15T00:30:00.000Z") });
+        const since = await claim({ releasedSince: "2026-01-01" });
+        const until = await claim({ releasedUntil: "2026-09-30" });
+        const named = await claim({ namedCandidates: ["acme/small-1"] });
+        expect(
+          new Set([bare.runId, since.runId, until.runId, named.runId]).size,
+        ).toBe(4);
+        await expect(
+          claim({ now: new Date("2026-11-14T00:30:00.000Z") }),
+        ).resolves.toMatchObject({ runId: bare.runId, deduplicated: true });
+      } finally {
+        delete process.env[apiKeyEnv];
+        await stub.close();
+      }
+    },
+  );
+
   it("hashes header values in the provider identity", () => {
     const digest = (value: string) =>
       createHash("sha256").update(value).digest("hex");
@@ -485,6 +536,63 @@ describe("detached replay provider identity", () => {
       ["x-b", digest("two")],
     ]);
   });
+});
+
+describe("detached replay release window", () => {
+  it(
+    "resolves a rebuilt shortlist's window from the day the replay was claimed",
+    { timeout: 30_000 },
+    async () => {
+      const root = await mkdtemp(
+        join(tmpdir(), "rightmodeler-detached-anchor-"),
+      );
+      temporaryDirectories.push(root);
+      const repo = await makeGitFixture(root, demoAppPath, "demo-app");
+      const store = join(root, "store");
+      const traces = join(root, "traces.json");
+      await copyFile(tracesPath, traces);
+      const reporter = new Reporter("json", {
+        stdout: () => undefined,
+        stderr: () => undefined,
+      });
+
+      const stubModule = (await import(stubModuleUrl)) as StubProviderModule;
+      const stub = await stubModule.startStubProvider({ port: 0 });
+      const apiKeyEnv = "RIGHTMODELER_DETACHED_ANCHOR_TEST_API_KEY";
+      process.env[apiKeyEnv] = "fixture-key";
+      const options = {
+        repo,
+        store,
+        traces,
+        baseUrl: `http://127.0.0.1:${stub.port}/v1`,
+        apiKeyEnv,
+        through: "shortlist" as const,
+        reporter,
+      };
+      try {
+        const claim = await claimDetachedReplay({
+          ...options,
+          now: new Date("2026-01-10T00:30:00.000Z"),
+        });
+        await expect(
+          readRunStatus({ repo, store, runId: claim.runId }),
+        ).resolves.toMatchObject({ startedAt: "2026-01-10T00:30:00.000Z" });
+
+        await runPipeline({ ...options, existingRunId: claim.runId });
+
+        const stored = new FsStore(store);
+        const checkpoint = (await readSetupState(stored, "project")).stages
+          .shortlist!;
+        expect(await readJson(stored, checkpoint.outputKey)).toMatchObject({
+          releasedSince: "2025-10-12",
+          releasedUntil: null,
+        });
+      } finally {
+        delete process.env[apiKeyEnv];
+        await stub.close();
+      }
+    },
+  );
 });
 
 describe("status spend", () => {
