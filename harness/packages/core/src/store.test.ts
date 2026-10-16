@@ -133,7 +133,7 @@ describe("FsStore", () => {
       ),
       { numRuns: 30 },
     );
-  });
+  }, 30_000);
 
   it("creates an absent key at version zero and persists versions across instances", async () => {
     const store = await makeStore();

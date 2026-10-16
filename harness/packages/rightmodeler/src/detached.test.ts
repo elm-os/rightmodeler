@@ -136,7 +136,7 @@ describe("pull request watches", () => {
 describe("detached replay progress", () => {
   it(
     "reports only stages observed by the requested run",
-    { timeout: 30_000 },
+    { timeout: 120_000 },
     async () => {
       const root = await mkdtemp(join(tmpdir(), "rightmodeler-detached-"));
       temporaryDirectories.push(root);

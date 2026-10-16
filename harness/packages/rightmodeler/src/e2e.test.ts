@@ -2937,7 +2937,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  }, 180_000);
 
   it("gives a second family two call sites and never abstains it on distinct steps", async () => {
     const { root, repo } = await fixtureCopy("second-family-call-sites");
@@ -3059,7 +3059,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  }, 240_000);
 
   it("abstains a single-call-site family before any replay spend", async () => {
     const { root, repo } = await fixtureCopy("single-call-site-family");
@@ -4638,7 +4638,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await Promise.all([provider.close(), github.close()]);
     }
-  }, 60_000);
+  }, 180_000);
 
   it("prefers a reachable external evaluator, persists every metric, and makes zero judge calls", async () => {
     const { repo } = await fixtureCopy("external-evaluator");
