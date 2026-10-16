@@ -16,7 +16,7 @@ export function renderCommandsDoc(program: Command): string {
       `## \`${commandPath(command)}\``,
       "",
       "```text",
-      command.helpInformation().replaceAll(process.cwd(), ".").trimEnd(),
+      command.helpInformation().trimEnd(),
       "```",
     );
   }

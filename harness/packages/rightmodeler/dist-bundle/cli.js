@@ -51620,7 +51620,12 @@ function createProgram(io = processIo, runtime = processRuntime) {
   const program2 = new Command().name("rightmodeler").description("Find and prove safe model substitutions.").addHelpText(
     "after",
     "\nExit codes are command-specific: apply uses 0 success, 1 refused, 2 needs a completed run, >=10 runtime error; rollback uses 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere (result on stdout) or needs a completed run (error on stderr), >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n"
-  ).version(version2).option("--repo <dir>", "repository to analyze", process.cwd()).option("--store <dir>", "store directory").addOption(
+  ).version(version2).addOption(
+    new Option("--repo <dir>", "repository to analyze").default(
+      process.cwd(),
+      "current directory"
+    )
+  ).option("--store <dir>", "store directory").addOption(
     new Option("--output <mode>", "output mode").choices(["human", "json", "jsonl"]).default("human")
   ).exitOverride().configureOutput({
     writeOut: (text) => io.stdout(text),
