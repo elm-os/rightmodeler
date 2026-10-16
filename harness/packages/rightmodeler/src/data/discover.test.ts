@@ -101,6 +101,22 @@ describe("trace discovery", () => {
     expect(candidates[0]?.approximateRecords).toBe(2);
   });
 
+  it("finds a trace file that Windows PowerShell 5.1 wrote as UTF-16", async () => {
+    const { repo, homeDir } = await fixtureRoot("utf16-discovery");
+    const path = join(repo, "traces.json");
+    await writeFile(
+      path,
+      Buffer.concat([
+        Buffer.from([0xff, 0xfe]),
+        Buffer.from(otelTrace, "utf16le"),
+      ]),
+    );
+
+    expect(await discoverTraces({ repo, homeDir })).toMatchObject([
+      { path, format: "otel-genai" },
+    ]);
+  });
+
   it("examines no more than 50 conventional local files", async () => {
     const { repo, homeDir } = await fixtureRoot("file-cap");
     await Promise.all(

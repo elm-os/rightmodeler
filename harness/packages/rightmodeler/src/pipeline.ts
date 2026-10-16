@@ -109,6 +109,7 @@ import {
   auditCorpusSample,
   auditTabulate,
   buildCorpus,
+  decodeText,
   detectFormat,
   excludedStepsWarning,
   FormatDetectionError,
@@ -2138,7 +2139,7 @@ function createContext(options: PipelineOptions): PipelineContext {
 function readModeBConfig(path: string): ModeBConfig {
   let value: unknown;
   try {
-    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    value = JSON.parse(decodeText(readFileSync(path))) as unknown;
   } catch (error) {
     throw invalidModeBConfig(
       `Invalid --modeb-config file: ${error instanceof Error ? error.message : String(error)}`,
@@ -2185,7 +2186,7 @@ function readModeBConfig(path: string): ModeBConfig {
 function readPricingFile(path: string): z.infer<typeof pricingFileSchema> {
   let value: unknown;
   try {
-    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    value = JSON.parse(decodeText(readFileSync(path))) as unknown;
   } catch (error) {
     throw invalidPricingFile(
       `Invalid --pricing-file: ${error instanceof Error ? error.message : String(error)}`,
@@ -2205,7 +2206,7 @@ function readPricingFile(path: string): z.infer<typeof pricingFileSchema> {
 function readPolicyFile(path: string): z.infer<typeof releasePolicyFileSchema> {
   let value: unknown;
   try {
-    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    value = JSON.parse(decodeText(readFileSync(path))) as unknown;
   } catch (error) {
     throw invalidPolicyFile(
       `Invalid --policy: ${error instanceof Error ? error.message : String(error)}`,
@@ -2870,9 +2871,7 @@ async function executeIngest(
   if (tracePath === undefined) {
     throw missingTracesPath();
   }
-  const texts = (await readTraceInput(tracePath)).map((body) =>
-    body.toString("utf8"),
-  );
+  const texts = (await readTraceInput(tracePath)).map(decodeText);
   const detected = texts.map((text) => detectFormat(text, traceAdapters));
   const names = [...new Set(detected.map(({ name }) => name))];
   if (names.length > 1) throw mixedTraceFormats(names);
@@ -7015,7 +7014,7 @@ export async function runAuditTabulate(options: {
   });
   const worksheet: AuditWorksheet = options.worksheet
     ? auditWorksheetSchema.parse(
-        JSON.parse(await readFile(resolve(options.worksheet), "utf8")),
+        JSON.parse(decodeText(await readFile(resolve(options.worksheet)))),
       )
     : await loadCurrent(context, "audit-sample", auditWorksheetSchema);
   const result = auditTabulate(worksheet);

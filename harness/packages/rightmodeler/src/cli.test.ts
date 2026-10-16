@@ -148,6 +148,52 @@ describe("current folder program lookup", () => {
   });
 });
 
+describe("path arguments on Windows", () => {
+  function windowsRuntime(
+    homeDir: string,
+  ): NonNullable<Parameters<typeof executeCli>[2]> {
+    return { ...terminal(homeDir, [], {}, false).runtime!, platform: "win32" };
+  }
+
+  it("refuses a quoted path that took in the arguments after it, naming only their flags", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-quoted-path-"));
+    temporaryDirectories.push(root);
+    const output = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "init",
+          "--plan",
+          "--repo",
+          `${root}\\my app" --output json --header x-api-key:secret-value`,
+        ],
+        output.io,
+        windowsRuntime(root),
+      ),
+    ).toBe(10);
+    expect(output.stderr()).toContain("(--output --header)");
+    expect(output.stderr()).not.toContain("secret-value");
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it("expands a leading ~ to the home folder", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-home-path-"));
+    temporaryDirectories.push(root);
+    await makeGitFixture(root);
+    const output = captureIo();
+
+    expect(
+      await executeCli(
+        ["init", "--plan", "--output", "json", "--repo", "~/repo"],
+        output.io,
+        windowsRuntime(root),
+      ),
+    ).toBe(0);
+    expect(output.stderr()).toBe("");
+  });
+});
+
 describe("pipelineArgv", () => {
   it("serializes every pipeline option in command order", () => {
     const approvedRun = "a".repeat(64);

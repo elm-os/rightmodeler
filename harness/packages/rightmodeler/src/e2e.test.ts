@@ -1314,6 +1314,45 @@ describe("built CLI pipeline", () => {
     60_000,
   );
 
+  it("ingests a trace file Windows PowerShell 5.1 wrote, in UTF-16 with CRLF, like the original", async () => {
+    const original = await readFile(tracesPath, "utf8");
+    const runCounts: number[] = [];
+    for (const [label, bytes] of [
+      ["utf8-traces", Buffer.from(original)],
+      [
+        "utf16-traces",
+        Buffer.concat([
+          Buffer.from([0xff, 0xfe]),
+          Buffer.from(original.replaceAll("\n", "\r\n"), "utf16le"),
+        ]),
+      ],
+    ] as const) {
+      const { root, repo } = await fixtureCopy(label);
+      const traces = join(root, "otel-genai.json");
+      await writeFile(traces, bytes);
+      const result = await runCli([
+        "init",
+        "--through",
+        "ingest",
+        "--traces",
+        traces,
+        "--output",
+        "json",
+        "--repo",
+        repo,
+      ]);
+
+      expect(result.code, result.stderr).toBe(0);
+      const ingest = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "ingest",
+      );
+      runCounts.push((ingest.runs as unknown[]).length);
+    }
+    expect(runCounts[0]).toBeGreaterThan(0);
+    expect(runCounts[1]).toBe(runCounts[0]);
+  });
+
   it("warns and keeps ingesting when a traced stream never finished", async () => {
     const { repo } = await fixtureCopy("stream-incomplete");
     const result = await runCli([
@@ -1942,7 +1981,11 @@ describe("built CLI pipeline", () => {
         allowPolicyPath,
         JSON.stringify({ allowModels: [allowedModelId] }),
       ),
-      writeFile(floorPolicyPath, JSON.stringify({ qualityFloor: 0.95 })),
+      // With a byte order mark, as Windows editors often write it.
+      writeFile(
+        floorPolicyPath,
+        `\uFEFF${JSON.stringify({ qualityFloor: 0.95 })}`,
+      ),
     ]);
     const stub = await startStub();
     const apiKeyEnv = "RIGHTMODELER_POLICY_E2E_API_KEY";

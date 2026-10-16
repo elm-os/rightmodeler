@@ -6,6 +6,7 @@ import { compareText } from "@rightmodeler/core";
 
 import { traceAdapters } from "./adapters.js";
 import { detectFormat, isRecord, type TraceFormat } from "./adapters/shared.js";
+import { decodeText } from "./decode.js";
 
 const MAX_FILES = 50;
 const MAX_CODEX_EXAMINED = 300;
@@ -259,7 +260,7 @@ async function detectionHead(
   try {
     const buffer = Buffer.alloc(Math.min(MAX_READ_BYTES, fileSize));
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    const raw = buffer.toString("utf8", 0, bytesRead);
+    const raw = decodeText(buffer.subarray(0, bytesRead));
     const complete = bytesRead === fileSize;
     const parsed = complete ? parseWholeJson(raw) : undefined;
     if (parsed !== undefined) {

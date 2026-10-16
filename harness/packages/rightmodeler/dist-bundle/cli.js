@@ -10591,7 +10591,7 @@ var require__ = __commonJS({
 import { spawn as spawn2 } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import { basename as basename6, resolve as resolve14 } from "node:path";
+import { basename as basename6, join as join21, resolve as resolve14 } from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
@@ -32938,7 +32938,7 @@ import { createHash as createHash13 } from "node:crypto";
 import { readFileSync as readFileSync7 } from "node:fs";
 import { mkdir as mkdir5, readFile as readFile13, readdir as readdir4, stat as stat4, writeFile as writeFile8 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
-import { dirname as dirname8, join as join19, relative as relative9, resolve as resolve10, sep as sep5 } from "node:path";
+import { dirname as dirname8, join as join19, relative as relative9, resolve as resolve10, sep as sep6 } from "node:path";
 import { promisify as promisify6 } from "node:util";
 
 // ../scanner/dist/declarative-matcher.js
@@ -37007,6 +37007,13 @@ function auditTabulate(worksheet) {
     if (error51 instanceof AuditError) throw error51;
     throw new AuditError("Audit tabulation failed", { cause: error51 });
   }
+}
+
+// src/data/decode.ts
+function decodeText(bytes) {
+  return new TextDecoder(
+    bytes[0] === 255 && bytes[1] === 254 ? "utf-16le" : "utf-8"
+  ).decode(bytes);
 }
 
 // src/data/scrub.ts
@@ -41816,7 +41823,7 @@ async function readCorpusVersion(options, corpusVersionId) {
 async function runDrift(options) {
   const { store, storeRoot } = context(options);
   const parent = await loadActiveCorpus(store);
-  const traceText = await readFile11(resolve7(options.traces), "utf8");
+  const traceText = decodeText(await readFile11(resolve7(options.traces)));
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
   const result2 = adaptWithReport(adapter, records);
@@ -44280,7 +44287,7 @@ function braintrustUrl(baseUrl, path) {
 
 // src/guidance.ts
 import { createInterface } from "node:readline";
-import { isAbsolute as isAbsolute4, relative as relative8, resolve as resolve9 } from "node:path";
+import { isAbsolute as isAbsolute4, relative as relative8, resolve as resolve9, sep as sep5 } from "node:path";
 async function promptForTracePath(options) {
   if (options.candidates.length === 0) {
     options.output.write(
@@ -44297,7 +44304,7 @@ async function promptForTracePath(options) {
       "Trace file path (leave empty to stop): "
     );
     const typed = asked2.answer.trim();
-    return asked2.cancelled || typed === "" ? void 0 : resolve9(options.repo, typed);
+    return asked2.cancelled || typed === "" ? void 0 : resolve9(options.repo, unquote(typed));
   }
   options.output.write("Found trace files:\n");
   const now = options.now ?? /* @__PURE__ */ new Date();
@@ -44332,7 +44339,10 @@ async function promptForTracePath(options) {
     const selected = options.candidates[Number(answer) - 1];
     if (selected !== void 0) return selected.path;
   }
-  return resolve9(options.repo, answer);
+  return resolve9(options.repo, unquote(answer));
+}
+function unquote(answer) {
+  return /^(["'])(.+)\1$/u.exec(answer)?.[2] ?? answer;
 }
 var apiPresets = {
   openrouter: {
@@ -44679,11 +44689,11 @@ function formatName(format11) {
 function shortPath(path, repo, homeDir) {
   const fromRepo = relative8(resolve9(repo), path);
   if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute4(fromRepo)) {
-    return `./${fromRepo}`;
+    return `./${fromRepo.split(sep5).join("/")}`;
   }
   const fromHome = relative8(resolve9(homeDir), path);
   if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute4(fromHome)) {
-    return `~/${fromHome}`;
+    return `~/${fromHome.split(sep5).join("/")}`;
   }
   return path;
 }
@@ -47180,7 +47190,7 @@ function createContext(options) {
 function readModeBConfig(path) {
   let value;
   try {
-    value = JSON.parse(readFileSync7(path, "utf8"));
+    value = JSON.parse(decodeText(readFileSync7(path)));
   } catch (error51) {
     throw invalidModeBConfig(
       `Invalid --modeb-config file: ${error51 instanceof Error ? error51.message : String(error51)}`
@@ -47220,7 +47230,7 @@ function readModeBConfig(path) {
 function readPricingFile(path) {
   let value;
   try {
-    value = JSON.parse(readFileSync7(path, "utf8"));
+    value = JSON.parse(decodeText(readFileSync7(path)));
   } catch (error51) {
     throw invalidPricingFile(
       `Invalid --pricing-file: ${error51 instanceof Error ? error51.message : String(error51)}`
@@ -47239,7 +47249,7 @@ function readPricingFile(path) {
 function readPolicyFile(path) {
   let value;
   try {
-    value = JSON.parse(readFileSync7(path, "utf8"));
+    value = JSON.parse(decodeText(readFileSync7(path)));
   } catch (error51) {
     throw invalidPolicyFile(
       `Invalid --policy: ${error51 instanceof Error ? error51.message : String(error51)}`
@@ -47756,9 +47766,7 @@ async function executeIngest(context2, inputDigestValue) {
   if (tracePath === void 0) {
     throw missingTracesPath();
   }
-  const texts = (await readTraceInput(tracePath)).map(
-    (body) => body.toString("utf8")
-  );
+  const texts = (await readTraceInput(tracePath)).map(decodeText);
   const detected = texts.map((text) => detectFormat(text, traceAdapters));
   const names = [...new Set(detected.map(({ name }) => name))];
   if (names.length > 1) throw mixedTraceFormats(names);
@@ -50063,7 +50071,7 @@ async function repositoryFiles(repo, storeRoot) {
   const files = [];
   for (const path of paths) {
     const absolute = join19(repo, ...path.split("/"));
-    if (absolute === storeRoot || absolute.startsWith(`${storeRoot}${sep5}`)) {
+    if (absolute === storeRoot || absolute.startsWith(`${storeRoot}${sep6}`)) {
       continue;
     }
     if (path.split("/").some((segment) => IGNORED_DIRECTORIES.has(segment))) {
@@ -50102,7 +50110,7 @@ async function walkFiles(repo) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) await visit(absolute);
       } else if (entry.isFile()) {
-        files.push(relative9(repo, absolute).split(sep5).join("/"));
+        files.push(relative9(repo, absolute).split(sep6).join("/"));
       }
     }
   }
@@ -50813,7 +50821,7 @@ async function runAuditTabulate(options) {
     })
   });
   const worksheet = options.worksheet ? auditWorksheetSchema.parse(
-    JSON.parse(await readFile13(resolve10(options.worksheet), "utf8"))
+    JSON.parse(decodeText(await readFile13(resolve10(options.worksheet))))
   ) : await loadCurrent(context2, "audit-sample", auditWorksheetSchema);
   const result2 = auditTabulate(worksheet);
   await putMutableJson(
@@ -51096,7 +51104,7 @@ async function detectionHead(path, fileSize) {
   try {
     const buffer = Buffer.alloc(Math.min(MAX_READ_BYTES, fileSize));
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    const raw = buffer.toString("utf8", 0, bytesRead);
+    const raw = decodeText(buffer.subarray(0, bytesRead));
     const complete = bytesRead === fileSize;
     const parsed2 = complete ? parseWholeJson(raw) : void 0;
     if (parsed2 !== void 0) {
@@ -51753,15 +51761,27 @@ var processRuntime = {
 function createProgram(io = processIo, runtime = processRuntime) {
   let code = 0;
   let usageOutput = "";
+  const platform = runtime.platform ?? process.platform;
+  const pathArg = (value) => {
+    if (platform !== "win32") return value;
+    if (value.includes('"')) {
+      const flags = [...value.matchAll(/(?:^|\s)(--?[A-Za-z][\w-]*)/gu)].map(
+        ([, flag]) => flag
+      );
+      const taken = flags.length > 0 ? ` (${flags.join(" ")})` : "";
+      const message2 = `error: a quoted path ends in a backslash, so the shell passed the arguments after it as part of the path${taken}. Remove the trailing backslash, or end the path with /.`;
+      usageOutput += `${message2}
+`;
+      throw new CommanderError(10, "rightmodeler.quotedPath", message2);
+    }
+    return value === "~" || value.startsWith("~/") || value.startsWith("~\\") ? join21(runtime.homeDir, value.slice(2)) : value;
+  };
   const program2 = new Command().name("rightmodeler").description("Find and prove safe model substitutions.").addHelpText(
     "after",
     "\nExit codes are command-specific: apply uses 0 success, 1 refused, 2 needs a completed run, >=10 runtime error; rollback uses 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere (result on stdout) or needs a completed run (error on stderr), >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n"
   ).version(version2).addOption(
-    new Option("--repo <dir>", "repository to analyze").default(
-      process.cwd(),
-      "current directory"
-    )
-  ).option("--store <dir>", "store directory").addOption(
+    new Option("--repo <dir>", "repository to analyze").argParser(pathArg).default(process.cwd(), "current directory")
+  ).option("--store <dir>", "store directory", pathArg).addOption(
     new Option("--output <mode>", "output mode").choices(["human", "json", "jsonl"]).default("human")
   ).exitOverride().configureOutput({
     writeOut: (text) => io.stdout(text),
@@ -51782,7 +51802,8 @@ function createProgram(io = processIo, runtime = processRuntime) {
   };
   const init = addPipelineOptions(
     program2.command("init").description("run the resumable Phase A pipeline"),
-    true
+    true,
+    pathArg
   );
   run(init, async (reporter, global) => {
     const local = init.opts();
@@ -51806,7 +51827,8 @@ function createProgram(io = processIo, runtime = processRuntime) {
   });
   const estimate = addPipelineOptions(
     program2.command("estimate").description("project replay spend before paid model calls"),
-    true
+    true,
+    pathArg
   ).option(
     "--approved-run <digest>",
     "scope projection to one merged approved swap"
@@ -51830,7 +51852,8 @@ function createProgram(io = processIo, runtime = processRuntime) {
     if (stage === "audit-sample" || stage === "corpus") continue;
     const command = addPipelineOptions(
       program2.command(stage).description(`run through the ${stage} stage`),
-      stage === "replay" || stage === "confirm"
+      stage === "replay" || stage === "confirm",
+      pathArg
     );
     if (stage === "replay") {
       command.option("--detach", "enqueue replay and return its run identifier").option(
@@ -51873,7 +51896,8 @@ function createProgram(io = processIo, runtime = processRuntime) {
   }
   const corpus = addPipelineOptions(
     program2.command("corpus").description("build or import the replay corpus"),
-    false
+    false,
+    pathArg
   );
   run(corpus, async (reporter, global) => {
     const result2 = await runPipeline({
@@ -51933,7 +51957,8 @@ function createProgram(io = processIo, runtime = processRuntime) {
   const audit = program2.command("audit").description("manage the reference audit");
   const auditSample = addPipelineOptions(
     audit.command("sample").description("write the audit worksheet without blocking"),
-    false
+    false,
+    pathArg
   );
   run(auditSample, async (reporter, global) => {
     const result2 = await runPipeline({
@@ -51947,7 +51972,7 @@ function createProgram(io = processIo, runtime = processRuntime) {
     reporter.result(result2);
     return 0;
   });
-  const auditTabulate2 = audit.command("tabulate").description("tabulate a completed audit worksheet").option("--worksheet <path>", "completed worksheet JSON file");
+  const auditTabulate2 = audit.command("tabulate").description("tabulate a completed audit worksheet").option("--worksheet <path>", "completed worksheet JSON file", pathArg);
   run(auditTabulate2, async (reporter, global) => {
     const result2 = await runAuditTabulate({
       repo: global.repo,
@@ -51969,7 +51994,8 @@ function createProgram(io = processIo, runtime = processRuntime) {
     "environment variable containing the GitHub token"
   ).option("--dry-run", "run all machine gates without writing GitHub state").option(
     "--code-graph <path>",
-    "Graphify graph.json for static code context in the pull request body; never evidence"
+    "Graphify graph.json for static code context in the pull request body; never evidence",
+    pathArg
   );
   run(apply, async (reporter, global) => {
     const local = apply.opts();
@@ -52016,7 +52042,7 @@ function createProgram(io = processIo, runtime = processRuntime) {
     reporter.result(result2);
     return result2.status === "refused" ? 1 : 0;
   });
-  const drift = program2.command("drift").description("detect drift against the active replay corpus").option("--traces <path>", "new trace batch");
+  const drift = program2.command("drift").description("detect drift against the active replay corpus").option("--traces <path>", "new trace batch", pathArg);
   run(drift, async (reporter, global) => {
     const traces = drift.opts().traces;
     if (traces === void 0) {
@@ -52094,7 +52120,8 @@ function createProgram(io = processIo, runtime = processRuntime) {
   });
   const report = program2.command("report").description("write report.md and report.json").option(
     "--code-graph <path>",
-    "Graphify graph.json for static code context in the report; never evidence"
+    "Graphify graph.json for static code context in the report; never evidence",
+    pathArg
   );
   run(report, async (reporter, global) => {
     const result2 = await readReport({
@@ -52127,8 +52154,12 @@ function createProgram(io = processIo, runtime = processRuntime) {
     usageOutput: () => usageOutput
   };
 }
-function addPipelineOptions(command, provider) {
-  command.option("--traces <path>", "trace input file or directory").option("--matchers <path>", "declarative matcher definitions JSON file").option(
+function addPipelineOptions(command, provider, pathArg) {
+  command.option("--traces <path>", "trace input file or directory", pathArg).option(
+    "--matchers <path>",
+    "declarative matcher definitions JSON file",
+    pathArg
+  ).option(
     "--include-free",
     "include zero-priced models in candidate shortlists"
   ).option(
@@ -52143,7 +52174,8 @@ function addPipelineOptions(command, provider) {
     collectOption
   ).option(
     "--modeb-config <path>",
-    "versioned Mode B runtime configuration JSON file"
+    "versioned Mode B runtime configuration JSON file",
+    pathArg
   );
   if (provider) {
     command.option("--base-url <url>", "OpenAI-compatible provider base URL").option(
@@ -52164,17 +52196,20 @@ function addPipelineOptions(command, provider) {
       "optional hard spend cap in USD; omit to run uncapped so every case and judge cell completes"
     ).option("--max-concurrency <n>", "maximum concurrent provider requests").option(
       "--pricing-file <path>",
-      "JSON map from model id to per-token input and output USD, for catalogs without pricing"
+      "JSON map from model id to per-token input and output USD, for catalogs without pricing",
+      pathArg
     ).option(
       "--header <header>",
       "extra HTTP header for every provider request, as 'name: value' (repeatable)",
       collectOption
     ).option(
       "--catalog-reference <url-or-path>",
-      "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks, and supplies release dates"
+      "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks, and supplies release dates",
+      pathArg
     ).option(
       "--policy <path>",
-      "release policy JSON file: quality floor, shortlist size, model allow and deny lists"
+      "release policy JSON file: quality floor, shortlist size, model allow and deny lists",
+      pathArg
     ).addOption(
       new Option(
         "--evaluator <provider>",
@@ -52191,10 +52226,12 @@ function addPipelineOptions(command, provider) {
       "Braintrust project or LangSmith dataset identifier"
     ).option(
       "--evaluator-command <path>",
-      "promptfoo executable path or command"
+      "promptfoo executable path or command",
+      pathArg
     ).option(
       "--evaluator-config <path>",
-      "promptfoo assertions configuration file"
+      "promptfoo assertions configuration file",
+      pathArg
     ).option(
       "--evaluator-scorer <name>",
       "external evaluator scorer name (repeatable)",
@@ -52214,7 +52251,8 @@ function addPipelineOptions(command, provider) {
       ])
     ).option(
       "--code-graph <path>",
-      "Graphify graph.json for static code context in the report; never evidence"
+      "Graphify graph.json for static code context in the report; never evidence",
+      pathArg
     );
   }
   if (command.name() === "init" || command.name() === "estimate") {

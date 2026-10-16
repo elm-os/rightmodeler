@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { Writable, type Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
@@ -194,6 +194,7 @@ interface CliRuntime {
   readonly stdout: Writable & { readonly isTTY?: boolean };
   readonly env: NodeJS.ProcessEnv;
   readonly homeDir: string;
+  readonly platform?: NodeJS.Platform;
   now(): Date;
 }
 
@@ -211,6 +212,26 @@ export function createProgram(
 ): ProgramHandle {
   let code = 0;
   let usageOutput = "";
+  const platform = runtime.platform ?? process.platform;
+  // On Windows, a quoted path that ends in a backslash escapes its closing quote, so the shell
+  // passes the arguments after it as part of the path. A Windows path cannot hold a double
+  // quote, so such a value is refused. The message names only the flags it took in, because
+  // the rest can hold a header or a key. PowerShell and cmd also pass ~ unexpanded.
+  const pathArg = (value: string): string => {
+    if (platform !== "win32") return value;
+    if (value.includes('"')) {
+      const flags = [...value.matchAll(/(?:^|\s)(--?[A-Za-z][\w-]*)/gu)].map(
+        ([, flag]) => flag,
+      );
+      const taken = flags.length > 0 ? ` (${flags.join(" ")})` : "";
+      const message = `error: a quoted path ends in a backslash, so the shell passed the arguments after it as part of the path${taken}. Remove the trailing backslash, or end the path with /.`;
+      usageOutput += `${message}\n`;
+      throw new CommanderError(10, "rightmodeler.quotedPath", message);
+    }
+    return value === "~" || value.startsWith("~/") || value.startsWith("~\\")
+      ? join(runtime.homeDir, value.slice(2))
+      : value;
+  };
   const program = new Command()
     .name("rightmodeler")
     .description("Find and prove safe model substitutions.")
@@ -220,12 +241,11 @@ export function createProgram(
     )
     .version(version)
     .addOption(
-      new Option("--repo <dir>", "repository to analyze").default(
-        process.cwd(),
-        "current directory",
-      ),
+      new Option("--repo <dir>", "repository to analyze")
+        .argParser(pathArg)
+        .default(process.cwd(), "current directory"),
     )
-    .option("--store <dir>", "store directory")
+    .option("--store <dir>", "store directory", pathArg)
     .addOption(
       new Option("--output <mode>", "output mode")
         .choices(["human", "json", "jsonl"])
@@ -257,6 +277,7 @@ export function createProgram(
   const init = addPipelineOptions(
     program.command("init").description("run the resumable Phase A pipeline"),
     true,
+    pathArg,
   );
   run(init, async (reporter, global) => {
     const local = init.opts<PipelineCommandOptions>();
@@ -290,6 +311,7 @@ export function createProgram(
       .command("estimate")
       .description("project replay spend before paid model calls"),
     true,
+    pathArg,
   ).option(
     "--approved-run <digest>",
     "scope projection to one merged approved swap",
@@ -315,6 +337,7 @@ export function createProgram(
     const command = addPipelineOptions(
       program.command(stage).description(`run through the ${stage} stage`),
       stage === "replay" || stage === "confirm",
+      pathArg,
     );
     if (stage === "replay") {
       command
@@ -371,6 +394,7 @@ export function createProgram(
   const corpus = addPipelineOptions(
     program.command("corpus").description("build or import the replay corpus"),
     false,
+    pathArg,
   );
   run(corpus, async (reporter, global) => {
     const result = await runPipeline({
@@ -454,6 +478,7 @@ export function createProgram(
       .command("sample")
       .description("write the audit worksheet without blocking"),
     false,
+    pathArg,
   );
   run(auditSample, async (reporter, global) => {
     const result = await runPipeline({
@@ -471,7 +496,7 @@ export function createProgram(
   const auditTabulate = audit
     .command("tabulate")
     .description("tabulate a completed audit worksheet")
-    .option("--worksheet <path>", "completed worksheet JSON file");
+    .option("--worksheet <path>", "completed worksheet JSON file", pathArg);
   run(auditTabulate, async (reporter, global) => {
     const result = await runAuditTabulate({
       repo: global.repo,
@@ -503,6 +528,7 @@ export function createProgram(
     .option(
       "--code-graph <path>",
       "Graphify graph.json for static code context in the pull request body; never evidence",
+      pathArg,
     );
   run(apply, async (reporter, global) => {
     const local = apply.opts<ApplyCommandOptions>();
@@ -567,7 +593,7 @@ export function createProgram(
   const drift = program
     .command("drift")
     .description("detect drift against the active replay corpus")
-    .option("--traces <path>", "new trace batch");
+    .option("--traces <path>", "new trace batch", pathArg);
   run(drift, async (reporter, global) => {
     const traces = drift.opts<DriftCommandOptions>().traces;
     if (traces === undefined) {
@@ -672,6 +698,7 @@ export function createProgram(
     .option(
       "--code-graph <path>",
       "Graphify graph.json for static code context in the report; never evidence",
+      pathArg,
     );
   run(report, async (reporter, global) => {
     const result = await readReport({
@@ -716,10 +743,18 @@ export function createProgram(
   };
 }
 
-function addPipelineOptions(command: Command, provider: boolean): Command {
+function addPipelineOptions(
+  command: Command,
+  provider: boolean,
+  pathArg: (value: string) => string,
+): Command {
   command
-    .option("--traces <path>", "trace input file or directory")
-    .option("--matchers <path>", "declarative matcher definitions JSON file")
+    .option("--traces <path>", "trace input file or directory", pathArg)
+    .option(
+      "--matchers <path>",
+      "declarative matcher definitions JSON file",
+      pathArg,
+    )
     .option(
       "--include-free",
       "include zero-priced models in candidate shortlists",
@@ -740,6 +775,7 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
     .option(
       "--modeb-config <path>",
       "versioned Mode B runtime configuration JSON file",
+      pathArg,
     );
   if (provider) {
     command
@@ -768,6 +804,7 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
       .option(
         "--pricing-file <path>",
         "JSON map from model id to per-token input and output USD, for catalogs without pricing",
+        pathArg,
       )
       .option(
         "--header <header>",
@@ -777,10 +814,12 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
       .option(
         "--catalog-reference <url-or-path>",
         "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks, and supplies release dates",
+        pathArg,
       )
       .option(
         "--policy <path>",
         "release policy JSON file: quality floor, shortlist size, model allow and deny lists",
+        pathArg,
       )
       .addOption(
         new Option(
@@ -804,10 +843,12 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
       .option(
         "--evaluator-command <path>",
         "promptfoo executable path or command",
+        pathArg,
       )
       .option(
         "--evaluator-config <path>",
         "promptfoo assertions configuration file",
+        pathArg,
       )
       .option(
         "--evaluator-scorer <name>",
@@ -834,6 +875,7 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
       .option(
         "--code-graph <path>",
         "Graphify graph.json for static code context in the report; never evidence",
+        pathArg,
       );
   }
   if (command.name() === "init" || command.name() === "estimate") {

@@ -33,6 +33,7 @@ import { z } from "zod";
 import {
   adaptWithReport,
   buildCorpus,
+  decodeText,
   detectFormat,
   excludedStepsWarning,
   parseTraceRecords,
@@ -268,7 +269,7 @@ export async function runDrift(
 ): Promise<RunDriftResult> {
   const { store, storeRoot } = context(options);
   const parent = await loadActiveCorpus(store);
-  const traceText = await readFile(resolve(options.traces), "utf8");
+  const traceText = decodeText(await readFile(resolve(options.traces)));
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
   const result = adaptWithReport(adapter, records);
