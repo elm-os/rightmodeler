@@ -19,7 +19,7 @@
     {
       "label": "02 · Catalog",
       "title": "The shortlist comes from your model list",
-      "body": "GET /models is read as the catalog. A candidate qualifies only when it is strictly cheaper than the incumbent on a blended per-token price, supports what the step needs, and has a context window at least as large as the step's observed tokens. LiteLLM's /v1/models lists ids only, so pass --catalog-reference with the upstream's public model list, such as https://openrouter.ai/api/v1/models, and name each model group by its upstream id, such as openai/gpt-4o-mini: rightmodeler joins the two by id and fills in each listed model's price, context window, output ceiling, and tool and structured-output support. When no model is priced after the join, it requests GET /model/info on the same host for LiteLLM's per-token costs. Entries still without a price cannot be compared and are left out, named in a catalog_reference_unmatched warning."
+      "body": "GET /models is read as the catalog. A candidate qualifies only when it is strictly cheaper than the incumbent on a blended per-token price, supports what the step needs, has a context window at least as large as the step's observed tokens and, by default, was released in the last 90 days. LiteLLM's /v1/models lists ids only, so pass --catalog-reference with the upstream's public model list, such as https://openrouter.ai/api/v1/models, and name each model group by its upstream id, such as openai/gpt-4o-mini: rightmodeler joins the two by id and fills in each listed model's price, context window, output ceiling, and tool and structured-output support. When no model is priced after the join, it requests GET /model/info on the same host for LiteLLM's per-token costs. Entries still without a price cannot be compared and are left out, named in a catalog_reference_unmatched warning."
     },
     {
       "label": "03 · Replay + judge",
@@ -84,7 +84,7 @@
     },
     {
       "q": "Why does my run find no candidates through my proxy?",
-      "a": "Almost always because the catalog has no price or context window to compare. LiteLLM's /v1/models lists ids only, and the shortlist needs a candidate that is strictly cheaper than the incumbent on a blended per-token price and has a context window at least as large as the step's observed tokens. Pass --catalog-reference with the upstream's public model list and name each model group by its upstream id; rightmodeler falls back to the proxy's GET /model/info for prices when nothing is priced after the join, and a catalog_reference_unmatched warning names any model the reference did not match."
+      "a": "Almost always because the catalog has no price or context window to compare. LiteLLM's /v1/models lists ids only, and the shortlist needs a candidate that is strictly cheaper than the incumbent on a blended per-token price, has a context window at least as large as the step's observed tokens and, by default, was released in the last 90 days. Pass --catalog-reference with the upstream's public model list and name each model group by its upstream id; rightmodeler falls back to the proxy's GET /model/info for prices when nothing is priced after the join, and a catalog_reference_unmatched warning names any model the reference did not match. A run that stops with no_recent_candidates found cheaper models, but none released in the last 90 days: pass an earlier --released-since, such as 365d, or name the models to try with --candidate."
     },
     {
       "q": "Does rightmodeler replace LiteLLM?",

@@ -102,7 +102,7 @@
         {
           "scenario": "A cheaper model climbs a Vals leaderboard in your domain, and your provider serves it.",
           "winner": "both",
-          "why": "Vals tells you it performs well on expert tasks like yours. Add its ID to the allowModels list in your audit policy file and the CLI tests it on your own traces, as long as it costs less than the model a step runs today. One is evidence about the field; the other is evidence about your workload."
+          "why": "Vals tells you it performs well on expert tasks like yours. Name its ID with --candidate and the CLI tests it on your own traces, whatever its release date, as long as it costs less than the model a step runs today. One is evidence about the field; the other is evidence about your workload."
         }
       ]
     },
@@ -111,13 +111,13 @@
       "heading": "Test a leaderboard pick on your own traces",
       "intro": "There is no integration; the handoff is a model ID you copy.",
       "paragraphs": [
-        "Put the models a Vals leaderboard flagged in a policy file under allowModels, spelled the way your provider's catalog spells them, and point the CLI at your recorded traces. Only candidates cheaper than a step's current model are tested, and each result comes back with its sample size and any abstentions.",
+        "Pass each model a Vals leaderboard flagged with its own --candidate flag, spelled the way your provider's catalog spells it, and point the CLI at your recorded traces. The CLI tests every model you name and no others, whatever its release date, wherever it costs less than a step's current model, and each result comes back with its sample size and any abstentions.",
         "The run happens on your machine with your own provider key. There is no rightmodeler server, no account with us, and no telemetry, and the CLI is never in your request path."
       ],
       "commands": [
         {
-          "comment": "# policy.json lists the leaderboard picks under allowModels",
-          "command": "npx rightmodeler init --traces ./traces --policy ./policy.json"
+          "comment": "# each leaderboard pick gets its own --candidate",
+          "command": "npx rightmodeler init --traces ./traces --candidate <model-id> --candidate <model-id>"
         }
       ]
     },
@@ -174,7 +174,7 @@
         },
         {
           "q": "Is there an integration between rightmodeler and Vals AI?",
-          "a": "No. rightmodeler has no Vals trace reader and no Vals evaluator; the external evaluators it ships are Braintrust, Langfuse, LangSmith, and promptfoo. The connection is manual: copy a model a Vals leaderboard flagged into the allowModels list of your audit policy file."
+          "a": "No. rightmodeler has no Vals trace reader and no Vals evaluator; the external evaluators it ships are Braintrust, Langfuse, LangSmith, and promptfoo. The connection is manual: name a model a Vals leaderboard flagged with --candidate."
         },
         {
           "q": "Why not simply pick the top model on the Vals Index?",

@@ -19,7 +19,7 @@
     {
       "label": "02 · Shortlist",
       "title": "Candidates from the live catalog",
-      "body": "GET /models returns every model with pricing, context length, and supported parameters. A candidate qualifies only if it is strictly cheaper than the incumbent on a blended per-token price, supports what the step needs (tool calling, structured output), and has a context window at least as large as the step's observed tokens. The cheapest qualifiers are tried; zero-priced models are excluded unless you pass --include-free."
+      "body": "GET /models returns every model with pricing, context length, and supported parameters. A candidate qualifies only if it is strictly cheaper than the incumbent on a blended per-token price, supports what the step needs (tool calling, structured output), and has a context window at least as large as the step's observed tokens. By default only qualifiers released in the last 90 days, by OpenRouter's created date, are tried, up to three per step: cheapest first, with a model placed behind any that costs no more and is no older. Zero-priced models are excluded unless you pass --include-free."
     },
     {
       "label": "03 · Replay + judge",

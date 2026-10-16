@@ -16,7 +16,7 @@ const STEPS: {
   {
     Icon: WatchSignalIcon,
     name: "Watch",
-    body: "A weekly schedule rechecks the provider catalog and recalculates the shortlist, so a newly listed or repriced model gets flagged per step.",
+    body: "A weekly schedule rechecks the provider catalog and recalculates the shortlist, so a new or repriced model released in the last 90 days gets flagged per step.",
   },
   {
     Icon: ReplayLoopIcon,

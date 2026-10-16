@@ -87,7 +87,7 @@
         {
           "scenario": "An open model near the top of a board costs less than what one of your steps runs, and your provider lists it.",
           "winner": "both",
-          "why": "The board is a fine place to find it. Add its ID, spelled the way your provider's catalog spells it, to the allowModels list in your audit policy file, and the CLI tests it on your own traces. The board says it scores well on public evaluations; the audit says whether it matches the outputs you accepted."
+          "why": "The board is a fine place to find it. Name its ID with --candidate, spelled the way your provider's catalog spells it, and the CLI tests it on your own traces, whatever its release date. The board says it scores well on public evaluations; the audit says whether it matches the outputs you accepted."
         }
       ]
     },
@@ -143,7 +143,7 @@
         },
         {
           "q": "Can rightmodeler test a model I found on The Open Frontier?",
-          "a": "Yes, if the provider you configure lists it with a price and it costs less than the model a step runs today. Add its catalog ID to allowModels in a policy file passed with --policy. There is no integration: rightmodeler never reads The Open Frontier's data, and the board's scores play no part in the verdict."
+          "a": "Yes, if the provider you configure lists it with a price and it costs less than the model a step runs today. Name its catalog ID with --candidate, and the CLI tests it whatever its release date. There is no integration: rightmodeler never reads The Open Frontier's data, and the board's scores play no part in the verdict."
         },
         {
           "q": "Is The Open Frontier's cost the same as the cost the audit reports?",
