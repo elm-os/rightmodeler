@@ -44,6 +44,8 @@ OpenAI's and Anthropic's APIs serve only their own models and list no prices, so
 
 `--route claude-login` and `--judge-route claude-login` run the `claude` CLI (Claude Code) already installed and signed in on this machine, version 2.1.282 or newer. Rightmodeler runs your own unmodified binary as a child process under the login it already holds. It never reads, stores or forwards a token, and never opens `~/.claude`, the macOS Keychain or a credential file.
 
+On Windows, `~` in this document means your user folder, `%USERPROFILE%`. Rightmodeler starts `claude` and `codex` without a shell whether you installed them with npm, WinGet or their own installer; a CLI wrapped by a version manager such as Volta cannot be started.
+
 Before any model call, rightmodeler runs `claude --version` and `claude auth status`. It accepts only a Claude plan login: signed in, through Anthropic directly, with a claude.ai login or a `claude setup-token` token. Anything else, such as an API key, Amazon Bedrock or Google Vertex, stops with `plan_login_required`.
 
 Each call runs in a fresh, empty temporary directory with no tools, no MCP servers, no settings files, no skills, no auto memory, no session file and one turn: `claude -p --model <id> --system-prompt-file <file> --tools "" --strict-mcp-config --disable-slash-commands --setting-sources "" --no-session-persistence --max-turns 1 --settings {"switchModelsOnFlag":false} --output-format stream-json --verbose`, with the recorded user message on standard input. Because no session file is written, replays never appear in the Claude Code transcripts rightmodeler reads as traces.

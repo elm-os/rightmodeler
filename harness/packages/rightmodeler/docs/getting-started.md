@@ -5,7 +5,7 @@ Rightmodeler analyzes recorded model calls, replays them against cheaper candida
 ## Requirements
 
 - Node.js 24 or newer.
-- A Git repository to analyze.
+- A Git repository to analyze, and the `git` command on `PATH` (Git for Windows on Windows; see [Windows](#windows)).
 - Trace input in a supported format.
 - An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for a gateway that lists bare model ids or a direct OpenAI or Anthropic key, pass `--catalog-reference`; for another unpriced endpoint, pass `--pricing-file`.
 
@@ -247,3 +247,61 @@ Read the generated [command reference](commands.md), the [evaluator guide](evalu
 To open the draft pull request and keep it reconciled, read the [GitHub guide](github.md).
 
 Run `rightmodeler docs <name>` to print any of these documents from the installed package.
+
+## Windows
+
+Rightmodeler runs natively on Windows 10 and 11, without WSL, from Windows
+PowerShell 5.1, PowerShell 7, the Command Prompt, or Git Bash. It needs Node.js 24
+or newer and Git for Windows on `PATH`.
+
+The commands in these docs are written for macOS and Linux shells. On Windows:
+
+- Put each command on one line. Leave out the `\` line continuations, or end each
+  line with a backtick (`` ` ``) in PowerShell instead.
+- Set an environment variable with `$env:OPENROUTER_API_KEY = "..."` in PowerShell,
+  or `set "OPENROUTER_API_KEY=..."` in the Command Prompt.
+- Windows PowerShell 5.1 refuses to run the `npx` and `rightmodeler` scripts that
+  npm installs while running scripts is disabled. Run `npx.cmd rightmodeler ...`,
+  or `rightmodeler.cmd ...` after `npm install -g rightmodeler`, or allow local
+  scripts once with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+- A leading `~` in a path option means your home folder, as on macOS and Linux.
+  PowerShell and the Command Prompt pass it unexpanded, so Rightmodeler expands it
+  itself.
+- Do not end a quoted folder path with a backslash: in Windows PowerShell 5.1 and
+  the Command Prompt, `--repo ".\my app\" --plan` passes `--plan` as part of the
+  path. Write `".\my app"` or `".\my app/"`. Rightmodeler refuses such a path and
+  names the flags it swallowed.
+- Rightmodeler reads trace files, and the `--policy`, `--pricing-file` and
+  `--modeb-config` files, that Windows PowerShell 5.1 writes with `>` or `Out-File`
+  as UTF-16, or that start with a byte order mark. Write any other file you pass,
+  such as `--matchers`, in a text editor: in Windows PowerShell 5.1, `>` writes
+  UTF-16 and `Out-File -Encoding utf8` adds a byte order mark, and those options
+  read neither.
+- In Git Bash, quote Windows paths with single quotes or write them with forward
+  slashes, for example `--repo 'C:\src\app'` or `--repo C:/src/app`.
+
+Windows looks for a program in the current folder before `PATH`. Rightmodeler turns
+that off for the programs it starts, but `npx` and the Command Prompt still look in
+the current folder when they start Rightmodeler itself. To analyze a repository you
+do not trust, run Rightmodeler from another folder and pass `--repo`, or first set
+`$env:NoDefaultCurrentDirectoryInExePath = "1"` in PowerShell (or
+`setx NoDefaultCurrentDirectoryInExePath 1` for every new terminal).
+
+Keep the repository and the store on a local NTFS or Dev Drive volume. A store on
+exFAT or FAT32, such as some USB drives, cannot be used. Keep the store out of
+folders OneDrive syncs, because OneDrive can lock files while it syncs them. If Git
+refuses the repository because another account owns its folder (`detected dubious
+ownership`), and you trust that folder and everyone who can write to it, run the
+`git config --global --add safe.directory ...` command Git prints, then rerun. If a
+long path fails, run `git config --global core.longpaths true`.
+
+Plan routes start your installed `claude` or `codex` CLI directly, including npm
+installs. A CLI that a version manager such as Volta wraps in a batch file cannot be
+started; install it with its own installer or WinGet instead, or with npm outside
+the version manager.
+
+Mode B needs Docker Desktop running Linux containers, or the cloud backend. See
+[Mode B](modeb.md).
+
+A detached replay (`replay --detach`) stops when Windows restarts or the worker is
+ended. Rerun the same command to resume it from its checkpoints.

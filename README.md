@@ -27,12 +27,12 @@ service and no telemetry.
 | You need                                            | Details                                                                                                                                                                       |
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Node.js 24 or newer                                 | Run `npx rightmodeler`, or install it with `npm install -g rightmodeler`.                                                                                                     |
-| Your app's Git repository, with at least one commit | It is scanned for model call sites. Run from it or pass `--repo <dir>`.                                                                                                       |
+| Your app's Git repository, with at least one commit | It is scanned for model call sites. Run from it or pass `--repo <dir>`. The `git` command must be on `PATH`.                                                                  |
 | Traces of your app's model calls                    | With token usage on each call. See [Traces](#traces).                                                                                                                         |
 | A way to call models                                | An OpenAI-compatible endpoint with a priced model catalog, or the `claude` or `codex` CLI signed in on this machine. See [Two ways to call models](#two-ways-to-call-models). |
 | That endpoint's key in an environment variable      | `RIGHTMODELER_API_KEY` by default, or any variable you name with `--api-key-env`.                                                                                             |
 | A GitHub token (optional)                           | Only for the pull-request commands. See [From verdict to pull request](#from-verdict-to-pull-request).                                                                        |
-| Docker with a running daemon (optional)             | Only for [Mode B confirmation](#mode-b-confirmation) on its default backend.                                                                                                  |
+| Docker with a running daemon (optional)             | Only for [Mode B confirmation](#mode-b-confirmation) on its default backend. On Windows, Docker Desktop running Linux containers.                                             |
 
 ## Quick start
 
@@ -71,6 +71,13 @@ npx rightmodeler init --traces ./traces.jsonl \
 # 6. Read the verdicts. Free.
 cat .rightmodeler/project/reports/report.md
 ```
+
+On Windows, rightmodeler runs natively, without WSL, from PowerShell, the Command
+Prompt or Git Bash, with Git for Windows installed. Put each command on one line,
+set the key with `$env:OPENROUTER_API_KEY = "..."` in PowerShell, and read the
+report with `Get-Content`. If Windows PowerShell 5.1 blocks `npx`, run `npx.cmd`,
+or `rightmodeler.cmd` after a global install. See
+[Windows](harness/packages/rightmodeler/docs/getting-started.md#windows) for the rest.
 
 Without `--max-cost-usd` a run is uncapped. Every run resumes from its checkpoints:
 when one stops for a missing input or the spend cap, fix what the message names, or
