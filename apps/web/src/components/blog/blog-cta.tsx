@@ -1,4 +1,4 @@
-// Mirrors sections/cta-band.tsx: same command, caveat and button treatment.
+// Mirrors sections/cta-band.tsx: same command and button treatment.
 
 import { CopyCommand } from "@/components/copy-command";
 import { GitHubIcon } from "@/components/icons";
@@ -20,13 +20,6 @@ export function BlogCta() {
           className="mt-8 flex w-full flex-col items-start gap-4"
         >
           <CopyCommand command={RUN_COMMAND} className="w-full sm:w-auto" />
-          <p className="max-w-[34rem] pl-4 font-mono text-body text-driftwood">
-            <span aria-hidden className="select-none text-fog">
-              #{" "}
-            </span>
-            Free until replay, then your own provider key. It is a report, not a
-            runtime gateway.
-          </p>
         </Reveal>
 
         <Reveal delay={0.16} className="mt-10">

@@ -91,7 +91,5 @@ This is what rightmodeler produces: not a cheaper model, a policy. Eleven worklo
 
     ${RUN_COMMAND}
 
-Free until replay, then your own provider key. It is a report, not a runtime gateway.
-
 View on GitHub: ${REPO_URL}
 `;
