@@ -99,7 +99,5 @@ This is what rightmodeler produces: a routing policy where every job is assigned
 
     ${RUN_COMMAND}
 
-Free until replay, then your own provider key. It is a report, not a runtime gateway.
-
 View on GitHub: ${REPO_URL}
 `;
