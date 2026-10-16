@@ -95,7 +95,5 @@ Read the story: /case-study/iam360
 
     ${RUN_COMMAND}
 
-Free until replay, then your own provider key. It’s a report, not a runtime gateway.
-
 View on GitHub: ${REPO_URL}
 `;
