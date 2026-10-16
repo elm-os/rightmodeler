@@ -19,7 +19,7 @@
     {
       "label": "02 · Catalog",
       "title": "Discover candidates from the live catalog",
-      "body": "GET /models supplies per-token input and output pricing, context windows, and capability tags such as tool use and structured output. rightmodeler normalizes those fields, including the Gateway's context_window naming, and builds the shortlist at run time from models strictly cheaper than the incumbent that still cover what the step needs, so there is no fixed model list to go stale."
+      "body": "GET /models supplies per-token input and output pricing, context windows, and capability tags such as tool use and structured output. rightmodeler normalizes those fields, including the Gateway's context_window naming, and builds the shortlist at run time from models strictly cheaper than the incumbent that still cover what the step needs and, by default, were released in the last 90 days, so there is no fixed model list to go stale."
     },
     {
       "label": "03 · Replay + judge",

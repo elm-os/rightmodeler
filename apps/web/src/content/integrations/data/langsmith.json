@@ -121,7 +121,7 @@
     },
     {
       "q": "Which candidate models does it try?",
-      "a": "Models from the live catalog of whichever OpenAI-compatible endpoint you pass with --base-url: cheaper than the incumbent, and capable of what the step needs. Zero-priced models are left out unless you pass --include-free, and the built-in judge is chosen from a family that is neither the candidate's nor the reference's."
+      "a": "Models from the live catalog of whichever OpenAI-compatible endpoint you pass with --base-url: cheaper than the incumbent, capable of what the step needs and, by default, released in the last 90 days; models you name with --candidate are tried instead, whatever their release date. Zero-priced models are left out unless you pass --include-free, and the built-in judge is chosen from a family that is neither the candidate's nor the reference's."
     },
     {
       "q": "Does my trace data leave my machine?",

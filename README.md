@@ -122,9 +122,10 @@ Any model provider or gateway works when it meets this contract:
   reads `GET <base-url>/models` and sends `POST <base-url>/chat/completions`.
 - **The catalog** lists the model your traces recorded (a bare `gpt-4o-mini` also
   matches `openai/gpt-4o-mini`, unless two vendors list it), prices cheaper text models
-  to try as candidates, and prices a judge model from a vendor other than both the
-  current model's and the candidate's. When your own evaluator grades the replays, the
-  judge serves only as its fallback and for Mode B confirmation.
+  to try as candidates (by default those released in the last 90 days, or the ones you
+  name with `--candidate <id>`), and prices a judge model from a vendor other than both
+  the current model's and the candidate's. When your own evaluator grades the replays,
+  the judge serves only as its fallback and for Mode B confirmation.
 - **A catalog without prices** takes `--catalog-reference <url-or-path>`, a priced
   upstream list fetched without your key, or your own `--pricing-file <path>`.
 
