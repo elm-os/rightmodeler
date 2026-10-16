@@ -19,6 +19,7 @@ import {
   parsePromptfooResults,
   type PromptfooParsedRun,
   type PromptfooSentCase,
+  scratchParent,
 } from "./promptfoo.js";
 
 interface CapturedComponent {
@@ -556,6 +557,29 @@ describe("promptfoo invocation", () => {
       PROMPTFOO_STRIP_RESPONSE_OUTPUT: "false",
       PROMPTFOO_STRIP_TEST_VARS: "false",
     });
+  });
+
+  it.each([
+    [
+      "D:\\app",
+      "C:\\Users\\me\\AppData\\Local\\Temp",
+      "D:\\app\\.rightmodeler",
+    ],
+    [
+      "\\\\server\\share\\app",
+      "C:\\Temp",
+      "\\\\server\\share\\app\\.rightmodeler",
+    ],
+    ["c:\\app", "C:\\Temp", "C:\\Temp"],
+  ])(
+    "on Windows, keeps the model outputs for %s on its own drive, which promptfoo needs for a relative path",
+    (cwd, temp, parent) => {
+      expect(scratchParent(cwd, temp, "win32")).toBe(parent);
+    },
+  );
+
+  it("keeps the model outputs in the temp folder on POSIX", () => {
+    expect(scratchParent("/srv/app", "/tmp", "linux")).toBe("/tmp");
   });
 
   it("accepts exit 100 when the caller's own promptfoo settings would change the exit code", async () => {

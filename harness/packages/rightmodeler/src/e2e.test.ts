@@ -167,6 +167,55 @@ describe.runIf(process.platform === "win32")("Windows program lookup", () => {
   });
 });
 
+describe("git preconditions", () => {
+  it("names a missing git instead of calling the folder no repository", async () => {
+    const { root, repo } = await fixtureCopy("missing-git");
+    const empty = join(root, "empty-path");
+    await mkdir(empty);
+    // Every spelling of PATH, since Windows reads the name in any letter case.
+    const path = Object.fromEntries(
+      [...Object.keys(process.env), "PATH"]
+        .filter((name) => name.toUpperCase() === "PATH")
+        .map((name) => [name, empty]),
+    );
+
+    const plan = await runCli(
+      ["init", "--plan", "--output", "json", "--repo", repo],
+      { env: path },
+    );
+
+    expect(plan.code, plan.stderr).toBe(2);
+    expect(JSON.parse(plan.stderr)).toMatchObject({
+      code: "not_git_repository",
+      message: expect.stringContaining("Git is not installed"),
+    });
+  });
+
+  it("names a repository git refuses for its owner, with git's own fix", async () => {
+    const { root, repo } = await fixtureCopy("unsafe-owner");
+
+    const plan = await runCli(
+      ["init", "--plan", "--output", "json", "--repo", repo],
+      {
+        env: {
+          GIT_TEST_ASSUME_DIFFERENT_OWNER: "1",
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: join(root, "no-global-config"),
+        },
+      },
+    );
+
+    expect(plan.code, plan.stderr).toBe(2);
+    expect(JSON.parse(plan.stderr)).toMatchObject({
+      code: "not_git_repository",
+      message: expect.stringContaining("another account owns"),
+      remedy: expect.stringContaining(
+        "git config --global --add safe.directory",
+      ),
+    });
+  });
+});
+
 describe("direct vendor keys", () => {
   it("stops a direct OpenAI key before any chat when only OpenAI models could judge", async () => {
     const { root, repo, traces } = await renamedModelFixture(

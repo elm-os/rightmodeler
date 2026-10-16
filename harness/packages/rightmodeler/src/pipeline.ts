@@ -5998,8 +5998,8 @@ async function repositoryRevision(repo: string): Promise<string> {
       ["-C", repo, "rev-parse", "--is-inside-work-tree"],
       { encoding: "utf8", windowsHide: true },
     ));
-  } catch {
-    throw notGitRepository();
+  } catch (error) {
+    throw notGitRepository(error);
   }
   if (insideWorkTree.trim() !== "true") throw notGitRepository();
   try {
@@ -6020,7 +6020,38 @@ async function repositoryRevision(repo: string): Promise<string> {
   }
 }
 
-function notGitRepository(): ProtocolError {
+function notGitRepository(error?: unknown): ProtocolError {
+  const failure = error as { syscall?: unknown; stderr?: unknown } | undefined;
+  if (
+    typeof failure?.syscall === "string" &&
+    failure.syscall.startsWith("spawn")
+  ) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "not_git_repository",
+      message:
+        "Git is not installed or not on PATH, so Rightmodeler cannot read this repository.",
+      remedy:
+        "Install Git (on Windows, Git for Windows), open a new terminal, and run the command again.",
+    });
+  }
+  // Git refuses a repository whose folder another account owns, as on some Windows drives and
+  // network shares, and prints the command that trusts it.
+  const trust =
+    typeof failure?.stderr === "string"
+      ? /git config --global --add safe\.directory .+/u.exec(
+          failure.stderr,
+        )?.[0]
+      : undefined;
+  if (trust !== undefined) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "not_git_repository",
+      message:
+        "Git refuses to read this repository because another account owns its folder.",
+      remedy: `If you trust the folder, run ${trust.trim()}, then run the command again.`,
+    });
+  }
   return new ProtocolError({
     exitCode: 2,
     code: "not_git_repository",

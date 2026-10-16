@@ -139,6 +139,9 @@ async function codexCandidates(
   repo: string,
 ): Promise<CandidateFile[]> {
   const files: CandidateFile[] = [];
+  // Codex records the folder as the shell spelled it, which on Windows can differ in letter
+  // case or name the same folder by another path; the native realpath spells it one way.
+  const canonicalRepo = await realpath(repo).catch(() => repo);
   let examined = 0;
   for (const path of paths) {
     if (
@@ -151,7 +154,14 @@ async function codexCandidates(
     try {
       const metadata = await stat(path);
       const head = await detectionHead(path, metadata.size);
-      if (codexSessionCwd(head.text) !== repo) continue;
+      const recorded = codexSessionCwd(head.text);
+      if (
+        recorded === undefined ||
+        (recorded !== repo &&
+          (await realpath(recorded).catch(() => undefined)) !== canonicalRepo)
+      ) {
+        continue;
+      }
       files.push({
         path,
         source: "codex",

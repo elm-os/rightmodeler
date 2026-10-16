@@ -25954,6 +25954,10 @@ var FsStore = class {
     } catch (error51) {
       if (isAlreadyPresent(error51))
         return false;
+      const { code } = error51;
+      if (code === "EISDIR" || code === "ENOTSUP") {
+        throw Object.assign(new Error(`The store at ${this.root} is on a volume that cannot create hard links, such as exFAT or FAT32. Keep the store on a volume that can, such as NTFS or a Dev Drive.`, { cause: error51 }), { code });
+      }
       throw error51;
     }
   }
@@ -32936,7 +32940,7 @@ var {
 import { execFile as execFile7 } from "node:child_process";
 import { createHash as createHash13 } from "node:crypto";
 import { readFileSync as readFileSync7 } from "node:fs";
-import { mkdir as mkdir5, readFile as readFile13, readdir as readdir4, stat as stat4, writeFile as writeFile8 } from "node:fs/promises";
+import { mkdir as mkdir6, readFile as readFile13, readdir as readdir4, stat as stat4, writeFile as writeFile8 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
 import { dirname as dirname8, join as join19, relative as relative9, resolve as resolve10, sep as sep6 } from "node:path";
 import { promisify as promisify6 } from "node:util";
@@ -43173,9 +43177,16 @@ function providerName(provider) {
 // src/evaluators/promptfoo.ts
 import { execFile as execFile6 } from "node:child_process";
 import { createHash as createHash8 } from "node:crypto";
-import { mkdtemp as mkdtemp4, readFile as readFile12, realpath as realpath3, rm as rm4, writeFile as writeFile7 } from "node:fs/promises";
+import {
+  mkdir as mkdir5,
+  mkdtemp as mkdtemp4,
+  readFile as readFile12,
+  realpath as realpath3,
+  rm as rm4,
+  writeFile as writeFile7
+} from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { dirname as dirname7, join as join18, relative as relative7, resolve as resolve8 } from "node:path";
+import { dirname as dirname7, join as join18, posix as posix4, relative as relative7, resolve as resolve8, win32 as win323 } from "node:path";
 import { promisify as promisify5 } from "node:util";
 var PROMPTFOO_VERIFIED_VERSION = "0.123.1";
 var PROMPTFOO_EVAL_FLAGS = [
@@ -43356,8 +43367,11 @@ function createPromptfooEvaluator(input) {
         output: typeof output === "string" ? output : JSON.stringify(output)
       }));
       const cwd = await realpath3(dirname7(assertionsPath));
+      const temp = await realpath3(tmpdir2());
+      const parent = scratchParent(cwd, temp, process.platform);
+      if (parent !== temp) await mkdir5(parent, { recursive: true });
       const directory = await realpath3(
-        await mkdtemp4(join18(tmpdir2(), "rightmodeler-promptfoo-"))
+        await mkdtemp4(join18(parent, "rightmodeler-promptfoo-"))
       );
       const modelOutputsPath = join18(directory, "model-outputs.json");
       const resultsPath = join18(directory, "results.json");
@@ -43448,6 +43462,10 @@ async function readPromptfooConfigs(assertionsPath) {
     )
   );
   return configs.flat();
+}
+function scratchParent(cwd, temp, platform) {
+  const path = platform === "win32" ? win323 : posix4;
+  return path.parse(cwd).root.toLowerCase() === path.parse(temp).root.toLowerCase() ? temp : path.join(cwd, ".rightmodeler");
 }
 async function runPromptfoo(command, args, cwd) {
   try {
@@ -49933,7 +49951,7 @@ async function executeReport(context2, inputDigestValue, ledger) {
   const markdown = renderReport(report);
   await putMutableJson(context2.store, jsonKey, jsonValue2(report));
   await putMutableText(context2.store, markdownKey, markdown);
-  await mkdir5(dirname8(reportPath(context2)), { recursive: true });
+  await mkdir6(dirname8(reportPath(context2)), { recursive: true });
   await writeFile8(reportPath(context2), markdown, "utf8");
   return jsonKey;
 }
@@ -50144,8 +50162,8 @@ async function repositoryRevision(repo) {
       ["-C", repo, "rev-parse", "--is-inside-work-tree"],
       { encoding: "utf8", windowsHide: true }
     ));
-  } catch {
-    throw notGitRepository();
+  } catch (error51) {
+    throw notGitRepository(error51);
   }
   if (insideWorkTree.trim() !== "true") throw notGitRepository();
   try {
@@ -50164,7 +50182,27 @@ async function repositoryRevision(repo) {
     });
   }
 }
-function notGitRepository() {
+function notGitRepository(error51) {
+  const failure2 = error51;
+  if (typeof failure2?.syscall === "string" && failure2.syscall.startsWith("spawn")) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "not_git_repository",
+      message: "Git is not installed or not on PATH, so Rightmodeler cannot read this repository.",
+      remedy: "Install Git (on Windows, Git for Windows), open a new terminal, and run the command again."
+    });
+  }
+  const trust = typeof failure2?.stderr === "string" ? /git config --global --add safe\.directory .+/u.exec(
+    failure2.stderr
+  )?.[0] : void 0;
+  if (trust !== void 0) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "not_git_repository",
+      message: "Git refuses to read this repository because another account owns its folder.",
+      remedy: `If you trust the folder, run ${trust.trim()}, then run the command again.`
+    });
+  }
   return new ProtocolError({
     exitCode: 2,
     code: "not_git_repository",
@@ -51016,6 +51054,7 @@ async function candidateFiles(repo, homeDir) {
 }
 async function codexCandidates(paths, repo) {
   const files = [];
+  const canonicalRepo = await realpath4(repo).catch(() => repo);
   let examined = 0;
   for (const path of paths) {
     if (files.length >= SOURCE_BUDGETS.codex || examined >= MAX_CODEX_EXAMINED) {
@@ -51025,7 +51064,10 @@ async function codexCandidates(paths, repo) {
     try {
       const metadata = await stat5(path);
       const head = await detectionHead(path, metadata.size);
-      if (codexSessionCwd(head.text) !== repo) continue;
+      const recorded = codexSessionCwd(head.text);
+      if (recorded === void 0 || recorded !== repo && await realpath4(recorded).catch(() => void 0) !== canonicalRepo) {
+        continue;
+      }
       files.push({
         path,
         source: "codex",

@@ -254,6 +254,24 @@ describe("trace discovery", () => {
     ]);
   });
 
+  it.runIf(process.platform === "win32")(
+    "finds a Codex session that spells the repo path in another letter case",
+    async () => {
+      const { repo, homeDir } = await fixtureRoot("codex-case");
+      const sessions = join(homeDir, ".codex", "sessions", "2026", "10", "16");
+      await mkdir(sessions, { recursive: true });
+      const matching = join(sessions, "rollout-upper-case.jsonl");
+      await writeFile(
+        matching,
+        `${codexSession(resolve(repo).toUpperCase())}\n`,
+      );
+
+      expect(await discoverTraces({ repo, homeDir })).toMatchObject([
+        { path: matching, format: "codex" },
+      ]);
+    },
+  );
+
   it("finds a matching Codex session after the global file cap", async () => {
     const { root, repo, homeDir } = await fixtureRoot("codex-file-cap");
     const foreignSessions = join(
