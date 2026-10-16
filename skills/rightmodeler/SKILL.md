@@ -50,6 +50,10 @@ Ask only for inputs that are not already known:
   cap. Never ask for, suggest, or set a cap when a plan route is used, unless the user asks
   for one.
 - Model, provider, quality, or ownership constraints that affect the run.
+- Models the user wants tried, if any. By default rightmodeler tries only models that cost
+  less than the recorded one and were released in the last 90 days. Name models with
+  `--candidate`, or move the window with `--released-since` or `--released-until`, only when
+  the user asks.
 
 Never ask for, read, echo, or store an API key or login token, and never open `~/.claude`,
 the Keychain, or `~/.codex/auth.json`. The user sets the named environment variable in their
@@ -113,7 +117,8 @@ Both help commands must exit 0. If either exits 10 or greater, stop and report t
 installation or command-line failure. There is no fallback engine.
 The shipped docs describe the version actually installed and take precedence over
 this runbook if versions differ. If `init --help` does not list `--route`, the installed
-CLI predates plan routes; use an API route.
+CLI predates plan routes; use an API route. If it does not list `--candidate`, the installed
+CLI predates candidate selection options; leave `CANDIDATE_ARGS` empty.
 
 ## 4. Preview the plan
 
@@ -149,7 +154,12 @@ a catalog lacks, which on a plan route is the price list (by default Vercel AI G
 public list); `--header 'name: value'`, repeatable, for a gateway that routes on request
 headers, never for a secret; `--max-concurrency <n>` for the maximum concurrent provider
 requests, or on a plan route the maximum CLI processes at once, not a limit on calls;
-`--matchers <path>` for a declarative matcher definitions JSON file; and
+`--matchers <path>` for a declarative matcher definitions JSON file; `--candidate <id>`,
+repeatable, to replay exactly the models the user names, in each family where each one is
+cheaper than the recorded models and fits every call site, whatever its release date;
+`--released-since <date-or-days>` (a date such as `2026-01-01`, or `365d`) and
+`--released-until <date>` to move the release window from its default of the 90 days before
+the shortlist is planned; and
 `--modeb-config <path>` to select the container image, app spec, step map, and `backend`,
 `docker` by default or `cloud` for a remote sandbox. For a Mode B run, read
 `reference/harnesses/index.md` first and follow the file it routes to.
@@ -173,12 +183,19 @@ the recorded model's.
 This run never reads a route saved by an interactive `init` or `estimate`. To reuse one, ask
 the user for the flags that run printed.
 
+Leave `CANDIDATE_ARGS` empty unless the user named models to try or asked for older or
+specific release dates, for example `CANDIDATE_ARGS=(--candidate openai/gpt-6-luna)` or
+`CANDIDATE_ARGS=(--released-since 365d)`. `--candidate` cannot be combined with the release-date
+options. Pass the same `CANDIDATE_ARGS` on every later command for the same store: a command
+without them goes back to the default shortlist.
+
 ```bash
 TRACES=/absolute/path/to/traces.json
 THROUGH=report
 PROVIDER_BASE_URL=https://provider.example/v1
 API_KEY_ENV=RIGHTMODELER_API_KEY
 ROUTE_ARGS=()
+CANDIDATE_ARGS=()
 MAX_COST_USD=
 RUN_LOG=$(mktemp)
 ERROR_LOG=$(mktemp)
@@ -198,6 +215,7 @@ if "${RIGHTMODELER[@]}" init \
   --through "$THROUGH" \
   --traces "$TRACES" \
   "${ROUTE_ARGS[@]}" \
+  "${CANDIDATE_ARGS[@]}" \
   "${API_ARGS[@]}" \
   "${CAP_ARGS[@]}" \
   --output jsonl \
@@ -287,6 +305,20 @@ Model routes add these exit-2 codes. Report the `message` and `remedy`, then:
   for a third-vendor catalog, another judge route (a plan route only after their yes), or an
   evaluator.
 
+Candidate selection adds these exit-2 codes. Each fires before any model call. Report the
+`message` and `remedy`, and ask the user before widening the window or naming models, because
+either changes what replay spends on:
+
+- `no_recent_candidates`: no model cheaper than a recorded model was released inside the
+  release window. Offer the remedy's choices: an earlier `--released-since`, models named with
+  `--candidate`, or `--catalog-reference` when the catalog's dates are placeholders.
+- `release_dates_unavailable`: a release-date option was passed, but the catalog has no usable
+  release dates. Offer `--catalog-reference`, `--candidate`, or removing the date options.
+- `unknown_candidate`: a `--candidate` is not in the provider catalog, or matches more than one
+  model. Ask the user which catalog id they meant.
+- `named_candidates_ineligible`: no named model can be tried at any call site; the message gives
+  each model's reason. Relay the reasons and ask which models to name instead.
+
 On exit 3, report that the configured budget boundary stopped the run. Include the
 error `message` and `remedy`, the configured `--max-cost-usd`, and the last completed
 stage from stdout. Do not raise the budget without explicit user authorization.
@@ -316,7 +348,8 @@ relay the report's `## Model routes` section, and say that spend on a plan route
 list-price equivalent drawn from the plan's allowance, not a bill. Report every `warning`
 event with its `code` and `message`; on a plan route these include `plan_route_key_withheld`,
 `plan_usage_warning`, `codex_global_instructions`, `judge_vendor_candidates_dropped`, and
-`plan_route_cases_left_out`.
+`plan_route_cases_left_out`. Candidate selection can add `release_window_skipped`,
+`shortlist_no_recent_candidates`, and `shortlist_candidate_left_out`.
 
 Treat family verdicts as the decision unit. Do not promote a single successful case
 into a family recommendation. Exit 0 can still contain useful rejects and
