@@ -1631,11 +1631,22 @@ export async function executeCli(
   }
 }
 
+// Windows looks up a bare command name such as git in the current folder before PATH, so a
+// git.exe inside the analyzed repository would run instead of Git. This variable turns that
+// lookup off for the CLI and every process it starts.
+export function disableCurrentFolderLookup(
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): void {
+  if (platform === "win32") env.NoDefaultCurrentDirectoryInExePath ??= "1";
+}
+
 const isEntryPoint =
   process.argv[1] !== undefined &&
   fileURLToPath(import.meta.url) === realpathSync(process.argv[1]);
 
 if (isEntryPoint) {
+  disableCurrentFolderLookup(process.env, process.platform);
   process.exitCode = await executeCli(process.argv.slice(2));
 }
 

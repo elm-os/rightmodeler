@@ -5944,7 +5944,7 @@ async function gitFiles(repo: string): Promise<string[] | undefined> {
         "--others",
         "--exclude-standard",
       ],
-      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true },
     );
     return stdout.split("\0").filter((path) => path.length > 0);
   } catch {
@@ -5997,7 +5997,7 @@ async function repositoryRevision(repo: string): Promise<string> {
     ({ stdout: insideWorkTree } = await execFileAsync(
       "git",
       ["-C", repo, "rev-parse", "--is-inside-work-tree"],
-      { encoding: "utf8" },
+      { encoding: "utf8", windowsHide: true },
     ));
   } catch {
     throw notGitRepository();
@@ -6007,7 +6007,7 @@ async function repositoryRevision(repo: string): Promise<string> {
     const { stdout } = await execFileAsync(
       "git",
       ["-C", repo, "rev-parse", "--verify", "HEAD"],
-      { encoding: "utf8" },
+      { encoding: "utf8", windowsHide: true },
     );
     return stdout.trim();
   } catch {

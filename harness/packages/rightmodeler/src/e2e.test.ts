@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import {
   chmod,
+  copyFile,
   cp,
   mkdir,
   mkdtemp,
@@ -137,6 +138,30 @@ describe("machine error protocol", () => {
       code: "stale_corpus_parent",
       message: "active corpus moved",
     });
+  });
+});
+
+describe.runIf(process.platform === "win32")("Windows program lookup", () => {
+  it("runs Git from PATH, not a git.exe in the current folder", async () => {
+    const { root, repo } = await fixtureCopy("planted-git");
+    const cwd = join(root, "planted");
+    await mkdir(cwd);
+    await copyFile(process.execPath, join(cwd, "git.exe"));
+    // Drop any opt-out the parent shell set, so the CLI has to set it itself.
+    const unset = Object.fromEntries(
+      Object.keys(process.env)
+        .filter(
+          (name) => name.toUpperCase() === "NODEFAULTCURRENTDIRECTORYINEXEPATH",
+        )
+        .map((name) => [name, undefined]),
+    );
+
+    const plan = await runCli(
+      ["init", "--plan", "--output", "json", "--repo", repo],
+      { cwd, env: unset },
+    );
+
+    expect(plan.code, plan.stderr).toBe(0);
   });
 });
 

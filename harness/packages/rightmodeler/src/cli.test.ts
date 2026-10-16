@@ -19,6 +19,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createProgram,
+  disableCurrentFolderLookup,
   executeCli,
   pipelineArgv,
   type PipelineCommandOptions,
@@ -127,6 +128,24 @@ function runtime(
     runtimeOutput: () => runtimeOutput,
   };
 }
+
+describe("current folder program lookup", () => {
+  it("is turned off on Windows only", () => {
+    const windows: NodeJS.ProcessEnv = {};
+    disableCurrentFolderLookup(windows, "win32");
+    expect(windows).toEqual({ NoDefaultCurrentDirectoryInExePath: "1" });
+
+    const linux: NodeJS.ProcessEnv = {};
+    disableCurrentFolderLookup(linux, "linux");
+    expect(linux).toEqual({});
+  });
+
+  it("keeps a value the user already set", () => {
+    const env: NodeJS.ProcessEnv = { NoDefaultCurrentDirectoryInExePath: "0" };
+    disableCurrentFolderLookup(env, "win32");
+    expect(env).toEqual({ NoDefaultCurrentDirectoryInExePath: "0" });
+  });
+});
 
 describe("pipelineArgv", () => {
   it("serializes every pipeline option in command order", () => {

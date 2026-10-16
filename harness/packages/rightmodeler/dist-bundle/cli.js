@@ -49955,7 +49955,7 @@ async function gitFiles(repo) {
         "--others",
         "--exclude-standard"
       ],
-      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true }
     );
     return stdout.split("\0").filter((path) => path.length > 0);
   } catch {
@@ -50002,7 +50002,7 @@ async function repositoryRevision(repo) {
     ({ stdout: insideWorkTree } = await execFileAsync6(
       "git",
       ["-C", repo, "rev-parse", "--is-inside-work-tree"],
-      { encoding: "utf8" }
+      { encoding: "utf8", windowsHide: true }
     ));
   } catch {
     throw notGitRepository();
@@ -50012,7 +50012,7 @@ async function repositoryRevision(repo) {
     const { stdout } = await execFileAsync6(
       "git",
       ["-C", repo, "rev-parse", "--verify", "HEAD"],
-      { encoding: "utf8" }
+      { encoding: "utf8", windowsHide: true }
     );
     return stdout.trim();
   } catch {
@@ -52681,14 +52681,19 @@ async function executeCli(argv, io = processIo, runtime = processRuntime) {
     return reporter.error(error51);
   }
 }
+function disableCurrentFolderLookup(env, platform) {
+  if (platform === "win32") env.NoDefaultCurrentDirectoryInExePath ??= "1";
+}
 var isEntryPoint = process.argv[1] !== void 0 && fileURLToPath2(import.meta.url) === realpathSync(process.argv[1]);
 if (isEntryPoint) {
+  disableCurrentFolderLookup(process.env, process.platform);
   process.exitCode = await executeCli(process.argv.slice(2));
 }
 export {
   applySwaps2 as applySwaps,
   approveDriftProposal,
   createProgram,
+  disableCurrentFolderLookup,
   executeCli,
   listApprovedSwapSets,
   listWatchablePullRequests,
