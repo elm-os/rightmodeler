@@ -25435,6 +25435,7 @@ function nonemptyString(value) {
 }
 
 // ../core/dist/keys.js
+import { createHash as createHash2 } from "node:crypto";
 import { posix, win32 } from "node:path";
 var reservedStoreSegments = /* @__PURE__ */ new Set([
   ".rightmodeler-store",
@@ -25459,6 +25460,9 @@ function assertSafeSegment(segment, label2 = "segment") {
   if (reservedStoreSegments.has(segment)) {
     throw new Error(`Invalid ${label2}: reserved by the store`);
   }
+}
+function portableSegment(segment) {
+  return process.platform === "win32" && (/[<>:"|?*\u0000-\u001f]|[. ]$/u.test(segment) || /^(?:con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\..*)?$/iu.test(segment)) ? `x-${createHash2("sha256").update(segment).digest("hex").slice(0, 32)}` : segment;
 }
 function projectPrefix(projectId3) {
   assertSafeSegment(projectId3, "projectId");
@@ -25506,14 +25510,14 @@ function confirmPrefix(projectId3) {
 }
 function confirmPlanKey(projectId3, familyId) {
   assertSafeSegment(familyId, "familyId");
-  return `${confirmPrefix(projectId3)}${familyId}/plan.json`;
+  return `${confirmPrefix(projectId3)}${portableSegment(familyId)}/plan.json`;
 }
 function verdictsPrefix(projectId3) {
   return `${projectPrefix(projectId3)}verdicts/`;
 }
 function verdictKey(projectId3, family) {
   assertSafeSegment(family, "family");
-  return `${verdictsPrefix(projectId3)}${family}.json`;
+  return `${verdictsPrefix(projectId3)}${portableSegment(family)}.json`;
 }
 function runsPrefix(projectId3) {
   return `${projectPrefix(projectId3)}runs/`;
@@ -29403,7 +29407,7 @@ function compareSignals(left, right) {
 }
 
 // ../kernel/dist/selection.js
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 function assignSplits(caseIds, seed) {
   const unique2 = new Set(caseIds);
   if (unique2.size !== caseIds.length) {
@@ -29536,7 +29540,7 @@ function validateWinnerHoldout(candidateId3, shortlist2, holdout, gatePolicyVers
   }
 }
 function splitHash(seed, caseId) {
-  return createHash2("sha256").update(String(seed)).update("\0").update(caseId).digest("hex");
+  return createHash3("sha256").update(String(seed)).update("\0").update(caseId).digest("hex");
 }
 function sameStrings2(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
@@ -32930,7 +32934,7 @@ var {
 
 // src/pipeline.ts
 import { execFile as execFile7 } from "node:child_process";
-import { createHash as createHash12 } from "node:crypto";
+import { createHash as createHash13 } from "node:crypto";
 import { readFileSync as readFileSync7 } from "node:fs";
 import { mkdir as mkdir5, readFile as readFile13, readdir as readdir4, stat as stat4, writeFile as writeFile8 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
@@ -34418,7 +34422,7 @@ function reconcile(normalizedSteps, stepRecords) {
 }
 
 // ../scanner/dist/scan.js
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 import { readFileSync as readFileSync4, readdirSync as readdirSync2 } from "node:fs";
 import { join as join10, relative as relative3, resolve as resolve4, sep as sep3 } from "node:path";
 function sourceFiles(rootDir) {
@@ -34472,7 +34476,7 @@ function scanRepository(rootDir, registry2, projectId3) {
       continue;
     }
     const searchable = maskSource(content, normalizedPath);
-    const contentHash = createHash3("sha256").update(content).digest("hex");
+    const contentHash = createHash4("sha256").update(content).digest("hex");
     const seen = /* @__PURE__ */ new Set();
     for (const matcher of fileMatchers) {
       let candidates;
@@ -37074,14 +37078,14 @@ function scrubRuns(runs) {
 
 // src/apply/orchestrator.ts
 import { execFile as execFile5 } from "node:child_process";
-import { createHash as createHash6 } from "node:crypto";
+import { createHash as createHash7 } from "node:crypto";
 import { readFile as readFile10 } from "node:fs/promises";
 import { join as join15 } from "node:path";
 import { promisify as promisify4 } from "node:util";
 
 // src/code-graph/graph.ts
 import { constants } from "node:buffer";
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 import { readFile as readFile6, stat as stat3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute2, relative as relative4, sep as sep4 } from "node:path";
 var provenanceRank = {
@@ -37123,7 +37127,7 @@ async function graphFileDigest(path) {
   try {
     const { size } = await stat3(path);
     if (size > constants.MAX_STRING_LENGTH) return `too-large:${size}`;
-    return createHash4("sha256").update(await readFile6(path)).digest("hex");
+    return createHash5("sha256").update(await readFile6(path)).digest("hex");
   } catch {
     return "unreadable";
   }
@@ -37230,7 +37234,7 @@ async function loadCodeGraph(path, repoDir) {
   return {
     graph: {
       displayPath,
-      sha256: createHash4("sha256").update(bytes).digest("hex"),
+      sha256: createHash5("sha256").update(bytes).digest("hex"),
       builtAtCommit: file2.data.built_at_commit ?? null,
       nodes,
       edges,
@@ -38700,7 +38704,7 @@ function createGithubClient(options) {
 }
 
 // src/apply/remediation.ts
-import { createHash as createHash5 } from "node:crypto";
+import { createHash as createHash6 } from "node:crypto";
 
 // src/contract-validation.ts
 var import__ = __toESM(require__(), 1);
@@ -39376,10 +39380,10 @@ var remediationLifecycleEventSchema = remediationLifecycleEventBodySchema.extend
   event_id: contentDigestSchema
 });
 function digestJson(value) {
-  return `sha256:${createHash5("sha256").update(canonicalJson(jsonValueSchema.parse(value))).digest("hex")}`;
+  return `sha256:${createHash6("sha256").update(canonicalJson(jsonValueSchema.parse(value))).digest("hex")}`;
 }
 function digestFileContent(content) {
-  return `sha256:${createHash5("sha256").update(content).digest("hex")}`;
+  return `sha256:${createHash6("sha256").update(content).digest("hex")}`;
 }
 function sortedUnique(values) {
   return [...new Set(values)].sort();
@@ -40912,7 +40916,7 @@ async function staleDigestPaths(repoDir, swaps) {
         "\r\n",
         "\n"
       );
-      const actual = createHash6("sha256").update(content).digest("hex");
+      const actual = createHash7("sha256").update(content).digest("hex");
       if (expected.size !== 1 || !expected.has(actual)) stale.push(path);
     } catch {
       stale.push(path);
@@ -43161,7 +43165,7 @@ function providerName(provider) {
 
 // src/evaluators/promptfoo.ts
 import { execFile as execFile6 } from "node:child_process";
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 import { mkdtemp as mkdtemp4, readFile as readFile12, realpath as realpath3, rm as rm4, writeFile as writeFile7 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
 import { dirname as dirname7, join as join18, relative as relative7, resolve as resolve8 } from "node:path";
@@ -43334,7 +43338,7 @@ function createPromptfooEvaluator(input) {
       return (await runPromptfoo(command, ["--version"], process.cwd())).code === 0;
     },
     async launch(input2) {
-      const providerRunId = createHash7("sha256").update(
+      const providerRunId = createHash8("sha256").update(
         JSON.stringify({
           experimentName: input2.experimentName,
           caseIds: input2.cases.map(({ caseId }) => caseId)
@@ -43462,7 +43466,7 @@ async function runPromptfoo(command, args, cwd) {
 }
 
 // src/evaluators/langfuse.ts
-import { createHash as createHash8 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 var healthSchema = external_exports.object({ status: external_exports.string().min(1) });
 var otelResponseSchema = external_exports.object({ partialSuccess: external_exports.unknown().optional() });
 var scoreSchema = external_exports.object({
@@ -43793,11 +43797,11 @@ function rubric2(score) {
   return rubricVersion === void 0 ? {} : { rubricVersion };
 }
 function hashHex(value) {
-  return createHash8("sha256").update(JSON.stringify(value)).digest("hex");
+  return createHash9("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 // src/evaluators/langsmith.ts
-import { createHash as createHash9 } from "node:crypto";
+import { createHash as createHash10 } from "node:crypto";
 var sessionSchema = external_exports.object({ id: external_exports.string().min(1) });
 var feedbackEntrySchema = external_exports.object({
   score: external_exports.number().optional(),
@@ -44035,7 +44039,7 @@ function scorerRule(value) {
   return separator === -1 ? value : value.slice(separator + 1);
 }
 function stableUuid(value) {
-  const hex3 = createHash9("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32);
+  const hex3 = createHash10("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32);
   return `${hex3.slice(0, 8)}-${hex3.slice(8, 12)}-4${hex3.slice(13, 16)}-8${hex3.slice(17, 20)}-${hex3.slice(20)}`;
 }
 
@@ -44941,10 +44945,10 @@ function derivePrState(events) {
 }
 
 // src/watch/watch.ts
-import { createHash as createHash11, randomUUID as randomUUID11 } from "node:crypto";
+import { createHash as createHash12, randomUUID as randomUUID11 } from "node:crypto";
 
 // src/watch/lock.ts
-import { createHash as createHash10, randomUUID as randomUUID10 } from "node:crypto";
+import { createHash as createHash11, randomUUID as randomUUID10 } from "node:crypto";
 var staleAfterMs = 5 * 60 * 1e3;
 var availableLockSchema = external_exports.strictObject({ status: external_exports.literal("available") });
 var heldLockSchema = external_exports.strictObject({
@@ -44961,7 +44965,7 @@ function encode4(value) {
   return Buffer.from(JSON.stringify(value), "utf8");
 }
 function lockKey(owner, repo, prNumber) {
-  const repository = createHash10("sha256").update(`${owner.toLowerCase()}/${repo.toLowerCase()}`).digest("hex");
+  const repository = createHash11("sha256").update(`${owner.toLowerCase()}/${repo.toLowerCase()}`).digest("hex");
   return `project/watch-locks/${repository}/pr-${prNumber}.json`;
 }
 function nextFence(value) {
@@ -45236,7 +45240,7 @@ async function markForReproof(store, verdicts, requestId) {
   }
 }
 function ciEventKey(prNumber, headSha, checkIdentities) {
-  const checks = createHash11("sha256").update(JSON.stringify(checkIdentities)).digest("hex");
+  const checks = createHash12("sha256").update(JSON.stringify(checkIdentities)).digest("hex");
   return `ci:${prNumber}:${headSha}:${checks}`;
 }
 function checkIdentity(check2) {
@@ -45318,7 +45322,7 @@ function action(type, detail) {
   return { type, detail };
 }
 function commentMarker(handledEventKey2) {
-  const digest2 = createHash11("sha256").update(handledEventKey2).digest("hex");
+  const digest2 = createHash12("sha256").update(handledEventKey2).digest("hex");
   return `${commentMarkerPrefix}${digest2} -->`;
 }
 async function changedPreApplyDigests(input, baseSha, preApplyDigests) {
@@ -45612,7 +45616,7 @@ ${marker}`
       }
       const changed = preApplyDigests === void 0 ? void 0 : await changedPreApplyDigests(input, base.sha, preApplyDigests);
       if (changed === void 0 || changed.length > 0) {
-        const key = changed === void 0 ? `base:${input.prNumber}:${base.sha}` : `base:${input.prNumber}:${createHash11("sha256").update(canonicalJson(jsonValueSchema.parse(changed))).digest("hex")}`;
+        const key = changed === void 0 ? `base:${input.prNumber}:${base.sha}` : `base:${input.prNumber}:${createHash12("sha256").update(canonicalJson(jsonValueSchema.parse(changed))).digest("hex")}`;
         if (!handled.has(key)) {
           await renew();
           await markForReproof(input.store, prVerdicts, key);
@@ -47355,7 +47359,7 @@ async function inputDigest(stage, context2, state) {
   if (stage === "corpus") {
     extra.seed = CORPUS_SEED;
     const active = await context2.store.get(ACTIVE_CORPUS_KEY2);
-    extra.activeCorpus = active === null ? null : createHash12("sha256").update(active.body).digest("hex");
+    extra.activeCorpus = active === null ? null : createHash13("sha256").update(active.body).digest("hex");
   }
   if (stage === "audit-sample") extra.limit = AUDIT_SAMPLE_LIMIT;
   if (stage === "shortlist") {
@@ -50038,7 +50042,7 @@ function digest(value) {
   return computeRunSpecDigest(value);
 }
 function sha256(value) {
-  return createHash12("sha256").update(value).digest("hex");
+  return createHash13("sha256").update(value).digest("hex");
 }
 function contextRepositoryFiles(context2) {
   context2.cache.repositoryFiles ??= repositoryFiles(
