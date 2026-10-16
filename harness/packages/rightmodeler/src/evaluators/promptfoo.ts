@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { computeRunSpecDigest, jsonValueSchema } from "@rightmodeler/core";
+import {
+  computeRunSpecDigest,
+  jsonValueSchema,
+  resolveCommand,
+} from "@rightmodeler/core";
 import { z } from "zod";
 
 import type {
@@ -384,14 +388,17 @@ async function runPromptfoo(
   args: readonly string[],
   cwd: string,
 ): Promise<{ code: unknown; output: string }> {
-  const running = execFileAsync(command, [...args], {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, ...PROMPTFOO_ENV },
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  running.child.stdin?.end();
   try {
+    const env = { ...process.env, ...PROMPTFOO_ENV };
+    const launch = resolveCommand(command, env);
+    const running = execFileAsync(launch.file, [...launch.args, ...args], {
+      cwd,
+      encoding: "utf8",
+      env,
+      maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true,
+    });
+    running.child.stdin?.end();
     const { stdout, stderr } = await running;
     return { code: 0, output: `${stdout}${stderr}` };
   } catch (error) {

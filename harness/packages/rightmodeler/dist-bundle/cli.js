@@ -6418,7 +6418,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve14.call(this, root, ref);
+      let _sch = resolve15.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -6445,7 +6445,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve14(root, ref) {
+    function resolve15(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -7076,7 +7076,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve14(baseURI, relativeURI, options) {
+    function resolve15(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -7340,7 +7340,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve14,
+      resolve: resolve15,
       resolveComponent,
       equal,
       serialize,
@@ -10591,7 +10591,7 @@ var require__ = __commonJS({
 import { spawn as spawn2 } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import { basename as basename5, resolve as resolve13 } from "node:path";
+import { basename as basename6, resolve as resolve14 } from "node:path";
 import { Writable } from "node:stream";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
@@ -10614,6 +10614,90 @@ function catalogFamily(modelId) {
 }
 function canonicalModelName(modelId) {
   return modelId.split("/").at(-1).toLowerCase().replace(/-\d{8}$/u, "").replaceAll(".", "-");
+}
+
+// ../core/dist/command.js
+import { lstatSync, readFileSync } from "node:fs";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+var PROGRAM_EXTENSIONS = [".COM", ".EXE", ".BAT", ".CMD"];
+var SCRIPT_EXTENSIONS = [".JS", ".CJS", ".MJS"];
+function resolveCommand(command, env = process.env) {
+  if (process.platform !== "win32")
+    return { file: command, args: [] };
+  const extensions = (envValue(env, "PATHEXT") ?? PROGRAM_EXTENSIONS.join(";")).toUpperCase().split(";").filter((extension) => PROGRAM_EXTENSIONS.includes(extension));
+  const found = findProgram(command, env, extensions);
+  if (found === void 0) {
+    throw launchError("ENOENT", command, `${command} is not on PATH.`);
+  }
+  return launchFor(found);
+}
+function cmdShimTarget(text) {
+  const matches = [
+    ...text.matchAll(/"(?:(?:%~dp0|%dp0%)\\*|(?=[A-Za-z]:\\))([^"%]+)"\s+%\*/gu)
+  ];
+  const path = matches.at(-1)?.[1];
+  if (path === void 0)
+    return void 0;
+  if (/\.(?:exe|com)$/iu.test(path))
+    return { path, node: false };
+  if (/\.(?:bat|cmd)$/iu.test(path) || !/\bnode(?:\.exe)?\b/iu.test(text)) {
+    return void 0;
+  }
+  return { path, node: true };
+}
+function findProgram(command, env, extensions) {
+  const extension = extname(command).toUpperCase();
+  const named = extensions.includes(extension) || SCRIPT_EXTENSIONS.includes(extension);
+  const candidates = (base) => named ? [base] : extensions.map((suffix) => base + suffix);
+  if (/[\\/]/u.test(command))
+    return candidates(resolve(command)).find(isFile);
+  const path = envValue(env, "PATH") ?? process.env.PATH ?? "";
+  for (const entry of path.split(";")) {
+    const directory = entry.trim().replace(/^"(.*)"$/u, "$1");
+    if (!isAbsolute(directory))
+      continue;
+    const found = candidates(join(directory, command)).find(isFile);
+    if (found !== void 0)
+      return found;
+  }
+  return void 0;
+}
+function launchFor(file2) {
+  const extension = extname(file2).toUpperCase();
+  if (SCRIPT_EXTENSIONS.includes(extension)) {
+    return { file: process.execPath, args: [file2] };
+  }
+  if (extension !== ".CMD" && extension !== ".BAT")
+    return { file: file2, args: [] };
+  const target = cmdShimTarget(readFileSync(file2, "utf8"));
+  if (target !== void 0) {
+    const program2 = resolve(dirname(file2), target.path);
+    return target.node ? { file: process.execPath, args: [program2] } : { file: program2, args: [] };
+  }
+  const name = basename(file2, extname(file2)).toLowerCase();
+  const cli = join(dirname(file2), "node_modules", "npm", "bin", `${name}-cli.js`);
+  if ((name === "npm" || name === "npx") && isFile(cli)) {
+    return { file: process.execPath, args: [cli] };
+  }
+  throw launchError("EINVAL", file2, `${file2} is a script that rightmodeler cannot start without a shell.`);
+}
+function envValue(env, name) {
+  const key = Object.keys(env).sort().find((candidate) => candidate.toUpperCase() === name);
+  return key === void 0 ? void 0 : env[key];
+}
+function isFile(path) {
+  try {
+    return !lstatSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function launchError(code, path, message2) {
+  return Object.assign(new Error(message2), {
+    code,
+    path,
+    syscall: `spawn ${path}`
+  });
 }
 
 // ../../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
@@ -25680,7 +25764,7 @@ var stepRecordSchema = external_exports.strictObject({
 // ../core/dist/store.js
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { link, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
-import { join, posix as posix2, relative, sep, win32 as win322 } from "node:path";
+import { join as join2, posix as posix2, relative, sep, win32 as win322 } from "node:path";
 var metadataDirectory = ".rightmodeler-store";
 var entriesDirectory = "entries";
 var stagedFilePattern = /^staged-([1-9]\d*)-/;
@@ -25806,13 +25890,13 @@ var FsStore = class {
     return true;
   }
   entriesRoot() {
-    return join(this.root, metadataDirectory, entriesDirectory);
+    return join2(this.root, metadataDirectory, entriesDirectory);
   }
   entryDirectory(key) {
-    return join(this.entriesRoot(), ...key.split("/"));
+    return join2(this.entriesRoot(), ...key.split("/"));
   }
   versionPath(key, version3) {
-    return join(this.entryDirectory(key), `v${version3}.json`);
+    return join2(this.entryDirectory(key), `v${version3}.json`);
   }
   async readCurrent(key) {
     const directory = this.entryDirectory(key);
@@ -25833,7 +25917,7 @@ var FsStore = class {
       const version3 = Number(match[1]);
       if (version3 > highestVersion) {
         highestVersion = version3;
-        highestFile = join(directory, name);
+        highestFile = join2(directory, name);
       }
     }
     if (highestFile === null)
@@ -25855,7 +25939,7 @@ var FsStore = class {
   async stage(key, targetVersion, body) {
     const directory = this.entryDirectory(key);
     await mkdir(directory, { recursive: true });
-    const staged = join(directory, `staged-${targetVersion}-${randomUUID4()}`);
+    const staged = join2(directory, `staged-${targetVersion}-${randomUUID4()}`);
     await writeFile(staged, body, { flag: "wx" });
     return staged;
   }
@@ -25885,7 +25969,7 @@ var FsStore = class {
         const match = stagedFilePattern.exec(name);
         if (match === null)
           return Number.POSITIVE_INFINITY;
-        const info = await stat(join(directory, name)).catch(() => null);
+        const info = await stat(join2(directory, name)).catch(() => null);
         if (info === null || Date.now() - info.mtimeMs >= stagedWriteTimeoutMs) {
           return Number.POSITIVE_INFINITY;
         }
@@ -25896,7 +25980,7 @@ var FsStore = class {
         const match = versionFilePattern.exec(name);
         if (match === null || Number(match[1]) >= retainFrom)
           return;
-        await unlink(join(directory, name)).catch(() => void 0);
+        await unlink(join2(directory, name)).catch(() => void 0);
       }));
     } catch {
     }
@@ -25915,7 +25999,7 @@ var FsStore = class {
     }
     const children = entries.filter((entry) => entry.isDirectory());
     for (let index = 0; index < children.length; index += listConcurrency) {
-      await Promise.all(children.slice(index, index + listConcurrency).map((entry) => this.walkEntries(join(directory, entry.name), keys)));
+      await Promise.all(children.slice(index, index + listConcurrency).map((entry) => this.walkEntries(join2(directory, entry.name), keys)));
     }
   }
 };
@@ -25947,7 +26031,7 @@ async function reserveWhenFree(budget, input, inFlight, signal) {
         if (refunds.length > 0) {
           await Promise.race(refunds);
         } else {
-          await new Promise((resolve14) => setTimeout(resolve14, retryMs));
+          await new Promise((resolve15) => setTimeout(resolve15, retryMs));
           retryMs = Math.min(retryMs * 2, RESERVATION_RETRY_CAP_MS);
         }
         continue;
@@ -26174,13 +26258,13 @@ function createBudget(options) {
 
 // ../replay/dist/claude-route.js
 import { writeFile as writeFile2 } from "node:fs/promises";
-import { join as join3 } from "node:path";
+import { join as join4 } from "node:path";
 
 // ../replay/dist/plan-route.js
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join as join2 } from "node:path";
+import { join as join3 } from "node:path";
 
 // ../replay/dist/provider.js
 import { readFile as readFile2 } from "node:fs/promises";
@@ -26372,10 +26456,10 @@ var AdaptiveLimiter = class {
       this.active += 1;
       return Promise.resolve(this.sequence++);
     }
-    return new Promise((resolve14) => {
+    return new Promise((resolve15) => {
       this.waiters.push(() => {
         this.active += 1;
-        resolve14(this.sequence++);
+        resolve15(this.sequence++);
       });
     });
   }
@@ -26463,7 +26547,7 @@ function retryDelay(response, attempt) {
   return backoffDelay(attempt);
 }
 function sleep(milliseconds) {
-  return new Promise((resolve14) => setTimeout(resolve14, milliseconds));
+  return new Promise((resolve15) => setTimeout(resolve15, milliseconds));
 }
 function isRetryable(status) {
   return status === 408 || status === 409 || status === 429 || status >= 500;
@@ -27047,7 +27131,8 @@ function isSingleTurn(messages) {
   return last >= 0 && messages[last].role === "user" && messages.slice(0, last).every(({ role }) => role === "system" || role === "developer");
 }
 function withheldFromChild(name) {
-  return name.startsWith("ANTHROPIC_") || name.startsWith("OPENAI_") || name === "CODEX_API_KEY" || name === "CLAUDECODE" || name === "CLAUDE_PID" || name === "CLAUDE_EFFORT" || name.startsWith("CLAUDE_CODE_") && name !== "CLAUDE_CODE_OAUTH_TOKEN";
+  const upper = name.toUpperCase();
+  return upper.startsWith("ANTHROPIC_") || upper.startsWith("OPENAI_") || upper === "CODEX_API_KEY" || upper === "CLAUDECODE" || upper === "CLAUDE_PID" || upper === "CLAUDE_EFFORT" || upper.startsWith("CLAUDE_CODE_") && upper !== "CLAUDE_CODE_OAUTH_TOKEN";
 }
 function outputSchema(format11) {
   if (!isRecord(format11) || format11.type !== "json_schema")
@@ -27064,17 +27149,31 @@ function versionAtLeast(version3, minimum) {
   }
   return true;
 }
+function startFailure(command, error51, installRemedy) {
+  const { code, message: message2 } = error51;
+  if (code === "ENOENT") {
+    return new PlanRouteUnavailableError(`${command} is not installed or not on PATH.`, installRemedy);
+  }
+  return code === "EINVAL" ? new PlanRouteUnavailableError(message2, installRemedy) : new ProviderRequestError(`${command} could not start: ${message2}`);
+}
 function runner(command, env, installRemedy) {
   return async (args, options) => {
-    const cwd = options.cwd ?? await mkdtemp(join2(tmpdir(), "rightmodeler-plan-"));
+    const cwd = options.cwd ?? await mkdtemp(join3(tmpdir(), "rightmodeler-plan-"));
     try {
-      return await new Promise((resolve14, reject) => {
-        const child = spawn(command, args, {
-          cwd,
-          env,
-          stdio: ["pipe", "pipe", "pipe"],
-          shell: false
-        });
+      return await new Promise((resolve15, reject) => {
+        let child;
+        try {
+          const launch = resolveCommand(command, env);
+          child = spawn(launch.file, [...launch.args, ...args], {
+            cwd,
+            env,
+            stdio: ["pipe", "pipe", "pipe"],
+            shell: false
+          });
+        } catch (error51) {
+          reject(startFailure(command, error51, installRemedy));
+          return;
+        }
         running.add(child);
         if (!exitHookRegistered) {
           exitHookRegistered = true;
@@ -27132,14 +27231,14 @@ function runner(command, env, installRemedy) {
           if (pending.length > 0)
             readLine(pending);
           if (spawnError !== void 0) {
-            reject(spawnError.code === "ENOENT" ? new PlanRouteUnavailableError(`${command} is not installed or not on PATH.`, installRemedy) : new ProviderRequestError(`${command} could not start: ${spawnError.message}`));
+            reject(startFailure(command, spawnError, installRemedy));
             return;
           }
           if (overflowed) {
             reject(new ProviderRequestError(`${command} printed more than 32 MiB`));
             return;
           }
-          resolve14({
+          resolve15({
             code,
             stdout,
             stderr: stderr.slice(0, 500),
@@ -27159,7 +27258,8 @@ async function preflightPlanCli(adapter, parentEnv, withhold = []) {
   if ((parentEnv.CI ?? "").length > 0) {
     throw new PlanRouteUnavailableError("Plan routes run only on your own machine, and CI is set.", "In continuous integration, use an API route: --base-url <url> and --api-key-env <name>. If this is your own machine, unset CI and rerun.");
   }
-  const run = runner(adapter.command, adapter.childEnv(Object.fromEntries(Object.entries(parentEnv).filter(([name]) => !withheldFromChild(name) && !withhold.includes(name)))), adapter.remedies.install);
+  const withheld = new Set(withhold.map((name) => name.toUpperCase()));
+  const run = runner(adapter.command, adapter.childEnv(Object.fromEntries(Object.entries(parentEnv).filter(([name]) => !withheldFromChild(name) && !withheld.has(name.toUpperCase())))), adapter.remedies.install);
   const version3 = /\d+\.\d+\.\d+/u.exec((await run(["--version"], {
     stdin: "",
     timeoutMs: PREFLIGHT_TIMEOUT_MS
@@ -27189,7 +27289,7 @@ function createPlanProvider(adapter, options) {
   function ready() {
     preflight ??= (async () => {
       const { run } = await preflightPlanCli(adapter, parentEnv, options.withhold);
-      const withheld = adapter.keyVariables.filter((name) => (parentEnv[name] ?? "").length > 0);
+      const withheld = adapter.keyVariables.filter((name) => Object.entries(parentEnv).some(([key, value]) => key.toUpperCase() === name && (value ?? "").length > 0));
       if (withheld.length > 0) {
         const one = withheld.length === 1;
         warnOnce("plan_route_key_withheld", `${withheld.join(", ")} ${one ? "is" : "are"} set; rightmodeler keeps ${one ? "it" : "them"} away from ${adapter.command} so your plan is used, not a key.`);
@@ -27261,7 +27361,7 @@ function createPlanProvider(adapter, options) {
     return limiter.run(async () => {
       if (latch !== void 0)
         throw latch;
-      const dir = await mkdtemp(join2(tmpdir(), "rightmodeler-plan-"));
+      const dir = await mkdtemp(join3(tmpdir(), "rightmodeler-plan-"));
       let result2;
       try {
         result2 = await adapter.call(run, {
@@ -27384,7 +27484,10 @@ var claudeAdapter = {
       DISABLE_AUTOUPDATER: "1",
       MAX_THINKING_TOKENS: "0"
     };
-    delete env.NODE_OPTIONS;
+    for (const name of Object.keys(env)) {
+      if (name.toUpperCase() === "NODE_OPTIONS")
+        delete env[name];
+    }
     return env;
   },
   async checkLogin(run) {
@@ -27446,7 +27549,7 @@ var claudeAdapter = {
   },
   async call(run, input) {
     const schema = input.outputSchema;
-    const systemFile = join3(input.dir, "system.txt");
+    const systemFile = join4(input.dir, "system.txt");
     await writeFile2(systemFile, input.system);
     const seen = { models: [], toolUse: false };
     const outcome = await run([
@@ -27556,7 +27659,7 @@ function createClaudeLoginProvider(options) {
 // ../replay/dist/codex-route.js
 import { readFile as readFile3, stat as stat2, writeFile as writeFile3 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join as join4 } from "node:path";
+import { join as join5 } from "node:path";
 var updateRemedy2 = "Update with npm install -g @openai/codex@latest, then rerun.";
 var loginRemedy2 = "Run codex login, then rerun; finished calls are kept.";
 var chatgptRemedy = "Sign in with ChatGPT using codex login, then rerun.";
@@ -27694,8 +27797,8 @@ ${result2.stderr}` };
         }
         store = "keyring";
       }
-      const home = env.CODEX_HOME ?? join4(homedir(), ".codex");
-      if (await exists(join4(home, "AGENTS.override.md")) || await exists(join4(home, "AGENTS.md"))) {
+      const home = env.CODEX_HOME ?? join5(homedir(), ".codex");
+      if (await exists(join5(home, "AGENTS.override.md")) || await exists(join5(home, "AGENTS.md"))) {
         options.warning?.("codex_global_instructions", "Codex adds your global instructions file ($CODEX_HOME/AGENTS.md or AGENTS.override.md) to every call and cannot be told not to; rightmodeler did not read it. Move it aside for this run if it should not shape the replayed answers.");
       }
     },
@@ -27722,9 +27825,9 @@ ${result2.stderr}` };
       });
     },
     async call(run, input) {
-      const instructions = join4(input.dir, "instructions.md");
-      const lastMessage = join4(input.dir, "last-message.txt");
-      const schemaFile = join4(input.dir, "output-schema.json");
+      const instructions = join5(input.dir, "instructions.md");
+      const lastMessage = join5(input.dir, "last-message.txt");
+      const schemaFile = join5(input.dir, "output-schema.json");
       const hasInstructions = input.system.trim().length > 0;
       if (hasInstructions)
         await writeFile3(instructions, input.system);
@@ -29451,7 +29554,7 @@ function stableSeed2(value) {
 import { execFile } from "node:child_process";
 import { randomUUID as randomUUID6 } from "node:crypto";
 import { lstat, readFile as readFile4, readdir as readdir2, realpath } from "node:fs/promises";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 import { promisify } from "node:util";
 var execFileAsync = promisify(execFile);
 var dockerOutputLimit = 10 * 1024 * 1024;
@@ -29527,7 +29630,7 @@ function scratchHostPath(inspect, handle) {
 }
 async function heartbeatTime(scratchPath) {
   try {
-    return (await lstat(join5(scratchPath, HEARTBEAT_FILE))).mtime.toISOString();
+    return (await lstat(join6(scratchPath, HEARTBEAT_FILE))).mtime.toISOString();
   } catch (error51) {
     if (isRecord2(error51) && error51.code === "ENOENT")
       return null;
@@ -29590,7 +29693,7 @@ async function listNamespaceFiles(namespace, namespacePath) {
     entries.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
     for (const entry of entries) {
       const relativePath = relativeDirectory.length === 0 ? entry.name : `${relativeDirectory}/${entry.name}`;
-      const hostPath = join5(directory, entry.name);
+      const hostPath = join6(directory, entry.name);
       const stats = await lstat(hostPath);
       try {
         assertSafeSegment(entry.name, "artifact path segment");
@@ -29660,7 +29763,7 @@ function createDockerExecutor(options) {
           return;
         if (attempt === 3)
           break;
-        await new Promise((resolve14) => setTimeout(resolve14, 1e3));
+        await new Promise((resolve15) => setTimeout(resolve15, 1e3));
       }
     }
     await runDocker(["rm", "--force", handle]).catch(() => void 0);
@@ -29743,7 +29846,7 @@ function createDockerExecutor(options) {
       const pendingFiles = [];
       const skipped = [];
       for (const namespace of namespaces) {
-        const listed = await listNamespaceFiles(namespace, join5(request.scratchHostPath, namespace));
+        const listed = await listNamespaceFiles(namespace, join6(request.scratchHostPath, namespace));
         pendingFiles.push(...listed.files);
         skipped.push(...listed.skipped);
       }
@@ -29812,7 +29915,7 @@ function createDockerExecutor(options) {
 
 // ../executor/dist/cloud-sandbox.js
 import { lstat as lstat2, mkdir as mkdir2, readFile as readFile5, readdir as readdir3, readlink, realpath as realpath2, writeFile as writeFile4 } from "node:fs/promises";
-import { dirname, join as join6, posix as posix3 } from "node:path";
+import { dirname as dirname2, join as join7, posix as posix3 } from "node:path";
 function isRecord3(value) {
   return typeof value === "object" && value !== null;
 }
@@ -29934,7 +30037,7 @@ async function listLocalEntries(root) {
     children.sort((left, right) => left.name.localeCompare(right.name));
     for (const child of children) {
       const relativePath = relativeDirectory.length === 0 ? child.name : posix3.join(relativeDirectory, child.name);
-      const absolutePath = join6(directory, child.name);
+      const absolutePath = join7(directory, child.name);
       const stats = await lstat2(absolutePath);
       if (stats.isDirectory()) {
         entries.push({
@@ -30229,8 +30332,8 @@ function createCloudExecutor(options) {
         if (contents === null) {
           throw new Error(`Cloud collection file ${pending.sandboxPath} vanished`);
         }
-        const hostPath = join6(request.scratchHostPath, pending.namespace, ...pending.path.split("/"));
-        await mkdir2(dirname(hostPath), { recursive: true });
+        const hostPath = join7(request.scratchHostPath, pending.namespace, ...pending.path.split("/"));
+        await mkdir2(dirname2(hostPath), { recursive: true });
         await writeFile4(hostPath, contents);
         files.push({
           namespace: pending.namespace,
@@ -30270,7 +30373,7 @@ function createCloudExecutor(options) {
 // ../replay/dist/driver-modeb.js
 import { randomUUID as randomUUID8 } from "node:crypto";
 import { mkdir as mkdir3, mkdtemp as mkdtemp2, rm as rm2, writeFile as writeFile5 } from "node:fs/promises";
-import { dirname as dirname2, join as join7, resolve } from "node:path";
+import { dirname as dirname3, join as join8, resolve as resolve2 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ../replay/dist/driver.js
@@ -30478,8 +30581,8 @@ async function replayModeA(input) {
             throw retirement.reason;
           }
           let resolveRefund = () => void 0;
-          const refundComplete = new Promise((resolve14) => {
-            resolveRefund = resolve14;
+          const refundComplete = new Promise((resolve15) => {
+            resolveRefund = resolve15;
           });
           activeRefunds.add(refundComplete);
           try {
@@ -30737,8 +30840,8 @@ async function replayModeA(input) {
       throw error51;
     }
     let resolveRefund = () => void 0;
-    const refundComplete = new Promise((resolve14) => {
-      resolveRefund = resolve14;
+    const refundComplete = new Promise((resolve15) => {
+      resolveRefund = resolve15;
     });
     activeRefunds.add(refundComplete);
     let heartbeatFailure;
@@ -30935,8 +31038,8 @@ function redactCredential(body, credential) {
   return Buffer.from(body.toString("utf8").split(credential).join("[REDACTED]"), "utf8");
 }
 function close(server) {
-  return new Promise((resolve14, reject) => {
-    server.close((error51) => error51 === void 0 ? resolve14() : reject(error51));
+  return new Promise((resolve15, reject) => {
+    server.close((error51) => error51 === void 0 ? resolve15() : reject(error51));
   });
 }
 async function startEgressListener(options) {
@@ -31004,9 +31107,9 @@ async function startEgressListener(options) {
     incoming.pipe(upstream);
   });
   const hostname5 = options.hostname ?? "0.0.0.0";
-  await new Promise((resolve14, reject) => {
+  await new Promise((resolve15, reject) => {
     server.once("error", reject);
-    server.listen(options.port ?? 0, hostname5, resolve14);
+    server.listen(options.port ?? 0, hostname5, resolve15);
   });
   const address = server.address();
   return {
@@ -31180,11 +31283,11 @@ function stepPricing(steps, policy, catalog) {
   return reachable;
 }
 function createWaiter() {
-  let resolve14 = () => void 0;
+  let resolve15 = () => void 0;
   const promise2 = new Promise((done) => {
-    resolve14 = done;
+    resolve15 = done;
   });
-  return { promise: promise2, resolve: resolve14 };
+  return { promise: promise2, resolve: resolve15 };
 }
 async function reserveCase(input, activeRefunds, worstCaseUsd) {
   for (; ; ) {
@@ -31204,22 +31307,22 @@ async function reserveCase(input, activeRefunds, worstCaseUsd) {
   }
 }
 function replayRuntimeRoot() {
-  return dirname2(fileURLToPath(import.meta.url));
+  return dirname3(fileURLToPath(import.meta.url));
 }
 async function prepareScratch(root, cell, executionId, appSpec) {
   const command = appSpec.command(CASE_CONTAINER_PATH);
   if (command.length === 0) {
     throw new Error("appSpec.command must not be empty");
   }
-  const scratch = join7(root, executionId);
-  await mkdir3(join7(scratch, "driver"), { recursive: true });
-  await writeFile5(join7(scratch, "driver", "case.json"), `${JSON.stringify({
+  const scratch = join8(root, executionId);
+  await mkdir3(join8(scratch, "driver"), { recursive: true });
+  await writeFile5(join8(scratch, "driver", "case.json"), `${JSON.stringify({
     caseId: cell.recordedCase.caseId,
     input: cell.recordedCase.input,
     ...cell.recordedCase.headers === void 0 ? {} : { headers: cell.recordedCase.headers }
   })}
 `, "utf8");
-  await writeFile5(join7(scratch, "driver", "config.json"), `${JSON.stringify({
+  await writeFile5(join8(scratch, "driver", "config.json"), `${JSON.stringify({
     command,
     ...appSpec.installCommand === void 0 ? {} : { installCommand: appSpec.installCommand }
   })}
@@ -31292,7 +31395,7 @@ async function waitForExit(executor, handle, timeoutMs) {
     if (Date.now() >= deadline) {
       throw new Error(`Container ${handle} did not exit within ${timeoutMs + EXIT_GRACE_MS} ms`);
     }
-    await new Promise((resolve14) => setTimeout(resolve14, EXIT_POLL_INTERVAL_MS));
+    await new Promise((resolve15) => setTimeout(resolve15, EXIT_POLL_INTERVAL_MS));
   }
 }
 function textFiles(collected) {
@@ -31970,7 +32073,7 @@ async function replayModeB(input) {
       hostname: input.egress.hostname,
       port: input.egress.port
     });
-    scratchRoot = await mkdtemp2(join7(dirname2(resolve(input.appSpec.mountPath)), ".rightmodeler-modeb-"));
+    scratchRoot = await mkdtemp2(join8(dirname3(resolve2(input.appSpec.mountPath)), ".rightmodeler-modeb-"));
   } catch (error51) {
     if (listener !== null)
       await listener.close().catch(() => void 0);
@@ -32321,8 +32424,8 @@ async function assessExecution(input, recordedCase, execution, key, existing) {
           pricing: input.modeB.judge.pricing
         }, judgeRefunds);
         let resolveRefund = () => void 0;
-        const refundComplete = new Promise((resolve14) => {
-          resolveRefund = resolve14;
+        const refundComplete = new Promise((resolve15) => {
+          resolveRefund = resolve15;
         });
         judgeRefunds.add(refundComplete);
         try {
@@ -32828,14 +32931,14 @@ var {
 // src/pipeline.ts
 import { execFile as execFile7 } from "node:child_process";
 import { createHash as createHash12 } from "node:crypto";
-import { readFileSync as readFileSync6 } from "node:fs";
+import { readFileSync as readFileSync7 } from "node:fs";
 import { mkdir as mkdir5, readFile as readFile13, readdir as readdir4, stat as stat4, writeFile as writeFile8 } from "node:fs/promises";
 import { hostname as hostname4 } from "node:os";
-import { dirname as dirname7, join as join18, relative as relative9, resolve as resolve9, sep as sep5 } from "node:path";
+import { dirname as dirname8, join as join19, relative as relative9, resolve as resolve10, sep as sep5 } from "node:path";
 import { promisify as promisify6 } from "node:util";
 
 // ../scanner/dist/declarative-matcher.js
-import { readFileSync } from "node:fs";
+import { readFileSync as readFileSync2 } from "node:fs";
 
 // ../scanner/dist/matchers/utils.js
 function maskNonCode(content, includeHashComments) {
@@ -33308,7 +33411,7 @@ function compileDeclarativeMatchers(inputs) {
   return { matchers, rejections };
 }
 function loadDeclarativeMatchers(filePath) {
-  const parsed2 = JSON.parse(readFileSync(filePath, "utf8"));
+  const parsed2 = JSON.parse(readFileSync2(filePath, "utf8"));
   if (!Array.isArray(parsed2)) {
     throw new Error(`${filePath} must contain a JSON array of matcher definitions`);
   }
@@ -33360,8 +33463,8 @@ function evaluateCoverage(input) {
 }
 
 // ../scanner/dist/detect-tech.js
-import { readFileSync as readFileSync2, readdirSync } from "node:fs";
-import { join as join8, relative as relative2, resolve as resolve2, sep as sep2 } from "node:path";
+import { readFileSync as readFileSync3, readdirSync } from "node:fs";
+import { join as join9, relative as relative2, resolve as resolve3, sep as sep2 } from "node:path";
 
 // ../scanner/dist/ignored-directories.js
 var IGNORED_DIRECTORIES = /* @__PURE__ */ new Set([
@@ -33413,9 +33516,9 @@ function manifests(rootDir) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name))
-          visit(join8(directory, entry.name));
+          visit(join9(directory, entry.name));
       } else if (entry.isFile() && manifestNames.has(entry.name)) {
-        found.push(join8(directory, entry.name));
+        found.push(join9(directory, entry.name));
       }
     }
   };
@@ -33494,13 +33597,13 @@ function pythonManifestDependencies(name, content) {
   return new Set(found.map(canonicalDependency));
 }
 function detectTech(rootDir) {
-  const absoluteRoot = resolve2(rootDir);
+  const absoluteRoot = resolve3(rootDir);
   const dependencies = [];
   const languages = /* @__PURE__ */ new Set();
   for (const manifest of manifests(absoluteRoot)) {
     const manifestPath = relative2(absoluteRoot, manifest).split(sep2).join("/");
     const name = manifest.slice(manifest.lastIndexOf(sep2) + 1);
-    const content = readFileSync2(manifest, "utf8");
+    const content = readFileSync3(manifest, "utf8");
     if (name === "package.json") {
       languages.add("javascript");
       let parsed2;
@@ -34316,17 +34419,17 @@ function reconcile(normalizedSteps, stepRecords) {
 
 // ../scanner/dist/scan.js
 import { createHash as createHash3 } from "node:crypto";
-import { readFileSync as readFileSync3, readdirSync as readdirSync2 } from "node:fs";
-import { join as join9, relative as relative3, resolve as resolve3, sep as sep3 } from "node:path";
+import { readFileSync as readFileSync4, readdirSync as readdirSync2 } from "node:fs";
+import { join as join10, relative as relative3, resolve as resolve4, sep as sep3 } from "node:path";
 function sourceFiles(rootDir) {
   const files = [];
   const visit = (directory) => {
     for (const entry of readdirSync2(directory, { withFileTypes: true })) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name))
-          visit(join9(directory, entry.name));
+          visit(join10(directory, entry.name));
       } else if (entry.isFile()) {
-        files.push(join9(directory, entry.name));
+        files.push(join10(directory, entry.name));
       }
     }
   };
@@ -34352,7 +34455,7 @@ function message(error51) {
   return error51 instanceof Error ? error51.message : String(error51);
 }
 function scanRepository(rootDir, registry2, projectId3) {
-  const absoluteRoot = resolve3(rootDir);
+  const absoluteRoot = resolve4(rootDir);
   const records = [];
   const skipped = [];
   const matchers = registry2.getAll();
@@ -34363,7 +34466,7 @@ function scanRepository(rootDir, registry2, projectId3) {
       continue;
     let content;
     try {
-      content = readFileSync3(absolutePath, "utf8").replaceAll("\r\n", "\n");
+      content = readFileSync4(absolutePath, "utf8").replaceAll("\r\n", "\n");
     } catch (error51) {
       skipped.push({ path: normalizedPath, reason: message(error51) });
       continue;
@@ -36973,14 +37076,14 @@ function scrubRuns(runs) {
 import { execFile as execFile5 } from "node:child_process";
 import { createHash as createHash6 } from "node:crypto";
 import { readFile as readFile10 } from "node:fs/promises";
-import { join as join14 } from "node:path";
+import { join as join15 } from "node:path";
 import { promisify as promisify4 } from "node:util";
 
 // src/code-graph/graph.ts
 import { constants } from "node:buffer";
 import { createHash as createHash4 } from "node:crypto";
 import { readFile as readFile6, stat as stat3 } from "node:fs/promises";
-import { isAbsolute, relative as relative4, sep as sep4 } from "node:path";
+import { isAbsolute as isAbsolute2, relative as relative4, sep as sep4 } from "node:path";
 var provenanceRank = {
   AMBIGUOUS: 0,
   INFERRED: 1,
@@ -37145,7 +37248,7 @@ async function loadCodeGraph(path, repoDir) {
 function normalizeSourcePath(value, repoDir) {
   if (value === void 0 || value === null || value === "") return null;
   const slashed = value.replaceAll("\\", "/");
-  const path = isAbsolute(slashed) ? relative4(repoDir, slashed).split(sep4).join("/") : slashed;
+  const path = isAbsolute2(slashed) ? relative4(repoDir, slashed).split(sep4).join("/") : slashed;
   return path.startsWith("./") ? path.slice(2) : path;
 }
 function parseLine3(value) {
@@ -37158,7 +37261,7 @@ function errorCode(error51) {
 }
 
 // src/code-graph/context.ts
-import { basename } from "node:path";
+import { basename as basename2 } from "node:path";
 
 // src/enrich/blast-radius.ts
 function addOwner(owners, owner) {
@@ -37225,7 +37328,7 @@ function blastRadius({
 // src/enrich/conventions.ts
 import { execFile as execFile2 } from "node:child_process";
 import { access, readFile as readFile7 } from "node:fs/promises";
-import { dirname as dirname3, join as join10, relative as relative5, resolve as resolve4 } from "node:path";
+import { dirname as dirname4, join as join11, relative as relative5, resolve as resolve5 } from "node:path";
 import { promisify as promisify2 } from "node:util";
 
 // src/enrich/shared.ts
@@ -37261,7 +37364,7 @@ function posixPath(repoDir, absolutePath) {
 async function existingPath(repoDir, candidates) {
   for (const path of candidates) {
     try {
-      await access(join10(repoDir, path));
+      await access(join11(repoDir, path));
       return path;
     } catch {
       continue;
@@ -37286,14 +37389,14 @@ function includeTargets(content) {
   return targets;
 }
 function includePath(repoDir, includedFrom, target) {
-  const absolute = target.startsWith("/") ? resolve4(repoDir, target.slice(1)) : resolve4(repoDir, dirname3(includedFrom), target);
+  const absolute = target.startsWith("/") ? resolve5(repoDir, target.slice(1)) : resolve5(repoDir, dirname4(includedFrom), target);
   return { absolute, relative: posixPath(repoDir, absolute) };
 }
 async function captureInstructionFiles(repoDir) {
   const rootFiles = (await Promise.all(
     ["AGENTS.md", "CLAUDE.md"].map(async (path) => {
       try {
-        await access(join10(repoDir, path));
+        await access(join11(repoDir, path));
         return path;
       } catch {
         return null;
@@ -37315,7 +37418,7 @@ async function captureInstructionFiles(repoDir) {
   async function capture(path, depth, stack, includedFrom) {
     let content;
     try {
-      content = await readFile7(join10(repoDir, path), "utf8");
+      content = await readFile7(join11(repoDir, path), "utf8");
     } catch {
       warn(
         includedFrom === void 0 ? { name: "instruction_file_unreadable", path } : {
@@ -37354,7 +37457,7 @@ async function captureInstructionFiles(repoDir) {
 }
 async function readFirst(repoDir, candidates) {
   const path = await existingPath(repoDir, candidates);
-  return path === null ? null : readFile7(join10(repoDir, path), "utf8");
+  return path === null ? null : readFile7(join11(repoDir, path), "utf8");
 }
 async function detectFormatter(repoDir) {
   const prettier = await existingPath(repoDir, prettierConfigs);
@@ -37363,7 +37466,7 @@ async function detectFormatter(repoDir) {
   if (ruff !== null) return { kind: "ruff", configPath: ruff };
   const pyproject = await existingPath(repoDir, ["pyproject.toml"]);
   if (pyproject !== null && /^\s*\[tool\.ruff(?:\.[^\]]+)?\]\s*$/m.test(
-    await readFile7(join10(repoDir, pyproject), "utf8")
+    await readFile7(join11(repoDir, pyproject), "utf8")
   )) {
     return { kind: "ruff", configPath: pyproject };
   }
@@ -37436,19 +37539,19 @@ async function captureConventions({
 // src/enrich/owners.ts
 import { execFile as execFile3 } from "node:child_process";
 import { access as access2, readFile as readFile8 } from "node:fs/promises";
-import { isAbsolute as isAbsolute2, join as join11, relative as relative6 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join12, relative as relative6 } from "node:path";
 import { promisify as promisify3 } from "node:util";
 var execFileAsync3 = promisify3(execFile3);
 var maximumBlameOwners = 3;
 var maximumBlameConcurrency = 4;
 function repositoryPath(repoDir, filePath) {
-  const path = isAbsolute2(filePath) ? relative6(repoDir, filePath) : filePath;
+  const path = isAbsolute3(filePath) ? relative6(repoDir, filePath) : filePath;
   return path.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, "");
 }
 async function findCodeowners(repoDir) {
   for (const path of codeownersPaths) {
     try {
-      await access2(join11(repoDir, path));
+      await access2(join12(repoDir, path));
       return path;
     } catch {
       continue;
@@ -37563,7 +37666,7 @@ async function resolveOwners({
 }) {
   const codeownersPath = await findCodeowners(repoDir);
   const rules = codeownersPath === null ? [] : parseCodeowners(
-    await readFile8(join11(repoDir, codeownersPath), "utf8")
+    await readFile8(join12(repoDir, codeownersPath), "utf8")
   ).map((rule) => ({
     ...rule,
     matcher: codeownersRegex(rule.pattern)
@@ -37763,7 +37866,7 @@ async function readCodeContext(input) {
       continue;
     }
     const fileNode = inPath.find(
-      ({ label: label2 }) => label2 === basename(callSite.path)
+      ({ label: label2 }) => label2 === basename2(callSite.path)
     );
     const enclosing = stale ? void 0 : inPath.filter(
       (node) => node !== fileNode && node.line !== null && node.line <= callSite.line
@@ -38196,7 +38299,7 @@ function transientDelay(attempt) {
   return Math.random() * Math.min(maxRetryDelayMs, transientBaseDelayMs * 2 ** (attempt - 1));
 }
 function sleep2(milliseconds) {
-  return new Promise((resolve14) => setTimeout(resolve14, milliseconds));
+  return new Promise((resolve15) => setTimeout(resolve15, milliseconds));
 }
 function parseJson(text, label2) {
   try {
@@ -39456,8 +39559,8 @@ async function restoreBranch({
 }
 
 // src/apply/diff.ts
-import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join12 } from "node:path";
+import { readFileSync as readFileSync5 } from "node:fs";
+import { join as join13 } from "node:path";
 
 // src/apply/lex.ts
 function regexStartsAt(content, index) {
@@ -39887,7 +39990,7 @@ function buildSwapDiff({
   for (const [path, fileSwaps] of grouped) {
     let before;
     try {
-      before = readFileSync4(join12(repoDir, path), "utf8");
+      before = readFileSync5(join13(repoDir, path), "utf8");
     } catch {
       results.push({ path, reason: "stale_location" });
       continue;
@@ -40225,20 +40328,20 @@ function lintSwapDiff({
 
 // src/apply/format.ts
 import { execFile as execFile4 } from "node:child_process";
-import { existsSync, readFileSync as readFileSync5, writeFileSync } from "node:fs";
+import { existsSync, readFileSync as readFileSync6, writeFileSync } from "node:fs";
 import { mkdtemp as mkdtemp3, readFile as readFile9, rm as rm3 } from "node:fs/promises";
-import { basename as basename2, dirname as dirname4, join as join13 } from "node:path";
+import { basename as basename3, dirname as dirname5, join as join14 } from "node:path";
 function pinnedPrettierVersion(repoDir) {
-  const pnpmLock = join13(repoDir, "pnpm-lock.yaml");
+  const pnpmLock = join14(repoDir, "pnpm-lock.yaml");
   if (existsSync(pnpmLock)) {
     const match = /^  prettier@([^:\s(]+)(?:\([^\n]*)?:/m.exec(
-      readFileSync5(pnpmLock, "utf8")
+      readFileSync6(pnpmLock, "utf8")
     );
     if (match !== null) return match[1];
   }
-  const packageLock = join13(repoDir, "package-lock.json");
+  const packageLock = join14(repoDir, "package-lock.json");
   if (existsSync(packageLock)) {
-    const parsed2 = JSON.parse(readFileSync5(packageLock, "utf8"));
+    const parsed2 = JSON.parse(readFileSync6(packageLock, "utf8"));
     if (typeof parsed2 === "object" && parsed2 !== null && "packages" in parsed2) {
       const packages = parsed2.packages;
       if (typeof packages === "object" && packages !== null && "node_modules/prettier" in packages) {
@@ -40249,19 +40352,19 @@ function pinnedPrettierVersion(repoDir) {
       }
     }
   }
-  const yarnLock = join13(repoDir, "yarn.lock");
+  const yarnLock = join14(repoDir, "yarn.lock");
   if (existsSync(yarnLock)) {
-    return /(?:^|\n)["']?prettier@[^\n]+:\n\s+version\s+["']([^"']+)["']/.exec(
-      readFileSync5(yarnLock, "utf8")
+    return /(?:^|\n)["']?prettier@[^\n]+:\r?\n\s+version\s+["']([^"']+)["']/.exec(
+      readFileSync6(yarnLock, "utf8")
     )?.[1] ?? null;
   }
   return null;
 }
 function formatterCommand(repoDir, formatter) {
   const { kind, configPath } = formatter;
-  const configArgs = configPath === null ? [] : ["--config", join13(repoDir, configPath)];
+  const configArgs = configPath === null ? [] : ["--config", join14(repoDir, configPath)];
   if (kind === "prettier") {
-    const executable = join13(
+    const executable = join14(
       repoDir,
       "node_modules",
       ".bin",
@@ -40289,7 +40392,7 @@ function formatterCommand(repoDir, formatter) {
     };
   }
   if (kind === "ruff") {
-    const local = join13(
+    const local = join14(
       repoDir,
       ".venv",
       process.platform === "win32" ? "Scripts/ruff.exe" : "bin/ruff"
@@ -40310,14 +40413,15 @@ function formatterCommand(repoDir, formatter) {
   return null;
 }
 function runFormatter(command, filePath, cwd, input) {
-  return new Promise((resolve14, reject) => {
+  return new Promise((resolve15, reject) => {
+    const launch = resolveCommand(command.executable);
     const child = execFile4(
-      command.executable,
-      command.args(filePath),
+      launch.file,
+      [...launch.args, ...command.args(filePath)],
       { cwd, encoding: "utf8" },
       (error51, stdout) => {
         if (error51 !== null) reject(error51);
-        else resolve14(command.stdin ? stdout : null);
+        else resolve15(command.stdin ? stdout : null);
       }
     );
     if (command.stdin) child.stdin?.end(input);
@@ -40341,7 +40445,7 @@ function firstOutsideTouchedLine(before, after, touchedLines) {
   return null;
 }
 function isMissingExecutable(error51) {
-  return typeof error51 === "object" && error51 !== null && "code" in error51 && error51.code === "ENOENT";
+  return typeof error51 === "object" && error51 !== null && "code" in error51 && (error51.code === "ENOENT" || error51.code === "EINVAL" || error51.code === "EFTYPE");
 }
 async function formatWithHostFormatter({
   repoDir,
@@ -40357,20 +40461,20 @@ async function formatWithHostFormatter({
   }
   const formattedFiles = [];
   for (const [fileIndex, file2] of files.entries()) {
-    const sourcePath = join13(repoDir, file2.path);
+    const sourcePath = join14(repoDir, file2.path);
     let temporaryDirectory = null;
     try {
       if (!command.stdin) {
         temporaryDirectory = await mkdtemp3(
-          join13(dirname4(sourcePath), ".rightmodeler-format-")
+          join14(dirname5(sourcePath), ".rightmodeler-format-")
         );
         writeFileSync(
-          join13(temporaryDirectory, basename2(sourcePath)),
+          join14(temporaryDirectory, basename3(sourcePath)),
           file2.after,
           "utf8"
         );
       }
-      const temporaryPath = temporaryDirectory === null ? sourcePath : join13(temporaryDirectory, basename2(sourcePath));
+      const temporaryPath = temporaryDirectory === null ? sourcePath : join14(temporaryDirectory, basename3(sourcePath));
       const stdout = await runFormatter(
         command,
         command.stdin ? sourcePath : temporaryPath,
@@ -40795,7 +40899,7 @@ async function staleDigestPaths(repoDir, swaps) {
     ([left], [right]) => compareText(left, right)
   )) {
     try {
-      const content = (await readFile10(join14(repoDir, path), "utf8")).replaceAll(
+      const content = (await readFile10(join15(repoDir, path), "utf8")).replaceAll(
         "\r\n",
         "\n"
       );
@@ -41474,10 +41578,10 @@ function requireStep(stepsById, stepId) {
 
 // src/drift.ts
 import { mkdir as mkdir4, readFile as readFile11, writeFile as writeFile6 } from "node:fs/promises";
-import { dirname as dirname5, join as join16, resolve as resolve6 } from "node:path";
+import { dirname as dirname6, join as join17, resolve as resolve7 } from "node:path";
 
 // src/state.ts
-import { join as join15, resolve as resolve5 } from "node:path";
+import { join as join16, resolve as resolve6 } from "node:path";
 var checkpointSchema = external_exports.strictObject({
   inputDigest: external_exports.string().min(1),
   outputKey: external_exports.string().min(1),
@@ -41489,7 +41593,7 @@ var setupStateSchema = external_exports.strictObject({
   stages: external_exports.record(external_exports.string(), checkpointSchema)
 });
 function resolveStoreRoot(repoDir, store) {
-  return resolve5(store ?? join15(repoDir, ".rightmodeler"));
+  return resolve6(store ?? join16(repoDir, ".rightmodeler"));
 }
 async function putImmutableJson(store, key, value) {
   await store.putImmutable(
@@ -41687,7 +41791,7 @@ async function readCorpusVersion(options, corpusVersionId) {
 async function runDrift(options) {
   const { store, storeRoot } = context(options);
   const parent = await loadActiveCorpus(store);
-  const traceText = await readFile11(resolve6(options.traces), "utf8");
+  const traceText = await readFile11(resolve7(options.traces), "utf8");
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
   const result2 = adaptWithReport(adapter, records);
@@ -41731,8 +41835,8 @@ async function runDrift(options) {
   );
   const markdown = renderDriftProposal(proposal);
   await store.putImmutable(keys.report, Buffer.from(markdown, "utf8"));
-  const reportPath2 = join16(storeRoot, keys.report);
-  await mkdir4(dirname5(reportPath2), { recursive: true });
+  const reportPath2 = join17(storeRoot, keys.report);
+  await mkdir4(dirname6(reportPath2), { recursive: true });
   await writeFile6(reportPath2, markdown, "utf8");
   return {
     proposal,
@@ -42224,7 +42328,7 @@ function promptValue(content) {
   });
 }
 function context(options) {
-  const repo = resolve6(options.repo);
+  const repo = resolve7(options.repo);
   const storeRoot = resolveStoreRoot(repo, options.store);
   return {
     store: new FsStore(storeRoot),
@@ -42571,7 +42675,7 @@ async function pollEvaluator(evaluator, providerRunId) {
     const remaining = EVALUATOR_POLL_BUDGET_MS - (Date.now() - startedAt);
     if (remaining <= 0) return "polling_exhausted";
     await new Promise(
-      (resolve14) => setTimeout(resolve14, Math.min(delay, remaining))
+      (resolve15) => setTimeout(resolve15, Math.min(delay, remaining))
     );
     delay = Math.min(delay * 2, maxPollDelayMs);
   }
@@ -43039,7 +43143,7 @@ import { execFile as execFile6 } from "node:child_process";
 import { createHash as createHash7 } from "node:crypto";
 import { mkdtemp as mkdtemp4, readFile as readFile12, realpath as realpath3, rm as rm4, writeFile as writeFile7 } from "node:fs/promises";
 import { tmpdir as tmpdir2 } from "node:os";
-import { dirname as dirname6, join as join17, relative as relative7, resolve as resolve7 } from "node:path";
+import { dirname as dirname7, join as join18, relative as relative7, resolve as resolve8 } from "node:path";
 import { promisify as promisify5 } from "node:util";
 var PROMPTFOO_VERIFIED_VERSION = "0.123.1";
 var PROMPTFOO_EVAL_FLAGS = [
@@ -43200,8 +43304,8 @@ function resolvePromptfooEvaluatorConfig(config2) {
 }
 function createPromptfooEvaluator(input) {
   const config2 = resolvePromptfooEvaluatorConfig(input);
-  const command = /[\\/]/u.test(config2.command) ? resolve7(config2.command) : config2.command;
-  const assertionsPath = resolve7(config2.assertionsPath);
+  const command = /[\\/]/u.test(config2.command) ? resolve8(config2.command) : config2.command;
+  const assertionsPath = resolve8(config2.assertionsPath);
   const results = /* @__PURE__ */ new Map();
   return {
     id: "promptfoo",
@@ -43219,12 +43323,12 @@ function createPromptfooEvaluator(input) {
         caseId,
         output: typeof output === "string" ? output : JSON.stringify(output)
       }));
-      const cwd = await realpath3(dirname6(assertionsPath));
+      const cwd = await realpath3(dirname7(assertionsPath));
       const directory = await realpath3(
-        await mkdtemp4(join17(tmpdir2(), "rightmodeler-promptfoo-"))
+        await mkdtemp4(join18(tmpdir2(), "rightmodeler-promptfoo-"))
       );
-      const modelOutputsPath = join17(directory, "model-outputs.json");
-      const resultsPath = join17(directory, "results.json");
+      const modelOutputsPath = join18(directory, "model-outputs.json");
+      const resultsPath = join18(directory, "results.json");
       try {
         await writeFile7(
           modelOutputsPath,
@@ -43297,13 +43401,13 @@ function createPromptfooEvaluator(input) {
   };
 }
 async function readPromptfooConfigs(assertionsPath) {
-  const directory = dirname6(resolve7(assertionsPath));
+  const directory = dirname7(resolve8(assertionsPath));
   const configs = await Promise.all(
     ["yaml", "yml", "json", "cjs", "cts", "js", "mjs", "mts", "ts"].map(
       async (extension) => {
         const file2 = `promptfooconfig.${extension}`;
         try {
-          return [{ file: file2, bytes: await readFile12(join17(directory, file2)) }];
+          return [{ file: file2, bytes: await readFile12(join18(directory, file2)) }];
         } catch (error51) {
           if (error51.code === "ENOENT") return [];
           throw error51;
@@ -43314,14 +43418,17 @@ async function readPromptfooConfigs(assertionsPath) {
   return configs.flat();
 }
 async function runPromptfoo(command, args, cwd) {
-  const running2 = execFileAsync5(command, [...args], {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, ...PROMPTFOO_ENV },
-    maxBuffer: 10 * 1024 * 1024
-  });
-  running2.child.stdin?.end();
   try {
+    const env = { ...process.env, ...PROMPTFOO_ENV };
+    const launch = resolveCommand(command, env);
+    const running2 = execFileAsync5(launch.file, [...launch.args, ...args], {
+      cwd,
+      encoding: "utf8",
+      env,
+      maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true
+    });
+    running2.child.stdin?.end();
     const { stdout, stderr } = await running2;
     return { code: 0, output: `${stdout}${stderr}` };
   } catch (error51) {
@@ -44148,7 +44255,7 @@ function braintrustUrl(baseUrl, path) {
 
 // src/guidance.ts
 import { createInterface } from "node:readline";
-import { isAbsolute as isAbsolute3, relative as relative8, resolve as resolve8 } from "node:path";
+import { isAbsolute as isAbsolute4, relative as relative8, resolve as resolve9 } from "node:path";
 async function promptForTracePath(options) {
   if (options.candidates.length === 0) {
     options.output.write(
@@ -44165,7 +44272,7 @@ async function promptForTracePath(options) {
       "Trace file path (leave empty to stop): "
     );
     const typed = asked2.answer.trim();
-    return asked2.cancelled || typed === "" ? void 0 : resolve8(options.repo, typed);
+    return asked2.cancelled || typed === "" ? void 0 : resolve9(options.repo, typed);
   }
   options.output.write("Found trace files:\n");
   const now = options.now ?? /* @__PURE__ */ new Date();
@@ -44200,7 +44307,7 @@ async function promptForTracePath(options) {
     const selected = options.candidates[Number(answer) - 1];
     if (selected !== void 0) return selected.path;
   }
-  return resolve8(options.repo, answer);
+  return resolve9(options.repo, answer);
 }
 var apiPresets = {
   openrouter: {
@@ -44545,12 +44652,12 @@ function formatName(format11) {
   return names[format11];
 }
 function shortPath(path, repo, homeDir) {
-  const fromRepo = relative8(resolve8(repo), path);
-  if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute3(fromRepo)) {
+  const fromRepo = relative8(resolve9(repo), path);
+  if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute4(fromRepo)) {
     return `./${fromRepo}`;
   }
-  const fromHome = relative8(resolve8(homeDir), path);
-  if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute3(fromHome)) {
+  const fromHome = relative8(resolve9(homeDir), path);
+  if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute4(fromHome)) {
     return `~/${fromHome}`;
   }
   return path;
@@ -46455,7 +46562,7 @@ async function evaluatorRunIdentity(context2) {
   if (context2.evaluator.provider !== "promptfoo") {
     return jsonValue2(context2.evaluator);
   }
-  const assertionsPath = resolve9(context2.evaluator.assertionsPath);
+  const assertionsPath = resolve10(context2.evaluator.assertionsPath);
   const promptfooConfigs = (await readPromptfooConfigs(assertionsPath)).map(
     ({ file: file2, bytes }) => ({ file: file2, sha256: sha256(bytes) })
   );
@@ -46988,18 +47095,18 @@ function applyCascadeStatus(status) {
   return "blocked";
 }
 function createContext(options) {
-  const repo = resolve9(options.repo);
+  const repo = resolve10(options.repo);
   const storeRoot = resolveStoreRoot(repo, options.store);
-  const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve9(options.modeBConfigPath);
-  const pricingFilePath = options.pricingFilePath === void 0 ? void 0 : resolve9(options.pricingFilePath);
-  const policyFilePath = options.policyFilePath === void 0 ? void 0 : resolve9(options.policyFilePath);
+  const modeBConfigPath = options.modeBConfigPath === void 0 ? void 0 : resolve10(options.modeBConfigPath);
+  const pricingFilePath = options.pricingFilePath === void 0 ? void 0 : resolve10(options.pricingFilePath);
+  const policyFilePath = options.policyFilePath === void 0 ? void 0 : resolve10(options.policyFilePath);
   const candidateRoute = options.route ?? (options.baseUrl === void 0 ? void 0 : "api");
   return {
     repo,
     storeRoot,
     store: new FsStore(storeRoot),
     projectId: PROJECT_ID2,
-    traces: options.traces === void 0 ? void 0 : resolve9(options.traces),
+    traces: options.traces === void 0 ? void 0 : resolve10(options.traces),
     baseUrl: options.baseUrl,
     apiKeyEnv: options.apiKeyEnv ?? API_KEY_ENV_DEFAULT,
     maxCostUsd: options.maxCostUsd,
@@ -47025,7 +47132,7 @@ function createContext(options) {
     },
     ...options.requestHeaders === void 0 ? {} : { requestHeaders: options.requestHeaders },
     ...options.catalogReference === void 0 ? {} : {
-      catalogReference: /^https?:\/\//iu.test(options.catalogReference) ? options.catalogReference : resolve9(options.catalogReference)
+      catalogReference: /^https?:\/\//iu.test(options.catalogReference) ? options.catalogReference : resolve10(options.catalogReference)
     },
     ...candidateRoute === void 0 ? {} : {
       routes: {
@@ -47035,12 +47142,12 @@ function createContext(options) {
     },
     ...policyFilePath === void 0 ? {} : { policyFilePath },
     ...options.matchersPath === void 0 ? {} : {
-      matchersPath: resolve9(options.matchersPath),
-      matchers: loadMatchers(resolve9(options.matchersPath))
+      matchersPath: resolve10(options.matchersPath),
+      matchers: loadMatchers(resolve10(options.matchersPath))
     },
     ...options.existingRunId === void 0 ? {} : { existingRunId: options.existingRunId },
     ...options.approvedRunSpecDigest === void 0 ? {} : { approvedRunSpecDigest: options.approvedRunSpecDigest },
-    ...options.codeGraphPath === void 0 ? {} : { codeGraphPath: resolve9(options.codeGraphPath) },
+    ...options.codeGraphPath === void 0 ? {} : { codeGraphPath: resolve10(options.codeGraphPath) },
     reporter: options.reporter,
     cache: { setupArtifacts: /* @__PURE__ */ new Map() }
   };
@@ -47048,7 +47155,7 @@ function createContext(options) {
 function readModeBConfig(path) {
   let value;
   try {
-    value = JSON.parse(readFileSync6(path, "utf8"));
+    value = JSON.parse(readFileSync7(path, "utf8"));
   } catch (error51) {
     throw invalidModeBConfig(
       `Invalid --modeb-config file: ${error51 instanceof Error ? error51.message : String(error51)}`
@@ -47081,14 +47188,14 @@ function readModeBConfig(path) {
     ...parsed2.data,
     appSpec: {
       ...parsed2.data.appSpec,
-      mountPath: resolve9(dirname7(path), parsed2.data.appSpec.mountPath)
+      mountPath: resolve10(dirname8(path), parsed2.data.appSpec.mountPath)
     }
   };
 }
 function readPricingFile(path) {
   let value;
   try {
-    value = JSON.parse(readFileSync6(path, "utf8"));
+    value = JSON.parse(readFileSync7(path, "utf8"));
   } catch (error51) {
     throw invalidPricingFile(
       `Invalid --pricing-file: ${error51 instanceof Error ? error51.message : String(error51)}`
@@ -47107,7 +47214,7 @@ function readPricingFile(path) {
 function readPolicyFile(path) {
   let value;
   try {
-    value = JSON.parse(readFileSync6(path, "utf8"));
+    value = JSON.parse(readFileSync7(path, "utf8"));
   } catch (error51) {
     throw invalidPolicyFile(
       `Invalid --policy: ${error51 instanceof Error ? error51.message : String(error51)}`
@@ -47548,7 +47655,7 @@ async function readTraceInput(path) {
     (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
   ).map(({ name }) => name).sort();
   if (names.length === 0) throw emptyTracesDirectory(path);
-  return Promise.all(names.map((name) => readFile13(join18(path, name))));
+  return Promise.all(names.map((name) => readFile13(join19(path, name))));
 }
 async function executeStage(stage, context2, inputDigestValue, runId) {
   switch (stage) {
@@ -49732,11 +49839,11 @@ function modeBProviderBaseUrl(baseUrl) {
   return url2.href.replace(/\/$/, "");
 }
 function reportPath(context2) {
-  return join18(context2.storeRoot, reportKey(context2.projectId, "report.md"));
+  return join19(context2.storeRoot, reportKey(context2.projectId, "report.md"));
 }
 async function codeContextFor(context2, callSites, warn) {
   if (context2.codeGraphPath === void 0) {
-    const found = join18(context2.repo, "graphify-out", "graph.json");
+    const found = join19(context2.repo, "graphify-out", "graph.json");
     if (await stat4(found).then(
       (entry) => entry.isFile(),
       () => false
@@ -49793,7 +49900,7 @@ async function executeReport(context2, inputDigestValue, ledger) {
   const markdown = renderReport(report);
   await putMutableJson(context2.store, jsonKey, jsonValue2(report));
   await putMutableText(context2.store, markdownKey, markdown);
-  await mkdir5(dirname7(reportPath(context2)), { recursive: true });
+  await mkdir5(dirname8(reportPath(context2)), { recursive: true });
   await writeFile8(reportPath(context2), markdown, "utf8");
   return jsonKey;
 }
@@ -49930,7 +50037,7 @@ async function repositoryFiles(repo, storeRoot) {
   const paths = await gitFiles(repo) ?? await walkFiles(repo);
   const files = [];
   for (const path of paths) {
-    const absolute = join18(repo, ...path.split("/"));
+    const absolute = join19(repo, ...path.split("/"));
     if (absolute === storeRoot || absolute.startsWith(`${storeRoot}${sep5}`)) {
       continue;
     }
@@ -49966,7 +50073,7 @@ async function walkFiles(repo) {
   const files = [];
   async function visit(directory) {
     for (const entry of await readdir4(directory, { withFileTypes: true })) {
-      const absolute = join18(directory, entry.name);
+      const absolute = join19(directory, entry.name);
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) await visit(absolute);
       } else if (entry.isFile()) {
@@ -50681,7 +50788,7 @@ async function runAuditTabulate(options) {
     })
   });
   const worksheet = options.worksheet ? auditWorksheetSchema.parse(
-    JSON.parse(await readFile13(resolve9(options.worksheet), "utf8"))
+    JSON.parse(await readFile13(resolve10(options.worksheet), "utf8"))
   ) : await loadCurrent(context2, "audit-sample", auditWorksheetSchema);
   const result2 = auditTabulate(worksheet);
   await putMutableJson(
@@ -50773,7 +50880,7 @@ async function maybeLoadCorpus(context2) {
 }
 
 // src/apply/index.ts
-import { basename as basename3, resolve as resolve10 } from "node:path";
+import { basename as basename4, resolve as resolve11 } from "node:path";
 function applySwaps2(options) {
   return runApply({
     repo: options.repo,
@@ -50783,7 +50890,7 @@ function applySwaps2(options) {
       tokenEnv: options.githubTokenEnv
     }),
     owner: options.owner,
-    githubRepo: options.githubRepo ?? basename3(resolve10(options.repo)),
+    githubRepo: options.githubRepo ?? basename4(resolve11(options.repo)),
     dryRun: options.dryRun ?? false,
     ...options.codeGraphPath === void 0 ? {} : { codeGraphPath: options.codeGraphPath },
     ...options.warning === void 0 ? {} : { warning: options.warning }
@@ -50793,15 +50900,15 @@ function applySwaps2(options) {
 // src/data/discover.ts
 import { open, readdir as readdir5, realpath as realpath4, stat as stat5 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute4, join as join19, relative as relative10, resolve as resolve11 } from "node:path";
+import { isAbsolute as isAbsolute5, join as join20, relative as relative10, resolve as resolve12 } from "node:path";
 var MAX_FILES = 50;
 var MAX_CODEX_EXAMINED = 300;
 var MAX_READ_BYTES = 64 * 1024;
 var MAX_SAMPLE_RECORDS = 20;
 var SOURCE_BUDGETS = { local: 20, claude: 15, codex: 15 };
 async function discoverTraces(options) {
-  const repo = resolve11(options.repo);
-  const homeDir = resolve11(options.homeDir ?? homedir2());
+  const repo = resolve12(options.repo);
+  const homeDir = resolve12(options.homeDir ?? homedir2());
   const candidates = await candidateFiles(repo, homeDir);
   const discovered = [];
   for (const candidate of candidates.slice(0, MAX_FILES)) {
@@ -50823,7 +50930,7 @@ async function discoverTraces(options) {
   ).map(({ sourceOrder: _sourceOrder, ...candidate }) => candidate);
 }
 function sanitizeClaudeProjectPath(repo) {
-  const absolute = resolve11(repo);
+  const absolute = resolve12(repo);
   const sanitized = absolute.replace(/[^a-zA-Z0-9]/g, "-");
   if (sanitized.length <= 200) return sanitized;
   let hash2 = 0;
@@ -50835,10 +50942,10 @@ function sanitizeClaudeProjectPath(repo) {
 async function candidateFiles(repo, homeDir) {
   const localPaths = await localCandidatePaths(repo);
   const claudePaths = (await jsonFiles(
-    join19(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
+    join20(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
     false
   )).sort(compareText);
-  const codexPaths = (await jsonFiles(join19(homeDir, ".codex", "sessions"), true)).filter((path) => path.endsWith(".jsonl")).sort((left, right) => compareText(right, left));
+  const codexPaths = (await jsonFiles(join20(homeDir, ".codex", "sessions"), true)).filter((path) => path.endsWith(".jsonl")).sort((left, right) => compareText(right, left));
   const sources = [
     {
       source: "local",
@@ -50920,7 +51027,7 @@ async function statCandidates(paths, source, sortNewest) {
   return files.slice(0, MAX_FILES);
 }
 async function localCandidatePaths(repo) {
-  const tracesDirectory = join19(repo, "traces");
+  const tracesDirectory = join20(repo, "traces");
   const [realRepo, realTracesDirectory] = await Promise.all([
     realpath4(repo).catch(() => void 0),
     realpath4(tracesDirectory).catch(() => void 0)
@@ -50933,7 +51040,7 @@ async function localCandidatePaths(repo) {
   });
   const topLevelSet = new Set(topLevel);
   return unique([
-    ...[join19(repo, "traces.json"), join19(repo, "traces.jsonl")].filter(
+    ...[join20(repo, "traces.json"), join20(repo, "traces.jsonl")].filter(
       (path) => topLevelSet.has(path)
     ),
     ...nested,
@@ -50949,11 +51056,11 @@ async function jsonFiles(root, recursive) {
   }
   return entries.filter(
     (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
-  ).map((entry) => join19(entry.parentPath, entry.name));
+  ).map((entry) => join20(entry.parentPath, entry.name));
 }
 function isWithin(root, path) {
   const fromRoot = relative10(root, path);
-  return fromRoot === "" || !fromRoot.startsWith("..") && !isAbsolute4(fromRoot);
+  return fromRoot === "" || !fromRoot.startsWith("..") && !isAbsolute5(fromRoot);
 }
 async function detectionHead(path, fileSize) {
   const handle = await open(path, "r");
@@ -51035,7 +51142,7 @@ function codexSessionCwd(text) {
     if (line.trim() === "") continue;
     const record2 = parseWholeJson(line);
     if (isRecord(record2) && record2.type === "session_meta" && isRecord(record2.payload) && typeof record2.payload.cwd === "string") {
-      return resolve11(record2.payload.cwd);
+      return resolve12(record2.payload.cwd);
     }
   }
   return void 0;
@@ -51057,7 +51164,7 @@ function unique(values) {
 }
 
 // src/rollback.ts
-import { basename as basename4, resolve as resolve12 } from "node:path";
+import { basename as basename5, resolve as resolve13 } from "node:path";
 var projectId2 = "project";
 var RollbackServiceError = class extends Error {
   code;
@@ -51574,7 +51681,7 @@ async function rollbackPreparedSwaps({
   }
 }
 function rollbackSwaps(options) {
-  const repoDir = resolve12(options.repo);
+  const repoDir = resolve13(options.repo);
   return rollbackPreparedSwaps({
     store: new FsStore(resolveStoreRoot(repoDir, options.store)),
     githubClient: createGithubClient({
@@ -51582,7 +51689,7 @@ function rollbackSwaps(options) {
       tokenEnv: options.githubTokenEnv
     }),
     owner: options.owner,
-    repo: options.githubRepo ?? basename4(repoDir),
+    repo: options.githubRepo ?? basename5(repoDir),
     prNumber: options.prNumber
   });
 }
@@ -51593,7 +51700,7 @@ var version2 = true ? "0.5.0" : JSON.parse(
 ).version;
 
 // src/cli-docs.ts
-import { readFileSync as readFileSync7, readdirSync as readdirSync3 } from "node:fs";
+import { readFileSync as readFileSync8, readdirSync as readdirSync3 } from "node:fs";
 var docsUrl = new URL("../docs/", import.meta.url);
 function docNames() {
   try {
@@ -51603,7 +51710,7 @@ function docNames() {
   }
 }
 function readDoc(name) {
-  return readFileSync7(new URL(`${name}.md`, docsUrl), "utf8");
+  return readFileSync8(new URL(`${name}.md`, docsUrl), "utf8");
 }
 
 // src/cli.ts
@@ -51949,7 +52056,7 @@ function createProgram(io = processIo, runtime = processRuntime) {
         tokenEnv: local.githubTokenEnv
       }),
       owner: local.owner,
-      githubRepo: local.githubRepo ?? basename5(resolve13(global.repo)),
+      githubRepo: local.githubRepo ?? basename6(resolve14(global.repo)),
       prNumber,
       warning: (code2, message2) => reporter.warning(code2, message2)
     });
@@ -52303,7 +52410,7 @@ async function guidedPipelineOptions(global, local, reporter, runtime) {
   });
   const traces = local.yes ? candidates[0]?.path : interactive ? await promptForTracePath({
     candidates,
-    repo: resolve13(global.repo),
+    repo: resolve14(global.repo),
     homeDir: runtime.homeDir,
     now: runtime.now(),
     input: runtime.stdin,
@@ -52614,7 +52721,7 @@ function pipelineArgv(options) {
     appendCliOption(
       args,
       flag,
-      kind === "path" || kind === "reference" && !/^https?:\/\//iu.test(value) ? resolve13(value) : kind === "command" ? detachedCommand(value) : value
+      kind === "path" || kind === "reference" && !/^https?:\/\//iu.test(value) ? resolve14(value) : kind === "command" ? detachedCommand(value) : value
     );
   }
   return args;
@@ -52623,18 +52730,18 @@ async function startDetachedReplay(global, local, runId) {
   const args = [
     fileURLToPath2(import.meta.url),
     "--repo",
-    resolve13(global.repo),
+    resolve14(global.repo),
     "--output",
     "json"
   ];
   if (global.store !== void 0) {
-    args.push("--store", resolve13(global.store));
+    args.push("--store", resolve14(global.store));
   }
   args.push("replay", ...pipelineArgv(local));
   appendCliOption(args, "--internal-run-id", runId);
   await new Promise((resolveSpawn, rejectSpawn) => {
     const child = spawn2(process.execPath, args, {
-      cwd: resolve13(global.repo),
+      cwd: resolve14(global.repo),
       detached: true,
       env: process.env,
       stdio: "ignore"
@@ -52648,7 +52755,7 @@ async function startDetachedReplay(global, local, runId) {
 }
 function detachedCommand(value) {
   if (value === void 0) return void 0;
-  return value.startsWith("./") || value.startsWith("../") || value.includes("/") || value.includes("\\") ? resolve13(value) : value;
+  return value.startsWith("./") || value.startsWith("../") || value.includes("/") || value.includes("\\") ? resolve14(value) : value;
 }
 function appendCliOption(args, flag, value) {
   if (value !== void 0) args.push(flag, value);

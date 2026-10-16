@@ -119,6 +119,42 @@ describe("plan route runtime", () => {
     ]);
   });
 
+  it("withholds keys whatever their letter case, as Windows reads them", async () => {
+    const harness = await planStubHarness({
+      env: {
+        anthropic_api_key: "sk-ant-lower-case",
+        Openai_Api_Key: "sk-openai-mixed-case",
+        codex_api_key: "codex-lower-case",
+        node_options: "--no-warnings",
+      },
+    });
+
+    await harness.provider.chat(turn(haiku));
+
+    const starts = (await harness.records()).filter(
+      ({ event }) => event === "start",
+    );
+    expect(starts.length).toBeGreaterThan(0);
+    const withheld = [
+      "ANTHROPIC_API_KEY",
+      "OPENAI_API_KEY",
+      "CODEX_API_KEY",
+      "NODE_OPTIONS",
+    ];
+    for (const { envNames } of starts) {
+      expect(
+        envNames?.filter((name) => withheld.includes(name.toUpperCase())),
+      ).toEqual([]);
+    }
+    expect(harness.warnings).toEqual([
+      {
+        code: "plan_route_key_withheld",
+        message:
+          "ANTHROPIC_API_KEY is set; rightmodeler keeps it away from claude so your plan is used, not a key.",
+      },
+    ]);
+  });
+
   it("keeps CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_CONFIG_DIR for the child", async () => {
     const harness = await planStubHarness({
       env: {

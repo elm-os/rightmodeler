@@ -80,6 +80,28 @@ describe("formatWithHostFormatter", () => {
     ).resolves.toEqual({ files: [file], note: "no_formatter" });
   });
 
+  it.runIf(process.platform === "win32")(
+    "treats a Prettier shim it cannot start without a shell as unavailable",
+    async () => {
+      const { root, file } = await fixtureDiff("src/string.ts");
+      await unlink(join(root, "node_modules"));
+      const bin = join(root, "node_modules", ".bin");
+      await mkdir(bin, { recursive: true });
+      await writeFile(
+        join(bin, "prettier.cmd"),
+        "@echo off\r\nvolta run %~n0 %*\r\n",
+      );
+
+      await expect(
+        formatWithHostFormatter({
+          repoDir: root,
+          conventions: { formatter: { kind: "prettier", configPath: null } },
+          files: [file],
+        }),
+      ).resolves.toEqual({ files: [file], note: "formatter_unavailable" });
+    },
+  );
+
   it("returns files unchanged when the configured formatter is absent", async () => {
     const { root, file } = await fixtureDiff("src/string.ts");
     await unlink(join(root, "node_modules"));

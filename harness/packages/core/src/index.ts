@@ -1,4 +1,5 @@
 export * from "./catalog.js";
+export * from "./command.js";
 export * from "./facts.js";
 export * from "./identity.js";
 export * from "./json.js";

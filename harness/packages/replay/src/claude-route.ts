@@ -102,7 +102,9 @@ export const claudeAdapter: PlanAdapter = {
       DISABLE_AUTOUPDATER: "1",
       MAX_THINKING_TOKENS: "0",
     };
-    delete env.NODE_OPTIONS;
+    for (const name of Object.keys(env)) {
+      if (name.toUpperCase() === "NODE_OPTIONS") delete env[name];
+    }
     return env;
   },
 

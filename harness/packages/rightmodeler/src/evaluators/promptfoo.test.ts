@@ -659,6 +659,19 @@ describe("promptfoo invocation", () => {
     });
   });
 
+  it.runIf(process.platform === "win32")(
+    "treats a script it cannot start without a shell as unreachable",
+    async () => {
+      const assertionsPath = await assertionsCopy();
+      const shim = join(dirname(assertionsPath), "promptfoo.cmd");
+      await writeFile(shim, "@echo off\r\nvolta run %~n0 %*\r\n");
+
+      expect(
+        await stubEvaluator(assertionsPath, shim).detectAvailability(),
+      ).toBe(false);
+    },
+  );
+
   it("treats a missing executable as unreachable and any runnable one as reachable", async () => {
     const assertionsPath = await assertionsCopy();
 
