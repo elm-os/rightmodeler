@@ -9,7 +9,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p src/proxy/tsconfig.build.json && node src/proxy/build-runtime.mjs",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p src/proxy/tsconfig.build.json && node src/proxy/build-runtime.mjs",
     "check-types": "tsc --noEmit",
     "check": "tsc --noEmit && vitest run"
   },

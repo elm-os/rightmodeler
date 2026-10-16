@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(fileURLToPath(import.meta.url), "../..");
@@ -45,9 +45,9 @@ const declaration =
 
 const unreferenced = [];
 for (const [file, source] of sources) {
-  const name = file.slice(file.lastIndexOf("/") + 1);
+  const name = basename(file);
   if (name === "index.ts" || /\.(test|eval)\.ts$/.test(name)) continue;
-  const key = relative(repoRoot, file);
+  const key = relative(repoRoot, file).split(sep).join("/");
   for (const match of source.matchAll(declaration)) {
     const exported = match[1];
     if (allowed.has(`${key}#${exported}`)) continue;

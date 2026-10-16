@@ -22,10 +22,12 @@
     },
     "check": {
       "dependsOn": ["build", "^build", "^check"],
+      "env": ["RIGHTMODELER_SKIP_DOCKER"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/harness/fixtures/**"]
     },
     "@rightmodeler/cli#check": {
       "dependsOn": ["build", "^build", "^check"],
+      "env": ["RIGHTMODELER_SKIP_DOCKER"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/harness/docs/parity.md",
