@@ -17,6 +17,7 @@ const candidates: StepShortlist[] = [
     droppedByTop: 0,
     droppedFreeModels: 0,
     droppedByOutputCeiling: 0,
+    droppedByReleaseWindow: 0,
   },
   {
     stepId: "step-2",
@@ -24,6 +25,7 @@ const candidates: StepShortlist[] = [
     droppedByTop: 0,
     droppedFreeModels: 0,
     droppedByOutputCeiling: 0,
+    droppedByReleaseWindow: 0,
   },
 ];
 
@@ -116,6 +118,7 @@ describe("estimateReplayCost", () => {
             droppedByTop: 0,
             droppedFreeModels: 0,
             droppedByOutputCeiling: 0,
+            droppedByReleaseWindow: 0,
           },
         ],
         judge: undefined,

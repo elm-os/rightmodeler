@@ -1489,6 +1489,27 @@ describe("applySwaps", () => {
     expect(pull.body).toContain("no attempt recorded a duration");
   });
 
+  it("renders text caps in the pull request body", async () => {
+    const harness = await createHarness();
+    const verdict = {
+      ...applyVerdict(harness),
+      caps: [
+        { name: "top-N shortlist", value: 3 },
+        { name: "released since", value: "2026-07-17" },
+        { name: "named candidates", value: "acme/lite-1, acme/small-1" },
+      ],
+    };
+    const applied = requireApplied(await runApply(harness, [verdict]));
+    const pull = await harness.githubClient.getPullRequest({
+      ...repository,
+      pullNumber: applied.prNumber,
+    });
+
+    expect(pull.body).toContain(
+      "top-N shortlist: 3; released since: 2026-07-17; named candidates: acme/lite-1, acme/small-1",
+    );
+  });
+
   it("renders unavailable cost and latency receipts as n/a", async () => {
     const harness = await createHarness();
     const verdict = {

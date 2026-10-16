@@ -144,6 +144,9 @@ describe("pipelineArgv", () => {
       catalogReference: "https://ai-gateway.vercel.sh/v1/models",
       policy: "./policy.json",
       includeFree: true,
+      releasedSince: "180d",
+      releasedUntil: "2026-09-30",
+      candidate: ["acme/small-1", "acme/lite-1"],
       approvedRun,
       evaluator: "promptfoo",
       evaluatorBaseUrl: "https://evaluator.example",
@@ -183,6 +186,14 @@ describe("pipelineArgv", () => {
       "--policy",
       resolve("./policy.json"),
       "--include-free",
+      "--released-since",
+      "180d",
+      "--released-until",
+      "2026-09-30",
+      "--candidate",
+      "acme/small-1",
+      "--candidate",
+      "acme/lite-1",
       "--approved-run",
       approvedRun,
       "--evaluator",
@@ -336,6 +347,21 @@ describe("CLI trace guidance wiring", () => {
 
     expect(await executeCli(["init", "--help"], captured.io)).toBe(0);
     expect(captured.stdout()).toContain("--policy <path>");
+  });
+
+  it("registers the candidate selection options on shortlist, estimate and aggregate", async () => {
+    for (const command of ["shortlist", "estimate", "aggregate"]) {
+      const captured = captureIo();
+
+      expect(await executeCli([command, "--help"], captured.io)).toBe(0);
+      for (const option of [
+        "--released-since <date-or-days>",
+        "--released-until <date>",
+        "--candidate <id>",
+      ]) {
+        expect(captured.stdout(), `${command} ${option}`).toContain(option);
+      }
+    }
   });
 
   it("registers --code-graph on init and report", async () => {
@@ -534,6 +560,108 @@ describe("CLI needs-input errors", () => {
       expect(JSON.parse(captured.stderr())).toMatchObject({
         code: "invalid_option",
         message,
+      });
+    }
+  });
+
+  it("rejects malformed and conflicting candidate selection options", async () => {
+    const { repo, homeDir } = await fixture();
+    const approvedRun = "a".repeat(64);
+    const sinceForm =
+      "--released-since must be a date as YYYY-MM-DD or a number of days such as 90d";
+    const untilForm = "--released-until must be a date as YYYY-MM-DD";
+    const namedWithWindow =
+      "--candidate tries the models it names whatever their release date; remove --released-since and --released-until, or remove --candidate";
+    const approvedOnly =
+      "--approved-run replays the approved model only; remove --candidate, --released-since and --released-until";
+    const cases: Array<[string[], string]> = [
+      [["--released-since", "2026-02-30"], sinceForm],
+      [["--released-since", "2026-7-1"], sinceForm],
+      [["--released-since", "90"], sinceForm],
+      [["--released-since", "0d"], sinceForm],
+      [["--released-since", "100000d"], sinceForm],
+      [["--released-until", "2026-02-30"], untilForm],
+      [["--released-until", "90d"], untilForm],
+      [
+        ["--released-since", "2026-09-01", "--released-until", "2026-08-31"],
+        "--released-since 2026-09-01 is later than --released-until 2026-08-31",
+      ],
+      [["--candidate", ""], "--candidate needs a model id"],
+      [
+        ["--candidate", "acme/small-1", "--candidate", " "],
+        "--candidate needs a model id",
+      ],
+      [
+        ["--candidate", "acme/small-1", "--released-since", "2026-01-01"],
+        namedWithWindow,
+      ],
+      [
+        ["--candidate", "acme/small-1", "--released-until", "2026-09-30"],
+        namedWithWindow,
+      ],
+      [
+        ["--approved-run", approvedRun, "--candidate", "acme/small-1"],
+        approvedOnly,
+      ],
+      [
+        ["--approved-run", approvedRun, "--released-since", "90d"],
+        approvedOnly,
+      ],
+      [
+        ["--approved-run", approvedRun, "--released-until", "2026-09-30"],
+        approvedOnly,
+      ],
+    ];
+    for (const [args, message] of cases) {
+      const captured = captureIo();
+
+      expect(
+        await executeCli(
+          ["--output", "json", "estimate", ...args, "--repo", repo],
+          captured.io,
+          runtime(homeDir, "", undefined).runtime,
+        ),
+        args.join(" "),
+      ).toBe(2);
+      expect(JSON.parse(captured.stderr()), args.join(" ")).toMatchObject({
+        code: "invalid_option",
+        message,
+      });
+    }
+  });
+
+  it("accepts candidate selection options in their documented forms", async () => {
+    const { repo, homeDir, root } = await fixture();
+    for (const args of [
+      ["--released-since", "90d"],
+      ["--released-since", "99999d"],
+      ["--released-since", "2026-01-01", "--released-until", "2026-01-01"],
+      ["--released-since", "400d", "--released-until", "2026-01-01"],
+      ["--candidate", "acme/small-1", "--candidate", "lite-1"],
+    ]) {
+      const captured = captureIo();
+
+      expect(
+        await executeCli(
+          [
+            "--output",
+            "json",
+            "init",
+            ...args,
+            "--through",
+            "ingest",
+            "--traces",
+            join(root, "no-such-traces.json"),
+            "--repo",
+            repo,
+          ],
+          captured.io,
+          runtime(homeDir, "", undefined).runtime,
+        ),
+        args.join(" "),
+      ).toBe(2);
+      expect(JSON.parse(captured.stderr()), args.join(" ")).toMatchObject({
+        code: "missing_traces_path",
       });
     }
   });

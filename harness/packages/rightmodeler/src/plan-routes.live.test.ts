@@ -71,6 +71,8 @@ const legs = {
   },
 } as const;
 const vercelAllowanceUsd = 0.3;
+// The cheapest live models are often older than the default release window.
+const releaseWindow = ["--released-since", "2000-01-01"];
 
 function vendorOf(id: string): string {
   return id.split("/")[0]!;
@@ -142,6 +144,7 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
       prepared.traces,
       "--policy",
       policy,
+      ...releaseWindow,
       ...(cap === undefined ? [] : ["--max-cost-usd", String(cap)]),
       "--output",
       "json",
@@ -516,6 +519,7 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
           store,
           "--traces",
           prepared.traces,
+          ...releaseWindow,
         ],
         run.io,
         run.runtime,
@@ -542,6 +546,7 @@ describe.skipIf(!gate.run)(`plan routes live (${gate.reason})`, () => {
           ...printed!.split(" "),
           "--traces",
           prepared.traces,
+          ...releaseWindow,
           "--output",
           "json",
           "--repo",

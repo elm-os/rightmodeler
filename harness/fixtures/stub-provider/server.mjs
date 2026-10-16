@@ -55,6 +55,17 @@ const freeModel = {
   supported_parameters: ["max_tokens", "temperature"],
 };
 
+// Cheaper acme models are newer, so the release-window ranking keeps their price order.
+const releasedDaysAgo = {
+  "acme/free-1": 1,
+  "acme/lite-1": 2,
+  "acme/small-1": 3,
+  "acme/large-1": 4,
+  "acme/max-1": 5,
+  "zeta/judge-1": 6,
+  "yotta/judge-2": 7,
+};
+
 function json(response, status, body, headers = {}) {
   response.writeHead(status, {
     "content-type": "application/json",
@@ -74,12 +85,14 @@ export async function startStubProvider({
   bareModelIds = false,
   catalogPageSize,
   catalogTotalCount,
+  contextLengths = {},
   errorModels = [],
   includeFreeModel = false,
   malformedJudgeModels = [],
   omitCatalogModels = [],
   rateLimitedModels = [],
   rateLimitMessageIncludes,
+  releasedDaysAgo: releasedDaysAgoOverrides = {},
   servedModels = {},
   responseHeaders: chatResponseHeaders = {},
 }) {
@@ -89,8 +102,17 @@ export async function startStubProvider({
   const malformedJudges = new Set(malformedJudgeModels);
   const omittedCatalogModels = new Set(omitCatalogModels);
   const persistentlyRateLimitedModels = new Set(rateLimitedModels);
+  const today = Math.floor(Date.now() / 86_400_000) * 86_400;
+  const daysAgo = { ...releasedDaysAgo, ...releasedDaysAgoOverrides };
   const catalogModels = (includeFreeModel ? [...models, freeModel] : models)
     .filter(({ id }) => !omittedCatalogModels.has(id))
+    .map((model) => ({
+      ...model,
+      released: today - daysAgo[model.id] * 86_400,
+      ...(contextLengths[model.id] === undefined
+        ? {}
+        : { context_length: contextLengths[model.id] }),
+    }))
     .map((model) =>
       bareModelIds && model.id.startsWith("acme/")
         ? { ...model, id: model.id.slice("acme/".length) }

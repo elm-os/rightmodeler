@@ -64,7 +64,7 @@ export type ApplyCascadeStatus =
 
 export interface ApplyCap {
   readonly name: string;
-  readonly value: number;
+  readonly value: number | string;
 }
 
 export interface ApplyVerdict {

@@ -130,6 +130,24 @@ Graph edges are never replay trials, runtime proof, or quality evidence, and the
 
 `qualityFloor` must be greater than 0.8 and less than 1, and `shortlistTop` must be a positive integer. Changing the policy changes the stamped gate policy version, so shortlist and replay run again instead of pooling evidence gathered under the old policy.
 
+## Which models are tried
+
+For each call site, the shortlist takes the catalog models that have a per-token price and cost strictly less than the call site's current model at a blended price (input weighted three to one over output), support what the call site needs (tool calls, structured output, its recorded context and output length), pass the policy's `allowModels` and `denyModels` and, on a plan route, the route's model list, and are not zero-priced unless you pass `--include-free`. By default it keeps only models released on or after the UTC day 90 days before the shortlist is planned: a shortlist planned on 2026-10-15 tries models released on or after 2026-07-17. It ranks the cheapest first and puts a model behind any model that costs no more and is no older, with exact ties in model id order, then keeps the policy's `shortlistTop`, 3 by default, at each call site.
+
+The window is fixed when the shortlist for a set of inputs is first planned, and it is stored with that plan, so later commands on the same inputs use the same window: `estimate` and then `replay`, a rerun after a budget cap or a plan's usage limit, and a detached replay, whose worker counts from the day the replay was claimed if it has to plan the shortlist. Turning an option such as `--include-free` on and then off again returns to the first plan and its window. When the inputs change, for example with new traces or another `--policy`, the shortlist is planned again and its window counts back from that day. While a watch re-proof is pending and no release-date option is passed, a new shortlist keeps the window of the one it replaces, so the open pull request's model is tested again under the window it was chosen in.
+
+- `--released-since <date-or-days>` starts the window on a UTC date (`2026-01-01`) or a number of days before the day the shortlist is planned (`365d`), counted like the default when that plan is first built.
+- `--released-until <date>` ends the window on a UTC date, that day included; alone, it ends a 90-day window.
+- `--candidate <id>` replays the models you name instead of the automatic shortlist; repeat it to name several. Each name is matched to the catalog as a recorded model is: the exact id, then an id that ends in `/<name>`, then the same model name written another way (`claude-haiku-4-5-20251001` for `anthropic/claude-haiku-4.5`), within the vendor when the name gives one. A name that matches no model, or more than one, stops the run with `unknown_candidate` before any model call. A named model is tried whatever its release date and beyond `shortlistTop`, in each family where it passes the other checks above at every call site. `--candidate` cannot be combined with `--released-since` or `--released-until`.
+
+A model the catalog gives no release date is not tried while a window applies, and the policy's `allowModels` never widens the window; name the model with `--candidate` instead. `--approved-run` replays the approved model only and takes none of these options. Pass the same options on every later command for the same store, as with `--include-free` and `--policy`: a command without them goes back to the default shortlist.
+
+Release dates come from the catalog's `released`, `created` or `created_at` field, and the dates in a `--catalog-reference` replace the gateway's (see [Catalogs without pricing or capabilities](#catalogs-without-pricing-or-capabilities)); on a plan route they come from the price list. When the catalog's priced models carry fewer than two distinct release dates, as when a gateway gives every model one placeholder date, the default window is not applied: the run warns `release_window_skipped` and ranks the candidates by price, and an explicit `--released-since` or `--released-until` stops with `release_dates_unavailable`.
+
+When the window leaves no cheaper model at any call site of a family, a `shortlist_no_recent_candidates` warning names the family and how many cheaper models it left out, and when that leaves no call site with a candidate, the run stops before any model call with `no_recent_candidates`. A named model that a family cannot use gets a `shortlist_candidate_left_out` warning with the reason, and when no named model can be tried at any call site, the run stops with `named_candidates_ineligible`, giving each model's reason.
+
+`estimate` prints the window it applied as `releaseWindow` (`null` when none applies) and, per call site, `droppedByReleaseWindow`, the number of cheaper models the window left out. The report and the draft pull request list the window as `released since` and, when it has an end, `released until`, and the models named with `--candidate` as `named candidates`; when a window applied, the report adds `droppedByReleaseWindow` per call site. A store whose shortlist was planned by rightmodeler 0.4.0 or earlier keeps that shortlist, with no window and candidates ranked by price, until its inputs change; to apply the 90-day window sooner, pass `--released-since 90d` on each command.
+
 ## Catalogs without pricing or capabilities
 
 Rightmodeler reads per-token pricing from the model catalog. When every catalog
@@ -154,10 +172,12 @@ the run with `invalid_catalog_reference`.
 The release date is the one field where the reference wins over the gateway:
 when the matched reference entry has a release date, it replaces the date the
 gateway declares, and the gateway's date is kept only when the reference gives
-none. Rightmodeler ranks judges partly by how recent a model is, and a gateway
-can give every model the same placeholder date (Bifrost does for Vercel AI
-Gateway's models), which would leave context and price to rank the judges and
-favor the most expensive.
+none. Rightmodeler ranks judges partly by how recent a model is, and by default
+tries only candidates released in the last 90 days (see
+[Which models are tried](#which-models-are-tried)). A gateway can give every
+model the same placeholder date (Bifrost does for Vercel AI Gateway's models),
+which would leave context and price to rank the judges and favor the most
+expensive, and would leave the default release window unapplied.
 
 ```sh
 npx rightmodeler estimate --base-url https://provider.example/v1 --pricing-file /path/to/pricing.json --repo /path/to/repository
@@ -214,7 +234,7 @@ Rightmodeler checks every replay and judge response, and in Mode B every respons
 
 A response names the requested model when it echoes it, when it drops a gateway provider prefix (`openai/gpt-4o-mini` for `vercel/openai/gpt-4o-mini`), or when it adds a dated snapshot (`gpt-4o-mini-2024-07-18` for `gpt-4o-mini`). An alias whose answering model has another name counts as substituted, so name replay models by their upstream ids and turn off fallbacks, model aliases, response caching and request plugins for the replay route. Completed replay cells are reused, so after fixing the route rerun with a fresh store (`--store <directory>`). For streamed Mode B calls only the model a stream names and the response headers are checked.
 
-A judge whose response names another model is retired at that first response: rightmodeler starts no new call to it, cancels its calls still waiting for budget, and re-judges the affected replays with the next-ranked judge once the calls already under way return; the `judge_unusable` warning names the model that answered. Some catalogs also list a faster service tier of a model under its own id, which the gateway answers as the base model: on Vercel AI Gateway, `<id>-fast` is `<id>` at its fast tier. Rightmodeler never ranks such an id as a judge or shortlists it as a candidate while `<id>` is in the catalog too; an id that ends in `-fast` with no base model listed, such as `morph/morph-v3-fast`, is treated like any other model.
+A judge whose response names another model is retired at that first response: rightmodeler starts no new call to it, cancels its calls still waiting for budget, and re-judges the affected replays with the next-ranked judge once the calls already under way return; the `judge_unusable` warning names the model that answered. Some catalogs also list a faster service tier of a model under its own id, which the gateway answers as the base model: on Vercel AI Gateway, `<id>-fast` is `<id>` at its fast tier. Rightmodeler never ranks such an id as a judge or shortlists it as a candidate while `<id>` is in the catalog too, and it never shortlists a batch tier, `<id>-batch` or `<id>:batch`, while `<id>` is listed; an id that ends in `-fast` with no base model listed, such as `morph/morph-v3-fast`, is treated like any other model.
 
 ## Gateways that route by header
 
