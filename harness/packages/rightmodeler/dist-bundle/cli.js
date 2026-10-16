@@ -39979,7 +39979,8 @@ function freshCandidate(content, path, stepRecord, projectId3) {
 function buildSwapDiff({
   repoDir,
   projectId: projectId3,
-  swaps
+  swaps,
+  sources
 }) {
   const grouped = /* @__PURE__ */ new Map();
   for (const swap of swaps) {
@@ -39990,7 +39991,7 @@ function buildSwapDiff({
   for (const [path, fileSwaps] of grouped) {
     let before;
     try {
-      before = readFileSync5(join13(repoDir, path), "utf8");
+      before = sources?.get(path) ?? readFileSync5(join13(repoDir, path), "utf8");
     } catch {
       results.push({ path, reason: "stale_location" });
       continue;
@@ -40813,7 +40814,15 @@ async function dirtySwapPaths(repoDir, paths) {
   return dirty;
 }
 function committedBlobSha(repoDir, path) {
-  return gitOutput2(repoDir, ["rev-parse", `HEAD:${path}`]);
+  return gitOutput2(repoDir, ["rev-parse", `HEAD:./${path}`]);
+}
+async function committedText(repoDir, path) {
+  const { stdout } = await execFileAsync4(
+    "git",
+    ["-C", repoDir, "cat-file", "blob", `HEAD:./${path}`],
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  );
+  return stdout;
 }
 async function resumedApplyUpdates({
   githubClient,
@@ -41208,7 +41217,19 @@ async function applySwaps({
       { paths: staleDigests }
     );
   }
-  const diffResults = buildSwapDiff({ repoDir, projectId, swaps });
+  const sources = /* @__PURE__ */ new Map();
+  for (const path of swapPaths) {
+    try {
+      sources.set(path, await committedText(repoDir, path));
+    } catch {
+      return refusal(
+        "stale_location",
+        "At least one proposed swap no longer has one fresh source location.",
+        { paths: [path] }
+      );
+    }
+  }
+  const diffResults = buildSwapDiff({ repoDir, projectId, swaps, sources });
   const stale = diffResults.flatMap(
     (result2) => "reason" in result2 ? [result2.path] : []
   );

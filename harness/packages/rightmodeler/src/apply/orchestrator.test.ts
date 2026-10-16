@@ -857,6 +857,42 @@ describe("applySwaps", () => {
     expect(githubWrites(harness.stub)).toEqual([]);
   });
 
+  it("edits the committed file when the checkout has CRLF line endings", async () => {
+    const harness = await createHarness();
+    await git(harness.repoDir, ["config", "core.autocrlf", "true"]);
+    await git(harness.repoDir, ["rm", "-r", "--cached", "-q", "."]);
+    await git(harness.repoDir, ["reset", "--hard", "-q"]);
+    expect(await readFile(join(harness.repoDir, sourcePath), "utf8")).toContain(
+      "\r\n",
+    );
+
+    const applied = requireApplied(
+      await runApply(harness, [applyVerdict(harness)]),
+    );
+
+    const base = await harness.githubClient.getFileContent({
+      ...repository,
+      path: sourcePath,
+      ref: "main",
+    });
+    const after = await harness.githubClient.getFileContent({
+      ...repository,
+      path: sourcePath,
+      ref: applied.branch,
+    });
+    expect(after.content).toBe(
+      base.content.replace(harness.stepRecord.currentModel!, "acme/small-1"),
+    );
+    expect(after.content).not.toContain("\r");
+    const opened = (await lifecycleEvents(harness.store)).find(
+      ({ kind }) => kind === "pr_opened",
+    );
+    if (opened === undefined) throw new Error("Missing pr_opened event");
+    expect(remediationFromLifecycleDetail(opened.detail)).toMatchObject({
+      pre_apply_digests: { [sourcePath]: digestFileContent(base.contentBytes) },
+    });
+  });
+
   it("opens the draft pull request without reviewers when no owner resolves", async () => {
     const harness = await createHarness();
     const input = applyVerdict(harness);
