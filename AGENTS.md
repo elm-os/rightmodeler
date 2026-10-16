@@ -104,7 +104,7 @@ Any instruction that references `CLAUDE.md` means `AGENTS.md`.
 ## Code graph and vendor source
 
 - The code graph lives at `graphify-out/graph.json` (AST only, gitignored). Git hooks rebuild it after commits and checkouts; run `graphify update .` after pulls or large edits.
-- First time: `uv tool install "graphifyy[mcp]==0.9.65"`, `graphify update .`, then `graphify hook install` and delete the `.gitattributes` it writes.
+- First time: `uv tool install "graphifyy[mcp]==0.9.65"`, `graphify update .`, then `graphify hook install` and revert the line it appends to `.gitattributes` (`git checkout -- .gitattributes`).
 - Query the graph before broad grepping: `graphify query "<question>" --graph graphify-out/graph.json`, `graphify path "A" "B"`, `graphify explain "X"`.
 - Query by symbol or file name for precise hits. Natural-language queries are exploratory; raise `--budget` for them.
 - Cite `source_file` and `source_location` from results. Treat INFERRED and AMBIGUOUS edges as hints, not facts.
