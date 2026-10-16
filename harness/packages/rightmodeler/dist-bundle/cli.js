@@ -29593,7 +29593,14 @@ async function runDocker(args) {
 }
 async function detectDockerAvailability() {
   try {
-    await runDocker(["version", "--format", "{{.Server.Version}}"]);
+    const serverOs = await runDocker(["version", "--format", "{{.Server.Os}}"]);
+    if (serverOs === "windows") {
+      return {
+        available: false,
+        reason: "daemon-unavailable",
+        message: "Docker is running Windows containers, and Mode B needs Linux containers. Switch Docker Desktop to Linux containers."
+      };
+    }
     return { available: true };
   } catch (error51) {
     const missingCli = isRecord2(error51) && error51.code === "ENOENT";
@@ -30024,6 +30031,9 @@ function buildCloudNetworkPolicy(credential) {
     }
   };
 }
+function uploadMode(mode) {
+  return process.platform === "win32" ? 493 : mode & 511;
+}
 async function listLocalEntries(root) {
   const rootStats = await lstat2(root);
   if (rootStats.isFile()) {
@@ -30031,7 +30041,7 @@ async function listLocalEntries(root) {
       {
         kind: "file",
         path: "",
-        mode: rootStats.mode & 511,
+        mode: uploadMode(rootStats.mode),
         contents: await readFile5(root)
       }
     ];
@@ -30051,21 +30061,21 @@ async function listLocalEntries(root) {
         entries.push({
           kind: "directory",
           path: relativePath,
-          mode: stats.mode & 511
+          mode: uploadMode(stats.mode)
         });
         await visit(absolutePath, relativePath);
       } else if (stats.isFile()) {
         entries.push({
           kind: "file",
           path: relativePath,
-          mode: stats.mode & 511,
+          mode: uploadMode(stats.mode),
           contents: await readFile5(absolutePath)
         });
       } else if (stats.isSymbolicLink()) {
         entries.push({
           kind: "symlink",
           path: relativePath,
-          mode: stats.mode & 511,
+          mode: uploadMode(stats.mode),
           target: await readlink(absolutePath)
         });
       } else {
@@ -31879,6 +31889,12 @@ function executionFor(cell, executionId, outcome, finalOutput, attribution) {
     attribution
   });
 }
+function endInterrupted(platform) {
+  if (platform === "win32")
+    process.exit(130);
+  else
+    process.kill(process.pid, "SIGINT");
+}
 async function replayModeB(input) {
   validateInput(input);
   const backend = input.backend ?? "docker";
@@ -32100,7 +32116,7 @@ async function replayModeB(input) {
   }
   let workerFailure;
   const onInterrupt = () => {
-    void Promise.allSettled([...liveContainers].map(({ executor, handle }) => executor.destroy(handle))).then(() => process.kill(process.pid, "SIGINT"));
+    void Promise.allSettled([...liveContainers].map(({ executor, handle }) => executor.destroy(handle))).then(() => endInterrupted(process.platform));
   };
   try {
     process.once("SIGINT", onInterrupt);

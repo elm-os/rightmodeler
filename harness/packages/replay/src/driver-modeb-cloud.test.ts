@@ -7,6 +7,7 @@ import type { DockerLaunchSpec } from "@rightmodeler/executor";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createBudget } from "./budget.js";
 import {
+  endInterrupted,
   replayModeB,
   type ModeBCase,
   type ModeBExecutor,
@@ -240,6 +241,38 @@ describe("Mode B concurrency warning", () => {
       ]);
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Mode B interrupt", () => {
+  it("exits with 130 on Windows, where a re-raised SIGINT would exit with 1", () => {
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      endInterrupted("win32");
+      expect(exit).toHaveBeenCalledWith(130);
+      expect(kill).not.toHaveBeenCalled();
+    } finally {
+      exit.mockRestore();
+      kill.mockRestore();
+    }
+  });
+
+  it("re-raises SIGINT elsewhere, so the process dies by the signal", () => {
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      endInterrupted("linux");
+      expect(kill).toHaveBeenCalledWith(process.pid, "SIGINT");
+      expect(exit).not.toHaveBeenCalled();
+    } finally {
+      exit.mockRestore();
+      kill.mockRestore();
     }
   });
 });
