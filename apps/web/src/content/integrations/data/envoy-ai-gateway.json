@@ -125,7 +125,7 @@
     },
     {
       "q": "Why does rightmodeler need --catalog-reference here?",
-      "a": "The gateway answers /v1/models itself, listing the ids your routes declare with no price, context window or capabilities. The shortlist needs all of those, so rightmodeler joins each declared id to the upstream's public list, such as https://ai-gateway.vercel.sh/v1/models, reading it without your key and filling the pricing, context windows and capabilities the gateway leaves out."
+      "a": "The gateway answers /v1/models itself, listing the ids your routes declare with no price, context window or capabilities. The shortlist needs all of those, so rightmodeler joins each declared id to the upstream's public list, such as https://ai-gateway.vercel.sh/v1/models, reading it without your key and filling the pricing, context windows and capabilities the gateway leaves out. The release dates that bound the candidates come from that list too: by default, only models released in the last 90 days are tried."
     },
     {
       "q": "Which spans does rightmodeler read?",
