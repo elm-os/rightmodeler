@@ -41,8 +41,9 @@ export function AgentShowcase() {
       <h2 className="sr-only">How it decides</h2>
 
       <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
-        <Reveal className="h-full">
-          <div className="relative isolate flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand lg:aspect-square">
+        {/* At least square, free to grow: aspect-square with h-full pins the height and lets content overflow. */}
+        <Reveal className="h-full lg:@container">
+          <div className="relative isolate flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand lg:min-h-[100cqw]">
             <Image
               src="/agent/showcase-grain.jpg"
               alt=""
@@ -68,8 +69,8 @@ export function AgentShowcase() {
           </div>
         </Reveal>
 
-        <Reveal delay={0.06} className="h-full">
-          <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-4 sm:p-8 lg:aspect-square">
+        <Reveal delay={0.06} className="h-full lg:@container">
+          <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-4 sm:p-8 lg:min-h-[100cqw]">
             <div className="rounded-xl border border-ash-border bg-parchment-white p-5 sm:p-7">
               <p className="font-mono text-caption uppercase text-fog">TL;DR</p>
               <p className="mt-3 text-subheading text-driftwood">
@@ -98,8 +99,12 @@ export function AgentShowcase() {
 
       <div className="mt-4 grid gap-4 sm:mt-5 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
         {STEPS.map((step, i) => (
-          <Reveal key={step.name} delay={i * 0.06} className="h-full">
-            <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-5 sm:p-6 lg:aspect-square">
+          <Reveal
+            key={step.name}
+            delay={i * 0.06}
+            className="h-full lg:@container"
+          >
+            <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-5 sm:p-6 lg:min-h-[100cqw]">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-ash-border bg-parchment-white text-driftwood">
                 <step.Icon size={19} />
               </span>
