@@ -32653,13 +32653,16 @@ function resolveCurrentModel(catalog, currentModel) {
   return { kind: "absent" };
 }
 function shortlist(stepRecords, catalog, options = {}) {
-  const top = options.top ?? 8;
+  const named = options.named === void 0 || options.named.length === 0 ? void 0 : new Set(options.named);
+  const top = named?.size ?? options.top ?? 8;
   if (!Number.isSafeInteger(top) || top < 1) {
     throw new Error("top must be a positive integer");
   }
   const allow = options.allow === void 0 ? void 0 : new Set(options.allow);
   const deny = new Set(options.deny ?? []);
-  const rankable = withoutFastTiers(catalog);
+  const window = named === void 0 ? options.releasedWithin : void 0;
+  const rankable = withoutBatchTiers(withoutFastTiers(catalog));
+  const rankableIds = new Set(rankable.map(({ id }) => id));
   return stepRecords.map((step) => {
     if (!Number.isSafeInteger(step.observedContextTokens) || step.observedContextTokens < 0) {
       throw new Error("observedContextTokens must be a non-negative integer");
@@ -32672,6 +32675,7 @@ function shortlist(stepRecords, catalog, options = {}) {
         droppedByTop: 0,
         droppedFreeModels: 0,
         droppedByOutputCeiling: 0,
+        droppedByReleaseWindow: 0,
         abstention: {
           kind: "current-model-ambiguous",
           message: `Recorded model ${step.currentModel} matches more than one catalog model: ${[...resolution.matches].sort().join(", ")}`
@@ -32685,6 +32689,7 @@ function shortlist(stepRecords, catalog, options = {}) {
         droppedByTop: 0,
         droppedFreeModels: 0,
         droppedByOutputCeiling: 0,
+        droppedByReleaseWindow: 0,
         abstention: {
           kind: "current-model-absent",
           message: `Current model is absent from the provider catalog: ${step.currentModel ?? "unknown"}`
@@ -32694,7 +32699,7 @@ function shortlist(stepRecords, catalog, options = {}) {
     const current = resolution.model;
     const resolvedCurrentModelId = resolution.kind === "resolved" ? current.id : void 0;
     const currentPrice = blendedPrice(current);
-    const capable = rankable.filter((candidate) => candidate.id !== current.id && (allow === void 0 || allow.has(candidate.id)) && !deny.has(candidate.id) && (!step.needsTools || candidate.supportsTools) && (!step.needsStructuredOutput || candidate.supportsStructuredOutput) && candidate.contextLength >= step.observedContextTokens);
+    const capable = rankable.filter((candidate) => candidate.id !== current.id && (named === void 0 || named.has(candidate.id)) && (allow === void 0 || allow.has(candidate.id)) && !deny.has(candidate.id) && (!step.needsTools || candidate.supportsTools) && (!step.needsStructuredOutput || candidate.supportsStructuredOutput) && candidate.contextLength >= step.observedContextTokens);
     const fitsCeiling = (candidate) => step.recordedMaxOutputTokens === void 0 || candidate.maxOutputTokens === void 0 || candidate.maxOutputTokens === null || candidate.maxOutputTokens >= step.recordedMaxOutputTokens;
     const withinCeiling = capable.filter(fitsCeiling);
     const droppedByOutputCeiling = capable.length - withinCeiling.length;
@@ -32704,14 +32709,15 @@ function shortlist(stepRecords, catalog, options = {}) {
       return candidatePrice !== null && currentPrice !== null && candidatePrice < currentPrice;
     });
     const droppedFreeModels = options.includeFreeModels ? 0 : qualifiedBeforeFreePolicy.filter((candidate) => blendedPrice(candidate) === 0).length;
-    const qualified = qualifiedBeforeFreePolicy.filter((candidate) => options.includeFreeModels || blendedPrice(candidate) !== 0).sort((left, right) => blendedPrice(left) - blendedPrice(right));
-    if (qualified.length === 0 && (currentPrice === null || unpricedCandidates > 0)) {
+    const qualified = qualifiedBeforeFreePolicy.filter((candidate) => options.includeFreeModels || blendedPrice(candidate) !== 0);
+    if (qualified.length === 0 && (currentPrice === null || named === void 0 && unpricedCandidates > 0)) {
       return {
         stepId: step.stepId,
         candidates: [],
         droppedByTop: 0,
         droppedFreeModels,
         droppedByOutputCeiling,
+        droppedByReleaseWindow: 0,
         ...resolvedCurrentModelId === void 0 ? {} : { resolvedCurrentModelId },
         abstention: {
           kind: "no-priced-candidates",
@@ -32719,15 +32725,84 @@ function shortlist(stepRecords, catalog, options = {}) {
         }
       };
     }
+    const inWindow = window === void 0 ? qualified : qualified.filter(({ releasedAt }) => typeof releasedAt === "number" && releasedAt >= window.since && (window.before === void 0 || releasedAt < window.before));
+    const ranked = window === void 0 ? inWindow.sort((left, right) => blendedPrice(left) - blendedPrice(right) || compareText(left.id, right.id)) : cheaperAndNewerFirst(inWindow);
+    const candidates = ranked.slice(0, top);
+    const perMillion = (price2) => Number((price2 * 1e6).toPrecision(4));
+    const leftOutReason = (model) => {
+      const price2 = blendedPrice(model);
+      if (model.id === current.id)
+        return "it is the current model";
+      if (!rankableIds.has(model.id)) {
+        const base = model.id.replace(/(?:-fast|[-:]batch)$/u, "");
+        return `it is a service tier of ${base}; name ${base} instead`;
+      }
+      if (allow !== void 0 && !allow.has(model.id) || deny.has(model.id)) {
+        return "the release policy or the route's model list does not allow it";
+      }
+      if (step.needsTools && !model.supportsTools) {
+        return "it does not support tool calls, which this call site needs";
+      }
+      if (step.needsStructuredOutput && !model.supportsStructuredOutput) {
+        return "it does not support structured output, which this call site needs";
+      }
+      if (model.contextLength < step.observedContextTokens) {
+        return `its context window is smaller than the ${step.observedContextTokens} tokens this call site sent`;
+      }
+      if (!fitsCeiling(model)) {
+        return `its output limit is below the ${step.recordedMaxOutputTokens} tokens this call site needs`;
+      }
+      if (price2 === null)
+        return "the catalog gives it no per-token price";
+      if (price2 >= currentPrice) {
+        return `it is not cheaper than the current model ${current.id} (${perMillion(price2)} vs ${perMillion(currentPrice)} USD per million tokens)`;
+      }
+      return "it is zero-priced; pass --include-free to try it";
+    };
+    const namedCandidatesLeftOut = [...named ?? []].filter((modelId) => !candidates.some(({ id }) => id === modelId)).map((modelId) => ({
+      modelId,
+      reason: leftOutReason(catalog.find(({ id }) => id === modelId))
+    }));
     return {
       stepId: step.stepId,
-      candidates: qualified.slice(0, top),
-      droppedByTop: Math.max(0, qualified.length - top),
+      candidates,
+      droppedByTop: Math.max(0, inWindow.length - top),
       droppedFreeModels,
       droppedByOutputCeiling,
-      ...resolvedCurrentModelId === void 0 ? {} : { resolvedCurrentModelId }
+      droppedByReleaseWindow: qualified.length - inWindow.length,
+      ...resolvedCurrentModelId === void 0 ? {} : { resolvedCurrentModelId },
+      ...namedCandidatesLeftOut.length === 0 ? {} : { namedCandidatesLeftOut }
     };
   });
+}
+function releaseDateCount(catalog) {
+  const priced = withoutBatchTiers(withoutFastTiers(catalog)).filter(({ pricing }) => pricing !== null);
+  if (priced.length === 0)
+    return void 0;
+  return new Set(priced.map(({ releasedAt }) => releasedAt ?? 0).filter((releasedAt) => releasedAt > 0)).size;
+}
+function withoutBatchTiers(catalog) {
+  const ids = new Set(catalog.map(({ id }) => id));
+  return catalog.filter(({ id }) => !/[-:]batch$/u.test(id) || !ids.has(id.slice(0, -"-batch".length)));
+}
+function cheaperAndNewerFirst(candidates) {
+  let remaining = [...candidates].sort((left, right) => blendedPrice(left) - blendedPrice(right) || (right.releasedAt ?? 0) - (left.releasedAt ?? 0) || compareText(left.id, right.id));
+  const ranked = [];
+  while (remaining.length > 0) {
+    const later = [];
+    let latest = -Infinity;
+    for (const candidate of remaining) {
+      const releasedAt = candidate.releasedAt ?? 0;
+      if (releasedAt > latest) {
+        ranked.push(candidate);
+        latest = releasedAt;
+      } else {
+        later.push(candidate);
+      }
+    }
+    remaining = later;
+  }
+  return ranked;
 }
 
 // ../replay/dist/transport/stream.js
@@ -41364,10 +41439,18 @@ function estimateReplayCost(input) {
       "External evaluator charges, which are not present in the provider catalog."
     ],
     shortlist: input.candidates.map(
-      ({ stepId, candidates, resolvedCurrentModelId }) => ({
+      ({
+        stepId,
+        candidates,
+        resolvedCurrentModelId,
+        droppedByReleaseWindow,
+        namedCandidatesLeftOut
+      }) => ({
         stepId,
         candidateIds: candidates.map(({ id }) => id),
-        ...resolvedCurrentModelId === void 0 ? {} : { resolvedCurrentModelId }
+        ...resolvedCurrentModelId === void 0 ? {} : { resolvedCurrentModelId },
+        droppedByReleaseWindow,
+        ...namedCandidatesLeftOut === void 0 ? {} : { namedCandidatesLeftOut }
       })
     )
   };
@@ -45646,6 +45729,7 @@ var ACTIVE_CORPUS_KEY2 = `${PROJECT_ID2}/corpus/active.json`;
 var CORPUS_SEED = 42;
 var AUDIT_SAMPLE_LIMIT = 20;
 var DEFAULT_SHORTLIST_TOP = 3;
+var DEFAULT_RELEASE_WINDOW_DAYS = 90;
 var DEFAULT_QUALITY_FLOOR = 0.85;
 var AVAILABILITY_FLOOR = 0.7;
 var GATE_POLICY_BASE_VERSION = "phase-a-v3";
@@ -45757,6 +45841,9 @@ var replayPlanSchema = external_exports.strictObject({
   includeFreeModels: external_exports.boolean(),
   allowModels: external_exports.array(external_exports.string().min(1)).default([]),
   denyModels: external_exports.array(external_exports.string().min(1)).default([]),
+  releasedSince: external_exports.iso.date().nullable().default(null),
+  releasedUntil: external_exports.iso.date().nullable().default(null),
+  namedCandidates: external_exports.array(external_exports.string().min(1)).default([]),
   sampleSizes: external_exports.record(external_exports.string(), external_exports.number().int().positive()),
   familyPlans: external_exports.array(familyPlanSchema).default([]),
   steps: external_exports.array(replayPlanStepSchema),
@@ -45781,9 +45868,15 @@ var detachedReplayCatalogSchema = external_exports.strictObject({
   runId: external_exports.string().min(1),
   models: external_exports.array(modelCatalogSchema)
 });
+var releaseWindowSchema = external_exports.strictObject({
+  since: external_exports.iso.date(),
+  until: external_exports.iso.date().nullable()
+});
 var replayOutputSchema = external_exports.strictObject({
   completed: external_exports.number().int().nonnegative(),
   skipped: external_exports.number().int().nonnegative(),
+  releaseWindow: releaseWindowSchema.optional(),
+  namedCandidates: external_exports.array(external_exports.string().min(1)).optional(),
   candidates: external_exports.array(
     external_exports.strictObject({
       stepId: external_exports.string().min(1),
@@ -45791,7 +45884,14 @@ var replayOutputSchema = external_exports.strictObject({
       droppedByTop: external_exports.number().int().nonnegative(),
       droppedFreeModels: external_exports.number().int().nonnegative(),
       droppedByOutputCeiling: external_exports.number().int().nonnegative().default(0),
+      droppedByReleaseWindow: external_exports.number().int().nonnegative().default(0),
       resolvedCurrentModelId: external_exports.string().min(1).optional(),
+      namedCandidatesLeftOut: external_exports.array(
+        external_exports.strictObject({
+          modelId: external_exports.string().min(1),
+          reason: external_exports.string().min(1)
+        })
+      ).optional(),
       currentPricing: external_exports.strictObject({
         input: external_exports.number().nonnegative(),
         output: external_exports.number().nonnegative()
@@ -46116,6 +46216,9 @@ async function runPipeline(options) {
     type: "init",
     phase: options.through ?? "report"
   }) : await requireRunningReplayRun(context2, options.existingRunId);
+  if (options.existingRunId !== void 0) {
+    context2.now = new Date(run.startedAt);
+  }
   const executedStages = [];
   try {
     for (const stage of stagesThrough(options.through)) {
@@ -46165,17 +46268,26 @@ async function estimateReplay(options) {
   const known = context2.existingRunId === void 0 ? await routeCatalog(() => routes.candidates.known()) : await readDetachedReplayCatalog(context2, context2.existingRunId);
   const judgeCatalog = context2.existingRunId === void 0 ? await routeCatalog(() => routes.judge.callable()) : known;
   const callable = planCandidateRoute(context2) === void 0 ? void 0 : await routeCatalog(() => routes.candidates.callable());
-  const candidates = dropJudgeVendorCandidates(
-    context2,
-    context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable) : await approvedReplayCandidates(
+  const window = candidateReleaseWindow(context2, plan, known);
+  const selection = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable, window) : {
+    shortlists: await approvedReplayCandidates(
       context2,
       plan,
       callable ?? known,
       context2.approvedRunSpecDigest
-    )
-  );
+    ),
+    emptiedByWindow: /* @__PURE__ */ new Set()
+  };
+  const candidates = dropJudgeVendorCandidates(context2, selection.shortlists);
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
+  reportCandidateSelection(
+    context2,
+    plan,
+    candidates,
+    window,
+    selection.emptiedByWindow
+  );
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
@@ -46214,7 +46326,9 @@ async function estimateReplay(options) {
     ...usesPlanRoute(context2) ? {
       basis: `List-price equivalents from the price list ${context2.catalogReference ?? DEFAULT_PLAN_PRICE_LIST} for calls made through a plan you are signed in to (charged to that plan's usage allowance, not billed in dollars), and current provider catalog pricing for any API route. Worst-case candidate reservation from corpus token bounds; holdout uses the most expensive possible family winner. Judge calls are priced at two calls per replayed cell. A plan route sets no output cap, so actual use can exceed this figure.`
     } : {},
-    policy: context2.release.effective
+    policy: context2.release.effective,
+    releaseWindow: window ?? null,
+    ...plan.namedCandidates.length === 0 ? {} : { namedCandidates: plan.namedCandidates }
   };
 }
 async function claimDetachedReplay(options) {
@@ -46252,6 +46366,9 @@ async function claimDetachedReplay(options) {
       apiKeyEnv: context2.apiKeyEnv,
       maxCostUsd: context2.maxCostUsd ?? null,
       includeFreeModels: context2.includeFreeModels,
+      ...context2.releasedSince === void 0 ? {} : { releasedSince: context2.releasedSince },
+      ...context2.releasedUntil === void 0 ? {} : { releasedUntil: context2.releasedUntil },
+      ...context2.namedCandidates.length === 0 ? {} : { namedCandidates: [...context2.namedCandidates] },
       ...context2.requestHeaders === void 0 ? {} : { headers: requestHeaderIdentity(context2.requestHeaders) },
       ...context2.catalogReference === void 0 ? {} : { catalogReference: context2.catalogReference }
     },
@@ -46273,7 +46390,8 @@ async function claimDetachedReplay(options) {
       projectId: context2.projectId,
       type: "replay",
       phase: targetPhase,
-      runId
+      runId,
+      now: context2.now
     });
     return detachedClaim(created, false);
   } catch (error51) {
@@ -46821,6 +46939,7 @@ async function prepareApply(context2) {
       blastRadius: radius,
       caps: [
         { name: "top-N shortlist", value: plan.top },
+        ...candidateSelectionCaps(replay),
         {
           name: "replay sample size",
           value: plan.sampleSizes[family.familyId] ?? 0
@@ -46845,6 +46964,21 @@ async function prepareApply(context2) {
     verdicts,
     conventions: await captureConventions({ repoDir: context2.repo })
   };
+}
+function candidateSelectionCaps(replay) {
+  const window = replay.releaseWindow;
+  return [
+    ...window === void 0 ? [] : [
+      { name: "released since", value: window.since },
+      ...window.until === null ? [] : [{ name: "released until", value: window.until }]
+    ],
+    ...replay.namedCandidates === void 0 ? [] : [
+      {
+        name: "named candidates",
+        value: replay.namedCandidates.join(", ")
+      }
+    ]
+  ];
 }
 function applyCascadeStatus(status) {
   if (status === "not_required") return "not-required";
@@ -46871,6 +47005,12 @@ function createContext(options) {
     maxCostUsd: options.maxCostUsd,
     maxConcurrency: options.maxConcurrency,
     includeFreeModels: options.includeFreeModels ?? false,
+    releasedSince: options.releasedSince,
+    releasedUntil: options.releasedUntil,
+    namedCandidates: [...new Set(options.namedCandidates ?? [])].sort(
+      compareText
+    ),
+    now: options.now,
     release: releasePolicy(
       policyFilePath === void 0 ? void 0 : readPolicyFile(policyFilePath)
     ),
@@ -47093,6 +47233,15 @@ async function inputDigest(stage, context2, state) {
   if (stage === "shortlist") {
     extra.policy = jsonValue2({ ...context2.release.effective });
     extra.includeFreeModels = context2.includeFreeModels;
+    if (context2.releasedSince !== void 0) {
+      extra.releasedSince = context2.releasedSince;
+    }
+    if (context2.releasedUntil !== void 0) {
+      extra.releasedUntil = context2.releasedUntil;
+    }
+    if (context2.namedCandidates.length > 0) {
+      extra.namedCandidates = [...context2.namedCandidates];
+    }
     extra.stepsPerFamily = MIN_DISTINCT_STEPS;
     extra.minimumHoldoutCases = context2.release.minimumHoldoutCases;
   }
@@ -47884,17 +48033,38 @@ async function executeShortlist(context2, inputDigestValue) {
     }
   }
   const key = artifactKey(context2, "shortlist", inputDigestValue);
+  if (await context2.store.get(key) !== null) return key;
   await putImmutableJson(context2.store, key, {
     top: context2.release.effective.shortlistTop,
     includeFreeModels: context2.includeFreeModels,
     allowModels: [...context2.release.effective.allowModels],
     denyModels: [...context2.release.effective.denyModels],
+    ...await plannedReleaseWindow(context2),
+    namedCandidates: [...context2.namedCandidates],
     sampleSizes,
     familyPlans,
     steps,
     cases
   });
   return key;
+}
+async function plannedReleaseWindow(context2) {
+  if (context2.releasedSince === void 0 && context2.releasedUntil === void 0 && (await readReproofRequests(context2.store, context2.projectId)).some(
+    ({ requested }) => requested
+  ) && (await readSetupState(context2.store, context2.projectId)).stages.shortlist !== void 0) {
+    const { releasedSince, releasedUntil: releasedUntil2 } = await loadReplayPlan(context2);
+    return { releasedSince, releasedUntil: releasedUntil2 };
+  }
+  const today = (context2.now ?? /* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const releasedUntil = context2.releasedUntil ?? null;
+  const days = /^(\d+)d$/u.exec(context2.releasedSince ?? "")?.[1];
+  return {
+    releasedSince: days !== void 0 ? shiftUtcDate(today, -Number(days)) : context2.releasedSince ?? shiftUtcDate(releasedUntil ?? today, -DEFAULT_RELEASE_WINDOW_DAYS),
+    releasedUntil
+  };
+}
+function shiftUtcDate(date5, days) {
+  return new Date(Date.parse(date5) + days * 864e5).toISOString().slice(0, 10);
 }
 function replayUsageByCase(runs) {
   const usage2 = /* @__PURE__ */ new Map();
@@ -47973,7 +48143,54 @@ function approvedRecords(approved, family, records) {
   }
   return selected.sort((left, right) => compareText(left.stepId, right.stepId));
 }
-function replayCandidates(plan, catalog, callable) {
+function candidateReleaseWindow(context2, plan, catalog) {
+  if (context2.approvedRunSpecDigest !== void 0 || plan.namedCandidates.length > 0 || plan.releasedSince === null) {
+    return void 0;
+  }
+  const window = { since: plan.releasedSince, until: plan.releasedUntil };
+  const dates = releaseDateCount(catalog);
+  if (dates === void 0 || dates >= 2) return window;
+  if (context2.releasedSince === void 0 && context2.releasedUntil === void 0) {
+    context2.reporter.warning(
+      "release_window_skipped",
+      `The provider catalog gives its priced models fewer than two distinct release dates, so the default release window (models released on or after ${window.since}) was not applied and candidates are ranked by price. Pass --catalog-reference with a model list that publishes release dates to apply it.`
+    );
+    return void 0;
+  }
+  throw new ProtocolError({
+    exitCode: 2,
+    code: "release_dates_unavailable",
+    message: "The provider catalog gives its priced models fewer than two distinct release dates, so --released-since and --released-until cannot be applied.",
+    remedy: "Pass --catalog-reference <url> with a model list that publishes release dates (for example https://ai-gateway.vercel.sh/v1/models), name the models to try with --candidate <id>, or remove --released-since and --released-until."
+  });
+}
+function resolveNamedCandidates(plan, catalog) {
+  const unknown2 = [];
+  const ids = plan.namedCandidates.flatMap((name) => {
+    const resolution = resolveCurrentModel(catalog, name);
+    if (resolution.kind === "ambiguous") {
+      unknown2.push(
+        `--candidate ${name} matches more than one catalog model: ${[...resolution.matches].sort(compareText).join(", ")}`
+      );
+      return [];
+    }
+    if (resolution.kind === "absent") {
+      unknown2.push(`--candidate ${name} is not in the provider catalog`);
+      return [];
+    }
+    return [resolution.model.id];
+  });
+  if (unknown2.length > 0) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "unknown_candidate",
+      message: `${unknown2.join("; ")}.`,
+      remedy: "Pass each --candidate as the provider's /models list spells it (vendor/model), then rerun."
+    });
+  }
+  return [...new Set(ids)].sort(compareText);
+}
+function replayCandidates(plan, catalog, callable, window) {
   const callableById = new Map(
     (callable ?? []).map((model) => [model.id, model])
   );
@@ -47995,13 +48212,25 @@ function replayCandidates(plan, catalog, callable) {
       top: plan.top,
       includeFreeModels: plan.includeFreeModels,
       ...callable === void 0 && allow.length === 0 ? {} : { allow },
-      deny: plan.denyModels
+      deny: plan.denyModels,
+      named: resolveNamedCandidates(plan, models),
+      ...window === void 0 ? {} : {
+        releasedWithin: {
+          since: Date.parse(window.since) / 1e3,
+          ...window.until === null ? {} : { before: Date.parse(window.until) / 1e3 + 86400 }
+        }
+      }
     }
   ).map((assignment) => ({
     ...assignment,
     candidates: assignment.candidates.map(({ id }) => catalogById.get(id))
   }));
-  return shortlisted.map((assignment) => {
+  const emptiedByWindow = new Set(
+    shortlisted.filter(
+      ({ candidates, droppedByReleaseWindow, abstention: abstention2 }) => abstention2 === void 0 && candidates.length === 0 && droppedByReleaseWindow > 0
+    ).map(({ stepId }) => stepId)
+  );
+  const shortlists = shortlisted.map((assignment) => {
     const family = plan.steps.find(
       ({ stepId }) => stepId === assignment.stepId
     )?.family;
@@ -48024,6 +48253,7 @@ function replayCandidates(plan, catalog, callable) {
       candidates: assignment.candidates.filter(({ id }) => commonIds.has(id))
     };
   });
+  return { shortlists, emptiedByWindow };
 }
 function dropJudgeVendorCandidates(context2, candidates) {
   const judgeKind = context2.routes?.judge;
@@ -48084,6 +48314,65 @@ function assertPricedCandidates(baseUrl, candidates) {
       code: "no_priced_candidates",
       message: `The model catalog at ${baseUrl} publishes no per-token pricing, so no candidate can be priced.`,
       remedy: "Point --base-url at a catalog that publishes pricing, pass --catalog-reference <url> naming the upstream's public model list, or pass --pricing-file <path> mapping each model id to its input and output USD per token."
+    });
+  }
+}
+function reportCandidateSelection(context2, plan, candidates, window, emptiedByWindow) {
+  const familyByStepId = new Map(
+    plan.steps.map(({ stepId, family }) => [stepId, family])
+  );
+  const steps = candidates.filter(({ abstention: abstention2 }) => abstention2 === void 0).sort((left, right) => compareText(left.stepId, right.stepId));
+  const windowText = window === void 0 ? "" : window.until === null ? `on or after ${window.since}` : `between ${window.since} and ${window.until}`;
+  const leftOut = /* @__PURE__ */ new Map();
+  for (const family of [
+    ...new Set(steps.map(({ stepId }) => familyByStepId.get(stepId)))
+  ].sort(compareText)) {
+    const familySteps = steps.filter(
+      ({ stepId }) => familyByStepId.get(stepId) === family
+    );
+    const droppedByWindow = Math.max(
+      0,
+      ...familySteps.filter(({ stepId }) => emptiedByWindow.has(stepId)).map((step) => step.droppedByReleaseWindow)
+    );
+    if (familySteps.every((step) => step.candidates.length === 0) && droppedByWindow > 0) {
+      context2.reporter.warning(
+        "shortlist_no_recent_candidates",
+        `Family ${family}: no model cheaper than the current model was released ${windowText} (${droppedByWindow} cheaper ${droppedByWindow === 1 ? "model" : "models"} left out); pass an earlier --released-since, or name models with --candidate.`
+      );
+    }
+    const reasons = /* @__PURE__ */ new Map();
+    for (const step of familySteps) {
+      for (const { modelId, reason } of step.namedCandidatesLeftOut ?? []) {
+        if (!reasons.has(modelId)) reasons.set(modelId, reason);
+      }
+    }
+    for (const [modelId, reason] of [...reasons].sort(
+      ([left], [right]) => compareText(left, right)
+    )) {
+      context2.reporter.warning(
+        "shortlist_candidate_left_out",
+        `Family ${family}: --candidate ${modelId} was left out: ${reason}.`
+      );
+      if (!leftOut.has(modelId)) leftOut.set(modelId, reason);
+    }
+  }
+  if (steps.some((step) => step.candidates.length > 0)) return;
+  if (steps.some(({ stepId }) => emptiedByWindow.has(stepId))) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "no_recent_candidates",
+      message: `No model cheaper than a recorded model was released ${windowText}, so there is nothing to replay.`,
+      remedy: "Pass an earlier --released-since (a date such as 2026-01-01, or a number of days such as 365d), name the models to try with --candidate <id>, or, if the catalog's release dates are placeholders, pass --catalog-reference <url> with a model list that publishes real ones."
+    });
+  }
+  if (leftOut.size > 0) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "named_candidates_ineligible",
+      message: `None of the models named with --candidate can be tried at any call site: ${[
+        ...leftOut
+      ].sort(([left], [right]) => compareText(left, right)).map(([modelId, reason]) => `${modelId}: ${reason}`).join("; ")}.`,
+      remedy: "Name models that cost less than the recorded models and support what each call site needs, or remove --candidate to use the automatic shortlist."
     });
   }
 }
@@ -48172,7 +48461,8 @@ async function approvedReplayCandidates(context2, plan, catalog, runSpecDigest) 
       candidates: [model],
       droppedByTop: 0,
       droppedFreeModels: 0,
-      droppedByOutputCeiling: 0
+      droppedByOutputCeiling: 0,
+      droppedByReleaseWindow: 0
     };
   });
 }
@@ -48188,17 +48478,26 @@ async function executeReplay(context2, inputDigestValue, runId) {
     selectionStage: split
   }));
   const callable = planCandidateRoute(context2) === void 0 ? void 0 : await routeCatalog(() => routes.candidates.callable());
-  const candidates = dropJudgeVendorCandidates(
-    context2,
-    context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable) : await approvedReplayCandidates(
+  const window = candidateReleaseWindow(context2, plan, known);
+  const selection = context2.approvedRunSpecDigest === void 0 ? replayCandidates(plan, known, callable, window) : {
+    shortlists: await approvedReplayCandidates(
       context2,
       plan,
       callable ?? known,
       context2.approvedRunSpecDigest
-    )
-  );
+    ),
+    emptiedByWindow: /* @__PURE__ */ new Set()
+  };
+  const candidates = dropJudgeVendorCandidates(context2, selection.shortlists);
   reportShortlistAbstentions(context2, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
+  reportCandidateSelection(
+    context2,
+    plan,
+    candidates,
+    window,
+    selection.emptiedByWindow
+  );
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
@@ -48383,8 +48682,8 @@ async function executeReplay(context2, inputDigestValue, runId) {
           ({ stepId }) => stepId === assignment.stepId
         )?.family;
         if (family === void 0) return false;
-        const selection = shortlistSelections.get(family);
-        return selection?.status === "confirmation_required" && selection.confirmedCandidateId === candidate.id;
+        const selection2 = shortlistSelections.get(family);
+        return selection2?.status === "confirmation_required" && selection2.confirmedCandidateId === candidate.id;
       })
     }));
     await runCells("holdout", holdoutCandidates);
@@ -48395,6 +48694,8 @@ async function executeReplay(context2, inputDigestValue, runId) {
   await putImmutableJson(context2.store, key, {
     completed,
     skipped,
+    ...window === void 0 ? {} : { releaseWindow: window },
+    ...plan.namedCandidates.length === 0 ? {} : { namedCandidates: plan.namedCandidates },
     candidates: candidates.map((assignment) => {
       const pricing = currentPricingByStepId.get(assignment.stepId);
       return {
@@ -50099,6 +50400,7 @@ async function buildReport(context2, ledger) {
     stratumWeights: { basis: "corpus_only", weights: corpus.strata },
     caps: [
       { name: "top-N shortlist", value: plan.top },
+      ...candidateSelectionCaps(replay),
       { name: "audit sample size", value: worksheet.cases.length },
       ...Object.entries(plan.sampleSizes).map(([family, value]) => ({
         name: "replay sample size",
@@ -50114,6 +50416,11 @@ async function buildReport(context2, ledger) {
         name: "droppedFreeModels",
         stepId,
         value: droppedFreeModels
+      })),
+      ...replay.releaseWindow === void 0 ? [] : replay.candidates.map(({ stepId, droppedByReleaseWindow }) => ({
+        name: "droppedByReleaseWindow",
+        stepId,
+        value: droppedByReleaseWindow
       })),
       ...decisionOutput.families.flatMap(
         (family) => family.confirmation?.maxRunSets === void 0 ? [] : [
@@ -51684,6 +51991,16 @@ function addPipelineOptions(command, provider) {
     "--include-free",
     "include zero-priced models in candidate shortlists"
   ).option(
+    "--released-since <date-or-days>",
+    "shortlist only models released on or after this UTC date (YYYY-MM-DD) or this many days before the shortlist is planned (180d); 90d when omitted"
+  ).option(
+    "--released-until <date>",
+    "shortlist only models released on or before this UTC date (YYYY-MM-DD); alone, it ends a 90-day window"
+  ).option(
+    "--candidate <id>",
+    "replay this catalog model instead of the automatic shortlist, in each family where it is cheaper than the recorded models and fits every call site (repeatable)",
+    collectOption
+  ).option(
     "--modeb-config <path>",
     "versioned Mode B runtime configuration JSON file"
   );
@@ -51713,7 +52030,7 @@ function addPipelineOptions(command, provider) {
       collectOption
     ).option(
       "--catalog-reference <url-or-path>",
-      "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks"
+      "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks, and supplies release dates"
     ).option(
       "--policy <path>",
       "release policy JSON file: quality floor, shortlist size, model allow and deny lists"
@@ -51778,6 +52095,34 @@ function invalidOption(message2) {
 function pipelineOptions(global, local, reporter) {
   if (local.approvedRun !== void 0 && !/^[0-9a-f]{64}$/u.test(local.approvedRun)) {
     throw invalidOption("--approved-run must be a SHA-256 run-spec digest");
+  }
+  const isoDate = external_exports.iso.date();
+  if (local.releasedSince !== void 0 && !/^[1-9]\d{0,4}d$/u.test(local.releasedSince) && !isoDate.safeParse(local.releasedSince).success) {
+    throw invalidOption(
+      "--released-since must be a date as YYYY-MM-DD or a number of days such as 90d"
+    );
+  }
+  if (local.releasedUntil !== void 0 && !isoDate.safeParse(local.releasedUntil).success) {
+    throw invalidOption("--released-until must be a date as YYYY-MM-DD");
+  }
+  if (local.releasedSince !== void 0 && local.releasedUntil !== void 0 && isoDate.safeParse(local.releasedSince).success && local.releasedSince > local.releasedUntil) {
+    throw invalidOption(
+      `--released-since ${local.releasedSince} is later than --released-until ${local.releasedUntil}`
+    );
+  }
+  if (local.candidate?.some((id) => id.trim() === "")) {
+    throw invalidOption("--candidate needs a model id");
+  }
+  const releaseWindowFlags = local.releasedSince !== void 0 || local.releasedUntil !== void 0;
+  if (local.approvedRun !== void 0 && (releaseWindowFlags || local.candidate !== void 0)) {
+    throw invalidOption(
+      "--approved-run replays the approved model only; remove --candidate, --released-since and --released-until"
+    );
+  }
+  if (local.candidate !== void 0 && releaseWindowFlags) {
+    throw invalidOption(
+      "--candidate tries the models it names whatever their release date; remove --released-since and --released-until, or remove --candidate"
+    );
   }
   const maxCostUsd = local.maxCostUsd === void 0 ? void 0 : Number(local.maxCostUsd);
   if (maxCostUsd !== void 0 && (!Number.isFinite(maxCostUsd) || maxCostUsd < 0)) {
@@ -51881,6 +52226,9 @@ function pipelineOptions(global, local, reporter) {
     catalogReference: local.catalogReference,
     policyFilePath: local.policy,
     includeFreeModels: local.includeFree,
+    releasedSince: local.releasedSince,
+    releasedUntil: local.releasedUntil,
+    namedCandidates: local.candidate,
     ...local.evaluator === void 0 ? {} : {
       evaluator: evaluatorConfig(local, evaluatorGateThreshold)
     },
@@ -52192,6 +52540,9 @@ var PIPELINE_ARG_OPTIONS = [
   { flag: "--catalog-reference", key: "catalogReference", kind: "reference" },
   { flag: "--policy", key: "policy", kind: "path" },
   { flag: "--include-free", key: "includeFree", kind: "flag" },
+  { flag: "--released-since", key: "releasedSince", kind: "value" },
+  { flag: "--released-until", key: "releasedUntil", kind: "value" },
+  { flag: "--candidate", key: "candidate", kind: "repeated" },
   { flag: "--approved-run", key: "approvedRun", kind: "value" },
   { flag: "--evaluator", key: "evaluator", kind: "value" },
   {

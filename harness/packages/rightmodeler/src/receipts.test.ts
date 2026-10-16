@@ -89,6 +89,7 @@ function replayOutput(
       droppedByTop: 0,
       droppedFreeModels: 0,
       droppedByOutputCeiling: 0,
+      droppedByReleaseWindow: 0,
       currentPricing: currentPricingByStep[index]!,
     })),
     evaluation: {

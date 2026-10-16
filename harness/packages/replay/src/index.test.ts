@@ -37,6 +37,7 @@ import {
   isUsageLimit,
   ProviderRequestError,
   ProviderResponseError,
+  releaseDateCount,
   replayModeA,
   shortlist,
   type Budget,
@@ -253,7 +254,7 @@ describe("provider client", () => {
       pricing: { input: 0.0000002, output: 0.0000008 },
       supportsTools: false,
       supportsStructuredOutput: false,
-      releasedAt: null,
+      releasedAt: (Math.floor(Date.now() / 86_400_000) - 3) * 86_400,
       maxOutputTokens: 16_384,
       outputModalities: [],
       requiresReasoning: false,
@@ -2509,6 +2510,18 @@ describe("shortlist", () => {
       supportsStructuredOutput: true,
     },
   ];
+  const day = 86_400;
+  const since = Date.UTC(2026, 6, 17) / 1000;
+  const entry = (
+    id: string,
+    usdPerMillion: number,
+    releasedAt?: number | null,
+  ): ModelCatalogEntry => ({
+    ...catalog[1]!,
+    id,
+    pricing: { input: usdPerMillion / 1e6, output: usdPerMillion / 1e6 },
+    releasedAt,
+  });
 
   it("filters capabilities, context, allow/deny, and price", () => {
     const result = shortlist(
@@ -2749,6 +2762,414 @@ describe("shortlist", () => {
     );
     expect(result[0]?.droppedFreeModels).toBe(0);
   });
+
+  it("keeps models released on the window's first and last day", () => {
+    const before = Date.UTC(2026, 9, 16) / 1000;
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        entry("vendor/current", 5),
+        entry("vendor/first-day", 1, since),
+        entry("vendor/day-before", 1.5, since - 1),
+        entry("vendor/last-day", 2, before - 1),
+        entry("vendor/day-after", 2.5, before),
+      ],
+      { releasedWithin: { since, before } },
+    );
+
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "vendor/first-day",
+      "vendor/last-day",
+    ]);
+    expect(result[0]?.droppedByReleaseWindow).toBe(2);
+  });
+
+  it("leaves out models without a release date while a window applies", () => {
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        entry("vendor/current", 5),
+        entry("vendor/null-date", 1, null),
+        entry("vendor/no-date", 1.5),
+        entry("vendor/recent", 2, since + day),
+      ],
+      { releasedWithin: { since } },
+    );
+
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "vendor/recent",
+    ]);
+    expect(result[0]?.droppedByReleaseWindow).toBe(2);
+  });
+
+  it("applies the window after the free-model rule, so each left-out model is counted once", () => {
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        entry("vendor/current", 5),
+        entry("vendor/recent", 1, since + day),
+        entry("vendor/recent-pricier", 2, since + 2 * day),
+        entry("vendor/old", 3, since - day),
+        entry("vendor/undated", 4, null),
+        entry("vendor/old-free", 0, since - day),
+      ],
+      { top: 1, releasedWithin: { since } },
+    );
+
+    expect(result[0]).toMatchObject({
+      candidates: [{ id: "vendor/recent" }],
+      droppedByTop: 1,
+      droppedFreeModels: 1,
+      droppedByReleaseWindow: 2,
+    });
+  });
+
+  it("does not report a list the window empties as unpriced", () => {
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        entry("vendor/current", 5),
+        { ...entry("vendor/unpriced", 1, since + day), pricing: null },
+        entry("vendor/old", 1, since - day),
+      ],
+      { releasedWithin: { since } },
+    );
+
+    expect(result).toEqual([
+      {
+        stepId: "step-1",
+        candidates: [],
+        droppedByTop: 0,
+        droppedFreeModels: 0,
+        droppedByOutputCeiling: 0,
+        droppedByReleaseWindow: 1,
+      },
+    ]);
+  });
+
+  it("ranks the cheapest first and a model behind any that costs no more and is no older", () => {
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        entry("vendor/current", 5),
+        entry("vendor/a", 1, since + 2 * day),
+        entry("vendor/b", 2, since + 2 * day),
+        entry("vendor/c", 3, since + 3 * day),
+        entry("vendor/d", 3, since + 4 * day),
+        entry("vendor/e", 4, since + day),
+      ],
+      { releasedWithin: { since } },
+    );
+
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "vendor/a",
+      "vendor/d",
+      "vendor/b",
+      "vendor/c",
+      "vendor/e",
+    ]);
+  });
+
+  it("orders by price, then id, when no window applies", () => {
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        entry("vendor/current", 5),
+        entry("vendor/e", 4, since + day),
+        entry("vendor/d", 3, since + 4 * day),
+        entry("vendor/c", 3, since + 3 * day),
+        entry("vendor/undated", 2.5, null),
+        entry("vendor/b", 2, since + 2 * day),
+        entry("vendor/a", 1, since + 2 * day),
+      ],
+    );
+
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "vendor/a",
+      "vendor/b",
+      "vendor/undated",
+      "vendor/c",
+      "vendor/d",
+      "vendor/e",
+    ]);
+  });
+
+  it("breaks exact ties by id, with or without a window", () => {
+    const tied = [
+      entry("vendor/current", 5),
+      entry("vendor/tie-b", 2, since + day),
+      entry("vendor/tie-a", 2, since + day),
+    ];
+
+    expect(
+      shortlist(
+        [step({ currentModel: "vendor/current" })],
+        tied,
+      )[0]?.candidates.map(({ id }) => id),
+    ).toEqual(["vendor/tie-a", "vendor/tie-b"]);
+    expect(
+      shortlist([step({ currentModel: "vendor/current" })], tied, {
+        releasedWithin: { since },
+      })[0]?.candidates.map(({ id }) => id),
+    ).toEqual(["vendor/tie-a", "vendor/tie-b"]);
+  });
+
+  it("never shortlists a batch tier whose base model is listed", () => {
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        entry("vendor/current", 5),
+        entry("vendor/m", 2),
+        entry("vendor/m-batch", 1),
+        entry("vendor/n", 2),
+        entry("vendor/n:batch", 1),
+        entry("vendor/k-batch", 1),
+        entry("vendor/j:batch", 1),
+      ],
+    );
+
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual([
+      "vendor/j:batch",
+      "vendor/k-batch",
+      "vendor/m",
+      "vendor/n",
+    ]);
+  });
+
+  it("tries named models whatever their release date and the top cut, where they cost less", () => {
+    const result = shortlist(
+      [step({ currentModel: "vendor/current" })],
+      [
+        entry("vendor/current", 5),
+        entry("vendor/old", 1, since - 400 * day),
+        entry("vendor/recent", 2, since + day),
+        entry("vendor/unnamed", 1.5, since + day),
+        entry("vendor/pricier", 6, since + day),
+      ],
+      {
+        top: 1,
+        releasedWithin: { since },
+        named: ["vendor/recent", "vendor/old", "vendor/pricier"],
+      },
+    );
+
+    expect(result[0]).toMatchObject({
+      candidates: [{ id: "vendor/old" }, { id: "vendor/recent" }],
+      droppedByTop: 0,
+      droppedByReleaseWindow: 0,
+      namedCandidatesLeftOut: [
+        {
+          modelId: "vendor/pricier",
+          reason:
+            "it is not cheaper than the current model vendor/current (6 vs 5 USD per million tokens)",
+        },
+      ],
+    });
+  });
+
+  it("explains each named model it leaves out by the first check it fails", () => {
+    const named = [
+      "vendor/current",
+      "vendor/base-fast",
+      "vendor/base-batch",
+      "vendor/base:batch",
+      "vendor/denied",
+      "vendor/not-allowed",
+      "vendor/no-tools",
+      "vendor/no-structure",
+      "vendor/short-context",
+      "vendor/short-output",
+      "vendor/unpriced",
+      "vendor/pricier",
+      "vendor/same-price",
+      "vendor/free",
+      "vendor/kept",
+    ];
+    const serviceTier =
+      "it is a service tier of vendor/base; name vendor/base instead";
+    const notAllowed =
+      "the release policy or the route's model list does not allow it";
+
+    const result = shortlist(
+      [
+        step({
+          currentModel: "vendor/current",
+          needsTools: true,
+          needsStructuredOutput: true,
+          observedContextTokens: 100,
+          recordedMaxOutputTokens: 1_000,
+        }),
+      ],
+      [
+        entry("vendor/current", 1.5),
+        entry("vendor/base", 1),
+        entry("vendor/base-fast", 1),
+        { ...entry("vendor/base-batch", 1), supportsTools: false },
+        entry("vendor/base:batch", 3),
+        { ...entry("vendor/denied", 1), supportsTools: false },
+        { ...entry("vendor/not-allowed", 1), pricing: null },
+        {
+          ...entry("vendor/no-tools", 1),
+          supportsTools: false,
+          supportsStructuredOutput: false,
+        },
+        {
+          ...entry("vendor/no-structure", 1),
+          supportsStructuredOutput: false,
+          contextLength: 10,
+        },
+        {
+          ...entry("vendor/short-context", 1),
+          contextLength: 10,
+          maxOutputTokens: 500,
+        },
+        {
+          ...entry("vendor/short-output", 1),
+          maxOutputTokens: 500,
+          pricing: null,
+        },
+        { ...entry("vendor/unpriced", 1), pricing: null },
+        entry("vendor/pricier", 3),
+        entry("vendor/same-price", 1.5),
+        entry("vendor/free", 0),
+        entry("vendor/kept", 1),
+      ],
+      {
+        named,
+        allow: named.filter((id) => id !== "vendor/not-allowed"),
+        deny: ["vendor/base-fast", "vendor/denied"],
+      },
+    );
+
+    expect(result[0]?.candidates.map(({ id }) => id)).toEqual(["vendor/kept"]);
+    expect(result[0]?.namedCandidatesLeftOut).toEqual([
+      { modelId: "vendor/current", reason: "it is the current model" },
+      { modelId: "vendor/base-fast", reason: serviceTier },
+      { modelId: "vendor/base-batch", reason: serviceTier },
+      { modelId: "vendor/base:batch", reason: serviceTier },
+      { modelId: "vendor/denied", reason: notAllowed },
+      { modelId: "vendor/not-allowed", reason: notAllowed },
+      {
+        modelId: "vendor/no-tools",
+        reason: "it does not support tool calls, which this call site needs",
+      },
+      {
+        modelId: "vendor/no-structure",
+        reason:
+          "it does not support structured output, which this call site needs",
+      },
+      {
+        modelId: "vendor/short-context",
+        reason:
+          "its context window is smaller than the 100 tokens this call site sent",
+      },
+      {
+        modelId: "vendor/short-output",
+        reason:
+          "its output limit is below the 1000 tokens this call site needs",
+      },
+      {
+        modelId: "vendor/unpriced",
+        reason: "the catalog gives it no per-token price",
+      },
+      {
+        modelId: "vendor/pricier",
+        reason:
+          "it is not cheaper than the current model vendor/current (3 vs 1.5 USD per million tokens)",
+      },
+      {
+        modelId: "vendor/same-price",
+        reason:
+          "it is not cheaper than the current model vendor/current (1.5 vs 1.5 USD per million tokens)",
+      },
+      {
+        modelId: "vendor/free",
+        reason: "it is zero-priced; pass --include-free to try it",
+      },
+    ]);
+  });
+
+  it("explains an unpriced named model instead of abstaining, unless the current model is unpriced", () => {
+    const result = shortlist(
+      [
+        step({ stepId: "priced-current", currentModel: "vendor/current" }),
+        step({
+          stepId: "unpriced-current",
+          currentModel: "vendor/unpriced-current",
+        }),
+      ],
+      [
+        entry("vendor/current", 5),
+        { ...entry("vendor/unpriced-current", 5), pricing: null },
+        { ...entry("vendor/unpriced", 1), pricing: null },
+      ],
+      { named: ["vendor/unpriced"] },
+    );
+
+    expect(result).toEqual([
+      {
+        stepId: "priced-current",
+        candidates: [],
+        droppedByTop: 0,
+        droppedFreeModels: 0,
+        droppedByOutputCeiling: 0,
+        droppedByReleaseWindow: 0,
+        namedCandidatesLeftOut: [
+          {
+            modelId: "vendor/unpriced",
+            reason: "the catalog gives it no per-token price",
+          },
+        ],
+      },
+      {
+        stepId: "unpriced-current",
+        candidates: [],
+        droppedByTop: 0,
+        droppedFreeModels: 0,
+        droppedByOutputCeiling: 0,
+        droppedByReleaseWindow: 0,
+        abstention: {
+          kind: "no-priced-candidates",
+          message:
+            "The provider catalog publishes no per-token pricing, so no candidate can be priced against the current model.",
+        },
+      },
+    ]);
+  });
+
+  it("counts the distinct release dates of the priced models it can rank", () => {
+    const placeholder = Date.UTC(2024, 6, 18) / 1000;
+
+    expect(releaseDateCount([])).toBeUndefined();
+    expect(
+      releaseDateCount([{ ...entry("vendor/a", 1, since), pricing: null }]),
+    ).toBeUndefined();
+    expect(
+      releaseDateCount([
+        entry("vendor/a", 1, null),
+        entry("vendor/b", 1),
+        entry("vendor/c", 0, 0),
+      ]),
+    ).toBe(0);
+    expect(
+      releaseDateCount([
+        entry("vendor/a", 1, placeholder),
+        entry("vendor/b", 2, placeholder),
+        { ...entry("vendor/c", 1, since), pricing: null },
+        entry("vendor/a-fast", 2, since + day),
+        entry("vendor/a-batch", 1, since + 2 * day),
+        entry("vendor/b:batch", 1, since + 3 * day),
+      ]),
+    ).toBe(1);
+    expect(
+      releaseDateCount([
+        entry("vendor/a", 1, placeholder),
+        entry("vendor/b", 2, since),
+        entry("vendor/c", 3, since),
+        entry("vendor/d", 4, since + day),
+      ]),
+    ).toBe(3);
+  });
 });
 
 describe("toWireMessages", () => {
@@ -2867,6 +3288,7 @@ describe("Mode A replay", () => {
           droppedByTop: 0,
           droppedFreeModels: 0,
           droppedByOutputCeiling: 0,
+          droppedByReleaseWindow: 0,
         },
       ],
       provider,
@@ -3853,6 +4275,7 @@ describe("Mode A replay", () => {
             droppedByTop: 0,
             droppedFreeModels: 0,
             droppedByOutputCeiling: 0,
+            droppedByReleaseWindow: 0,
           },
         ],
         provider: gatedProvider,
@@ -3923,6 +4346,7 @@ describe("Mode A replay", () => {
           droppedByTop: 0,
           droppedFreeModels: 0,
           droppedByOutputCeiling: 0,
+          droppedByReleaseWindow: 0,
         },
       ],
       provider: immediateProvider,
@@ -3994,6 +4418,7 @@ describe("Mode A replay", () => {
             droppedByTop: 0,
             droppedFreeModels: 0,
             droppedByOutputCeiling: 0,
+            droppedByReleaseWindow: 0,
           },
         ],
         provider: settlingProvider,
@@ -4063,6 +4488,7 @@ describe("Mode A replay", () => {
           droppedByTop: 0,
           droppedFreeModels: 0,
           droppedByOutputCeiling: 0,
+          droppedByReleaseWindow: 0,
         },
       ],
       provider: delayedProvider,
@@ -4639,6 +5065,7 @@ describe("Mode A replay", () => {
           droppedByTop: 0,
           droppedFreeModels: 0,
           droppedByOutputCeiling: 0,
+          droppedByReleaseWindow: 0,
         },
       ],
       provider,

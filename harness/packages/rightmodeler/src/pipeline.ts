@@ -77,6 +77,7 @@ import {
   PlanRouteUnavailableError,
   planRouteVendors,
   ProviderConfigurationError,
+  releaseDateCount,
   replayModeA,
   resolveCurrentModel,
   roundUsd,
@@ -246,6 +247,7 @@ const ACTIVE_CORPUS_KEY = `${PROJECT_ID}/corpus/active.json`;
 const CORPUS_SEED = 42;
 const AUDIT_SAMPLE_LIMIT = 20;
 const DEFAULT_SHORTLIST_TOP = 3;
+const DEFAULT_RELEASE_WINDOW_DAYS = 90;
 const DEFAULT_QUALITY_FLOOR = 0.85;
 const AVAILABILITY_FLOOR = 0.7;
 const GATE_POLICY_BASE_VERSION = "phase-a-v3";
@@ -364,6 +366,9 @@ const replayPlanSchema = z.strictObject({
   includeFreeModels: z.boolean(),
   allowModels: z.array(z.string().min(1)).default([]),
   denyModels: z.array(z.string().min(1)).default([]),
+  releasedSince: z.iso.date().nullable().default(null),
+  releasedUntil: z.iso.date().nullable().default(null),
+  namedCandidates: z.array(z.string().min(1)).default([]),
   sampleSizes: z.record(z.string(), z.number().int().positive()),
   familyPlans: z.array(familyPlanSchema).default([]),
   steps: z.array(replayPlanStepSchema),
@@ -391,9 +396,16 @@ const detachedReplayCatalogSchema = z.strictObject({
   runId: z.string().min(1),
   models: z.array(modelCatalogSchema),
 });
+const releaseWindowSchema = z.strictObject({
+  since: z.iso.date(),
+  until: z.iso.date().nullable(),
+});
+type ReleaseWindow = z.infer<typeof releaseWindowSchema>;
 const replayOutputSchema = z.strictObject({
   completed: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
+  releaseWindow: releaseWindowSchema.optional(),
+  namedCandidates: z.array(z.string().min(1)).optional(),
   candidates: z.array(
     z.strictObject({
       stepId: z.string().min(1),
@@ -401,7 +413,16 @@ const replayOutputSchema = z.strictObject({
       droppedByTop: z.number().int().nonnegative(),
       droppedFreeModels: z.number().int().nonnegative(),
       droppedByOutputCeiling: z.number().int().nonnegative().default(0),
+      droppedByReleaseWindow: z.number().int().nonnegative().default(0),
       resolvedCurrentModelId: z.string().min(1).optional(),
+      namedCandidatesLeftOut: z
+        .array(
+          z.strictObject({
+            modelId: z.string().min(1),
+            reason: z.string().min(1),
+          }),
+        )
+        .optional(),
       currentPricing: z
         .strictObject({
           input: z.number().nonnegative(),
@@ -612,6 +633,10 @@ interface PipelineContext {
   maxCostUsd?: number;
   maxConcurrency?: number;
   includeFreeModels: boolean;
+  releasedSince?: string;
+  releasedUntil?: string;
+  namedCandidates: readonly string[];
+  now?: Date;
   evaluator?: ResolvedEvaluatorConfig;
   modeBConfig?: ModeBConfig;
   modeBConfigPath?: string;
@@ -642,6 +667,10 @@ export interface PipelineOptions {
   maxCostUsd?: number;
   maxConcurrency?: number;
   includeFreeModels?: boolean;
+  releasedSince?: string;
+  releasedUntil?: string;
+  namedCandidates?: readonly string[];
+  now?: Date;
   evaluator?: EvaluatorConfig;
   modeBConfigPath?: string;
   pricingFilePath?: string;
@@ -982,6 +1011,9 @@ export async function runPipeline(
           phase: options.through ?? "report",
         })
       : await requireRunningReplayRun(context, options.existingRunId);
+  if (options.existingRunId !== undefined) {
+    context.now = new Date(run.startedAt);
+  }
   const executedStages: PipelineStage[] = [];
   try {
     for (const stage of stagesThrough(options.through)) {
@@ -1040,9 +1072,13 @@ export async function runPipeline(
   };
 }
 
-export async function estimateReplay(
-  options: PipelineOptions,
-): Promise<ReplayCostEstimate & { readonly policy: EffectiveReleasePolicy }> {
+export async function estimateReplay(options: PipelineOptions): Promise<
+  ReplayCostEstimate & {
+    readonly policy: EffectiveReleasePolicy;
+    readonly releaseWindow: ReleaseWindow | null;
+    readonly namedCandidates?: readonly string[];
+  }
+> {
   const context = createContext(options);
   const routes = replayRoutes(context);
   const plan = await loadReplayPlan(context);
@@ -1058,19 +1094,29 @@ export async function estimateReplay(
     planCandidateRoute(context) === undefined
       ? undefined
       : await routeCatalog(() => routes.candidates.callable());
-  const candidates = dropJudgeVendorCandidates(
-    context,
+  const window = candidateReleaseWindow(context, plan, known);
+  const selection =
     context.approvedRunSpecDigest === undefined
-      ? replayCandidates(plan, known, callable)
-      : await approvedReplayCandidates(
-          context,
-          plan,
-          callable ?? known,
-          context.approvedRunSpecDigest,
-        ),
-  );
+      ? replayCandidates(plan, known, callable, window)
+      : {
+          shortlists: await approvedReplayCandidates(
+            context,
+            plan,
+            callable ?? known,
+            context.approvedRunSpecDigest,
+          ),
+          emptiedByWindow: new Set<string>(),
+        };
+  const candidates = dropJudgeVendorCandidates(context, selection.shortlists);
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
+  reportCandidateSelection(
+    context,
+    plan,
+    candidates,
+    window,
+    selection.emptiedByWindow,
+  );
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
@@ -1115,6 +1161,10 @@ export async function estimateReplay(
         }
       : {}),
     policy: context.release.effective,
+    releaseWindow: window ?? null,
+    ...(plan.namedCandidates.length === 0
+      ? {}
+      : { namedCandidates: plan.namedCandidates }),
   };
 }
 
@@ -1158,6 +1208,15 @@ export async function claimDetachedReplay(
       apiKeyEnv: context.apiKeyEnv,
       maxCostUsd: context.maxCostUsd ?? null,
       includeFreeModels: context.includeFreeModels,
+      ...(context.releasedSince === undefined
+        ? {}
+        : { releasedSince: context.releasedSince }),
+      ...(context.releasedUntil === undefined
+        ? {}
+        : { releasedUntil: context.releasedUntil }),
+      ...(context.namedCandidates.length === 0
+        ? {}
+        : { namedCandidates: [...context.namedCandidates] }),
       ...(context.requestHeaders === undefined
         ? {}
         : { headers: requestHeaderIdentity(context.requestHeaders) }),
@@ -1185,6 +1244,7 @@ export async function claimDetachedReplay(
       type: "replay",
       phase: targetPhase,
       runId,
+      now: context.now,
     });
     return detachedClaim(created, false);
   } catch (error) {
@@ -1911,6 +1971,7 @@ async function prepareApply(context: PipelineContext): Promise<{
       blastRadius: radius,
       caps: [
         { name: "top-N shortlist", value: plan.top },
+        ...candidateSelectionCaps(replay),
         {
           name: "replay sample size",
           value: plan.sampleSizes[family.familyId] ?? 0,
@@ -1937,6 +1998,30 @@ async function prepareApply(context: PipelineContext): Promise<{
     verdicts,
     conventions: await captureConventions({ repoDir: context.repo }),
   };
+}
+
+function candidateSelectionCaps(
+  replay: z.infer<typeof replayOutputSchema>,
+): Array<{ name: string; value: string }> {
+  const window = replay.releaseWindow;
+  return [
+    ...(window === undefined
+      ? []
+      : [
+          { name: "released since", value: window.since },
+          ...(window.until === null
+            ? []
+            : [{ name: "released until", value: window.until }]),
+        ]),
+    ...(replay.namedCandidates === undefined
+      ? []
+      : [
+          {
+            name: "named candidates",
+            value: replay.namedCandidates.join(", "),
+          },
+        ]),
+  ];
 }
 
 function applyCascadeStatus(
@@ -1987,6 +2072,12 @@ function createContext(options: PipelineOptions): PipelineContext {
     maxCostUsd: options.maxCostUsd,
     maxConcurrency: options.maxConcurrency,
     includeFreeModels: options.includeFreeModels ?? false,
+    releasedSince: options.releasedSince,
+    releasedUntil: options.releasedUntil,
+    namedCandidates: [...new Set(options.namedCandidates ?? [])].sort(
+      compareText,
+    ),
+    now: options.now,
     release: releasePolicy(
       policyFilePath === undefined ? undefined : readPolicyFile(policyFilePath),
     ),
@@ -2291,6 +2382,15 @@ async function inputDigest(
   if (stage === "shortlist") {
     extra.policy = jsonValue({ ...context.release.effective });
     extra.includeFreeModels = context.includeFreeModels;
+    if (context.releasedSince !== undefined) {
+      extra.releasedSince = context.releasedSince;
+    }
+    if (context.releasedUntil !== undefined) {
+      extra.releasedUntil = context.releasedUntil;
+    }
+    if (context.namedCandidates.length > 0) {
+      extra.namedCandidates = [...context.namedCandidates];
+    }
     extra.stepsPerFamily = MIN_DISTINCT_STEPS;
     extra.minimumHoldoutCases = context.release.minimumHoldoutCases;
   }
@@ -3304,17 +3404,56 @@ async function executeShortlist(
   }
 
   const key = artifactKey(context, "shortlist", inputDigestValue);
+  // The first plan built for these inputs fixes their release window.
+  if ((await context.store.get(key)) !== null) return key;
   await putImmutableJson(context.store, key, {
     top: context.release.effective.shortlistTop,
     includeFreeModels: context.includeFreeModels,
     allowModels: [...context.release.effective.allowModels],
     denyModels: [...context.release.effective.denyModels],
+    ...(await plannedReleaseWindow(context)),
+    namedCandidates: [...context.namedCandidates],
     sampleSizes,
     familyPlans,
     steps,
     cases,
   });
   return key;
+}
+
+async function plannedReleaseWindow(
+  context: PipelineContext,
+): Promise<{ releasedSince: string | null; releasedUntil: string | null }> {
+  // A re-proof keeps the window the open pull request's model was chosen in.
+  if (
+    context.releasedSince === undefined &&
+    context.releasedUntil === undefined &&
+    (await readReproofRequests(context.store, context.projectId)).some(
+      ({ requested }) => requested,
+    ) &&
+    (await readSetupState(context.store, context.projectId)).stages
+      .shortlist !== undefined
+  ) {
+    const { releasedSince, releasedUntil } = await loadReplayPlan(context);
+    return { releasedSince, releasedUntil };
+  }
+  const today = (context.now ?? new Date()).toISOString().slice(0, 10);
+  const releasedUntil = context.releasedUntil ?? null;
+  const days = /^(\d+)d$/u.exec(context.releasedSince ?? "")?.[1];
+  return {
+    releasedSince:
+      days !== undefined
+        ? shiftUtcDate(today, -Number(days))
+        : (context.releasedSince ??
+          shiftUtcDate(releasedUntil ?? today, -DEFAULT_RELEASE_WINDOW_DAYS)),
+    releasedUntil,
+  };
+}
+
+function shiftUtcDate(date: string, days: number): string {
+  return new Date(Date.parse(date) + days * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 }
 
 function replayUsageByCase(
@@ -3426,11 +3565,81 @@ function approvedRecords(
   return selected.sort((left, right) => compareText(left.stepId, right.stepId));
 }
 
+function candidateReleaseWindow(
+  context: PipelineContext,
+  plan: z.infer<typeof replayPlanSchema>,
+  catalog: readonly ModelCatalogEntry[],
+): ReleaseWindow | undefined {
+  if (
+    context.approvedRunSpecDigest !== undefined ||
+    plan.namedCandidates.length > 0 ||
+    plan.releasedSince === null
+  ) {
+    return undefined;
+  }
+  const window = { since: plan.releasedSince, until: plan.releasedUntil };
+  const dates = releaseDateCount(catalog);
+  if (dates === undefined || dates >= 2) return window;
+  if (
+    context.releasedSince === undefined &&
+    context.releasedUntil === undefined
+  ) {
+    context.reporter.warning(
+      "release_window_skipped",
+      `The provider catalog gives its priced models fewer than two distinct release dates, so the default release window (models released on or after ${window.since}) was not applied and candidates are ranked by price. Pass --catalog-reference with a model list that publishes release dates to apply it.`,
+    );
+    return undefined;
+  }
+  throw new ProtocolError({
+    exitCode: 2,
+    code: "release_dates_unavailable",
+    message:
+      "The provider catalog gives its priced models fewer than two distinct release dates, so --released-since and --released-until cannot be applied.",
+    remedy:
+      "Pass --catalog-reference <url> with a model list that publishes release dates (for example https://ai-gateway.vercel.sh/v1/models), name the models to try with --candidate <id>, or remove --released-since and --released-until.",
+  });
+}
+
+function resolveNamedCandidates(
+  plan: z.infer<typeof replayPlanSchema>,
+  catalog: readonly ModelCatalogEntry[],
+): string[] {
+  const unknown: string[] = [];
+  const ids = plan.namedCandidates.flatMap((name) => {
+    const resolution = resolveCurrentModel(catalog, name);
+    if (resolution.kind === "ambiguous") {
+      unknown.push(
+        `--candidate ${name} matches more than one catalog model: ${[...resolution.matches].sort(compareText).join(", ")}`,
+      );
+      return [];
+    }
+    if (resolution.kind === "absent") {
+      unknown.push(`--candidate ${name} is not in the provider catalog`);
+      return [];
+    }
+    return [resolution.model.id];
+  });
+  if (unknown.length > 0) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "unknown_candidate",
+      message: `${unknown.join("; ")}.`,
+      remedy:
+        "Pass each --candidate as the provider's /models list spells it (vendor/model), then rerun.",
+    });
+  }
+  return [...new Set(ids)].sort(compareText);
+}
+
 function replayCandidates(
   plan: z.infer<typeof replayPlanSchema>,
   catalog: readonly ModelCatalogEntry[],
-  callable?: readonly ModelCatalogEntry[],
-): StepShortlist[] {
+  callable: readonly ModelCatalogEntry[] | undefined,
+  window: ReleaseWindow | undefined,
+): {
+  readonly shortlists: StepShortlist[];
+  readonly emptiedByWindow: ReadonlySet<string>;
+} {
   const callableById = new Map(
     (callable ?? []).map((model) => [model.id, model] as const),
   );
@@ -3461,12 +3670,33 @@ function replayCandidates(
       includeFreeModels: plan.includeFreeModels,
       ...(callable === undefined && allow.length === 0 ? {} : { allow }),
       deny: plan.denyModels,
+      named: resolveNamedCandidates(plan, models),
+      ...(window === undefined
+        ? {}
+        : {
+            releasedWithin: {
+              since: Date.parse(window.since) / 1000,
+              ...(window.until === null
+                ? {}
+                : { before: Date.parse(window.until) / 1000 + 86_400 }),
+            },
+          }),
     },
   ).map((assignment) => ({
     ...assignment,
     candidates: assignment.candidates.map(({ id }) => catalogById.get(id)!),
   }));
-  return shortlisted.map((assignment) => {
+  const emptiedByWindow = new Set(
+    shortlisted
+      .filter(
+        ({ candidates, droppedByReleaseWindow, abstention }) =>
+          abstention === undefined &&
+          candidates.length === 0 &&
+          droppedByReleaseWindow > 0,
+      )
+      .map(({ stepId }) => stepId),
+  );
+  const shortlists = shortlisted.map((assignment) => {
     const family = plan.steps.find(
       ({ stepId }) => stepId === assignment.stepId,
     )?.family;
@@ -3494,6 +3724,7 @@ function replayCandidates(
       candidates: assignment.candidates.filter(({ id }) => commonIds.has(id)),
     };
   });
+  return { shortlists, emptiedByWindow };
 }
 
 function dropJudgeVendorCandidates(
@@ -3582,6 +3813,89 @@ function assertPricedCandidates(
       message: `The model catalog at ${baseUrl} publishes no per-token pricing, so no candidate can be priced.`,
       remedy:
         "Point --base-url at a catalog that publishes pricing, pass --catalog-reference <url> naming the upstream's public model list, or pass --pricing-file <path> mapping each model id to its input and output USD per token.",
+    });
+  }
+}
+
+function reportCandidateSelection(
+  context: PipelineContext,
+  plan: z.infer<typeof replayPlanSchema>,
+  candidates: readonly StepShortlist[],
+  window: ReleaseWindow | undefined,
+  emptiedByWindow: ReadonlySet<string>,
+): void {
+  const familyByStepId = new Map(
+    plan.steps.map(({ stepId, family }) => [stepId, family] as const),
+  );
+  const steps = candidates
+    .filter(({ abstention }) => abstention === undefined)
+    .sort((left, right) => compareText(left.stepId, right.stepId));
+  const windowText =
+    window === undefined
+      ? ""
+      : window.until === null
+        ? `on or after ${window.since}`
+        : `between ${window.since} and ${window.until}`;
+  const leftOut = new Map<string, string>();
+  for (const family of [
+    ...new Set(steps.map(({ stepId }) => familyByStepId.get(stepId)!)),
+  ].sort(compareText)) {
+    const familySteps = steps.filter(
+      ({ stepId }) => familyByStepId.get(stepId) === family,
+    );
+    const droppedByWindow = Math.max(
+      0,
+      ...familySteps
+        .filter(({ stepId }) => emptiedByWindow.has(stepId))
+        .map((step) => step.droppedByReleaseWindow),
+    );
+    if (
+      familySteps.every((step) => step.candidates.length === 0) &&
+      droppedByWindow > 0
+    ) {
+      context.reporter.warning(
+        "shortlist_no_recent_candidates",
+        `Family ${family}: no model cheaper than the current model was released ${windowText} (${droppedByWindow} cheaper ${droppedByWindow === 1 ? "model" : "models"} left out); pass an earlier --released-since, or name models with --candidate.`,
+      );
+    }
+    const reasons = new Map<string, string>();
+    for (const step of familySteps) {
+      for (const { modelId, reason } of step.namedCandidatesLeftOut ?? []) {
+        if (!reasons.has(modelId)) reasons.set(modelId, reason);
+      }
+    }
+    for (const [modelId, reason] of [...reasons].sort(([left], [right]) =>
+      compareText(left, right),
+    )) {
+      context.reporter.warning(
+        "shortlist_candidate_left_out",
+        `Family ${family}: --candidate ${modelId} was left out: ${reason}.`,
+      );
+      if (!leftOut.has(modelId)) leftOut.set(modelId, reason);
+    }
+  }
+  if (steps.some((step) => step.candidates.length > 0)) return;
+  if (steps.some(({ stepId }) => emptiedByWindow.has(stepId))) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "no_recent_candidates",
+      message: `No model cheaper than a recorded model was released ${windowText}, so there is nothing to replay.`,
+      remedy:
+        "Pass an earlier --released-since (a date such as 2026-01-01, or a number of days such as 365d), name the models to try with --candidate <id>, or, if the catalog's release dates are placeholders, pass --catalog-reference <url> with a model list that publishes real ones.",
+    });
+  }
+  if (leftOut.size > 0) {
+    throw new ProtocolError({
+      exitCode: 2,
+      code: "named_candidates_ineligible",
+      message: `None of the models named with --candidate can be tried at any call site: ${[
+        ...leftOut,
+      ]
+        .sort(([left], [right]) => compareText(left, right))
+        .map(([modelId, reason]) => `${modelId}: ${reason}`)
+        .join("; ")}.`,
+      remedy:
+        "Name models that cost less than the recorded models and support what each call site needs, or remove --candidate to use the automatic shortlist.",
     });
   }
 }
@@ -3702,6 +4016,7 @@ async function approvedReplayCandidates(
       droppedByTop: 0,
       droppedFreeModels: 0,
       droppedByOutputCeiling: 0,
+      droppedByReleaseWindow: 0,
     };
   });
 }
@@ -3732,19 +4047,29 @@ async function executeReplay(
     planCandidateRoute(context) === undefined
       ? undefined
       : await routeCatalog(() => routes.candidates.callable());
-  const candidates = dropJudgeVendorCandidates(
-    context,
+  const window = candidateReleaseWindow(context, plan, known);
+  const selection =
     context.approvedRunSpecDigest === undefined
-      ? replayCandidates(plan, known, callable)
-      : await approvedReplayCandidates(
-          context,
-          plan,
-          callable ?? known,
-          context.approvedRunSpecDigest,
-        ),
-  );
+      ? replayCandidates(plan, known, callable, window)
+      : {
+          shortlists: await approvedReplayCandidates(
+            context,
+            plan,
+            callable ?? known,
+            context.approvedRunSpecDigest,
+          ),
+          emptiedByWindow: new Set<string>(),
+        };
+  const candidates = dropJudgeVendorCandidates(context, selection.shortlists);
   reportShortlistAbstentions(context, plan, candidates);
   assertPricedCandidates(routes.candidates.label, candidates);
+  reportCandidateSelection(
+    context,
+    plan,
+    candidates,
+    window,
+    selection.emptiedByWindow,
+  );
   const referenceFamilyByStepId = referenceFamiliesByStep(
     plan,
     candidates,
@@ -3979,6 +4304,10 @@ async function executeReplay(
   await putImmutableJson(context.store, key, {
     completed,
     skipped,
+    ...(window === undefined ? {} : { releaseWindow: window }),
+    ...(plan.namedCandidates.length === 0
+      ? {}
+      : { namedCandidates: plan.namedCandidates }),
     candidates: candidates.map((assignment) => {
       const pricing = currentPricingByStepId.get(assignment.stepId);
       return {
@@ -5858,7 +6187,7 @@ interface ReportData {
   };
   caps: Array<{
     name: string;
-    value: number;
+    value: number | string;
     family?: string;
     stepId?: string;
   }>;
@@ -6318,6 +6647,7 @@ async function buildReport(
     stratumWeights: { basis: "corpus_only", weights: corpus.strata },
     caps: [
       { name: "top-N shortlist", value: plan.top },
+      ...candidateSelectionCaps(replay),
       { name: "audit sample size", value: worksheet.cases.length },
       ...Object.entries(plan.sampleSizes).map(([family, value]) => ({
         name: "replay sample size",
@@ -6334,6 +6664,13 @@ async function buildReport(
         stepId,
         value: droppedFreeModels,
       })),
+      ...(replay.releaseWindow === undefined
+        ? []
+        : replay.candidates.map(({ stepId, droppedByReleaseWindow }) => ({
+            name: "droppedByReleaseWindow",
+            stepId,
+            value: droppedByReleaseWindow,
+          }))),
       ...decisionOutput.families.flatMap((family) =>
         family.confirmation?.maxRunSets === undefined
           ? []

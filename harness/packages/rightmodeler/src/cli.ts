@@ -14,6 +14,7 @@ import {
   planRouteVendors,
 } from "@rightmodeler/replay";
 import { Argument, Command, CommanderError, Option } from "commander";
+import { z } from "zod";
 
 import {
   PIPELINE_STAGES,
@@ -106,6 +107,9 @@ interface PipelineCommandOptions {
   catalogReference?: string;
   policy?: string;
   includeFree?: boolean;
+  releasedSince?: string;
+  releasedUntil?: string;
+  candidate?: string[];
   modebConfig?: string;
   through?: PipelineStage;
   plan?: boolean;
@@ -716,6 +720,19 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
       "include zero-priced models in candidate shortlists",
     )
     .option(
+      "--released-since <date-or-days>",
+      "shortlist only models released on or after this UTC date (YYYY-MM-DD) or this many days before the shortlist is planned (180d); 90d when omitted",
+    )
+    .option(
+      "--released-until <date>",
+      "shortlist only models released on or before this UTC date (YYYY-MM-DD); alone, it ends a 90-day window",
+    )
+    .option(
+      "--candidate <id>",
+      "replay this catalog model instead of the automatic shortlist, in each family where it is cheaper than the recorded models and fits every call site (repeatable)",
+      collectOption,
+    )
+    .option(
       "--modeb-config <path>",
       "versioned Mode B runtime configuration JSON file",
     );
@@ -754,7 +771,7 @@ function addPipelineOptions(command: Command, provider: boolean): Command {
       )
       .option(
         "--catalog-reference <url-or-path>",
-        "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks",
+        "upstream /models URL or file that fills pricing, context and capabilities the provider catalog lacks, and supplies release dates",
       )
       .option(
         "--policy <path>",
@@ -843,6 +860,50 @@ function pipelineOptions(
     !/^[0-9a-f]{64}$/u.test(local.approvedRun)
   ) {
     throw invalidOption("--approved-run must be a SHA-256 run-spec digest");
+  }
+  const isoDate = z.iso.date();
+  if (
+    local.releasedSince !== undefined &&
+    !/^[1-9]\d{0,4}d$/u.test(local.releasedSince) &&
+    !isoDate.safeParse(local.releasedSince).success
+  ) {
+    throw invalidOption(
+      "--released-since must be a date as YYYY-MM-DD or a number of days such as 90d",
+    );
+  }
+  if (
+    local.releasedUntil !== undefined &&
+    !isoDate.safeParse(local.releasedUntil).success
+  ) {
+    throw invalidOption("--released-until must be a date as YYYY-MM-DD");
+  }
+  if (
+    local.releasedSince !== undefined &&
+    local.releasedUntil !== undefined &&
+    isoDate.safeParse(local.releasedSince).success &&
+    local.releasedSince > local.releasedUntil
+  ) {
+    throw invalidOption(
+      `--released-since ${local.releasedSince} is later than --released-until ${local.releasedUntil}`,
+    );
+  }
+  if (local.candidate?.some((id) => id.trim() === "")) {
+    throw invalidOption("--candidate needs a model id");
+  }
+  const releaseWindowFlags =
+    local.releasedSince !== undefined || local.releasedUntil !== undefined;
+  if (
+    local.approvedRun !== undefined &&
+    (releaseWindowFlags || local.candidate !== undefined)
+  ) {
+    throw invalidOption(
+      "--approved-run replays the approved model only; remove --candidate, --released-since and --released-until",
+    );
+  }
+  if (local.candidate !== undefined && releaseWindowFlags) {
+    throw invalidOption(
+      "--candidate tries the models it names whatever their release date; remove --released-since and --released-until, or remove --candidate",
+    );
   }
   const maxCostUsd =
     local.maxCostUsd === undefined ? undefined : Number(local.maxCostUsd);
@@ -989,6 +1050,9 @@ function pipelineOptions(
     catalogReference: local.catalogReference,
     policyFilePath: local.policy,
     includeFreeModels: local.includeFree,
+    releasedSince: local.releasedSince,
+    releasedUntil: local.releasedUntil,
+    namedCandidates: local.candidate,
     ...(local.evaluator === undefined
       ? {}
       : {
@@ -1395,6 +1459,9 @@ const PIPELINE_ARG_OPTIONS = [
   { flag: "--catalog-reference", key: "catalogReference", kind: "reference" },
   { flag: "--policy", key: "policy", kind: "path" },
   { flag: "--include-free", key: "includeFree", kind: "flag" },
+  { flag: "--released-since", key: "releasedSince", kind: "value" },
+  { flag: "--released-until", key: "releasedUntil", kind: "value" },
+  { flag: "--candidate", key: "candidate", kind: "repeated" },
   { flag: "--approved-run", key: "approvedRun", kind: "value" },
   { flag: "--evaluator", key: "evaluator", kind: "value" },
   {

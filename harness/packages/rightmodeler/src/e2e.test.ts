@@ -237,6 +237,7 @@ interface StubProviderModule {
     omitCatalogModels?: string[];
     rateLimitedModels?: string[];
     rateLimitMessageIncludes?: string;
+    releasedDaysAgo?: Record<string, number>;
     servedModels?: Record<string, string>;
   }): Promise<RecordingStubProvider>;
 }
@@ -591,6 +592,10 @@ function warningMessages(stderr: string, code: string): string[] {
     .map(({ message }) => message);
 }
 
+function utcDateDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+}
+
 async function langgraphFixtureCopy(
   label: string,
 ): Promise<{ root: string; repo: string; traces: string }> {
@@ -735,6 +740,7 @@ async function startStub(
     omitCatalogModels?: string[];
     rateLimitedModels?: string[];
     rateLimitMessageIncludes?: string;
+    releasedDaysAgo?: Record<string, number>;
     servedModels?: Record<string, string>;
   } = {},
 ): Promise<RecordingStubProvider> {
@@ -864,6 +870,67 @@ async function startCatalogDriftStub(
     port: address.port,
     getHitCount: () => hitCount,
     getMaxInFlight: () => upstream.getMaxInFlight(),
+    close: async () => {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      await upstream.close();
+    },
+  };
+}
+
+async function startRenamedCatalogStub(
+  renames: Readonly<Record<string, string>>,
+): Promise<{
+  port: number;
+  upstream: RecordingStubProvider;
+  close(): Promise<void>;
+}> {
+  const upstream = await startStub();
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const body = Buffer.concat(chunks);
+    const upstreamResponse = await fetch(
+      `http://127.0.0.1:${upstream.port}${request.url ?? "/"}`,
+      {
+        method: request.method,
+        headers: { "content-type": "application/json" },
+        ...(body.length === 0 ? {} : { body }),
+      },
+    );
+    const text = await upstreamResponse.text();
+    response.writeHead(upstreamResponse.status, {
+      "content-type":
+        upstreamResponse.headers.get("content-type") ?? "application/json",
+    });
+    if (request.method === "GET" && request.url === "/v1/models") {
+      const catalog = JSON.parse(text) as { data: Array<{ id: string }> };
+      response.end(
+        JSON.stringify({
+          ...catalog,
+          data: catalog.data.map((model) => ({
+            ...model,
+            id: renames[model.id] ?? model.id,
+          })),
+        }),
+      );
+      return;
+    }
+    response.end(text);
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    await upstream.close();
+    throw new Error("Renamed catalog stub did not bind a TCP port");
+  }
+  return {
+    port: address.port,
+    upstream,
     close: async () => {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -1933,6 +2000,325 @@ describe("built CLI pipeline", () => {
           defaultFamilyPlan!.minimumHoldoutCases,
         );
       }
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it("tries cheaper models released in the 90 days before the shortlist is planned, or since --released-since, and reports the window", async () => {
+    const { repo } = await fixtureCopy("release-window");
+    const stub = await startStub({ releasedDaysAgo: { "acme/lite-1": 200 } });
+    const apiKeyEnv = "RIGHTMODELER_WINDOW_E2E_API_KEY";
+    const options = [
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    const env = { env: { [apiKeyEnv]: secret } };
+    const since = utcDateDaysAgo(90);
+    const caps = async () =>
+      (
+        await storeText(
+          new FsStore(join(repo, ".rightmodeler")),
+          reportKey("project", "report.md"),
+        )
+      )
+        .split("\n")
+        .filter((line) => /^- released |^- droppedByReleaseWindow /u.test(line))
+        .sort();
+    try {
+      const recent = await runCli(["estimate", ...options], env);
+      expect(recent.code, recent.stderr).toBe(0);
+      const estimated = jsonOutput(recent);
+      expect(estimated).toMatchObject({
+        releaseWindow: { since, until: null },
+        shortlist: [
+          { candidateIds: ["acme/small-1"], droppedByReleaseWindow: 1 },
+          { candidateIds: ["acme/small-1"], droppedByReleaseWindow: 1 },
+        ],
+      });
+      const stepRows = (estimated.shortlist as Array<{ stepId: string }>).map(
+        ({ stepId }) => `- droppedByReleaseWindow (${stepId}): 1`,
+      );
+
+      const widened = await runCli(
+        ["estimate", ...options, "--released-since", "500d"],
+        env,
+      );
+      expect(widened.code, widened.stderr).toBe(0);
+      expect(jsonOutput(widened)).toMatchObject({
+        releaseWindow: { since: utcDateDaysAgo(500), until: null },
+        shortlist: [
+          {
+            candidateIds: ["acme/lite-1", "acme/small-1"],
+            droppedByReleaseWindow: 0,
+          },
+          {
+            candidateIds: ["acme/lite-1", "acme/small-1"],
+            droppedByReleaseWindow: 0,
+          },
+        ],
+      });
+
+      const initialized = await runCli(["init", ...options], env);
+      expect([0, 1], initialized.stderr).toContain(initialized.code);
+      jsonOutput(initialized);
+      expect(await caps()).toEqual(
+        [...stepRows, `- released since: ${since}`].sort(),
+      );
+      const replayed = new Set(stub.getRequests().map(({ model }) => model));
+      expect(replayed).toContain("acme/small-1");
+      expect(replayed).not.toContain("acme/lite-1");
+
+      const until = utcDateDaysAgo(0);
+      const ended = await runCli(
+        ["init", ...options, "--released-until", until],
+        env,
+      );
+      expect([0, 1], ended.stderr).toContain(ended.code);
+      jsonOutput(ended);
+      expect(await caps()).toEqual(
+        [
+          ...stepRows,
+          `- released since: ${since}`,
+          `- released until: ${until}`,
+        ].sort(),
+      );
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it("replays the models named with --candidate whatever their release date, and names each one it leaves out", async () => {
+    const { repo } = await fixtureCopy("named-candidates");
+    const stub = await startStub({ releasedDaysAgo: { "acme/lite-1": 200 } });
+    const renamed = await startRenamedCatalogStub({
+      "acme/max-1": "zeta/small-1",
+    });
+    const apiKeyEnv = "RIGHTMODELER_NAMED_E2E_API_KEY";
+    const options = (port: number) => [
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    const env = { env: { [apiKeyEnv]: secret } };
+    const notCheaper =
+      "it is not cheaper than the current model acme/large-1 (3 vs 1.5 USD per million tokens)";
+    const unknownRemedy =
+      "Pass each --candidate as the provider's /models list spells it (vendor/model), then rerun.";
+    try {
+      const named = await runCli(
+        [
+          "estimate",
+          ...options(stub.port),
+          "--candidate",
+          "lite-1",
+          "--candidate",
+          "acme/max-1",
+        ],
+        env,
+      );
+      expect(named.code, named.stderr).toBe(0);
+      expect(JSON.parse(named.stdout)).toMatchObject({
+        releaseWindow: null,
+        namedCandidates: ["acme/max-1", "lite-1"],
+        shortlist: [
+          {
+            candidateIds: ["acme/lite-1"],
+            droppedByReleaseWindow: 0,
+            namedCandidatesLeftOut: [
+              { modelId: "acme/max-1", reason: notCheaper },
+            ],
+          },
+          {
+            candidateIds: ["acme/lite-1"],
+            droppedByReleaseWindow: 0,
+            namedCandidatesLeftOut: [
+              { modelId: "acme/max-1", reason: notCheaper },
+            ],
+          },
+        ],
+      });
+      expect(
+        named.stderr
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as Record<string, unknown>),
+      ).toEqual([
+        {
+          event: "warning",
+          code: "shortlist_candidate_left_out",
+          message: `Family summarize: --candidate acme/max-1 was left out: ${notCheaper}.`,
+        },
+      ]);
+
+      const ineligible = await runCli(
+        ["estimate", ...options(stub.port), "--candidate", "acme/max-1"],
+        env,
+      );
+      expect(ineligible.code, ineligible.stderr).toBe(2);
+      expect(lastStderrEvent(ineligible)).toEqual({
+        code: "named_candidates_ineligible",
+        message: `None of the models named with --candidate can be tried at any call site: acme/max-1: ${notCheaper}.`,
+        remedy:
+          "Name models that cost less than the recorded models and support what each call site needs, or remove --candidate to use the automatic shortlist.",
+      });
+
+      const unknown = await runCli(
+        ["estimate", ...options(stub.port), "--candidate", "acme/nope-1"],
+        env,
+      );
+      expect(unknown.code, unknown.stderr).toBe(2);
+      expect(lastStderrEvent(unknown)).toEqual({
+        code: "unknown_candidate",
+        message: "--candidate acme/nope-1 is not in the provider catalog.",
+        remedy: unknownRemedy,
+      });
+
+      const ambiguous = await runCli(
+        ["estimate", ...options(renamed.port), "--candidate", "small-1"],
+        env,
+      );
+      expect(ambiguous.code, ambiguous.stderr).toBe(2);
+      expect(lastStderrEvent(ambiguous)).toEqual({
+        code: "unknown_candidate",
+        message:
+          "--candidate small-1 matches more than one catalog model: acme/small-1, zeta/small-1.",
+        remedy: unknownRemedy,
+      });
+      expect(stub.getHitCount() + renamed.upstream.getHitCount()).toBe(0);
+
+      const initialized = await runCli(
+        ["init", ...options(stub.port), "--candidate", "lite-1"],
+        env,
+      );
+      expect([0, 1], initialized.stderr).toContain(initialized.code);
+      jsonOutput(initialized);
+      const report = await storeText(
+        new FsStore(join(repo, ".rightmodeler")),
+        reportKey("project", "report.md"),
+      );
+      expect(report).toContain("\n- named candidates: lite-1\n");
+      expect(report).not.toMatch(/^- (?:released|droppedByReleaseWindow) /mu);
+      expect(stub.getRequests().map(({ model }) => model)).toContain(
+        "acme/lite-1",
+      );
+    } finally {
+      await renamed.close();
+      await stub.close();
+    }
+  });
+
+  it("stops before any model call when no cheaper model was released inside the window", async () => {
+    const { repo } = await fixtureCopy("no-recent-candidates");
+    const stub = await startStub({
+      releasedDaysAgo: { "acme/lite-1": 200, "acme/small-1": 300 },
+    });
+    const apiKeyEnv = "RIGHTMODELER_NO_RECENT_E2E_API_KEY";
+    const since = utcDateDaysAgo(90);
+    try {
+      const result = await runCli(
+        [
+          "init",
+          "--traces",
+          tracesPath,
+          "--base-url",
+          `http://127.0.0.1:${stub.port}/v1`,
+          "--api-key-env",
+          apiKeyEnv,
+          "--output",
+          "json",
+          "--repo",
+          repo,
+        ],
+        { env: { [apiKeyEnv]: secret } },
+      );
+
+      expect(result.code, result.stderr).toBe(2);
+      expect(
+        warningMessages(result.stderr, "shortlist_no_recent_candidates"),
+      ).toEqual([
+        `Family summarize: no model cheaper than the current model was released on or after ${since} (2 cheaper models left out); pass an earlier --released-since, or name models with --candidate.`,
+      ]);
+      expect(lastStderrEvent(result)).toEqual({
+        code: "no_recent_candidates",
+        message: `No model cheaper than a recorded model was released on or after ${since}, so there is nothing to replay.`,
+        remedy:
+          "Pass an earlier --released-since (a date such as 2026-01-01, or a number of days such as 365d), name the models to try with --candidate <id>, or, if the catalog's release dates are placeholders, pass --catalog-reference <url> with a model list that publishes real ones.",
+      });
+      expect(stub.getHitCount()).toBe(0);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it("ranks by price with a warning when the catalog publishes no release dates, and refuses an explicit range", async () => {
+    const { repo } = await fixtureCopy("undated-catalog");
+    const stub = await startUnpricedCatalogStub(["released"]);
+    const apiKeyEnv = "RIGHTMODELER_UNDATED_E2E_API_KEY";
+    const options = [
+      "--traces",
+      tracesPath,
+      "--base-url",
+      `http://127.0.0.1:${stub.port}/v1`,
+      "--api-key-env",
+      apiKeyEnv,
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ];
+    const env = { env: { [apiKeyEnv]: secret } };
+    try {
+      const estimated = await runCli(["estimate", ...options], env);
+
+      expect(estimated.code, estimated.stderr).toBe(0);
+      expect(
+        warningMessages(estimated.stderr, "release_window_skipped"),
+      ).toEqual([
+        `The provider catalog gives its priced models fewer than two distinct release dates, so the default release window (models released on or after ${utcDateDaysAgo(90)}) was not applied and candidates are ranked by price. Pass --catalog-reference with a model list that publishes release dates to apply it.`,
+      ]);
+      expect(JSON.parse(estimated.stdout)).toMatchObject({
+        releaseWindow: null,
+        shortlist: [
+          {
+            candidateIds: ["acme/lite-1", "acme/small-1"],
+            droppedByReleaseWindow: 0,
+          },
+          {
+            candidateIds: ["acme/lite-1", "acme/small-1"],
+            droppedByReleaseWindow: 0,
+          },
+        ],
+      });
+
+      const ranged = await runCli(
+        ["estimate", ...options, "--released-since", "2026-01-01"],
+        env,
+      );
+      expect(ranged.code, ranged.stderr).toBe(2);
+      expect(lastStderrEvent(ranged)).toEqual({
+        code: "release_dates_unavailable",
+        message:
+          "The provider catalog gives its priced models fewer than two distinct release dates, so --released-since and --released-until cannot be applied.",
+        remedy:
+          "Pass --catalog-reference <url> with a model list that publishes release dates (for example https://ai-gateway.vercel.sh/v1/models), name the models to try with --candidate <id>, or remove --released-since and --released-until.",
+      });
+      expect(stub.getHitCount()).toBe(0);
     } finally {
       await stub.close();
     }
@@ -6146,6 +6532,11 @@ describe("built CLI through plan routes", () => {
     return path;
   }
 
+  // The price list's release dates age out of the default window; these tests check routes.
+  function priceListArgs(prices: string): string[] {
+    return ["--catalog-reference", prices, "--released-since", "2000-01-01"];
+  }
+
   async function writePolicy(root: string, shortlistTop: number) {
     const path = join(root, `policy-${shortlistTop}.json`);
     await writeFile(path, JSON.stringify({ shortlistTop }));
@@ -6231,8 +6622,7 @@ describe("built CLI through plan routes", () => {
       baseUrl,
       "--api-key-env",
       apiKeyEnv,
-      "--catalog-reference",
-      prices,
+      ...priceListArgs(prices),
       "--policy",
       policy,
       ...extra,
@@ -6242,67 +6632,6 @@ describe("built CLI through plan routes", () => {
       repo,
     ];
     return { root, repo, stub, baseUrl, prices, policy, args };
-  }
-
-  async function startRenamedCatalogStub(
-    renames: Readonly<Record<string, string>>,
-  ): Promise<{
-    port: number;
-    upstream: RecordingStubProvider;
-    close(): Promise<void>;
-  }> {
-    const upstream = await startStub();
-    const server = createServer(async (request, response) => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      const body = Buffer.concat(chunks);
-      const upstreamResponse = await fetch(
-        `http://127.0.0.1:${upstream.port}${request.url ?? "/"}`,
-        {
-          method: request.method,
-          headers: { "content-type": "application/json" },
-          ...(body.length === 0 ? {} : { body }),
-        },
-      );
-      const text = await upstreamResponse.text();
-      response.writeHead(upstreamResponse.status, {
-        "content-type":
-          upstreamResponse.headers.get("content-type") ?? "application/json",
-      });
-      if (request.method === "GET" && request.url === "/v1/models") {
-        const catalog = JSON.parse(text) as { data: Array<{ id: string }> };
-        response.end(
-          JSON.stringify({
-            ...catalog,
-            data: catalog.data.map((model) => ({
-              ...model,
-              id: renames[model.id] ?? model.id,
-            })),
-          }),
-        );
-        return;
-      }
-      response.end(text);
-    });
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve);
-    });
-    const address = server.address();
-    if (address === null || typeof address === "string") {
-      await upstream.close();
-      throw new Error("Renamed catalog stub did not bind a TCP port");
-    }
-    return {
-      port: address.port,
-      upstream,
-      close: async () => {
-        await new Promise<void>((resolve, reject) =>
-          server.close((error) => (error ? reject(error) : resolve())),
-        );
-        await upstream.close();
-      },
-    };
   }
 
   it("replays candidates through claude-login and judges through an API route", async () => {
@@ -6405,8 +6734,7 @@ describe("built CLI through plan routes", () => {
           "--traces",
           tracesPath,
           ...extra,
-          "--catalog-reference",
-          prices,
+          ...priceListArgs(prices),
           "--policy",
           policy,
           "--output",
@@ -6470,8 +6798,7 @@ describe("built CLI through plan routes", () => {
       `http://127.0.0.1:${stub.port}/v1`,
       "--api-key-env",
       apiKeyEnv,
-      "--catalog-reference",
-      await writePlanPrices(root),
+      ...priceListArgs(await writePlanPrices(root)),
       "--policy",
       await writePolicy(root, 2),
       "--output",
@@ -6547,8 +6874,7 @@ describe("built CLI through plan routes", () => {
         "claude-login",
         "--judge-route",
         "claude-login",
-        "--catalog-reference",
-        await writePlanPrices(root),
+        ...priceListArgs(await writePlanPrices(root)),
         "--policy",
         await writePolicy(root, 1),
         "--output",
@@ -6781,11 +7107,12 @@ describe("built CLI through plan routes", () => {
       `http://127.0.0.1:${stub.port}/v1`,
       "--api-key-env",
       apiKeyEnv,
-      "--catalog-reference",
-      await writePlanPrices(root, {
-        "acme/large-1": { input: "0.00003", output: "0.00015" },
-        "acme/max-1": { input: "0.00006", output: "0.0003" },
-      }),
+      ...priceListArgs(
+        await writePlanPrices(root, {
+          "acme/large-1": { input: "0.00003", output: "0.00015" },
+          "acme/max-1": { input: "0.00006", output: "0.0003" },
+        }),
+      ),
       "--policy",
       await writePolicy(root, 1),
       "--output",
@@ -6936,11 +7263,12 @@ describe("built CLI through plan routes", () => {
           `http://127.0.0.1:${stub.port}/v1`,
           "--api-key-env",
           apiKeyEnv,
-          "--catalog-reference",
-          await writePlanPrices(root, {
-            "acme/large-1": { input: "0.00003", output: "0.00015" },
-            "acme/max-1": { input: "0.00006", output: "0.0003" },
-          }),
+          ...priceListArgs(
+            await writePlanPrices(root, {
+              "acme/large-1": { input: "0.00003", output: "0.00015" },
+              "acme/max-1": { input: "0.00006", output: "0.0003" },
+            }),
+          ),
           "--policy",
           await writePolicy(root, 1),
           "--output",
@@ -7035,8 +7363,7 @@ describe("built CLI through plan routes", () => {
       route,
       "--judge-route",
       judge,
-      "--catalog-reference",
-      prices,
+      ...priceListArgs(prices),
       "--policy",
       policy,
       ...extra,
@@ -7277,8 +7604,7 @@ describe("built CLI through plan routes", () => {
           `http://127.0.0.1:${stub.port}/v1`,
           "--api-key-env",
           apiKeyEnv,
-          "--catalog-reference",
-          await writePlanPrices(root),
+          ...priceListArgs(await writePlanPrices(root)),
           "--policy",
           await writePolicy(root, 1),
           "--output",
@@ -7543,8 +7869,7 @@ describe("built CLI through plan routes", () => {
           baseUrl,
           "--api-key-env",
           apiKeyEnv,
-          "--catalog-reference",
-          await writePlanPrices(judged.root),
+          ...priceListArgs(await writePlanPrices(judged.root)),
           "--policy",
           await writePolicy(judged.root, 1),
           "--output",

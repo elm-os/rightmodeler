@@ -33,6 +33,8 @@ export interface ReplayCostEstimate {
     readonly stepId: string;
     readonly candidateIds: readonly string[];
     readonly resolvedCurrentModelId?: string;
+    readonly droppedByReleaseWindow: number;
+    readonly namedCandidatesLeftOut?: StepShortlist["namedCandidatesLeftOut"];
   }[];
 }
 
@@ -164,12 +166,22 @@ export function estimateReplayCost(input: {
       "External evaluator charges, which are not present in the provider catalog.",
     ],
     shortlist: input.candidates.map(
-      ({ stepId, candidates, resolvedCurrentModelId }) => ({
+      ({
+        stepId,
+        candidates,
+        resolvedCurrentModelId,
+        droppedByReleaseWindow,
+        namedCandidatesLeftOut,
+      }) => ({
         stepId,
         candidateIds: candidates.map(({ id }) => id),
         ...(resolvedCurrentModelId === undefined
           ? {}
           : { resolvedCurrentModelId }),
+        droppedByReleaseWindow,
+        ...(namedCandidatesLeftOut === undefined
+          ? {}
+          : { namedCandidatesLeftOut }),
       }),
     ),
   };

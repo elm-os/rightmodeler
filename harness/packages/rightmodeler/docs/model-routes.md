@@ -95,6 +95,8 @@ Anthropic announced, then paused, a change that would take `claude -p` usage off
 
 Rightmodeler leaves out Claude Fable models, because in non-interactive mode "When a Fable request there would bill to usage credits, Claude Code bills it without asking" (`https://code.claude.com/docs/en/model-config`), and `[1m]` variants, whose 1M context can require usage credits. Models the price list does not price are left out with `plan_model_unpriced`.
 
+A plan route's candidates take their release dates from the price list, and the default 90-day release window applies to them as on an API route, unless you set the window with `--released-since` or `--released-until` or name models with `--candidate`; see [Which models are tried](getting-started.md#which-models-are-tried).
+
 ## Errors
 
 - `plan_cli_unavailable` (exit `2`): `claude` is missing or older than 2.1.282, `codex` is missing or older than 0.153.3, `CI` is set, the CLI changed an output shape rightmodeler relies on, or `codex` rejected one of rightmodeler's isolation settings.

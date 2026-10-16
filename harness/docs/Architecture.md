@@ -8,8 +8,9 @@ This document describes the system. For the build sequence and phase gates, see
 ## 1. The pattern
 
 The harness is a **cost-asymmetric verification harness**. A cheap, deterministic,
-deliberately over-inclusive generator nominates candidates. Expensive compute is spent only on
-those candidates. More expensive compute adversarially re-examines the result before a human
+deliberately over-inclusive generator nominates candidates. By default a release window narrows
+them on purpose to models released in the 90 days before the shortlist is planned. Expensive
+compute is spent only on those candidates. More expensive compute adversarially re-examines the result before a human
 sees it. Every stage's contract is an immutable object in a store, and every stage only ever
 adds to state.
 
@@ -183,7 +184,7 @@ version and fence token. Only `reports/report.md` is additionally written as a p
 | `scrub`                                  | free          | PII removed, fails closed                                    |
 | `corpus`                                 | free          | immutable content-addressed case set with stratum weights    |
 | `audit`                                  | human         | reference correctness ceiling, stratified by family          |
-| `shortlist`                              | cheap         | ranked candidates, capability filtered, price filtered       |
+| `shortlist`                              | cheap         | ranked candidates, capability, price, release-date filtered  |
 | `replay`                                 | high          | executions and attempts                                      |
 | `confirm`                                | highest       | cascade evidence for a swap set                              |
 | `aggregate`                              | free          | `FamilyVerdict`                                              |
@@ -313,7 +314,8 @@ substituted judge response is a judge failure, and in replay the first one whose
 retires that judge at once: no new call to it starts and its calls still waiting for budget are
 cancelled. A catalog id `<id>-fast` whose `<id>` is also listed is that model's fast service
 tier, which Vercel AI Gateway answers as `<id>`, so it is never ranked as a judge or shortlisted
-as a candidate. Only swapped steps are checked in Mode B: the rest are the application's own
+as a candidate. A batch tier, `<id>-batch` or `<id>:batch`, whose `<id>` is listed is never
+shortlisted either. Only swapped steps are checked in Mode B: the rest are the application's own
 environment.
 
 ### Fallbacks
@@ -326,7 +328,9 @@ with a sandbox-trusted CA, and after that an authored per-repository adapter.
 No preflight is implemented. Shipped snapshots are dated and live documentation wins on any
 conflict, so the standing rule is that provider request and response shapes are re-read from
 the vendor's current documentation before they are changed. No model list is ever pinned:
-candidates come from the configured catalog at run time.
+candidates come from the configured catalog at run time, by default those released in the 90
+days before the shortlist is planned; the operator can widen the window with `--released-since`
+or name catalog models with `--candidate`.
 
 ### Sandboxes never score
 
@@ -444,8 +448,8 @@ are blocked, on what, and what finishing would cost, as a first-class result. Th
 polling and re-dispatching failed shards, and does not surface a report while the frontier is
 non-empty.
 
-**No silent caps.** Any bound on coverage, including top-N selection, sampling, a skipped
-family, or a dropped shard, is printed and carried onto the verdict.
+**No silent caps.** Any bound on coverage, including top-N selection, the release window,
+sampling, a skipped family, or a dropped shard, is printed and carried onto the verdict.
 
 **Generous defaults.** Sampling above the minimums. `confirm` by default for coupled or
 model-authored-prefix steps. One judge runs per cell, from a model family that is neither the
