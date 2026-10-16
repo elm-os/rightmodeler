@@ -1225,7 +1225,7 @@ describe("applySwaps", () => {
     await symlink(
       join(repositoryRoot, "node_modules"),
       join(harness.repoDir, "node_modules"),
-      "dir",
+      "junction",
     );
     const file = join(harness.repoDir, sourcePath);
     const content = `const adjacent={value:1}\n${await readFile(file, "utf8")}`;

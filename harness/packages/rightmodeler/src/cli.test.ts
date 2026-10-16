@@ -26,6 +26,7 @@ import {
 } from "./cli.js";
 import { saveModelRoute, type ModelRoute } from "./pipeline.js";
 import type { CliIo } from "./protocol.js";
+import { hermeticPath, linkFakeCli } from "./test-utils/fake-cli.js";
 import { makeGitFixture } from "./test-utils/git-fixture.js";
 import { promptAnswers } from "./test-utils/prompt-answers.js";
 
@@ -1123,13 +1124,16 @@ async function planClis(
 ): Promise<{ env: NodeJS.ProcessEnv; records(): Promise<string[]> }> {
   const bin = join(root, "bin");
   await mkdir(bin);
-  await symlink(process.execPath, join(bin, "node"));
-  for (const cli of clis) await symlink(join(fakeBin, cli), join(bin, cli));
+  if (process.platform !== "win32") {
+    await symlink(process.execPath, join(bin, "node"));
+  }
+  for (const cli of clis) await linkFakeCli(bin, cli, join(fakeBin, cli));
   const record = join(root, "plan-stub-record.jsonl");
-  vi.stubEnv("PATH", `${bin}:/usr/bin:/bin`);
+  const path = hermeticPath(bin);
+  vi.stubEnv("PATH", path);
   return {
     env: {
-      PATH: `${bin}:/usr/bin:/bin`,
+      PATH: path,
       CODEX_HOME: join(root, "codex-home"),
       PLAN_STUB_RECORD: record,
     },

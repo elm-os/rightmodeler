@@ -70,8 +70,7 @@ export async function discoverTraces(
     .map(({ sourceOrder: _sourceOrder, ...candidate }) => candidate);
 }
 
-export function sanitizeClaudeProjectPath(repo: string): string {
-  const absolute = resolve(repo);
+export function sanitizeClaudeProjectPath(absolute: string): string {
   const sanitized = absolute.replace(/[^a-zA-Z0-9]/g, "-");
   if (sanitized.length <= 200) return sanitized;
   let hash = 0;
@@ -88,7 +87,12 @@ async function candidateFiles(
   const localPaths = await localCandidatePaths(repo);
   const claudePaths = (
     await jsonFiles(
-      join(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
+      join(
+        homeDir,
+        ".claude",
+        "projects",
+        sanitizeClaudeProjectPath(resolve(repo)),
+      ),
       false,
     )
   ).sort(compareText);

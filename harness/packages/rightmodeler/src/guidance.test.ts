@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
 
 import type { PlanLoginStatus } from "@rightmodeler/replay";
@@ -61,7 +62,7 @@ describe("interactive trace guidance", () => {
 
   it("accepts a typed path", async () => {
     expect((await prompt("./exports/traces.jsonl\n")).selected).toBe(
-      "/repo/exports/traces.jsonl",
+      resolve("/repo", "./exports/traces.jsonl"),
     );
   });
 

@@ -15,7 +15,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -27,6 +27,7 @@ import {
   factsPrefix,
   readLedger,
   reportKey,
+  resolveCommand,
   setupStateKey,
   type StepRecord,
   type JsonValue,
@@ -52,6 +53,7 @@ import {
   topologicalRecords,
 } from "./pipeline.js";
 import { Reporter } from "./protocol.js";
+import { hermeticPath } from "./test-utils/fake-cli.js";
 
 const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const demoAppPath = fileURLToPath(
@@ -6480,12 +6482,7 @@ describe("built CLI through plan routes", () => {
       import.meta.url,
     ),
   );
-  const planPath = [
-    fakeBin,
-    dirname(process.execPath),
-    "/usr/bin",
-    "/bin",
-  ].join(delimiter);
+  const planPath = hermeticPath(fakeBin, dirname(process.execPath));
   const apiKeyEnv = "RIGHTMODELER_PLAN_E2E_API_KEY";
   const dummyAnthropicKey = "sk-ant-plan-e2e-dummy-must-stay-home";
   const judgeModels = new Set(["zeta/judge-1", "yotta/judge-2"]);
@@ -6513,8 +6510,10 @@ describe("built CLI through plan routes", () => {
   beforeAll(() => {
     const root = join(tmpdir(), `rightmodeler-plan-fake-${process.pid}`);
     const record = `${root}.jsonl`;
-    const version = spawnSync("claude", ["--version"], {
-      env: { PATH: planPath, PLAN_STUB_RECORD: record },
+    const env = { PATH: planPath, PLAN_STUB_RECORD: record };
+    const claude = resolveCommand("claude", env);
+    const version = spawnSync(claude.file, [...claude.args, "--version"], {
+      env,
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf8",
     });

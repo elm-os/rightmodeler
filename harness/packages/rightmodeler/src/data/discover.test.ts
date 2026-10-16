@@ -211,7 +211,7 @@ describe("trace discovery", () => {
     const outside = join(root, "outside");
     await mkdir(outside);
     await writeFile(join(outside, "outside.json"), otelTrace);
-    await symlink(outside, join(repo, "traces"));
+    await symlink(outside, join(repo, "traces"), "junction");
     const healthy = join(repo, "traces.json");
     await writeFile(healthy, otelTrace);
 

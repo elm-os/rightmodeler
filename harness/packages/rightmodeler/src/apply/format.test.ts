@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { createMatcherRegistry, scan } from "@rightmodeler/scanner";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { writeFakeCli } from "../test-utils/fake-cli.js";
 import { buildSwapDiff, type SwapDiffFile } from "./diff.js";
 import { formatWithHostFormatter } from "./format.js";
 
@@ -42,7 +43,7 @@ async function fixtureDiff(path: string): Promise<{
   const root = await mkdtemp(join(tmpdir(), "rightmodeler-format-"));
   temporaryDirectories.push(root);
   await cp(fixture, root, { recursive: true });
-  await symlink(monorepoNodeModules, join(root, "node_modules"), "dir");
+  await symlink(monorepoNodeModules, join(root, "node_modules"), "junction");
   const stepRecord = scan(root, createMatcherRegistry(), "project").find(
     ({ callSite }) => callSite.path === path,
   )!;
@@ -120,13 +121,12 @@ describe("formatWithHostFormatter", () => {
     await unlink(join(root, "node_modules"));
     await writeFile(root + "/pnpm-lock.yaml", "  prettier@3.9.4:\n");
     const bin = join(root, "bin");
-    const executable = join(bin, "npx");
     await mkdir(bin);
-    await writeFile(
-      executable,
-      '#!/usr/bin/env node\nconst args = process.argv.slice(2);\nif (args[0] !== "--yes" || args[1] !== "--package=prettier@3.9.4" || args[2] !== "prettier" || args[3] !== "--stdin-filepath" || !args[4].endsWith("src/string.ts")) process.exit(2);\nprocess.stdin.pipe(process.stdout);\n',
+    await writeFakeCli(
+      bin,
+      "npx",
+      '#!/usr/bin/env node\nconst args = process.argv.slice(2);\nif (args[0] !== "--yes" || args[1] !== "--package=prettier@3.9.4" || args[2] !== "prettier" || args[3] !== "--stdin-filepath" || !args[4].replaceAll("\\\\", "/").endsWith("src/string.ts")) process.exit(2);\nprocess.stdin.pipe(process.stdout);\n',
     );
-    await chmod(executable, 0o755);
     const originalPath = process.env.PATH;
     process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
     try {
@@ -150,13 +150,12 @@ describe("formatWithHostFormatter", () => {
     );
     const bin = join(root, "bin");
     const marker = join(root, "npx-invoked");
-    const executable = join(bin, "npx");
     await mkdir(bin);
-    await writeFile(
-      executable,
+    await writeFakeCli(
+      bin,
+      "npx",
       `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(${JSON.stringify(marker)}, "called");\n`,
     );
-    await chmod(executable, 0o755);
     const originalPath = process.env.PATH;
     process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
     try {
@@ -183,13 +182,12 @@ describe("formatWithHostFormatter", () => {
       'prettier@^3.0.0:\n  version "3.9.4-alpha.1+build.2"\n',
     );
     const bin = join(root, "bin");
-    const executable = join(bin, "npx");
     await mkdir(bin);
-    await writeFile(
-      executable,
+    await writeFakeCli(
+      bin,
+      "npx",
       '#!/usr/bin/env node\nconst args = process.argv.slice(2);\nif (args[1] !== "--package=prettier@3.9.4-alpha.1+build.2") process.exit(2);\nprocess.stdin.pipe(process.stdout);\n',
     );
-    await chmod(executable, 0o755);
     const originalPath = process.env.PATH;
     process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
     try {
@@ -349,47 +347,54 @@ describe("formatWithHostFormatter", () => {
     expect(result.files).toEqual([file]);
   });
 
-  it("runs ruff format on only the temporary copy of a changed file", async () => {
-    const { root, file } = await fixtureDiff("src/string.py");
-    const executable = join(root, ".venv/bin/ruff");
-    await mkdir(join(root, ".venv/bin"), { recursive: true });
-    await writeFile(
-      executable,
-      '#!/usr/bin/env node\nconst [kind, file] = process.argv.slice(2);\nif (kind !== "format" || !file.includes(".rightmodeler-format-") || !file.endsWith("string.py")) process.exit(2);\n',
-    );
-    await chmod(executable, 0o755);
+  // A local ruff on Windows is a real .venv\Scripts\ruff.exe, which a node script cannot fake.
+  it.skipIf(process.platform === "win32")(
+    "runs ruff format on only the temporary copy of a changed file",
+    async () => {
+      const { root, file } = await fixtureDiff("src/string.py");
+      const executable = join(root, ".venv/bin/ruff");
+      await mkdir(join(root, ".venv/bin"), { recursive: true });
+      await writeFile(
+        executable,
+        '#!/usr/bin/env node\nconst [kind, file] = process.argv.slice(2);\nif (kind !== "format" || !file.includes(".rightmodeler-format-") || !file.endsWith("string.py")) process.exit(2);\n',
+      );
+      await chmod(executable, 0o755);
 
-    const result = await formatWithHostFormatter({
-      repoDir: root,
-      conventions: { formatter: { kind: "ruff", configPath: null } },
-      files: [file],
-    });
+      const result = await formatWithHostFormatter({
+        repoDir: root,
+        conventions: { formatter: { kind: "ruff", configPath: null } },
+        files: [file],
+      });
 
-    expect(result).toEqual({ files: [file], note: "formatted" });
-  });
+      expect(result).toEqual({ files: [file], note: "formatted" });
+    },
+  );
 
-  it("returns a named blocker when the host formatter fails", async () => {
-    const { root, file } = await fixtureDiff("src/string.py");
-    const executable = join(root, ".venv/bin/ruff");
-    await mkdir(join(root, ".venv/bin"), { recursive: true });
-    await writeFile(executable, "#!/usr/bin/env node\nprocess.exit(1);\n");
-    await chmod(executable, 0o755);
+  it.skipIf(process.platform === "win32")(
+    "returns a named blocker when the host formatter fails",
+    async () => {
+      const { root, file } = await fixtureDiff("src/string.py");
+      const executable = join(root, ".venv/bin/ruff");
+      await mkdir(join(root, ".venv/bin"), { recursive: true });
+      await writeFile(executable, "#!/usr/bin/env node\nprocess.exit(1);\n");
+      await chmod(executable, 0o755);
 
-    const result = await formatWithHostFormatter({
-      repoDir: root,
-      conventions: { formatter: { kind: "ruff", configPath: null } },
-      files: [file],
-    });
+      const result = await formatWithHostFormatter({
+        repoDir: root,
+        conventions: { formatter: { kind: "ruff", configPath: null } },
+        files: [file],
+      });
 
-    expect(result).toEqual({
-      files: [file],
-      blocker: {
-        path: "src/string.py",
-        line: 1,
-        reason: "formatter_failed",
-      },
-    });
-  });
+      expect(result).toEqual({
+        files: [file],
+        blocker: {
+          path: "src/string.py",
+          line: 1,
+          reason: "formatter_failed",
+        },
+      });
+    },
+  );
 
   it("blocks a formatter reformat of the swapped line", async () => {
     const first = await fixtureDiff("src/string.ts");
@@ -427,13 +432,12 @@ describe("formatWithHostFormatter", () => {
   it("runs gofmt with argv on only the temporary changed file", async () => {
     const { root } = await fixtureDiff("src/string.ts");
     const bin = join(root, "bin");
-    const executable = join(bin, "gofmt");
     await mkdir(bin);
-    await writeFile(
-      executable,
+    await writeFakeCli(
+      bin,
+      "gofmt",
       '#!/usr/bin/env node\nconst [flag, file] = process.argv.slice(2);\nif (flag !== "-w" || !file.includes(".rightmodeler-format-") || !file.endsWith("model.go")) process.exit(2);\n',
     );
-    await chmod(executable, 0o755);
     const before = 'package fixture\n\nconst MODEL_ID = "acme/large-1"\n';
     const after = 'package fixture\n\nconst MODEL_ID = "acme/small-1"\n';
     const file: SwapDiffFile = {

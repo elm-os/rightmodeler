@@ -50929,8 +50929,7 @@ async function discoverTraces(options) {
     (left, right) => right.modifiedAt.getTime() - left.modifiedAt.getTime() || left.sourceOrder - right.sourceOrder || compareText(left.path, right.path)
   ).map(({ sourceOrder: _sourceOrder, ...candidate }) => candidate);
 }
-function sanitizeClaudeProjectPath(repo) {
-  const absolute = resolve12(repo);
+function sanitizeClaudeProjectPath(absolute) {
   const sanitized = absolute.replace(/[^a-zA-Z0-9]/g, "-");
   if (sanitized.length <= 200) return sanitized;
   let hash2 = 0;
@@ -50942,7 +50941,12 @@ function sanitizeClaudeProjectPath(repo) {
 async function candidateFiles(repo, homeDir) {
   const localPaths = await localCandidatePaths(repo);
   const claudePaths = (await jsonFiles(
-    join20(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
+    join20(
+      homeDir,
+      ".claude",
+      "projects",
+      sanitizeClaudeProjectPath(resolve12(repo))
+    ),
     false
   )).sort(compareText);
   const codexPaths = (await jsonFiles(join20(homeDir, ".codex", "sessions"), true)).filter((path) => path.endsWith(".jsonl")).sort((left, right) => compareText(right, left));

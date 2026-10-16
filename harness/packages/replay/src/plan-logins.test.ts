@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { detectPlanLogins } from "./plan-logins.js";
+import { hermeticPath, linkFakeCli } from "./test-utils/fake-cli.js";
 import type { StubRecord } from "./test-utils/plan-cli-stub.js";
 
 const fakeBin = fileURLToPath(
@@ -35,20 +36,24 @@ async function machine(
   const bin = join(root, "bin");
   await mkdir(bin);
   await mkdir(join(root, "codex-home"));
-  await symlink(process.execPath, join(bin, "node"));
+  if (process.platform !== "win32") {
+    await symlink(process.execPath, join(bin, "node"));
+  }
   if (clis.codex === "fake") {
-    await symlink(join(fakeBin, "codex"), join(bin, "codex"));
+    await linkFakeCli(bin, "codex", join(fakeBin, "codex"));
   }
   if (clis.claude === "fake") {
-    await symlink(join(fakeBin, "claude"), join(bin, "claude"));
+    await linkFakeCli(bin, "claude", join(fakeBin, "claude"));
   }
   if (clis.claude === "unrunnable") {
-    await writeFile(join(bin, "claude"), "#!/bin/sh\n", { mode: 0o644 });
+    // On Windows, a file named like a program that is not one.
+    const name = process.platform === "win32" ? "claude.exe" : "claude";
+    await writeFile(join(bin, name), "#!/bin/sh\n", { mode: 0o644 });
   }
   const record = join(root, "record.jsonl");
   return {
     env: {
-      PATH: `${bin}:/usr/bin:/bin`,
+      PATH: hermeticPath(bin),
       CODEX_HOME: join(root, "codex-home"),
       PLAN_STUB_RECORD: record,
       ...extra,
