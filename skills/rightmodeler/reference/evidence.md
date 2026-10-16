@@ -137,6 +137,25 @@ All release gates bind. A candidate clearing the `0.75` shortlist pass fraction 
 recommendation. Selection also requires the held-out winner's multiplicity-corrected 95% lower
 bound to meet the quality floor.
 
+## Candidate selection
+
+A step's shortlist holds the catalog models that cost less than its recorded model at a blended
+per-token price (input weighted three to one over output), support the tools, structured output,
+context, and output length it needs, and pass the release policy's allow and deny lists;
+zero-priced models need `--include-free`. By default only models released on or after the UTC
+day 90 days before the shortlist is planned qualify, both window ends are inclusive UTC days, and
+a model with no release date is left out while a window applies. `--released-since` and
+`--released-until` move the window. Inside the window, models are ranked cheapest first, a model
+placed behind any model that costs no more and is no older, and `shortlistTop` keeps the first
+ones. When the catalog's priced models carry fewer than two distinct release dates, the default
+window is not applied (`release_window_skipped`) and models are ranked by price. `--candidate`
+replaces the ranked shortlist with the named models, each kept in a family where it qualifies on
+price and capability at every call site, whatever its release date. Each step's
+`droppedByReleaseWindow` counts the cheaper models the window left out. A family whose shortlist
+is empty abstains with `selection_missing_shortlist_verdicts`; when the window emptied a call
+site, the run warns `shortlist_no_recent_candidates`, and when no call site has a candidate it
+stops with exit 2 `no_recent_candidates`.
+
 ## Judge selection and execution
 
 Candidate and reference families must both be known. Exclude a judge catalog entry when its
@@ -144,7 +163,8 @@ family is missing, `unknown`, the candidate family, or the reference family; whe
 `/` and its family is the id itself, because a bare id names no vendor; when its declared
 type is not `language`; when declared output modalities omit text; when it has no pricing; or
 when its id is `<id>-fast` and `<id>` is also in the catalog, because a gateway answers that
-faster service tier as the base model (the shortlist skips such an id as a candidate too). An id
+faster service tier as the base model (the shortlist skips such an id as a candidate too, and
+also a batch tier, `<id>-batch` or `<id>:batch`, whose `<id>` is listed). An id
 ending in `-fast` with no base model listed is ranked like any other. Never borrow either
 evaluated family. The built-in judge is checked before replay calls any model, also when it
 stands in for an unreachable external evaluator: a candidate or recorded model whose bare id
