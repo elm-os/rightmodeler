@@ -19,12 +19,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createProgram,
+  disableCurrentFolderLookup,
   executeCli,
   pipelineArgv,
   type PipelineCommandOptions,
 } from "./cli.js";
 import { saveModelRoute, type ModelRoute } from "./pipeline.js";
 import type { CliIo } from "./protocol.js";
+import { hermeticPath, linkFakeCli } from "./test-utils/fake-cli.js";
 import { makeGitFixture } from "./test-utils/git-fixture.js";
 import { promptAnswers } from "./test-utils/prompt-answers.js";
 
@@ -127,6 +129,70 @@ function runtime(
     runtimeOutput: () => runtimeOutput,
   };
 }
+
+describe("current folder program lookup", () => {
+  it("is turned off on Windows only", () => {
+    const windows: NodeJS.ProcessEnv = {};
+    disableCurrentFolderLookup(windows, "win32");
+    expect(windows).toEqual({ NoDefaultCurrentDirectoryInExePath: "1" });
+
+    const linux: NodeJS.ProcessEnv = {};
+    disableCurrentFolderLookup(linux, "linux");
+    expect(linux).toEqual({});
+  });
+
+  it("keeps a value the user already set", () => {
+    const env: NodeJS.ProcessEnv = { NoDefaultCurrentDirectoryInExePath: "0" };
+    disableCurrentFolderLookup(env, "win32");
+    expect(env).toEqual({ NoDefaultCurrentDirectoryInExePath: "0" });
+  });
+});
+
+describe("path arguments on Windows", () => {
+  function windowsRuntime(
+    homeDir: string,
+  ): NonNullable<Parameters<typeof executeCli>[2]> {
+    return { ...terminal(homeDir, [], {}, false).runtime!, platform: "win32" };
+  }
+
+  it("refuses a quoted path that took in the arguments after it, naming only their flags", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-quoted-path-"));
+    temporaryDirectories.push(root);
+    const output = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "init",
+          "--plan",
+          "--repo",
+          `${root}\\my app" --output json --header x-api-key:secret-value`,
+        ],
+        output.io,
+        windowsRuntime(root),
+      ),
+    ).toBe(10);
+    expect(output.stderr()).toContain("(--output --header)");
+    expect(output.stderr()).not.toContain("secret-value");
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it("expands a leading ~ to the home folder", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-home-path-"));
+    temporaryDirectories.push(root);
+    await makeGitFixture(root);
+    const output = captureIo();
+
+    expect(
+      await executeCli(
+        ["init", "--plan", "--output", "json", "--repo", "~/repo"],
+        output.io,
+        windowsRuntime(root),
+      ),
+    ).toBe(0);
+    expect(output.stderr()).toBe("");
+  });
+});
 
 describe("pipelineArgv", () => {
   it("serializes every pipeline option in command order", () => {
@@ -1104,13 +1170,16 @@ async function planClis(
 ): Promise<{ env: NodeJS.ProcessEnv; records(): Promise<string[]> }> {
   const bin = join(root, "bin");
   await mkdir(bin);
-  await symlink(process.execPath, join(bin, "node"));
-  for (const cli of clis) await symlink(join(fakeBin, cli), join(bin, cli));
+  if (process.platform !== "win32") {
+    await symlink(process.execPath, join(bin, "node"));
+  }
+  for (const cli of clis) await linkFakeCli(bin, cli, join(fakeBin, cli));
   const record = join(root, "plan-stub-record.jsonl");
-  vi.stubEnv("PATH", `${bin}:/usr/bin:/bin`);
+  const path = hermeticPath(bin);
+  vi.stubEnv("PATH", path);
   return {
     env: {
-      PATH: `${bin}:/usr/bin:/bin`,
+      PATH: path,
       CODEX_HOME: join(root, "codex-home"),
       PLAN_STUB_RECORD: record,
     },

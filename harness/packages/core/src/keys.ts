@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { posix, win32 } from "node:path";
 
 const reservedStoreSegments = new Set([
@@ -24,6 +25,17 @@ export function assertSafeSegment(segment: string, label = "segment"): void {
   if (reservedStoreSegments.has(segment)) {
     throw new Error(`Invalid ${label}: reserved by the store`);
   }
+}
+
+// Family names come from traces. Windows cannot store a name holding one of these characters
+// or ending in a dot or space, or a device name, so on Windows such a name is stored under its
+// digest. Elsewhere every name is stored as it is.
+function portableSegment(segment: string): string {
+  return process.platform === "win32" &&
+    (/[<>:"|?*\u0000-\u001f]|[. ]$/u.test(segment) ||
+      /^(?:con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\..*)?$/iu.test(segment))
+    ? `x-${createHash("sha256").update(segment).digest("hex").slice(0, 32)}`
+    : segment;
 }
 
 function projectPrefix(projectId: string): string {
@@ -112,7 +124,7 @@ export function confirmPrefix(projectId: string): string {
 
 export function confirmPlanKey(projectId: string, familyId: string): string {
   assertSafeSegment(familyId, "familyId");
-  return `${confirmPrefix(projectId)}${familyId}/plan.json`;
+  return `${confirmPrefix(projectId)}${portableSegment(familyId)}/plan.json`;
 }
 
 export function verdictsPrefix(projectId: string): string {
@@ -121,7 +133,7 @@ export function verdictsPrefix(projectId: string): string {
 
 export function verdictKey(projectId: string, family: string): string {
   assertSafeSegment(family, "family");
-  return `${verdictsPrefix(projectId)}${family}.json`;
+  return `${verdictsPrefix(projectId)}${portableSegment(family)}.json`;
 }
 
 export function runsPrefix(projectId: string): string {

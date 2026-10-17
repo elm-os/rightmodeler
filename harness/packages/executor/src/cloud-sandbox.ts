@@ -226,6 +226,12 @@ export function buildCloudNetworkPolicy(
   };
 }
 
+// Windows reports mode 0o666 for directories and files alike, which would leave uploaded
+// directories without the search bit the sandbox user needs to enter them.
+function uploadMode(mode: number): number {
+  return process.platform === "win32" ? 0o755 : mode & 0o777;
+}
+
 async function listLocalEntries(root: string): Promise<readonly LocalEntry[]> {
   const rootStats = await lstat(root);
   if (rootStats.isFile()) {
@@ -233,7 +239,7 @@ async function listLocalEntries(root: string): Promise<readonly LocalEntry[]> {
       {
         kind: "file",
         path: "",
-        mode: rootStats.mode & 0o777,
+        mode: uploadMode(rootStats.mode),
         contents: await readFile(root),
       },
     ];
@@ -260,21 +266,21 @@ async function listLocalEntries(root: string): Promise<readonly LocalEntry[]> {
         entries.push({
           kind: "directory",
           path: relativePath,
-          mode: stats.mode & 0o777,
+          mode: uploadMode(stats.mode),
         });
         await visit(absolutePath, relativePath);
       } else if (stats.isFile()) {
         entries.push({
           kind: "file",
           path: relativePath,
-          mode: stats.mode & 0o777,
+          mode: uploadMode(stats.mode),
           contents: await readFile(absolutePath),
         });
       } else if (stats.isSymbolicLink()) {
         entries.push({
           kind: "symlink",
           path: relativePath,
-          mode: stats.mode & 0o777,
+          mode: uploadMode(stats.mode),
           target: await readlink(absolutePath),
         });
       } else {

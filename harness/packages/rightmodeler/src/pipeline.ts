@@ -109,6 +109,7 @@ import {
   auditCorpusSample,
   auditTabulate,
   buildCorpus,
+  decodeText,
   detectFormat,
   excludedStepsWarning,
   FormatDetectionError,
@@ -2138,7 +2139,7 @@ function createContext(options: PipelineOptions): PipelineContext {
 function readModeBConfig(path: string): ModeBConfig {
   let value: unknown;
   try {
-    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    value = JSON.parse(decodeText(readFileSync(path))) as unknown;
   } catch (error) {
     throw invalidModeBConfig(
       `Invalid --modeb-config file: ${error instanceof Error ? error.message : String(error)}`,
@@ -2185,7 +2186,7 @@ function readModeBConfig(path: string): ModeBConfig {
 function readPricingFile(path: string): z.infer<typeof pricingFileSchema> {
   let value: unknown;
   try {
-    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    value = JSON.parse(decodeText(readFileSync(path))) as unknown;
   } catch (error) {
     throw invalidPricingFile(
       `Invalid --pricing-file: ${error instanceof Error ? error.message : String(error)}`,
@@ -2205,7 +2206,7 @@ function readPricingFile(path: string): z.infer<typeof pricingFileSchema> {
 function readPolicyFile(path: string): z.infer<typeof releasePolicyFileSchema> {
   let value: unknown;
   try {
-    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    value = JSON.parse(decodeText(readFileSync(path))) as unknown;
   } catch (error) {
     throw invalidPolicyFile(
       `Invalid --policy: ${error instanceof Error ? error.message : String(error)}`,
@@ -2870,9 +2871,7 @@ async function executeIngest(
   if (tracePath === undefined) {
     throw missingTracesPath();
   }
-  const texts = (await readTraceInput(tracePath)).map((body) =>
-    body.toString("utf8"),
-  );
+  const texts = (await readTraceInput(tracePath)).map(decodeText);
   const detected = texts.map((text) => detectFormat(text, traceAdapters));
   const names = [...new Set(detected.map(({ name }) => name))];
   if (names.length > 1) throw mixedTraceFormats(names);
@@ -5944,7 +5943,7 @@ async function gitFiles(repo: string): Promise<string[] | undefined> {
         "--others",
         "--exclude-standard",
       ],
-      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true },
     );
     return stdout.split("\0").filter((path) => path.length > 0);
   } catch {
@@ -5997,17 +5996,17 @@ async function repositoryRevision(repo: string): Promise<string> {
     ({ stdout: insideWorkTree } = await execFileAsync(
       "git",
       ["-C", repo, "rev-parse", "--is-inside-work-tree"],
-      { encoding: "utf8" },
+      { encoding: "utf8", windowsHide: true },
     ));
-  } catch {
-    throw notGitRepository();
+  } catch (error) {
+    throw notGitRepository(error);
   }
   if (insideWorkTree.trim() !== "true") throw notGitRepository();
   try {
     const { stdout } = await execFileAsync(
       "git",
       ["-C", repo, "rev-parse", "--verify", "HEAD"],
-      { encoding: "utf8" },
+      { encoding: "utf8", windowsHide: true },
     );
     return stdout.trim();
   } catch {
@@ -6021,7 +6020,38 @@ async function repositoryRevision(repo: string): Promise<string> {
   }
 }
 
-function notGitRepository(): ProtocolError {
+function notGitRepository(error?: unknown): ProtocolError {
+  const failure = error as { syscall?: unknown; stderr?: unknown } | undefined;
+  if (
+    typeof failure?.syscall === "string" &&
+    failure.syscall.startsWith("spawn")
+  ) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "not_git_repository",
+      message:
+        "Git is not installed or not on PATH, so Rightmodeler cannot read this repository.",
+      remedy:
+        "Install Git (on Windows, Git for Windows), open a new terminal, and run the command again.",
+    });
+  }
+  // Git refuses a repository whose folder another account owns, as on some Windows drives and
+  // network shares, and prints the command that trusts it.
+  const trust =
+    typeof failure?.stderr === "string"
+      ? /git config --global --add safe\.directory .+/u.exec(
+          failure.stderr,
+        )?.[0]
+      : undefined;
+  if (trust !== undefined) {
+    return new ProtocolError({
+      exitCode: 2,
+      code: "not_git_repository",
+      message:
+        "Git refuses to read this repository because another account owns its folder.",
+      remedy: `If you trust the folder, run ${trust.trim()}, then run the command again.`,
+    });
+  }
   return new ProtocolError({
     exitCode: 2,
     code: "not_git_repository",
@@ -7015,7 +7045,7 @@ export async function runAuditTabulate(options: {
   });
   const worksheet: AuditWorksheet = options.worksheet
     ? auditWorksheetSchema.parse(
-        JSON.parse(await readFile(resolve(options.worksheet), "utf8")),
+        JSON.parse(decodeText(await readFile(resolve(options.worksheet)))),
       )
     : await loadCurrent(context, "audit-sample", auditWorksheetSchema);
   const result = auditTabulate(worksheet);

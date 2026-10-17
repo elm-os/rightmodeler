@@ -12,10 +12,19 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { resolveCommand } from "@rightmodeler/core";
 import { afterAll, describe, expect, it } from "vitest";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -35,6 +44,21 @@ const executorManifestPath = fileURLToPath(
 const temporaryDirectories: string[] = [];
 const execFileAsync = promisify(execFile);
 
+// npm and pnpm are .cmd shims on Windows, which execFile cannot start without a shell.
+function runTool(
+  command: string,
+  args: readonly string[],
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    maxBuffer?: number;
+    timeout?: number;
+  },
+) {
+  const launch = resolveCommand(command);
+  return execFileAsync(launch.file, [...launch.args, ...args], options);
+}
+
 interface StubProvider {
   port: number;
   close(): Promise<void>;
@@ -52,7 +76,7 @@ interface ChildResult {
 
 // The registry test needs the network; locally it skips when the registry is unreachable, in CI
 // it always runs so an outage fails loudly instead of passing silently.
-const registryReachable = await execFileAsync(
+const registryReachable = await runTool(
   "npm",
   ["view", "--prefer-online", "@vercel/sandbox@^3.3.0", "version"],
   { env: withoutColor(process.env), timeout: 20_000 },
@@ -82,7 +106,7 @@ function packOnce(): Promise<string> {
   packed ??= (async () => {
     const packDirectory = await mkdtemp(join(tmpdir(), "rightmodeler-pack-"));
     temporaryDirectories.push(packDirectory);
-    await execFileAsync("pnpm", ["pack", "--pack-destination", packDirectory], {
+    await runTool("pnpm", ["pack", "--pack-destination", packDirectory], {
       cwd: packageRoot,
       env: withoutColor(process.env),
       maxBuffer: 20 * 1024 * 1024,
@@ -140,7 +164,7 @@ describe("packed CLI bundle", () => {
     );
     // `--omit=optional` alone still fetches the optional SDK's registry metadata, which retries
     // for minutes without a network; `--offline` keeps this install hermetic.
-    await execFileAsync(
+    await runTool(
       "npm",
       [
         "install",
@@ -163,7 +187,9 @@ describe("packed CLI bundle", () => {
     // the scoped name to avoid colliding with the repo root package.
     const installedRoot = join(project, "node_modules/rightmodeler");
     const installedBinary = join(project, "node_modules/.bin/rightmodeler");
-    expect(await realpath(installedBinary)).toBe(
+    // A symlink to the bundle elsewhere; on Windows, npm's .cmd shim, which names it.
+    const launch = resolveCommand(installedBinary);
+    expect(await realpath(launch.args.at(-1) ?? launch.file)).toBe(
       await realpath(join(installedRoot, "dist-bundle/cli.js")),
     );
     await assertPackedDocumentation(installedRoot, installedBinary, project);
@@ -292,11 +318,14 @@ describe("packed CLI bundle", () => {
 
   it("packs only what the CLI runs: no type declarations, and exports that point at the bundle", async () => {
     const tarball = await packOnce();
-    const { stdout: listing } = await execFileAsync("tar", ["-tzf", tarball], {
-      maxBuffer: 20 * 1024 * 1024,
-    });
+    // A bare file name: GNU tar, which Git for Windows ships, reads C: as a remote host.
+    const { stdout: listing } = await execFileAsync(
+      "tar",
+      ["-tzf", basename(tarball)],
+      { cwd: dirname(tarball), maxBuffer: 20 * 1024 * 1024 },
+    );
     const packed = listing
-      .split("\n")
+      .split(/\r?\n/)
       .filter((entry) => entry.length > 0)
       .map((entry) => entry.replace(/^package\//, ""))
       .sort();
@@ -317,11 +346,11 @@ describe("packed CLI bundle", () => {
         "package.json",
       ].sort(),
     );
-    const { stdout: manifest } = await execFileAsync("tar", [
-      "-xzOf",
-      tarball,
-      "package/package.json",
-    ]);
+    const { stdout: manifest } = await execFileAsync(
+      "tar",
+      ["-xzOf", basename(tarball), "package/package.json"],
+      { cwd: dirname(tarball) },
+    );
     const packedManifest = JSON.parse(manifest) as {
       exports?: unknown;
       types?: unknown;
@@ -340,7 +369,7 @@ describe("packed CLI bundle", () => {
         join(project, "package.json"),
         `${JSON.stringify({ name: "registry-cli-test", private: true })}\n`,
       );
-      await execFileAsync(
+      await runTool(
         "npm",
         [
           "install",
@@ -399,7 +428,8 @@ function runInstalled(
   addedEnv: NodeJS.ProcessEnv = {},
 ): Promise<ChildResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, [...args], {
+    const launch = resolveCommand(binary);
+    const child = spawn(launch.file, [...launch.args, ...args], {
       cwd,
       env: { ...withoutColor(process.env), ...addedEnv },
       stdio: ["ignore", "pipe", "pipe"],
@@ -433,7 +463,9 @@ async function assertPackedDocumentation(
   ) as { homepage?: string };
   const markdownFiles = await collectMarkdown(installedRoot);
   expect(
-    markdownFiles.map((path) => relative(installedRoot, path)).sort(),
+    markdownFiles
+      .map((path) => relative(installedRoot, path).split(sep).join("/"))
+      .sort(),
   ).toEqual([
     "README.md",
     "docs/commands.md",

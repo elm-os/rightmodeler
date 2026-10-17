@@ -146,7 +146,16 @@ async function runDocker(args: readonly string[]): Promise<string> {
 
 export async function detectDockerAvailability(): Promise<DockerAvailability> {
   try {
-    await runDocker(["version", "--format", "{{.Server.Version}}"]);
+    // Docker Desktop on Windows can run Windows containers, which Mode B cannot use.
+    const serverOs = await runDocker(["version", "--format", "{{.Server.Os}}"]);
+    if (serverOs === "windows") {
+      return {
+        available: false,
+        reason: "daemon-unavailable",
+        message:
+          "Docker is running Windows containers, and Mode B needs Linux containers. Switch Docker Desktop to Linux containers.",
+      };
+    }
     return { available: true };
   } catch (error) {
     const missingCli = isRecord(error) && error.code === "ENOENT";

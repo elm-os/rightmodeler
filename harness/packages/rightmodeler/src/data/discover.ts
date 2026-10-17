@@ -6,6 +6,7 @@ import { compareText } from "@rightmodeler/core";
 
 import { traceAdapters } from "./adapters.js";
 import { detectFormat, isRecord, type TraceFormat } from "./adapters/shared.js";
+import { decodeText } from "./decode.js";
 
 const MAX_FILES = 50;
 const MAX_CODEX_EXAMINED = 300;
@@ -70,8 +71,7 @@ export async function discoverTraces(
     .map(({ sourceOrder: _sourceOrder, ...candidate }) => candidate);
 }
 
-export function sanitizeClaudeProjectPath(repo: string): string {
-  const absolute = resolve(repo);
+export function sanitizeClaudeProjectPath(absolute: string): string {
   const sanitized = absolute.replace(/[^a-zA-Z0-9]/g, "-");
   if (sanitized.length <= 200) return sanitized;
   let hash = 0;
@@ -88,7 +88,12 @@ async function candidateFiles(
   const localPaths = await localCandidatePaths(repo);
   const claudePaths = (
     await jsonFiles(
-      join(homeDir, ".claude", "projects", sanitizeClaudeProjectPath(repo)),
+      join(
+        homeDir,
+        ".claude",
+        "projects",
+        sanitizeClaudeProjectPath(resolve(repo)),
+      ),
       false,
     )
   ).sort(compareText);
@@ -134,6 +139,9 @@ async function codexCandidates(
   repo: string,
 ): Promise<CandidateFile[]> {
   const files: CandidateFile[] = [];
+  // Codex records the folder as the shell spelled it, which on Windows can differ in letter
+  // case or name the same folder by another path; the native realpath spells it one way.
+  const canonicalRepo = await realpath(repo).catch(() => repo);
   let examined = 0;
   for (const path of paths) {
     if (
@@ -146,7 +154,14 @@ async function codexCandidates(
     try {
       const metadata = await stat(path);
       const head = await detectionHead(path, metadata.size);
-      if (codexSessionCwd(head.text) !== repo) continue;
+      const recorded = codexSessionCwd(head.text);
+      if (
+        recorded === undefined ||
+        (recorded !== repo &&
+          (await realpath(recorded).catch(() => undefined)) !== canonicalRepo)
+      ) {
+        continue;
+      }
       files.push({
         path,
         source: "codex",
@@ -255,7 +270,7 @@ async function detectionHead(
   try {
     const buffer = Buffer.alloc(Math.min(MAX_READ_BYTES, fileSize));
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    const raw = buffer.toString("utf8", 0, bytesRead);
+    const raw = decodeText(buffer.subarray(0, bytesRead));
     const complete = bytesRead === fileSize;
     const parsed = complete ? parseWholeJson(raw) : undefined;
     if (parsed !== undefined) {

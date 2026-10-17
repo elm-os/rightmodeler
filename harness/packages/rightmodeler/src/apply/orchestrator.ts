@@ -498,7 +498,19 @@ async function dirtySwapPaths(
 }
 
 function committedBlobSha(repoDir: string, path: string): Promise<string> {
-  return gitOutput(repoDir, ["rev-parse", `HEAD:${path}`]);
+  return gitOutput(repoDir, ["rev-parse", `HEAD:./${path}`]);
+}
+
+// The pull request edits the committed file, not the working copy: a checkout with
+// core.autocrlf=true holds CRLF copies of LF files, and the change must touch only the
+// model id.
+async function committedText(repoDir: string, path: string): Promise<string> {
+  const { stdout } = await execFileAsync(
+    "git",
+    ["-C", repoDir, "cat-file", "blob", `HEAD:./${path}`],
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  );
+  return stdout;
 }
 
 async function resumedApplyUpdates({
@@ -1022,7 +1034,19 @@ export async function applySwaps({
       { paths: staleDigests },
     );
   }
-  const diffResults = buildSwapDiff({ repoDir, projectId, swaps });
+  const sources = new Map<string, string>();
+  for (const path of swapPaths) {
+    try {
+      sources.set(path, await committedText(repoDir, path));
+    } catch {
+      return refusal(
+        "stale_location",
+        "At least one proposed swap no longer has one fresh source location.",
+        { paths: [path] },
+      );
+    }
+  }
+  const diffResults = buildSwapDiff({ repoDir, projectId, swaps, sources });
   const stale = diffResults.flatMap((result) =>
     "reason" in result ? [result.path] : [],
   );

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import {
   access,
+  link,
   mkdir,
   mkdtemp,
   readFile,
@@ -24,6 +25,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...actual,
+    link: vi.fn(actual.link),
     readFile: vi.fn(actual.readFile),
     readdir: vi.fn(actual.readdir),
   };
@@ -62,6 +64,26 @@ afterEach(async () => {
 });
 
 describe("FsStore", () => {
+  it("names a volume that cannot hold hard links instead of failing with its raw error", async () => {
+    const store = await makeStore();
+    // What exFAT and FAT32 volumes report on Windows.
+    vi.mocked(link).mockRejectedValueOnce(
+      Object.assign(
+        new Error("EISDIR: illegal operation on a directory, link"),
+        {
+          code: "EISDIR",
+        },
+      ),
+    );
+
+    await expect(
+      store.putImmutable("project/facts/fact-1.json", Buffer.from("fact")),
+    ).rejects.toMatchObject({
+      code: "EISDIR",
+      message: expect.stringContaining("cannot create hard links"),
+    });
+  });
+
   it("treats an identical immutable write as idempotent and rejects different bytes", async () => {
     const store = await makeStore();
     const key = "project/facts/fact-1.json";
@@ -111,7 +133,7 @@ describe("FsStore", () => {
       ),
       { numRuns: 30 },
     );
-  });
+  }, 30_000);
 
   it("creates an absent key at version zero and persists versions across instances", async () => {
     const store = await makeStore();

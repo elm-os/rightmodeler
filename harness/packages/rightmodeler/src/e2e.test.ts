@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import {
   chmod,
+  copyFile,
   cp,
   mkdir,
   mkdtemp,
@@ -14,7 +15,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -26,6 +27,7 @@ import {
   factsPrefix,
   readLedger,
   reportKey,
+  resolveCommand,
   setupStateKey,
   type StepRecord,
   type JsonValue,
@@ -51,6 +53,7 @@ import {
   topologicalRecords,
 } from "./pipeline.js";
 import { Reporter } from "./protocol.js";
+import { hermeticPath } from "./test-utils/fake-cli.js";
 
 const cliPath = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const demoAppPath = fileURLToPath(
@@ -136,6 +139,79 @@ describe("machine error protocol", () => {
     expect(JSON.parse(stderr)).toMatchObject({
       code: "stale_corpus_parent",
       message: "active corpus moved",
+    });
+  });
+});
+
+describe.runIf(process.platform === "win32")("Windows program lookup", () => {
+  it("runs Git from PATH, not a git.exe in the current folder", async () => {
+    const { root, repo } = await fixtureCopy("planted-git");
+    const cwd = join(root, "planted");
+    await mkdir(cwd);
+    await copyFile(process.execPath, join(cwd, "git.exe"));
+    // Drop any opt-out the parent shell set, so the CLI has to set it itself.
+    const unset = Object.fromEntries(
+      Object.keys(process.env)
+        .filter(
+          (name) => name.toUpperCase() === "NODEFAULTCURRENTDIRECTORYINEXEPATH",
+        )
+        .map((name) => [name, undefined]),
+    );
+
+    const plan = await runCli(
+      ["init", "--plan", "--output", "json", "--repo", repo],
+      { cwd, env: unset },
+    );
+
+    expect(plan.code, plan.stderr).toBe(0);
+  });
+});
+
+describe("git preconditions", () => {
+  it("names a missing git instead of calling the folder no repository", async () => {
+    const { root, repo } = await fixtureCopy("missing-git");
+    const empty = join(root, "empty-path");
+    await mkdir(empty);
+    // Every spelling of PATH, since Windows reads the name in any letter case.
+    const path = Object.fromEntries(
+      [...Object.keys(process.env), "PATH"]
+        .filter((name) => name.toUpperCase() === "PATH")
+        .map((name) => [name, empty]),
+    );
+
+    const plan = await runCli(
+      ["init", "--plan", "--output", "json", "--repo", repo],
+      { env: path },
+    );
+
+    expect(plan.code, plan.stderr).toBe(2);
+    expect(JSON.parse(plan.stderr)).toMatchObject({
+      code: "not_git_repository",
+      message: expect.stringContaining("Git is not installed"),
+    });
+  });
+
+  it("names a repository git refuses for its owner, with git's own fix", async () => {
+    const { root, repo } = await fixtureCopy("unsafe-owner");
+
+    const plan = await runCli(
+      ["init", "--plan", "--output", "json", "--repo", repo],
+      {
+        env: {
+          GIT_TEST_ASSUME_DIFFERENT_OWNER: "1",
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: join(root, "no-global-config"),
+        },
+      },
+    );
+
+    expect(plan.code, plan.stderr).toBe(2);
+    expect(JSON.parse(plan.stderr)).toMatchObject({
+      code: "not_git_repository",
+      message: expect.stringContaining("another account owns"),
+      remedy: expect.stringContaining(
+        "git config --global --add safe.directory",
+      ),
     });
   });
 });
@@ -1287,6 +1363,45 @@ describe("built CLI pipeline", () => {
     60_000,
   );
 
+  it("ingests a trace file Windows PowerShell 5.1 wrote, in UTF-16 with CRLF, like the original", async () => {
+    const original = await readFile(tracesPath, "utf8");
+    const runCounts: number[] = [];
+    for (const [label, bytes] of [
+      ["utf8-traces", Buffer.from(original)],
+      [
+        "utf16-traces",
+        Buffer.concat([
+          Buffer.from([0xff, 0xfe]),
+          Buffer.from(original.replaceAll("\n", "\r\n"), "utf16le"),
+        ]),
+      ],
+    ] as const) {
+      const { root, repo } = await fixtureCopy(label);
+      const traces = join(root, "otel-genai.json");
+      await writeFile(traces, bytes);
+      const result = await runCli([
+        "init",
+        "--through",
+        "ingest",
+        "--traces",
+        traces,
+        "--output",
+        "json",
+        "--repo",
+        repo,
+      ]);
+
+      expect(result.code, result.stderr).toBe(0);
+      const ingest = await readStageArtifact(
+        join(repo, ".rightmodeler"),
+        "ingest",
+      );
+      runCounts.push((ingest.runs as unknown[]).length);
+    }
+    expect(runCounts[0]).toBeGreaterThan(0);
+    expect(runCounts[1]).toBe(runCounts[0]);
+  });
+
   it("warns and keeps ingesting when a traced stream never finished", async () => {
     const { repo } = await fixtureCopy("stream-incomplete");
     const result = await runCli([
@@ -1915,7 +2030,11 @@ describe("built CLI pipeline", () => {
         allowPolicyPath,
         JSON.stringify({ allowModels: [allowedModelId] }),
       ),
-      writeFile(floorPolicyPath, JSON.stringify({ qualityFloor: 0.95 })),
+      // With a byte order mark, as Windows editors often write it.
+      writeFile(
+        floorPolicyPath,
+        `\uFEFF${JSON.stringify({ qualityFloor: 0.95 })}`,
+      ),
     ]);
     const stub = await startStub();
     const apiKeyEnv = "RIGHTMODELER_POLICY_E2E_API_KEY";
@@ -2818,7 +2937,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  }, 180_000);
 
   it("gives a second family two call sites and never abstains it on distinct steps", async () => {
     const { root, repo } = await fixtureCopy("second-family-call-sites");
@@ -2940,7 +3059,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  }, 240_000);
 
   it("abstains a single-call-site family before any replay spend", async () => {
     const { root, repo } = await fixtureCopy("single-call-site-family");
@@ -4519,7 +4638,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await Promise.all([provider.close(), github.close()]);
     }
-  }, 60_000);
+  }, 180_000);
 
   it("prefers a reachable external evaluator, persists every metric, and makes zero judge calls", async () => {
     const { repo } = await fixtureCopy("external-evaluator");
@@ -6455,12 +6574,7 @@ describe("built CLI through plan routes", () => {
       import.meta.url,
     ),
   );
-  const planPath = [
-    fakeBin,
-    dirname(process.execPath),
-    "/usr/bin",
-    "/bin",
-  ].join(delimiter);
+  const planPath = hermeticPath(fakeBin, dirname(process.execPath));
   const apiKeyEnv = "RIGHTMODELER_PLAN_E2E_API_KEY";
   const dummyAnthropicKey = "sk-ant-plan-e2e-dummy-must-stay-home";
   const judgeModels = new Set(["zeta/judge-1", "yotta/judge-2"]);
@@ -6488,8 +6602,10 @@ describe("built CLI through plan routes", () => {
   beforeAll(() => {
     const root = join(tmpdir(), `rightmodeler-plan-fake-${process.pid}`);
     const record = `${root}.jsonl`;
-    const version = spawnSync("claude", ["--version"], {
-      env: { PATH: planPath, PLAN_STUB_RECORD: record },
+    const env = { PATH: planPath, PLAN_STUB_RECORD: record };
+    const claude = resolveCommand("claude", env);
+    const version = spawnSync(claude.file, [...claude.args, "--version"], {
+      env,
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf8",
     });

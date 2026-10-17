@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
 
 import type { PlanLoginStatus } from "@rightmodeler/replay";
@@ -61,8 +62,27 @@ describe("interactive trace guidance", () => {
 
   it("accepts a typed path", async () => {
     expect((await prompt("./exports/traces.jsonl\n")).selected).toBe(
-      "/repo/exports/traces.jsonl",
+      resolve("/repo", "./exports/traces.jsonl"),
     );
+  });
+
+  it("accepts a path pasted in quotes, as Explorer's Copy as path gives it", async () => {
+    for (const pasted of [
+      '"./exports/traces.jsonl"',
+      "'./exports/traces.jsonl'",
+    ]) {
+      expect((await prompt(`${pasted}\n`)).selected).toBe(
+        resolve("/repo", "./exports/traces.jsonl"),
+      );
+    }
+  });
+
+  it("lists nested candidates with forward slashes", async () => {
+    const nested = [
+      { ...candidates[0]!, path: resolve("/repo/traces/a.jsonl") },
+    ];
+
+    expect((await prompt("\n", nested)).output).toContain(", ./traces/a.jsonl");
   });
 
   it("re-prompts when a numeric choice is out of range", async () => {

@@ -271,6 +271,17 @@ export class FsStore implements Store {
       return true;
     } catch (error) {
       if (isAlreadyPresent(error)) return false;
+      // exFAT and FAT32 volumes, and some network shares, have no hard links.
+      const { code } = error as NodeJS.ErrnoException;
+      if (code === "EISDIR" || code === "ENOTSUP") {
+        throw Object.assign(
+          new Error(
+            `The store at ${this.root} is on a volume that cannot create hard links, such as exFAT or FAT32. Keep the store on a volume that can, such as NTFS or a Dev Drive.`,
+            { cause: error },
+          ),
+          { code },
+        );
+      }
       throw error;
     }
   }
