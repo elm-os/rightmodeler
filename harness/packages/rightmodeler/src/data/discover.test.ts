@@ -101,6 +101,22 @@ describe("trace discovery", () => {
     expect(candidates[0]?.approximateRecords).toBe(2);
   });
 
+  it("finds a trace file that Windows PowerShell 5.1 wrote as UTF-16", async () => {
+    const { repo, homeDir } = await fixtureRoot("utf16-discovery");
+    const path = join(repo, "traces.json");
+    await writeFile(
+      path,
+      Buffer.concat([
+        Buffer.from([0xff, 0xfe]),
+        Buffer.from(otelTrace, "utf16le"),
+      ]),
+    );
+
+    expect(await discoverTraces({ repo, homeDir })).toMatchObject([
+      { path, format: "otel-genai" },
+    ]);
+  });
+
   it("examines no more than 50 conventional local files", async () => {
     const { repo, homeDir } = await fixtureRoot("file-cap");
     await Promise.all(
@@ -211,7 +227,7 @@ describe("trace discovery", () => {
     const outside = join(root, "outside");
     await mkdir(outside);
     await writeFile(join(outside, "outside.json"), otelTrace);
-    await symlink(outside, join(repo, "traces"));
+    await symlink(outside, join(repo, "traces"), "junction");
     const healthy = join(repo, "traces.json");
     await writeFile(healthy, otelTrace);
 
@@ -237,6 +253,24 @@ describe("trace discovery", () => {
       { path: matching, format: "codex", approximateRecords: 2 },
     ]);
   });
+
+  it.runIf(process.platform === "win32")(
+    "finds a Codex session that spells the repo path in another letter case",
+    async () => {
+      const { repo, homeDir } = await fixtureRoot("codex-case");
+      const sessions = join(homeDir, ".codex", "sessions", "2026", "10", "16");
+      await mkdir(sessions, { recursive: true });
+      const matching = join(sessions, "rollout-upper-case.jsonl");
+      await writeFile(
+        matching,
+        `${codexSession(resolve(repo).toUpperCase())}\n`,
+      );
+
+      expect(await discoverTraces({ repo, homeDir })).toMatchObject([
+        { path: matching, format: "codex" },
+      ]);
+    },
+  );
 
   it("finds a matching Codex session after the global file cap", async () => {
     const { root, repo, homeDir } = await fixtureRoot("codex-file-cap");

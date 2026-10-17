@@ -436,10 +436,13 @@ export function buildSwapDiff({
   repoDir,
   projectId,
   swaps,
+  sources,
 }: {
   readonly repoDir: string;
   readonly projectId: string;
   readonly swaps: readonly SwapRequest[];
+  // Text to edit by path, when it differs from the working copy.
+  readonly sources?: ReadonlyMap<string, string>;
 }): SwapDiffResult[] {
   const grouped = new Map<string, SwapRequest[]>();
   for (const swap of swaps) {
@@ -451,7 +454,7 @@ export function buildSwapDiff({
   for (const [path, fileSwaps] of grouped) {
     let before: string;
     try {
-      before = readFileSync(join(repoDir, path), "utf8");
+      before = sources?.get(path) ?? readFileSync(join(repoDir, path), "utf8");
     } catch {
       results.push({ path, reason: "stale_location" });
       continue;

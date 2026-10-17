@@ -3,6 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
+import { resolveCommand } from "@rightmodeler/core";
+
 import { lintSwapDiff } from "./difflint.js";
 import type { SwapDiffFile } from "./diff.js";
 
@@ -68,7 +70,7 @@ function pinnedPrettierVersion(repoDir: string): string | null {
   const yarnLock = join(repoDir, "yarn.lock");
   if (existsSync(yarnLock)) {
     return (
-      /(?:^|\n)["']?prettier@[^\n]+:\n\s+version\s+["']([^"']+)["']/.exec(
+      /(?:^|\n)["']?prettier@[^\n]+:\r?\n\s+version\s+["']([^"']+)["']/.exec(
         readFileSync(yarnLock, "utf8"),
       )?.[1] ?? null
     );
@@ -142,9 +144,10 @@ function runFormatter(
   input: string,
 ): Promise<string | null> {
   return new Promise((resolve, reject) => {
+    const launch = resolveCommand(command.executable);
     const child = execFile(
-      command.executable,
-      command.args(filePath),
+      launch.file,
+      [...launch.args, ...command.args(filePath)],
       { cwd, encoding: "utf8" },
       (error, stdout) => {
         if (error !== null) reject(error);
@@ -180,12 +183,16 @@ function firstOutsideTouchedLine(
   return null;
 }
 
+// ENOENT: not installed. EINVAL and EFTYPE: on Windows, something that cannot be started
+// without a shell, or is not a program at all.
 function isMissingExecutable(error: unknown): boolean {
   return (
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    error.code === "ENOENT"
+    (error.code === "ENOENT" ||
+      error.code === "EINVAL" ||
+      error.code === "EFTYPE")
   );
 }
 

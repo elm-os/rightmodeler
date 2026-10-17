@@ -38,6 +38,27 @@ Install workspace dependencies:
 pnpm install
 ```
 
+### Windows
+
+Contributing from native Windows works without WSL. In PowerShell, install pnpm
+with the standalone installer:
+
+```powershell
+Invoke-WebRequest https://get.pnpm.io/install.ps1 -UseBasicParsing | Invoke-Expression
+```
+
+You also need Git for Windows. The repository's `.gitattributes` keeps every text
+file LF, whatever `core.autocrlf` is set to. A clone made before that file existed
+still has CRLF copies; commit or stash your work, then refresh it with
+`git rm -r --cached -q .` followed by `git reset --hard`.
+
+For the Docker suites, run Docker Desktop with Linux containers. Without Docker,
+set the skip variable in the same shell before `pnpm check`:
+`$env:RIGHTMODELER_SKIP_DOCKER = "1"` in PowerShell, or
+`set "RIGHTMODELER_SKIP_DOCKER=1"` in the Command Prompt. The suites that emulate
+the documented GitHub Actions workflow with bash, and actionlint, are skipped on
+Windows; they print why.
+
 ## Workspace layout
 
 | Path                  | What it is                                                      |

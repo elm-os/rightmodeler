@@ -406,7 +406,15 @@ describe("workflow structure", () => {
   });
 });
 
-describe("exit mapping", () => {
+// The documented workflow runs on ubuntu-latest, and these suites run its steps with bash.
+const linuxRunnerOnly = process.platform === "win32";
+if (linuxRunnerOnly) {
+  console.warn(
+    "[github-actions doc] workflow step emulation SKIPPED on Windows: the documented workflow targets ubuntu-latest",
+  );
+}
+
+describe.skipIf(linuxRunnerOnly)("exit mapping", () => {
   const warning = (code: string, message: string) =>
     jsonLine({ event: "warning", code, message });
   const error = (code: string) =>
@@ -706,7 +714,7 @@ describe("exit mapping", () => {
   );
 });
 
-describe("against the real CLI", () => {
+describe.skipIf(linuxRunnerOnly)("against the real CLI", () => {
   it("watches nothing, proves a swap, opens one draft, then watches it quietly", async () => {
     const root = await temporaryDirectory("rightmodeler-actions-cli-");
     const repo = await makeGitFixture(root, demoAppPath, "demo-app");
@@ -845,12 +853,15 @@ async function actionlintUnavailable(): Promise<string | undefined> {
     : `the ${actionlintImage} image could not be pulled`;
 }
 
-const actionlintSkipReason = await actionlintUnavailable();
+const actionlintSkipReason = linuxRunnerOnly
+  ? "the documented workflow targets ubuntu-latest"
+  : await actionlintUnavailable();
 const skipActionlint =
-  actionlintSkipReason !== undefined && process.env.CI !== "true";
+  linuxRunnerOnly ||
+  (actionlintSkipReason !== undefined && process.env.CI !== "true");
 if (skipActionlint) {
   console.warn(
-    `[github-actions doc] actionlint SKIPPED: ${actionlintSkipReason} (required when CI=true)`,
+    `[github-actions doc] actionlint SKIPPED: ${actionlintSkipReason}${linuxRunnerOnly ? "" : " (required when CI=true)"}`,
   );
 }
 

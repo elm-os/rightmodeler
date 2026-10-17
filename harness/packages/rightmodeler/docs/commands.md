@@ -13,8 +13,7 @@ Find and prove safe model substitutions.
 
 Options:
   -V, --version        output the version number
-  --repo <dir>         repository to analyze (default:
-                       ".")
+  --repo <dir>         repository to analyze (default: current directory)
   --store <dir>        store directory
   --output <mode>      output mode (choices: "human", "json", "jsonl", default:
                        "human")

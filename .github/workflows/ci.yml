@@ -61,6 +61,50 @@ jobs:
             exit 1
           fi
 
+  windows:
+    # Native Windows, without Docker: hosted Windows runners run only Windows containers, so
+    # the Docker suites skip here and stay covered by the ci job. Advisory until it is green.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: windows-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    env:
+      RIGHTMODELER_SKIP_DOCKER: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        # Same as the ci job: the version comes from the packageManager field only.
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check
+        # pnpm runs package scripts through cmd.exe. Drop Git's Unix tools from PATH so a script
+        # that needs rm or bash fails here as it would on a stock Windows machine.
+        shell: pwsh
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Git\\(usr\\|mingw64\\)?bin\\?$' }) -join ';'
+          pnpm check
+
+      - name: Refuse a CLI bundle that differs from the Windows build
+        shell: pwsh
+        run: |
+          $stale = git status --porcelain -- harness/packages/rightmodeler/dist-bundle
+          if ($stale) {
+            $stale
+            Write-Error "harness/packages/rightmodeler/dist-bundle differs from a fresh Windows build."
+            exit 1
+          }
+
   unprivileged-artifacts:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest

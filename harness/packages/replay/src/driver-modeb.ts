@@ -1468,6 +1468,13 @@ function executionFor(
   });
 }
 
+// Windows has no signal to re-raise: a process that signals itself ends with exit code 1, which
+// means a recommendation exists, so exit with 130 there, as a shell does on Ctrl+C.
+export function endInterrupted(platform: NodeJS.Platform): void {
+  if (platform === "win32") process.exit(130);
+  else process.kill(process.pid, "SIGINT");
+}
+
 /**
  * Runs the client's pipeline in a container and joins validated execution and
  * metering records. Assessment remains a host-side caller step.
@@ -1824,7 +1831,7 @@ export async function replayModeB(
       [...liveContainers].map(({ executor, handle }) =>
         executor.destroy(handle),
       ),
-    ).then(() => process.kill(process.pid, "SIGINT"));
+    ).then(() => endInterrupted(process.platform));
   };
   try {
     process.once("SIGINT", onInterrupt);

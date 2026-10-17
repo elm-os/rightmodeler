@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExecutorProvider } from "@rightmodeler/core";
@@ -57,6 +57,7 @@ const mocks = vi.hoisted(() => {
     }> = [];
     readonly commands: Array<{
       cmd: string;
+      args?: string[];
       detached?: boolean;
       timeoutMs?: number;
     }> = [];
@@ -80,6 +81,7 @@ const mocks = vi.hoisted(() => {
 
     async runCommand(params: {
       cmd: string;
+      args?: string[];
       detached?: boolean;
       timeoutMs?: number;
     }): Promise<
@@ -273,6 +275,25 @@ describe("cloud sandbox contract", () => {
       timedOut: false,
     });
   });
+
+  it.runIf(process.platform === "win32")(
+    "uploads from Windows with modes the sandbox user can use",
+    async () => {
+      await mkdir(join(scratchPath, "driver"));
+      await writeFile(join(scratchPath, "driver", "case.json"), "{}");
+      const executor = createCloudExecutor({ maxBytesPerNamespace: 10 });
+
+      await executor.launch(launchSpec());
+
+      const [sandbox] = [...mocks.sandboxes.values()];
+      expect(
+        sandbox?.commands
+          .filter(({ cmd }) => cmd === "chmod")
+          .map(({ args }) => args?.[0]),
+      ).toEqual(["755"]);
+      expect(sandbox?.writes.map(({ mode }) => mode)).toEqual([0o755]);
+    },
+  );
 
   it("reports a non-zero workload exit without calling it a timeout", async () => {
     mocks.setExitCode(3);

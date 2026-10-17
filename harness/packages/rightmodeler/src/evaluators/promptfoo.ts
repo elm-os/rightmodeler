@@ -1,11 +1,22 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, posix, relative, resolve, win32 } from "node:path";
 import { promisify } from "node:util";
 
-import { computeRunSpecDigest, jsonValueSchema } from "@rightmodeler/core";
+import {
+  computeRunSpecDigest,
+  jsonValueSchema,
+  resolveCommand,
+} from "@rightmodeler/core";
 import { z } from "zod";
 
 import type {
@@ -282,8 +293,11 @@ export function createPromptfooEvaluator(
         output: typeof output === "string" ? output : JSON.stringify(output),
       }));
       const cwd = await realpath(dirname(assertionsPath));
+      const temp = await realpath(tmpdir());
+      const parent = scratchParent(cwd, temp, process.platform);
+      if (parent !== temp) await mkdir(parent, { recursive: true });
       const directory = await realpath(
-        await mkdtemp(join(tmpdir(), "rightmodeler-promptfoo-")),
+        await mkdtemp(join(parent, "rightmodeler-promptfoo-")),
       );
       const modelOutputsPath = join(directory, "model-outputs.json");
       const resultsPath = join(directory, "results.json");
@@ -379,19 +393,36 @@ export async function readPromptfooConfigs(
   return configs.flat();
 }
 
+// promptfoo reads the model outputs from a path relative to its working directory, and Windows
+// has no relative path from one drive to another, so the scratch folder then sits on cwd's drive.
+export function scratchParent(
+  cwd: string,
+  temp: string,
+  platform: NodeJS.Platform,
+): string {
+  const path = platform === "win32" ? win32 : posix;
+  return path.parse(cwd).root.toLowerCase() ===
+    path.parse(temp).root.toLowerCase()
+    ? temp
+    : path.join(cwd, ".rightmodeler");
+}
+
 async function runPromptfoo(
   command: string,
   args: readonly string[],
   cwd: string,
 ): Promise<{ code: unknown; output: string }> {
-  const running = execFileAsync(command, [...args], {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, ...PROMPTFOO_ENV },
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  running.child.stdin?.end();
   try {
+    const env = { ...process.env, ...PROMPTFOO_ENV };
+    const launch = resolveCommand(command, env);
+    const running = execFileAsync(launch.file, [...launch.args, ...args], {
+      cwd,
+      encoding: "utf8",
+      env,
+      maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true,
+    });
+    running.child.stdin?.end();
     const { stdout, stderr } = await running;
     return { code: 0, output: `${stdout}${stderr}` };
   } catch (error) {

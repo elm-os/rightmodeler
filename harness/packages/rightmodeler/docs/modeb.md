@@ -62,4 +62,12 @@ Mode B runs confirmation cases inside a container when a recommendation can affe
 - Cleanup: sandboxes are created non-persistent and deleted after each case.
 - Scoring: sandboxes never score. The host judges every case; sandbox output is only the candidate text.
 
+## Windows hosts
+
+- The Docker backend needs Docker Desktop running Linux containers, its default. When it runs Windows containers, Mode B reports Docker as unavailable with a message to switch Docker Desktop to Linux containers; switch and rerun.
+- The container is Linux and mounts your checkout as it is on disk. Check out scripts the container runs with LF line endings, for example with `*.sh text eol=lf` in the application repository's `.gitattributes`: a script with CRLF line endings fails to start in the container.
+- Install the application's dependencies in the image, not on the Windows host: a `node_modules` or `.venv` folder built on Windows does not run in Linux.
+- Write `appSpec.mountPath` relative to the configuration file, with forward slashes.
+- The cloud backend needs no local Docker.
+
 See [Commands](commands.md) for where `--modeb-config` is accepted and [Exit codes](exit-codes.md) for blocked or failed runs.

@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import {
   chmod,
   cp,
@@ -19,17 +20,23 @@ const bundleRoot = resolve(packageRoot, "dist-bundle");
 // so the bundle is assembled here and then moved into place file by file via atomic rename.
 const stagingRoot = resolve(packageRoot, "dist-bundle.staging");
 const publishRoot = resolve(packageRoot, "dist/publish");
-const replayDriver = resolve(packageRoot, "../replay/dist/driver-modeb.js");
+// Canonical paths, so a symlink or junction install, or a cwd whose letter case differs
+// from the disk's, still matches the driver esbuild loads.
+const replayDriver = realpathSync.native(
+  resolve(packageRoot, "../replay/dist/driver-modeb.js"),
+);
 const replayRuntime = resolve(packageRoot, "../replay/dist/proxy");
 const bundleRuntimeResolver = `function replayRuntimeRoot() {
   return dirname(fileURLToPath(import.meta.url));
 }`;
+let replacedRuntimeResolver = false;
 
 const bundleRuntimePlugin = {
   name: "bundle-runtime-root",
   setup(context) {
     context.onLoad({ filter: /driver-modeb\.js$/ }, async (args) => {
-      if (resolve(args.path) !== replayDriver) return undefined;
+      if (realpathSync.native(args.path) !== replayDriver) return undefined;
+      replacedRuntimeResolver = true;
       const source = await readFile(args.path, "utf8");
       const startMarker = "function replayRuntimeRoot() {";
       const endMarker = "\n}\nasync function prepareScratch";
@@ -79,6 +86,11 @@ await build({
   legalComments: "none",
   sourcemap: false,
 });
+if (!replacedRuntimeResolver) {
+  throw new Error(
+    `Expected to replace the replay runtime resolver in ${replayDriver}`,
+  );
+}
 
 await chmod(resolve(stagingRoot, "cli.js"), 0o755);
 await mkdir(resolve(stagingRoot, "proxy"), { recursive: true });

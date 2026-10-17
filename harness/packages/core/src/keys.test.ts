@@ -1,5 +1,10 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
+import { FsStore } from "./store.js";
 import {
   assertSafeSegment,
   budgetKey,
@@ -190,4 +195,72 @@ describe("key builders", () => {
       expect(() => judgementKey("project", "run", invocationNumber)).toThrow();
     },
   );
+});
+
+describe("family name keys", () => {
+  const unstorable = [
+    "chat:summarize",
+    'say "hi"',
+    "a|b",
+    "why?",
+    "star*",
+    "<tag>",
+    "dot.",
+    "space ",
+    "con",
+    "NUL.json",
+    "com1",
+    "LPT9",
+  ];
+
+  it.runIf(process.platform === "win32")(
+    "store names Windows cannot hold under their digest",
+    () => {
+      for (const family of unstorable) {
+        expect(verdictKey("project", family)).toMatch(
+          /^project\/verdicts\/x-[0-9a-f]{32}\.json$/u,
+        );
+        expect(confirmPlanKey("project", family)).toMatch(
+          /^project\/confirm\/x-[0-9a-f]{32}\/plan\.json$/u,
+        );
+      }
+      expect(verdictKey("project", "chat:summarize")).not.toBe(
+        verdictKey("project", "chat:summarise"),
+      );
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
+    "let a family named like chat:summarize round-trip through the store",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "rightmodeler-keys-"));
+      try {
+        const store = new FsStore(root);
+        const key = verdictKey("project", "chat:summarize");
+        await store.putImmutable(key, Buffer.from("verdict"));
+        expect(Buffer.from((await store.get(key))!.body).toString()).toBe(
+          "verdict",
+        );
+        expect(await store.list("project/verdicts/")).toEqual([key]);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform === "win32")("keep every name elsewhere", () => {
+    for (const family of unstorable) {
+      expect(verdictKey("project", family)).toBe(
+        `project/verdicts/${family}.json`,
+      );
+    }
+  });
+
+  it("keep ordinary names", () => {
+    for (const family of ["summarize", "chat-summarize", "console", "com10"]) {
+      expect(verdictKey("project", family)).toBe(
+        `project/verdicts/${family}.json`,
+      );
+    }
+  });
 });

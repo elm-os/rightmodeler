@@ -19,6 +19,7 @@ import {
   parsePromptfooResults,
   type PromptfooParsedRun,
   type PromptfooSentCase,
+  scratchParent,
 } from "./promptfoo.js";
 
 interface CapturedComponent {
@@ -558,6 +559,29 @@ describe("promptfoo invocation", () => {
     });
   });
 
+  it.each([
+    [
+      "D:\\app",
+      "C:\\Users\\me\\AppData\\Local\\Temp",
+      "D:\\app\\.rightmodeler",
+    ],
+    [
+      "\\\\server\\share\\app",
+      "C:\\Temp",
+      "\\\\server\\share\\app\\.rightmodeler",
+    ],
+    ["c:\\app", "C:\\Temp", "C:\\Temp"],
+  ])(
+    "on Windows, keeps the model outputs for %s on its own drive, which promptfoo needs for a relative path",
+    (cwd, temp, parent) => {
+      expect(scratchParent(cwd, temp, "win32")).toBe(parent);
+    },
+  );
+
+  it("keeps the model outputs in the temp folder on POSIX", () => {
+    expect(scratchParent("/srv/app", "/tmp", "linux")).toBe("/tmp");
+  });
+
   it("accepts exit 100 when the caller's own promptfoo settings would change the exit code", async () => {
     vi.stubEnv("PROMPTFOO_FAILED_TEST_EXIT_CODE", "1");
     const provider = stubEvaluator(await assertionsCopy());
@@ -658,6 +682,19 @@ describe("promptfoo invocation", () => {
       absentReason: "external_evaluator_error",
     });
   });
+
+  it.runIf(process.platform === "win32")(
+    "treats a script it cannot start without a shell as unreachable",
+    async () => {
+      const assertionsPath = await assertionsCopy();
+      const shim = join(dirname(assertionsPath), "promptfoo.cmd");
+      await writeFile(shim, "@echo off\r\nvolta run %~n0 %*\r\n");
+
+      expect(
+        await stubEvaluator(assertionsPath, shim).detectAvailability(),
+      ).toBe(false);
+    },
+  );
 
   it("treats a missing executable as unreachable and any runnable one as reachable", async () => {
     const assertionsPath = await assertionsCopy();

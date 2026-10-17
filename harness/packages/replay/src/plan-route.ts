@@ -1,4 +1,8 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import {
+  spawn,
+  type ChildProcess,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +10,7 @@ import { join } from "node:path";
 import {
   canonicalModelName,
   isRecord,
+  resolveCommand,
   type JsonValue,
   type Substitution,
 } from "@rightmodeler/core";
@@ -156,15 +161,17 @@ export function isSingleTurn(messages: readonly ChatMessage[]): boolean {
   );
 }
 
+// Windows treats environment names case-insensitively, so compare them upper-cased.
 function withheldFromChild(name: string): boolean {
+  const upper = name.toUpperCase();
   return (
-    name.startsWith("ANTHROPIC_") ||
-    name.startsWith("OPENAI_") ||
-    name === "CODEX_API_KEY" ||
-    name === "CLAUDECODE" ||
-    name === "CLAUDE_PID" ||
-    name === "CLAUDE_EFFORT" ||
-    (name.startsWith("CLAUDE_CODE_") && name !== "CLAUDE_CODE_OAUTH_TOKEN")
+    upper.startsWith("ANTHROPIC_") ||
+    upper.startsWith("OPENAI_") ||
+    upper === "CODEX_API_KEY" ||
+    upper === "CLAUDECODE" ||
+    upper === "CLAUDE_PID" ||
+    upper === "CLAUDE_EFFORT" ||
+    (upper.startsWith("CLAUDE_CODE_") && upper !== "CLAUDE_CODE_OAUTH_TOKEN")
   );
 }
 
@@ -185,6 +192,23 @@ function versionAtLeast(version: string, minimum: string): boolean {
   return true;
 }
 
+function startFailure(
+  command: string,
+  error: unknown,
+  installRemedy: string,
+): Error {
+  const { code, message } = error as NodeJS.ErrnoException;
+  if (code === "ENOENT") {
+    return new PlanRouteUnavailableError(
+      `${command} is not installed or not on PATH.`,
+      installRemedy,
+    );
+  }
+  return code === "EINVAL"
+    ? new PlanRouteUnavailableError(message, installRemedy)
+    : new ProviderRequestError(`${command} could not start: ${message}`);
+}
+
 function runner(
   command: string,
   env: NodeJS.ProcessEnv,
@@ -195,12 +219,19 @@ function runner(
       options.cwd ?? (await mkdtemp(join(tmpdir(), "rightmodeler-plan-")));
     try {
       return await new Promise<RunCliResult>((resolve, reject) => {
-        const child = spawn(command, args, {
-          cwd,
-          env,
-          stdio: ["pipe", "pipe", "pipe"],
-          shell: false,
-        });
+        let child: ChildProcessWithoutNullStreams;
+        try {
+          const launch = resolveCommand(command, env);
+          child = spawn(launch.file, [...launch.args, ...args], {
+            cwd,
+            env,
+            stdio: ["pipe", "pipe", "pipe"],
+            shell: false,
+          });
+        } catch (error) {
+          reject(startFailure(command, error, installRemedy));
+          return;
+        }
         running.add(child);
         if (!exitHookRegistered) {
           exitHookRegistered = true;
@@ -260,16 +291,7 @@ function runner(
           running.delete(child);
           if (pending.length > 0) readLine(pending);
           if (spawnError !== undefined) {
-            reject(
-              spawnError.code === "ENOENT"
-                ? new PlanRouteUnavailableError(
-                    `${command} is not installed or not on PATH.`,
-                    installRemedy,
-                  )
-                : new ProviderRequestError(
-                    `${command} could not start: ${spawnError.message}`,
-                  ),
-            );
+            reject(startFailure(command, spawnError, installRemedy));
             return;
           }
           if (overflowed) {
@@ -306,12 +328,14 @@ export async function preflightPlanCli(
       "In continuous integration, use an API route: --base-url <url> and --api-key-env <name>. If this is your own machine, unset CI and rerun.",
     );
   }
+  const withheld = new Set(withhold.map((name) => name.toUpperCase()));
   const run = runner(
     adapter.command,
     adapter.childEnv(
       Object.fromEntries(
         Object.entries(parentEnv).filter(
-          ([name]) => !withheldFromChild(name) && !withhold.includes(name),
+          ([name]) =>
+            !withheldFromChild(name) && !withheld.has(name.toUpperCase()),
         ),
       ),
     ),
@@ -366,8 +390,11 @@ export function createPlanProvider(
         parentEnv,
         options.withhold,
       );
-      const withheld = adapter.keyVariables.filter(
-        (name) => (parentEnv[name] ?? "").length > 0,
+      const withheld = adapter.keyVariables.filter((name) =>
+        Object.entries(parentEnv).some(
+          ([key, value]) =>
+            key.toUpperCase() === name && (value ?? "").length > 0,
+        ),
       );
       if (withheld.length > 0) {
         const one = withheld.length === 1;

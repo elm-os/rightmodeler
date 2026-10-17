@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import {
   isPlanRouteKind,
@@ -42,7 +42,7 @@ export async function promptForTracePath(
     const typed = asked.answer.trim();
     return asked.cancelled || typed === ""
       ? undefined
-      : resolve(options.repo, typed);
+      : resolve(options.repo, unquote(typed));
   }
 
   options.output.write("Found trace files:\n");
@@ -76,7 +76,12 @@ export async function promptForTracePath(
     const selected = options.candidates[Number(answer) - 1];
     if (selected !== undefined) return selected.path;
   }
-  return resolve(options.repo, answer);
+  return resolve(options.repo, unquote(answer));
+}
+
+// Explorer's "Copy as path" and a path dropped on a terminal arrive in quotes.
+function unquote(answer: string): string {
+  return /^(["'])(.+)\1$/u.exec(answer)?.[2] ?? answer;
 }
 
 const apiPresets = {
@@ -502,11 +507,11 @@ function formatName(format: TraceFormat): string {
 function shortPath(path: string, repo: string, homeDir: string): string {
   const fromRepo = relative(resolve(repo), path);
   if (fromRepo !== "" && !fromRepo.startsWith("..") && !isAbsolute(fromRepo)) {
-    return `./${fromRepo}`;
+    return `./${fromRepo.split(sep).join("/")}`;
   }
   const fromHome = relative(resolve(homeDir), path);
   if (fromHome !== "" && !fromHome.startsWith("..") && !isAbsolute(fromHome)) {
-    return `~/${fromHome}`;
+    return `~/${fromHome.split(sep).join("/")}`;
   }
   return path;
 }

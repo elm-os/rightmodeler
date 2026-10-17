@@ -120,6 +120,33 @@ this runbook if versions differ. If `init --help` does not list `--route`, the i
 CLI predates plan routes; use an API route. If it does not list `--candidate`, the installed
 CLI predates candidate selection options; leave `CANDIDATE_ARGS` empty.
 
+### Windows PowerShell
+
+The examples in this runbook use bash. When your shell tool runs Windows
+PowerShell instead, locate the CLI like this:
+
+```powershell
+$env:NoDefaultCurrentDirectoryInExePath = "1"
+$cli = Get-Command rightmodeler.cmd -ErrorAction SilentlyContinue
+if ($cli) { rightmodeler.cmd --help } else { npx.cmd --yes rightmodeler --help }
+exit $LASTEXITCODE
+```
+
+Then run each command on one line with the same arguments, and keep these rules:
+
+- Call `npx.cmd` or `rightmodeler.cmd`, not `npx` or `rightmodeler`: for the bare
+  names, Windows PowerShell 5.1 runs the `.ps1` scripts npm installs, which its
+  default execution policy blocks.
+- Start each call with `$env:NoDefaultCurrentDirectoryInExePath = "1";` so that a
+  program planted in the repository cannot run in place of the CLI.
+- End each call with `; exit $LASTEXITCODE`, so the shell reports the CLI's exit
+  code. Without it, `powershell -Command` turns every non-zero exit code into `1`,
+  and codes `2` and `3` mean something else.
+- Read the output from the tool result instead of redirecting it with `>`, which
+  writes UTF-16 in Windows PowerShell 5.1.
+- Set variables with `$env:NAME = "value"`, and quote paths with double quotes that
+  do not end in a backslash.
+
 ## 4. Preview the plan
 
 Previewing is read-only and needs neither traces nor provider credentials:
