@@ -19,6 +19,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { requestAttemptSchema } from "@rightmodeler/core";
 
 import {
+  defaultEgressHost,
   redactCredential,
   startEgressListener,
   type EgressListener,
@@ -535,6 +536,16 @@ async function sendDuplicateStepHeader(
     request.end(body);
   });
 }
+
+describe("egress listener address", () => {
+  it.each([
+    ["win32", "127.0.0.1"],
+    ["linux", "0.0.0.0"],
+    ["darwin", "0.0.0.0"],
+  ] as const)("listens on %s at %s", (platform, host) => {
+    expect(defaultEgressHost(platform)).toBe(host);
+  });
+});
 
 describe("Mode B proxy and host egress", () => {
   it("redacts every credential occurrence from an error body", () => {
