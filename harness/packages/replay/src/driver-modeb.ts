@@ -68,6 +68,10 @@ const liveContainers = new Set<{
   executor: ModeBExecutor;
   handle: string;
 }>();
+// Launches still starting their container. Ctrl+C waits for them, or the container they start
+// after the cleanup has run is left behind. Once interrupted, no new launch starts.
+const launchingContainers = new Set<Promise<string>>();
+let interrupted = false;
 
 export interface ModeBCase extends RecordedCase {
   readonly input: JsonValue;
@@ -1206,7 +1210,8 @@ async function runContainer(
   for (let launchNumber = 0; launchNumber < 2; launchNumber += 1) {
     let handle: string;
     try {
-      handle = await launchCase(
+      if (interrupted) throw new Error("Mode B was interrupted");
+      const launch = launchCase(
         input,
         listener,
         cell,
@@ -1217,6 +1222,12 @@ async function runContainer(
         leaseUsd,
         resume,
       );
+      launchingContainers.add(launch);
+      try {
+        handle = await launch;
+      } finally {
+        launchingContainers.delete(launch);
+      }
     } catch (error) {
       return {
         inspection: failedInspection(),
@@ -1827,13 +1838,19 @@ export async function replayModeB(
 
   let workerFailure: unknown;
   const onInterrupt = () => {
-    void Promise.allSettled(
-      [...liveContainers].map(({ executor, handle }) =>
-        executor.destroy(handle),
-      ),
-    ).then(() => endInterrupted(process.platform));
+    interrupted = true;
+    void Promise.allSettled([...launchingContainers])
+      .then(() =>
+        Promise.allSettled(
+          [...liveContainers].map(({ executor, handle }) =>
+            executor.destroy(handle),
+          ),
+        ),
+      )
+      .then(() => endInterrupted(process.platform));
   };
   try {
+    interrupted = false;
     process.once("SIGINT", onInterrupt);
     const settled = await Promise.allSettled(
       Array.from({ length: workerLimit }, () => worker()),

@@ -31060,6 +31060,9 @@ function close(server) {
     server.close((error51) => error51 === void 0 ? resolve15() : reject(error51));
   });
 }
+function defaultEgressHost(platform) {
+  return platform === "win32" ? "127.0.0.1" : "0.0.0.0";
+}
 async function startEgressListener(options) {
   const providerBaseUrl = new URL(options.providerBaseUrl);
   if (!/^https?:$/.test(providerBaseUrl.protocol)) {
@@ -31124,7 +31127,7 @@ async function startEgressListener(options) {
     });
     incoming.pipe(upstream);
   });
-  const hostname5 = options.hostname ?? "0.0.0.0";
+  const hostname5 = options.hostname ?? defaultEgressHost(process.platform);
   await new Promise((resolve15, reject) => {
     server.once("error", reject);
     server.listen(options.port ?? 0, hostname5, resolve15);
@@ -31158,6 +31161,8 @@ var STREAM_OUTCOMES = /* @__PURE__ */ new Set([
   "truncated"
 ]);
 var liveContainers = /* @__PURE__ */ new Set();
+var launchingContainers = /* @__PURE__ */ new Set();
+var interrupted = false;
 function nonnegativeInteger(value) {
   return Number.isSafeInteger(value) && Number(value) >= 0;
 }
@@ -31734,7 +31739,15 @@ async function runContainer(input, listener, cell, executionId, scratchHostPath2
   for (let launchNumber = 0; launchNumber < 2; launchNumber += 1) {
     let handle;
     try {
-      handle = await launchCase(input, listener, cell, executionId, scratchHostPath2, policy, table, leaseUsd, resume);
+      if (interrupted)
+        throw new Error("Mode B was interrupted");
+      const launch = launchCase(input, listener, cell, executionId, scratchHostPath2, policy, table, leaseUsd, resume);
+      launchingContainers.add(launch);
+      try {
+        handle = await launch;
+      } finally {
+        launchingContainers.delete(launch);
+      }
     } catch (error51) {
       return {
         inspection: failedInspection(),
@@ -32116,9 +32129,11 @@ async function replayModeB(input) {
   }
   let workerFailure;
   const onInterrupt = () => {
-    void Promise.allSettled([...liveContainers].map(({ executor, handle }) => executor.destroy(handle))).then(() => endInterrupted(process.platform));
+    interrupted = true;
+    void Promise.allSettled([...launchingContainers]).then(() => Promise.allSettled([...liveContainers].map(({ executor, handle }) => executor.destroy(handle)))).then(() => endInterrupted(process.platform));
   };
   try {
+    interrupted = false;
     process.once("SIGINT", onInterrupt);
     const settled = await Promise.allSettled(Array.from({ length: workerLimit }, () => worker()));
     workerFailure = settled.find((entry) => entry.status === "rejected")?.reason;
