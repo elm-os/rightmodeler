@@ -27162,7 +27162,13 @@ function startFailure(command, error51, installRemedy) {
   if (code === "ENOENT") {
     return new PlanRouteUnavailableError(`${command} is not installed or not on PATH.`, installRemedy);
   }
-  return code === "EINVAL" ? new PlanRouteUnavailableError(message2, installRemedy) : new ProviderRequestError(`${command} could not start: ${message2}`);
+  if (code === "EINVAL") {
+    return new PlanRouteUnavailableError(message2, `Install ${command} with its own installer or WinGet, or with npm outside a version manager such as Volta, or use an API route with --base-url <url> and --api-key-env <name>.`);
+  }
+  if (code === "ENAMETOOLONG" || code === "E2BIG") {
+    return new PlanRouteUnavailableError(`${command} could not start: its command line is longer than the system allows (32,767 characters on Windows), usually because a step's structured-output schema is large.`, "Use an API route with --base-url <url> and --api-key-env <name> for this run.");
+  }
+  return new ProviderRequestError(`${command} could not start: ${message2}`);
 }
 function runner(command, env, installRemedy) {
   return async (args, options) => {
@@ -29607,7 +29613,7 @@ async function detectDockerAvailability() {
     return {
       available: false,
       reason: missingCli ? "cli-unavailable" : "daemon-unavailable",
-      message: missingCli ? "Docker CLI was not found on PATH" : `Docker daemon is not reachable: ${failureDetail(error51)}`
+      message: missingCli ? "Docker CLI was not found on PATH. Install Docker Desktop (running Linux containers) or Docker Engine and open a new terminal, or use the cloud backend." : `Docker daemon is not reachable: ${failureDetail(error51)}`
     };
   }
 }

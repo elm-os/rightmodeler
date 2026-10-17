@@ -28,3 +28,22 @@ describe.skipIf(process.platform === "win32")("docker engine check", () => {
     }
   });
 });
+
+describe("docker CLI check", () => {
+  it("names Docker Desktop when no docker is on PATH", async () => {
+    const empty = await mkdtemp(join(import.meta.dirname, ".docker-missing-"));
+    const previousPath = process.env.PATH;
+    try {
+      process.env.PATH = empty;
+      await expect(detectDockerAvailability()).resolves.toEqual({
+        available: false,
+        reason: "cli-unavailable",
+        message: expect.stringContaining("Install Docker Desktop"),
+      });
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      await rm(empty, { recursive: true, force: true });
+    }
+  });
+});
