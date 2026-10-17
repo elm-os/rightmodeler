@@ -72,7 +72,9 @@ describe.skipIf(!liveRequested)("codex-login live", () => {
         expect(entry.family).toBe("openai");
         expect(entry.pricing).not.toBeNull();
         expect(entry.id).not.toMatch(/gpt-reserve|codex-auto-review/u);
-        expect(entry.contextLength).toBeLessThanOrEqual(272_000);
+        // Codex's own window (272,000, or 500,000 for gpt-6.1-sol in codex 0.163), never above its
+        // 872,000 ceiling; the price list says 1,050,000, so an unclamped length fails here.
+        expect(entry.contextLength).toBeLessThanOrEqual(872_000);
         expect(known.has(entry.id)).toBe(true);
       }
       const cheapest = [...callable].sort(

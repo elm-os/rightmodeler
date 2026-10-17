@@ -47,6 +47,10 @@ const overrides = [
   "project_doc_max_bytes=0",
   'history.persistence="none"',
   "features.code_mode_host=false",
+  // Models that ask for multi-agent tools get them unless [agents] is off; codex 0.163 sends a
+  // multi-agent role prompt and collaboration tools to gpt-6 models otherwise.
+  "agents.enabled=false",
+  "features.sleep_tool=false",
 ].flatMap((setting) => ["-c", setting]);
 const toolItems = new Set([
   "command_execution",

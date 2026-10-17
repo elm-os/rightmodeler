@@ -50,6 +50,8 @@ const overrides = [
   "project_doc_max_bytes=0",
   'history.persistence="none"',
   "features.code_mode_host=false",
+  "agents.enabled=false",
+  "features.sleep_tool=false",
 ];
 
 function hasFault(name) {
