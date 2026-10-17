@@ -63,11 +63,10 @@ jobs:
 
   windows:
     # Native Windows, without Docker: hosted Windows runners run only Windows containers, so
-    # the Docker suites skip here and stay covered by the ci job. Advisory until it is green.
+    # the Docker suites skip here and stay covered by the ci job.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-latest
     timeout-minutes: 45
-    continue-on-error: true
     env:
       RIGHTMODELER_SKIP_DOCKER: "1"
     steps:
