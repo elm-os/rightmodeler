@@ -589,7 +589,9 @@ while True:
     testTimeoutMs,
   );
 
-  it(
+  // The race is staged by a /bin/sh wrapper named docker on PATH; on Windows only a real
+  // docker.exe could stand in.
+  it.skipIf(process.platform === "win32")(
     "continues when a listed container disappears and leaves a young container running",
     async () => {
       const executor = createDockerExecutor({ maxBytesPerNamespace: 1024 });
