@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { resolveCommand } from "@rightmodeler/core";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import { createPromptfooEvaluator } from "./promptfoo.js";
@@ -50,7 +51,9 @@ describe.skipIf(livePromptfoo === undefined)("promptfoo live", () => {
     vi.stubEnv("PROMPTFOO_STRIP_TEST_VARS", "true");
     vi.stubEnv("PROMPTFOO_DISABLE_VAR_EXPANSION", "false");
     vi.stubEnv("PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES", "true");
-    const version = execFileSync(livePromptfoo!, ["--version"], {
+    // Through resolveCommand, as the evaluator starts it, so an npm promptfoo.cmd works on Windows.
+    const launch = resolveCommand(livePromptfoo!);
+    const version = execFileSync(launch.file, [...launch.args, "--version"], {
       encoding: "utf8",
       env: { ...process.env, PROMPTFOO_DISABLE_UPDATE: "true" },
     })
