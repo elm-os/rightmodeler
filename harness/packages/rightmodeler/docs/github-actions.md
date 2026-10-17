@@ -48,7 +48,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RIGHTMODELER_VERSION: "0.6.0"
+  RIGHTMODELER_VERSION: "0.6.1"
   RIGHTMODELER_TRACES: traces
   RIGHTMODELER_MAX_COST_USD: "5"
   RM_ANNOTATE: |
