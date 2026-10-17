@@ -91,6 +91,13 @@ function close(server: Server): Promise<void> {
   });
 }
 
+// Docker Desktop on Windows routes host.docker.internal to the host's loopback, so the listener,
+// which adds the provider credential to every request, stays off the network there. Native Linux
+// Docker reaches the host through the bridge gateway, which needs every interface.
+export function defaultEgressHost(platform: NodeJS.Platform): string {
+  return platform === "win32" ? "127.0.0.1" : "0.0.0.0";
+}
+
 export async function startEgressListener(
   options: EgressListenerOptions,
 ): Promise<EgressListener> {
@@ -177,7 +184,7 @@ export async function startEgressListener(
     incoming.pipe(upstream);
   });
 
-  const hostname = options.hostname ?? "0.0.0.0";
+  const hostname = options.hostname ?? defaultEgressHost(process.platform);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(options.port ?? 0, hostname, resolve);

@@ -204,9 +204,20 @@ function startFailure(
       installRemedy,
     );
   }
-  return code === "EINVAL"
-    ? new PlanRouteUnavailableError(message, installRemedy)
-    : new ProviderRequestError(`${command} could not start: ${message}`);
+  if (code === "EINVAL") {
+    return new PlanRouteUnavailableError(
+      message,
+      `Install ${command} with its own installer or WinGet, or with npm outside a version manager such as Volta, or use an API route with --base-url <url> and --api-key-env <name>.`,
+    );
+  }
+  // Every call of the step would fail the same way, so stop instead of counting them as lost.
+  if (code === "ENAMETOOLONG" || code === "E2BIG") {
+    return new PlanRouteUnavailableError(
+      `${command} could not start: its command line is longer than the system allows (32,767 characters on Windows), usually because a step's structured-output schema is large.`,
+      "Use an API route with --base-url <url> and --api-key-env <name> for this run.",
+    );
+  }
+  return new ProviderRequestError(`${command} could not start: ${message}`);
 }
 
 function runner(
