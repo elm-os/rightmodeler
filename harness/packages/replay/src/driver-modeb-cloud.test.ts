@@ -261,6 +261,86 @@ describe("Mode B interrupt", () => {
     }
   });
 
+  it("removes a container that was still starting at Ctrl+C and starts no more", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-modeb-interrupt-"));
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+    const launched: string[] = [];
+    const destroyed = new Set<string>();
+    try {
+      const storeRoot = join(root, "store");
+      await mkdir(storeRoot);
+      const store = new FsStore(storeRoot);
+      const executor: ModeBExecutor = {
+        async launch() {
+          // Ctrl+C arrives while docker run is still creating the container.
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          process.emit("SIGINT");
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          launched.push(`container-${launched.length + 1}`);
+          return launched.at(-1)!;
+        },
+        async status(handle) {
+          return {
+            state: destroyed.has(handle) ? "exited" : "running",
+            exitCode: destroyed.has(handle) ? 137 : undefined,
+            oomKilled: false,
+            timedOut: false,
+            startedAt: new Date(0).toISOString(),
+            heartbeatAt: null,
+          };
+        },
+        async collect() {
+          throw new Error("nothing to collect");
+        },
+        async destroy(handle) {
+          // Only removals before the exit count: the interrupt's, not the run's own cleanup.
+          if (exit.mock.calls.length + kill.mock.calls.length === 0) {
+            destroyed.add(handle);
+          }
+        },
+      };
+      await replayModeB({
+        stepRecords,
+        cases: [cases[0]!, { ...cases[0]!, caseId: "case-2" }],
+        swapPolicy: { lookup: "acme/small-1" },
+        executor,
+        egress: {
+          providerId: "stub",
+          providerBaseUrl: "https://provider.example",
+          apiKeyEnv: "REPLAY_MODEB_INTERRUPT_TEST_API_KEY",
+          catalog,
+        },
+        store,
+        budget: createBudget({
+          store,
+          projectId: "modeb-interrupt-test",
+          runId: randomUUID(),
+          authorizedTotalUsd: 1,
+        }),
+        image: "vercel/sandbox/universal:latest",
+        appSpec: {
+          mountPath: join(root, "app"),
+          command: (caseFile) => ["node", "app.mjs", caseFile],
+          timeoutMs: 5_000,
+        },
+        concurrency: 1,
+        backend: "cloud",
+      });
+      await vi.waitFor(() =>
+        expect(exit.mock.calls.length + kill.mock.calls.length).toBe(1),
+      );
+      expect(launched).toEqual(["container-1"]);
+      expect([...destroyed]).toEqual(["container-1"]);
+    } finally {
+      exit.mockRestore();
+      kill.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("re-raises SIGINT elsewhere, so the process dies by the signal", () => {
     const exit = vi
       .spyOn(process, "exit")

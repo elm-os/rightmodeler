@@ -303,5 +303,10 @@ the version manager.
 Mode B needs Docker Desktop running Linux containers, or the cloud backend. See
 [Mode B](modeb.md).
 
+Ctrl+C stops a run with exit code 130 and removes its Mode B containers. Under `npx`
+the exit code is 1 instead, which also means a recommendation exists, because npm
+ends itself that way on Windows. A script that must tell the two apart should run
+`rightmodeler.cmd` after `npm install -g rightmodeler`.
+
 A detached replay (`replay --detach`) stops when Windows restarts or the worker is
 ended. Rerun the same command to resume it from its checkpoints.

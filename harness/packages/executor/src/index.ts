@@ -163,7 +163,7 @@ export async function detectDockerAvailability(): Promise<DockerAvailability> {
       available: false,
       reason: missingCli ? "cli-unavailable" : "daemon-unavailable",
       message: missingCli
-        ? "Docker CLI was not found on PATH"
+        ? "Docker CLI was not found on PATH. Install Docker Desktop (running Linux containers) or Docker Engine and open a new terminal, or use the cloud backend."
         : `Docker daemon is not reachable: ${failureDetail(error)}`,
     };
   }

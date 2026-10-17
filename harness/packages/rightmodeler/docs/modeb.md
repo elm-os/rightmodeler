@@ -65,6 +65,7 @@ Mode B runs confirmation cases inside a container when a recommendation can affe
 ## Windows hosts
 
 - The Docker backend needs Docker Desktop running Linux containers, its default. When it runs Windows containers, Mode B reports Docker as unavailable with a message to switch Docker Desktop to Linux containers; switch and rerun.
+- The host listener that adds the model credential listens on 127.0.0.1 only, and Docker Desktop routes `host.docker.internal` to it. Other machines on your network cannot reach it, and Windows Firewall does not ask to allow it.
 - The container is Linux and mounts your checkout as it is on disk. Check out scripts the container runs with LF line endings, for example with `*.sh text eol=lf` in the application repository's `.gitattributes`: a script with CRLF line endings fails to start in the container.
 - Install the application's dependencies in the image, not on the Windows host: a `node_modules` or `.venv` folder built on Windows does not run in Linux.
 - Write `appSpec.mountPath` relative to the configuration file, with forward slashes.

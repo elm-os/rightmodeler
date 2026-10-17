@@ -47,7 +47,10 @@ with the standalone installer:
 Invoke-WebRequest https://get.pnpm.io/install.ps1 -UseBasicParsing | Invoke-Expression
 ```
 
-You also need Git for Windows. The repository's `.gitattributes` keeps every text
+You also need Node.js 24 or newer, from the nodejs.org installer or fnm, and Git
+for Windows. Rightmodeler cannot start a CLI that a version manager such as Volta
+wraps in a batch file, so install `claude`, `codex` and `promptfoo` with npm outside
+it if you test plan routes or evaluators by hand. The repository's `.gitattributes` keeps every text
 file LF, whatever `core.autocrlf` is set to. A clone made before that file existed
 still has CRLF copies; commit or stash your work, then refresh it with
 `git rm -r --cached -q .` followed by `git reset --hard`.

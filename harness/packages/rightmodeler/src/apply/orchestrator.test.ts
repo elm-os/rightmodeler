@@ -865,6 +865,12 @@ describe("applySwaps", () => {
     expect(await readFile(join(harness.repoDir, sourcePath), "utf8")).toContain(
       "\r\n",
     );
+    // With node_modules, the fixture's .prettierrc runs real Prettier over the edit.
+    await symlink(
+      join(repositoryRoot, "node_modules"),
+      join(harness.repoDir, "node_modules"),
+      "junction",
+    );
 
     const applied = requireApplied(
       await runApply(harness, [applyVerdict(harness)]),
