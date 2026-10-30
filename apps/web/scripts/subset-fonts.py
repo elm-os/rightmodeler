@@ -17,9 +17,10 @@ weights, features and characters the site uses: a preloaded core file, plus Lati
 Extended-A files that load only for characters in their unicode-range. Writes public/fonts/,
 src/app/fonts.css and src/lib/fonts.ts, and refuses to write anything that fails its checks.
 
-Edit FONTS and rerun when copy in one of these fonts starts using a character outside its core
-(add it to "core" so it keeps kerning with its neighbours), a family is set in a weight outside
-"weights", CSS turns on a feature a family does not keep, or a font is updated.
+Edit FONTS and rerun when the site starts setting these fonts differently: a character outside a
+family's core, a weight outside its "weights", an OpenType feature it does not keep, DM Sans or
+Space Grotesk without letter-spacing, hyphens: auto, or a font update. docs/design.md (Font files)
+says what to change for each.
 """
 
 import hashlib
@@ -159,20 +160,15 @@ def cut(source: TTFont, weights: tuple | int) -> TTFont:
     narrowing the source's deltas are put back unchanged on the rebased regions."""
     if isinstance(weights, int):
         return instancer.instantiateVariableFont(source, {"wght": weights})
-    axis = next(a for a in source["fvar"].axes if a.axisTag == "wght")
-    if weights == (axis.minValue, axis.maxValue):
-        font = TTFont(io.BytesIO(save(source)))
-    else:
-        font = instancer.instantiateVariableFont(TTFont(io.BytesIO(save(source))), {"wght": weights}, optimize=False)
-        low, high = normalized(source, weights[0]), normalized(source, weights[1])
-        for glyph, variations in source["gvar"].variations.items():
-            kept = [
-                TupleVariation({"wght": tent}, tv.coordinates)
-                for tv in variations
-                if any(c not in (None, (0, 0)) for c in tv.coordinates)
-                and (tent := rebase(tv.axes["wght"], low, high)) is not None
-            ]
-            font["gvar"].variations[glyph] = kept
+    font = instancer.instantiateVariableFont(TTFont(io.BytesIO(save(source))), {"wght": weights}, optimize=False)
+    low, high = normalized(source, weights[0]), normalized(source, weights[1])
+    for glyph, variations in source["gvar"].variations.items():
+        font["gvar"].variations[glyph] = [
+            TupleVariation({"wght": tent}, tv.coordinates)
+            for tv in variations
+            if any(c not in (None, (0, 0)) for c in tv.coordinates)
+            and (tent := rebase(tv.axes["wght"], low, high)) is not None
+        ]
     font["fvar"].instances = []
     return font
 
