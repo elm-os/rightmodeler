@@ -129,12 +129,14 @@ leading, tracking, and the 300 weight. Nothing else is needed.
 `apps/web/scripts/subset-fonts.py` builds the four faces into `apps/web/public/fonts/`
 and writes their `@font-face` rules to `src/app/fonts.css` and the preload list to
 `src/lib/fonts.ts`. Its sources are the Google Fonts files the site loaded through
-`next/font/google` until October 2026, pinned by URL and checksum, so the files draw
-exactly what those drew. Each family keeps only the weights and OpenType features the
-site uses and is split three ways: a core file with ASCII and common punctuation,
-preloaded on every page, and Latin-1 and Latin Extended-A files that a page downloads
-only when it uses one of their characters. Characters in none of them, such as arrows
-and check marks, render in the system fallback, as they did before.
+`next/font/google` until October 2026, pinned by URL and checksum. Each family keeps
+only the weights and OpenType features the site uses and is split three ways: a core
+file with ASCII, common punctuation and the other characters the site sets in that
+family, preloaded on every page, and Latin-1 and Latin Extended-A files that a page
+downloads only when it uses one of their characters. Everything else renders in the
+system fallback: the arrows and check marks the site uses always did, and Greek,
+Cyrillic, Vietnamese and symbols such as € and ™, which Google's files also covered,
+now do too.
 
 The script is not part of the build. Run it from the repository root and commit what
 it writes:
@@ -153,9 +155,8 @@ Edit its `FONTS` table and rerun it when:
   `diagonal-fractions` on Inter;
 - DM Sans or Space Grotesk is set without letter-spacing: Chrome then applies
   ligatures and contextual alternates, which those two families do not keep;
-- CSS turns on `hyphens: auto`: Chrome draws the hyphen (U+2010) from the core
-  file, so add it to `core`;
-- a font needs updating.
+- a font needs updating: pin the new files, and refresh the fallback metrics, which
+  the script checks against each font.
 
 ---
 

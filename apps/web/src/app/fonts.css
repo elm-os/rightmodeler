@@ -4,7 +4,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("/fonts/space-grotesk-latin-ext.e1ae6ad809.woff2") format("woff2");
+  src: url("/fonts/space-grotesk-latin-ext.b9a89d2943.woff2") format("woff2");
   unicode-range: U+100-130, U+132-151, U+154-17F;
 }
 
@@ -13,7 +13,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("/fonts/space-grotesk-latin-1.a5a3fddc05.woff2") format("woff2");
+  src: url("/fonts/space-grotesk-latin-1.2ffba32413.woff2") format("woff2");
   unicode-range: U+A1-AC, U+AE-FF, U+131, U+152-153;
 }
 
@@ -22,7 +22,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("/fonts/space-grotesk-core.bce39f090b.woff2") format("woff2");
+  src: url("/fonts/space-grotesk-core.7c54471d0d.woff2") format("woff2");
   unicode-range:
     U+20-7E, U+A0, U+AD, U+2013-2014, U+2018-2019, U+201C-201D, U+2026;
 }
@@ -32,7 +32,7 @@
   font-style: normal;
   font-weight: 300 400;
   font-display: swap;
-  src: url("/fonts/dm-sans-latin-ext.bc664f2c69.woff2") format("woff2");
+  src: url("/fonts/dm-sans-latin-ext.d147b82162.woff2") format("woff2");
   unicode-range:
     U+100-107, U+10A-11B, U+11E-123, U+126-130, U+132-133, U+136-137, U+139-148,
     U+14A-151, U+154-15B, U+15E-165, U+168-17E;
@@ -43,7 +43,7 @@
   font-style: normal;
   font-weight: 300 400;
   font-display: swap;
-  src: url("/fonts/dm-sans-latin-1.33d3ca1ad5.woff2") format("woff2");
+  src: url("/fonts/dm-sans-latin-1.167a5d7222.woff2") format("woff2");
   unicode-range: U+A1-AC, U+AE-FF, U+131, U+152-153;
 }
 
@@ -52,7 +52,7 @@
   font-style: normal;
   font-weight: 300 400;
   font-display: swap;
-  src: url("/fonts/dm-sans-core.5c260987ef.woff2") format("woff2");
+  src: url("/fonts/dm-sans-core.4cc2b2d5e9.woff2") format("woff2");
   unicode-range: U+20-7E, U+A0, U+2013-2014, U+2018-2019, U+201C-201D, U+2026;
 }
 
@@ -61,7 +61,7 @@
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
-  src: url("/fonts/geist-mono-latin-ext.fa03be3c1c.woff2") format("woff2");
+  src: url("/fonts/geist-mono-latin-ext.1681506cd5.woff2") format("woff2");
   unicode-range:
     U+100-113, U+116-12B, U+12E-130, U+134-137, U+139-13E, U+141-148, U+14A-14D,
     U+150-151, U+154-17E;
@@ -72,7 +72,7 @@
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
-  src: url("/fonts/geist-mono-latin-1.9b28e734a0.woff2") format("woff2");
+  src: url("/fonts/geist-mono-latin-1.88d314f952.woff2") format("woff2");
   unicode-range: U+A1-A8, U+AA-AC, U+AE-B6, U+B8-D6, U+D8-FF, U+131, U+152-153;
 }
 
@@ -81,7 +81,7 @@
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
-  src: url("/fonts/geist-mono-core.ef5868d459.woff2") format("woff2");
+  src: url("/fonts/geist-mono-core.20394cade7.woff2") format("woff2");
   unicode-range:
     U+20-7E, U+A0, U+A9, U+B7, U+D7, U+2013-2014, U+2018-2019, U+201C-201D,
     U+2026;
@@ -92,7 +92,7 @@
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
-  src: url("/fonts/inter-latin-ext.17fe754db9.woff2") format("woff2");
+  src: url("/fonts/inter-latin-ext.a6a4c2fe16.woff2") format("woff2");
   unicode-range: U+100-130, U+132-148, U+14A-151, U+154-17F;
 }
 
@@ -101,7 +101,7 @@
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
-  src: url("/fonts/inter-latin-1.e5174cda03.woff2") format("woff2");
+  src: url("/fonts/inter-latin-1.655088bc8d.woff2") format("woff2");
   unicode-range: U+A1-AC, U+AE-B6, U+B8-FF, U+131, U+152-153;
 }
 
@@ -110,7 +110,7 @@
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
-  src: url("/fonts/inter-core.0f4b5145ea.woff2") format("woff2");
+  src: url("/fonts/inter-core.621c0e8cb6.woff2") format("woff2");
   unicode-range:
     U+20-7E, U+A0, U+B7, U+2013-2014, U+2018-2019, U+201C-201D, U+2026;
 }

@@ -21,8 +21,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 The visual identity is defined in `docs/design.md` (color, typography, motion) and
 implemented as tokens in `apps/web/src/app/globals.css` (Tailwind v4 `@theme`) with
-fonts loaded in `apps/web/src/app/layout.tsx`. Read `docs/design.md` before building or
-changing any UI, and derive every color, type, and motion decision from its tokens.
+fonts in `apps/web/src/app/fonts.css` (built by `apps/web/scripts/subset-fonts.py`).
+Read `docs/design.md` before building or changing any UI, and derive every color, type,
+and motion decision from its tokens.
 
 - Use the design skills for UI work: `frontend-design` for visual direction,
   `emil-design-eng` for interaction/motion craft, `review-animations` to audit

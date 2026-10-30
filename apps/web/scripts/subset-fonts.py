@@ -11,16 +11,11 @@
 
     uv run apps/web/scripts/subset-fonts.py
 
-The sources are the Google Fonts files next/font/google served before the fonts were self-hosted,
-pinned by URL and sha256, so the output draws exactly what they drew. Each family is cut to the
-weights, features and characters the site uses: a preloaded core file, plus Latin-1 and Latin
-Extended-A files that load only for characters in their unicode-range. Writes public/fonts/,
-src/app/fonts.css and src/lib/fonts.ts, and refuses to write anything that fails its checks.
-
-Edit FONTS and rerun when the site starts setting these fonts differently: a character outside a
-family's core, a weight outside its "weights", an OpenType feature it does not keep, DM Sans or
-Space Grotesk without letter-spacing, hyphens: auto, or a font update. docs/design.md (Font files)
-says what to change for each.
+The sources are the Google Fonts files the site served through next/font/google, pinned by URL and
+sha256. Each family is cut to the weights, features and characters the site uses: a preloaded core
+file, plus Latin-1 and Latin Extended-A files that load only for characters in their unicode-range.
+Writes public/fonts/, src/app/fonts.css and src/lib/fonts.ts, and refuses to write anything that
+fails its checks. docs/design.md (Font files) says when to edit FONTS and rerun.
 """
 
 import hashlib
@@ -34,12 +29,10 @@ from pathlib import Path
 import ots
 import uharfbuzz as hb
 from fontTools import subset
-from fontTools.misc.fixedTools import floatToFixedToFloat
 from fontTools.pens.recordingPen import RecordingPen
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables.TupleVariation import TupleVariation
 from fontTools.varLib import instancer
-from fontTools.varLib.models import piecewiseLinearMap
 
 WEB = Path(__file__).resolve().parent.parent
 FONTS_DIR = WEB / "public" / "fonts"
@@ -56,6 +49,13 @@ LATIN_EXT_A_IN_LATIN = {0x131, 0x152, 0x153}
 # its own glyph; it sits here so it cannot pull in an extended file.
 CORE_PUNCTUATION = {0xA0, 0xAD, 0x2018, 0x2019, 0x201C, 0x201D, 0x2013, 0x2014, 0x2026}
 HINTING_TABLES = {"fpgm", "prep", "cvt ", "cvar", "hdmx", "VDMX", "LTSH"}
+# Font-wide fields subsetting recomputes. macOS draws small text relative to the bounding box, so all
+# of them keep the source's values.
+FONT_WIDE = {
+    "head": ("xMin", "yMin", "xMax", "yMax"),
+    "hhea": ("advanceWidthMax", "minLeftSideBearing", "minRightSideBearing", "xMaxExtent"),
+    "OS/2": ("ulUnicodeRange1", "ulUnicodeRange2", "ulUnicodeRange3", "ulUnicodeRange4", "ulCodePageRange1", "ulCodePageRange2"),
+}
 
 # In preload order. "weights" are the weights the site sets; "range" cuts the wght axis to their
 # span, widened to the nearest master so no delta is recomputed, or pins it when the site uses one
@@ -122,17 +122,6 @@ def fetch(path: str, sha256: str) -> bytes:
     return data
 
 
-def normalized(font: TTFont, value: float) -> float:
-    axis = next(a for a in font["fvar"].axes if a.axisTag == "wght")
-    if value == axis.defaultValue:
-        return 0.0
-    span = axis.defaultValue - axis.minValue if value < axis.defaultValue else axis.maxValue - axis.defaultValue
-    n = floatToFixedToFloat((value - axis.defaultValue) / span, 14)
-    if "avar" in font:
-        n = floatToFixedToFloat(piecewiseLinearMap(n, font["avar"].segments["wght"]), 14)
-    return n
-
-
 def scalar(tent: tuple, n: float) -> float:
     start, peak, end = tent
     if n == peak:
@@ -161,9 +150,10 @@ def cut(source: TTFont, weights: tuple | int) -> TTFont:
     """Narrows or pins the wght axis. The instancer rounds every delta set it touches, so after a
     narrowing the source's deltas are put back unchanged on the rebased regions."""
     if isinstance(weights, int):
-        return instancer.instantiateVariableFont(source, {"wght": weights})
+        return instancer.instantiateVariableFont(source, {"wght": weights}, overlap=instancer.OverlapMode.KEEP_AND_DONT_SET_FLAGS)
     font = instancer.instantiateVariableFont(TTFont(io.BytesIO(save(source))), {"wght": weights}, optimize=False)
-    low, high = normalized(source, weights[0]), normalized(source, weights[1])
+    limits = instancer.AxisLimits(wght=weights).limitAxesAndPopulateDefaults(source).normalize(source)["wght"]
+    low, high = limits.minimum, limits.maximum
     for glyph, variations in source["gvar"].variations.items():
         font["gvar"].variations[glyph] = [
             TupleVariation({"wght": tent}, tv.coordinates)
@@ -183,11 +173,11 @@ def save(font: TTFont, flavor: str | None = None) -> bytes:
     return out.getvalue()
 
 
-def bounds(font: TTFont) -> tuple:
-    return tuple(getattr(font["head"], a) for a in ("xMin", "yMin", "xMax", "yMax"))
+def font_wide(font: TTFont) -> dict:
+    return {(tag, attr): getattr(font[tag], attr) for tag, attrs in FONT_WIDE.items() for attr in attrs}
 
 
-def build(font: TTFont, chars: set[int], features: list[str], bbox: tuple) -> bytes:
+def build(font: TTFont, chars: set[int], features: list[str], source: TTFont) -> bytes:
     options = subset.Options()
     options.layout_features = features
     options.layout_scripts = ["DFLT", "latn"]
@@ -202,8 +192,8 @@ def build(font: TTFont, chars: set[int], features: list[str], bbox: tuple) -> by
     subsetter = subset.Subsetter(options)
     subsetter.populate(unicodes=chars)
     subsetter.subset(font)
-    # macOS draws small text relative to the font's bounding box, so it keeps the source's.
-    font["head"].xMin, font["head"].yMin, font["head"].xMax, font["head"].yMax = bbox
+    for (tag, attr), value in font_wide(source).items():
+        setattr(font[tag], attr, value)
     font.recalcBBoxes = False
     return save(font, "woff2")
 
@@ -243,8 +233,9 @@ def check(data: bytes, source: bytes, chars: set[int], spec: dict, name: str) ->
     problems = []
     if set(font.getBestCmap()) != chars:
         problems.append("cmap differs from the requested characters")
-    if bounds(font) != bounds(TTFont(io.BytesIO(source))):
-        problems.append("bounding box differs from the source's")
+    original = TTFont(io.BytesIO(source))
+    if font_wide(font) != font_wide(original) or font["post"].formatType != original["post"].formatType:
+        problems.append("font-wide metadata differs from the source's")
     if HINTING_TABLES & set(font.keys()):
         problems.append(f"hinting tables left: {sorted(HINTING_TABLES & set(font.keys()))}")
     kept = {r.FeatureTag for tag in ("GSUB", "GPOS") if tag in font and font[tag].table.FeatureList for r in font[tag].table.FeatureList.FeatureRecord}
@@ -282,9 +273,10 @@ def declaration(prop: str, value: str) -> str:
     line = f"  {prop}: {value};"
     if len(line) <= 80:
         return line + "\n"
-    lines, current = [], ""
-    for item in value.split(", "):
-        if current and len(current) + len(item) + 2 > 80:
+    lines, current, items = [], "", value.split(", ")
+    for i, item in enumerate(items):
+        # The comma counts toward 80 columns; Prettier lets the final semicolon run past.
+        if current and len(current) + len(item) + (2 if i < len(items) - 1 else 1) > 80:
             lines.append(current)
             current = ""
         current = f"{current} {item}," if current else f"    {item},"
@@ -312,6 +304,12 @@ def main() -> None:
         latin_cut = cut(TTFont(io.BytesIO(latin)), spec["range"])
         latin_ext_cut = cut(TTFont(io.BytesIO(latin_ext)), spec["range"])
         in_latin, in_latin_ext = set(latin_cut.getBestCmap()), set(latin_ext_cut.getBestCmap())
+        if missing := spec["core"] - in_latin:
+            raise SystemExit(f"{spec['family']}: {sorted(map(hex, missing))} are not in its latin file")
+        hhea, upem, size = latin_cut["hhea"], latin_cut["head"].unitsPerEm, float(spec["fallback"][3][:-1])
+        for metric, value in zip((hhea.ascent, -hhea.descent), spec["fallback"][:2]):
+            if abs(metric / upem / size * 1e4 - float(value[:-1])) > 0.006:
+                raise SystemExit(f"{spec['family']}: fallback metrics no longer match the font; recompute them")
         core = (ASCII | CORE_PUNCTUATION | spec["core"]) & in_latin
         latin_1 = (LATIN_1 | LATIN_EXT_A_IN_LATIN) & in_latin - core
         extended = LATIN_EXT_A & in_latin_ext - core - latin_1
@@ -322,7 +320,7 @@ def main() -> None:
             ("latin-1", latin_cut, latin, latin_1),
             ("core", latin_cut, latin, core),
         ):
-            data = build(font, chars, spec["features"], bounds(TTFont(io.BytesIO(source))))
+            data = build(font, chars, spec["features"], TTFont(io.BytesIO(source)))
             name = f"{spec['slug']}-{part}.{hashlib.sha256(data).hexdigest()[:10]}.woff2"
             check(data, source, chars, spec, name)
             files[name] = data
