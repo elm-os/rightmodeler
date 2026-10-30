@@ -116,6 +116,39 @@ gate("the home hero's copy enters through keyframes the page ships", () => {
   }
 });
 
+gate(
+  "the stylesheet serves every font file, and the home page preloads the cores",
+  () => {
+    const html = read(path.join(appDir, "index.html"));
+    const sheets = [
+      ...html.matchAll(/<link rel="stylesheet" href="\/_next\/([^"?]+\.css)/g),
+    ]
+      .map((m) => read(path.join(webRoot, ".next", m[1])))
+      .join("\n");
+    const files = fs
+      .readdirSync(path.join(webRoot, "public", "fonts"))
+      .filter((name) => name.endsWith(".woff2"))
+      .sort();
+    const served = [...sheets.matchAll(/\/fonts\/([^")]+\.woff2)/g)].map(
+      (m) => m[1],
+    );
+    assert.deepEqual(
+      [...new Set(served)].sort(),
+      files,
+      "public/fonts and the stylesheet disagree: rerun scripts/subset-fonts.py",
+    );
+    const { link } = JSON.parse(read(path.join(appDir, "index.meta"))).headers;
+    const preloaded = [...link.matchAll(/<\/fonts\/([^>]+\.woff2)>/g)].map(
+      (m) => m[1],
+    );
+    assert.deepEqual(
+      preloaded.sort(),
+      files.filter((name) => name.includes("-core.")),
+      "the home page should preload exactly the core font files",
+    );
+  },
+);
+
 gate("nothing server-renders invisible without a no-JS escape hatch", () => {
   // Without the noscript rule in app/layout.tsx a revealed element stays at opacity:0 with JS off.
   for (const file of allBuiltHtml()) {

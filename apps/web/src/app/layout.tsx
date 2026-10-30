@@ -1,32 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { preload } from "react-dom";
 import { Analytics } from "@vercel/analytics/next";
-import { Inter, DM_Sans, Space_Grotesk, Geist_Mono } from "next/font/google";
+import { fontPreloads } from "@/lib/fonts";
 import "./globals.css";
 
 // Public pages must remain fully prerendered, including client navigations.
 export const ensureStatic = "navigation";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
-
-// Free substitute for the licensed "Waldenburg".
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-});
-
-// Free substitute for the licensed "WaldenburgFH".
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.rightmodeler.com"),
@@ -58,11 +37,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  for (const href of fontPreloads) {
+    preload(href, { as: "font", type: "font/woff2" });
+  }
   return (
-    <html
-      lang="en"
-      className={`${inter.variable} ${dmSans.variable} ${spaceGrotesk.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         {/*
           Everything marked data-reveal waits for JavaScript to appear; this shows it without.
