@@ -20,11 +20,11 @@ pinned to `light`.
 Tokens are implemented as **Tailwind v4** theme variables. There is no
 `tailwind.config.js`; the system lives in CSS.
 
-| Concern                    | Where                                               |
-| -------------------------- | --------------------------------------------------- |
-| Color / type / font tokens | `apps/web/src/app/globals.css` (`@theme` + `:root`) |
-| Font loading               | `apps/web/src/app/layout.tsx` (`next/font/google`)  |
-| This document              | `docs/design.md`                                    |
+| Concern                    | Where                                                   |
+| -------------------------- | ------------------------------------------------------- |
+| Color / type / font tokens | `apps/web/src/app/globals.css` (`@theme` + `:root`)     |
+| Font files                 | `apps/web/public/fonts/` + `apps/web/src/app/fonts.css` |
+| This document              | `docs/design.md`                                        |
 
 Because tokens are declared in `@theme`, each one generates a matching Tailwind
 utility automatically — `--color-warm-sand` → `bg-warm-sand` / `text-warm-sand`
@@ -81,8 +81,9 @@ files in later is a no-op for consuming code.
 | Monospace       | `font-mono`             | Geist Mono         | **Geist Mono**    | Code, API references, technical labels       |
 
 > Substitute alternates if you ever swap: Display → Figtree (300); Mono →
-> JetBrains Mono / IBM Plex Mono (400). Fonts load as variable fonts via
-> `next/font/google`, so all needed weights are available without extra config.
+> JetBrains Mono / IBM Plex Mono (400). The loaded fonts are self-hosted files
+> cut to the weights, features and characters the site uses; see
+> [Font files](#font-files).
 
 ### Type scale
 
@@ -122,6 +123,39 @@ leading, tracking, and the 300 weight. Nothing else is needed.
   `leading-*` utilities or ad-hoc `tracking-[…]` values. If a rare case genuinely
   needs a tracking utility, only `tracking-normal`, `tracking-tight`, or
   `tracking-tighter` are allowed (mirrors the repo rule in `AGENTS.md`).
+
+### Font files
+
+`apps/web/scripts/subset-fonts.py` builds the four faces into `apps/web/public/fonts/`
+and writes their `@font-face` rules to `src/app/fonts.css` and the preload list to
+`src/lib/fonts.ts`. Its sources are the Google Fonts files the site loaded through
+`next/font/google` until October 2026, pinned by URL and checksum, so the files draw
+exactly what those drew. Each family keeps only the weights and OpenType features the
+site uses and is split three ways: a core file with ASCII and common punctuation,
+preloaded on every page, and Latin-1 and Latin Extended-A files that a page downloads
+only when it uses one of their characters. Characters in none of them, such as arrows
+and check marks, render in the system fallback, as they did before.
+
+The script is not part of the build. Run it from the repository root and commit what
+it writes:
+
+```sh
+uv run apps/web/scripts/subset-fonts.py
+```
+
+Edit its `FONTS` table and rerun it when:
+
+- copy starts using a character outside a family's core: add it to `core`, so it
+  keeps kerning with its neighbours and no extra file loads;
+- a family is set in a weight outside its `weights` (Inter 400–500, DM Sans 300–400,
+  Geist Mono 400–500, Space Grotesk 700);
+- CSS turns on an OpenType feature a family does not keep, such as
+  `diagonal-fractions` on Inter;
+- DM Sans or Space Grotesk is set without letter-spacing: Chrome then applies
+  ligatures and contextual alternates, which those two families do not keep;
+- CSS turns on `hyphens: auto`: Chrome draws the hyphen (U+2010) from the core
+  file, so add it to `core`;
+- a font needs updating.
 
 ---
 

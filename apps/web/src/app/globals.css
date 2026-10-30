@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./fonts.css";
 
 /* Design tokens: see docs/design.md. Light theme only. */
 @theme {
@@ -13,8 +14,8 @@
   --color-void-violet: #0447ff; /* decorative accent — illustration only */
   --color-ember-orange: #ff4704; /* decorative accent — illustration only */
 
-  /* Loaded via next/font in app/layout.tsx. The licensed brand face leads each stack,
-     so the real files can be dropped in without a change here. */
+  /* Loaded by app/fonts.css (scripts/subset-fonts.py). The licensed brand face leads each
+     stack, so the real files can be dropped in without a change here. */
   --font-sans:
     var(--font-inter), ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
