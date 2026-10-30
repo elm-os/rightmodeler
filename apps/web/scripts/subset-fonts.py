@@ -50,6 +50,8 @@ GSTATIC = "https://fonts.gstatic.com/s"
 ASCII = set(range(0x20, 0x7F))
 LATIN_1 = set(range(0xA0, 0x100))
 LATIN_EXT_A = set(range(0x100, 0x180))
+# The Latin Extended-A characters Google served from its latin file; the rest came from latin-ext.
+LATIN_EXT_A_IN_LATIN = {0x131, 0x152, 0x153}
 # No-break space, soft hyphen, curly quotes, en and em dashes, ellipsis. The soft hyphen never draws
 # its own glyph; it sits here so it cannot pull in an extended file.
 CORE_PUNCTUATION = {0xA0, 0xAD, 0x2018, 0x2019, 0x201C, 0x201D, 0x2013, 0x2014, 0x2026}
@@ -94,7 +96,7 @@ FONTS = [
         "range": (400, 900),
         "features": [],
         "letter_spaced": False,
-        "core": {0xA9, 0xB7},
+        "core": {0xA9, 0xB7, 0xD7},
         "fallback": ("74.67%", "21.92%", "0%", "134.59%"),
     },
     {
@@ -181,12 +183,17 @@ def save(font: TTFont, flavor: str | None = None) -> bytes:
     return out.getvalue()
 
 
-def build(font: TTFont, chars: set[int], features: list[str]) -> bytes:
+def bounds(font: TTFont) -> tuple:
+    return tuple(getattr(font["head"], a) for a in ("xMin", "yMin", "xMax", "yMax"))
+
+
+def build(font: TTFont, chars: set[int], features: list[str], bbox: tuple) -> bytes:
     options = subset.Options()
     options.layout_features = features
     options.layout_scripts = ["DFLT", "latn"]
     options.hinting = False
-    options.glyph_names = False
+    # Without glyph names (post format 3) macOS draws text differently at 1x.
+    options.glyph_names = True
     options.name_IDs = [0, 1, 2, 3, 4, 5, 6, 13, 14]
     options.name_languages = [0x409]
     options.drop_tables += ["STAT"]
@@ -195,6 +202,9 @@ def build(font: TTFont, chars: set[int], features: list[str]) -> bytes:
     subsetter = subset.Subsetter(options)
     subsetter.populate(unicodes=chars)
     subsetter.subset(font)
+    # macOS draws small text relative to the font's bounding box, so it keeps the source's.
+    font["head"].xMin, font["head"].yMin, font["head"].xMax, font["head"].yMax = bbox
+    font.recalcBBoxes = False
     return save(font, "woff2")
 
 
@@ -233,6 +243,8 @@ def check(data: bytes, source: bytes, chars: set[int], spec: dict, name: str) ->
     problems = []
     if set(font.getBestCmap()) != chars:
         problems.append("cmap differs from the requested characters")
+    if bounds(font) != bounds(TTFont(io.BytesIO(source))):
+        problems.append("bounding box differs from the source's")
     if HINTING_TABLES & set(font.keys()):
         problems.append(f"hinting tables left: {sorted(HINTING_TABLES & set(font.keys()))}")
     kept = {r.FeatureTag for tag in ("GSUB", "GPOS") if tag in font and font[tag].table.FeatureList for r in font[tag].table.FeatureList.FeatureRecord}
@@ -301,7 +313,7 @@ def main() -> None:
         latin_ext_cut = cut(TTFont(io.BytesIO(latin_ext)), spec["range"])
         in_latin, in_latin_ext = set(latin_cut.getBestCmap()), set(latin_ext_cut.getBestCmap())
         core = (ASCII | CORE_PUNCTUATION | spec["core"]) & in_latin
-        latin_1 = (LATIN_1 | LATIN_EXT_A) & in_latin - core
+        latin_1 = (LATIN_1 | LATIN_EXT_A_IN_LATIN) & in_latin - core
         extended = LATIN_EXT_A & in_latin_ext - core - latin_1
         weight = spec["range"] if isinstance(spec["range"], int) else f"{spec['range'][0]} {spec['range'][1]}"
         # Chrome consults the last-declared face first, so the core goes last, as in Google's CSS.
@@ -310,7 +322,7 @@ def main() -> None:
             ("latin-1", latin_cut, latin, latin_1),
             ("core", latin_cut, latin, core),
         ):
-            data = build(font, chars, spec["features"])
+            data = build(font, chars, spec["features"], bounds(TTFont(io.BytesIO(source))))
             name = f"{spec['slug']}-{part}.{hashlib.sha256(data).hexdigest()[:10]}.woff2"
             check(data, source, chars, spec, name)
             files[name] = data
