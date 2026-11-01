@@ -63,7 +63,11 @@ export function readFormFeedback(body: string): FeedbackResult {
   if (!sent) return { error: "Invalid request." };
 
   const { email } = sent;
-  if (typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
+  if (
+    typeof email !== "string" ||
+    email.trim().length > AGENT_FIELD_LIMITS.contact ||
+    !EMAIL_RE.test(email.trim())
+  ) {
     return { error: "Enter a valid email address." };
   }
 
