@@ -43,6 +43,15 @@ test("the form's body is read into trimmed feedback", () => {
   );
 });
 
+test("the form accepts a trimmed email of exactly 254 characters", () => {
+  const email = `${"x".repeat(249)}@b.co`;
+  assert.equal(email.length, 254);
+  assert.deepEqual(
+    readFormFeedback(body({ email: ` ${email} `, message: "hi" })),
+    { feedback: { via: "form", message: "hi", email } },
+  );
+});
+
 const FORM_REJECTIONS = [
   ["{not json", "Invalid request.", "a body that is not JSON"],
   ["", "Invalid request.", "an empty body"],
@@ -63,6 +72,11 @@ const FORM_REJECTIONS = [
     body({ email: "you @company.com", message: "hi" }),
     NO_EMAIL,
     "an email with a space inside",
+  ],
+  [
+    body({ email: `${"x".repeat(250)}@b.co`, message: "hi" }),
+    NO_EMAIL,
+    "an email one character past the cap",
   ],
   [body({ email: "you@company.com" }), NO_MESSAGE, "a missing message"],
   [
