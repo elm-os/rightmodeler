@@ -49,6 +49,17 @@ Mode B runs confirmation cases inside a container when a recommendation can affe
 - The in-container proxy runs on both backends. The workload always reaches it at `OPENAI_BASE_URL`, and it meters the case lease and records every attempt. Only the hop after it differs: the Docker backend forwards to a host listener over `host.docker.internal`, while the cloud backend forwards straight to the provider and the sandbox platform's egress firewall attaches the model credential in flight. The credential never enters the sandbox on either backend.
 - The workload is killed at the configured timeout by both the host and an in-container deadline.
 
+## Keep the environment the same for every case
+
+Mode B judges the application's final output from this run against the final output recorded for the same trajectory. Only the swapped steps should differ between the two.
+
+- The workload runs live. Steps the candidate does not replace call their current model again, and the system clock, random values and outbound calls behave as they do on any other run.
+- The application keeps ordinary network access. On the Docker backend the container uses Docker's default networking, and on the cloud backend the firewall lets every host other than the provider through unchanged. Point the application's tools, retrieval and data stores at fixtures or a snapshot, never at production services.
+- The case file carries no timestamp. If the output depends on the current time, have the driver set a fixed time instead of reading the system clock.
+- Seed any randomness the application controls, and avoid writes to state that another case reads.
+- A difference from any of these sources is judged like a difference caused by the candidate. It can fail a case and turn a confirmation into `isolated` or `inconclusive`.
+- When the full swap set fails, the same cases run again with no step swapped. If that run fails too, the confirmation is reported as `inconclusive`: check the environment before the candidate.
+
 ## Cloud backend
 
 - The cloud backend runs each confirmation case in a short-lived Vercel Sandbox microVM in your own Vercel project. It is separate from the Vercel AI Gateway: the `VERCEL_*` variables only authorize creating sandboxes, and the model credential is always the variable named by `--api-key-env`, whatever the provider.
