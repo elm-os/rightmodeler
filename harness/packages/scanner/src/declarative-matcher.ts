@@ -239,23 +239,6 @@ export const declarativeMatcherSpecSchema = z
     }
   });
 
-export const declarativeMatcherSpecsSchema = z
-  .array(declarativeMatcherSpecSchema)
-  .superRefine((specs, context) => {
-    const seen = new Set<string>();
-    for (const [index, spec] of specs.entries()) {
-      if (seen.has(spec.slug)) {
-        issue(
-          context,
-          "SLUG_COLLISION",
-          [index, "slug"],
-          `duplicate matcher slug ${spec.slug}`,
-        );
-      }
-      seen.add(spec.slug);
-    }
-  });
-
 export type DeclarativeMatcherSpec = z.infer<
   typeof declarativeMatcherSpecSchema
 >;

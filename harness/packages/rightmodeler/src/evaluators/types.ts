@@ -1,7 +1,6 @@
 export type {
   EvaluatorCase,
   EvaluatorCaseResult,
-  EvaluatorLaunchInput,
   EvaluatorMetric,
   EvaluatorProvider,
   EvaluatorRunStatus,

@@ -9,7 +9,6 @@ import {
   evaluateGates,
   judgeExecution,
   minimumTrialsForFloor,
-  pickJudge,
   selectWinner,
   wilson,
 } from "./index.js";
@@ -24,7 +23,6 @@ describe("kernel public API", () => {
     expect(evaluateGates).toBeTypeOf("function");
     expect(judgeExecution).toBeTypeOf("function");
     expect(minimumTrialsForFloor).toBeTypeOf("function");
-    expect(pickJudge).toBeTypeOf("function");
     expect(selectWinner).toBeTypeOf("function");
     expect(wilson).toBeTypeOf("function");
   });

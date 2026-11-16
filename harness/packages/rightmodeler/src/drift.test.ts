@@ -20,7 +20,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildCorpus,
   openAiJsonlAdapter,
-  parseTraceRecords,
   scrubRuns,
   writeCorpus,
   langfuseAdapter,

@@ -319,7 +319,7 @@ describe("CLI trace guidance wiring", () => {
   });
 
   it("prompts through injected IO in a TTY and uses the selected candidate", async () => {
-    const { repo, homeDir, older } = await fixture();
+    const { repo, homeDir } = await fixture();
     const captured = captureIo();
     const terminal = runtime(homeDir, "2\n", true);
 

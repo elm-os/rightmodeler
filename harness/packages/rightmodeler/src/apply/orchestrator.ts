@@ -45,7 +45,6 @@ import { formatWithHostFormatter, type FormatterBlocker } from "./format.js";
 import {
   createAppliedRemediationLifecycleEvent,
   createRemediationLifecycleEvent,
-  digestFileContent,
   isRepositoryRevision,
   readRemediationLifecycleEvents,
   remediationFromLifecycleDetail,

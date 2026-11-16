@@ -6,7 +6,6 @@ export const jsonValueSchema = z.json();
 export type JsonValue = z.infer<typeof jsonValueSchema>;
 
 export const terminalOutcomeSchema = z.enum(["success", "failure", "abstain"]);
-export type TerminalOutcome = z.infer<typeof terminalOutcomeSchema>;
 
 export const streamOutcomeSchema = z.enum([
   "completed",
@@ -14,7 +13,6 @@ export const streamOutcomeSchema = z.enum([
   "client_cancelled",
   "truncated",
 ]);
-export type StreamOutcome = z.infer<typeof streamOutcomeSchema>;
 
 export const attributionSchema = z.enum([
   "ok",
@@ -23,7 +21,6 @@ export const attributionSchema = z.enum([
   "silent-failure",
   "substituted",
 ]);
-export type Attribution = z.infer<typeof attributionSchema>;
 
 export const substitutionSchema = z
   .strictObject({
@@ -106,7 +103,6 @@ export const cascadeFindingVerdictSchema = z.enum([
   "isolated",
   "inconclusive",
 ]);
-export type CascadeFindingVerdict = z.infer<typeof cascadeFindingVerdictSchema>;
 
 export const cascadeFindingSchema = z
   .strictObject({
@@ -135,7 +131,6 @@ export const lifecycleEventKindSchema = z.enum([
   "pr_merged",
   "watch_ended",
 ]);
-export type LifecycleEventKind = z.infer<typeof lifecycleEventKindSchema>;
 
 export const lifecycleEventSchema = z
   .strictObject({

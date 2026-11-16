@@ -25,7 +25,6 @@ import {
   confirmSwapSet,
   type ConfirmModeB,
   type ConfirmSwapSetInput,
-  type ConfirmSwapSetResult,
 } from "./confirm.js";
 import type {
   ModeBSwapPolicy,

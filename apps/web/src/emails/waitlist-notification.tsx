@@ -69,5 +69,3 @@ export function WaitlistNotification({
     </Html>
   );
 }
-
-export default WaitlistNotification;

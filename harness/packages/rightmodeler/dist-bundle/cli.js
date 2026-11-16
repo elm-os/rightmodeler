@@ -25550,29 +25550,18 @@ function rowsFrom(input) {
   }
   return rows;
 }
-function firstIssueMessage(error51) {
-  const issue3 = error51.issues[0];
-  if (issue3 === void 0) {
-    return "Invalid fact";
-  }
-  const location2 = issue3.path.length > 0 ? issue3.path.join(".") : "(root)";
-  return `${location2}: ${issue3.message}`;
-}
 function parseFactRow(row2) {
   let candidate = row2;
   if (typeof row2 === "string") {
     try {
       candidate = JSON.parse(row2);
-    } catch (error51) {
-      return {
-        success: false,
-        message: error51 instanceof Error ? error51.message : String(error51)
-      };
+    } catch {
+      return { success: false };
     }
   }
   const parsed2 = factSchema.safeParse(candidate);
   if (!parsed2.success) {
-    return { success: false, message: firstIssueMessage(parsed2.error) };
+    return { success: false };
   }
   return { success: true, fact: parsed2.data };
 }
@@ -33368,15 +33357,6 @@ var declarativeMatcherSpecSchema = external_exports.strictObject({
     }
   }
 });
-var declarativeMatcherSpecsSchema = external_exports.array(declarativeMatcherSpecSchema).superRefine((specs, context2) => {
-  const seen = /* @__PURE__ */ new Set();
-  for (const [index, spec] of specs.entries()) {
-    if (seen.has(spec.slug)) {
-      issue2(context2, "SLUG_COLLISION", [index, "slug"], `duplicate matcher slug ${spec.slug}`);
-    }
-    seen.add(spec.slug);
-  }
-});
 function inputSlug(input) {
   if (typeof input !== "object" || input === null || !("slug" in input)) {
     return "<invalid>";
@@ -36764,6 +36744,122 @@ var traceAdapters = [
   bifrostAdapter
 ];
 
+// src/data/audit.ts
+var MIN_AUDITED_PER_FAMILY = 10;
+var verdictSchema = external_exports.enum(["correct", "incorrect", "ambiguous"]);
+var AuditError = class extends Error {
+  constructor(message2, options) {
+    super(message2, options);
+    this.name = "AuditError";
+  }
+};
+function referenceCeilings(cases, audit) {
+  const byFamily = /* @__PURE__ */ new Map();
+  for (const item of cases) {
+    byFamily.set(item.family, [...byFamily.get(item.family) ?? [], item]);
+  }
+  return [...byFamily.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([family, familyCases]) => {
+    const audited = audit?.perFamily[family]?.referenceAgreementPoint;
+    const baseMultiplier = audited ?? 1;
+    const verifiedCuratedReferences = familyCases.filter(
+      (item) => item.referenceSource === "curated" && item.referenceVerified === true
+    ).length;
+    return {
+      family,
+      multiplier: (verifiedCuratedReferences + (familyCases.length - verifiedCuratedReferences) * baseMultiplier) / familyCases.length,
+      baseMultiplier,
+      baseSource: audited === void 0 || audited === null ? "default" : "audit",
+      referenceCount: familyCases.length,
+      verifiedCuratedReferences
+    };
+  });
+}
+function sampleCases(cases, size, seed) {
+  return [...cases].sort((left, right) => {
+    const leftOrder = computeRunSpecDigest({ seed, caseId: left.caseId });
+    const rightOrder = computeRunSpecDigest({ seed, caseId: right.caseId });
+    return leftOrder < rightOrder ? -1 : leftOrder > rightOrder ? 1 : 0;
+  }).slice(0, size);
+}
+function auditCorpusSample(corpus, options) {
+  try {
+    if (!Number.isSafeInteger(options.size) || options.size < 1) {
+      throw new AuditError("Audit sample size must be a positive integer");
+    }
+    if (options.size > corpus.cases.length) {
+      throw new AuditError(
+        `Audit sample size must not exceed ${corpus.cases.length}`
+      );
+    }
+    const cases = sampleCases(corpus.cases, options.size, options.seed).map(
+      ({ caseId, content }) => {
+        const worksheetCase = {
+          caseId,
+          family: content.family,
+          messages: content.messages,
+          acceptedOutput: content.output,
+          verdict: "",
+          note: ""
+        };
+        if (content.systemPrompt !== void 0) {
+          worksheetCase.systemPrompt = content.systemPrompt;
+        }
+        return worksheetCase;
+      }
+    );
+    return {
+      seed: options.seed,
+      populationSize: corpus.cases.length,
+      cases
+    };
+  } catch (error51) {
+    if (error51 instanceof AuditError) throw error51;
+    throw new AuditError("Audit sampling failed", { cause: error51 });
+  }
+}
+function auditTabulate(worksheet) {
+  try {
+    const families = /* @__PURE__ */ new Map();
+    for (const worksheetCase of worksheet.cases) {
+      const verdict = verdictSchema.parse(worksheetCase.verdict);
+      const familyVerdicts = families.get(worksheetCase.family) ?? [];
+      familyVerdicts.push(verdict);
+      families.set(worksheetCase.family, familyVerdicts);
+    }
+    if (families.size === 0) {
+      throw new AuditError("Audit worksheet contains no cases");
+    }
+    const perFamily = Object.fromEntries(
+      [...families.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([family, verdicts]) => {
+        const n = verdicts.length;
+        const disagreementCount = verdicts.filter(
+          (verdict) => verdict !== "correct"
+        ).length;
+        const disagreement = disagreementCount / n;
+        const { lower: wilsonLow, upper: wilsonHigh } = wilson(
+          disagreementCount,
+          n
+        );
+        const result2 = {
+          n,
+          disagreement,
+          wilsonLow,
+          wilsonHigh,
+          referenceAgreementPoint: n >= MIN_AUDITED_PER_FAMILY ? 1 - disagreement : null
+        };
+        if (result2.referenceAgreementPoint === null) {
+          result2.referenceAgreementPointReason = "below_minimum_audited_count";
+        }
+        return [family, result2];
+      })
+    );
+    return { perFamily };
+  } catch (error51) {
+    if (error51 instanceof AuditError) throw error51;
+    throw new AuditError("Audit tabulation failed", { cause: error51 });
+  }
+}
+
 // src/data/corpus.ts
 var CorpusError = class extends Error {
   constructor(message2, options) {
@@ -36936,122 +37032,6 @@ async function writeCorpus(store, projectId3, corpus) {
     `${projectId3}/corpus/corpus-${corpus.corpusVersionId}.json`,
     Buffer.from(canonicalJson(corpusManifest(corpus)), "utf8")
   );
-}
-
-// src/data/audit.ts
-var MIN_AUDITED_PER_FAMILY = 10;
-var verdictSchema = external_exports.enum(["correct", "incorrect", "ambiguous"]);
-var AuditError = class extends Error {
-  constructor(message2, options) {
-    super(message2, options);
-    this.name = "AuditError";
-  }
-};
-function referenceCeilings(cases, audit) {
-  const byFamily = /* @__PURE__ */ new Map();
-  for (const item of cases) {
-    byFamily.set(item.family, [...byFamily.get(item.family) ?? [], item]);
-  }
-  return [...byFamily.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([family, familyCases]) => {
-    const audited = audit?.perFamily[family]?.referenceAgreementPoint;
-    const baseMultiplier = audited ?? 1;
-    const verifiedCuratedReferences = familyCases.filter(
-      (item) => item.referenceSource === "curated" && item.referenceVerified === true
-    ).length;
-    return {
-      family,
-      multiplier: (verifiedCuratedReferences + (familyCases.length - verifiedCuratedReferences) * baseMultiplier) / familyCases.length,
-      baseMultiplier,
-      baseSource: audited === void 0 || audited === null ? "default" : "audit",
-      referenceCount: familyCases.length,
-      verifiedCuratedReferences
-    };
-  });
-}
-function sampleCases(cases, size, seed) {
-  return [...cases].sort((left, right) => {
-    const leftOrder = computeRunSpecDigest({ seed, caseId: left.caseId });
-    const rightOrder = computeRunSpecDigest({ seed, caseId: right.caseId });
-    return leftOrder < rightOrder ? -1 : leftOrder > rightOrder ? 1 : 0;
-  }).slice(0, size);
-}
-function auditCorpusSample(corpus, options) {
-  try {
-    if (!Number.isSafeInteger(options.size) || options.size < 1) {
-      throw new AuditError("Audit sample size must be a positive integer");
-    }
-    if (options.size > corpus.cases.length) {
-      throw new AuditError(
-        `Audit sample size must not exceed ${corpus.cases.length}`
-      );
-    }
-    const cases = sampleCases(corpus.cases, options.size, options.seed).map(
-      ({ caseId, content }) => {
-        const worksheetCase = {
-          caseId,
-          family: content.family,
-          messages: content.messages,
-          acceptedOutput: content.output,
-          verdict: "",
-          note: ""
-        };
-        if (content.systemPrompt !== void 0) {
-          worksheetCase.systemPrompt = content.systemPrompt;
-        }
-        return worksheetCase;
-      }
-    );
-    return {
-      seed: options.seed,
-      populationSize: corpus.cases.length,
-      cases
-    };
-  } catch (error51) {
-    if (error51 instanceof AuditError) throw error51;
-    throw new AuditError("Audit sampling failed", { cause: error51 });
-  }
-}
-function auditTabulate(worksheet) {
-  try {
-    const families = /* @__PURE__ */ new Map();
-    for (const worksheetCase of worksheet.cases) {
-      const verdict = verdictSchema.parse(worksheetCase.verdict);
-      const familyVerdicts = families.get(worksheetCase.family) ?? [];
-      familyVerdicts.push(verdict);
-      families.set(worksheetCase.family, familyVerdicts);
-    }
-    if (families.size === 0) {
-      throw new AuditError("Audit worksheet contains no cases");
-    }
-    const perFamily = Object.fromEntries(
-      [...families.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([family, verdicts]) => {
-        const n = verdicts.length;
-        const disagreementCount = verdicts.filter(
-          (verdict) => verdict !== "correct"
-        ).length;
-        const disagreement = disagreementCount / n;
-        const { lower: wilsonLow, upper: wilsonHigh } = wilson(
-          disagreementCount,
-          n
-        );
-        const result2 = {
-          n,
-          disagreement,
-          wilsonLow,
-          wilsonHigh,
-          referenceAgreementPoint: n >= MIN_AUDITED_PER_FAMILY ? 1 - disagreement : null
-        };
-        if (result2.referenceAgreementPoint === null) {
-          result2.referenceAgreementPointReason = "below_minimum_audited_count";
-        }
-        return [family, result2];
-      })
-    );
-    return { perFamily };
-  } catch (error51) {
-    if (error51 instanceof AuditError) throw error51;
-    throw new AuditError("Audit tabulation failed", { cause: error51 });
-  }
 }
 
 // src/data/decode.ts

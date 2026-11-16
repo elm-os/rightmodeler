@@ -1,7 +1,5 @@
 .rightmodeler/
-.cheaper-models/
 .agents/skills/rightmodeler/
-.agents/skills/cheaper-models/
 .next/
 .turbo/
 .vercel/
@@ -12,7 +10,6 @@ coverage/
 .ruff_cache/
 .venv/
 .claude/skills/rightmodeler/
-.claude/skills/cheaper-models/
 __pycache__/
 *.pyc
 outputs/

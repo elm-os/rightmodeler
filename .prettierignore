@@ -3,7 +3,6 @@ apps/**/node_modules
 node_modules
 .next
 .turbo
-.cheaper-models
 pnpm-lock.yaml
 harness/fixtures/diff-cases/src/misformatted.ts
 harness/packages/rightmodeler/dist-bundle

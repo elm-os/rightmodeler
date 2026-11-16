@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  aggregationFact,
-  aggregationFacts,
-} from "./__fixtures__/aggregation.js";
+import { aggregationFacts } from "./__fixtures__/aggregation.js";
 import { aggregate, type FamilyVerdict } from "./aggregation.js";
 import { wilson } from "./statistics.js";
 import { assignDriftSplit, assignSplits, selectWinner } from "./selection.js";

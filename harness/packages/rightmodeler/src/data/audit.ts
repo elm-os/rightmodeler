@@ -3,7 +3,6 @@ import { wilson } from "@rightmodeler/kernel";
 import { z } from "zod";
 
 import { buildCorpus, type Corpus } from "./corpus.js";
-import type { NormalizedRun } from "./normalized-run.js";
 
 export const MIN_AUDITED_PER_FAMILY = 10;
 
@@ -106,21 +105,6 @@ function sampleCases(
       return leftOrder < rightOrder ? -1 : leftOrder > rightOrder ? 1 : 0;
     })
     .slice(0, size);
-}
-
-export function auditSample(
-  runs: readonly NormalizedRun[],
-  options: { size: number; seed: number },
-): AuditWorksheet {
-  try {
-    return auditCorpusSample(
-      buildCorpus(runs, { seed: options.seed }),
-      options,
-    );
-  } catch (error) {
-    if (error instanceof AuditError) throw error;
-    throw new AuditError("Audit sampling failed", { cause: error });
-  }
 }
 
 export function auditCorpusSample(
