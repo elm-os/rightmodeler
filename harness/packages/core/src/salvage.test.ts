@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseFacts, parseFactsStrict } from "./salvage.js";
+import { parseFacts } from "./salvage.js";
 
 const execution = {
   executionId: "execution-1",
@@ -29,7 +29,6 @@ const requestAttempt = {
 describe("fact salvage", () => {
   it("treats an empty input as an empty ledger", () => {
     expect(parseFacts("")).toEqual({ facts: [], droppedRows: 0 });
-    expect(parseFactsStrict("")).toEqual([]);
   });
 
   it("keeps valid objects and lines while counting every malformed row", () => {
@@ -64,21 +63,5 @@ describe("fact salvage", () => {
 
     expect(result.droppedRows).toBe(1);
     expect(result.facts).toEqual([execution, requestAttempt]);
-  });
-
-  it("throws with the first malformed row in strict mode", () => {
-    expect(() =>
-      parseFactsStrict([
-        execution,
-        '{"attemptId":',
-        { ...requestAttempt, costUsd: "unknown" },
-      ]),
-    ).toThrow(/^Invalid fact at row 2: Unexpected end of JSON input/);
-  });
-
-  it("returns all facts when strict input is valid", () => {
-    expect(
-      parseFactsStrict([execution, JSON.stringify(requestAttempt)]),
-    ).toEqual([execution, requestAttempt]);
   });
 });

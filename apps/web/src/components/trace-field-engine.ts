@@ -4,14 +4,6 @@
 import { PALETTES, type PaletteName } from "@/components/trace-field-palettes";
 
 export type { PaletteName } from "@/components/trace-field-palettes";
-export type ShapeName = "confluence" | "descent" | "ring" | "slipstream";
-
-export const SHAPE_ORDER: ShapeName[] = [
-  "confluence",
-  "descent",
-  "ring",
-  "slipstream",
-];
 
 /** Decoded pixels of one etched plate, used to place resting particles. */
 export type ShapeMask = {

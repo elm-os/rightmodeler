@@ -110,16 +110,6 @@ export class NoNeutralJudgeError extends Error {
   }
 }
 
-export function pickJudge(
-  catalog: readonly ModelCatalogEntry[],
-  options: {
-    readonly candidateFamily: string;
-    readonly referenceFamily: string;
-  },
-): string {
-  return pickJudges(catalog, options)[0]!;
-}
-
 export function pickJudges(
   catalog: readonly ModelCatalogEntry[],
   options: {

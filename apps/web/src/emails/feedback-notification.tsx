@@ -93,5 +93,3 @@ export function FeedbackNotification({
     </Html>
   );
 }
-
-export default FeedbackNotification;

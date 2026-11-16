@@ -60,8 +60,6 @@ export type AbstainReasonDetails =
       readonly required: number;
     }
   | { readonly reason: CascadeReason };
-export type FamilyDecision =
-  "recommend" | "reject" | "abstain" | "inconclusive";
 
 /**
  * A joined execution and its assigned evaluation context.

@@ -5,7 +5,6 @@ import { catalogFamily, type ModelCatalogEntry } from "@rightmodeler/core";
 import {
   judgeExecution,
   NoNeutralJudgeError,
-  pickJudge,
   pickJudges,
   type JudgeChatRequest,
   type JudgeChatResult,
@@ -28,7 +27,7 @@ function response(
   return reply(JSON.stringify({ verdict, score, justification }));
 }
 
-describe("pickJudge", () => {
+describe("pickJudges", () => {
   it("excludes candidate, reference, and unknown families", () => {
     const catalog: ModelCatalogEntry[] = [
       {
@@ -70,10 +69,10 @@ describe("pickJudge", () => {
     ];
 
     expect(
-      pickJudge(catalog, {
+      pickJudges(catalog, {
         candidateFamily: "candidate",
         referenceFamily: "reference",
-      }),
+      })[0],
     ).toBe("neutral/judge");
   });
 

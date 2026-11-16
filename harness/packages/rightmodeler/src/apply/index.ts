@@ -7,15 +7,7 @@ export * from "./diff.js";
 export * from "./difflint.js";
 export * from "./format.js";
 export * from "./remediation.js";
-export { applySwaps as applyPreparedSwaps } from "./orchestrator.js";
-export type {
-  ApplyCap,
-  ApplyCascadeStatus,
-  ApplyRefusal,
-  ApplyRefusalCode,
-  ApplyResult,
-  ApplyVerdict,
-} from "./orchestrator.js";
+export type { ApplyVerdict } from "./orchestrator.js";
 
 export interface ApplySwapsOptions {
   readonly repo: string;

@@ -24,9 +24,6 @@ import {
 } from "./promptfoo.js";
 import type { EvaluatorProvider } from "./types.js";
 
-export type EvaluatorProviderName =
-  "braintrust" | "langfuse" | "langsmith" | "promptfoo";
-
 export type EvaluatorConfig =
   | ({ readonly provider: "braintrust" } & BraintrustEvaluatorConfig)
   | ({ readonly provider: "langfuse" } & LangfuseEvaluatorConfig)

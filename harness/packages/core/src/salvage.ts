@@ -7,8 +7,7 @@ export interface ParsedFacts {
   droppedRows: number;
 }
 
-type ParsedFactRow =
-  { success: true; fact: Fact } | { success: false; message: string };
+type ParsedFactRow = { success: true; fact: Fact } | { success: false };
 
 function rowsFrom(input: FactRows): readonly unknown[] {
   if (typeof input !== "string") {
@@ -23,34 +22,19 @@ function rowsFrom(input: FactRows): readonly unknown[] {
   return rows;
 }
 
-function firstIssueMessage(error: {
-  issues: readonly { path: PropertyKey[]; message: string }[];
-}) {
-  const issue = error.issues[0];
-  if (issue === undefined) {
-    return "Invalid fact";
-  }
-
-  const location = issue.path.length > 0 ? issue.path.join(".") : "(root)";
-  return `${location}: ${issue.message}`;
-}
-
 function parseFactRow(row: unknown): ParsedFactRow {
   let candidate = row;
   if (typeof row === "string") {
     try {
       candidate = JSON.parse(row);
-    } catch (error) {
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : String(error),
-      };
+    } catch {
+      return { success: false };
     }
   }
 
   const parsed = factSchema.safeParse(candidate);
   if (!parsed.success) {
-    return { success: false, message: firstIssueMessage(parsed.error) };
+    return { success: false };
   }
   return { success: true, fact: parsed.data };
 }
@@ -69,18 +53,4 @@ export function parseFacts(input: FactRows): ParsedFacts {
   }
 
   return { facts, droppedRows };
-}
-
-export function parseFactsStrict(input: FactRows): Fact[] {
-  const facts: Fact[] = [];
-
-  for (const [index, row] of rowsFrom(input).entries()) {
-    const parsed = parseFactRow(row);
-    if (!parsed.success) {
-      throw new Error(`Invalid fact at row ${index + 1}: ${parsed.message}`);
-    }
-    facts.push(parsed.fact);
-  }
-
-  return facts;
 }

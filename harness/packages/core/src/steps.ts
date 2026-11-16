@@ -1,17 +1,14 @@
 import { z } from "zod";
 
 const replayModeSchema = z.enum(["single_shot", "e2e"]);
-export type ReplayMode = z.infer<typeof replayModeSchema>;
 
 const prefixProvenanceSchema = z.enum([
   "external",
   "model_authored",
   "unknown",
 ]);
-export type PrefixProvenance = z.infer<typeof prefixProvenanceSchema>;
 
 const stepStatusSchema = z.enum(["pending", "replaying", "replayed", "error"]);
-export type StepStatus = z.infer<typeof stepStatusSchema>;
 
 export const stepRecordSchema = z.strictObject({
   stepId: z.string().min(1),

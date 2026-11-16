@@ -43,10 +43,6 @@ function projectPrefix(projectId: string): string {
   return `${projectId}/`;
 }
 
-export function projectKey(projectId: string): string {
-  return `${projectPrefix(projectId)}project.json`;
-}
-
 export function setupPrefix(projectId: string): string {
   return `${projectPrefix(projectId)}setup/`;
 }
@@ -84,29 +80,6 @@ export function factsPrefix(projectId: string): string {
 export function factKey(projectId: string, factId: string): string {
   assertSafeSegment(factId, "factId");
   return `${factsPrefix(projectId)}${factId}.json`;
-}
-
-export function judgementsPrefix(projectId: string): string {
-  return `${projectPrefix(projectId)}judgements/`;
-}
-
-export function runJudgementsPrefix(projectId: string, runId: string): string {
-  assertSafeSegment(runId, "runId");
-  return `${judgementsPrefix(projectId)}${runId}/`;
-}
-
-export function judgementKey(
-  projectId: string,
-  runId: string,
-  invocationNumber: number,
-): string {
-  if (!Number.isSafeInteger(invocationNumber) || invocationNumber < 0) {
-    throw new Error(
-      "Invalid invocationNumber: must be a non-negative safe integer",
-    );
-  }
-  const invocation = String(invocationNumber).padStart(3, "0");
-  return `${runJudgementsPrefix(projectId, runId)}invocation-${invocation}.json`;
 }
 
 export function budgetPrefix(projectId: string): string {

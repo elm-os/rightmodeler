@@ -16,12 +16,8 @@ import {
   confirmPrefix,
   factKey,
   factsPrefix,
-  judgementKey,
-  judgementsPrefix,
-  projectKey,
   reportKey,
   reportsPrefix,
-  runJudgementsPrefix,
   runKey,
   runsPrefix,
   setupPrefix,
@@ -34,7 +30,6 @@ import {
 
 describe("key builders", () => {
   it.each([
-    ["projectKey", projectKey("project"), "project/project.json"],
     ["setupPrefix", setupPrefix("project"), "project/setup/"],
     [
       "setupStateKey",
@@ -52,17 +47,6 @@ describe("key builders", () => {
     ["stepKey", stepKey("project", "step"), "project/steps/step.json"],
     ["factsPrefix", factsPrefix("project"), "project/facts/"],
     ["factKey", factKey("project", "fact"), "project/facts/fact.json"],
-    ["judgementsPrefix", judgementsPrefix("project"), "project/judgements/"],
-    [
-      "runJudgementsPrefix",
-      runJudgementsPrefix("project", "run"),
-      "project/judgements/run/",
-    ],
-    [
-      "judgementKey",
-      judgementKey("project", "run", 7),
-      "project/judgements/run/invocation-007.json",
-    ],
     ["budgetPrefix", budgetPrefix("project"), "project/budget/"],
     ["budgetKey", budgetKey("project", "run"), "project/budget/run.json"],
     ["confirmPrefix", confirmPrefix("project"), "project/confirm/"],
@@ -105,7 +89,6 @@ describe("key builders", () => {
     name: string;
     build: (unsafe: string) => string;
   }> = [
-    { name: "projectKey projectId", build: (value) => projectKey(value) },
     { name: "setupPrefix projectId", build: (value) => setupPrefix(value) },
     { name: "setupStateKey projectId", build: (value) => setupStateKey(value) },
     {
@@ -121,26 +104,6 @@ describe("key builders", () => {
     { name: "factsPrefix projectId", build: (value) => factsPrefix(value) },
     { name: "factKey projectId", build: (value) => factKey(value, "fact") },
     { name: "factKey factId", build: (value) => factKey("project", value) },
-    {
-      name: "judgementsPrefix projectId",
-      build: (value) => judgementsPrefix(value),
-    },
-    {
-      name: "runJudgementsPrefix projectId",
-      build: (value) => runJudgementsPrefix(value, "run"),
-    },
-    {
-      name: "runJudgementsPrefix runId",
-      build: (value) => runJudgementsPrefix("project", value),
-    },
-    {
-      name: "judgementKey projectId",
-      build: (value) => judgementKey(value, "run", 1),
-    },
-    {
-      name: "judgementKey runId",
-      build: (value) => judgementKey("project", value, 1),
-    },
     { name: "budgetPrefix projectId", build: (value) => budgetPrefix(value) },
     { name: "budgetKey projectId", build: (value) => budgetKey(value, "run") },
     { name: "budgetKey runId", build: (value) => budgetKey("project", value) },
@@ -188,13 +151,6 @@ describe("key builders", () => {
   it("accepts an ordinary segment", () => {
     expect(() => assertSafeSegment("family.v1-2")).not.toThrow();
   });
-
-  it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
-    "rejects invalid judgement invocation number %s",
-    (invocationNumber) => {
-      expect(() => judgementKey("project", "run", invocationNumber)).toThrow();
-    },
-  );
 });
 
 describe("family name keys", () => {

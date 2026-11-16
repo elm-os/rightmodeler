@@ -20,7 +20,7 @@ import {
 } from "./adapters.js";
 import {
   MIN_AUDITED_PER_FAMILY,
-  auditSample,
+  auditCorpusSample,
   auditTabulate,
   type AuditWorksheet,
 } from "./audit.js";
@@ -480,10 +480,10 @@ describe("corpus", () => {
 
 describe("reference audit", () => {
   it("samples accepted references with blank human review fields only", async () => {
-    const worksheet = auditSample(scrubRuns(await otelRuns()).runs, {
-      size: 5,
-      seed: 12,
-    });
+    const worksheet = auditCorpusSample(
+      buildCorpus(scrubRuns(await otelRuns()).runs, { seed: 12 }),
+      { size: 5, seed: 12 },
+    );
 
     expect(worksheet.cases).toHaveLength(5);
     expect(worksheet.cases.every((entry) => entry.verdict === "")).toBe(true);
