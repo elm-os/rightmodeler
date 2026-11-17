@@ -86,7 +86,7 @@ From validation to autonomy
 
 On npm now
 
-The validation framework. Replay cheaper models on your traces; open a draft pull request when a swap clears every gate.
+The validation framework. Replay cheaper or newer models on your traces; open a draft PR when a swap clears every gate.
 
 See how it works: /how-it-works
 

@@ -66,7 +66,7 @@
         {
           "scenario": "A team is evaluating Not Diamond and wants to know whether a router would actually save money on their pipeline before wiring it in.",
           "winner": "both",
-          "why": "Run a validation first, on your own traces: for each step it shows whether a cheaper or newer pinned model clears every release gate, or abstains where the evidence is thin. That tells you what a fixed per-step assignment can save before you weigh a router against it. What per-request routing would add on top is for Not Diamond's own evaluation on your traffic to show; rightmodeler does not measure it."
+          "why": "Run a validation first, on your own traces: for each step it shows whether a cheaper pinned model clears every release gate, or abstains where the evidence is thin. That tells you what a fixed per-step assignment can save before you weigh a router against it. What per-request routing would add on top is for Not Diamond's own evaluation on your traffic to show; rightmodeler does not measure it."
         }
       ]
     },

@@ -36,7 +36,7 @@ only in hand-written CSS (e.g. a keyframe or a custom easing).
 
 ## Color
 
-Nine tokens. Every one is a Tailwind color utility (`bg-`, `text-`, `border-`).
+Nine brand tokens, plus the six banner blues below. Every one is a Tailwind color utility (`bg-`, `text-`, `border-`).
 
 | Token / utility   | Hex       | Role                                                         | Semantic             |
 | ----------------- | --------- | ------------------------------------------------------------ | -------------------- |
