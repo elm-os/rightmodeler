@@ -35,6 +35,15 @@ T1:change T2:change T3:change T4:change T5:change T6:change T7:change T8:change 
 const typescriptSurfaces = [
   ["e2e.test.ts", new URL("e2e.test.ts", import.meta.url)],
   [
+    "e2e-pipeline-2.test.ts",
+    new URL("e2e-pipeline-2.test.ts", import.meta.url),
+  ],
+  [
+    "e2e-pipeline-3.test.ts",
+    new URL("e2e-pipeline-3.test.ts", import.meta.url),
+  ],
+  ["e2e-modeb.test.ts", new URL("e2e-modeb.test.ts", import.meta.url)],
+  [
     "selection.test.ts",
     new URL("../../kernel/src/selection.test.ts", import.meta.url),
   ],
