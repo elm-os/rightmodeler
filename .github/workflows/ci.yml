@@ -2,6 +2,9 @@ name: ci
 
 on:
   push:
+    # Branches only, so a tag push does not start this workflow. release.yml builds and checks
+    # the CLI on every v* tag, and the tagged commit has normally passed this workflow on main.
+    branches: ["**"]
   pull_request:
 
 permissions:
@@ -36,17 +39,49 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Prebuild Mode B fixture image
+      - name: Write the Mode B fixture Dockerfile
+        id: fixture
+        # The tests look the image up by the first 12 hex digits of the SHA-256 of
+        # requirements.txt. hashFiles() computes a different hash, so the tag is computed here.
         run: |
-          docker pull node:24-bookworm-slim
           fixture_digest="$(sha256sum harness/fixtures/langgraph-app/requirements.txt | cut -c1-12)"
-          fixture_image="rightmodeler-modeb-langgraph:${fixture_digest}"
-          docker build --tag "${fixture_image}" --file - harness/fixtures/langgraph-app <<'DOCKERFILE'
+          echo "image=rightmodeler-modeb-langgraph:${fixture_digest}" >> "${GITHUB_OUTPUT}"
+          cat > "${RUNNER_TEMP}/Dockerfile.modeb" <<'DOCKERFILE'
           FROM node:24-bookworm-slim
           RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip && rm -rf /var/lib/apt/lists/*
           COPY requirements.txt /tmp/requirements.txt
           RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
           DOCKERFILE
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # Leave plain `docker build`, which the tests fall back to, on the default builder.
+          use: false
+
+      - name: Prebuild Mode B fixture image
+        # The layers live in the GitHub Actions cache. A new node:24-bookworm-slim digest or a
+        # requirements.txt change misses the cache and rebuilds from that layer on.
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          DOCKER_BUILD_SUMMARY: "false"
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: harness/fixtures/langgraph-app
+          file: ${{ runner.temp }}/Dockerfile.modeb
+          tags: ${{ steps.fixture.outputs.image }}
+          load: true
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,ignore-error=true
+
+      - name: Confirm the fixture image is loaded
+        # The tests quietly rebuild a missing image, which would hide a prebuild that loaded nothing.
+        env:
+          FIXTURE_IMAGE: ${{ steps.fixture.outputs.image }}
+        run: docker image inspect "${FIXTURE_IMAGE}" > /dev/null
 
       - name: Check
         run: pnpm check
@@ -73,15 +108,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up pnpm
-        # Same as the ci job: the version comes from the packageManager field only.
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
       - name: Set up Node.js
+        # No pnpm store cache here: on Windows, restoring it takes longer than the install it saves.
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          cache: pnpm
+
+      - name: Set up pnpm
+        # The version comes from the packageManager field only, as in the ci job. npm installs that
+        # exact version. pnpm/action-setup installs its own bootstrap pnpm first and then
+        # self-updates to this version, which takes about 20s on Windows.
+        run: npm install --global --no-audit --no-fund (node -p "require('./package.json').packageManager")
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -127,17 +164,49 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Prebuild Mode B fixture image
+      - name: Write the Mode B fixture Dockerfile
+        id: fixture
+        # The tests look the image up by the first 12 hex digits of the SHA-256 of
+        # requirements.txt. hashFiles() computes a different hash, so the tag is computed here.
         run: |
-          docker pull node:24-bookworm-slim
           fixture_digest="$(sha256sum harness/fixtures/langgraph-app/requirements.txt | cut -c1-12)"
-          fixture_image="rightmodeler-modeb-langgraph:${fixture_digest}"
-          docker build --tag "${fixture_image}" --file - harness/fixtures/langgraph-app <<'DOCKERFILE'
+          echo "image=rightmodeler-modeb-langgraph:${fixture_digest}" >> "${GITHUB_OUTPUT}"
+          cat > "${RUNNER_TEMP}/Dockerfile.modeb" <<'DOCKERFILE'
           FROM node:24-bookworm-slim
           RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip && rm -rf /var/lib/apt/lists/*
           COPY requirements.txt /tmp/requirements.txt
           RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
           DOCKERFILE
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # Leave plain `docker build`, which the tests fall back to, on the default builder.
+          use: false
+
+      - name: Prebuild Mode B fixture image
+        # The layers live in the GitHub Actions cache. A new node:24-bookworm-slim digest or a
+        # requirements.txt change misses the cache and rebuilds from that layer on.
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          DOCKER_BUILD_SUMMARY: "false"
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: harness/fixtures/langgraph-app
+          file: ${{ runner.temp }}/Dockerfile.modeb
+          tags: ${{ steps.fixture.outputs.image }}
+          load: true
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,ignore-error=true
+
+      - name: Confirm the fixture image is loaded
+        # The tests quietly rebuild a missing image, which would hide a prebuild that loaded nothing.
+        env:
+          FIXTURE_IMAGE: ${{ steps.fixture.outputs.image }}
+        run: docker image inspect "${FIXTURE_IMAGE}" > /dev/null
 
       - name: Check
         run: pnpm check
