@@ -17,7 +17,8 @@ This branch takes the smaller changes the measurements support:
   `cli:check` fell from a median 41s on Windows and 21s on Linux to 0s in all eight branch runs.
 - **No duplicate type check** (five `check` scripts). The CLI suite starts 8 to 9s sooner.
 - **No `ci` run for tag pushes.** A release tag no longer reruns a full Linux and Windows run
-  (median 24m38s of wall time over the last three tags) on a commit `main` already checked.
+  (median 24m38s of wall time over the last three tags) on a commit `main` has normally checked
+  already.
 - **Windows TEMP on D:.** In two same-run pairs the CLI suite did 27% and 28% less work per unit
   of runner speed; on comparable runners it finished 4m12s sooner.
 - **pnpm from npm on Windows.** 7 to 10s instead of a 22s median.
@@ -126,8 +127,10 @@ bundle check 1s, post steps 3s
 ```
 
 The `pull_request` run ends a median 4m19s before the push run's `windows` job, and the Linux
-`ci` job about 4.5 minutes before it. Until the Windows job gets faster, Linux savings shorten
-runner time but not the wall time a developer waits.
+`ci` job about 4.5 minutes before it. Before this branch, Linux savings shortened runner time but
+not the wall time a developer waits. With it, the two jobs are close: in the final run below,
+`ci` finished at 15m46s and `windows` at 12m36s, so the Linux job, with its 384s Mode B test, can
+now be the last to finish.
 
 ## What this branch changes
 
@@ -162,6 +165,12 @@ job totals are given only for completeness.
 | job total, Windows TEMP on D: (final) | 23m24s            | 14m05s, 16m33s              |
 
 Windows rows list attempt 1 and attempt 2 of the C: leg, then of the D: leg, where both legs ran.
+
+The final configuration then ran on commit `04f8120`, as push run 43993344295 and as
+pull_request run 43993353474, and passed: `windows` took 12m36s, with 33s from checkout to
+install, a 1s CLI `tsc` gap, a 0s tail and `bundle.test.ts` at 26.2s; `ci` took 15m46s and
+`unprivileged-artifacts` 13m14s. Its Check step's environment showed TEMP and TMP as
+`D:\a\_temp`.
 
 ### The agent check alongside the CLI suite
 
@@ -217,13 +226,15 @@ The two legs of each attempt ran the same commit at the same time:
 | 1       | 0.94                    | 0.69                 | 0.73                      | 71.8s to 31.9s            |
 | 2       | 1.37                    | 0.98                 | 0.72                      | 75.0s to 37.5s            |
 
-The CPU-bound suites (core, kernel, scanner and replay) barely touch TEMP, so their ratio
-measures the two runners. In attempt 1 the runners matched, and the CLI suite's wall time fell
-from 16m19s to 12m07s. In attempt 2 the D: leg drew a runner about 37% slower, and still did
-slightly less CLI work than the C: leg. The files that gain most create temporary git
-repositories or install packages: `apply/diff.test.ts` went from 15.1s to 0.6s in attempt 1. The
-scratch workflow points the same way: pnpm/action-setup's `npm ci` of its 891-file bootstrap took
-19s into `C:\Users\runneradmin\setup-pnpm` and 4s into `D:\a\_temp\setup-pnpm`.
+The CPU-bound suites (core, kernel, scanner and replay) stand in for the speed of the two
+runners. They also create temporary directories (21 of their 43 test files call `tmpdir()`), so
+to the extent they gain from D: as well, dividing by their ratio understates the CLI suite's
+gain. In attempt 1 the runners matched, and the CLI suite's wall time fell from 16m19s to
+12m07s. In attempt 2 the D: leg drew a runner about 37% slower, and still did slightly less CLI
+work than the C: leg. The files that gain most create temporary git repositories or install
+packages: `apply/diff.test.ts` went from 15.1s to 0.6s in attempt 1. The scratch workflow points
+the same way: pnpm/action-setup's `npm ci` of its 891-file bootstrap took 19s into
+`C:\Users\runneradmin\setup-pnpm` and 4s into `D:\a\_temp\setup-pnpm`.
 
 With both on D:, the e2e tests that pass the repository's promptfoo fixture to the CLI no longer
 take the cross-drive branch of the promptfoo scratch folder (`scratchParent` in
@@ -274,9 +285,10 @@ The first number is setting up the builder, the second the build. Setting up a
 28.0.4 uses the classic overlay2 image store, so even a fully cached build must export the image
 as a tarball and load it, 5 to 13.5s. That leaves at most 10s of the 15s that apt and pip take,
 and a cold cache, after every new `node:24-bookworm-slim` digest and in every new cache scope,
-costs 14 to 40s more. Untested alternatives: `docker save` and `docker load` through
-`actions/cache` keyed on `requirements.txt`, which would match how a developer machine reuses
-the image, or the containerd image store.
+costs 14 to 40s more. Each warm figure is a single sample. Now that the Linux job can finish last,
+a dependable Linux saving would count toward wall time, so this is worth retrying with
+`docker save` and `docker load` through `actions/cache` keyed on `requirements.txt`, which would
+match how a developer machine reuses the image, or with the containerd image store.
 
 ## Plan for the larger items
 
