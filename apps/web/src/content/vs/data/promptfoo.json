@@ -5,25 +5,25 @@
   "logo": "/integrations/logos/promptfoo.svg",
   "category": "evals",
   "verdict": "different-job",
-  "verdictLabel": "Different job · pre-ship tests vs post-ship audit",
+  "verdictLabel": "Different job · authored cases vs recorded traces",
   "title": "rightmodeler vs promptfoo: where tests come from",
-  "description": "promptfoo tests what you ship next against cases you author. rightmodeler audits what you shipped against accepted outputs. Different stages of the same loop.",
+  "description": "promptfoo tests what you ship next against cases you author. rightmodeler validates cheaper models on what you shipped, against the outputs you accepted.",
   "h1": "rightmodeler vs promptfoo",
-  "lede": "promptfoo evaluates what you are about to ship against test cases you author. rightmodeler audits what you already shipped against the outputs you accepted, so the real line between them is where the test set comes from.",
+  "lede": "promptfoo evaluates what you are about to ship against test cases you author. rightmodeler validates cheaper models on what you already shipped, against the outputs you accepted, so the real line between them is where the test set comes from.",
   "integrationSlug": "promptfoo",
   "related": ["braintrust", "langsmith", "not-diamond", "modaic"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Not rivals for the same job. You hire promptfoo to test what you are about to ship: you author the prompts, cases, and assertions, and its CI gate fails the build when a pass rate drops. You hire rightmodeler to audit what you already shipped: the CLI reruns each step of your recorded traces on cheaper candidates and scores every proposed swap against the output you accepted, step by step. Red teaming (generating adversarial attacks against your app) is entirely promptfoo's turf. promptfoo ships as a rightmodeler evaluator provider, selected with `--evaluator promptfoo` and configured with `--evaluator-command` and `--evaluator-config`; it is not a trace source or replay provider, and the model-change handoff remains manual."
+      "body": "Not rivals for the same job. You hire promptfoo to test what you are about to ship: you author the prompts, cases, and assertions, and its CI gate fails the build when a pass rate drops. You hire rightmodeler to validate swaps to cheaper models on what you already shipped: the CLI reruns the recorded calls in your traces on cheaper candidates and scores every proposed swap against the output you accepted, step by step. Red teaming (generating adversarial attacks against your app) is entirely promptfoo's turf. promptfoo ships as a rightmodeler evaluator provider, selected with --evaluator promptfoo, pointed at your assertions file with --evaluator-config, and given each metric to grade with --evaluator-scorer; it is not a trace source or replay provider, and rightmodeler does not edit your promptfoo config."
     },
     {
       "type": "fork",
       "left": {
         "heading": "Your test set is cases you author",
         "items": [
-          "Nothing has shipped yet, or a prompt is changing and you need proof nothing regressed. For a system with no production history, authored cases are the only possible evidence.",
+          "Nothing has shipped yet, or a prompt is changing and you need to show nothing regressed. For a system with no production history, authored cases are the only possible evidence.",
           "You want assertions you control, on quality, cost, and latency, run on every pull request, with a build that fails when the pass rate drops.",
           "You need adversarial cases: prompt injection, jailbreaks, PII leaks, access-control flaws. promptfoo generates these; rightmodeler does not. Start with promptfoo."
         ]
@@ -32,8 +32,8 @@
         "heading": "Your test set is traces you already have",
         "items": [
           "Your agent has served real users, and the outputs you accepted are the evidence you trust most.",
-          "You want to know which model belongs at each step without authoring a single case; the CLI treats your accepted output as the reference for that exact step.",
-          "You want every step to carry its own verdict, how many samples backed it, and an abstention (the audit recommends nothing for a step when the evidence is thin). Start with rightmodeler."
+          "You want to know which steps can move to a cheaper model without authoring a single case; the CLI treats your accepted output as the reference for that exact step.",
+          "You want every step to carry its own verdict, how many samples backed it, and an abstention (rightmodeler recommends nothing for a step when the evidence is thin). Start with rightmodeler."
         ]
       }
     },
@@ -50,10 +50,10 @@
       "right": {
         "heading": "With rightmodeler beside your suite",
         "items": [
-          "Keep the suite. The audit does not touch it, replace it, or sit in your request path.",
-          "Candidates are shortlisted from the active provider's live catalog, not a hand-picked list, replayed at temperature 0 against your real steps, and judged by a neutral third-family judge (a judge model from a family neither the current model nor the candidate belongs to) that grades both output orders, or by your own promptfoo assertions, deterministic types such as is-json and regex included.",
-          "Each verdict carries reference agreement (how often the candidate matched the output you accepted), a quality floor (a configurable minimum that agreement must clear), sample size, and abstentions. Multi-step work replays end to end, so cascade risk (a cheaper step's output quietly breaking the step after it) surfaces before you swap.",
-          "When you approve a swap, the new model ID goes into promptfooconfig.yaml by hand, and your CI gate keeps the decision honest from then on. promptfoo ships as an evaluator provider selected with `--evaluator promptfoo` and configured with `--evaluator-command` and `--evaluator-config`; it is not a trace source or replay provider, so the model-change handoff remains manual."
+          "Keep the suite. rightmodeler does not touch it, replace it, or sit in your request path.",
+          "Cheaper candidates are shortlisted from the active provider's live catalog, not a hand-picked list, replayed against your real steps, and judged by a neutral third-family judge (a judge model from a family neither the current model nor the candidate belongs to) that grades both output orders, or by your own promptfoo assertions, deterministic types such as is-json and regex included.",
+          "Each verdict carries reference agreement (how often the candidate matched the output you accepted), a quality floor (a configurable minimum that agreement must clear), sample size, and abstentions. A swap at a step that feeds later model steps counts only once it is confirmed end to end in a sandbox, so cascade risk (a cheaper step's output quietly breaking the step after it) surfaces before you swap.",
+          "When you merge a swap, the new model ID goes into promptfooconfig.yaml by hand, and your CI gate keeps the decision honest from then on. promptfoo also ships as a rightmodeler evaluator provider, selected with --evaluator promptfoo, pointed at your assertions file with --evaluator-config, and given each metric to grade with --evaluator-scorer; it is not a trace source or replay provider."
         ]
       }
     },
@@ -75,7 +75,7 @@
         {
           "scenario": "Your agent has run in production for months, one expensive model sits on every step, and you want to know which steps a cheaper model can actually hold.",
           "winner": "ours",
-          "why": "There is no suite to write for this, and writing one would recreate what your traces already contain. The CLI turns the traces into the test set: each step reruns on cheaper candidates, each candidate is scored against the answer you shipped, and every verdict arrives with its sample size and any abstentions. Where the evidence is thin it abstains rather than calling a winner, and you approve each change."
+          "why": "There is no suite to write for this, and writing one would recreate what your traces already contain. The CLI turns the traces into the test set: the recorded calls rerun on cheaper candidates, each candidate is scored against the answer you shipped, and every verdict arrives with its sample size and any abstentions. Where the evidence is thin it abstains rather than calling a winner, and the swaps that clear every gate arrive as a draft pull request for a person to merge."
         }
       ]
     },
@@ -83,10 +83,10 @@
       "type": "prose",
       "heading": "What we will not pretend to do",
       "paragraphs": [
-        "Red teaming and security testing belong to promptfoo, full stop. Plugin-generated attacks on agents and RAG apps, prompt injection, jailbreaks, PII leaks, authorization flaws: rightmodeler does none of this, and an audit will never tell you your agent is safe.",
+        "Red teaming and security testing belong to promptfoo, full stop. Plugin-generated attacks on agents and RAG apps, prompt injection, jailbreaks, PII leaks, authorization flaws: rightmodeler does none of this, and a validation run will never tell you your agent is secure.",
         "promptfoo works before an app has ever served a user. rightmodeler requires real traces, so it has nothing to say about a system with no production history.",
-        "promptfoo can run on every pull request and fail the build. The rightmodeler CLI takes a different seat in CI: a scheduled job you choose to run, streaming JSON events with exit codes as verdicts, leaving a report behind. Not observability. Not a runtime gateway. It runs after the fact, outside your pipeline entirely.",
-        "And the audit's own limits, stated plainly: a passing score means the candidate agreed with what you shipped, not that either answer was correct; the production result is the reference, not ground truth. Thin evidence on a step ends in an abstention, not a guess, and some steps come back with no verdict at all."
+        "promptfoo can run on every pull request and fail the build. The rightmodeler CLI takes a different seat in CI: a scheduled job you choose to run, streaming JSON events with exit codes as verdicts, leaving a report behind; rightmodeler apply then opens a draft pull request for the swaps that clear every gate. Not observability. Not a runtime gateway. It runs offline on traces you already recorded, never in your request path.",
+        "And rightmodeler's own limits, stated plainly: a passing score means the candidate agreed with what you shipped, not that either answer was correct; the production result is the reference, not ground truth. Thin evidence on a step ends in an abstention, not a guess, and some steps come back with no verdict at all."
       ]
     },
     {
@@ -100,22 +100,22 @@
         },
         {
           "term": "reference evidence",
-          "def": "Agreement between a candidate model's answer and the output you already accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness.",
+          "def": "Agreement between a candidate model's answer and the output you already accepted for that exact step. Evidence of agreement with shipped output, not ground-truth correctness.",
           "slug": "reference-evidence"
         },
         {
           "term": "quality floor",
-          "def": "The configurable minimum agreement score a candidate must clear before the audit will recommend it for a step.",
+          "def": "The configurable minimum agreement score a candidate must clear before rightmodeler will recommend it for a step.",
           "slug": "quality-floor"
         },
         {
           "term": "abstain",
-          "def": "What the audit does when a step's sample is too small or its evidence too mixed: it recommends nothing rather than guessing.",
+          "def": "What rightmodeler does when a step's sample is too small or its evidence incomplete: it recommends nothing rather than guessing.",
           "slug": "abstain"
         },
         {
           "term": "cascade risk",
-          "def": "The chance that a cheaper model's output at one step quietly breaks a later step. Multi-step work replays end to end so it surfaces.",
+          "def": "The chance that a cheaper model's output at one step quietly breaks a later step. Swaps that feed later model steps are confirmed end to end in a sandbox so it surfaces.",
           "slug": "cascade-risk"
         }
       ]
@@ -125,15 +125,15 @@
       "items": [
         {
           "q": "Does rightmodeler replace promptfoo?",
-          "a": "No. promptfoo tests what you are about to ship against cases you author, and red-teams it for vulnerabilities. rightmodeler asks a different question of every step you have already shipped, and answers it with receipts: is this the model the step needs? Keep your suite; the CLI is a report you run on your own traces, not a runtime gateway."
+          "a": "No. promptfoo tests what you are about to ship against cases you author, and red-teams it for vulnerabilities. rightmodeler asks a different question of every step you have already shipped, and answers it with receipts: can a cheaper model do this step's job? Keep your suite; the CLI runs offline on your own traces and is not a runtime gateway."
         },
         {
           "q": "Is there an integration between rightmodeler and promptfoo?",
-          "a": "promptfoo ships as a rightmodeler evaluator provider, selected with `--evaluator promptfoo` and configured with `--evaluator-command` and `--evaluator-config`. It is not a trace source rightmodeler reads or a replay provider it runs through, so the handoff remains manual. Once you approve a swap, the new model ID goes into promptfooconfig.yaml by hand, and the audited step's accepted outputs can become assertions your CI gate enforces on every future change."
+          "a": "promptfoo ships as a rightmodeler evaluator provider, selected with --evaluator promptfoo, pointed at your assertions file with --evaluator-config, and given each metric to grade with --evaluator-scorer, plus --evaluator-command when promptfoo is not on your PATH. It is not a trace source rightmodeler reads or a replay provider it runs through, so the handoff to your suite remains manual. Once you merge a swap, the new model ID goes into promptfooconfig.yaml by hand, and the validated step's accepted outputs can become assertions your CI gate enforces on every future change."
         },
         {
           "q": "Can promptfoo compare models the way rightmodeler does?",
-          "a": "Both can put models side by side, but the inputs differ. promptfoo compares the exact model IDs you name, on cases you author, in a matrix you read. rightmodeler shortlists candidates from the active provider's live catalog and uses your production traces as the test set, so nothing needs authoring, and every verdict carries reference agreement, sample size, and abstentions. If you have no traces yet, promptfoo is the only option of the two."
+          "a": "Both can put models side by side, but the inputs differ. promptfoo compares the exact model IDs you name, on cases you author, in a matrix you read. rightmodeler shortlists cheaper candidates from the active provider's live catalog and uses your production traces as the test set, so nothing needs authoring, and every verdict carries reference agreement, sample size, and abstentions. If you have no traces yet, promptfoo is the only option of the two."
         },
         {
           "q": "Is promptfoo still open source now that it is part of OpenAI?",

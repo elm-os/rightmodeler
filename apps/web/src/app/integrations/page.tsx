@@ -6,53 +6,17 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { getAllIntegrations } from "@/content/integrations";
+import { INTEGRATIONS_HUB } from "@/content/markdown/render-hub";
 import { TRACE_SOURCES } from "@/lib/product-facts";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Integrations",
-  description: `Every tool rightmodeler works with: the ${TRACE_SOURCES.length} trace formats it reads, where candidates run, what grades them, where changes ship, code context, and what is coming next.`,
+  description: `Everything the validation loop touches: the ${TRACE_SOURCES.length} trace formats rightmodeler reads, where cheaper candidates replay, what grades them, and where the pull request lands.`,
   path: "/integrations",
   image: "/social/integrations.png",
 });
-
-const BANDS: { title: string; intro: string; categories: string[] }[] = [
-  {
-    title: "Reads your traces",
-    intro: "Autodetected and folded into one per-step schema.",
-    categories: ["trace-source", "trace-source-generic"],
-  },
-  {
-    title: "Grades the replays",
-    intro:
-      "Scorers you already trust grade each replay, in place of the built-in judge.",
-    categories: ["evaluator"],
-  },
-  {
-    title: "Runs the candidates",
-    intro: "Where the candidate calls actually run.",
-    categories: ["replay-engine", "replay-method", "execution-backend"],
-  },
-  {
-    title: "Ships the change",
-    intro:
-      "Where an approved swap becomes a change you review. rightmodeler never merges it for you.",
-    categories: ["source-control", "ci-recipe"],
-  },
-  {
-    title: "Maps your code",
-    intro:
-      "Static context about the code around each swap, shown beside the evidence and never counted as evidence.",
-    categories: ["code-context"],
-  },
-  {
-    title: "Coming soon",
-    intro:
-      "Not built yet. Each page says exactly what exists today and what does not.",
-    categories: ["coming-soon"],
-  },
-];
 
 export default function IntegrationsPage() {
   const integrations = getAllIntegrations();
@@ -75,14 +39,14 @@ export default function IntegrationsPage() {
       <JsonLd data={itemListLd} />
 
       <PageHero
-        eyebrow="Integrations"
-        title="Works with the traces you already have."
-        lede="No new SDK and nothing in your request path: rightmodeler reads the traces your agent already emits, measures cheaper candidates against accepted outputs, and reports the evidence, sample size, and abstentions."
+        eyebrow={INTEGRATIONS_HUB.eyebrow}
+        title={INTEGRATIONS_HUB.title}
+        lede={INTEGRATIONS_HUB.lede}
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {BANDS.map((band) => {
+      {INTEGRATIONS_HUB.bands.map((band) => {
         const entries = integrations.filter((integration) =>
           band.categories.includes(integration.category),
         );

@@ -1,6 +1,8 @@
 import { getAllPosts } from "@/content/blog";
+import { BSIDE, IAM360 } from "@/content/case-studies";
 import { getAllIntegrations } from "@/content/integrations";
 import { getAllComparisons } from "@/content/vs";
+import { TRACE_SOURCES } from "@/lib/product-facts";
 import {
   DOCS_URL,
   docsFileUrl,
@@ -12,30 +14,56 @@ import {
   SKILL_COMMAND,
 } from "@/lib/site";
 
-// The llms.txt blockquote. Stands alone: the whole platform, and the report-not-gateway caveat.
-const SUMMARY =
-  "rightmodeler keeps AI agents on the right model at every step. The rightmodeler CLI, published on npm as rightmodeler, replays your real agent traces through cheaper models, measures each candidate against the output you accepted, reports the evidence, sample size, and abstentions, and ships approved swaps as a pull request you can roll back byte-exact. npx rightmodeler init finds the traces Claude Code and Codex already left on disk and runs free through shortlist; a coding-agent skill lets Claude Code and Codex-class agents drive the same CLI end to end. rightmodeler agent, MIT licensed in the same repo and self-hosted today (a hosted version has a waitlist), rechecks the provider catalog and prices weekly, watches approved swaps for drift, and opens evidence-backed model-change pull requests in your repo. Crucible, in development with a waitlist, is the analytics and optimization suite being built to show what every layer of your agent system costs, how fast it runs, and where it fails, and to keep your stack right-sized continuously. The CLI produces a report you run on your own traces, not a runtime gateway.";
+// The llms.txt blockquote. Stands alone: the thesis, what exists today, the human's part, and the
+// never-in-the-request-path caveat. It travels without the site, so it never says a bare "safe".
+const SUMMARY = `rightmodeler is working toward production AI systems that maintain and optimize themselves, starting with an open-source framework that validates swaps to cheaper models on your own traces and opens each one that clears every release gate as a draft pull request. We think the biggest bottleneck in maintaining software is the human in the loop: not the judgment, the work. We are solving it first for production AI systems, where a new model ships every few weeks and each one restarts the same manual job. The shortcuts teams take instead do not hold up. Blind swaps fail quietly. Routers don't work in production, in our opinion, because a runtime router picks a model per request with a policy that was not validated on your workload, adds a hop and a dependency to the request path, and can send the same input to different models, so behavior is harder to reproduce, audit and roll back; a gateway that serves the model you pin is a different thing. General benchmarks aren't your workload. Frontier everywhere costs too much. What holds up is one pinned model per step, validated on your own traces and changed through code review. The rightmodeler CLI (on npm as rightmodeler, MIT licensed; start with ${RUN_COMMAND} on the traces you already have) replays the recorded steps on cheaper candidate models from your provider's live catalog and has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many. A swap must clear every release gate: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin. A swap that clears every gate becomes a draft pull request that changes only model identifiers, with the evidence attached; watch follows it through review and CI, and rollback opens a pull request that restores the exact pre-swap files. A coding-agent skill drives the same CLI. rightmodeler agent (same repository, self-hosted today; the hosted version has a waitlist) is the maintenance loop, on a schedule: a weekly catalog and price check that flags cheaper new or repriced models, a daily drift check on new traces whose proposals a person approves, one regression replay for each merged swap set, and follow-up on swap pull requests as review and CI report back. On your word it replays new candidates; once a replay clears every gate, it opens the draft pull request. It never merges and carries no merge capability. rightmodeler takes the work out of the loop, not the judgment: today a person sets the policy, gives the agent the word before it replays a new candidate, and decides whether each draft pull request merges. Everything runs offline, beside your app, on your machine or in CI, never in the request path. Crucible, the planned analytics and optimization suite, is in development with a waitlist.`;
 
 // Product overview in Markdown for llms-context.txt (indented code block avoids backticks here).
 const OVERVIEW = `## What it is
 
-${SITE_NAME} is the model layer for teams running multi-agent LLM systems. New models ship every few weeks, and the gap between the right model and the default one is real money. ${SITE_NAME} answers one question with evidence, at every step of your stack: which model belongs here?
+${SITE_NAME} is a validation framework for model swaps: it validates swaps to cheaper models on your production traces, the model calls your production app already recorded, and opens each one that clears every release gate as a draft pull request. It is built for production AI systems, and it is where we start toward production AI that maintains and optimizes itself.
 
-Three offerings:
+## Why it exists
 
-- The ${SITE_NAME} CLI (on npm as rightmodeler, available now): an audit you run on your own traces. npx rightmodeler init finds the traces Claude Code and Codex already left on disk, or asks for a file, and runs free through shortlist before any provider key is needed. It replays your real agent traces through cheaper candidate models, measures each output against what you already accepted, and produces a per-step recommendation report with reference agreement, evidence, sample size, and abstentions. Approved swaps ship as a pull request with the evidence attached; a rollback command restores the exact pre-swap state. It is a report and a PR, not a runtime gateway; it never sits in your request path. Bring-your-own evaluation is supported: Braintrust, Langfuse, LangSmith, or promptfoo can score the replays, curated datasets can seed the case set, and results can be exported back. A coding-agent skill (npx skills add elm-os/rightmodeler --skill rightmodeler) gives Claude Code and Codex-class agents the runbook to drive the same CLI end to end.
-- ${SITE_NAME} agent (open source, MIT; self-hosted today; hosted version on a waitlist): the same measurement loop, continuous. You clone and build it from the repo and run it on a long-lived Node 24 host with your own GitHub App and model credentials. It runs on a schedule, re-checks prices as they decay, watches approved swaps for drift, reconciles open swap pull requests as CI reports back, and when a candidate clears your configured quality floor and preferences it opens a draft pull request in your repo with the evidence attached. It opens pull requests only and never merges. Model migrations become code review.
-- Crucible (in development; waitlist): the analytics and optimization suite being built for your agents. Planned: cost per layer, speed per step, failed tool calls and regressions as they happen, connected over MCP, with your model stack kept right-sized continuously.
+We think the biggest bottleneck in maintaining software is the human in the loop: not the judgment, the work. We are solving it first for production AI systems, where a new model ships every few weeks and each one restarts the same manual job: notice it, pull real traces, build a replay, grade the outputs, write it up so it survives review, migrate, and do it again.
 
-## How the measurement works
+The shortcuts teams take instead do not hold up:
 
-- Replay your real agent traces through candidate models.
-- Measure each output against what you already accepted in production, using reference-based and judge-based evaluation. This measures agreement with shipped output, not ground-truth correctness.
-- Report the evidence and sample size, and abstain when they are weak. A tool that always finds savings is not measuring anything, so ${SITE_NAME} also tells you when not to switch.
+- Blind swaps fail quietly. A cheaper model drops into a step in thirty seconds. When it fails, nothing throws: the JSON still parses and is wrong on the edge cases.
+- Routers don't work in production. This is our opinion, for three reasons: a runtime router picks a model per request with a policy that was not validated on your workload; it adds a hop and a dependency to the request path; and the same input can take different models, so behavior is harder to reproduce, audit and roll back. A gateway that serves the model you pin is a different thing, and ${SITE_NAME} replays through gateways.
+- General benchmarks aren't your workload. A leaderboard ranks models on someone else's tasks. It cannot tell you whether a cheaper model matches the outputs you already accepted.
+- Frontier everywhere costs too much. The most expensive model on every step feels safe until the bill compounds, call by call, on steps nobody has measured.
+
+What holds up: one pinned model per step, validated on your own traces and changed through code review.
+
+The mission is a direction, not a description of the product today: production AI systems that maintain and optimize themselves, earning each step of autonomy with evidence.
+
+## What you can use today
+
+- The ${SITE_NAME} CLI (on npm as rightmodeler, MIT licensed, available now). ${RUN_COMMAND} finds the traces you already have, such as Claude Code and Codex sessions on disk, or asks for a file, and runs free through shortlist before any provider key is needed. It replays the recorded steps on cheaper candidate models from your provider's live catalog: by default up to three released in the last 90 days, or models you name with --candidate that cost less than the recorded model. A judge from a different vendor, or your own evaluator, grades every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many. Codex sessions are read as traces, but Codex records each user message as input_text blocks, which replay cannot send yet, so a Codex turn with a user message is also left out of the replay sample. A swap that clears every release gate becomes a draft pull request that changes only model identifiers, with the evidence attached. The watch command follows that pull request through review and CI, and the rollback command opens a pull request that restores the exact pre-swap files. Braintrust, Langfuse, LangSmith, or promptfoo can score the replays instead of the built-in judge, curated datasets can seed the case set, and results can be exported back to Braintrust or Langfuse. A coding-agent skill (${SKILL_COMMAND}) gives Claude Code and Codex-class agents the runbook to drive the same CLI end to end.
+- ${SITE_NAME} agent (open source, MIT, in the same repository; self-hosted today, and the hosted version has a waitlist): the maintenance loop, on a schedule. It runs a weekly catalog and price check that flags cheaper new or repriced models, a daily drift check on new traces whose proposals a person approves, one regression replay for each merged swap set, and follow-up on swap pull requests as review and CI report back. On your word it replays new candidates; once a replay clears every gate, it opens the draft pull request. It never merges and carries no merge capability. You build it from the repository and run it on a long-lived Node 24 host with your own GitHub App or token and model credentials.
+
+## What is being built
+
+Crucible (in development; waitlist) is the planned analytics and optimization suite for production AI systems. It is designed to show cost per layer, speed per step, and failures as they happen, connected over MCP and never in the request path, and to add continuous right-sizing on top of the self-hosted agent's schedule.
+
+## What safe means
+
+A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin.
+
+The cases are split in two. The shortlist half only screens candidates; the lower-bound test against your quality floor runs on the held-out half, adjusted for the number of candidates. A tool that finds a swap every time is not measuring anything, so ${SITE_NAME} also tells you when not to switch.
+
+## What a person still does today
+
+A person sets the policy (the quality floor, which models are allowed, an optional spend cap), gives the agent the word before it replays a new candidate, and decides whether each draft pull request merges. Rolling back is one command that opens another pull request. ${SITE_NAME} takes the work out of the loop, not the judgment: today, the final yes stays yours. That is deliberate: autonomy is earned with evidence, and validation is how ${SITE_NAME} earns it.
+
+## Where it runs
+
+Everything runs offline, beside your app, on your machine or in CI. Nothing sits in the request path, there is no ${SITE_NAME} server and no telemetry, and it is not a runtime gateway. End-to-end confirmation runs your app in a sandbox, apart from production. That sandbox keeps your model key out but has ordinary network access, so point your app's tools at test fixtures, not production services.
 
 ## Get started
 
-Run it on your own traces:
+Start with the traces you already have:
 
     ${RUN_COMMAND}
 
@@ -46,100 +74,98 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/how-it-works",
     title: "How it works",
     description:
-      "Detect, measure, review: how rightmodeler replays your traces through cheaper models, measures each output against what you accepted, and reports evidence, sample size, and abstentions.",
+      "Run rightmodeler from your terminal, coding agent, CI or the self-hosted agent. It validates cheaper models on your traces and opens a draft PR for review.",
   },
   {
     path: "/use-cases/reduce-llm-costs",
     title: "Reduce LLM costs",
     description:
-      "Cut your agent's model bill without guessing: measure cheaper candidates against accepted outputs and review the evidence before changing a model.",
+      "Frontier everywhere costs too much. rightmodeler validates cheaper models on your production traces and opens a draft PR when a swap clears every gate.",
   },
   {
     path: "/case-study",
     title: "Case studies",
     description:
-      "How real teams modeled lower inference cost with per-workload routing policies; B:Side also reports a measured 100% pass rate on a 20-query benchmark.",
+      "Two studies of per-workload model assignment: projected savings and a measured 100% pass rate on a 20-query benchmark at B:Side, and modeled savings at iAM360.",
   },
   {
     path: "/case-study/bside",
-    title: "Case study: B:Side Assist",
-    description:
-      "How rightmodeler right-sized AI Assist's 11 AI layers: 70.8% lower projected inference cost and a measured 100% pass rate on a 20-query benchmark.",
+    title: `${BSIDE.company} case study`,
+    description: BSIDE.description,
   },
   {
     path: "/case-study/iam360",
-    title: "Case study: iAM360",
-    description:
-      "How iAM360 used rightmodeler to cut modeled AI cost per request by 56-57% while upgrading its hardest coaching paths from Terra to Sol.",
+    title: `${IAM360.company} case study`,
+    description: IAM360.description,
   },
   {
     path: "/integrations",
     title: "Integrations",
-    description:
-      "Every tool rightmodeler works with: the trace formats it reads, where candidates run, what grades them, where changes ship, code context, and what is coming next.",
+    description: `Everything the validation loop touches: the ${TRACE_SOURCES.length} trace formats rightmodeler reads, where cheaper candidates replay, what grades them, and where the pull request lands.`,
   },
   {
     path: "/vs",
     title: "rightmodeler vs alternatives",
     description:
-      "Honest comparisons with gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, benchmarks, and coding agents: when to use which.",
+      "rightmodeler validates swaps to cheaper models on your own traces. See where it ends and gateways, observability, evals, routers, benchmarks, and coding agents begin.",
   },
   {
     path: "/manifesto",
-    title: "Manifesto",
+    title: "Software should maintain itself.",
     description:
-      "Measure it, don't guess: the case for evidence-backed model downgrading.",
+      "We think the human work in the loop is the bottleneck. The case against blind swaps, runtime routers, general benchmarks and frontier bills, and for validation.",
   },
   {
     path: "/glossary",
     title: "Glossary",
     description:
-      "Plain definitions for the model-downgrade vocabulary: quality floor, cascade risk, abstain, LLM-as-judge, and more.",
+      "Plain definitions for validating a swap to a cheaper model: release gates, the quality floor, held-out cases, abstention, cascade risk, and what safe means.",
   },
   {
     path: "/agent",
-    title: "rightmodeler agent (self-hosted today; hosted waitlist)",
+    title: "rightmodeler agent",
     description:
-      "The open-source autonomous agent that rechecks the provider catalog weekly, replays candidates against your real traces, and opens evidence-backed model-swap pull requests in your repo.",
+      "rightmodeler agent flags cheaper models weekly, validates a swap on your traces when you say go, and opens a draft pull request once it clears every gate.",
   },
   {
     path: "/crucible",
     title: "Crucible (in development)",
     description:
-      "The analytics and optimization suite being built for AI agents: cost per layer, speed per step, failures as they happen, and continuous right-sizing, connected over MCP. Waitlist open.",
+      "Crucible, in development, is designed to show cost, speed, and failures for every layer of your production AI system, over MCP and never in the request path.",
   },
   {
     path: "/about",
     title: "About",
-    description: "What rightmodeler is and the mission behind it.",
+    description:
+      "rightmodeler is working toward production AI that maintains and optimizes itself, starting with open-source validation of cheaper model swaps on your traces.",
   },
   {
     path: "/contact",
     title: "Contact",
     description:
-      "Every way to reach the rightmodeler team: email for questions and licensing, GitHub issues for bugs, the feedback form for product input, and the security policy for vulnerability reports.",
+      "Reach the rightmodeler team: email for questions and licensing, GitHub issues for bugs and feature requests, the feedback form for product input, and a security policy for vulnerability reports.",
   },
   {
     path: "/feedback",
     title: "Feedback",
     description:
-      "Send the team feedback: what to build, what broke, and what the agent should handle next.",
+      "Tell the rightmodeler team what to build, what broke, and what the agent should handle next. We read everything.",
   },
   {
     path: "/privacy",
     title: "Privacy policy",
     description:
-      "What the site collects (very little), how it is used, and how to reach us.",
+      "How rightmodeler handles your information: what this site collects (very little), how it is used, where it lives, and how to reach us.",
   },
   {
     path: "/terms",
     title: "Terms of service",
     description:
-      "The terms that govern use of the rightmodeler website, in plain English.",
+      "Read the rightmodeler website terms, including pre-release product changes, illustrative figures, repository licensing, and acceptable use.",
   },
 ];
 
-const DEVELOPER_RESOURCES = `- [CLI documentation](${DOCS_URL}): Command reference, getting started, exit codes, evaluators, and Mode B. Ships with the npm package.
+const DEVELOPER_RESOURCES = `- [CLI documentation](${DOCS_URL}): Command reference, getting started, exit codes, evaluators, and end-to-end confirmation in a sandbox (Mode B). Ships with the npm package.
 - [Getting started](${docsFileUrl("getting-started.md")}): Install, point it at traces, and read the first report.
 - [Command reference](${docsFileUrl("commands.md")}): Every command and flag, generated from the CLI itself.
 - [Exit codes](${docsFileUrl("exit-codes.md")}): What each exit status means, for scripting and CI.
@@ -179,11 +205,11 @@ export function buildLlmsTxt(): string {
 
 > ${SUMMARY}
 
-${SITE_NAME} is a developer tool from ELM-OS for teams running multi-agent LLM systems. This file indexes the site for language models; for a curated product overview, annotated page index, and complete blog archive in one file, see the Optional section.
+${SITE_NAME} is an open-source developer tool from ELM-OS for teams running production AI systems. This file indexes the site for language models; for a curated product overview, annotated page index, and complete blog archive in one file, see the Optional section.
 
 ## Product
 
-- [${SITE_NAME}](${SITE_URL}): Home. What it does, how the evidence-backed downgrade report works, and the first command to run.
+- [${SITE_NAME}](${SITE_URL}): Home. Why the human work in the loop is the bottleneck, how rightmodeler validates cheaper model swaps and opens draft pull requests, and the first command to run.
 - [GitHub repository](${REPO_URL}): Source code and the pipeline you run on your own traces. Open source under the MIT license.
 
 ## Developer resources

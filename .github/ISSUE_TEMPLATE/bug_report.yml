@@ -64,8 +64,8 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: Output of `node --version`, `pnpm --version`, and `rightmodeler --version`.
-      placeholder: node v24.6.0, pnpm 11.7.0, rightmodeler 0.1.0
+      description: Output of `node --version`, `pnpm --version`, and `npx rightmodeler --version`.
+      placeholder: node v24.6.0, pnpm 11.7.0, and the output of npx rightmodeler --version
     validations:
       required: true
 

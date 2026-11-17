@@ -6,8 +6,8 @@
   "category": "benchmarks",
   "verdict": "different-job",
   "verdictLabel": "Different job · a public scoreboard vs your traffic",
-  "title": "rightmodeler vs The Open Frontier: scoreboard vs audit",
-  "description": "The Open Frontier, built by Together AI, shows Artificial Analysis scores and prices for open models. rightmodeler tests cheaper models on your own traces.",
+  "title": "rightmodeler vs The Open Frontier: scoreboard vs your traces",
+  "description": "The Open Frontier, built by Together AI, shows Artificial Analysis scores and prices for open models. rightmodeler validates cheaper models on your own traces.",
   "h1": "rightmodeler vs The Open Frontier",
   "lede": "The Open Frontier is a free-to-read site, built by Together AI, that republishes Artificial Analysis scores and published prices for open models, use case by use case. rightmodeler reads no public scores: it replays your own recorded traces through cheaper models and reports, step by step, which ones held up.",
   "integrationSlug": "",
@@ -16,7 +16,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Different jobs at different moments. The Open Frontier answers a market question: per its own pages, which open model looks best for a use case, what it costs, and how it compares with closed models, using Artificial Analysis scores and providers' published prices, refreshed daily by script. It says plainly that it grades nothing itself. rightmodeler answers a question about your stack: the free, MIT-licensed CLI replays your recorded traces through cheaper models from your provider's live catalog, judges each against the output you accepted, and turns an approved swap into a draft pull request a human merges. Browse the boards to see which open models are worth a look; run the audit to learn whether any of them can take a step of your agent."
+      "body": "Different jobs at different moments. The Open Frontier answers a market question: per its own pages, which open model looks best for a use case, what it costs, and how it compares with closed models, using Artificial Analysis scores and providers' published prices, refreshed daily by script. It says plainly that it grades nothing itself. rightmodeler answers a question about your stack: the free, MIT-licensed CLI replays your recorded traces through cheaper models from your provider's live catalog, grades each against the output you accepted, and turns a swap that clears every release gate into a draft pull request a person merges. Browse the boards to see which open models are worth a look; if your provider lists one that costs less than the model a step runs today, run a validation to learn whether it can take that step."
     },
     {
       "type": "prose",
@@ -65,7 +65,7 @@
         {
           "dimension": "what you get",
           "theirs": "boards, a leaderboard, and a cost calculator, nothing to install",
-          "ours": "a per-step report and, once you approve, a draft pull request"
+          "ours": "a per-step report and, for each swap that clears every gate, a draft pull request"
         }
       ]
     },
@@ -77,17 +77,17 @@
         {
           "scenario": "You are starting a new coding feature and want a quick, attributed shortlist of open models with prices before writing any code.",
           "winner": "theirs",
-          "why": "There are no traces yet, so the audit has nothing to replay. The Open Frontier's Coding board names an open pick, a best-value pick, and the closed model to beat, from Artificial Analysis scores, and it costs nothing to open."
+          "why": "There are no traces yet, so rightmodeler has nothing to replay. The Open Frontier's Coding board names an open pick, a best-value pick, and the closed model to beat, from Artificial Analysis scores, and it costs nothing to open."
         },
         {
           "scenario": "Your agent has run in production on a closed frontier model for months, and you want to know which steps a cheaper model could take without changing what users get.",
           "winner": "ours",
-          "why": "An index averages public evaluations; your steps are your prompts and your accepted outputs. The CLI replays each recorded step through cheaper candidates, judges them against what you shipped, abstains where the evidence is thin, confirms multi-step swaps end to end, and proposes only model identifier changes, in a draft pull request a human merges."
+          "why": "An index averages public evaluations; your steps are your prompts and your accepted outputs. The CLI replays recorded steps through cheaper candidates, judges them against what you shipped, abstains where the evidence is thin, confirms multi-step swaps end to end in a sandbox, and proposes only model identifier changes, in a draft pull request a person merges."
         },
         {
           "scenario": "An open model near the top of a board costs less than what one of your steps runs, and your provider lists it.",
           "winner": "both",
-          "why": "The board is a fine place to find it. Name its ID with --candidate, spelled the way your provider's catalog spells it, and the CLI tests it on your own traces, whatever its release date. The board says it scores well on public evaluations; the audit says whether it matches the outputs you accepted."
+          "why": "The board is a fine place to find it. Name its ID with --candidate, spelled the way your provider's catalog spells it, and the CLI tests it on your own traces, whatever its release date. The board says it scores well on public evaluations; a validation run says whether it matches the outputs you accepted."
         }
       ]
     },
@@ -97,7 +97,7 @@
       "paragraphs": [
         "The Open Frontier shows the whole field on one attributed index, closed models included, with licenses and prices, and there is nothing to install. rightmodeler only ever sees the candidates your configured provider lists, and only the ones cheaper than what a step runs today.",
         "It is useful before you have traffic. rightmodeler needs recorded traces and has nothing to say about a system that has not run yet.",
-        "rightmodeler ranks no models and publishes no scores. A verdict on your traces says nothing about anyone else's, and it measures agreement with the output you shipped, not correctness."
+        "rightmodeler ranks no models and publishes no scores. A verdict on your traces says nothing about anyone else's, and it measures agreement with the output you shipped, not ground-truth correctness."
       ]
     },
     {
@@ -111,22 +111,22 @@
         {
           "term": "swap candidate",
           "slug": "swap-candidate",
-          "def": "A cheaper model the audit is testing for one step of your agent, drawn from your configured provider's live catalog."
+          "def": "A cheaper model rightmodeler is testing for one step of your agent, drawn from your configured provider's live catalog."
         },
         {
           "term": "reference evidence",
           "slug": "reference-evidence",
-          "def": "Agreement between a candidate's answer and the output you accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness."
+          "def": "Agreement between a candidate's answer and the output you accepted for that exact step. Evidence of agreement with shipped output, not ground-truth correctness."
         },
         {
           "term": "quality floor",
           "slug": "quality-floor",
-          "def": "The configurable minimum a candidate's worst-case agreement must clear, on the cases it was chosen on and again on held-out cases, before the audit recommends it."
+          "def": "The configurable minimum a candidate's worst-case agreement must clear on held-out cases, adjusted for the number of candidates, before rightmodeler recommends it."
         },
         {
           "term": "abstain",
           "slug": "abstain",
-          "def": "What the audit does when a step's sample is too small or its evidence incomplete: it recommends nothing rather than guessing."
+          "def": "What rightmodeler does when a step's sample is too small or its evidence incomplete: it recommends nothing rather than guessing."
         }
       ]
     },
@@ -146,8 +146,8 @@
           "a": "Yes, if the provider you configure lists it with a price and it costs less than the model a step runs today. Name its catalog ID with --candidate, and the CLI tests it whatever its release date. There is no integration: rightmodeler never reads The Open Frontier's data, and the board's scores play no part in the verdict."
         },
         {
-          "q": "Is The Open Frontier's cost the same as the cost the audit reports?",
-          "a": "No. The Open Frontier shows published per-token prices and Artificial Analysis's cost to run its index, and its calculator sets a token volume you choose on an open model on Together against a closed API. The audit measures cost per case on replays of your own traces, next to what the current model cost on the same cases."
+          "q": "Is The Open Frontier's cost the same as the cost rightmodeler reports?",
+          "a": "No. The Open Frontier shows published per-token prices and Artificial Analysis's cost to run its index, and its calculator sets a token volume you choose on an open model on Together against a closed API. rightmodeler measures cost per case on replays of your own traces, next to what the current model cost on the same cases."
         },
         {
           "q": "Does rightmodeler replace The Open Frontier?",

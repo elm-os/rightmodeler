@@ -141,7 +141,7 @@ const CHANGES = [
 
 const COST_ROWS = [
   { label: "all terra · xhigh", value: "$0.0725" },
-  { label: "routed architecture", value: "$0.0314-$0.0319" },
+  { label: "right-sized architecture", value: "$0.0314-$0.0319" },
   { label: "savings", value: "56.0-56.7%", strong: true },
 ];
 
@@ -181,7 +181,7 @@ export default function Iam360CaseStudyPage() {
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
-            title="iam360 · routed outcome"
+            title="iam360 · right-sized outcome"
             meta="modeled from 1 representative request"
             footer="million-request figure is a linear projection from one representative request · hypothetical all terra · xhigh baseline"
           >
@@ -192,7 +192,7 @@ export default function Iam360CaseStudyPage() {
               <StatCell label="projected savings per million requests">
                 <span className="tabular-nums">$41,000</span>
               </StatCell>
-              <StatCell label="from routing alone, at identical usage">
+              <StatCell label="from model assignment alone, at identical usage">
                 <span className="tabular-nums">25-26%</span>
               </StatCell>
             </div>
@@ -216,14 +216,14 @@ export default function Iam360CaseStudyPage() {
 
           <H2>What rightmodeler changed</H2>
           <P>
-            Using rightmodeler&rsquo;s routing and evidence framework, iAM360
-            taught the system to assign each job to the appropriate level of AI.
+            Using rightmodeler&rsquo;s evidence framework, iAM360 taught the
+            system to assign each job to the appropriate level of AI.
           </P>
         </Prose>
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
-            title="rightmodeler · routing policy · iam360"
+            title="iam360 · per-job model assignment"
             meta="baseline: terra · xhigh everywhere"
           >
             <RouteRows rows={POLICY} />
@@ -239,7 +239,7 @@ export default function Iam360CaseStudyPage() {
             The counterintuitive part: right-sizing went in both directions.
             Some complex coaching paths were upgraded from Terra to flagship Sol
             at the same time narrowly defined routine tasks moved to smaller,
-            faster models. The routing changed more than the models, too:
+            faster models. iAM360 changed more than the models, too:
           </P>
         </Prose>
 
@@ -280,9 +280,9 @@ export default function Iam360CaseStudyPage() {
           <P>
             The comparison baseline is a hypothetical starting point where every
             request uses Terra with xhigh reasoning. At identical text usage,
-            smarter routing alone reduces the modeled AI cost by approximately
-            25 to 26%. The larger saving comes from avoiding excessive reasoning
-            on simple tasks.
+            smarter model assignment alone reduces the modeled AI cost by
+            approximately 25 to 26%. The larger saving comes from avoiding
+            excessive reasoning on simple tasks.
           </P>
         </Prose>
 
@@ -297,15 +297,16 @@ export default function Iam360CaseStudyPage() {
 
         <Prose>
           <P>
-            In a representative request, the routed system costs approximately
-            3.1 cents where the all-Terra xhigh version costs approximately 7.25
-            cents: a modeled saving of roughly 56 to 57% per request.
+            In a representative request, the right-sized system costs
+            approximately 3.1 cents where the all-Terra xhigh version costs
+            approximately 7.25 cents: a modeled saving of roughly 56 to 57% per
+            request.
           </P>
           <P>
             The honest caveat is that the headline depends on how much extra
             output and reasoning xhigh actually produces. Even in the most
-            conservative case, identical output volume, routing alone still
-            saves 25 to 26%:
+            conservative case, identical output volume, model assignment alone
+            still saves 25 to 26%:
           </P>
         </Prose>
 
@@ -355,9 +356,11 @@ export default function Iam360CaseStudyPage() {
 
         <Prose>
           <P>
-            This is what rightmodeler produces: a routing policy where every job
-            is assigned under the stated validation procedure, with the flagship
-            kept, and sometimes promoted, for the work that deserves it.
+            This is what the engagement produced: a model for every job, with
+            the flagship kept, and sometimes promoted, for the work that
+            deserves it. The rightmodeler CLI validates swaps to cheaper models;
+            reasoning-effort settings and upgrades to pricier models are outside
+            what it validates today.
           </P>
           <PullQuote>&ldquo;{study.testimonial.quote}&rdquo;</PullQuote>
           <P>

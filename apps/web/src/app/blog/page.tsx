@@ -4,6 +4,7 @@ import { PostCard } from "@/components/blog/post-card";
 import { HeroGradient } from "@/components/hero-gradient";
 import { Reveal } from "@/components/reveal";
 import { getAllPosts } from "@/content/blog";
+import { BLOG_HUB } from "@/content/markdown/render-hub";
 import { alternatesFor, socialImage } from "@/lib/seo";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
@@ -12,10 +13,10 @@ const VEIL =
   "radial-gradient(130% 115% at 24% 30%, rgba(253,252,252,0.82) 0%, rgba(253,252,252,0.34) 46%, rgba(253,252,252,0) 74%)";
 
 const description =
-  "Field notes from the rightmodeler team on measuring candidate models, watching every layer, and reviewing model changes as pull requests.";
+  "Notes from the rightmodeler team on the work in the loop: validating cheaper model swaps on your traces, what a swap has to clear, and what we changed our minds about.";
 const preview = socialImage(
   "/social/blog.png",
-  "The rightmodeler blog: research notes on running agents on the right models",
+  "Notes on the work in the loop: the rightmodeler blog",
 );
 
 export const metadata: Metadata = {
@@ -74,14 +75,13 @@ export default function BlogIndexPage() {
         <div className="mx-auto max-w-2xl px-6 py-24 sm:px-8 sm:py-32">
           <Reveal>
             <p className="font-mono text-caption text-fog uppercase">
-              The rightmodeler blog
+              {BLOG_HUB.eyebrow}
             </p>
             <h1 className="mt-5 font-display text-heading-lg text-balance text-midnight-ink sm:text-display">
-              Notes on running agents on the right models.
+              {BLOG_HUB.title}
             </h1>
             <p className="mt-6 max-w-xl text-subheading text-driftwood">
-              How we measure candidates against accepted outputs, watch every
-              layer, and turn model changes into code review.
+              {BLOG_HUB.lede}
             </p>
           </Reveal>
         </div>

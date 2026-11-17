@@ -8,7 +8,7 @@
   "title": "OpenRouter integration: one key, every candidate model",
   "description": "Point rightmodeler at OpenRouter with one base URL and one key: it shortlists cheaper models from the live catalog, replays your steps, and prices every call.",
   "h1": "rightmodeler + OpenRouter",
-  "lede": "Every candidate call in a rightmodeler audit (shortlist, replay, judge, price) can run through OpenRouter on your own key. It is the engine of the audit, not a source of traces.",
+  "lede": "Every candidate call in a rightmodeler validation run (shortlist, replay, judge, price) can run through OpenRouter on your own key. It is a replay endpoint, not a source of traces.",
   "tldr": "rightmodeler talks to any OpenAI-compatible endpoint you name with --base-url, reading the key from the environment variable you name with --api-key-env. Against OpenRouter that means GET /models builds the shortlist from live pricing, context lengths, and supported_parameters, POST /chat/completions runs the replays and the judge, and usage.cost prices each call at what was actually charged rather than a token-count guess.",
   "steps": [
     {
@@ -33,7 +33,7 @@
     }
   ],
   "setup": {
-    "intro": "The audit needs one credential: an OpenRouter key, exported by you and named on the command line. Run estimate first to project the spend before any paid call, and cap the run with --max-cost-usd.",
+    "intro": "A validation run needs one credential: an OpenRouter key, exported by you and named on the command line. Run estimate first to project the spend before any paid call, and cap the run with --max-cost-usd.",
     "commands": [
       {
         "comment": "# one key powers the shortlist, every replay, and the judge",
@@ -66,7 +66,7 @@
     },
     {
       "title": "Capability-compatible shortlists",
-      "body": "The supported_parameters field becomes a capability filter, so a candidate that cannot do tool calling or structured output never reaches the bench when the step needs one, and a verdict is never flattered by a model that quietly skipped the hard part."
+      "body": "Context length and the output limit from the catalog filter the shortlist, so a candidate that cannot take the step's observed tokens or the output the call site needs never reaches the bench. Replay itself runs plain text call sites only: cases from call sites that need tools or structured output are left out of the replay sample, and the run says how many."
     }
   ],
   "limits": [
@@ -74,8 +74,8 @@
     "One replay endpoint is configured per run. OpenRouter, the Vercel AI Gateway, and a LiteLLM proxy are all OpenAI-compatible routes rightmodeler accepts; it does not mix keys within a run.",
     "Zero-priced models are excluded by default: free tiers rate-limit and disappear mid-run, which corrupts a measurement more than it saves. Pass --include-free if you want them counted anyway.",
     "A step whose current model is missing from the catalog abstains rather than being priced against a guess, and so does a model with no pricing published.",
-    "A cheaper model existing in the catalog is not a recommendation. When position-swapped verdicts disagree, when the evidence is thin, or when the winner cannot clear the quality floor again on held-out cases, the audit abstains.",
-    "rightmodeler calls OpenRouter offline, on traces you exported. It is not a gateway: nothing routes your production traffic through OpenRouter, before or after the audit."
+    "A cheaper model existing in the catalog is not a recommendation. A case whose position-swapped verdicts disagree counts as a failure, thin evidence ends in an abstention, and nothing is proposed unless the winner clears the quality floor on held-out cases.",
+    "rightmodeler calls OpenRouter offline, on traces you exported. It is not a gateway: nothing routes your production traffic through OpenRouter, before or after a validation run."
   ],
   "faq": [
     {
@@ -83,7 +83,7 @@
       "a": "Only if you choose it as the replay route. rightmodeler takes whatever OpenAI-compatible base URL you pass, so the Vercel AI Gateway or your own LiteLLM proxy work the same way. What it always needs is a catalog at /models and a chat endpoint at /chat/completions."
     },
     {
-      "q": "Why route the audit through OpenRouter?",
+      "q": "Why replay through OpenRouter?",
       "a": "The shortlist needs one live catalog with prices, context lengths, and capability flags across model families, and the judge needs a family outside both the candidate's and the incumbent's. One OpenAI-compatible endpoint and one key cover all of that; a drawer of per-provider keys covers almost none of it."
     },
     {
@@ -96,7 +96,7 @@
     },
     {
       "q": "Does my trace data leave my machine?",
-      "a": "Step inputs go to OpenRouter with your key when a replay runs, the same class of call your agent already makes to a model provider. Nothing goes anywhere else: no rightmodeler server, no account with us, no telemetry."
+      "a": "Step inputs go to candidate models, and recorded outputs go to the judge, through OpenRouter with your key, the same class of call your agent already makes to a model provider. An external evaluator, if you name one, receives what it scores. Nothing goes anywhere else: no rightmodeler server, no account with us, no telemetry."
     },
     {
       "q": "If I approve a swap, do I have to serve it through OpenRouter?",

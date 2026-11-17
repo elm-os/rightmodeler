@@ -1,12 +1,15 @@
 // One case per block type in vs-page.schema.json: scripts/markdown.test.mjs fails if one is missed.
-// The site origin is passed in, not imported, so the Node tests can load this module as is.
+// The site origin, run command and repo URL are passed in, not imported, so the Node tests can load this module as is.
 
 import type { VsBlock, VsPageData, VsSide } from "@/content/vs/types";
+
+// A <placeholder> in prose parses as an HTML tag and drops out of the rendered twin; code lines stay literal.
+const prose = (text: string) => text.replace(/</g, "\\<");
 
 function side(part: VsSide | undefined): string[] {
   if (!part) return [];
   return [
-    `**${part.heading}**`,
+    `## ${part.heading}`,
     "",
     ...part.items.map((item) => `- ${item}`),
     "",
@@ -17,10 +20,11 @@ function block(
   item: VsBlock,
   name: string,
   setupGuide: string | undefined,
+  siteUrl: string,
 ): string[] {
   switch (item.type) {
     case "tldr":
-      return [item.body ?? "", ""];
+      return [`**TL;DR** ${item.body ?? ""}`, ""];
 
     case "positioning":
     case "contrast":
@@ -52,6 +56,7 @@ function block(
     case "table": {
       const lines = [`## ${item.heading ?? "Comparison"}`, ""];
       if (item.intro) lines.push(item.intro, "");
+      if (item.caption) lines.push(`_${item.caption}_`, "");
       const left = item.leftLabel ?? "Theirs";
       const right = item.rightLabel ?? "rightmodeler";
       lines.push(`| | ${left} | ${right} |`, "| --- | --- | --- |");
@@ -59,7 +64,6 @@ function block(
         lines.push(`| ${row.dimension} | ${row.theirs} | ${row.ours} |`);
       }
       lines.push("");
-      if (item.caption) lines.push(`_${item.caption}_`, "");
       return lines;
     }
 
@@ -68,7 +72,7 @@ function block(
       if (item.intro) lines.push(item.intro, "");
       for (const paragraph of item.paragraphs ?? []) lines.push(paragraph, "");
       for (const entry of item.commands ?? []) {
-        lines.push("```bash", entry.comment, entry.command, "```", "");
+        lines.push(`    ${entry.comment}`, `    ${entry.command}`, "");
       }
       if (setupGuide) lines.push(setupGuide, "");
       return lines;
@@ -77,7 +81,9 @@ function block(
     case "prose": {
       const lines = [`## ${item.heading ?? ""}`.trimEnd(), ""];
       if (item.intro) lines.push(item.intro, "");
-      for (const paragraph of item.paragraphs ?? []) lines.push(paragraph, "");
+      for (const paragraph of item.paragraphs ?? [])
+        lines.push(`- ${paragraph}`);
+      lines.push("");
       return lines;
     }
 
@@ -85,13 +91,17 @@ function block(
       const lines = [`## ${item.heading ?? "Definitions"}`, ""];
       if (item.intro) lines.push(item.intro, "");
       for (const term of item.terms ?? [])
-        lines.push(`- **${term.term}**: ${term.def}`);
+        lines.push(
+          term.slug
+            ? `- **[${term.term}](${siteUrl}/glossary#${term.slug})**: ${term.def}`
+            : `- **${term.term}**: ${term.def}`,
+        );
       lines.push("");
       return lines;
     }
 
     case "faq": {
-      const lines = ["## FAQ", ""];
+      const lines = ["## Frequently asked questions", ""];
       for (const entry of item.items ?? []) {
         lines.push(`### ${entry.q}`, "", entry.a, "");
       }
@@ -104,9 +114,40 @@ function block(
   }
 }
 
-export function renderVsMarkdown(data: VsPageData, siteUrl: string): string {
+// Mirrors the band that closes every comparison page; the button and command come in from the caller.
+function cta(
+  data: VsPageData,
+  siteUrl: string,
+  links: { runCommand: string; repoUrl: string } | undefined,
+): string[] {
+  if (data.cta === "crucible") {
+    return [
+      "## Crucible will add the instruments.",
+      "",
+      "The self-hosted rightmodeler agent runs the maintenance loop on a schedule today. Crucible, the analytics and optimization suite in development, is designed to track cost per layer, speed per step, and failures as they happen.",
+      "",
+      `Join the Crucible waitlist: ${siteUrl}/crucible`,
+    ];
+  }
+  return [
+    "## Start with the traces you already have.",
+    "",
+    "The CLI runs from npx, nothing to install, and validates cheaper models on your own traces.",
+    ...(links
+      ? ["", `View on GitHub: ${links.repoUrl}`, "", `    ${links.runCommand}`]
+      : []),
+  ];
+}
+
+export function renderVsMarkdown(
+  data: VsPageData,
+  siteUrl: string,
+  links?: { runCommand: string; repoUrl: string },
+): string {
   const lines = [
     `# ${data.h1}`,
+    "",
+    `Comparison · ${data.name}`,
     "",
     data.lede,
     "",
@@ -120,8 +161,10 @@ export function renderVsMarkdown(data: VsPageData, siteUrl: string): string {
     ? `Setup guide: ${siteUrl}/integrations/${data.integrationSlug}`
     : undefined;
   for (const entry of data.blocks)
-    lines.push(...block(entry, data.name, setupGuide));
+    lines.push(...block(entry, data.name, setupGuide, siteUrl));
+  lines.push("", ...cta(data, siteUrl, links));
   return lines
+    .map((line) => (line.startsWith("    ") ? line : prose(line)))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

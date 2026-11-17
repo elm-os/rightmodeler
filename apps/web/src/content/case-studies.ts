@@ -32,11 +32,11 @@ export const BSIDE: CaseStudy = {
   slug: "bside",
   company: "B:Side Assist",
   website: "https://www.bsideassist.com",
-  title: "From brute-force reasoning to precision routing",
+  title: "From brute-force reasoning to per-layer model assignment",
   headline:
-    "70.8% lower inference cost. Quality held at 100% across a 20-query benchmark.",
+    "70.8% lower projected inference cost. Quality held at 100% across a 20-query benchmark.",
   excerpt:
-    "AI Assist's 11 AI layers moved from all Terra · xhigh to a per-workload routing policy: 53.3% faster, 114.3% more throughput, zero points of quality lost.",
+    "AI Assist's 11 AI layers moved from all Terra · xhigh to a per-layer model assignment: projected 53.3% faster responses and 114.3% more throughput, with zero points of quality lost.",
   tagline: "financial intelligence · 11 workloads",
   description:
     "How rightmodeler right-sized AI Assist's 11 AI layers: 70.8% lower projected inference cost and a measured 100% pass rate on a 20-query benchmark.",
@@ -70,7 +70,7 @@ export const BSIDE: CaseStudy = {
       sameAs: ["https://www.linkedin.com/company/bsidecapital"],
     },
     evidenceNote:
-      "Measured on a 20-query benchmark against the outputs B:Side had accepted.",
+      "Quality measured on a 20-query benchmark against the outputs B:Side had accepted; cost and speed are projected from the same benchmark.",
   },
 };
 
@@ -81,9 +81,9 @@ export const IAM360: CaseStudy = {
   title:
     "How iAM360 made its AI coach dramatically more efficient without lowering the quality bar",
   headline:
-    "56-57% lower cost per request. The hardest work got a better model.",
+    "56-57% lower modeled cost per request. The hardest work got a better model.",
   excerpt:
-    "The AI coach now routes every job to the right level of intelligence: Sol for complex coaching, Terra for moderate analysis, small validated models for routine work.",
+    "The AI coach now assigns every job to the right level of intelligence: Sol for complex coaching, Terra for moderate analysis, small validated models for routine work.",
   tagline: "fitness + wellness · ai coach",
   description:
     "How iAM360 used rightmodeler to cut modeled AI cost per request by 56-57% while upgrading its hardest coaching paths from Terra to Sol.",
@@ -118,6 +118,8 @@ export const IAM360: CaseStudy = {
         "https://www.tiktok.com/@iam360_performance_coach",
       ],
     },
+    evidenceNote:
+      "Cost per request is modeled from one representative request, against a baseline where every request used Terra at xhigh reasoning.",
   },
 };
 

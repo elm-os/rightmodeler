@@ -8,13 +8,13 @@
   "title": "Claude Code integration: replay sessions on cheaper models",
   "description": "Point rightmodeler at ~/.claude/projects: it reads your sessions as traces and measures cheaper models against the output you accepted, step by step.",
   "h1": "rightmodeler + Claude Code",
-  "lede": "rightmodeler runs inside the tool that wrote the traces. Claude Code already keeps every session on disk, so the audit starts with no export step, no SDK, and no re-instrumentation.",
-  "tldr": "Claude Code writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter recognizes the transcript by its type, sessionId, uuid, parentUuid, and message keys, joins the rows of one assistant message back together, walks parentUuid up to collect the user turns that prompted it, and folds each assistant message into a step with its own token usage. Those steps are then replayed against cheaper candidates and scored against the answer you accepted.",
+  "lede": "rightmodeler runs inside the tool that wrote the traces. Claude Code already keeps every session on disk, so a validation run starts with no export step, no SDK, and no re-instrumentation.",
+  "tldr": "Claude Code writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter recognizes the transcript by its type, sessionId, uuid, parentUuid, and message keys, joins the rows of one assistant message back together, walks parentUuid up to collect the user turns that prompted it, and folds each assistant message into a step with its own token usage. Steps prompted by plain text are then replayed against cheaper candidates and scored against the answer you accepted.",
   "steps": [
     {
       "label": "01 · Locate",
       "title": "Your traces are already on disk",
-      "body": "Claude Code writes every session to ~/.claude/projects/<encoded-path>/*.jsonl as it runs, one folder per project, one JSONL file per session. There is nothing to export and no SDK to add; the audit starts from files you already have."
+      "body": "Claude Code writes every session to ~/.claude/projects/<encoded-path>/*.jsonl as it runs, one folder per project, one JSONL file per session. There is nothing to export and no SDK to add; rightmodeler starts from files you already have."
     },
     {
       "label": "02 · Ingest",
@@ -24,12 +24,12 @@
     {
       "label": "03 · Replay + judge",
       "title": "Cheaper candidates, judged against what you accepted",
-      "body": "Each step is replayed against cheaper candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route claude-login, the claude CLI you are signed in to, on your Claude plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, picking a judge from a vendor that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
+      "body": "Each step prompted by plain text is replayed against cheaper candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route claude-login, the claude CLI you are signed in to, on your Claude plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, picking a judge from a vendor that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
       "title": "A per-step report, then a pull request",
-      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
+      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback opens another pull request that restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
@@ -95,15 +95,15 @@
   "useCases": [
     {
       "title": "Find out which turns earn the frontier model",
-      "body": "Every assistant message carries its model and token usage. The audit replays those messages against cheaper candidates and reports, per step family, where the big model is earning its price and where a smaller one held the quality floor."
+      "body": "Every assistant message carries its model and token usage. rightmodeler replays the ones prompted by plain text against cheaper candidates and reports, per step family, where the big model is earning its price and where a smaller one held the quality floor."
     },
     {
       "title": "Keep a prompt's turns together in the statistics",
       "body": "The trajectory comes from the promptId of the user turn that started the exchange, so every assistant message answering one prompt is clustered as a unit. The intervals are resampled at that level rather than treating a long agentic turn as a pile of independent trials."
     },
     {
-      "title": "Audit an agent built on Claude Code",
-      "body": "If your team ships automation on headless Claude Code (CI jobs, hooks, subagent fan-outs) the session logs are already complete traces. The audit reads them as they are, so a coding agent gets right-sized without standing up an observability stack first."
+      "title": "Validate swaps for an agent built on Claude Code",
+      "body": "If your team ships automation on headless Claude Code (CI jobs, hooks, subagent fan-outs) the session logs are already complete traces. rightmodeler reads them as they are, so a coding agent's plain-text steps can be validated without standing up an observability stack first."
     },
     {
       "title": "Replay through your plan",
@@ -112,14 +112,15 @@
   ],
   "limits": [
     "It reads the JSONL session logs already on disk; it does not watch live sessions, and it never changes which model Claude Code uses. Acting on the report stays your decision.",
-    "Replay needs plain-text model call sites in the repository it scans; session files are read as traces, and the audit is built for the model calls your own code makes.",
+    "Replay needs plain-text model call sites in the repository it scans; session files are read as traces, and rightmodeler is built for the model calls your own code makes.",
+    "Steps whose prompt carries tool_result blocks, as every step after a tool call does, are read but not replayed yet: replay resends conversations as text, so those cases are left out with a recorded_messages_not_replayable warning.",
     "An assistant message has to carry a message id, a model, and a usage object. Rows missing any of those are dropped with a recorded reason rather than guessed at, and a message that changed model between rows is dropped too.",
     "Claude Code logs token counts, including cache reads and writes, but no dollar cost. Historical spend is not derived from them; candidate calls are priced from what your replay endpoint reports. Calls through a plan are priced at list price from a public model list, always as an estimate: a list-price equivalent, not a bill.",
     "Through a plan, rightmodeler measures the model inside a coding CLI, not the API your app calls: claude adds its own instructions to every call, including your account's email address and the date, and cannot set temperature or an output cap. The report labels this. Only cases made of system or developer messages and one user message replay that way; multi-turn cases are left out with a named reason.",
     "Plan routes run only on your own machine: rightmodeler refuses one when CI is set, and Mode B confirmation and --detach stay on an API route. Plan routes have no default limit on calls or spend: a run makes as many calls as it needs, and your plan's usage limit is the only stop.",
     "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Coding sessions are dense, so a short session usually abstains for want of distinct trajectories rather than producing a thin recommendation.",
     "Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in. That needs a --modeb-config file naming the image and the step map; without it the recommendation is reported as unconfirmed.",
-    "It is a report, not a gateway. Claude Code keeps calling its provider directly; rightmodeler never sits in the request path."
+    "It is not a gateway. Claude Code keeps calling its provider directly; rightmodeler never sits in the request path."
   ],
   "faq": [
     {
@@ -132,11 +133,11 @@
     },
     {
       "q": "How does it turn a transcript into steps?",
-      "a": "One assistant message is one step. Rows sharing a session and a message id are stitched back together, the user turns above it (up to the previous assistant) become its input messages, and tool_result blocks from those turns are attached to the output so the answer is scored with the evidence it was given."
+      "a": "One assistant message is one step. Rows sharing a session and a message id are stitched back together, the user turns above it (up to the previous assistant) become its input messages, and tool_result blocks from those turns are attached to the output; replay resends conversations as text, so a step that answers a tool result is read but not replayed yet."
     },
     {
       "q": "Does my code leave my machine?",
-      "a": "Replays send step inputs, which for a coding session include your prompts and code, to candidate models and the judge: through the endpoint you configured, under your own key, the same shape of call Claude Code already makes, or through the claude and codex CLIs you are signed in to, where Anthropic and OpenAI handle them under your plan accounts' data settings. There is no rightmodeler server and no account; nothing else holds your traces."
+      "a": "Replays send step inputs, which for a coding session include your prompts and code, to candidate models, and the recorded and candidate outputs to the judge: through the endpoint you configured, under your own key, the same shape of call Claude Code already makes, or through the claude and codex CLIs you are signed in to, where Anthropic and OpenAI handle them under your plan accounts' data settings. There is no rightmodeler server and no account; nothing else holds your traces."
     },
     {
       "q": "Can it switch the model my sessions use?",

@@ -1,6 +1,6 @@
 # Operating the evidence contract
 
-Use this guide when reading a verdict or deciding whether a model substitution has enough proof.
+Use this guide when reading a verdict or deciding whether a model substitution has enough evidence.
 The values and identifiers below come from the TypeScript kernel and the active Phase A pipeline
 policy. Do not replace a lower bound with a point estimate or silently reinterpret a count's unit.
 
@@ -14,7 +14,7 @@ Choose the strongest applicable signal in this order:
 4. Calibrated LLM judge for behavior that the earlier rungs cannot decide.
 5. Abstain when the evidence is insufficient.
 
-Only promote a check to deterministic evidence after a mutation test proves that corrupting the
+Only promote a check to deterministic evidence after a mutation test shows that corrupting the
 output makes the check fail. The kernel keeps evaluator kinds as separate estimands, requires the
 predeclared case/stratum/evaluator matrix to be complete, and binds the decision to the weakest
 worst-case bound. Evidence from one evaluator kind cannot fill missing trials or diversity for
@@ -36,12 +36,18 @@ skip stronger deterministic or trajectory evidence.
   while anything greater abstains.
 - `DEFAULT_PASS_FRACTION = 0.75`: raw pass-rate shortlist filter for every evaluator kind. This is
   not the release gate.
-- Statistical intervals default to 95% confidence. Repeated cases from a trajectory use a
+- Statistical intervals use a fixed 95% confidence. Repeated cases from a trajectory use a
   trajectory-cluster bootstrap; otherwise the kernel uses Wilson intervals.
 
-The release policy accepts a quality floor only in `(0.8, 1.0]` and an availability floor only in
-`(0, 1.0]`. The active Phase A policy is `phase-a-v2`, with a worst-case quality lower-bound floor
-of `0.85` and an availability lower-bound floor of `0.70`. These are fractions, not percentages.
+The kernel's release gate policy accepts a quality floor in `(0.8, 1.0]` and an availability floor
+in `(0, 1.0]`. The CLI narrows both: a `--policy` file accepts a quality floor only in `(0.8, 1)`,
+greater than `0.8` and less than `1`, with a default of `0.85`, and the availability floor is fixed
+at `0.70`, with no policy setting. The quality floor applies to the worst-case quality lower bound
+and the availability floor to the availability lower bound. These are fractions, not percentages.
+The CLI stamps the active Phase A gate policy version as `phase-a-v3-<digest>`, where `<digest>` is
+the first 12 hexadecimal characters of a SHA-256 digest over the base version and the effective
+policy (quality floor, shortlist size, and model allow and deny lists). A changed policy gets a new
+version, so shortlist and replay run again instead of pooling evidence gathered under the old one.
 
 ## Abstention reasons
 
@@ -132,6 +138,15 @@ evidence exclusion.
   passes.
 - `availability`: at least one verdict must exist, and every verdict's availability lower bound
   must meet the configured floor.
+
+The CLI gives three of these gates constant inputs: it flags no execution as an unsafe
+substitution or as a required abstention, and it marks every execution covered. In a CLI run,
+`zero-unsafe-substitutions` and `required-abstention` therefore pass, and `evidence-coverage`
+passes whenever at least one execution exists. Do not present them as findings: the CLI does not
+detect unsafe substitutions, and a `reject` comes only from confirmation isolating a culprit
+(`cascade_isolated`). The CLI also marks no family as requiring deterministic evidence, so the
+abstention reasons `missing_deterministic_evidence`, `required_abstention` and
+`incomplete_evidence_coverage` never fire in a CLI run.
 
 All release gates bind. A candidate clearing the `0.75` shortlist pass fraction is not a release
 recommendation. Selection also requires the held-out winner's multiplicity-corrected 95% lower

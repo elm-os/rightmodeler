@@ -17,7 +17,7 @@ export const meta: PostMeta = {
   slug: "llm-cost-optimization-tools",
   title: "LLM cost optimization tools: which approach fits your workload?",
   description:
-    "Substitution, routing, caching, compression, batching and fine-tuning each fix a different LLM cost problem. How to match one to your workload and prove it.",
+    "Substitution, routing, caching, compression, batching and fine-tuning each fix a different LLM cost problem. How to match one to your workload and validate it.",
   excerpt:
     "Six ways to cut an LLM bill, sorted by the problem each solves: what it needs, the evidence to demand, and how they stack.",
   kicker: "Guide · LLM costs",
@@ -158,28 +158,32 @@ export function Body() {
       </P>
 
       <P>
-        This is the approach rightmodeler automates. It is an MIT-licensed CLI
-        (npx rightmodeler init) that reads{" "}
-        <A href="/integrations">the traces you already export</A> from tools
-        such as Langfuse, Helicone or OpenTelemetry, resends recorded
+        This is the approach rightmodeler is built for. It is a validation
+        framework for model swaps, an MIT-licensed CLI (npx rightmodeler init)
+        that reads <A href="/integrations">the traces you already export</A>{" "}
+        from tools such as Langfuse, Helicone or OpenTelemetry, resends recorded
         conversations to cheaper candidates from your provider&rsquo;s live
-        model catalog, and has a judge from outside both model families grade
-        each output against the one you accepted. The report gives each step
-        family&rsquo;s pass count out of its trials, a worst-case bound, and an
-        abstention reason wherever the evidence is too thin to recommend. A
-        candidate chosen on one part of your traces must also clear your quality
-        floor on a held-out part. Approved swaps arrive as a draft pull request
-        that changes model identifiers only; a person reviews and merges it, and
-        nothing runs in your request path.
+        model catalog, and has a judge from outside both model families, or your
+        own evaluator, grade each output against the one you accepted. The
+        report gives each step family&rsquo;s pass count out of its trials, a
+        worst-case bound, and an abstention reason wherever the evidence is too
+        thin to recommend. A candidate chosen on one part of your traces must
+        then clear your quality floor on a held-out part, and swaps that feed
+        later model steps must be confirmed end to end in a sandbox. Each swap
+        that clears every release gate becomes a draft pull request that changes
+        only model identifiers, with the evidence attached, and a person reviews
+        and merges it. Unlike a router, which chooses a model per request at
+        runtime, rightmodeler validates one pinned model per step, offline, and
+        never sits in your request path.
       </P>
 
       <P>
-        For what that evidence looks like on a real system, the{" "}
+        For what this kind of evidence looks like on a real system, the{" "}
         <A href="/case-study/bside">B:Side Assist case study</A> follows 11 AI
         workloads from a single model and reasoning setting to a per-workload
-        policy: a projected 70.8% lower inference cost, with the quality pass
-        rate measured at 100% on a 20-query benchmark against the outputs B:Side
-        had accepted. The{" "}
+        model assignment: a projected 70.8% lower inference cost, with the
+        quality pass rate measured at 100% on a 20-query benchmark against the
+        outputs B:Side had accepted. The{" "}
         <A href="/use-cases/reduce-llm-costs">reduce LLM costs</A> page covers
         the workflow end to end.
       </P>
@@ -467,8 +471,8 @@ export function Body() {
         <LI>
           <Strong>Take the quality-neutral wins first.</Strong> Prompt caching
           leaves the output unchanged, and batching runs the same model on the
-          same prompt. Neither needs a quality evaluation, only proof the cost
-          moved.
+          same prompt. Neither needs a quality evaluation, only evidence that
+          the cost moved.
         </LI>
         <LI>
           <Strong>Compress, then re-measure the model choice.</Strong> A model
@@ -478,9 +482,10 @@ export function Body() {
           in a long log may not need it once the log is reduced to that test.
         </LI>
         <LI>
-          <Strong>Substitute per step, route where difficulty varies.</Strong>{" "}
-          Substitution covers steps with uniform traffic; a router earns its
-          place only where traffic is mixed.
+          <Strong>Substitute per step.</Strong> Substitution covers steps with
+          uniform traffic. A router chooses a model per request at runtime;
+          rightmodeler validates one pinned model per step, offline, before a
+          person merges.
         </LI>
         <LI>
           <Strong>
@@ -498,13 +503,13 @@ export function Body() {
         <LI>
           <Strong>Keep response caching out of evaluation.</Strong> A cached
           response is evidence about the cache, not the model. rightmodeler
-          leaves out of its evidence any replayed response that a gateway
-          reports as a cache hit, such as a{" "}
+          leaves out of its evidence a replayed response that a{" "}
           <A href="/integrations/portkey">Portkey</A> cache-status header or a{" "}
-          <A href="/integrations/bifrost">Bifrost</A> cache flag, and its
-          gateway setup keeps response caching off on the replay route.
-          Fallbacks, aliases and rewritten requests contaminate an evaluation
-          the same way;{" "}
+          <A href="/integrations/bifrost">Bifrost</A> cache flag reports as a
+          cache hit. It reads no other gateway&rsquo;s cache signal, and the
+          gateway setup it documents keeps response caching off on the replay
+          route. Fallbacks, aliases and rewritten requests contaminate an
+          evaluation the same way;{" "}
           <A href="/blog/llm-gateway-evaluation-pitfalls">
             how an AI gateway can invalidate your model evaluation
           </A>{" "}
@@ -524,31 +529,31 @@ export function Body() {
       <UL>
         <LI>
           <Strong>Frontier prices on routine steps:</Strong> model substitution,
-          proven per step on held-out cases.
+          measured per step on held-out cases.
         </LI>
         <LI>
-          <Strong>One step with easy and hard requests:</Strong> routing, proven
-          on held-out traffic.
+          <Strong>One step with easy and hard requests:</Strong> routing,
+          measured on held-out traffic.
         </LI>
         <LI>
-          <Strong>Long repeated prefixes:</Strong> prompt caching, proven by the
-          cached share of input.
+          <Strong>Long repeated prefixes:</Strong> prompt caching, measured by
+          the cached share of input.
         </LI>
         <LI>
-          <Strong>Exact repeated requests:</Strong> response caching, proven by
-          the duplicate rate.
+          <Strong>Exact repeated requests:</Strong> response caching, measured
+          by the duplicate rate.
         </LI>
         <LI>
-          <Strong>Oversized inputs:</Strong> compression, proven by task success
-          and cost net of cache effects.
+          <Strong>Oversized inputs:</Strong> compression, measured by task
+          success and cost net of cache effects.
         </LI>
         <LI>
-          <Strong>Latency-tolerant bulk work:</Strong> batch APIs, proven by
+          <Strong>Latency-tolerant bulk work:</Strong> batch APIs, measured by
           completion times.
         </LI>
         <LI>
           <Strong>A narrow, high-volume task:</Strong> fine-tuning or
-          distillation, proven on held-out inputs at full lifecycle cost.
+          distillation, measured on held-out inputs at full lifecycle cost.
         </LI>
       </UL>
 
@@ -557,7 +562,7 @@ export function Body() {
         have. <A href="/how-it-works">How it works</A> explains the
         replay-and-judge loop, and the{" "}
         <A href="/case-study/bside">B:Side Assist case study</A> shows the
-        evidence from one audit, workload by workload.
+        evidence from one real system, workload by workload.
       </P>
     </Prose>
   );
@@ -602,9 +607,9 @@ Prerequisites: step-level traces with each call's inputs and the outputs your te
 
 What it trades away: one model per step, chosen in advance, so it cannot adapt to a hard request inside an easy step. The accepted output is a [reference, not ground truth](https://www.rightmodeler.com/glossary#reference-evidence), so agreement means the candidate matches what you shipped. And models and prices keep changing, so the measurement has to be repeatable.
 
-This is the approach rightmodeler automates. It is an MIT-licensed CLI (npx rightmodeler init) that reads [the traces you already export](https://www.rightmodeler.com/integrations) from tools such as Langfuse, Helicone or OpenTelemetry, resends recorded conversations to cheaper candidates from your provider's live model catalog, and has a judge from outside both model families grade each output against the one you accepted. The report gives each step family's pass count out of its trials, a worst-case bound, and an abstention reason wherever the evidence is too thin to recommend. A candidate chosen on one part of your traces must also clear your quality floor on a held-out part. Approved swaps arrive as a draft pull request that changes model identifiers only; a person reviews and merges it, and nothing runs in your request path.
+This is the approach rightmodeler is built for. It is a validation framework for model swaps, an MIT-licensed CLI (npx rightmodeler init) that reads [the traces you already export](https://www.rightmodeler.com/integrations) from tools such as Langfuse, Helicone or OpenTelemetry, resends recorded conversations to cheaper candidates from your provider's live model catalog, and has a judge from outside both model families, or your own evaluator, grade each output against the one you accepted. The report gives each step family's pass count out of its trials, a worst-case bound, and an abstention reason wherever the evidence is too thin to recommend. A candidate chosen on one part of your traces must then clear your quality floor on a held-out part, and swaps that feed later model steps must be confirmed end to end in a sandbox. Each swap that clears every release gate becomes a draft pull request that changes only model identifiers, with the evidence attached, and a person reviews and merges it. Unlike a router, which chooses a model per request at runtime, rightmodeler validates one pinned model per step, offline, and never sits in your request path.
 
-For what that evidence looks like on a real system, the [B:Side Assist case study](https://www.rightmodeler.com/case-study/bside) follows 11 AI workloads from a single model and reasoning setting to a per-workload policy: a projected 70.8% lower inference cost, with the quality pass rate measured at 100% on a 20-query benchmark against the outputs B:Side had accepted. The [reduce LLM costs](https://www.rightmodeler.com/use-cases/reduce-llm-costs) page covers the workflow end to end.
+For what this kind of evidence looks like on a real system, the [B:Side Assist case study](https://www.rightmodeler.com/case-study/bside) follows 11 AI workloads from a single model and reasoning setting to a per-workload model assignment: a projected 70.8% lower inference cost, with the quality pass rate measured at 100% on a 20-query benchmark against the outputs B:Side had accepted. The [reduce LLM costs](https://www.rightmodeler.com/use-cases/reduce-llm-costs) page covers the workflow end to end.
 
 ## One step, easy and hard requests: routing
 
@@ -668,24 +673,24 @@ Prerequisites: a clean dataset of inputs and accepted outputs, an evaluation set
 
 The approaches combine, and the order changes what each is worth.
 
-- **Take the quality-neutral wins first.** Prompt caching leaves the output unchanged, and batching runs the same model on the same prompt. Neither needs a quality evaluation, only proof the cost moved.
+- **Take the quality-neutral wins first.** Prompt caching leaves the output unchanged, and batching runs the same model on the same prompt. Neither needs a quality evaluation, only evidence that the cost moved.
 - **Compress, then re-measure the model choice.** A model choice measured on uncompressed traces describes a workload that no longer exists, so run substitution on traces recorded after the change. A step that needed a frontier model to find one failing test in a long log may not need it once the log is reduced to that test.
-- **Substitute per step, route where difficulty varies.** Substitution covers steps with uniform traffic; a router earns its place only where traffic is mixed.
+- **Substitute per step.** Substitution covers steps with uniform traffic. A router chooses a model per request at runtime; rightmodeler validates one pinned model per step, offline, before a person merges.
 - **Price candidates at your cache mix, not at list price.** A model switch starts from a cold cache: OpenAI lists the model among the settings that affect the cached prefix. Cacheable minimums differ too. At Anthropic, a 2,000-token prefix that caches on Claude Sonnet 5, with its 1,024-token minimum, falls below Claude Haiku 4.5's 4,096-token minimum and is processed uncached. On that prefix, Sonnet 5's cache reads at $0.20 per million tokens cost less than Haiku 4.5's uncached input at $1. Compare each model's cost at your real cached share before acting on any per-token saving.
-- **Keep response caching out of evaluation.** A cached response is evidence about the cache, not the model. rightmodeler leaves out of its evidence any replayed response that a gateway reports as a cache hit, such as a [Portkey](https://www.rightmodeler.com/integrations/portkey) cache-status header or a [Bifrost](https://www.rightmodeler.com/integrations/bifrost) cache flag, and its gateway setup keeps response caching off on the replay route. Fallbacks, aliases and rewritten requests contaminate an evaluation the same way; [how an AI gateway can invalidate your model evaluation](https://www.rightmodeler.com/blog/llm-gateway-evaluation-pitfalls) covers all four.
+- **Keep response caching out of evaluation.** A cached response is evidence about the cache, not the model. rightmodeler leaves out of its evidence a replayed response that a [Portkey](https://www.rightmodeler.com/integrations/portkey) cache-status header or a [Bifrost](https://www.rightmodeler.com/integrations/bifrost) cache flag reports as a cache hit. It reads no other gateway's cache signal, and the gateway setup it documents keeps response caching off on the replay route. Fallbacks, aliases and rewritten requests contaminate an evaluation the same way; [how an AI gateway can invalidate your model evaluation](https://www.rightmodeler.com/blog/llm-gateway-evaluation-pitfalls) covers all four.
 - **Fine-tune last.** Training is the most expensive experiment, so run it after substitution has shown that no existing model clears the bar at an acceptable price.
 
 ## The short version
 
 Match the approach to the problem you can see in your traces:
 
-- **Frontier prices on routine steps:** model substitution, proven per step on held-out cases.
-- **One step with easy and hard requests:** routing, proven on held-out traffic.
-- **Long repeated prefixes:** prompt caching, proven by the cached share of input.
-- **Exact repeated requests:** response caching, proven by the duplicate rate.
-- **Oversized inputs:** compression, proven by task success and cost net of cache effects.
-- **Latency-tolerant bulk work:** batch APIs, proven by completion times.
-- **A narrow, high-volume task:** fine-tuning or distillation, proven on held-out inputs at full lifecycle cost.
+- **Frontier prices on routine steps:** model substitution, measured per step on held-out cases.
+- **One step with easy and hard requests:** routing, measured on held-out traffic.
+- **Long repeated prefixes:** prompt caching, measured by the cached share of input.
+- **Exact repeated requests:** response caching, measured by the duplicate rate.
+- **Oversized inputs:** compression, measured by task success and cost net of cache effects.
+- **Latency-tolerant bulk work:** batch APIs, measured by completion times.
+- **A narrow, high-volume task:** fine-tuning or distillation, measured on held-out inputs at full lifecycle cost.
 
-If the first line describes your bill, start with the traces you already have. [How it works](https://www.rightmodeler.com/how-it-works) explains the replay-and-judge loop, and the [B:Side Assist case study](https://www.rightmodeler.com/case-study/bside) shows the evidence from one audit, workload by workload.
+If the first line describes your bill, start with the traces you already have. [How it works](https://www.rightmodeler.com/how-it-works) explains the replay-and-judge loop, and the [B:Side Assist case study](https://www.rightmodeler.com/case-study/bside) shows the evidence from one real system, workload by workload.
 `;

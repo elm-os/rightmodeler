@@ -327,6 +327,10 @@ test("a comparison with an integration ends its stack section with the setup gui
   );
   for (const page of pages) {
     const markdown = renderVsMarkdown(page, SITE_URL);
+    assert.ok(
+      !markdown.includes("```"),
+      `${page.slug} twin uses a fenced block`,
+    );
     if (!page.integrationSlug) {
       assert.doesNotMatch(
         markdown,
@@ -336,10 +340,10 @@ test("a comparison with an integration ends its stack section with the setup gui
       continue;
     }
     const line = `Setup guide: ${SITE_URL}/integrations/${page.integrationSlug}`;
-    // Blocks such as positioning carry no h2, so anchor on the stack's own last line.
+    // Anchor on the stack's own last line rather than on whichever block follows it.
     for (const block of page.blocks.filter((b) => b.type === "stack")) {
       const last = block.commands?.length
-        ? `${block.commands.at(-1).command}\n\`\`\``
+        ? `    ${block.commands.at(-1).command}`
         : block.paragraphs.at(-1);
       assert.ok(
         markdown.includes(`${last}\n\n${line}\n`) ||

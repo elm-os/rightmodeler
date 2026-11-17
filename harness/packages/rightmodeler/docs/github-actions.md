@@ -97,7 +97,7 @@ jobs:
           key: rightmodeler-store-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: rightmodeler-store-
       - id: init
-        name: Find and prove cheaper models
+        name: Validate swaps to cheaper models
         env:
           RIGHTMODELER_PROVIDER_BASE_URL: ${{ vars.RIGHTMODELER_PROVIDER_BASE_URL }}
           RIGHTMODELER_PROVIDER_API_KEY: ${{ secrets.RIGHTMODELER_PROVIDER_API_KEY }}
@@ -125,7 +125,7 @@ jobs:
             0) echo "recommendation=false" >>"$GITHUB_OUTPUT" ;;
             1)
               echo "recommendation=true" >>"$GITHUB_OUTPUT"
-              echo "::notice title=rightmodeler::A proven swap is ready. Run this workflow with command=apply to open the draft pull request."
+              echo "::notice title=rightmodeler::A swap that cleared every gate is ready. Run this workflow with command=apply to open the draft pull request."
               ;;
             *)
               echo "::error title=rightmodeler::init exited $code; the annotations above name the cause and the fix."

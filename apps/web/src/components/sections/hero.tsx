@@ -1,6 +1,6 @@
 "use client";
 
-// The home hero: editorial copy over a per-step approval ledger. Every figure is illustrative.
+// The home hero: editorial copy over a per-step swap validation ledger. Every figure is illustrative.
 
 import { motion, useReducedMotion } from "motion/react";
 import { AnimatedNumber } from "@/components/animated-number";
@@ -26,7 +26,7 @@ type Flag = { label: string; strong?: boolean } | null;
 type LedgerRow = {
   key: string;
   glyph: string; // ✓ ⚙ ✕
-  status: "approved" | "pending" | "abstained";
+  status: "cleared" | "pending" | "abstained";
   srStatus: string; // spoken status (glyph alone is not accessible)
   step: string;
   family: string;
@@ -39,13 +39,14 @@ type LedgerRow = {
   dim?: boolean; // the abstain row: fog, with its verdict in ink
 };
 
-// Row 2 is below the quality floor in the title bar, hence pending. Row 5 is the abstention.
+// Row 2 clears the floor but feeds later model steps, so it waits on end-to-end confirmation.
+// Row 5 is the abstention.
 const ROWS: LedgerRow[] = [
   {
     key: "pr_summary",
     glyph: "✓",
-    status: "approved",
-    srStatus: "Approved",
+    status: "cleared",
+    srStatus: "Cleared",
     step: "1",
     family: "pr_summary",
     from: "gpt-5.6",
@@ -56,24 +57,24 @@ const ROWS: LedgerRow[] = [
     flag: null,
   },
   {
-    key: "tool_agent",
+    key: "task_planner",
     glyph: "⚙",
     status: "pending",
-    srStatus: "Pending, cascade risk",
+    srStatus: "Pending, end-to-end confirmation",
     step: "2",
-    family: "tool_agent",
+    family: "task_planner",
     from: "claude-opus-5",
     to: "llama-3.3-70b",
     save: "41%",
-    quality: ILLUSTRATIVE_SCORECARD.pending,
-    evidence: "trajectory",
-    flag: { label: "CASCADE" },
+    quality: ILLUSTRATIVE_SCORECARD.alternative,
+    evidence: "reference+judge",
+    flag: { label: "CASCADE · unconfirmed" },
   },
   {
     key: "json_extraction",
     glyph: "✓",
-    status: "approved",
-    srStatus: "Approved",
+    status: "cleared",
+    srStatus: "Cleared",
     step: "3",
     family: "json_extraction",
     from: "gpt-5.4",
@@ -86,8 +87,8 @@ const ROWS: LedgerRow[] = [
   {
     key: "sql_generation",
     glyph: "✓",
-    status: "approved",
-    srStatus: "Approved",
+    status: "cleared",
+    srStatus: "Cleared",
     step: "4",
     family: "sql_generation",
     from: "gpt-5.4",
@@ -137,33 +138,22 @@ export function Hero() {
           <Reveal lcp className="relative max-w-3xl">
             <div className="relative">
               <p className="font-mono text-caption text-fog uppercase">
-                Evidence-backed model decisions
+                Toward production AI that maintains itself
               </p>
 
+              {/* An opinion: it never travels without the subhead below it. */}
               <h1 className="mt-5 font-display text-heading-lg text-balance text-midnight-ink sm:text-display">
-                Measure cheaper models against what you shipped.
+                The human in the loop is the bottleneck.
               </h1>
 
               <p className="mt-6 max-w-2xl text-subheading text-driftwood">
-                rightmodeler replays your real agent traces through cheaper
-                models, judges each output against what you already shipped, and
-                reports agreement, cost, evidence, sample size, and every
-                abstention.
+                rightmodeler takes the work out of the loop, not the judgment.
+                It validates cheaper models on your production traces against
+                the outputs you accepted, and opens a draft pull request only
+                when a swap clears every gate. Today, the final yes stays yours.
               </p>
 
-              {/* The caption names "PR summary" so the figure reads against Row 1 of the ledger. */}
-              <div className="mt-9">
-                <AnimatedNumber
-                  value={72}
-                  suffix="%"
-                  className="font-display text-heading text-midnight-ink sm:text-heading-lg"
-                />
-                <p className="mt-1.5 font-mono text-caption text-fog">
-                  cost reduction · PR summary · medium confidence · illustrative
-                  example
-                </p>
-              </div>
-
+              {/* The product's first step sits right under the subhead; the ledger follows. */}
               <div className="mt-8 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
                 <CopyCommand command={RUN_COMMAND} />
                 <a
@@ -186,7 +176,20 @@ export function Hero() {
                 {ILLUSTRATIVE_SCORECARD.label}, not measured results
               </span>
             </div>
-            <ApprovalTable />
+            <SwapLedger />
+          </div>
+
+          {/* Below the ledger, so the ledger stays in the first screen. The caption names
+              "PR summary" so the figure reads against Row 1. */}
+          <div className="mt-6 sm:mt-8">
+            <AnimatedNumber
+              value={72}
+              suffix="%"
+              className="font-display text-heading text-midnight-ink sm:text-heading-lg"
+            />
+            <p className="mt-1.5 font-mono text-caption text-fog">
+              cost reduction · PR summary · illustrative example
+            </p>
           </div>
         </div>
       </div>
@@ -195,15 +198,16 @@ export function Hero() {
 }
 
 // The CLI's per-step swap plan as a still artifact: nothing here is a live measurement.
-function ApprovalTable() {
+function SwapLedger() {
   const reduce = useReducedMotion();
 
   return (
     <div className="relative overflow-hidden rounded-xl border border-ash-border bg-warm-sand">
-      {/* The quality floor on the right is why Row 2 is held rather than approved. */}
-      <div className="flex items-center justify-between gap-4 border-b border-ash-border px-4 py-3">
+      {/* Row 2 clears the quality floor on the right but still waits on end-to-end confirmation.
+          On a phone the floor wraps under the label instead of truncating it. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-ash-border px-4 py-3">
         <span className="min-w-0 truncate font-mono text-caption text-driftwood">
-          rightmodeler · per-step approval
+          rightmodeler · per-step swap validation
         </span>
         <span className="shrink-0 font-mono text-caption text-fog">
           5 steps · quality floor {ILLUSTRATIVE_SCORECARD.floor}

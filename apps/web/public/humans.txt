@@ -4,8 +4,6 @@
 
 	GitHub: @00-Aakash-00
 	GitHub: @ameyalambat128
-	GitHub: @Chaitanya-Chaurasia
-	GitHub: @Piyussh01
 
 	Repository: https://github.com/elm-os/rightmodeler
 
@@ -16,11 +14,11 @@
 
 /* SITE */
 
-	Last update: 2026/07/10
+	Last update: 2026/11/16
 	Language: English
 	Doctype: HTML5
 	Standards: HTML5, CSS3, ES2023
 	Components: Next.js, React, TypeScript, Tailwind CSS, Motion
 	Software: pnpm, Turborepo, TypeScript
 
-	# Every step, on the right model. Proven, not guessed. https://www.rightmodeler.com
+	# Take the work out of the loop. https://www.rightmodeler.com

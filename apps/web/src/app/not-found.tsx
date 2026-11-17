@@ -20,7 +20,7 @@ export default function NotFound() {
       <PageHero
         eyebrow="404 · Not found"
         title="This page isn't in the trace."
-        lede="The address may have moved, or it may never have existed. Start again from the homepage or jump straight to the proof loop."
+        lede="The address may have moved, or it may never have existed. Start again from the homepage or jump straight to the validation loop."
       >
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link

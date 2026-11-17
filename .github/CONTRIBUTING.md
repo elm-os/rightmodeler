@@ -48,7 +48,7 @@ Invoke-WebRequest https://get.pnpm.io/install.ps1 -UseBasicParsing | Invoke-Expr
 ```
 
 You also need Node.js 24 or newer, from the nodejs.org installer or fnm, and Git
-for Windows. Rightmodeler cannot start a CLI that a version manager such as Volta
+for Windows. rightmodeler cannot start a CLI that a version manager such as Volta
 wraps in a batch file, so install `claude`, `codex` and `promptfoo` with npm outside
 it if you test plan routes or evaluators by hand. The repository's `.gitattributes` keeps every text
 file LF, whatever `core.autocrlf` is set to. A clone made before that file existed

@@ -2,7 +2,7 @@
   "name": "@rightmodeler/agent",
   "version": "0.0.0",
   "private": true,
-  "description": "Agent application for operating the rightmodeler harness.",
+  "description": "The rightmodeler maintenance loop on a schedule: on your word it validates cheaper model swaps and opens a draft pull request for each one that clears every gate. It never merges.",
   "scripts": {
     "build": "eve build",
     "typecheck": "tsc --noEmit",

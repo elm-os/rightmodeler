@@ -10,22 +10,22 @@ import { breadcrumbLd, organizationLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "About",
   description:
-    "rightmodeler measures cheaper candidates against outputs you accepted, then reports the evidence and abstentions. Open source, for multi-agent LLM teams.",
+    "rightmodeler is working toward production AI that maintains and optimizes itself, starting with open-source validation of cheaper model swaps on your traces.",
   path: "/about",
 });
 
 const FAQ: FaqItem[] = [
   {
     q: "What is rightmodeler?",
-    a: "An open-source tool for teams running multi-agent LLM systems. It replays your own traces through cheaper candidates, measures each result against the output you accepted, and reports the evidence, sample size, and abstentions before you approve a repo edit.",
+    a: "An open-source project from ELM-OS, working toward production AI systems that maintain and optimize themselves. It starts with a validation framework for model swaps: the rightmodeler CLI validates swaps to cheaper models on your production traces and opens each one that clears every release gate as a draft pull request that changes only model identifiers, for a person to review and merge.",
   },
   {
     q: "Is it open source?",
-    a: "Yes, MIT licensed. The rightmodeler CLI and rightmodeler agent are both in the public GitHub repo, free to run, fork, and modify. The CLI is on npm today. The agent is self-hosted today: you clone and build it, then run it on a long-lived Node 24 host with your own GitHub App and model credentials. A hosted version of the agent has a waitlist. Crucible, the analytics and optimization suite, is in development, also with a waitlist.",
+    a: "Yes, MIT licensed. The rightmodeler CLI and rightmodeler agent are both in the public GitHub repo, free to run, fork, and modify. The CLI is on npm today. The agent is self-hosted today: you clone and build it, then run it on a long-lived Node 24 host with your own GitHub App and model credentials. A hosted version of the agent has a waitlist. Crucible, the planned analytics and optimization suite, is in development, also with a waitlist.",
   },
   {
     q: "How is it different from observability or a gateway?",
-    a: "It answers a narrower question: which model each step of your agent needs. rightmodeler replays recorded steps through cheaper candidates, measures each against the output you accepted, and reports the evidence, sample size, and abstentions. A swap that clears every release gate becomes a draft pull request that changes only model identifiers, and a human reviews and merges it. It reads exported traces, so your observability tool stays in place, and it never sits in your request path the way a runtime gateway does.",
+    a: "It answers a narrower question: whether a cheaper model agrees with the outputs you accepted, step by step. Observability records what your app did, and a gateway serves the model you pin. rightmodeler reads the traces you already export, so your observability tool stays in place, and it can replay candidates through your gateway. It runs offline and never sits in your request path. A swap that clears every release gate becomes a draft pull request that changes only model identifiers, for a person to review and merge.",
   },
 ];
 
@@ -38,7 +38,7 @@ export default function AboutPage() {
       <PageHero
         eyebrow="About"
         title="About rightmodeler"
-        lede="Measured evidence over guesswork, for the models your agents run on."
+        lede="Working toward production AI that maintains and optimizes itself, starting with validated model swaps."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
@@ -46,27 +46,60 @@ export default function AboutPage() {
       <section className="bg-parchment-white">
         <div className="mx-auto max-w-2xl space-y-6 px-6 py-16 sm:px-8 sm:py-20">
           <p className="text-subheading text-driftwood">
-            rightmodeler is an open-source tool for teams running multi-agent
-            LLM systems. It measures how closely cheaper candidates match the
-            outputs you already accepted, one call at a time.
+            rightmodeler is an open-source project from ELM-OS. We think the
+            biggest bottleneck in maintaining software is the human in the loop:
+            not the judgment, the work.
           </p>
           <p className="text-body text-driftwood">
-            The mission is simple:{" "}
+            We are solving it first for production AI systems, where a new model
+            ships every few weeks and each one restarts the same manual job:
+            notice it, pull real traces, build a replay, grade the outputs,
+            write it up so it survives review, migrate, and do it again.
+          </p>
+          <p className="text-body text-driftwood">
+            So we started with a validation framework for model swaps. The
+            rightmodeler CLI reads the model calls your app already recorded,
+            replays the recorded steps on cheaper candidate models, and has a
+            judge from a different vendor, or your own evaluator, grade every
+            answer against the output you accepted. A swap that clears every
+            release gate becomes a draft pull request that changes only model
+            identifiers, with the evidence attached.
+          </p>
+          <p className="text-body text-driftwood">
+            A swap is safe, in rightmodeler&rsquo;s terms, when it clears every
+            release gate on your own traces: agreement with the outputs you
+            accepted, at a statistical lower bound that reaches your quality
+            floor on held-out cases, with swaps that feed later model steps
+            confirmed end to end in a sandbox. rightmodeler measures agreement
+            with what you shipped, not ground-truth correctness, and abstains
+            when the evidence is thin.
+          </p>
+          <p className="text-body text-driftwood">
+            The mission:{" "}
             <span className="font-medium text-midnight-ink">
-              no model decision on vibes
+              production AI systems that maintain and optimize themselves,
+              earning each step of autonomy with evidence
             </span>
-            . rightmodeler detects inefficient calls, measures candidates
-            against what you already shipped, and reports the evidence, sample
-            size, and abstentions before applying an edit you approve. A report
-            and an edit, never a runtime gateway.
+            . The direction is a system that maintains itself inside the policy
+            you set, reached one validated change at a time.
           </p>
           <p className="text-body text-driftwood">
-            rightmodeler is an ELM-OS project. The CLI is on npm today.
-            rightmodeler agent, which opens evidence-backed swaps as draft pull
-            requests, is in the same MIT-licensed repo, and you can self-host it
-            today; a hosted version has a waitlist. Crucible, the analytics and
-            optimization suite built on the same evidence loop, is in
-            development.
+            Today a person sets the policy (the quality floor, which models are
+            allowed, an optional spend cap), gives the agent the word before it
+            replays a new candidate, and decides which draft pull requests
+            merge. Rolling back is one command that opens another pull request.
+            That is deliberate: autonomy is earned with evidence, and validation
+            is how rightmodeler earns it.
+          </p>
+          <p className="text-body text-driftwood">
+            The CLI is on npm today. rightmodeler agent, the maintenance loop on
+            a schedule, is in the same MIT-licensed repo, and you can self-host
+            it today; a hosted version has a waitlist. Crucible, the planned
+            analytics and optimization suite, is in development, also with a
+            waitlist. The CLI and the agent run offline, beside your app: the
+            CLI on your machine or in CI, the agent on a host you run. Nothing
+            sits in your request path, and there is no rightmodeler server and
+            no telemetry.
           </p>
 
           <div className="pt-2">

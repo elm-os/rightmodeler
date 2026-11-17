@@ -6,7 +6,7 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "Braintrust integration: replay spans on cheaper models",
-  "description": "Fetch Braintrust span rows: rightmodeler replays each step through cheaper models and measures every candidate against the output you accepted.",
+  "description": "Fetch Braintrust span rows: rightmodeler replays recorded steps on cheaper models and measures every candidate against the output you accepted.",
   "h1": "rightmodeler + Braintrust",
   "lede": "Braintrust scores your agent against your evals. rightmodeler puts the same span rows to a different test: which steps survive on a cheaper model, judged against the outputs you already shipped, and scored by Braintrust itself when you point it there.",
   "tldr": "rightmodeler has a dedicated Braintrust adapter. It recognizes span rows by their span_id, root_span_id, and span_attributes keys, maps the rows whose span_attributes.type is llm, and takes the model from metadata.model with token counts from metrics. Braintrust can also be the evaluator: pass --evaluator braintrust with a project id and scorer names and your own scorers grade the replays, with the built-in judge used only when nothing better is reachable.",
@@ -24,16 +24,16 @@
     {
       "label": "03 · Replay + score",
       "title": "Cheaper candidates, graded by your own scorers",
-      "body": "Each kept step is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator braintrust, your project's scorers grade the replays and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, which makes two temperature-zero calls with the reference and candidate positions swapped. Verdicts stay separate per evaluator kind and are never pooled."
+      "body": "Each kept step with a plain-text conversation is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator braintrust, your project's scorers grade the replays and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, which makes two temperature-zero calls with the reference and candidate positions swapped. Verdicts stay separate per evaluator kind and are never pooled."
     },
     {
       "label": "04 · Report + apply",
       "title": "A report, then a pull request you review",
-      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Where the evidence is thin the family abstains with a named reason. When one clears every release gate, rightmodeler apply opens a draft pull request that touches model identifiers and nothing else, and rollback restores the pre-apply files, refusing unless every restored digest matches. rightmodeler export --to braintrust pushes the trials and verdicts back into the project you already review."
+      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Where the evidence is thin the family abstains with a named reason. When one clears every release gate, rightmodeler apply opens a draft pull request that touches model identifiers and nothing else, and rollback opens another pull request that restores the pre-apply files, refusing unless every restored digest matches. rightmodeler export --to braintrust pushes the trials and verdicts back into the project you already review."
     }
   ],
   "setup": {
-    "intro": "Nothing to install: npx runs the published CLI. Point it at your saved span rows. The audit reads the file offline; your Braintrust key is needed only for the fetch you run yourself, and again if you choose Braintrust as the evaluator.",
+    "intro": "Nothing to install: npx runs the published CLI. Point it at your saved span rows. rightmodeler reads the file offline; your Braintrust key is needed only for the fetch you run yourself, and again if you choose Braintrust as the evaluator.",
     "commands": [
       {
         "comment": "# fetch span rows, save the response's events array as your trace file",
@@ -86,12 +86,12 @@
       "body": "Braintrust tells you the agent clears the bar you set; rightmodeler tells you which of its steps are overpaying to clear it. Same span rows, different question, answered with per-step evidence instead of a hunch."
     },
     {
-      "title": "Grade the audit with the scorers you already trust",
+      "title": "Grade the replays with the scorers you already trust",
       "body": "Point the run at Braintrust with --evaluator braintrust and your own scorers decide whether a candidate passed, rather than a judge model you did not write. The pass decisions, metric names, and rubric versions land in the ledger next to each trial."
     },
     {
       "title": "Build the corpus from a curated dataset",
-      "body": "rightmodeler corpus import --from braintrust:dataset pulls a curated dataset instead of raw traces. Curated references are usually human-verified, and reference correctness is the ceiling on every number downstream, so a verified corpus raises what the audit can prove."
+      "body": "rightmodeler corpus import --from braintrust:dataset pulls a curated dataset instead of raw traces. Curated references are usually human-verified, and reference correctness is the ceiling on every number downstream, so a verified corpus raises the ceiling on what a validation run can show."
     },
     {
       "title": "Turn a finished experiment into a swap decision",
@@ -101,10 +101,11 @@
   "limits": [
     "Only rows whose span_attributes.type is llm become steps. Score and task spans are read, then dropped with a recorded reason, so filtering the export to llm spans mostly saves you time rather than changing the result.",
     "The model has to be in metadata.model and the token counts in metrics. A row that records them somewhere else is dropped with its reason rather than guessed at.",
+    "Steps whose recorded conversation contains tool calls are read but not replayed yet: replay resends conversations as text, so those cases are left out with a recorded_messages_not_replayable warning.",
     "It reads exported rows on disk. It does not connect to your Braintrust project, poll the API, or watch new spans arrive; the evaluator and export paths are the only ones that call Braintrust, and only when you ask for them.",
     "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
     "Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in. That needs a --modeb-config file naming the image and the step map; without it the recommendation is reported as unconfirmed.",
-    "It is a report, not a runtime gateway. Braintrust keeps scoring your agent in production; rightmodeler runs offline on the files you fetched and never sits in the request path."
+    "It is not a runtime gateway. Braintrust keeps scoring your agent in production; rightmodeler runs offline on the files you fetched and never sits in the request path."
   ],
   "faq": [
     {
@@ -125,11 +126,11 @@
     },
     {
       "q": "Does my span data leave my machine?",
-      "a": "Replays send step inputs to candidate models through the endpoint you configured, under your own key, the same shape of call your agent already makes. There is no rightmodeler server and no account; Braintrust is contacted only by your own fetch, and by the evaluator or export commands when you run them."
+      "a": "Replays send step inputs to candidate models through the endpoint you configured, under your own key, the same shape of call your agent already makes, and the built-in judge receives the recorded and candidate outputs through the same endpoint. There is no rightmodeler server and no account; Braintrust is contacted only by your own fetch, and by the evaluator or export commands when you run them."
     },
     {
       "q": "Will it always find savings?",
-      "a": "No, by design. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor again on held-out cases. An audit that always finds a swap is not measuring anything."
+      "a": "No, by design. A family abstains when the evidence is thin or the excluded fraction runs over the ceiling, and nothing is proposed unless a candidate clears the quality floor on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],
   "related": ["langsmith", "langfuse", "weave"],

@@ -103,7 +103,7 @@
     },
     {
       "title": "Pool call sites that do the same job",
-      "body": "Give a generateText call and a streamText call that both summarize the same functionId, and their traces form one family bound to both call sites. A swap proven for that family covers both of them, and no unrelated call site on the same model is touched."
+      "body": "Give a generateText call and a streamText call that both summarize the same functionId, and their traces form one family bound to both call sites. A swap validated for that family covers both of them, and no unrelated call site on the same model is touched."
     },
     {
       "title": "See what is testable before anything is billed",

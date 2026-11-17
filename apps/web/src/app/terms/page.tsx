@@ -31,12 +31,13 @@ export default function TermsPage() {
       <section className="bg-parchment-white py-16 sm:py-20">
         <Prose>
           <p className="font-mono text-caption uppercase text-fog">
-            Last updated September 22, 2026
+            Last updated November 16, 2026
           </p>
 
           <Lead>
-            Browse freely, the pre-release products may change, and every figure
-            on this site is an illustrative example. The details follow.
+            Browse freely, the pre-release products may change, and the figures
+            on this site are illustrative examples, except the customer results
+            in our case studies. The details follow.
           </Lead>
 
           <H2>Agreement</H2>
@@ -49,11 +50,11 @@ export default function TermsPage() {
           <H2>The service</H2>
           <P>
             The site describes the rightmodeler CLI, rightmodeler agent, and
-            Crucible, and offers early-access waitlists and a feedback form.
-            Products described as in development, coming soon, or in early
-            access are pre-release: their features, availability, and pricing
-            may change or be withdrawn without notice, and joining a waitlist
-            does not guarantee access.
+            Crucible, and offers waitlists and a feedback form. Products
+            described as in development, coming soon, or in early access are
+            pre-release: their features, availability, and pricing may change or
+            be withdrawn without notice, and joining a waitlist does not
+            guarantee access.
           </P>
 
           <H2>The software</H2>
@@ -71,9 +72,11 @@ export default function TermsPage() {
           <P>
             Savings percentages, quality scores, latency deltas, and similar
             numbers shown on this site are illustrative examples, labeled as
-            such. They are not measurements of your workload and not a promise
-            of results. What you can actually save is exactly what the tool
-            exists to measure, on your own traces.
+            such. The exceptions are the customer results in our case studies,
+            which come from those customers' engagements and are labeled
+            measured, modeled or projected. None of them is a measurement of
+            your workload or a promise of results. What you can actually save is
+            exactly what the tool exists to measure, on your own traces.
           </P>
 
           <H2>Acceptable use</H2>

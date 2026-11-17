@@ -50,7 +50,7 @@ export function WaitlistForm({
   if (state.status === "success") {
     return (
       <p className="max-w-md text-body text-midnight-ink">
-        You’re on the list. We’ll be in touch when early access opens.
+        You’re on the list. We’ll send one note when it opens.
       </p>
     );
   }
@@ -78,7 +78,7 @@ export function WaitlistForm({
           disabled={submitting}
           className="inline-flex shrink-0 items-center justify-center rounded-xl bg-midnight-ink px-5 py-3 text-body font-medium text-parchment-white transition-transform duration-150 ease-out-strong active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white disabled:opacity-60"
         >
-          {submitting ? "Sending…" : "Get early access"}
+          {submitting ? "Sending…" : "Join the waitlist"}
         </button>
       </div>
       {state.status === "error" && (

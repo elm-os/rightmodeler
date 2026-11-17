@@ -8,7 +8,7 @@
   "title": "Envoy AI Gateway, now Agent Router: replay and spans",
   "description": "Replay and judge through Agent Router, formerly Envoy AI Gateway, and read its OpenInference spans as traces. Verified on v1.1.0 standalone and on Kubernetes.",
   "h1": "rightmodeler + Agent Router (formerly Envoy AI Gateway)",
-  "lede": "Agent Router, the Apache 2.0 gateway built on Envoy and renamed from Envoy AI Gateway in September 2026, can serve both ends of the audit: the source of the traces rightmodeler replays, and the route it replays and judges through. It runs as Kubernetes resources for teams already on a cluster, or standalone with aigw run.",
+  "lede": "Agent Router, the Apache 2.0 gateway built on Envoy and renamed from Envoy AI Gateway in September 2026, can serve both ends of a validation run: the source of the traces rightmodeler replays, and the route it replays and judges through. It runs as Kubernetes resources for teams already on a cluster, or standalone with aigw run.",
   "tldr": "rightmodeler reads the gateway's default OpenInference spans. From each span's request body it takes the model your application asked for and the conversation exactly as sent, groups calls into runs by agent-session-id, and names families from a header you map. The same gateway serves as the replay route: its /v1/models lists only the models your routes declare and carries no prices, so pass --catalog-reference with the upstream's public model list to fill pricing, context windows and capabilities. Declare each replay model under its upstream id with no fallback or override, and a response another model answered is left out of the evidence instead of graded. Verified live on v1.1.0: spans and replay standalone, and replay on a kind cluster with the Helm charts.",
   "steps": [
     {
@@ -94,7 +94,7 @@
       "body": "Every call that passes through the gateway is recorded as your application sent it, so services written in different languages are traced the same way, without instrumenting each of them. The same gateway then carries the replays."
     },
     {
-      "title": "Audit on the cluster you already run",
+      "title": "Validate on the cluster you already run",
       "body": "On Kubernetes, the gateway's routes are resources your platform team already reviews. Set the tracing endpoint through the ai-gateway-helm chart's extProc.extraEnvVars and the header mapping through controller.spanRequestHeaderAttributes, and the replay route is declared like any other route."
     },
     {
@@ -103,7 +103,7 @@
     },
     {
       "title": "Keep your own replays out of the next corpus",
-      "body": "With x-rightmodeler-replay mapped to a span attribute and sent on every replay and judge call, the next export of the gateway's spans leaves rightmodeler's own traffic out as replay_traffic, so earlier replays never become the recorded outputs the next audit compares candidates against."
+      "body": "With x-rightmodeler-replay mapped to a span attribute and sent on every replay and judge call, the next export of the gateway's spans leaves rightmodeler's own traffic out as replay_traffic, so earlier replays never become the recorded outputs the next run compares candidates against."
     }
   ],
   "limits": [

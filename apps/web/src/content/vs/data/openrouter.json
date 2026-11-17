@@ -7,16 +7,16 @@
   "verdict": "complement",
   "verdictLabel": "Complement · rightmodeler runs on top",
   "title": "rightmodeler vs OpenRouter: the market vs your traces",
-  "description": "OpenRouter routes live traffic and, on Auto, picks models from community spend. rightmodeler replays your traces against outputs you accepted. They compose.",
+  "description": "OpenRouter carries live traffic and, on Auto, picks models from community spend. rightmodeler validates cheaper models against what you shipped. They compose.",
   "h1": "rightmodeler vs OpenRouter",
-  "lede": "One is a gateway that carries your live model calls and now ships its own answer to which model, ranked by what the market spends. The other audits offline, judging candidates per step against the outputs you already accepted, with its bench running on your own OpenRouter key.",
+  "lede": "One is a gateway that carries your live model calls and now ships its own answer to which model, ranked by what the market spends. The other validates cheaper models offline, judging candidates per step against the outputs you already accepted, and can run its replays on your own OpenRouter key.",
   "integrationSlug": "openrouter",
   "related": ["litellm", "vercel-ai-gateway", "not-diamond"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Hire OpenRouter to carry live traffic: one key, one OpenAI-compatible API, a live catalog of 400+ models from 70+ providers, with provider pricing passed through at no markup on inference. Hire rightmodeler to decide which model belongs at each step of your agent: it replays your recorded traces (a trace is the record of what your agent actually did) through cheaper candidates and judges them against the outputs you accepted. Mostly they compose; the audit's default bench runs on your own OpenRouter key. They compete on exactly one question, which model, and they answer it from different evidence: Auto ranks candidates by what the whole community spent on that task type over a trailing 7-day window, their Ori Eval grades test cases it generates, and the audit grades what you shipped."
+      "body": "Hire OpenRouter to carry live traffic: one key, one OpenAI-compatible API, a live catalog of 400+ models from 70+ providers, with provider pricing passed through at no markup on inference. Hire rightmodeler to validate whether a cheaper model can take each step of your agent: it replays your recorded traces (a trace is the record of what your agent actually did) through cheaper candidates and judges them against the outputs you accepted. Mostly they compose: rightmodeler can run its replays through OpenRouter, on your own key. They compete on exactly one question, which model, and they answer it from different evidence: Auto ranks candidates by what the whole community spent on that task type over a trailing 7-day window, their Ori Eval grades test cases it generates, and rightmodeler grades against what you shipped."
     },
     {
       "type": "positioning",
@@ -28,10 +28,10 @@
         ]
       },
       "right": {
-        "heading": "rightmodeler decides at review time",
+        "heading": "rightmodeler validates before review",
         "items": [
-          "A report you run offline on traces you already have. Not observability. Not a runtime gateway. It replays each step's real inputs through cheaper candidates at temperature 0 (randomness turned off, so replays are repeatable).",
-          "Every candidate is scored by a judge drawn from a neutral third model family, against the output you accepted, position-swapped (judged twice with the order reversed, so order bias cancels). The verdict ships with reference agreement (how closely the candidate matched what you shipped: evidence of agreement, not proof of correctness), sample size, and abstentions (an abstention is a refusal to recommend when the evidence is too thin). You approve every swap."
+          "A validation run, offline, on traces you already have. Not observability. Not a runtime gateway. It replays recorded steps through cheaper candidates from the live catalog.",
+          "Every candidate is graded against the output you accepted, by a judge drawn from a neutral third model family or by your own evaluator. The built-in judge reads each pair twice with the order reversed, and a case passes only when both readings call it equivalent. The verdict comes with reference agreement (how closely the candidate matched what you shipped: evidence of agreement, not ground-truth correctness), sample size, and abstentions (an abstention is a refusal to recommend when the evidence is too thin). A person merges every swap."
         ]
       }
     },
@@ -48,7 +48,7 @@
       "right": {
         "heading": "The same stack with rightmodeler on top",
         "items": [
-          "Keep OpenRouter exactly where it is. The audit runs offline, on your key, and touches nothing in production.",
+          "Keep OpenRouter exactly where it is. A validation run works offline, on your key, and never sits in your request path.",
           "Candidates are graded step by step against answers you already accepted. The production result is the reference, not ground truth.",
           "A quality floor (a configurable minimum agreement score below which no swap is recommended) guards every verdict, and thin evidence produces an abstention instead of a recommendation."
         ]
@@ -62,17 +62,17 @@
         {
           "scenario": "You are building a new product, have no production traffic yet, and need to pick a starting model for a new feature.",
           "winner": "theirs",
-          "why": "With no traces there is nothing for rightmodeler to replay: no traces, no audit. Ori Eval scans your codebase for model call sites, interviews you, generates eval files with assertions and an LLM judge, and recommends a model. Before real usage exists, that is the right tool."
+          "why": "With no traces there is nothing for rightmodeler to replay: no traces, no validation. Ori Eval scans your codebase for model call sites, interviews you, generates eval files with assertions and an LLM judge, and recommends a model. Before real usage exists, that is the right tool."
         },
         {
           "scenario": "A cheaper model looks plausible for your extraction step, and you need to know it actually matches what you shipped before you commit.",
           "winner": "ours",
-          "why": "The audit replays the step's real recorded inputs, and a neutral third-family judge scores each candidate against the output you accepted, with sample size reported and abstentions when the evidence is thin. A 7-day spend ranking has no memory of what you shipped, and a single hand-run trial is one draw from a distribution research shows to be wide and lopsided."
+          "why": "rightmodeler replays the step's real recorded inputs, and a neutral third-family judge scores each candidate against the output you accepted, with sample size reported and abstentions when the evidence is thin. A 7-day spend ranking has no memory of what you shipped, and a single hand-run trial is one draw from a distribution research shows to be wide and lopsided."
         },
         {
-          "scenario": "The audit found a swap you approved, and you also want multi-provider uptime for the model you are moving to.",
+          "scenario": "rightmodeler validated a swap you plan to merge, and you also want multi-provider uptime for the model you are moving to.",
           "winner": "both",
-          "why": "The audit names a model; where you serve it is up to you. rightmodeler benched the candidates through OpenRouter on your key, and serving the approved model through OpenRouter afterward buys the one-key breadth and multi-provider uptime the audit never provides."
+          "why": "rightmodeler names a model; where you serve it is up to you. It replayed the candidates through OpenRouter on your key, and serving the new model through OpenRouter afterward buys the one-key breadth and multi-provider uptime rightmodeler never provides."
         }
       ]
     },
@@ -106,7 +106,7 @@
         {
           "dimension": "decides",
           "theirs": "per request, at the gateway",
-          "ours": "per step, in a report you review"
+          "ours": "per step, offline, in evidence and a draft pull request you review"
         },
         {
           "dimension": "reference",
@@ -121,7 +121,7 @@
         {
           "dimension": "in your request path",
           "theirs": "yes, it is the gateway",
-          "ours": "never; it is a report"
+          "ours": "never; it runs offline"
         },
         {
           "dimension": "quality bar",
@@ -130,18 +130,18 @@
         },
         {
           "dimension": "who applies the change",
-          "theirs": "the router, per request",
-          "ours": "you; the audit recommends and ranks"
+          "theirs": "Auto, per request, when you let it choose",
+          "ours": "a person, by merging the draft pull request rightmodeler opens"
         }
       ]
     },
     {
       "type": "stack",
-      "heading": "rightmodeler runs its bench through OpenRouter",
+      "heading": "rightmodeler replays through OpenRouter",
       "intro": "Setup is a single environment variable.",
       "paragraphs": [
-        "The audit shortlists cheaper candidates from OpenRouter's live catalog, replays your steps at temperature 0, runs a judge from a third model family, and prices every call at what OpenRouter actually charged. Setup details live on the integration page.",
-        "Your production traffic never passes through the audit's key; before and after, requests flow wherever they already flow. If you approve a swap, serve the model there or anywhere else: the audit borrowed OpenRouter as a bench; nothing in what you ship depends on it."
+        "rightmodeler shortlists cheaper candidates from OpenRouter's live catalog, replays your recorded steps, runs a judge from a third model family, and prices every call at what OpenRouter reports it charged. Setup details live on the integration page.",
+        "Your production traffic never passes through the replay key; before and after, requests flow wherever they already flow. If you merge a swap, serve the model there or anywhere else: rightmodeler borrowed OpenRouter for its replays; nothing in what you ship depends on it."
       ],
       "commands": [
         {
@@ -154,9 +154,9 @@
       "type": "prose",
       "heading": "The honest part",
       "paragraphs": [
-        "OpenRouter works on day one with zero history. One key reaches 400+ models, and it keeps production flowing while rightmodeler never touches live traffic at all. rightmodeler needs recorded traces before it can say anything; no traces, no audit.",
-        "OpenRouter also gives you continuous gateway-side visibility with no pipeline changes: Classifiers (in beta) tag each generation against your taxonomy, and the Activity Explorer shows which models handle which tasks and where spend goes. The rightmodeler CLI is a point-in-time report you choose to run.",
-        "One more honest number, and it cuts both ways. In the study How Do AI Agents Spend Your Money? (Bai et al., arXiv:2604.22750), a team from Michigan, Stanford, MIT, Google DeepMind, and All Hands AI repeated 500 real GitHub issues four times over on eight frontier models and recorded every token; total usage swung as much as thirtyfold between runs where nothing changed except chance. That variance is why any single-run impression of a model proves very little, whichever tool produced it. It is also why rightmodeler reports sample size beside every recommendation and abstains when the evidence is thin. Some audits end in abstentions instead of savings, and that possibility is precisely what makes the savings believable when they do appear."
+        "OpenRouter works on day one with zero history. One key reaches 400+ models, and it keeps production flowing while rightmodeler never touches live traffic at all. rightmodeler needs recorded traces before it can say anything; no traces, no validation.",
+        "OpenRouter also gives you continuous gateway-side visibility with no pipeline changes: Classifiers (in beta) tag each generation against your taxonomy, and the Activity Explorer shows which models handle which tasks and where spend goes. The rightmodeler CLI validates at a point in time, when you or your CI run it, and never watches live traffic.",
+        "One more honest number, and it cuts both ways. In the study How Do AI Agents Spend Your Money? (Bai et al., arXiv:2604.22750), a team from Michigan, Stanford, MIT, Google DeepMind, and All Hands AI repeated 500 real GitHub issues four times over on eight frontier models and recorded every token; total usage swung as much as thirtyfold between runs where nothing changed except chance. That variance is why any single-run impression of a model says very little, whichever tool produced it. It is also why rightmodeler reports sample size beside every recommendation and abstains when the evidence is thin. Some validation runs end in abstentions instead of savings, and that possibility is precisely what makes the savings believable when they do appear."
       ]
     },
     {
@@ -175,17 +175,17 @@
         },
         {
           "term": "quality floor",
-          "def": "The configurable minimum agreement score a candidate must clear before the audit will recommend a swap.",
+          "def": "The configurable minimum agreement score a candidate must clear before rightmodeler will recommend a swap.",
           "slug": "quality-floor"
         },
         {
           "term": "swap candidate",
-          "def": "A cheaper model the audit shortlists, replays, and judges for one specific step.",
+          "def": "A cheaper model rightmodeler shortlists, replays, and judges for one specific step.",
           "slug": "swap-candidate"
         },
         {
           "term": "abstain",
-          "def": "The audit's decision to make no recommendation when the evidence or sample is too weak to support one.",
+          "def": "rightmodeler's decision to make no recommendation when the evidence or sample is too weak to support one.",
           "slug": "abstain"
         }
       ]
@@ -195,15 +195,15 @@
       "items": [
         {
           "q": "Does rightmodeler replace OpenRouter?",
-          "a": "No. OpenRouter serves live traffic; rightmodeler is a report on traffic you already served. It is a report, not a runtime gateway; it never sits in your request path. The default bench for that report even runs through OpenRouter, on your key."
+          "a": "No. OpenRouter serves live traffic; rightmodeler validates, offline, on traffic you already served. It is not a runtime gateway; it never sits in your request path. Its replays can even run through OpenRouter, on your key."
         },
         {
-          "q": "OpenRouter's Auto router already picks a model for me. Why audit?",
-          "a": "Auto picks per request from what the community spent on that task type over the last week, inside your cost tier. That is a sensible default for a hands-off chat product, and it never looks at your outputs. The audit fixes one model per step and shows its evidence: reference agreement with what you shipped, sample size, and abstentions. A model decision deserves evidence, not a vibe."
+          "q": "OpenRouter's Auto router already picks a model for me. Why validate?",
+          "a": "Auto picks per request from what the community spent on that task type over the last week, inside your cost tier. That is a sensible default for a hands-off chat product, and it never looks at your outputs. rightmodeler validates one pinned model per step and shows its evidence: reference agreement with what you shipped, sample size, and abstentions. A model decision deserves evidence, not a vibe."
         },
         {
-          "q": "How is the audit different from Ori Eval?",
-          "a": "Ori Eval scans your codebase, interviews you, generates eval files with assertions and an LLM judge, and recommends a model; its test cases come from what it finds in your repo and your interview answers, and it can fold in data files it discovers there, but it does not replay recorded production traces against outputs you accepted. The audit replays your real traces and judges candidates against outputs you already accepted. Neither result is ground truth; the audit measures agreement with what you shipped, which is exactly the bar a downgrade has to clear."
+          "q": "How is rightmodeler different from Ori Eval?",
+          "a": "Ori Eval scans your codebase, interviews you, generates eval files with assertions and an LLM judge, and recommends a model; its test cases come from what it finds in your repo and your interview answers, and it can fold in data files it discovers there, but it does not replay recorded production traces against outputs you accepted. rightmodeler replays your real traces and judges candidates against outputs you already accepted. Neither result is ground truth; rightmodeler measures agreement with what you shipped, which is exactly the bar a swap to a cheaper model has to clear."
         },
         {
           "q": "Does an approved swap lock me into OpenRouter?",
@@ -211,7 +211,7 @@
         },
         {
           "q": "What does each one cost?",
-          "a": "The rightmodeler CLI is free, on npm and GitHub; you pay for the audit's own calls on your OpenRouter key, and the report lists that spend line by line. OpenRouter's side of the bill is the provider's own pricing with no markup on inference; buying credits carries a small purchase fee."
+          "a": "The rightmodeler CLI is free, on npm and GitHub; you pay for its replay and judge calls on your OpenRouter key, and the report states that spend. OpenRouter's side of the bill is the provider's own pricing with no markup on inference; buying credits carries a small purchase fee."
         }
       ]
     }

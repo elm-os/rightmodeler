@@ -12,7 +12,7 @@ export const meta: PostMeta = {
     "You approve the run and nobody knows the price, including the agent about to spend it. What a new paper on agent token costs actually measured, and what it changes about picking models.",
   kicker: "Research · Token economics",
   date: "2026-08-06",
-  readingMinutes: 7,
+  readingMinutes: 8,
   hero: {
     src: "/blog/nobody-can-predict-the-bill-hero.jpg",
     alt: "A warm parchment field where one short muted stroke stops early and a long grain-textured stroke runs on in rightmodeler's violet and orange brand accents.",
@@ -169,32 +169,37 @@ export function Body() {
       </P>
 
       <P>
-        That one result is what makes model routing a real lever instead of a
-        hope. If cost were a property of the task, swapping models would only
-        move the same bill around. Because it is a property of the model, the
-        same step can be handed to a different one and genuinely cost less for
-        the same output. And because expert intuition only tracks cost at 0.32,
-        you cannot work out which steps to hand over by staring at your pipeline
-        and deciding which parts look hard. You have to measure them.
+        That one result is what makes choosing the model for each step a real
+        lever instead of a hope. If cost were a property of the task, swapping
+        models would only move the same bill around. Because it is a property of
+        the model, the same step can be handed to a different one and genuinely
+        cost less for the same output. And because expert intuition only tracks
+        cost at 0.32, you cannot work out which steps to hand over by staring at
+        your pipeline and deciding which parts look hard. You have to measure
+        them.
       </P>
 
       <H2>Where this cuts against us</H2>
 
       <P>
         It would be dishonest to write all that up without naming the part that
-        is inconvenient for us. rightmodeler replays your real traces through
-        cheaper candidate models and measures the results against outputs you
-        already accepted. The variance finding applies to that too. A single
-        replay of a single trace is one draw from a distribution this paper
-        shows to be wide and lopsided. One replay proves very little.
+        is inconvenient for us. rightmodeler validates model swaps by replaying
+        your recorded traces on cheaper candidate models and measuring agreement
+        with the outputs you already accepted. The variance finding applies to
+        that too. A single replay of a single trace is one draw from a
+        distribution this paper shows to be wide and lopsided. One replay tells
+        you very little.
       </P>
 
       <P>
-        It is why the tool reports sample size beside every recommendation, and
-        why it abstains rather than guessing when the evidence under a step is
-        thin. A tool that always finds you a saving is not measuring anything.
-        We cannot make agent cost predictable. Neither can anyone else, which is
-        rather the point. What we can do is stop asking anybody to forecast it.
+        That is why a swap counts only when the statistical lower bound on
+        agreement, not the average, reaches your quality floor, on held-out
+        cases the candidate was not chosen on. It is also why the tool reports
+        sample size beside every recommendation, and why it abstains rather than
+        guessing when the evidence under a step is thin. A tool that always
+        finds you a saving is not measuring anything. We cannot make agent cost
+        predictable. Neither can anyone else, which is rather the point. What we
+        can do is stop asking anybody to forecast it.
       </P>
 
       <H2>What to do on Monday</H2>
@@ -206,16 +211,25 @@ export function Body() {
         table shows. Stop assigning models to steps by how hard those steps
         look, because that instinct has now been measured and it is weak.
         Measure the steps you actually run, on the traces you already have, and
-        let the result choose.
+        let the evidence make the case.
       </P>
 
       <P>
-        That is all the{" "}
-        <A href="https://github.com/elm-os/rightmodeler">rightmodeler skill</A>{" "}
-        does, and it is one command to install and free to run against your own
-        traces. For the downstream version of this problem, an invoice that
-        arrives as a single number with no line items, we wrote about that in{" "}
+        That is the work rightmodeler takes out of the loop, not the judgment.
+        The <A href="https://github.com/elm-os/rightmodeler">open-source CLI</A>{" "}
+        runs on your machine or in CI, never in your request path, and starts
+        with npx rightmodeler init. A swap that clears every release gate
+        becomes a draft pull request that changes only model identifiers, with
+        the evidence attached. Today, the final yes stays yours.
+      </P>
+
+      <P>
+        For the downstream version of this problem, an invoice that arrives as a
+        single number with no line items, we wrote about that in{" "}
         <A href="/blog/the-bill-nobody-can-read">the bill nobody can read</A>.
+        For our case that the human work in the loop is the bottleneck in
+        maintaining production AI, read{" "}
+        <A href="/blog/the-job-nobody-can-staff">the job nobody can staff</A>.
         And read the paper. It is careful work, honest about its own limits, and
         worth the hour.
       </P>
@@ -264,17 +278,19 @@ The finding that changed how we think about our own product is the quietest one 
 
 So the authors removed that explanation. They pulled out the 230 tasks that every model solved and the 100 that every model failed, and looked again. The ranking held. On identical problems, with identical outcomes, some models simply spend far more than others. Token efficiency turns out to be a trait a model brings with it, closer to verbosity than to difficulty.
 
-That one result is what makes model routing a real lever instead of a hope. If cost were a property of the task, swapping models would only move the same bill around. Because it is a property of the model, the same step can be handed to a different one and genuinely cost less for the same output. And because expert intuition only tracks cost at 0.32, you cannot work out which steps to hand over by staring at your pipeline and deciding which parts look hard. You have to measure them.
+That one result is what makes choosing the model for each step a real lever instead of a hope. If cost were a property of the task, swapping models would only move the same bill around. Because it is a property of the model, the same step can be handed to a different one and genuinely cost less for the same output. And because expert intuition only tracks cost at 0.32, you cannot work out which steps to hand over by staring at your pipeline and deciding which parts look hard. You have to measure them.
 
 ## Where this cuts against us
 
-It would be dishonest to write all that up without naming the part that is inconvenient for us. rightmodeler replays your real traces through cheaper candidate models and measures the results against outputs you already accepted. The variance finding applies to that too. A single replay of a single trace is one draw from a distribution this paper shows to be wide and lopsided. One replay proves very little.
+It would be dishonest to write all that up without naming the part that is inconvenient for us. rightmodeler validates model swaps by replaying your recorded traces on cheaper candidate models and measuring agreement with the outputs you already accepted. The variance finding applies to that too. A single replay of a single trace is one draw from a distribution this paper shows to be wide and lopsided. One replay tells you very little.
 
-It is why the tool reports sample size beside every recommendation, and why it abstains rather than guessing when the evidence under a step is thin. A tool that always finds you a saving is not measuring anything. We cannot make agent cost predictable. Neither can anyone else, which is rather the point. What we can do is stop asking anybody to forecast it.
+That is why a swap counts only when the statistical lower bound on agreement, not the average, reaches your quality floor, on held-out cases the candidate was not chosen on. It is also why the tool reports sample size beside every recommendation, and why it abstains rather than guessing when the evidence under a step is thin. A tool that always finds you a saving is not measuring anything. We cannot make agent cost predictable. Neither can anyone else, which is rather the point. What we can do is stop asking anybody to forecast it.
 
 ## What to do on Monday
 
-The practical version of this paper is smaller than the paper. Stop reading a model's list price as its cost to you, because in agentic work the bill is dominated by re-reading context that no pricing table shows. Stop assigning models to steps by how hard those steps look, because that instinct has now been measured and it is weak. Measure the steps you actually run, on the traces you already have, and let the result choose.
+The practical version of this paper is smaller than the paper. Stop reading a model's list price as its cost to you, because in agentic work the bill is dominated by re-reading context that no pricing table shows. Stop assigning models to steps by how hard those steps look, because that instinct has now been measured and it is weak. Measure the steps you actually run, on the traces you already have, and let the evidence make the case.
 
-That is all the [rightmodeler skill](https://github.com/elm-os/rightmodeler) does, and it is one command to install and free to run against your own traces. For the downstream version of this problem, an invoice that arrives as a single number with no line items, we wrote about that in [the bill nobody can read](https://www.rightmodeler.com/blog/the-bill-nobody-can-read). And read the paper. It is careful work, honest about its own limits, and worth the hour.
+That is the work rightmodeler takes out of the loop, not the judgment. The [open-source CLI](https://github.com/elm-os/rightmodeler) runs on your machine or in CI, never in your request path, and starts with npx rightmodeler init. A swap that clears every release gate becomes a draft pull request that changes only model identifiers, with the evidence attached. Today, the final yes stays yours.
+
+For the downstream version of this problem, an invoice that arrives as a single number with no line items, we wrote about that in [the bill nobody can read](https://www.rightmodeler.com/blog/the-bill-nobody-can-read). For our case that the human work in the loop is the bottleneck in maintaining production AI, read [the job nobody can staff](https://www.rightmodeler.com/blog/the-job-nobody-can-staff). And read the paper. It is careful work, honest about its own limits, and worth the hour.
 `;

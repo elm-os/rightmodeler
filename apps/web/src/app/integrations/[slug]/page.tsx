@@ -267,12 +267,13 @@ export default async function IntegrationPage({
               {data.cta === "crucible" ? (
                 <>
                   <h2 className="font-sans text-heading-sm text-midnight-ink">
-                    Deeper {data.name} support arrives with Crucible
+                    Crucible will add the instruments.
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
-                    Crucible is the analytics and optimization suite in
-                    development. Join the waitlist and it will meet your stack
-                    where it runs.
+                    The self-hosted rightmodeler agent runs the maintenance loop
+                    on a schedule today. Crucible, the analytics and
+                    optimization suite in development, is designed to track cost
+                    per layer, speed per step, and failures as they happen.
                   </p>
                   <div className="mt-5">
                     <Link href="/crucible" className={pillPrimary}>
@@ -283,18 +284,18 @@ export default async function IntegrationPage({
               ) : (
                 <>
                   <h2 className="font-sans text-heading-sm text-midnight-ink">
-                    Run the audit on your own traces
+                    Start with the traces you already have.
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
                     {data.reads.length > 0 ? (
                       <>
-                        The CLI runs from npx, nothing to install; your{" "}
-                        {data.name} traces do the rest.
+                        The CLI runs from npx, nothing to install, and validates
+                        cheaper models on your traces from {data.name}.
                       </>
                     ) : (
                       <>
-                        The CLI runs from npx, nothing to install; the traces
-                        you already have do the rest.
+                        The CLI runs from npx, nothing to install, and validates
+                        cheaper models on your own traces.
                       </>
                     )}
                   </p>

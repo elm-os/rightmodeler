@@ -7,7 +7,7 @@
   "verdict": "different-job",
   "verdictLabel": "Different job · code changes vs model choice",
   "title": "rightmodeler vs Jardinero: code fixes vs model choice",
-  "description": "Jardinero, a self-hosted AI engineer, fixes logged errors, implements tickets, and tends pull requests. rightmodeler measures which model your app's steps need.",
+  "description": "Jardinero, a self-hosted AI engineer, fixes logged errors, implements tickets, and tends pull requests. rightmodeler validates cheaper models for your app.",
   "h1": "rightmodeler vs Jardinero",
   "lede": "Jardinero is an always-on AI engineer you host yourself: it reads your production logs, implements the tickets you assign, and keeps pull requests moving, each in a throwaway sandbox. rightmodeler settles one narrower question with evidence: can a cheaper model take this step of your own AI product without losing what you accepted?",
   "integrationSlug": "",
@@ -45,7 +45,7 @@
         {
           "dimension": "question answered",
           "theirs": "what is broken or asked for, and which code change resolves it",
-          "ours": "which model each step needs, and whether a cheaper one holds up"
+          "ours": "whether a cheaper model holds up at each step"
         },
         {
           "dimension": "who does the work",
@@ -60,7 +60,7 @@
         {
           "dimension": "what stands behind it",
           "theirs": "your test suite and, for tickets, its own verifier checking the work against the ticket's criteria",
-          "ours": "replays on your recorded inputs, graded against the output you accepted, with a floor re-cleared on held-out cases"
+          "ours": "replays on your recorded inputs, graded against the output you accepted, with a floor cleared on held-out cases"
         },
         {
           "dimension": "a failing check",
@@ -97,7 +97,7 @@
         {
           "scenario": "Your product's agent pins a frontier model on every step. The bill keeps climbing, and nobody can say which steps need that model.",
           "winner": "ours",
-          "why": "rightmodeler replays each step's recorded inputs through cheaper candidates from your provider's live catalog, judges them against the outputs you accepted, requires a winner to clear the quality floor again on held-out cases, and abstains where the evidence is thin. The change arrives as a draft pull request that touches model identifiers only."
+          "why": "rightmodeler replays the recorded steps through cheaper candidates from your provider's live catalog, judges them against the outputs you accepted, requires a winner to clear the quality floor on held-out cases, and abstains where the evidence is thin. The change arrives as a draft pull request that touches model identifiers only."
         },
         {
           "scenario": "You ship an AI product from a repository Jardinero already tends.",
@@ -119,9 +119,9 @@
       "right": {
         "heading": "Jardinero with rightmodeler beside it",
         "items": [
-          "Everything on the left stays. The audit reads the model calls your app already recorded and adds a per-step answer to one question: does this step need the model it pays for?",
+          "Everything on the left stays. rightmodeler reads the model calls your app already recorded and adds a per-step answer to one question: does this step need the model it pays for?",
           "Candidates come from your configured provider's live catalog and are judged against the output you accepted, either by a judge from a model family neither side belongs to or by your own evaluator.",
-          "A swap has to clear the quality floor again on held-out cases, multi-step swaps are confirmed end to end, and thin evidence ends in an abstention. What clears every gate becomes a draft pull request that a human reviews and merges."
+          "A swap has to clear the quality floor on held-out cases, swaps that feed later model steps are confirmed end to end in a sandbox, and thin evidence ends in an abstention. What clears every gate becomes a draft pull request that a human reviews and merges."
         ]
       }
     },
@@ -130,7 +130,7 @@
       "heading": "Running both on one repository",
       "intro": "There is no integration between the two, and none is needed.",
       "paragraphs": [
-        "Run the audit from the repository Jardinero tends, on traces from your own logging, such as OpenTelemetry GenAI exports, LangSmith or Langfuse exports, or Claude Code and Codex session logs. Keep .rightmodeler/ in .gitignore, as the README's quick start says: the store holds content from your traces, and an ignored directory never reaches a branch or a sandbox clone. Trace files are a separate decision: any you commit to the repository travel with every clone, a coding agent's sandbox included.",
+        "Run rightmodeler from the repository Jardinero tends, on traces from your own logging, such as OpenTelemetry GenAI exports, LangSmith or Langfuse exports, or Claude Code and Codex session logs. Keep .rightmodeler/ in .gitignore, as the README's quick start says: the store holds content from your traces, and an ignored directory never reaches a branch or a sandbox clone. Trace files are a separate decision: any you commit to the repository travel with every clone, a coding agent's sandbox included.",
         "The run writes report.md with a verdict per step family. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers only and requests review from the owners of the files it touches. Let rightmodeler watch answer the review comments on that draft with the stored evidence, and do not tag Jardinero on it, so the diff stays what the evidence covers.",
         "One thing to check before that draft is marked ready. rightmodeler apply names its branch with the prefix most common among your repository's recent branches, and per Jardinero's docs, as of 2026-10-11, its pull request sweep takes up any pull request that is not a draft and sits on a branch with its own prefix. Run rightmodeler apply --dry-run to see the branch it would use. If it carries the prefix of Jardinero's branches, keep the swap a draft until a person is about to merge it."
       ],
@@ -150,7 +150,7 @@
       "heading": "Where the lines really fall",
       "paragraphs": [
         "Same ending, different cargo. Both end in a pull request and both leave the merge to a person: Jardinero's README says every result comes back as a pull request a person reviews, its site lists review and merge as your step, and rightmodeler never merges. What differs is what the pull request carries. Jardinero's carries code a coding agent wrote. rightmodeler's carries a model identifier that a measurement chose, and a diff check refuses anything else.",
-        "What stands behind each change is different in kind. Jardinero leans on your test suite and, for tickets, a verifier that checks the work against the ticket's criteria, per its docs. rightmodeler leans on your own history: each step's recorded inputs replayed on the candidate, every answer graded against the output you accepted, a quality floor cleared again on held-out cases, and an abstention with a named reason where the sample is thin. A passing score means the candidate agreed with what you shipped, not that either answer was correct: the production result is the reference, not ground truth.",
+        "What stands behind each change is different in kind. Jardinero leans on your test suite and, for tickets, a verifier that checks the work against the ticket's criteria, per its docs. rightmodeler leans on your own history: recorded inputs replayed on the candidate, every answer graded against the output you accepted, a quality floor cleared on held-out cases, and an abstention with a named reason where the sample is thin. A passing score means the candidate agreed with what you shipped, not that either answer was correct: the production result is the reference, not ground truth.",
         "Hosting and keys are not the dividing line. Jardinero is self-hosted, on your own Codex auth and sandbox account. rightmodeler has no server, account, or telemetry, and its replays send each step's recorded inputs, and the recorded output for judging, to the model provider you configure, under your own key. Choose on the job, not on where it runs."
       ]
     },
@@ -165,22 +165,22 @@
         },
         {
           "term": "reference evidence",
-          "def": "Scores measured against the output you actually shipped for that exact step. Evidence of agreement with shipped output, not proof of correctness: the production result is the reference, not ground truth.",
+          "def": "Scores measured against the output you actually shipped for that exact step. Evidence of agreement with shipped output, not ground-truth correctness: the production result is the reference.",
           "slug": "reference-evidence"
         },
         {
           "term": "quality floor",
-          "def": "The minimum agreement a candidate must clear, and clear again on held-out cases, before the audit will recommend a swap. Configurable, and anything below it is a no.",
+          "def": "The minimum agreement a candidate must clear on held-out cases before rightmodeler will recommend a swap. Configurable, and anything below it is a no.",
           "slug": "quality-floor"
         },
         {
           "term": "cascade risk",
-          "def": "The chance that a cheaper model at one step quietly degrades the later steps that build on its output. Swaps that could cascade are confirmed by running the pipeline end to end before they are recommended.",
+          "def": "The chance that a cheaper model at one step quietly degrades the later steps that build on its output. Swaps that could cascade are confirmed by running your app end to end in a sandbox before they are recommended.",
           "slug": "cascade-risk"
         },
         {
           "term": "abstain",
-          "def": "The audit's decision to recommend nothing for a step when the sample is small or the evidence is mixed, with the reason named. The current model stays.",
+          "def": "rightmodeler's decision to recommend nothing for a step when the sample is small or the evidence incomplete, with the reason named. The current model stays.",
           "slug": "abstain"
         }
       ]
@@ -190,7 +190,7 @@
       "items": [
         {
           "q": "Does rightmodeler replace Jardinero?",
-          "a": "No. Jardinero does engineering work: it fixes errors it finds in your logs, implements tickets, and keeps pull requests moving. rightmodeler is an offline audit of the model calls in the AI product you ship, and its pull request changes model identifiers only. Run both and you hand them different questions."
+          "a": "No. Jardinero does engineering work: it fixes errors it finds in your logs, implements tickets, and keeps pull requests moving. rightmodeler is an offline validation framework for model swaps in the AI product you ship, and its pull request changes model identifiers only. Run both and you hand them different questions."
         },
         {
           "q": "Both open pull requests. What is different about rightmodeler's?",
@@ -198,7 +198,7 @@
         },
         {
           "q": "Couldn't I assign Jardinero a ticket to switch a step to a cheaper model?",
-          "a": "You could, and per its README it would treat it like any ticket: scope the work, write it in a sandbox, run your test suite, and hand back a pull request. What its README and docs do not describe, as of 2026-10-11, is replaying your recorded calls on the cheaper model and grading each answer against the output you already accepted. That measurement is the whole of what rightmodeler does, and it is what says which steps can move and which should stay."
+          "a": "You could, and per its README it would treat it like any ticket: scope the work, write it in a sandbox, run your test suite, and hand back a pull request. What its README and docs do not describe, as of 2026-10-11, is replaying your recorded calls on the cheaper model and grading each answer against the output you already accepted. That validation is the core of what rightmodeler does, and it is what says which steps can move and which should stay."
         },
         {
           "q": "What happens when a check fails on the pull request?",
@@ -206,18 +206,18 @@
         },
         {
           "q": "Can rightmodeler cut what Jardinero's own agents spend on models?",
-          "a": "No. There is no Jardinero integration, and rightmodeler does not read Jardinero's run records. Which model each of its agents runs is set in Jardinero's own configuration, per its docs. rightmodeler audits the model calls of the product you build, from traces your own logging recorded."
+          "a": "No. There is no Jardinero integration, and rightmodeler does not read Jardinero's run records. Which model each of its agents runs is set in Jardinero's own configuration, per its docs. rightmodeler validates swaps for the model calls of the product you build, from traces your own logging recorded."
         },
         {
           "q": "Does rightmodeler run continuously, like Jardinero?",
-          "a": "It does not have to. The CLI runs when you run it, on your machine or in CI, and it is never in your app's request path. For a standing cadence, the rightmodeler repository includes its own self-hosted agent, built on the same CLI: it runs the CLI on schedules and answers collaborators' mentions through a GitHub App."
+          "a": "It does not have to. The CLI runs when you run it, on your machine or in CI, and it is never in your app's request path. For a standing cadence, the rightmodeler repository includes rightmodeler agent, which you self-host today and which runs the CLI on a schedule: a weekly catalog and price check that flags cheaper new or repriced models, a daily drift check on new traces whose proposals a person approves, one regression replay for each merged swap set, and follow-up on swap pull requests as review and CI report back. It answers collaborators' mentions through a GitHub App, replays new candidates on your word, and never merges."
         },
         {
           "q": "Is Jardinero open source?",
           "a": "Yes. As of 2026-10-11 its repository is public under the MIT license, and you host it yourself: per its README you bring a host that stays up, a GitHub App, a sandbox account with Tenki, Freestyle, or Daytona, and your own ChatGPT/Codex login or OpenAI API key. The rightmodeler CLI is also MIT-licensed and free on npm and GitHub."
         },
         {
-          "q": "Does every audit end in recommended swaps?",
+          "q": "Does every validation run end in recommended swaps?",
           "a": "No, and it is designed not to. Steps with thin evidence get an abstention rather than a swap, and a clean bill is a possible outcome: the report can come back saying your current model assignments already earn their cost."
         }
       ]

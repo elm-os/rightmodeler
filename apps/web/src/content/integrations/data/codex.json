@@ -5,11 +5,11 @@
   "logo": "/integrations/logos/codex.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · replay route",
-  "title": "Codex CLI integration: replay sessions on cheaper models",
-  "description": "Run rightmodeler on the Codex rollouts already on disk: it reads each session as a trace and judges cheaper models against the result you accepted.",
+  "title": "Codex CLI integration: read your rollouts as traces",
+  "description": "Run rightmodeler on the Codex rollouts already on disk: it reads each session as a trace. Replaying Codex turns on cheaper models is not supported yet.",
   "h1": "rightmodeler + Codex CLI",
-  "lede": "Codex CLI already writes every session to disk as a rollout log. rightmodeler reads those files where they sit, measures cheaper candidates against accepted outputs, and reports the result turn by turn.",
-  "tldr": "rightmodeler ingests Codex CLI rollout logs straight from ~/.codex/sessions with a dedicated adapter, no export step, because the JSONL files are already on your machine. The adapter keys on the session_meta record, takes the model from each turn_context, gathers that turn's user messages and assistant output from the response_item records, and derives per-turn usage from the token_count events. Each turn is then replayed against cheaper candidates and scored against the answer Codex gave.",
+  "lede": "Codex CLI already writes every session to disk as a rollout log. rightmodeler reads those files where they sit and folds each one into turns with their own model and token usage. Replay cannot send Codex's recorded user messages yet, so today those turns are read but not replayed.",
+  "tldr": "rightmodeler ingests Codex CLI rollout logs straight from ~/.codex/sessions with a dedicated adapter, no export step, because the JSONL files are already on your machine. The adapter keys on the session_meta record, takes the model from each turn_context, gathers that turn's user messages and assistant output from the response_item records, and derives per-turn usage from the token_count events. Codex records those user messages as input_text blocks, which replay cannot send yet, so today each such turn is read but left out of the replay sample.",
   "steps": [
     {
       "label": "01 · Locate",
@@ -23,13 +23,13 @@
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Cheaper candidates, judged against what you accepted",
-      "body": "Each turn is replayed against cheaper candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route codex-login, the codex CLI you are signed in to, on your ChatGPT plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, choosing a judge from a vendor that is neither the candidate's nor the reference's. Verdicts are confidence lower bounds kept separate per evaluator kind."
+      "title": "Read, but not replayed yet",
+      "body": "Replay cannot send a Codex turn with a user message yet, so those turns are left out of the replay sample. Cases that replay can send go to cheaper candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route codex-login, the codex CLI you are signed in to, on your ChatGPT plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, choosing a judge from a vendor that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
       "title": "A report, and the call stays yours",
-      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
+      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback opens another pull request that restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
@@ -94,12 +94,8 @@
   "detection": "session_meta · turn_context · response_item",
   "useCases": [
     {
-      "title": "Audit a stretch of coding sessions",
-      "body": "Rollouts accumulate under one dated tree, so the audit can take a day or a week in a pass and show which step families genuinely earned the model they ran on, across everything you did."
-    },
-    {
-      "title": "Evidence before you change the default model",
-      "body": "Instead of flipping your Codex model config and watching for regressions, replay the sessions you already ran and read the per-family verdicts first. The decision gets made on evidence from your own work, not a leaderboard."
+      "title": "Read a stretch of coding sessions",
+      "body": "Rollouts accumulate under one dated tree, so one validation run can read a day or a week of sessions in a pass."
     },
     {
       "title": "Per-turn usage, not a running total",
@@ -107,19 +103,20 @@
     },
     {
       "title": "Replay through your plan",
-      "body": "No API key needed: --route codex-login replays candidates through the codex CLI you are signed in to, and --judge-route claude-login has the claude CLI you are signed in to judge them, because the judge must come from a vendor other than both the candidates' and the recorded model's (an API key for a multi-vendor gateway can judge instead). The calls count against your plans' usage limits, the same limits as your own sessions: when one is reached the run stops and names the reset time, and rerunning the same command after the reset picks up where the run stopped. These calls write no session files, so they never turn up in the rollouts you audit next."
+      "body": "No API key needed: --route codex-login replays candidates through the codex CLI you are signed in to, and --judge-route claude-login has the claude CLI you are signed in to judge them, because the judge must come from a vendor other than both the candidates' and the recorded model's (an API key for a multi-vendor gateway can judge instead). The calls count against your plans' usage limits, the same limits as your own sessions: when one is reached the run stops and names the reset time, and rerunning the same command after the reset picks up where the run stopped. These calls write no session files, so they never turn up in the rollouts you read next."
     }
   ],
   "limits": [
     "It reads rollout files from disk. It does not hook into Codex, watch live sessions, or change your Codex configuration; acting on the report stays your move.",
-    "Replay needs plain-text model call sites in the repository it scans; session files are read as traces, and the audit is built for the model calls your own code makes.",
+    "Codex records each user turn as input_text blocks, which replay cannot send yet, so today a Codex turn with a user message is read but left out of the replay sample with a recorded_messages_not_replayable warning.",
+    "Replay needs plain-text model call sites in the repository it scans; session files are read as traces, and rightmodeler is built for the model calls your own code makes.",
     "A turn needs a turn_context with a model, and a response item needs a turn to attach to. Items that arrive before any turn context, or with an unrecognized payload type, are dropped with a recorded reason rather than guessed at.",
     "Turns that produced no assistant output are left out entirely, so a session of interrupted turns can yield fewer steps than it appears to contain.",
     "Codex does not log dollar cost. Historical spend is not derived from the rollout; candidate calls are priced from what your replay endpoint reports and marked as an estimate when the provider returns none. Calls through a plan are priced at list price from a public model list, always as an estimate: a list-price equivalent, not a bill.",
     "Through a plan, rightmodeler measures the model inside a coding CLI, not the API your app calls: codex adds its own context, including your global ~/.codex/AGENTS.md, to every call, cannot set temperature or an output cap, does not report which model answered, and keeps a code tool and a patch tool registered that no setting removes, so a call can include a tool step its output does not show. The report labels this. Only cases made of system or developer messages and one user message replay that way; multi-turn cases are left out with a named reason.",
     "Plan routes run only on your own machine: rightmodeler refuses one when CI is set, and Mode B confirmation and --detach stay on an API route. Plan routes have no default limit on calls or spend: a run makes as many calls as it needs, and your plan's usage limit is the only stop.",
     "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
-    "It is a report, not a gateway. Nothing sits between Codex and its provider, and there is no rightmodeler server to see your sessions."
+    "It is not a gateway. Nothing sits between Codex and its provider, and there is no rightmodeler server to see your sessions."
   ],
   "faq": [
     {
@@ -127,7 +124,7 @@
       "a": "In ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, one JSONL file per session, written as you work. Pass a rollout or a day's folder with --traces; the format is autodetected from the session_meta record and the turn_context and response_item lines that follow it."
     },
     {
-      "q": "Do I need to export anything before running the audit?",
+      "q": "Do I need to export anything before a validation run?",
       "a": "No. Codex already writes its rollouts to local disk, so there is no dashboard to visit and no export API to call. Replay needs either the key for an OpenAI-compatible endpoint you replay through, or no key at all with --route codex-login --judge-route claude-login, which run through the codex and claude CLIs you are signed in to. The judge runs on the other CLI because it must come from a vendor other than both the candidates' and the recorded model's. When a plan reaches its usage limit, the run stops and names the reset time, and the same command picks up where it stopped after the reset. npx rightmodeler docs model-routes prints the full guide to both routes."
     },
     {
@@ -140,11 +137,11 @@
     },
     {
       "q": "Does my session data leave my machine?",
-      "a": "Only during replay, when step inputs go to candidate models and the judge: through the endpoint you configured, under your own key, the same class of call Codex made to produce the log in the first place, or through the codex and claude CLIs you are signed in to, where OpenAI and Anthropic handle them under your plan accounts' data settings. There is no rightmodeler server and no account."
+      "a": "Only during replay, when step inputs go to candidate models and the recorded and candidate outputs go to the judge: through the endpoint you configured, under your own key, the same class of call Codex made to produce the log in the first place, or through the codex and claude CLIs you are signed in to, where OpenAI and Anthropic handle them under your plan accounts' data settings. There is no rightmodeler server and no account."
     },
     {
       "q": "What about turns where Codex ran commands or edited files?",
-      "a": "Those tool calls and their outputs are part of the turn's recorded output, so the judge sees what the model actually did rather than a stripped answer. Where a turn's result can feed later model-authored steps, confirmation runs your pipeline in a container with the candidate swapped in, and without a --modeb-config the recommendation stays unconfirmed."
+      "a": "Those tool calls and their outputs are read as part of the turn's recorded output rather than stripped away. Replay cannot send a Codex turn with a user message yet, so today those turns are left out of the replay sample and nothing scores them."
     }
   ],
   "related": ["claude-code", "openai-sdk", "openrouter"],

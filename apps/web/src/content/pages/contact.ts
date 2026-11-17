@@ -3,12 +3,18 @@
 import {
   CONTACT_EMAIL,
   ISSUES_NEW_URL,
+  LINKEDIN_URL,
+  REDDIT_URL,
+  REPO_URL,
   RUN_COMMAND,
   SECURITY_URL,
   SITE_URL,
+  X_URL,
 } from "@/lib/site";
 
 export const markdown = `# Reach the people who build it.
+
+Contact
 
 rightmodeler is a small team, and every channel below reaches a person. Pick the one that matches what you have: a question, a bug, an idea, or a security report.
 
@@ -20,29 +26,23 @@ Write to ${CONTACT_EMAIL} about anything: what the CLI actually measures, whethe
 
 ## Bugs and feature requests
 
-File those in the open-source repository so the thread stays next to the code:
-
-    ${ISSUES_NEW_URL}
-
-Both have templates, and the issue you open is the one we work from. If a result looks wrong, say which step and which candidate, and we will tell you what the tool measured and why it decided that way.
+File those [in the open-source repository](${ISSUES_NEW_URL}) so the thread stays next to the code. Both have templates, and the issue you open is the one we work from. If a result looks wrong, say which step and which candidate, and we will tell you what the tool measured and why it decided that way.
 
 ## Product feedback
 
-Use the feedback form at ${SITE_URL}/feedback for rough edges, trace formats you want read, and steps the agent should never touch. It goes straight to the team and it shapes what ships next. Reach for it when there is nothing to file and nothing to look up.
+Use the [feedback form](${SITE_URL}/feedback) for rough edges, trace formats you want read, and steps the agent should never touch. It goes straight to the team and it shapes what ships next. Reach for it when there is nothing to file and nothing to look up.
 
 ## Security
 
-Do not open a public issue for a vulnerability. Email ${CONTACT_EMAIL} with what the issue is, where it lives, and how to reproduce it. We acknowledge within five business days and credit you in the release notes unless you would rather stay anonymous. The security policy carries the full scope:
-
-    ${SECURITY_URL}
+Do not open a public issue for a vulnerability. Email ${CONTACT_EMAIL} with what the issue is, where it lives, and how to reproduce it. We acknowledge within five business days and credit you in the release notes unless you would rather stay anonymous. The [security policy](${SECURITY_URL}) carries the full scope.
 
 ## What we cannot do over email
 
-We cannot look at your traces. rightmodeler runs locally, against your own traces and your own provider key, and there is no rightmodeler server holding them. If you want a second read on a result, paste the per-step summary from the report rather than the trace. It is a report, not a runtime gateway, and that holds for support too.
+We cannot look at your traces. rightmodeler runs offline, on your machine or in CI, against your own traces and your own provider key, and there is no rightmodeler server holding them. If you want a second read on a result, paste the per-step summary from the report rather than the trace. rightmodeler stays out of your request path, and support stays out of your traces.
 
 ## Follow the work
 
-Releases, measurement notes, and the occasional argument about evaluation go out on GitHub, LinkedIn, X, and Reddit.
+Releases, measurement notes, and the occasional argument about evaluation go out on [GitHub](${REPO_URL}), [LinkedIn](${LINKEDIN_URL}), [X](${X_URL}), and [Reddit](${REDDIT_URL}).
 
 ## Before you write
 
@@ -60,5 +60,5 @@ Yes. The repository is MIT licensed and CONTRIBUTING.md has the setup. Trace-for
 
 ### How do I stay in the loop?
 
-Watch the repository for releases, or follow the accounts linked above. The waitlists for the hosted agent and for Crucible each send one note when early access opens, and nothing else.
+Watch the repository for releases, or follow the accounts linked above. The waitlists for the hosted agent and for Crucible each send one note when that product opens, and nothing else.
 `;

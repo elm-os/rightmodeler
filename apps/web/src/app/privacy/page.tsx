@@ -31,7 +31,7 @@ export default function PrivacyPage() {
       <section className="bg-parchment-white py-16 sm:py-20">
         <Prose>
           <p className="font-mono text-caption uppercase text-fog">
-            Last updated October 12, 2026
+            Last updated November 16, 2026
           </p>
 
           <Lead>
@@ -70,8 +70,7 @@ export default function PrivacyPage() {
           <H2>How we use it</H2>
           <UL>
             <LI>
-              To send you the early-access note you asked for when you joined a
-              waitlist.
+              To send you the note you asked for when you joined a waitlist.
             </LI>
             <LI>To read, and usually answer, the feedback you send us.</LI>
             <LI>

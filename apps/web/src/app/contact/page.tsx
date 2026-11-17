@@ -51,7 +51,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How do I stay in the loop?",
-    a: "Watch the repository for releases, or follow the accounts linked above. The waitlists for the hosted agent and for Crucible each send one note when early access opens, and nothing else.",
+    a: "Watch the repository for releases, or follow the accounts linked above. The waitlists for the hosted agent and for Crucible each send one note when that product opens, and nothing else.",
   },
 ];
 
@@ -117,12 +117,12 @@ export default function ContactPage() {
 
           <H2>What we cannot do over email</H2>
           <P>
-            We cannot look at your traces. rightmodeler runs locally, against
-            your own traces and your own provider key, and there is no
-            rightmodeler server holding them. If you want a second read on a
-            result, paste the per-step summary from the report rather than the
-            trace. It is a report, not a runtime gateway, and that holds for
-            support too.
+            We cannot look at your traces. rightmodeler runs offline, on your
+            machine or in CI, against your own traces and your own provider key,
+            and there is no rightmodeler server holding them. If you want a
+            second read on a result, paste the per-step summary from the report
+            rather than the trace. rightmodeler stays out of your request path,
+            and support stays out of your traces.
           </P>
 
           <H2>Follow the work</H2>

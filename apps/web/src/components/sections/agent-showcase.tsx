@@ -15,23 +15,23 @@ const STEPS: {
 }[] = [
   {
     Icon: WatchSignalIcon,
-    name: "Watch",
-    body: "A weekly schedule rechecks the provider catalog and recalculates the shortlist, so a new or repriced model released in the last 90 days gets flagged per step.",
+    name: "Notice",
+    body: "A weekly schedule rechecks catalog prices and rebuilds the shortlist, so a cheaper model released in the last 90 days gets flagged per step.",
   },
   {
     Icon: ReplayLoopIcon,
     name: "Replay",
-    body: "Candidates replay your recorded calls, and swaps that could cascade are confirmed end to end in a container, so cascade failures surface early.",
+    body: "On your word, candidates replay your recorded calls, and swaps that feed later model steps are confirmed end to end in a sandbox.",
   },
   {
     Icon: QualityFloorIcon,
     name: "Judge",
-    body: "Each output is judged against what you already shipped, cross-family, with your quality floor as the bar.",
+    body: "A judge from a different vendor, or your own evaluator, grades each output against the one you accepted, with your quality floor as the bar.",
   },
   {
     Icon: PullRequestIcon,
     name: "Open the PR",
-    body: "Diff, evidence, and confidence, opened for your review. Weak evidence means no PR.",
+    body: "A draft pull request that changes only model identifiers, evidence attached, for your review. Thin evidence means no PR.",
   },
 ];
 
@@ -63,7 +63,8 @@ export function AgentShowcase() {
                 The deliverable
               </p>
               <p className="mt-2 min-h-12 text-body text-midnight-ink">
-                A one-line diff with the receipts attached.
+                A diff that changes only model identifiers, with the receipts
+                attached.
               </p>
             </div>
           </div>
@@ -74,13 +75,14 @@ export function AgentShowcase() {
             <div className="rounded-xl border border-ash-border bg-parchment-white p-5 sm:p-7">
               <p className="font-mono text-caption uppercase text-fog">TL;DR</p>
               <p className="mt-3 text-subheading text-driftwood">
-                rightmodeler agent rechecks the provider catalog every week,
-                measures candidates against outputs you accepted, and opens the
-                evidence and proposed model edit as{" "}
+                rightmodeler agent rechecks the provider catalog every week for
+                cheaper models. On your word, it does the validation work
+                unattended, and when a swap clears every gate, it opens the
+                evidence and the model edit as{" "}
                 <span className="text-midnight-ink">
-                  a pull request in your repo
+                  a draft pull request in your repo
                 </span>
-                . Model changes become code review.
+                . Today, the final yes stays yours.
               </p>
             </div>
 
@@ -89,8 +91,8 @@ export function AgentShowcase() {
                 The loop
               </p>
               <p className="mt-2 min-h-12 text-body text-midnight-ink">
-                Watch, replay, judge, open the PR. Continuous, and always inside
-                your guardrails.
+                Notice, replay, judge, open the PR. On a schedule and on your
+                word, inside the policy you set.
               </p>
             </div>
           </div>

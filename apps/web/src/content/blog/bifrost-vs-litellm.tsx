@@ -45,8 +45,8 @@ export function Body() {
         Python proxy and SDK, MIT-licensed outside its enterprise directory.
         This checklist takes them side by side in the order the work usually
         goes, ending with replay: finding out whether a cheaper model can take
-        over part of your traffic. Vendor facts come from each project&rsquo;s
-        own documentation as of{" "}
+        over one step of your pipeline. Vendor facts come from each
+        project&rsquo;s own documentation as of{" "}
         <span className="whitespace-nowrap">2026-09-24</span>. Where a point
         rests on responses we captured, the file is linked.
       </P>
@@ -390,25 +390,30 @@ export function Body() {
         an estimate.
       </P>
       <P>
-        That is the job <A href="/how-it-works">rightmodeler</A> does. It is an
-        MIT-licensed CLI on npm, started with npx rightmodeler init, that reads
-        the traces you export, replays recorded steps through cheaper candidates
-        from your provider&rsquo;s live catalog, and judges them against the
-        outputs you already accepted. It reports{" "}
+        That is the job <A href="/how-it-works">rightmodeler</A> does. It is a
+        validation framework for model swaps: an MIT-licensed CLI on npm,
+        started with npx rightmodeler init, that reads the traces you export,
+        replays recorded steps through cheaper candidates from your
+        provider&rsquo;s live catalog, and has a judge from a different vendor,
+        or your own evaluator, grade every answer against the output you already
+        accepted. It reports{" "}
         <A href="/glossary#reference-evidence">reference agreement</A>, sample
         size and <A href="/glossary#abstain">abstentions</A> beside every
-        result, requires a winner to clear your{" "}
-        <A href="/glossary#quality-floor">quality floor</A> again on held-out
-        cases, and opens a draft pull request that changes only model
-        identifiers, for a person to review and merge. It is never in your
-        request path.
+        result, and requires the statistical lower bound on a winner&rsquo;s
+        agreement to reach your{" "}
+        <A href="/glossary#quality-floor">quality floor</A> on held-out cases. A
+        swap that clears every release gate becomes a draft pull request that
+        changes only model identifiers, with the evidence attached, for a person
+        to review and merge. It runs offline, beside your app, and is never in
+        your request path.
       </P>
       <P>
         It replays through any OpenAI-compatible base URL and checks every
-        response before counting it. A response that names another model,
-        reports a cache hit, or reports a changed request is recorded as
-        substituted and never graded, and a step family with more than 5% of its
-        replays substituted abstains.{" "}
+        response before counting it. A response that names another model, or
+        that reports a cache hit or a changed request in Portkey&rsquo;s or
+        Bifrost&rsquo;s response metadata, is recorded as substituted and never
+        graded, and a step family with more than 5% of its replays substituted
+        abstains.{" "}
         <A href="/blog/llm-gateway-evaluation-pitfalls">
           How an AI gateway can invalidate your model evaluation
         </A>{" "}
@@ -425,8 +430,8 @@ export function Body() {
         <span className="wrap-anywhere">
           sha256:a8942692af7b4b89196cd8fc33653b7353488dfd58b24078fe793b8574a8084b
         </span>{" "}
-        and runs it end to end, routing to Vercel AI Gateway as an OpenAI-typed
-        custom provider. A replay through it returns:
+        and runs it end to end, with Bifrost forwarding to Vercel AI Gateway as
+        an OpenAI-typed custom provider. A replay through it returns:
       </P>
       <UL>
         <LI>
@@ -476,7 +481,7 @@ export function Body() {
         GET /api/logs/&#123;id&#125; detail per line, as one ordered run per{" "}
         <span className="whitespace-nowrap">x-bf-session-id</span>, and leaves
         failed calls, fallback answers and rightmodeler&rsquo;s own tagged
-        replays out by name. In the live test, 64 production calls in two-call
+        replays out by name. In the live test, 64 recorded calls in two-call
         sessions read back as 32 ordered runs, with the failed call and the
         fallback answer each named and excluded, and the replay leg ran inside a
         $0.25 cap with every completed call attributed to the requested model at
@@ -570,8 +575,8 @@ export function Body() {
         OpenAI endpoint. These are the vendors&rsquo; own claims, on mocks, with
         different definitions of overhead, so they do not compare directly. Time
         the gateway on your own prompts and upstreams: rightmodeler records each
-        replay&rsquo;s end-to-end latency through your gateway beside the model
-        and its cost.
+        replay&rsquo;s end-to-end latency through your gateway in its ledger,
+        beside the model and its cost.
       </P>
       <H2>The checklist on one page</H2>
       <UL>
@@ -605,7 +610,7 @@ export function Body() {
         <A href="/integrations/litellm">LiteLLM</A> have the full commands, and
         the comparisons of rightmodeler with <A href="/vs/bifrost">Bifrost</A>{" "}
         and with <A href="/vs/litellm">LiteLLM</A> cover how each fits beside a
-        replay audit. If the bill brought you here, start with{" "}
+        validation run. If the bill brought you here, start with{" "}
         <A href="/use-cases/reduce-llm-costs">reducing LLM costs</A>; for the
         method, read <A href="/how-it-works">how rightmodeler works</A>.
       </P>
@@ -618,7 +623,7 @@ export const markdown = `# Bifrost vs LiteLLM: a practical evaluation checklist.
 
 Bifrost and LiteLLM solve the same first problem: one OpenAI-compatible endpoint in front of many model providers, so your application stops caring whose SDK it talks to. Both start with a single command. The differences arrive later: where provider keys live, whether the model list says what anything costs, what the logs keep, and which routing features can quietly change the model that answers.
 
-[Bifrost](https://docs.getbifrost.ai/overview), from Maxim, is written in Go and licensed Apache 2.0. [LiteLLM](https://docs.litellm.ai/), from BerriAI, is a Python proxy and SDK, MIT-licensed outside its enterprise directory. This checklist takes them side by side in the order the work usually goes, ending with replay: finding out whether a cheaper model can take over part of your traffic. Vendor facts come from each project's own documentation as of 2026-09-24. Where a point rests on responses we captured, the file is linked.
+[Bifrost](https://docs.getbifrost.ai/overview), from Maxim, is written in Go and licensed Apache 2.0. [LiteLLM](https://docs.litellm.ai/), from BerriAI, is a Python proxy and SDK, MIT-licensed outside its enterprise directory. This checklist takes them side by side in the order the work usually goes, ending with replay: finding out whether a cheaper model can take over one step of your pipeline. Vendor facts come from each project's own documentation as of 2026-09-24. Where a point rests on responses we captured, the file is linked.
 
 ## Setup: deployment, config and keys
 
@@ -695,13 +700,13 @@ One detail is worth checking by hand on Bifrost. Its [client reference](https://
 
 The usual reason to look this closely is a model decision. A cheaper model has shipped, and you want to know whether it can take over one step of your pipeline without changing what users get. The rigorous way is to replay that step's recorded inputs through the candidate and compare the outputs with the ones your team already accepted. Your gateway is the obvious route, so the previous section now matters in reverse: each replayed response must come from the model you asked for, answer the request you sent, and carry a cost that is billed or labelled an estimate.
 
-That is the job [rightmodeler](https://www.rightmodeler.com/how-it-works) does. It is an MIT-licensed CLI on npm, started with npx rightmodeler init, that reads the traces you export, replays recorded steps through cheaper candidates from your provider's live catalog, and judges them against the outputs you already accepted. It reports [reference agreement](https://www.rightmodeler.com/glossary#reference-evidence), sample size and [abstentions](https://www.rightmodeler.com/glossary#abstain) beside every result, requires a winner to clear your [quality floor](https://www.rightmodeler.com/glossary#quality-floor) again on held-out cases, and opens a draft pull request that changes only model identifiers, for a person to review and merge. It is never in your request path.
+That is the job [rightmodeler](https://www.rightmodeler.com/how-it-works) does. It is a validation framework for model swaps: an MIT-licensed CLI on npm, started with npx rightmodeler init, that reads the traces you export, replays recorded steps through cheaper candidates from your provider's live catalog, and has a judge from a different vendor, or your own evaluator, grade every answer against the output you already accepted. It reports [reference agreement](https://www.rightmodeler.com/glossary#reference-evidence), sample size and [abstentions](https://www.rightmodeler.com/glossary#abstain) beside every result, and requires the statistical lower bound on a winner's agreement to reach your [quality floor](https://www.rightmodeler.com/glossary#quality-floor) on held-out cases. A swap that clears every release gate becomes a draft pull request that changes only model identifiers, with the evidence attached, for a person to review and merge. It runs offline, beside your app, and is never in your request path.
 
-It replays through any OpenAI-compatible base URL and checks every response before counting it. A response that names another model, reports a cache hit, or reports a changed request is recorded as substituted and never graded, and a step family with more than 5% of its replays substituted abstains. [How an AI gateway can invalidate your model evaluation](https://www.rightmodeler.com/blog/llm-gateway-evaluation-pitfalls) walks through each of those cases and how to catch them.
+It replays through any OpenAI-compatible base URL and checks every response before counting it. A response that names another model, or that reports a cache hit or a changed request in Portkey's or Bifrost's response metadata, is recorded as substituted and never graded, and a step family with more than 5% of its replays substituted abstains. [How an AI gateway can invalidate your model evaluation](https://www.rightmodeler.com/blog/llm-gateway-evaluation-pitfalls) walks through each of those cases and how to catch them.
 
 ### Through Bifrost
 
-rightmodeler's Bifrost support is verified on the open-source transports/v2.2.1 release: [a live acceptance test](https://github.com/elm-os/rightmodeler/blob/27e877e1bed77a6fcf6e8ae8a879ba995dfb0355/harness/packages/rightmodeler/src/gateway-bifrost.live.test.ts) pins the image maximhq/bifrost:v2.2.1 at digest sha256:a8942692af7b4b89196cd8fc33653b7353488dfd58b24078fe793b8574a8084b and runs it end to end, routing to Vercel AI Gateway as an OpenAI-typed custom provider. A replay through it returns:
+rightmodeler's Bifrost support is verified on the open-source transports/v2.2.1 release: [a live acceptance test](https://github.com/elm-os/rightmodeler/blob/27e877e1bed77a6fcf6e8ae8a879ba995dfb0355/harness/packages/rightmodeler/src/gateway-bifrost.live.test.ts) pins the image maximhq/bifrost:v2.2.1 at digest sha256:a8942692af7b4b89196cd8fc33653b7353488dfd58b24078fe793b8574a8084b and runs it end to end, with Bifrost forwarding to Vercel AI Gateway as an OpenAI-typed custom provider. A replay through it returns:
 
 - **Served model.** The upstream id, with Bifrost's provider prefix dropped: a call to vercel/amazon/nova-micro comes back naming amazon/nova-micro, as [this captured response](https://github.com/elm-os/rightmodeler/blob/27e877e1bed77a6fcf6e8ae8a879ba995dfb0355/harness/fixtures/gateways/bifrost/chat.json) shows. rightmodeler reads a dropped gateway prefix as the requested model.
 - **Cost.** The upstream's billed cost in usage.cost.total_cost, which rightmodeler records as billed rather than estimated.
@@ -710,7 +715,7 @@ rightmodeler's Bifrost support is verified on the open-source transports/v2.2.1 
 - **Aliases.** In the live test, a key alias that mapped a candidate to another model had every one of that candidate's replays left out as substituted.
 - **Catalog.** A custom provider lists ids and context only, so the run passes --catalog-reference with the upstream's public model list for prices, capabilities and release dates.
 
-Bifrost is also a trace source. rightmodeler reads its log export, one GET /api/logs/{id} detail per line, as one ordered run per x-bf-session-id, and leaves failed calls, fallback answers and rightmodeler's own tagged replays out by name. In the live test, 64 production calls in two-call sessions read back as 32 ordered runs, with the failed call and the fallback answer each named and excluded, and the replay leg ran inside a $0.25 cap with every completed call attributed to the requested model at its billed cost. The commands and the replay-safe config are on the [Bifrost setup guide](https://www.rightmodeler.com/integrations/bifrost).
+Bifrost is also a trace source. rightmodeler reads its log export, one GET /api/logs/{id} detail per line, as one ordered run per x-bf-session-id, and leaves failed calls, fallback answers and rightmodeler's own tagged replays out by name. In the live test, 64 recorded calls in two-call sessions read back as 32 ordered runs, with the failed call and the fallback answer each named and excluded, and the replay leg ran inside a $0.25 cap with every completed call attributed to the requested model at its billed cost. The commands and the replay-safe config are on the [Bifrost setup guide](https://www.rightmodeler.com/integrations/bifrost).
 
 ### Through LiteLLM
 
@@ -724,7 +729,7 @@ A LiteLLM proxy is a supported replay route: point --base-url at the proxy's /v1
 
 ## A word on overhead numbers
 
-Both projects publish performance figures worth reading closely before quoting. [Bifrost's benchmark page](https://docs.getbifrost.ai/benchmarking/t3.xl) reports 11 microseconds of overhead on a t3.xlarge at 5,000 requests per second, excluding JSON marshalling and the HTTP call, measured on mocked OpenAI calls. [LiteLLM's benchmarks page](https://docs.litellm.ai/docs/benchmarks) reports 8 ms P95 latency at 1,000 requests per second against a fake OpenAI endpoint. These are the vendors' own claims, on mocks, with different definitions of overhead, so they do not compare directly. Time the gateway on your own prompts and upstreams: rightmodeler records each replay's end-to-end latency through your gateway beside the model and its cost.
+Both projects publish performance figures worth reading closely before quoting. [Bifrost's benchmark page](https://docs.getbifrost.ai/benchmarking/t3.xl) reports 11 microseconds of overhead on a t3.xlarge at 5,000 requests per second, excluding JSON marshalling and the HTTP call, measured on mocked OpenAI calls. [LiteLLM's benchmarks page](https://docs.litellm.ai/docs/benchmarks) reports 8 ms P95 latency at 1,000 requests per second against a fake OpenAI endpoint. These are the vendors' own claims, on mocks, with different definitions of overhead, so they do not compare directly. Time the gateway on your own prompts and upstreams: rightmodeler records each replay's end-to-end latency through your gateway in its ledger, beside the model and its cost.
 
 ## The checklist on one page
 
@@ -734,5 +739,5 @@ Both projects publish performance figures worth reading closely before quoting. 
 - **Routing.** Every feature that can change the model, the request or the source of an answer listed, with where each gateway reports it.
 - **Replay.** One deployment per replay model; no fallbacks, aliases, caches, compat changes or dropped parameters on the replay route; a cost you know to be billed or estimated.
 
-The setup guides for [Bifrost](https://www.rightmodeler.com/integrations/bifrost) and [LiteLLM](https://www.rightmodeler.com/integrations/litellm) have the full commands, and the comparisons of rightmodeler with [Bifrost](https://www.rightmodeler.com/vs/bifrost) and with [LiteLLM](https://www.rightmodeler.com/vs/litellm) cover how each fits beside a replay audit. If the bill brought you here, start with [reducing LLM costs](https://www.rightmodeler.com/use-cases/reduce-llm-costs); for the method, read [how rightmodeler works](https://www.rightmodeler.com/how-it-works).
+The setup guides for [Bifrost](https://www.rightmodeler.com/integrations/bifrost) and [LiteLLM](https://www.rightmodeler.com/integrations/litellm) have the full commands, and the comparisons of rightmodeler with [Bifrost](https://www.rightmodeler.com/vs/bifrost) and with [LiteLLM](https://www.rightmodeler.com/vs/litellm) cover how each fits beside a validation run. If the bill brought you here, start with [reducing LLM costs](https://www.rightmodeler.com/use-cases/reduce-llm-costs); for the method, read [how rightmodeler works](https://www.rightmodeler.com/how-it-works).
 `;

@@ -1,13 +1,13 @@
 # Getting started
 
-Rightmodeler analyzes recorded model calls, replays them against cheaper candidates, evaluates the outputs, and writes a recommendation report. Published on npm as `rightmodeler`.
+rightmodeler validates swaps to cheaper models on recorded model calls. It replays the recorded steps on cheaper candidate models, has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted, and writes a report with a verdict for each family. Recorded cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample (see [Run the complete pipeline](#run-the-complete-pipeline)). A swap that clears every release gate can become a draft pull request that changes only model identifiers, as the [GitHub guide](github.md) describes. Published on npm as `rightmodeler`.
 
 ## Requirements
 
 - Node.js 24 or newer.
 - A Git repository to analyze, and the `git` command on `PATH` (Git for Windows on Windows; see [Windows](#windows)).
 - Trace input in a supported format.
-- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, Rightmodeler can fall back to `GET /model/info`; for a gateway that lists bare model ids or a direct OpenAI or Anthropic key, pass `--catalog-reference`; for another unpriced endpoint, pass `--pricing-file`.
+- An OpenAI-compatible provider base URL and the name of an environment variable containing its API key before replay begins. Its `/v1/models` catalog should publish per-token pricing. OpenRouter and Vercel AI Gateway do. For a LiteLLM endpoint, rightmodeler can fall back to `GET /model/info`; for a gateway that lists bare model ids or a direct OpenAI or Anthropic key, pass `--catalog-reference`; for another unpriced endpoint, pass `--pricing-file`.
 
 Instead of an API key, candidates or the judge can run through the `claude`
 CLI you are signed in to on this machine, under your Claude plan:
@@ -34,7 +34,7 @@ Anthropic or another OpenAI-compatible endpoint. It prints the equivalent flags
 and saves the answer as the next default, which `--yes` applies without asking.
 `npx rightmodeler docs model-routes` describes the choice.
 
-Rightmodeler checks conventional local trace files, Claude Code transcripts for
+rightmodeler checks conventional local trace files, Claude Code transcripts for
 the repository, and Codex sessions whose recorded working directory matches the
 repository. In an interactive terminal it lists matches newest-first with an
 approximate model-call count. If nothing is found, it explains how to produce or
@@ -60,7 +60,7 @@ Each family is replayed only against the call sites its own traces came from. Tr
 
 ## AI SDK telemetry
 
-The AI SDK emits telemetry in two dialects, and Rightmodeler reads both:
+The AI SDK emits telemetry in two dialects, and rightmodeler reads both:
 
 - The `ai.*` dialect comes from AI SDK 5 and 6 with `experimental_telemetry: { isEnabled: true }` on each call, and from AI SDK 7 with `registerTelemetry(new LegacyOpenTelemetry())`. The AI SDK reader reads it.
 - The GenAI semantic conventions dialect comes from AI SDK 7 with `registerTelemetry(new OpenTelemetry())`. The OTel GenAI reader reads it and treats the agent, step and tool spans as structure, so each model call counts once.
@@ -111,7 +111,7 @@ npx rightmodeler report --code-graph graphify-out/graph.json --repo .
 
 `init --code-graph <path>` renders the same section at the end of a run. For each call site the scanner found, the section lists the enclosing symbol, its callers, the tests that reach it, and the owners of those files, which are listed only. It also lists files that import an AI SDK where the scanner found no call site.
 
-Graph edges are never replay trials, runtime proof, or quality evidence, and the flag never changes a stage before the report, a verdict, a gate, or confirmation. Each finding is labelled EXTRACTED, or INFERRED or AMBIGUOUS to verify, by its weakest hop. A graph built at another commit is shown file-level with a stale note. An unusable graph produces one warning, the section says why it is not shown, and the rest of the report is unchanged. The scan ignores `graphify-out/`, so building a graph never makes finished stages stale. Only `graphify update` and `graphify extract --code-only` are needed; other Graphify commands can call a language model.
+Graph edges are never replay trials, runtime evidence, or quality evidence, and the flag never changes a stage before the report, a verdict, a gate, or confirmation. Each finding is labelled EXTRACTED, or INFERRED or AMBIGUOUS to verify, by its weakest hop. A graph built at another commit is shown file-level with a stale note. An unusable graph produces one warning, the section says why it is not shown, and the rest of the report is unchanged. The scan ignores `graphify-out/`, so building a graph never makes finished stages stale. Only `graphify update` and `graphify extract --code-only` are needed; other Graphify commands can call a language model.
 
 `apply --code-graph <path>` appends the same section to the draft pull request body, limited to the call sites the pull request swaps and to five findings of each kind per call site. Owners there are listed only and are never requested as reviewers; reviewers still come from CODEOWNERS and blame. The graph never changes the swap, its digest, or its reviewers. `apply --dry-run` prints the exact body it would post, with or without `--code-graph`.
 
@@ -150,7 +150,7 @@ When the window leaves no cheaper model at any call site of a family, a `shortli
 
 ## Catalogs without pricing or capabilities
 
-Rightmodeler reads per-token pricing from the model catalog. When every catalog
+rightmodeler reads per-token pricing from the model catalog. When every catalog
 entry has null pricing and no `--pricing-file` is set, it requests LiteLLM
 `GET /model/info` on the same host. Use `--pricing-file` when `/model/info` has
 no usable per-token costs; file entries override provider pricing.
@@ -159,7 +159,7 @@ Some gateways answer `/v1/models` with bare model ids: Envoy AI Gateway lists
 the models a route declares, and Bifrost lists custom providers with ids and
 context only. Pass `--catalog-reference <url|path>` to name the upstream's own
 model list, for example `https://ai-gateway.vercel.sh/v1/models` or
-`https://openrouter.ai/api/v1/models`. Rightmodeler reads it without your key or
+`https://openrouter.ai/api/v1/models`. rightmodeler reads it without your key or
 headers and joins it to the gateway's entries by id, or by the reference id a
 gateway id ends with (`openai/gpt-4o-mini` for `vercel/openai/gpt-4o-mini`). A
 gateway entry takes from its match only what it does not declare itself (price,
@@ -172,7 +172,7 @@ the run with `invalid_catalog_reference`.
 The release date is the one field where the reference wins over the gateway:
 when the matched reference entry has a release date, it replaces the date the
 gateway declares, and the gateway's date is kept only when the reference gives
-none. Rightmodeler ranks judges partly by how recent a model is, and by default
+none. rightmodeler ranks judges partly by how recent a model is, and by default
 tries only candidates released in the last 90 days (see
 [Which models are tried](#which-models-are-tried)). A gateway can give every
 model the same placeholder date (Bifrost does for Vercel AI Gateway's models),
@@ -206,7 +206,7 @@ one model from a family other than the current model's and the candidate's.
 Point `--base-url` at `https://api.openai.com/v1` or
 `https://api.anthropic.com/v1` and name the variable that holds the key with
 `--api-key-env`. Neither vendor's model list publishes prices, so also pass
-`--catalog-reference https://ai-gateway.vercel.sh/v1/models`. Rightmodeler takes
+`--catalog-reference https://ai-gateway.vercel.sh/v1/models`. rightmodeler takes
 the vendor from these two hosts: their bare ids are that vendor's models and
 join the reference as `openai/<id>` or `anthropic/<id>`. Dated and dotted forms
 of a name match within one vendor, in the reference and in your traces, so
@@ -230,15 +230,15 @@ their vendor (`vendor/model`), or `--evaluator`.
 
 ## Which model answered
 
-Rightmodeler checks every replay and judge response, and in Mode B every response to a step whose model it sets, before it counts. It records the model the response names, and it leaves a response out of the evidence when that model is not the one it asked for, when a gateway reports that it answered from its cache (Portkey's `x-portkey-cache-status: HIT`, Bifrost's `cache_debug.cache_hit`), or when a gateway reports that it changed the request (a Portkey hook with `transformed: true`, Bifrost's compat plugin dropping parameters). Such a response is recorded with `attribution: "substituted"`, is never graded, and counts as `attribution_substituted`; more than 5% of a family's replays substituted abstains the family. A `replay_responses_substituted` warning counts them.
+rightmodeler checks every replay and judge response, and in Mode B every response to a step whose model it sets, before it counts. It records the model the response names, and it leaves a response out of the evidence when that model is not the one it asked for, when a gateway reports that it answered from its cache (Portkey's `x-portkey-cache-status: HIT`, Bifrost's `cache_debug.cache_hit`), or when a gateway reports that it changed the request (a Portkey hook with `transformed: true`, Bifrost's compat plugin dropping parameters). Such a response is recorded with `attribution: "substituted"`, is never graded, and counts as `attribution_substituted`; more than 5% of a family's replays substituted abstains the family. A `replay_responses_substituted` warning counts them.
 
 A response names the requested model when it echoes it, when it drops a gateway provider prefix (`openai/gpt-4o-mini` for `vercel/openai/gpt-4o-mini`), or when it adds a dated snapshot (`gpt-4o-mini-2024-07-18` for `gpt-4o-mini`). An alias whose answering model has another name counts as substituted, so name replay models by their upstream ids and turn off fallbacks, model aliases, response caching and request plugins for the replay route. Completed replay cells are reused, so after fixing the route rerun with a fresh store (`--store <directory>`). For streamed Mode B calls only the model a stream names and the response headers are checked.
 
-A judge whose response names another model is retired at that first response: rightmodeler starts no new call to it, cancels its calls still waiting for budget, and re-judges the affected replays with the next-ranked judge once the calls already under way return; the `judge_unusable` warning names the model that answered. Some catalogs also list a faster service tier of a model under its own id, which the gateway answers as the base model: on Vercel AI Gateway, `<id>-fast` is `<id>` at its fast tier. Rightmodeler never ranks such an id as a judge or shortlists it as a candidate while `<id>` is in the catalog too, and it never shortlists a batch tier, `<id>-batch` or `<id>:batch`, while `<id>` is listed; an id that ends in `-fast` with no base model listed, such as `morph/morph-v3-fast`, is treated like any other model.
+A judge whose response names another model is retired at that first response: rightmodeler starts no new call to it, cancels its calls still waiting for budget, and re-judges the affected replays with the next-ranked judge once the calls already under way return; the `judge_unusable` warning names the model that answered. Some catalogs also list a faster service tier of a model under its own id, which the gateway answers as the base model: on Vercel AI Gateway, `<id>-fast` is `<id>` at its fast tier. rightmodeler never ranks such an id as a judge or shortlists it as a candidate while `<id>` is in the catalog too, and it never shortlists a batch tier, `<id>-batch` or `<id>:batch`, while `<id>` is listed; an id that ends in `-fast` with no base model listed, such as `morph/morph-v3-fast`, is treated like any other model.
 
 ## Gateways that route by header
 
-Some gateways choose the upstream, the cache policy, or a trace tag from request headers. Pass each one with `--header 'name: value'`; repeat the option for more. Rightmodeler sends them with every request it makes to the provider base URL: the model catalog, candidate replays, judge calls, and the calls Mode B makes from your application, where a configured header replaces one your application sends. `authorization` comes only from `--api-key-env`, and `content-type`, `content-length` and `host` are set by rightmodeler, so none of them can be passed as a header. Completed replay cells are reused when the headers change, so after changing the route rerun with a fresh store (`--store <directory>`). A detached replay run is keyed to the header values by their SHA-256 digests; the values themselves are passed to the detached worker on its command line and are not written to the store. Do not put secrets in headers.
+Some gateways choose the upstream, the cache policy, or a trace tag from request headers. Pass each one with `--header 'name: value'`; repeat the option for more. rightmodeler sends them with every request it makes to the provider base URL: the model catalog, candidate replays, judge calls, and the calls Mode B makes from your application, where a configured header replaces one your application sends. `authorization` comes only from `--api-key-env`, and `content-type`, `content-length` and `host` are set by rightmodeler, so none of them can be passed as a header. Completed replay cells are reused when the headers change, so after changing the route rerun with a fresh store (`--store <directory>`). A detached replay run is keyed to the header values by their SHA-256 digests; the values themselves are passed to the detached worker on its command line and are not written to the store. Do not put secrets in headers.
 
 The default store is `.rightmodeler/` inside the analyzed repository. Completed stages resume when their inputs and outputs are still current. A complete run writes `.rightmodeler/project/reports/report.md`. The JSON report is kept inside the versioned store and is never written as a plain file, so read the final `result` event from `--output json` or `--output jsonl` for the machine-readable outcome.
 
@@ -250,7 +250,7 @@ Run `rightmodeler docs <name>` to print any of these documents from the installe
 
 ## Windows
 
-Rightmodeler runs natively on Windows 10 and 11, without WSL, from Windows
+rightmodeler runs natively on Windows 10 and 11, without WSL, from Windows
 PowerShell 5.1, PowerShell 7, the Command Prompt, or Git Bash. It needs Node.js 24
 or newer and Git for Windows on `PATH`.
 
@@ -265,13 +265,13 @@ The commands in these docs are written for macOS and Linux shells. On Windows:
   or `rightmodeler.cmd ...` after `npm install -g rightmodeler`, or allow local
   scripts once with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 - A leading `~` in a path option means your home folder, as on macOS and Linux.
-  PowerShell and the Command Prompt pass it unexpanded, so Rightmodeler expands it
+  PowerShell and the Command Prompt pass it unexpanded, so rightmodeler expands it
   itself.
 - Do not end a quoted folder path with a backslash: in Windows PowerShell 5.1 and
   the Command Prompt, `--repo ".\my app\" --plan` passes `--plan` as part of the
-  path. Write `".\my app"` or `".\my app/"`. Rightmodeler refuses such a path and
+  path. Write `".\my app"` or `".\my app/"`. rightmodeler refuses such a path and
   names the flags it swallowed.
-- Rightmodeler reads trace files, and the `--policy`, `--pricing-file` and
+- rightmodeler reads trace files, and the `--policy`, `--pricing-file` and
   `--modeb-config` files, that Windows PowerShell 5.1 writes with `>` or `Out-File`
   as UTF-16, or that start with a byte order mark. Write any other file you pass,
   such as `--matchers`, in a text editor: in Windows PowerShell 5.1, `>` writes
@@ -280,10 +280,10 @@ The commands in these docs are written for macOS and Linux shells. On Windows:
 - In Git Bash, quote Windows paths with single quotes or write them with forward
   slashes, for example `--repo 'C:\src\app'` or `--repo C:/src/app`.
 
-Windows looks for a program in the current folder before `PATH`. Rightmodeler turns
+Windows looks for a program in the current folder before `PATH`. rightmodeler turns
 that off for the programs it starts, but `npx` and the Command Prompt still look in
-the current folder when they start Rightmodeler itself. To analyze a repository you
-do not trust, run Rightmodeler from another folder and pass `--repo`, or first set
+the current folder when they start rightmodeler itself. To analyze a repository you
+do not trust, run rightmodeler from another folder and pass `--repo`, or first set
 `$env:NoDefaultCurrentDirectoryInExePath = "1"` in PowerShell (or
 `setx NoDefaultCurrentDirectoryInExePath 1` for every new terminal).
 

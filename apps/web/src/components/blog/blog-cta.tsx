@@ -11,7 +11,7 @@ export function BlogCta() {
       <div className="border-t border-ash-border pt-10">
         <Reveal>
           <h2 className="font-display text-heading text-balance text-midnight-ink sm:text-heading-lg">
-            Run it on your own traces.
+            Start with the traces you already have.
           </h2>
         </Reveal>
 

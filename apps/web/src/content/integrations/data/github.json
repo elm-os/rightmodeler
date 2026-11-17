@@ -8,8 +8,8 @@
   "title": "GitHub integration: model swaps as draft pull requests",
   "description": "rightmodeler apply opens a draft GitHub pull request that changes only model identifiers, carries the evidence and asks code owners to review. A person merges.",
   "h1": "rightmodeler + GitHub",
-  "lede": "When an audit proves a cheaper model is safe for a step, the change reaches GitHub as a draft pull request your team reviews like any other. It swaps model identifiers and nothing else, carries its evidence in the body, and asks the people who own the code to look.",
-  "tldr": "rightmodeler works with GitHub through apply, watch and rollback. apply opens a draft pull request that changes only model identifiers, with an evidence table in the body and reviewers taken from CODEOWNERS, then git blame. watch makes one pass over that pull request per run: it answers review questions with the stored evidence, marks families for re-proof when a reviewer requests changes or the base branch changes a swapped file, and closes the pull request only when the same check fails again on the same commit. rollback opens a draft that restores a merged swap. None of them merges anything.",
+  "lede": "When a swap to a cheaper model clears every release gate for a step, the change reaches GitHub as a draft pull request your team reviews like any other. It swaps model identifiers and nothing else, carries its evidence in the body, and asks the people who own the code to look.",
+  "tldr": "rightmodeler works with GitHub through apply, watch and rollback. apply opens a draft pull request that changes only model identifiers, with an evidence table in the body and reviewers taken from CODEOWNERS, then git blame. watch makes one pass over that pull request per run: it answers review questions with the stored evidence, marks families as needing new evidence when a reviewer requests changes or the base branch changes a swapped file, and closes the pull request only when the same check fails again on the same commit. rollback opens a draft that restores a merged swap. None of them merges anything.",
   "steps": [
     {
       "label": "01 · Check",
@@ -19,7 +19,7 @@
     {
       "label": "02 · Open",
       "title": "A draft that swaps model identifiers only",
-      "body": "apply creates the branch and commits the change through GitHub's API, then opens the pull request as a draft. The branch uses the prefix your recent branches use most, else rightmodeler/, and the title follows your commit style: perf(models): swap summarize in a repository that uses conventional commits, Swap summarize models otherwise. The body is your pull request template followed by a Rightmodeler evidence table with the revision, the corpus version, and per family the decision, evaluators, cascade status, worst-case bound, models, cost per case, latency, caps and case IDs. Case IDs are SHA-256 digests of the replayed cases, never prompts. With --code-graph, a Graphify code context section for the swapped call sites follows the table; it never changes the swap or its reviewers."
+      "body": "apply creates the branch and commits the change through GitHub's API, then opens the pull request as a draft. The branch uses the prefix your recent branches use most, else rightmodeler/, and the title follows your commit style: perf(models): swap summarize in a repository that uses conventional commits, Swap summarize models otherwise. The body is your pull request template followed by an evidence table, under the heading Rightmodeler evidence, with the revision, the corpus version, and per family the decision, evaluators, cascade status, worst-case bound, models, cost per case, latency, caps and case IDs. Case IDs are SHA-256 digests of the replayed cases, never prompts. With --code-graph, a Graphify code context section for the swapped call sites follows the table; it never changes the swap or its reviewers."
     },
     {
       "label": "03 · Review",
@@ -29,7 +29,7 @@
     {
       "label": "04 · Watch",
       "title": "One pass per run, and never a merge",
-      "body": "Each watch run reconciles one pull request under a lock kept in the store, so overlapping runs cannot act twice. It answers each human review or comment once with the stored evidence for the families involved, marks families for re-proof when a reviewer requests changes or the base branch changes a swapped file, and comments once on a failing check or status. If a check with the same name fails again on a new run of the same commit, it closes the pull request. A merge ends watching, and a close without merge is recorded as a rejection that apply honors until there is new evidence."
+      "body": "Each watch run reconciles one pull request under a lock kept in the store, so overlapping runs cannot act twice. It answers each human review or comment once with the stored evidence for the families involved, marks families as needing new evidence when a reviewer requests changes or the base branch changes a swapped file, and comments once on a failing check or status. If a check with the same name fails again on a new run of the same commit, it closes the pull request. A merge ends watching, and a close without merge is recorded as a rejection that apply honors until there is new evidence."
     },
     {
       "label": "05 · Roll back",
@@ -70,18 +70,18 @@
       "body": "A reviewer can ask which cases back the swap in an ordinary comment, and the next watch pass replies once with the stored evidence for that family: decision, evaluator, passes, trials, pass rate, worst-case bound and case IDs. The reply is built from the ledger, not written by a model."
     },
     {
-      "title": "Send a swap back for proof",
-      "body": "A review that requests changes, or a base-branch commit that edits a swapped file, marks the affected families for re-proof and says so in the thread, so stale evidence does not ride along into a merge."
+      "title": "Send a swap back for new evidence",
+      "body": "A review that requests changes, or a base-branch commit that edits a swapped file, marks the affected families as needing new evidence and says so in the thread, so stale evidence does not ride along into a merge."
     },
     {
-      "title": "Undo a swap without overwriting later work",
+      "title": "Roll back a swap without overwriting later work",
       "body": "If a merged swap misbehaves, rollback opens a draft that restores the pre-apply files. It refuses when those files have changed since the swap merged, rather than overwriting someone else's edit."
     }
   ],
   "limits": [
     "rightmodeler never merges. The GitHub client it ships has no merge call: apply and rollback open drafts, watch comments and can close a pull request after a repeated check failure, and the merge stays with a person.",
     "watch acts only when it runs. Each run is a pass over one pull request, so schedule it or trigger it from repository events; nothing listens to GitHub in between.",
-    "Re-proof is a mark, not a rerun. watch records which families need new evidence and says so in the thread, and the new evidence comes from your next pipeline run.",
+    "A request for new evidence is a mark, not a rerun. watch records which families need it and says so in the thread, and the new evidence comes from your next pipeline run.",
     "A fine-grained personal access token cannot read check runs, because GitHub offers those tokens no check-run permission. watch still reconciles reviews, comments, commit statuses, merges and base-branch changes, and prints the github_checks_unavailable warning.",
     "The blame fallback needs full history and a commit email GitHub can match to a user. An owner it cannot match is not requested, team reviewers need a repository owned by an organization, and every reviewer needs access to the repository.",
     "Verified live on github.com in a disposable repository: apply with GitHub Actions' GITHUB_TOKEN opened drafts authored by github-actions[bot] and requested the CODEOWNERS owner, and watch answered a reviewer's question once, both with that token and with the owner's own token. Nothing was merged. The test suite covers GitHub App installation tokens and fine-grained personal access tokens, each with the permissions GitHub gives it."
@@ -101,10 +101,10 @@
     },
     {
       "q": "What happens when a reviewer asks a question?",
-      "a": "The next watch pass replies once, in the thread, with the stored evidence for the families the comment names, else the families in the file it comments on, else every family in the pull request. A review that requests changes instead marks those families for re-proof, and the new evidence comes from the next pipeline run."
+      "a": "The next watch pass replies once, in the thread, with the stored evidence for the families the comment names, else the families in the file it comments on, else every family in the pull request. A review that requests changes instead marks those families as needing new evidence, which comes from the next pipeline run."
     },
     {
-      "q": "How do I undo a swap after it merged?",
+      "q": "How do I roll back a swap after it merged?",
       "a": "Run rightmodeler rollback with --owner, --pr set to the merged pull request's number and --github-token-env. It opens a draft pull request that restores the pre-apply contents of the files the swap changed, and it refuses unless the original pull request merged and those files still match their recorded post-apply state."
     },
     {

@@ -5,6 +5,7 @@ import { Reveal } from "@/components/reveal";
 import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
+import { VS_HUB } from "@/content/markdown/render-hub";
 import { getAllComparisons } from "@/content/vs";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 import { SITE_URL } from "@/lib/site";
@@ -12,66 +13,9 @@ import { SITE_URL } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "rightmodeler vs alternatives",
   description:
-    "Where rightmodeler ends and gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, benchmarks, and coding agents begin.",
+    "rightmodeler validates swaps to cheaper models on your own traces. See where it ends and gateways, observability, evals, routers, benchmarks, and coding agents begin.",
   path: "/vs",
 });
-
-const BANDS: { title: string; intro: string; category: string }[] = [
-  {
-    title: "The rails",
-    intro:
-      "They move your live requests. rightmodeler reads the requests some of them log, replays through others as test benches, and hands back a decision, not a proxy.",
-    category: "gateway",
-  },
-  {
-    title: "The observers",
-    intro:
-      "They trace, evaluate, and improve your agent where it runs. rightmodeler reads the traces most of them keep and decides which model each step should call.",
-    category: "observability",
-  },
-  {
-    title: "The graders",
-    intro:
-      "They grade outputs with what you assemble: metrics, assertions, datasets, calibrated judges. rightmodeler asks which steps overpay to clear that bar, on the traces you already have.",
-    category: "evals",
-  },
-  {
-    title: "The routers",
-    intro:
-      "They predict the right model per request, at runtime. rightmodeler measures it per step, at release time.",
-    category: "router",
-  },
-  {
-    title: "The meters",
-    intro:
-      "They show where AI spend goes, or trim what each call carries. rightmodeler asks whether each step needs the model it pays for.",
-    category: "spend",
-  },
-  {
-    title: "The coaches",
-    intro:
-      "They improve what your agent sees at runtime, with context learned from its past runs. rightmodeler changes which model each step calls, not what it sees.",
-    category: "context",
-  },
-  {
-    title: "The trainers",
-    intro:
-      "They train a custom model on your data. rightmodeler measures the models you can already call, step by step, against outputs you accepted.",
-    category: "training",
-  },
-  {
-    title: "The scorekeepers",
-    intro:
-      "They rank models on benchmark test sets, shared or your own. rightmodeler decides which model each step in your code calls and proposes the change as a pull request you review.",
-    category: "benchmarks",
-  },
-  {
-    title: "The engineers",
-    intro:
-      "They write the code change themselves, from a logged error, a ticket, or a review comment. rightmodeler proposes one kind of change: which model a step calls, measured on your traces first.",
-    category: "coding",
-  },
-];
 
 export default function VsPage() {
   const comparisons = getAllComparisons();
@@ -94,16 +38,16 @@ export default function VsPage() {
       <JsonLd data={itemListLd} />
 
       <PageHero
-        eyebrow="Comparisons"
-        title="Different question, different tool."
-        lede="rightmodeler is an offline audit that measures cheaper models against outputs you already accepted. Gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, benchmarks, and coding agents each answer a different question; rightmodeler reads traces from some and replays through others. Each page draws the line."
+        eyebrow={VS_HUB.eyebrow}
+        title={VS_HUB.title}
+        lede={VS_HUB.lede}
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
 
-      {BANDS.map((band) => {
-        const entries = comparisons.filter(
-          (comparison) => comparison.category === band.category,
+      {VS_HUB.bands.map((band) => {
+        const entries = comparisons.filter((comparison) =>
+          band.categories.includes(comparison.category),
         );
         if (entries.length === 0) return null;
         return (

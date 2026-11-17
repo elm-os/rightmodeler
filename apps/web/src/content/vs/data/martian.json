@@ -7,16 +7,16 @@
   "verdict": "different-job",
   "verdictLabel": "Different job · complement at the gateway",
   "title": "rightmodeler vs Martian: per-step evidence vs access",
-  "description": "Martian is a research lab with a name-the-model gateway; its router is legacy. rightmodeler replays traces offline to pick each step's model. Different jobs.",
+  "description": "Martian is a research lab with a name-the-model gateway; its router is legacy. rightmodeler validates cheaper models per step, offline. Different jobs.",
   "h1": "rightmodeler vs Martian",
-  "lede": "Martian in 2026 is an interpretability research lab whose live product is a gateway: one key, a large catalog, and you name the model on every call. rightmodeler is the offline audit that reads your own traces and tells you, step by step, what that model should be.",
+  "lede": "Martian in 2026 is an interpretability research lab whose live product is a gateway: one key, a large catalog, and you name the model on every call. rightmodeler validates offline, on your own traces, whether a cheaper model can take each step, and opens a draft pull request when one clears every gate.",
   "integrationSlug": "",
   "related": ["openrouter", "not-diamond", "vercel-ai-gateway", "conifer"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Mostly a different job now. You hire Martian for access and understanding: a live gateway with one key to a 200+ model catalog, where you name the model yourself on every call, and an interpretability research program underneath. You hire the rightmodeler CLI, free on npm and GitHub, to answer one question with evidence, at every step of your stack: which model belongs here? It replays your recorded traces through cheaper candidates offline and reports what held up against the output you accepted. The per-request router Martian was famous for is legacy now, and the guaranteed cost cut in Martian's orbit belongs to affiliated Thesean's Ship (their claim, in beta). Where the two meet is the model string in your code: the Gateway carries it, the audit tells you what it should say."
+      "body": "Mostly a different job now. You hire Martian for access and understanding: a live gateway with one key to a 200+ model catalog, where you name the model yourself on every call, and an interpretability research program underneath. You hire the rightmodeler CLI, free on npm and GitHub, to answer one question with evidence, at every step of your stack: can a cheaper model take this step? It replays your recorded traces through cheaper candidates offline and reports what held up against the output you accepted. The per-request router Martian was famous for is legacy now, and the guaranteed cost cut in Martian's orbit belongs to affiliated Thesean's Ship (their claim, in beta). Where the two meet is the model string in your code: the Gateway carries it, and rightmodeler validates whether a cheaper one can replace it."
     },
     {
       "type": "prose",
@@ -25,7 +25,7 @@
         "Martian's homepage today reads as a research lab. The company that started with model mapping now leads with interpretability work: ARES for training and evaluating agents with reinforcement learning, K-Steering for steering model behavior at inference time, and a $1M Interpretability Prize. The commercial product in the docs is the Gateway: an OpenAI and Anthropic compatible endpoint, one key, unified access to a 200+ model catalog, and a dashboard of real-time usage, model performance, and request history. On every call, you pass the full creator/model-name string yourself.",
         "The per-request Model Router that made Martian a router company is legacy. As of 2026-08-12 its product site is unreachable and its documentation paths return 404, and the current quickstart documents no automatic routing option. One third-party guide still describes the router as active; this page goes by Martian's own docs. What the docs sell today is access, not routing. The model choice is a string in your code, and it is yours.",
         "The cost-cutting play lives next door. Thesean AI, an affiliated lab, sells Ship (Beta): prepend ship-like/ to a supported model name and their endpoint promises the same behavior at 50% lower cost, guaranteed by an SLA (a service-level agreement). That is their claim, the product is in beta, and it is Thesean's offer, not Martian's own. Taking it means trading measurement for a guarantee, which is a legitimate trade when speed matters more than evidence.",
-        "Credit where due. Martian operates real production infrastructure: uptime obligations, key management, monitoring. rightmodeler does none of that. There is no rightmodeler server, no account with us, no telemetry. Martian also does frontier interpretability research; rightmodeler is black-box measurement of outputs and makes no claim to explain model internals. And rightmodeler cannot offer what Ship offers: a guarantee. The standard here is ours to state, not an accusation: a tool that always finds savings isn't measuring anything. So the audit shows its work instead: per-step reference agreement (how often a candidate matched the output you accepted), the sample size behind each score, and an abstention (a declined recommendation) wherever the evidence for a step runs thin."
+        "Credit where due. Martian operates real production infrastructure: uptime obligations, key management, monitoring. rightmodeler does none of that. There is no rightmodeler server, no account with us, no telemetry. Martian also does frontier interpretability research; rightmodeler is black-box measurement of outputs and makes no claim to explain model internals. And rightmodeler cannot offer what Ship offers: a guarantee. The standard here is ours to state, not an accusation: a tool that always finds savings isn't measuring anything. So rightmodeler shows its work instead: per-step reference agreement (how often a candidate matched the output you accepted), the sample size behind each score, and an abstention (a declined recommendation) wherever the evidence for a step runs thin."
       ]
     },
     {
@@ -39,7 +39,7 @@
         {
           "dimension": "runs at",
           "theirs": "request time, on live traffic",
-          "ours": "audit time, on recorded traces"
+          "ours": "offline, on recorded traces, before review"
         },
         {
           "dimension": "in your request path",
@@ -49,7 +49,7 @@
         {
           "dimension": "who picks the model",
           "theirs": "you do, as a full creator/model-name string per call",
-          "ours": "the report recommends per step; you approve every swap"
+          "ours": "rightmodeler validates cheaper models per step; a person merges every swap"
         },
         {
           "dimension": "cost story",
@@ -79,14 +79,14 @@
           "why": "Affiliated Thesean's Ship (Beta) is built for exactly this trade: a drop-in endpoint claiming the same behavior at 50% lower cost, guaranteed by an SLA. Their claim, in beta, and it asks nothing of you but the prefix. rightmodeler guarantees nothing and would make you measure first, which is slower by design."
         },
         {
-          "scenario": "You run a multi-layer agent pipeline, you suspect some layers are overpaying, and a downgrade at an early layer could poison everything downstream.",
+          "scenario": "You run a multi-layer agent pipeline, you suspect some layers are overpaying, and a cheaper model at an early layer could poison everything downstream.",
           "winner": "ours",
-          "why": "That is cascade risk (a swap that looks safe in isolation but degrades the work later steps do with its output), and no per-request tool can see it. The CLI replays whole traces end to end, confirming multi-step swaps by re-running your pipeline in a sandboxed container, judges each step against the output you accepted, abstains where the evidence is thin, and reports per-step evidence. You tip the scale on every swap."
+          "why": "That is cascade risk (a swap that looks safe in isolation but degrades the work later steps do with its output). The CLI replays recorded steps on cheaper candidates, judges each against the output you accepted, abstains where the evidence is thin, and reports per-step evidence. A swap that feeds later model steps must also be confirmed end to end, by running your app on recorded cases in a sandbox, before it can become a draft pull request, and a person merges every swap."
         },
         {
           "scenario": "Your steps already call Martian's Gateway, and you want to know whether the model string each step names is the right one.",
           "winner": "both",
-          "why": "Keep the Gateway. It made model choice an explicit string per step, which is exactly the surface an audit can act on: the report tells you, from your own traces, what each string should be, and the Gateway's catalog is a fine place for the approved swap to land. There is no shipped integration; the edit is manual, and the edit is the whole change."
+          "why": "Keep the Gateway. It made model choice an explicit string per step, which is exactly the surface rightmodeler acts on: it validates, from your own traces, whether a cheaper model can replace each string, and the Gateway's catalog is a fine place for that swap to land. There is no shipped Martian integration; replays run through the provider you configure, and the change rightmodeler proposes is the model string itself."
         }
       ]
     },
@@ -96,7 +96,7 @@
       "terms": [
         {
           "term": "trace",
-          "def": "The recorded, step-by-step log of a real agent run: prompts, outputs, tool calls, costs. Audits read traces from your own logging, never from a vendor dashboard.",
+          "def": "The recorded, step-by-step log of a real agent run: prompts, outputs, tool calls, costs. rightmodeler reads traces from your own logging, never from a vendor dashboard.",
           "slug": "trace"
         },
         {
@@ -106,12 +106,12 @@
         },
         {
           "term": "reference evidence",
-          "def": "The output you accepted in production, used as the reference each candidate is judged against. Agreement with it is evidence, not proof of correctness: the production result is the reference, not ground truth.",
+          "def": "The output you accepted in production, used as the reference each candidate is judged against. Matching it shows agreement with what you shipped, not ground-truth correctness.",
           "slug": "reference-evidence"
         },
         {
           "term": "abstain",
-          "def": "What the audit does when a step's evidence is too thin to support a recommendation: it says so and recommends nothing, instead of manufacturing a verdict.",
+          "def": "What rightmodeler does when a step's evidence is too thin to support a recommendation: it says so and recommends nothing, instead of manufacturing a verdict.",
           "slug": "abstain"
         }
       ]
@@ -121,19 +121,19 @@
       "items": [
         {
           "q": "Does rightmodeler replace Martian?",
-          "a": "No. Martian's Gateway is runtime infrastructure that carries your live requests; rightmodeler never carries a request, before or after an audit. If you serve through the Gateway today, keep serving through it. You apply the audit's recommendation by editing the model string your code already passes; nothing about how requests are routed changes."
+          "a": "No. Martian's Gateway is runtime infrastructure that carries your live requests; rightmodeler never carries a request, before or after a validation run. If you serve through the Gateway today, keep serving through it. A swap that clears every gate changes only the model string your code already passes, in a draft pull request a person merges; nothing about how requests are routed changes."
         },
         {
           "q": "Isn't Martian a model router?",
-          "a": "It was, and the reputation lingers. As of 2026-08-12 the per-request Model Router is legacy: its site is unreachable and its doc paths return 404, while the documented Gateway has you name the model on every call. rightmodeler is not a router either. Not observability. Not a runtime gateway. It is a report produced offline from your own recorded runs."
+          "a": "It was, and the reputation lingers. As of 2026-08-12 the per-request Model Router is legacy: its site is unreachable and its doc paths return 404, while the documented Gateway has you name the model on every call. rightmodeler is not a router either. Not observability. Not a runtime gateway. It validates one pinned model per step, offline, on your own recorded runs, before a person merges the change."
         },
         {
-          "q": "How is the audit different from Ship's guaranteed cost cut?",
-          "a": "Ship (Beta), from Martian-affiliated Thesean, is a drop-in endpoint claiming the same behavior at 50% lower cost, backed by an SLA. That is their claim and their guarantee, and it requires no measurement from you. rightmodeler makes the opposite bet: replay your own traces, judge each candidate against the output you accepted, and report reference agreement, sample size, and abstentions. You get evidence you can inspect instead of a promise you trust, and agreement with shipped output is evidence, not proof of correctness."
+          "q": "How is rightmodeler different from Ship's guaranteed cost cut?",
+          "a": "Ship (Beta), from Martian-affiliated Thesean, is a drop-in endpoint claiming the same behavior at 50% lower cost, backed by an SLA. That is their claim and their guarantee, and it requires no measurement from you. rightmodeler makes the opposite bet: replay your own traces, judge each candidate against the output you accepted, and report reference agreement, sample size, and abstentions. You get evidence you can inspect instead of a promise you trust, and that evidence measures agreement with what you shipped, not ground-truth correctness."
         },
         {
           "q": "Can rightmodeler read Martian's dashboard or replay through the Gateway?",
-          "a": "No. There is no shipped Martian integration: no trace adapter, no replay provider. Traces come from your own logging, such as LiteLLM logs or LangSmith exports, and replays run through the provider you configure. The composition is manual and downstream: the audit recommends, you edit the model string your step already names."
+          "a": "No. There is no shipped Martian integration: no trace adapter, no replay provider. Traces come from your own logging, such as OpenTelemetry GenAI spans or LangSmith exports, and replays run through the provider you configure. The composition is downstream: rightmodeler validates, and its draft pull request changes the model string your step already names, for a person to merge."
         }
       ]
     }

@@ -22,7 +22,7 @@ export function CtaBand() {
         <div className="max-w-2xl">
           <Reveal>
             <h2 className="font-display text-heading text-balance text-midnight-ink sm:text-display">
-              Run it on your own traces.
+              Start with the traces you already have.
             </h2>
           </Reveal>
 

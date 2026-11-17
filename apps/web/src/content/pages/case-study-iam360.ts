@@ -11,11 +11,11 @@ Case study · iAM360 · July 22, 2026 · 5 min read
 
 That means the AI handles very different kinds of work. Some requests require serious reasoning, such as analyzing weeks of health data or building a personalized plan. Others are much simpler: identifying the date of a meal photo, classifying a message, or returning information in a predefined format.
 
-**iam360 · routed outcome** (modeled from 1 representative request)
+**iam360 · right-sized outcome** (modeled from 1 representative request)
 
 - 56-57% lower cost per request
 - $41,000 projected savings per million requests
-- 25-26% from routing alone, at identical usage
+- 25-26% from model assignment alone, at identical usage
 
 million-request figure is a linear projection from one representative request · hypothetical all terra · xhigh baseline
 
@@ -27,11 +27,11 @@ Originally, the system was modeled as if every task used gpt-5.6-terra with its 
 
 ## What rightmodeler changed
 
-Using rightmodeler's routing and evidence framework, iAM360 taught the system to assign each job to the appropriate level of AI.
+Using rightmodeler's evidence framework, iAM360 taught the system to assign each job to the appropriate level of AI.
 
-**rightmodeler · routing policy · iam360** (baseline: terra · xhigh everywhere)
+**iam360 · per-job model assignment** (baseline: terra · xhigh everywhere)
 
-| route | covers |
+| model | covers |
 | --- | --- |
 | gpt-5.6-sol | complex coaching and personalized planning |
 | gpt-5.6-terra | moderate analysis |
@@ -40,7 +40,7 @@ Using rightmodeler's routing and evidence framework, iAM360 taught the system to
 
 > We did not remove intelligence. We concentrated it where users actually benefit from it.
 
-The counterintuitive part: right-sizing went in both directions. Some complex coaching paths were upgraded from Terra to flagship Sol at the same time narrowly defined routine tasks moved to smaller, faster models. The routing changed more than the models, too:
+The counterintuitive part: right-sizing went in both directions. Some complex coaching paths were upgraded from Terra to flagship Sol at the same time narrowly defined routine tasks moved to smaller, faster models. iAM360 changed more than the models, too:
 
 **what changed** (previously modeled → current)
 
@@ -54,17 +54,17 @@ The counterintuitive part: right-sizing went in both directions. Some complex co
 
 ## The modeled savings
 
-The comparison baseline is a hypothetical starting point where every request uses Terra with xhigh reasoning. At identical text usage, smarter routing alone reduces the modeled AI cost by approximately 25 to 26%. The larger saving comes from avoiding excessive reasoning on simple tasks.
+The comparison baseline is a hypothetical starting point where every request uses Terra with xhigh reasoning. At identical text usage, smarter model assignment alone reduces the modeled AI cost by approximately 25 to 26%. The larger saving comes from avoiding excessive reasoning on simple tasks.
 
 **iam360 · modeled cost per call** (representative request)
 
 - all terra · xhigh: $0.0725
-- routed architecture: $0.0314-$0.0319
+- right-sized architecture: $0.0314-$0.0319
 - savings: 56.0-56.7%
 
-In a representative request, the routed system costs approximately 3.1 cents where the all-Terra xhigh version costs approximately 7.25 cents: a modeled saving of roughly 56 to 57% per request.
+In a representative request, the right-sized system costs approximately 3.1 cents where the all-Terra xhigh version costs approximately 7.25 cents: a modeled saving of roughly 56 to 57% per request.
 
-The honest caveat is that the headline depends on how much extra output and reasoning xhigh actually produces. Even in the most conservative case, identical output volume, routing alone still saves 25 to 26%:
+The honest caveat is that the headline depends on how much extra output and reasoning xhigh actually produces. Even in the most conservative case, identical output volume, model assignment alone still saves 25 to 26%:
 
 **sensitivity · terra-xhigh output multiplier** (modeled savings)
 
@@ -89,13 +89,13 @@ The model uses one representative request shape. Applying its per-request cost d
 
 projected from one representative request · current pricing
 
-This is what rightmodeler produces: a routing policy where every job is assigned under the stated validation procedure, with the flagship kept, and sometimes promoted, for the work that deserves it.
+This is what the engagement produced: a model for every job, with the flagship kept, and sometimes promoted, for the work that deserves it. The rightmodeler CLI validates swaps to cheaper models; reasoning-effort settings and upgrades to pricier models are outside what it validates today.
 
 > "rightmodeler concentrated intelligence where our members feel it. The hardest coaching moved up to Sol, routine work got faster, and cost per request dropped by more than half."
 
 **Brian Douglas**, Founder, iAM360
 
-## Run it on your own traces.
+## Start with the traces you already have.
 
     ${RUN_COMMAND}
 

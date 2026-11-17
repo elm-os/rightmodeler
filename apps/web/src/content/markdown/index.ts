@@ -17,7 +17,7 @@ import {
 } from "@/content/markdown/render-hub";
 import { PAGE_MARKDOWN } from "@/content/pages";
 import { STATIC_MARKDOWN_PATHS } from "@/lib/markdown-routes";
-import { SITE_URL } from "@/lib/site";
+import { REPO_URL, RUN_COMMAND, SITE_URL } from "@/lib/site";
 
 const HUBS: Record<string, () => string> = {
   "/blog": renderBlogIndexMarkdown,
@@ -47,7 +47,13 @@ export function getMarkdown(pathname: string): string | undefined {
     if (family === "vs") {
       const comparison = getComparison(slug);
       if (comparison)
-        return withSource(path, renderVsMarkdown(comparison, SITE_URL));
+        return withSource(
+          path,
+          renderVsMarkdown(comparison, SITE_URL, {
+            runCommand: RUN_COMMAND,
+            repoUrl: REPO_URL,
+          }),
+        );
     }
     if (family === "integrations") {
       const integration = getIntegration(slug);
