@@ -1,7 +1,7 @@
 {
   "name": "@rightmodeler/cli",
   "version": "0.6.3",
-  "description": "Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.",
+  "description": "Cheaper or newer model swaps for production AI, validated on your own traces and opened as draft PRs.",
   "keywords": [
     "ai-agents",
     "agent-evals",

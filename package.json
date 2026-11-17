@@ -1,7 +1,7 @@
 {
   "name": "rightmodeler",
   "private": true,
-  "description": "Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.",
+  "description": "Cheaper or newer model swaps for production AI, validated on your own traces and opened as draft PRs.",
   "license": "MIT",
   "homepage": "https://www.rightmodeler.com",
   "repository": {
