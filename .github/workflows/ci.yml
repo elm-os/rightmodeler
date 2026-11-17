@@ -97,8 +97,8 @@ jobs:
         shell: pwsh
         env:
           # TEMP defaults to C:, where the tests' temp files are much slower to create than on D:,
-          # the drive that holds the workspace and runner.temp. With both on D:, the cross-drive
-          # branch of the promptfoo scratch folder is left to its unit test.
+          # the drive that holds the workspace and runner.temp. promptfoo-cross-drive.test.ts points
+          # TEMP back at C: to keep covering a workspace and a TEMP on different drives.
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
         run: |
