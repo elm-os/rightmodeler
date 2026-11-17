@@ -523,3 +523,30 @@ describe("AI SDK call-site binding", () => {
     });
   }, 120_000);
 });
+
+describe("Codex rollout replay sample", () => {
+  it("treats a tool-free Codex rollout as sendable, with no recorded_messages_not_replayable warning", async () => {
+    const { root, repo } = await fixtureRepo("codex-tool-free");
+    const toolFree = (await readFile(tracePath("codex.jsonl"), "utf8"))
+      .split("\n")
+      .filter((line) => {
+        if (line.length === 0) return false;
+        const { payload } = JSON.parse(line) as { payload: { type?: string } };
+        return (
+          payload.type !== "function_call" &&
+          payload.type !== "function_call_output"
+        );
+      });
+    const traces = join(root, "codex-tool-free.jsonl");
+    await writeFile(traces, `${toolFree.join("\n")}\n`);
+
+    const result = await shortlist(root, repo, traces);
+
+    expect(familyPlan(result.shortlist, "unclassified").cases).toBe(2);
+    expect(
+      result.warnings.filter(
+        ({ code }) => code === "recorded_messages_not_replayable",
+      ),
+    ).toEqual([]);
+  }, 120_000);
+});

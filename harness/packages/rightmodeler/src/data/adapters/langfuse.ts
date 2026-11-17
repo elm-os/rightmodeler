@@ -54,7 +54,19 @@ export const langfuseAdapter = createRowAdapter({
         format,
       ),
     );
-    if (record.tool_definitions !== undefined) {
+    const toolCalls = Array.isArray(record.tool_calls)
+      ? record.tool_calls.map(jsonEncodedValue)
+      : [];
+    // A generation without tools exports an empty tool_definitions. One that
+    // called tools offered them, even when the export left the field empty.
+    const toolDefinitions = jsonEncodedValue(record.tool_definitions);
+    const emptyDefinitions = Array.isArray(toolDefinitions)
+      ? toolDefinitions.length === 0
+      : isRecord(toolDefinitions) && Object.keys(toolDefinitions).length === 0;
+    if (
+      record.tool_definitions !== undefined &&
+      (!emptyDefinitions || toolCalls.length > 0)
+    ) {
       messages.push(
         jsonValue(
           { tool_definitions: record.tool_definitions },
@@ -63,9 +75,6 @@ export const langfuseAdapter = createRowAdapter({
         ),
       );
     }
-    const toolCalls = Array.isArray(record.tool_calls)
-      ? record.tool_calls.map(jsonEncodedValue)
-      : [];
     const usage = isRecord(record.usage_details) ? record.usage_details : {};
     const stepUsage = optionalUsage(
       usage.input,

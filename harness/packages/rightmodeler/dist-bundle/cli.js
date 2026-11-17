@@ -35769,6 +35769,14 @@ function usageDelta(final, baseline) {
   if (typeof final !== "number") return final;
   return typeof baseline === "number" ? Math.max(0, final - baseline) : final;
 }
+function textMessage(role, content) {
+  return {
+    role,
+    parts: content.map(
+      (block) => isRecord(block) && (block.type === "input_text" || block.type === "output_text") && typeof block.text === "string" ? { type: "text", content: block.text } : block
+    )
+  };
+}
 function adaptWithReport4(records) {
   const source = recordList(records, format5, "Codex rollout");
   const droppedRecords = [];
@@ -35826,6 +35834,7 @@ function adaptWithReport4(records) {
           timestamp: optionalString(candidate.timestamp),
           inputs: pendingInputs.get(turnId2) ?? [],
           outputs: [],
+          toolCalls: [],
           baselineUsage: cumulativeUsage
         };
         pendingInputs.delete(turnId2);
@@ -35882,7 +35891,7 @@ function adaptWithReport4(records) {
     if (turn === void 0) {
       if (payloadType === "message" && payload.role === "user" && Array.isArray(payload.content) && turnId !== void 0) {
         const inputs = pendingInputs.get(turnId) ?? [];
-        inputs.push(payload);
+        inputs.push(textMessage("user", payload.content));
         pendingInputs.set(turnId, inputs);
       }
       continue;
@@ -35894,12 +35903,13 @@ function adaptWithReport4(records) {
           reason: "Codex message content must be an array"
         });
       } else if (payload.role === "user") {
-        turn.inputs.push(payload);
+        turn.inputs.push(textMessage("user", payload.content));
       } else if (payload.role === "assistant" || payloadType === "agent_message") {
-        turn.outputs.push(payload);
+        turn.outputs.push(textMessage("assistant", payload.content));
       }
       continue;
     }
+    if (payloadType?.endsWith("_call")) turn.toolCalls.push(payload);
     if (payloadType === "function_call" || payloadType === "function_call_output" || payloadType === "custom_tool_call" || payloadType === "custom_tool_call_output" || payloadType === "web_search_call" || payloadType === "tool_search_call" || payloadType === "tool_search_output") {
       turn.outputs.push(payload);
       continue;
@@ -35922,7 +35932,13 @@ function adaptWithReport4(records) {
       return {
         stepIndex,
         model: turn.model,
-        messages: turn.inputs.map(
+        messages: [
+          ...turn.inputs,
+          // A turn that called tools needed them attached, and replay sends
+          // none. Carrying the calls in its conversation leaves the case out
+          // of replay with a tool-call reason.
+          ...turn.toolCalls.length === 0 ? [] : [{ role: "assistant", tool_calls: turn.toolCalls }]
+        ].map(
           (message2, index) => jsonValue(
             message2,
             `Codex turn ${turn.turnId} input ${index + 1}`,
@@ -36076,7 +36092,10 @@ var langfuseAdapter = createRowAdapter({
         format7
       )
     );
-    if (record2.tool_definitions !== void 0) {
+    const toolCalls2 = Array.isArray(record2.tool_calls) ? record2.tool_calls.map(jsonEncodedValue) : [];
+    const toolDefinitions2 = jsonEncodedValue(record2.tool_definitions);
+    const emptyDefinitions = Array.isArray(toolDefinitions2) ? toolDefinitions2.length === 0 : isRecord(toolDefinitions2) && Object.keys(toolDefinitions2).length === 0;
+    if (record2.tool_definitions !== void 0 && (!emptyDefinitions || toolCalls2.length > 0)) {
       messages.push(
         jsonValue(
           { tool_definitions: record2.tool_definitions },
@@ -36085,7 +36104,6 @@ var langfuseAdapter = createRowAdapter({
         )
       );
     }
-    const toolCalls2 = Array.isArray(record2.tool_calls) ? record2.tool_calls.map(jsonEncodedValue) : [];
     const usage2 = isRecord(record2.usage_details) ? record2.usage_details : {};
     const stepUsage = optionalUsage(
       usage2.input,
@@ -36369,7 +36387,9 @@ var weaveAdapter = createRowAdapter({
       format10
     );
     const rawMessages = Array.isArray(inputs.messages) ? [...inputs.messages] : [inputs];
-    if (Array.isArray(inputs.tools)) rawMessages.push({ tools: inputs.tools });
+    if (Array.isArray(inputs.tools) && inputs.tools.length > 0) {
+      rawMessages.push({ tools: inputs.tools });
+    }
     const summary = isRecord(record2.summary) ? record2.summary : {};
     const usageByModel = isRecord(summary.usage) ? summary.usage : {};
     const usage2 = isRecord(usageByModel[model]) ? usageByModel[model] : Object.values(usageByModel).find(isRecord) ?? {};

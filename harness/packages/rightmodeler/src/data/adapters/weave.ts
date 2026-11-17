@@ -45,7 +45,9 @@ export const weaveAdapter = createRowAdapter({
     const rawMessages = Array.isArray(inputs.messages)
       ? [...inputs.messages]
       : [inputs];
-    if (Array.isArray(inputs.tools)) rawMessages.push({ tools: inputs.tools });
+    if (Array.isArray(inputs.tools) && inputs.tools.length > 0) {
+      rawMessages.push({ tools: inputs.tools });
+    }
     const summary = isRecord(record.summary) ? record.summary : {};
     const usageByModel = isRecord(summary.usage) ? summary.usage : {};
     const usage = isRecord(usageByModel[model])

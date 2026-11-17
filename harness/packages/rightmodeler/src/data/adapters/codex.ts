@@ -55,6 +55,7 @@ interface TurnState {
   timestamp?: string;
   inputs: unknown[];
   outputs: unknown[];
+  toolCalls: unknown[];
   baselineUsage?: Usage;
   finalUsage?: Usage;
   lastUsage?: Usage;
@@ -72,6 +73,22 @@ function usage(value: unknown): Usage | undefined {
 function usageDelta(final: unknown, baseline: unknown): unknown {
   if (typeof final !== "number") return final;
   return typeof baseline === "number" ? Math.max(0, final - baseline) : final;
+}
+
+// Codex writes message text as input_text and output_text blocks, and replay
+// reads text parts. Any other block is kept as recorded, so replay still
+// leaves that message out.
+function textMessage(role: string, content: unknown[]) {
+  return {
+    role,
+    parts: content.map((block) =>
+      isRecord(block) &&
+      (block.type === "input_text" || block.type === "output_text") &&
+      typeof block.text === "string"
+        ? { type: "text", content: block.text }
+        : block,
+    ),
+  };
 }
 
 function adaptWithReport(records: unknown): TraceAdaptResult {
@@ -132,6 +149,7 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
           timestamp: optionalString(candidate.timestamp),
           inputs: pendingInputs.get(turnId) ?? [],
           outputs: [],
+          toolCalls: [],
           baselineUsage: cumulativeUsage,
         };
         pendingInputs.delete(turnId);
@@ -195,7 +213,7 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
         turnId !== undefined
       ) {
         const inputs = pendingInputs.get(turnId) ?? [];
-        inputs.push(payload);
+        inputs.push(textMessage("user", payload.content));
         pendingInputs.set(turnId, inputs);
       }
       continue;
@@ -207,15 +225,18 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
           reason: "Codex message content must be an array",
         });
       } else if (payload.role === "user") {
-        turn.inputs.push(payload);
+        turn.inputs.push(textMessage("user", payload.content));
       } else if (
         payload.role === "assistant" ||
         payloadType === "agent_message"
       ) {
-        turn.outputs.push(payload);
+        turn.outputs.push(textMessage("assistant", payload.content));
       }
       continue;
     }
+    // Any call item means the turn called a tool, including call types the
+    // output does not keep, such as local_shell_call.
+    if (payloadType?.endsWith("_call")) turn.toolCalls.push(payload);
     if (
       payloadType === "function_call" ||
       payloadType === "function_call_output" ||
@@ -253,7 +274,15 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
       return {
         stepIndex,
         model: turn.model,
-        messages: turn.inputs.map((message, index) =>
+        messages: [
+          ...turn.inputs,
+          // A turn that called tools needed them attached, and replay sends
+          // none. Carrying the calls in its conversation leaves the case out
+          // of replay with a tool-call reason.
+          ...(turn.toolCalls.length === 0
+            ? []
+            : [{ role: "assistant", tool_calls: turn.toolCalls }]),
+        ].map((message, index) =>
           jsonValue(
             message,
             `Codex turn ${turn.turnId} input ${index + 1}`,

@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 
+import type { JsonValue } from "@rightmodeler/core";
+import { toWireMessages } from "@rightmodeler/replay";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -574,5 +576,127 @@ describe("trace adapter conformance", () => {
       inputTokens: 5,
       outputTokens: 2,
     });
+  });
+
+  it("keeps a Weave call with an empty tools list sendable", async () => {
+    const [withTools] = weaveAdapter.adapt(
+      parseTraceRecords(await fixtureText("weave.jsonl")),
+    )[0]!.steps;
+    const runs = weaveAdapter.adapt([
+      {
+        id: "wv-no-tools",
+        trace_id: "wv-trace-no-tools",
+        op_name: "chat",
+        parent_id: null,
+        started_at: "2026-08-01T12:00:00.000Z",
+        inputs: {
+          model: "acme/large-1",
+          messages: [{ role: "user", content: "Hello" }],
+          tools: [],
+        },
+        output: "Hi",
+        summary: {},
+      },
+    ]);
+
+    expect(toWireMessages(runs[0]!.steps[0]!.messages)).toEqual([
+      { role: "user", content: "Hello" },
+    ]);
+    expect(() => toWireMessages(withTools!.messages)).toThrow(
+      "role is unsupported",
+    );
+  });
+
+  it("keeps a Langfuse generation with empty tool definitions sendable unless it called tools", async () => {
+    const generation = (
+      id: string,
+      toolDefinitions: unknown,
+      toolCalls: string[] = [],
+    ) => ({
+      id,
+      trace_id: `lf-trace-${id}`,
+      parent_observation_id: "",
+      type: "GENERATION",
+      provided_model_name: "acme/large-1",
+      input: JSON.stringify({ messages: [{ role: "user", content: "Hello" }] }),
+      output: JSON.stringify({ role: "assistant", content: "Hi" }),
+      usage_details: {},
+      tool_calls: toolCalls,
+      tool_definitions: toolDefinitions,
+    });
+    const steps = (records: unknown[]) =>
+      langfuseAdapter.adapt(records).flatMap((run) => run.steps);
+    const [withTools, emptyInFixture] = steps(
+      parseTraceRecords(await fixtureText("langfuse.jsonl")),
+    );
+    const toolFree = steps([
+      generation("empty-object", {}),
+      generation("empty-list", []),
+      generation("encoded-empty-list", "[]"),
+    ]);
+    const [calledTools] = steps([
+      generation("called-tools", {}, [
+        JSON.stringify({
+          id: "call-lf-9",
+          name: "lookup_order",
+          arguments: {},
+        }),
+      ]),
+    ]);
+
+    expect(toWireMessages(emptyInFixture!.messages)).toEqual([
+      { role: "tool", content: "shipped", tool_call_id: "call-lf-1" },
+    ]);
+    expect(toolFree).toHaveLength(3);
+    for (const step of toolFree) {
+      expect(toWireMessages(step.messages)).toEqual([
+        { role: "user", content: "Hello" },
+      ]);
+    }
+    for (const step of [withTools!, calledTools!]) {
+      expect(() => toWireMessages(step.messages)).toThrow(
+        "role is unsupported",
+      );
+    }
+  });
+
+  it("sends a tool-free Codex turn as text and keeps tool-calling turns out of replay", async () => {
+    const item = (type: string, payload: Record<string, unknown>) => ({
+      timestamp: "2026-08-01T12:00:02.000Z",
+      type,
+      payload,
+    });
+    const [toolTurn, textTurn, shellTurn] = codexAdapter.adapt([
+      ...parseTraceRecords(await fixtureText("codex.jsonl")),
+      item("turn_context", { turn_id: "cx-turn-3", model: "gpt-5.1-codex" }),
+      item("response_item", {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "List the files." }],
+      }),
+      item("response_item", {
+        type: "local_shell_call",
+        call_id: "call-cx-2",
+        status: "completed",
+        action: { type: "exec", command: ["ls"] },
+      }),
+      item("response_item", {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Two files." }],
+      }),
+    ])[0]!.steps;
+
+    expect(toWireMessages(textTurn!.messages)).toEqual([
+      { role: "user", content: "Summarize the status." },
+    ]);
+    expect(toWireMessages(textTurn!.output as JsonValue[])).toEqual([
+      { role: "assistant", content: "The order is awaiting pickup." },
+    ]);
+    for (const step of [toolTurn!, shellTurn!]) {
+      expect(() => toWireMessages(step.messages), step.trajectoryId).toThrow(
+        "carries tool calls",
+      );
+    }
   });
 });
