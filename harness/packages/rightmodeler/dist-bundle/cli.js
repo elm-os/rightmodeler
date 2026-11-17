@@ -26016,10 +26016,10 @@ var BudgetRefusalError = class extends Error {
     this.causedByReservations = causedByReservations;
   }
 };
-async function reserveWhenFree(budget, input, inFlight, signal) {
+async function reserveWhenFree(budget, input, inFlight) {
   let retryMs = 25;
   for (; ; ) {
-    signal?.throwIfAborted();
+    input.signal?.throwIfAborted();
     try {
       return await budget.reserveExecution(input);
     } catch (error51) {
@@ -26163,6 +26163,7 @@ function createBudget(options) {
     const reservationId = randomUUID5();
     for (; ; ) {
       const current = await load(true);
+      input.signal?.throwIfAborted();
       const requiredCapUsd = roundUsd(current.ledger.spentUsd + worstCaseUsd);
       const capacityRequiredUsd = roundUsd(requiredCapUsd + reservedTotal(current.ledger));
       if (current.ledger.authorizedTotalUsd !== void 0 && capacityRequiredUsd > roundUsd(current.ledger.authorizedTotalUsd)) {
@@ -30591,8 +30592,9 @@ async function replayModeA(input) {
           const reservation = await reserveWhenFree(input.budget, {
             contextTokens: estimateInputTokens(request.messages),
             maxOutputTokens: judge.maxOutputTokens,
-            pricing: judge.pricing
-          }, activeRefunds, retirement);
+            pricing: judge.pricing,
+            signal: retirement
+          }, activeRefunds);
           if (retirement.aborted) {
             await reservation.refund(0);
             throw retirement.reason;
