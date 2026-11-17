@@ -14,7 +14,7 @@
     {
       "label": "01 · Locate",
       "title": "Your sessions are already on disk",
-      "body": "Codex CLI writes each session to ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl as you work. There is nothing to export and nothing to instrument; choose one rollout or a day's folder."
+      "body": "Codex CLI writes each session to ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl as you work, and can later compress it to rollout-*.jsonl.zst; rightmodeler reads both. There is nothing to export and nothing to instrument; choose one rollout or a day's folder."
     },
     {
       "label": "02 · Ingest",
@@ -37,7 +37,7 @@
     "commands": [
       {
         "comment": "# list your most recent Codex rollouts",
-        "command": "ls -t ~/.codex/sessions/*/*/*/rollout-*.jsonl | head -5"
+        "command": "ls -t ~/.codex/sessions/*/*/*/rollout-*.jsonl* | head -5"
       },
       {
         "comment": "# preview the pipeline against a rollout, without spending",
@@ -123,7 +123,7 @@
   "faq": [
     {
       "q": "Where does Codex CLI keep its session logs?",
-      "a": "In ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, one JSONL file per session, written as you work. Pass a rollout or a day's folder with --traces; the format is autodetected from the session_meta record and the turn_context and response_item lines that follow it."
+      "a": "In ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, one JSONL file per session, written as you work. Codex can later compress a rollout to rollout-*.jsonl.zst, and rightmodeler reads both. Pass a rollout or a day's folder with --traces; the format is autodetected from the session_meta record and the turn_context and response_item lines that follow it."
     },
     {
       "q": "Do I need to export anything before a validation run?",
