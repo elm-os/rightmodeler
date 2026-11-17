@@ -8,7 +8,7 @@ import {
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { type StepRecord } from "@rightmodeler/core";
+import type { StepRecord } from "@rightmodeler/core";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { estimateReplay, runPipeline, topologicalRecords } from "./pipeline.js";
@@ -184,7 +184,7 @@ describe("direct vendor keys", () => {
       fetchSpy.mockRestore();
       delete process.env[apiKeyEnv];
     }
-  }, 60_000);
+  });
 });
 
 function topologyRecord(

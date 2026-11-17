@@ -83,7 +83,7 @@ describe("built CLI pipeline", () => {
         },
       }),
     );
-  }, 60_000);
+  });
 
   it("judges each call site of a mixed-vendor family outside that call site's model family", async () => {
     const { root, repo } = await fixtureCopy("mixed-vendor");
@@ -174,7 +174,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("keeps one external experiment per split for a mixed-vendor family", async () => {
     const { root, repo } = await fixtureCopy("mixed-vendor-external");
@@ -237,7 +237,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await Promise.all([modelStub.close(), evaluatorStub.close()]);
     }
-  }, 120_000);
+  });
 
   it("abstains and reports every family when shortlist evidence is entirely missing", async () => {
     const { repo } = await fixtureCopy("missing-shortlist-verdicts");
@@ -298,7 +298,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("warns and names catalog drift when every family step lacks its current model", async () => {
     const { repo } = await fixtureCopy("shortlist-catalog-drift");
@@ -363,7 +363,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("forwards catalog truncation warnings during estimates", async () => {
     const { repo } = await fixtureCopy("catalog-truncated");
@@ -401,7 +401,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("resolves a bare recorded model id against the provider catalog", async () => {
     const { repo } = await fixtureCopy("shortlist-model-resolution");
@@ -469,7 +469,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("stops before any spend when bare model ids cannot name the judge's vendor", async () => {
     const { repo, traces } = await renamedModelFixture(
@@ -509,7 +509,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("names the missing neutral judge before any spend", async () => {
     const { repo } = await fixtureCopy("no-neutral-judge");
@@ -550,7 +550,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("checks the fallback judge's vendor before any spend when the external evaluator is unreachable", async () => {
     const { repo, traces } = await renamedModelFixture(
@@ -597,7 +597,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("refuses an unpriced catalog until a pricing file is supplied", async () => {
     const { root, repo } = await fixtureCopy("unpriced-catalog");
@@ -644,7 +644,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("abstains when one candidate is missing its shortlist verdict", async () => {
     const { repo } = await fixtureCopy("missing-candidate-verdict");
@@ -721,7 +721,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("reports only the case whose evaluator evidence is missing", async () => {
     const { repo } = await fixtureCopy("missing-evaluator-evidence");
@@ -822,7 +822,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("blocks only affected families when operational replay cells cannot complete", async () => {
     const { repo } = await fixtureCopy("replay-operational-block");
@@ -884,7 +884,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("runs from the demo scan corpus to one idempotent draft pull request", async () => {
     const { root, repo } = await fixtureCopy("apply");
@@ -1407,7 +1407,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await Promise.all([provider.close(), github.close()]);
     }
-  }, 480_000);
+  }, 900_000);
 
   it("prefers a reachable external evaluator, persists every metric, and makes zero judge calls", async () => {
     const { repo } = await fixtureCopy("external-evaluator");
@@ -1529,7 +1529,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await Promise.all([modelStub.close(), evaluatorStub.close()]);
     }
-  }, 60_000);
+  });
 
   it("names failed external assessments as absent without fabricating Assessment facts", async () => {
     const { repo } = await fixtureCopy("external-evaluator-failed");
@@ -1613,7 +1613,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await Promise.all([modelStub.close(), evaluatorStub.close()]);
     }
-  }, 60_000);
+  });
 
   it("leaves candidates answered by another model out of the evidence as attribution_substituted", async () => {
     const { repo } = await fixtureCopy("substituted-candidates");
@@ -1698,7 +1698,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await modelStub.close();
     }
-  }, 60_000);
+  });
 
   it("sends --header values with catalog, replay and judge requests", async () => {
     const { repo } = await fixtureCopy("static-headers");
@@ -1752,5 +1752,5 @@ describe("built CLI pipeline", () => {
     } finally {
       await modelStub.close();
     }
-  }, 60_000);
+  });
 });

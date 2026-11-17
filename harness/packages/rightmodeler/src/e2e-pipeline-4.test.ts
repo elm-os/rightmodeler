@@ -163,7 +163,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("warns and uses the built-in judge when the external evaluator is unreachable", async () => {
     const { repo } = await fixtureCopy("external-evaluator-unreachable");
@@ -230,7 +230,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await modelStub.close();
     }
-  }, 60_000);
+  });
 
   it("records promptfoo grades of rewritten output as external_output_mismatch without an Assessment fact", async () => {
     const { repo } = await fixtureCopy("promptfoo-output-mismatch");
@@ -301,7 +301,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await modelStub.close();
     }
-  }, 60_000);
+  });
 
   it("re-grades promptfoo candidate outputs after an assertions edit without a model call", async () => {
     await regradeAfterAssertionsEdit({
@@ -309,7 +309,7 @@ describe("built CLI pipeline", () => {
       command: promptfooCommandPath,
       env: () => ({}),
     });
-  }, 90_000);
+  });
 
   it.skipIf(livePromptfoo === undefined)(
     "grades replays with the real promptfoo CLI against the stub provider",
@@ -402,7 +402,6 @@ describe("built CLI pipeline", () => {
         await modelStub.close();
       }
     },
-    120_000,
   );
 
   it.skipIf(livePromptfoo === undefined)(
@@ -523,7 +522,7 @@ describe("built CLI pipeline", () => {
     for (const { caseId, stepId } of planCases) {
       expect(stepId).toBe(stepMap[stepIndexByCase.get(caseId)!]);
     }
-  }, 120_000);
+  });
 
   it("abstains an affected family when the provider catalog drifts before confirmation", async () => {
     const { root, repo, traces } = await langgraphFixtureCopy("catalog-drift");
@@ -576,7 +575,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("names the missing neutral judge at confirmation instead of a runtime error", async () => {
     const { root, repo, traces } = await langgraphFixtureCopy(
@@ -609,7 +608,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("refuses the cloud Mode B backend before confirmation when it is unavailable", async () => {
     const { root, repo, traces } = await langgraphFixtureCopy("catalog-drift");
@@ -657,7 +656,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("abstains an affected family when confirmation model metadata is missing", async () => {
     const { root, repo, traces } = await langgraphFixtureCopy(
@@ -725,7 +724,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("abstains an affected family when recorded confirmation text is missing", async () => {
     const { root, repo, traces } = await langgraphFixtureCopy(
@@ -810,7 +809,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("marks a confirmation-needing recommendation unconfirmed when Mode B config is absent", async () => {
     const { repo, traces } = await langgraphFixtureCopy("unconfirmed");
@@ -856,7 +855,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("names an invalid Mode B config field", async () => {
     const { root, repo } = await fixtureCopy("bad-modeb-config");
@@ -1194,7 +1193,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("stops sending to a judge at its first model substitution inside --max-cost-usd", async () => {
     const { repo } = await fixtureCopy("judge-substitution-cap");
@@ -1251,7 +1250,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 
   it("includes discovered trace candidates in the non-interactive remedy", async () => {
     const fixture = await fixtureCopy("discovered-trace-remedy");

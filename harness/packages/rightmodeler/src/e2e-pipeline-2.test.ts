@@ -758,7 +758,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("replays a single call site bound by its functionId without a distinct-step abstention", async () => {
     const { repo } = await aiSdkFixtureCopy("single-bound-call-site");
@@ -802,7 +802,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 240_000);
+  });
 
   it("leaves recorded tool-call cases out of the replay sample and replays the rest", async () => {
     const { root, repo } = await fixtureCopy("unsendable-cases");
@@ -867,5 +867,5 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 120_000);
+  });
 });

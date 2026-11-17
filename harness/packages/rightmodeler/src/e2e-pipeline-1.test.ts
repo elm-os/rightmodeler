@@ -47,40 +47,36 @@ import {
 afterAll(removeTemporaryDirectories);
 
 describe("built CLI pipeline", () => {
-  it.each(traceFixtures)(
-    "runs %s through corpus",
-    async (name) => {
-      const { repo } = await fixtureCopy(`corpus-${name}`);
-      const result = await runCli([
-        "init",
-        "--through",
-        "corpus",
-        "--traces",
-        join(traceFixturesDir, name),
-        "--output",
-        "json",
-        "--repo",
-        repo,
-      ]);
+  it.each(traceFixtures)("runs %s through corpus", async (name) => {
+    const { repo } = await fixtureCopy(`corpus-${name}`);
+    const result = await runCli([
+      "init",
+      "--through",
+      "corpus",
+      "--traces",
+      join(traceFixturesDir, name),
+      "--output",
+      "json",
+      "--repo",
+      repo,
+    ]);
 
-      expect(result.code, result.stderr).toBe(0);
-      for (const line of result.stderr.split("\n")) {
-        if (line.trim() === "") continue;
-        expect(JSON.parse(line)).toMatchObject({
-          code: "trace_steps_excluded",
-        });
-      }
-      expect(
-        (JSON.parse(result.stdout) as Record<string, unknown>).executedStages,
-      ).toEqual(["scan", "ingest", "reconcile", "scrub", "corpus"]);
-      const corpus = await readStageArtifact(
-        join(repo, ".rightmodeler"),
-        "corpus",
-      );
-      expect(corpus.caseCount).toBeGreaterThan(0);
-    },
-    60_000,
-  );
+    expect(result.code, result.stderr).toBe(0);
+    for (const line of result.stderr.split("\n")) {
+      if (line.trim() === "") continue;
+      expect(JSON.parse(line)).toMatchObject({
+        code: "trace_steps_excluded",
+      });
+    }
+    expect(
+      (JSON.parse(result.stdout) as Record<string, unknown>).executedStages,
+    ).toEqual(["scan", "ingest", "reconcile", "scrub", "corpus"]);
+    const corpus = await readStageArtifact(
+      join(repo, ".rightmodeler"),
+      "corpus",
+    );
+    expect(corpus.caseCount).toBeGreaterThan(0);
+  });
 
   it("ingests a trace file Windows PowerShell 5.1 wrote, in UTF-16 with CRLF, like the original", async () => {
     const original = await readFile(tracesPath, "utf8");
@@ -404,7 +400,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 60_000);
+  });
 
   it("judges the recorded answer's text from gateway traces and keeps the recorded message in the stored plan", async () => {
     const { root, repo } = await fixtureCopy("gateway-reference");
@@ -526,7 +522,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 180_000);
+  });
 
   it("falls back from a persistently rate-limited judge and completes family evidence", async () => {
     const { repo } = await fixtureCopy("judge-rate-limit-failover");
@@ -629,7 +625,7 @@ describe("built CLI pipeline", () => {
     } finally {
       await stub.close();
     }
-  }, 180_000);
+  });
 
   it("plans from anywhere and proves checkpointed free stages", async () => {
     const { root, repo } = await fixtureCopy("plan");
