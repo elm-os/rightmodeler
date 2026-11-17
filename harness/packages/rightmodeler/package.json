@@ -37,12 +37,12 @@
     "linkDirectory": false
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && pnpm run bundle",
+    "build": "node node_modules/@typescript/native/bin/tsc -p tsconfig.json && pnpm run bundle",
     "bundle": "tsx scripts/generate-docs.mjs --check && node build.mjs",
     "docs:generate": "tsx scripts/generate-docs.mjs --write",
     "prepack": "pnpm run bundle",
     "parity": "pnpm run build && vitest run src/parity.test.ts",
-    "check-types": "tsc --noEmit",
+    "check-types": "node node_modules/@typescript/native/bin/tsc --noEmit",
     "check": "vitest run"
   },
   "devDependencies": {
@@ -52,6 +52,7 @@
     "@rightmodeler/replay": "workspace:*",
     "@rightmodeler/scanner": "workspace:*",
     "@types/node": "^24",
+    "@typescript/native": "npm:typescript@7.0.2",
     "ajv": "^8.20.0",
     "commander": "^14",
     "esbuild": "^0.28.2",

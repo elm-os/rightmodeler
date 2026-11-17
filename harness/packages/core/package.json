@@ -9,8 +9,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "check-types": "tsc --noEmit",
+    "build": "node node_modules/@typescript/native/bin/tsc -p tsconfig.json",
+    "check-types": "node node_modules/@typescript/native/bin/tsc --noEmit",
     "check": "vitest run"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@typescript/native": "npm:typescript@7.0.2",
     "fast-check": "^4.9.0",
     "typescript": "^5",
     "vitest": "^3"
