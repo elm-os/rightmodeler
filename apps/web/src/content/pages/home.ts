@@ -76,6 +76,8 @@ A swap is safe when it clears every release gate on your own traces.
 
 How the gates work: /how-it-works
 
+View on GitHub: ${REPO_URL}
+
 From validation to autonomy
 
 ## It starts with safe model swaps.

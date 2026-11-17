@@ -13,6 +13,13 @@
   --color-silver-mist: #b1b0b0; /* subtle washes, mid-level dividers */
   --color-void-violet: #0447ff; /* decorative accent — illustration only */
   --color-ember-orange: #ff4704; /* decorative accent — illustration only */
+  /* Owner-directed blues for the "What holds up" banner's background. Decoration only. */
+  --color-banner-navy: #0c1a40;
+  --color-banner-royal: #1c4aa8;
+  --color-banner-electric: #1466e0;
+  --color-banner-cyan: #1fa2dc;
+  --color-banner-sky: #7fc6ea;
+  --color-banner-silver: #c3c8e0;
 
   /* Loaded by app/fonts.css (scripts/subset-fonts.py). The licensed brand face leads each
      stack, so the real files can be dropped in without a change here. */
@@ -143,4 +150,116 @@ body {
 
 .reveal-lcp[data-shown="done"] {
   animation: none;
+}
+
+/* The "What holds up" banner (components/sections/thesis-band.tsx): a blue cloth under static
+   film grain. See docs/design.md § Banner blues. Nothing here moves. */
+.banner-field {
+  container-type: size;
+  background: linear-gradient(
+    100deg,
+    var(--color-banner-navy),
+    var(--color-banner-royal) 46%,
+    var(--color-banner-electric)
+  );
+}
+
+.banner-field::before,
+.banner-field::after {
+  content: "";
+  position: absolute;
+}
+
+/* The cloth: narrow light and shadow folds over colour pools, on a tilted, oversized sheet.
+   Radii are in container units, so a tall phone banner keeps folds instead of thin stripes. */
+.banner-field::before {
+  inset: -70% -20%;
+  rotate: 17deg;
+  background:
+    radial-gradient(
+      4.5cqmax 50cqmin at 19% 40%,
+      color-mix(in srgb, var(--color-banner-silver) 90%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      7cqmax 45cqmin at 14.5% 52%,
+      color-mix(in srgb, var(--color-banner-sky) 90%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      3.5cqmax 60cqmin at 41% 31%,
+      color-mix(in srgb, var(--color-banner-silver) 62%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      4.5cqmax 45cqmin at 59% 70%,
+      color-mix(in srgb, var(--color-banner-silver) 70%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      4.5cqmax 60cqmin at 87% 56%,
+      color-mix(in srgb, var(--color-banner-navy) 95%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      3cqmax 45cqmin at 83% 45%,
+      color-mix(in srgb, var(--color-banner-sky) 85%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      3.5cqmax 50cqmin at 90.5% 43%,
+      color-mix(in srgb, var(--color-banner-silver) 70%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      9cqmax 70cqmin at 79% 50%,
+      color-mix(in srgb, var(--color-banner-sky) 55%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      16cqmax 60cqmin at 23% 68%,
+      var(--color-banner-cyan),
+      transparent
+    ),
+    radial-gradient(
+      13cqmax 110cqmin at 28% 40%,
+      var(--color-banner-navy),
+      transparent
+    ),
+    radial-gradient(
+      26cqmax 130cqmin at 76% 50%,
+      var(--color-banner-cyan),
+      transparent
+    ),
+    radial-gradient(
+      36cqmax 90cqmin at 52% 70%,
+      var(--color-banner-electric),
+      transparent
+    );
+}
+
+/* Navy pooled behind the centred copy so white text clears AA, and again toward the edges. */
+.banner-field::after {
+  inset: 0;
+  background:
+    radial-gradient(
+      min(100cqw, 560px) 84% at 50% 52%,
+      color-mix(in srgb, var(--color-banner-navy) 66%, transparent),
+      color-mix(in srgb, var(--color-banner-navy) 48%, transparent) 58%,
+      transparent
+    ),
+    radial-gradient(
+      75% 95% at 50% 50%,
+      transparent 66%,
+      color-mix(in srgb, var(--color-banner-navy) 36%, transparent)
+    );
+}
+
+/* Film grain: one octave of fractal noise at about one CSS pixel, greyscale and opaque,
+   overlaid so it scales with the light beneath it the way the owner's reference does. */
+.banner-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  mix-blend-mode: overlay;
+  opacity: 0.34;
 }
