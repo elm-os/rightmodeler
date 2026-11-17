@@ -7,16 +7,16 @@
   "verdict": "complement",
   "verdictLabel": "Complement · it logs the bill, rightmodeler tests the swap",
   "title": "rightmodeler vs Helicone: routing vs a tested swap",
-  "description": "Helicone routes and logs your model traffic, so you can see where the bill goes. rightmodeler replays those logged requests on cheaper models before any swap.",
+  "description": "Helicone routes and logs your model traffic, so you can see where the bill goes. rightmodeler replays those logged requests on cheaper or newer models before any swap.",
   "h1": "rightmodeler vs Helicone",
-  "lede": "Helicone sits in your request path, routing each call to a provider and logging what it cost and returned. rightmodeler starts from those logged requests and asks what the log cannot: would a cheaper model have produced a response you would have accepted?",
+  "lede": "Helicone sits in your request path, routing each call to a provider and logging what it cost and returned. rightmodeler starts from those logged requests and asks what the log cannot: would a cheaper or newer model have produced a response you would have accepted?",
   "integrationSlug": "helicone",
   "related": ["openrouter", "litellm", "langfuse"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Complements on the same traffic. You hire Helicone to run and read your model traffic: as of 2026-09-24, its docs describe an OpenAI-compatible AI Gateway in front of 100+ LLM providers that routes each request to the cheapest provider serving the model you named and fails over when one errors, with every request logged alongside its cost, latency, and errors, and sessions, custom properties, alerts, caching, and rate limits on top. You hire rightmodeler, a free MIT-licensed CLI, when the bill raises a different question: which of those calls could a cheaper model answer as well? Its dedicated Helicone adapter reads the request rows you export, replays the recorded calls through cheaper candidates, judges them against the response you shipped, and reports agreement, sample size, and abstentions per step family. What clears every gate becomes a draft pull request that changes model identifiers only, for a human to review and merge. Keep Helicone in the request path; rightmodeler never enters it."
+      "body": "Complements on the same traffic. You hire Helicone to run and read your model traffic: as of 2026-09-24, its docs describe an OpenAI-compatible AI Gateway in front of 100+ LLM providers that routes each request to the cheapest provider serving the model you named and fails over when one errors, with every request logged alongside its cost, latency, and errors, and sessions, custom properties, alerts, caching, and rate limits on top. You hire rightmodeler, a free MIT-licensed CLI, when the bill raises a different question: which of those calls could a cheaper model answer as well? Its dedicated Helicone adapter reads the request rows you export, replays the recorded calls through cheaper or newer candidates, judges them against the response you shipped, and reports agreement, sample size, and abstentions per step family. What clears every gate becomes a draft pull request that changes model identifiers only, for a human to review and merge. Keep Helicone in the request path; rightmodeler never enters it."
     },
     {
       "type": "table",
@@ -29,7 +29,7 @@
         {
           "dimension": "job",
           "theirs": "route, log, and analyze live model traffic",
-          "ours": "test whether a cheaper model can take each step"
+          "ours": "test whether a cheaper or newer model can take each step"
         },
         {
           "dimension": "acts",
@@ -102,7 +102,7 @@
         {
           "scenario": "You already know which agent drives the bill, and every step in it calls the same frontier model.",
           "winner": "ours",
-          "why": "Helicone's cheapest-provider routing lowers the price of the model you named; it never changes the model. rightmodeler replays that agent's recorded calls on cheaper models from your provider's live catalog, judges each against the response you shipped, abstains where the sample is thin, and holds the winner to the quality floor on held-out cases before it recommends a swap."
+          "why": "Helicone's cheapest-provider routing lowers the price of the model you named; it never changes the model. rightmodeler replays that agent's recorded calls on cheaper or newer models from your provider's live catalog, judges each against the response you shipped, abstains where the sample is thin, and holds the winner to the quality floor on held-out cases before it recommends a swap."
         },
         {
           "scenario": "Finance asks why the model bill doubled last month and what to do about it.",
@@ -161,7 +161,7 @@
       "items": [
         {
           "q": "Does rightmodeler replace Helicone?",
-          "a": "No. Helicone proxies, caches, and observes live traffic. rightmodeler runs offline on rows you exported and answers a different question: whether a cheaper model would have produced an equivalent response on the calls you actually made. Keep Helicone in the request path; a merged swap keeps flowing through it."
+          "a": "No. Helicone proxies, caches, and observes live traffic. rightmodeler runs offline on rows you exported and answers a different question: whether a cheaper or newer model would have produced an equivalent response on the calls you actually made. Keep Helicone in the request path; a merged swap keeps flowing through it."
         },
         {
           "q": "Helicone's gateway already routes to the cheapest provider. Isn't that the same saving?",

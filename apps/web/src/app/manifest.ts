@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "rightmodeler",
     short_name: "rightmodeler",
     description:
-      "Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.",
+      "Cheaper or newer model swaps for production AI, validated on your own traces and opened as draft PRs.",
     start_url: "/",
     display: "standalone",
     background_color: "#fdfcfc",

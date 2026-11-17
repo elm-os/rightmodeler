@@ -148,9 +148,10 @@ export function Hero() {
 
               <p className="mt-6 max-w-2xl text-subheading text-driftwood">
                 rightmodeler takes the work out of the loop, not the judgment.
-                It validates cheaper models on your production traces against
-                the outputs you accepted, and opens a draft pull request only
-                when a swap clears every gate. Today, the final yes stays yours.
+                It validates cheaper or newer models on your production traces
+                against the outputs you accepted, and opens a draft pull request
+                only when a swap clears every gate. Today, the final yes stays
+                yours.
               </p>
 
               {/* The product's first step sits right under the subhead; the ledger follows. */}

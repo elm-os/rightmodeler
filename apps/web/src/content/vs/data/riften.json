@@ -7,16 +7,16 @@
   "verdict": "competitor",
   "verdictLabel": "Competitor · live routing vs reviewed swaps",
   "title": "rightmodeler vs Riften: who holds the model choice",
-  "description": "Riften routes each request live and learns from outcomes toward models you own. rightmodeler validates cheaper models offline and proposes swaps as draft PRs.",
+  "description": "Riften routes each request live and learns from outcomes toward models you own. rightmodeler validates cheaper or newer models offline and proposes swaps as draft PRs.",
   "h1": "rightmodeler vs Riften",
-  "lede": "Riften becomes the gateway for your AI traffic, picks the model for each request, and learns from the outcomes on the way to models of your own. rightmodeler stays out of the request path: it validates cheaper models on the traces you already have and proposes the swaps that clear every gate as a draft pull request your team reviews.",
+  "lede": "Riften becomes the gateway for your AI traffic, picks the model for each request, and learns from the outcomes on the way to models of your own. rightmodeler stays out of the request path: it validates cheaper or newer models on the traces you already have and proposes the swaps that clear every gate as a draft pull request your team reviews.",
   "integrationSlug": "",
   "related": ["not-diamond", "conifer", "martian"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Competitors for one decision, held in different places. You hire Riften to take model choice off your hands: per its site, you connect your OpenAI- or Anthropic-compatible client to its gateway, which selects the model for each request, tracks which workflow outcomes succeeded, runs evaluations against your company's real work, and, with content capture enabled, assembles training data for autonomous post-training of company-specific models. You hire rightmodeler to keep that choice in your code: the MIT-licensed CLI replays the traces you already recorded through cheaper candidates from your provider's live catalog, judges each against the output you accepted, and when a step family clears every release gate, held-out cases included, rightmodeler apply opens a draft pull request that changes only the model identifier, for a human to review and merge. Both judge models on your own work, not public leaderboards. Riften acts on what it learns live, in the request path; rightmodeler never enters the request path and changes nothing until someone merges."
+      "body": "Competitors for one decision, held in different places. You hire Riften to take model choice off your hands: per its site, you connect your OpenAI- or Anthropic-compatible client to its gateway, which selects the model for each request, tracks which workflow outcomes succeeded, runs evaluations against your company's real work, and, with content capture enabled, assembles training data for autonomous post-training of company-specific models. You hire rightmodeler to keep that choice in your code: the MIT-licensed CLI replays the traces you already recorded through cheaper or newer candidates from your provider's live catalog, judges each against the output you accepted, and when a step family clears every release gate, held-out cases included, rightmodeler apply opens a draft pull request that changes only the model identifier, for a human to review and merge. Both judge models on your own work, not public leaderboards. Riften acts on what it learns live, in the request path; rightmodeler never enters the request path and changes nothing until someone merges."
     },
     {
       "type": "table",
@@ -66,7 +66,7 @@
         {
           "scenario": "You want model selection handled for you today, and over time you want your accepted outputs to become a model your company owns.",
           "winner": "theirs",
-          "why": "That is Riften's whole arc, per its site and YC listing: route requests, learn which outputs succeed, build evaluations and training data from that experience, and post-train company-specific models on open weights. rightmodeler trains nothing; it only validates cheaper models you can already call."
+          "why": "That is Riften's whole arc, per its site and YC listing: route requests, learn which outputs succeed, build evaluations and training data from that experience, and post-train company-specific models on open weights. rightmodeler trains nothing; it only validates cheaper or newer models you can already call."
         },
         {
           "scenario": "A regulated team must keep every model change in code review, and no new third-party service may sit in the production request path.",
@@ -76,7 +76,7 @@
         {
           "scenario": "You are weighing a routing gateway and want to know first which of your steps have room to move.",
           "winner": "both",
-          "why": "Run rightmodeler on the traces you already have: per step, it shows whether cheaper candidates agreed with the output you shipped, with the number of trials behind each rate. Steps with headroom are where routing or a direct swap pays; steps already right-sized can stay put. Measure first, then decide who should hold the choice."
+          "why": "Run rightmodeler on the traces you already have: per step, it shows whether cheaper or newer candidates agreed with the output you shipped, with the number of trials behind each rate. Steps with headroom are where routing or a direct swap pays; steps already right-sized can stay put. Measure first, then decide who should hold the choice."
         }
       ]
     },

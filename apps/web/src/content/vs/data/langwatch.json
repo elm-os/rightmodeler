@@ -7,9 +7,9 @@
   "verdict": "complement",
   "verdictLabel": "Complement · simulated users gate per-step swaps",
   "title": "rightmodeler vs LangWatch: simulations vs recorded steps",
-  "description": "LangWatch tests agents with simulated users, and its Langy agent opens fix PRs. rightmodeler replays recorded steps on cheaper models and opens model-only PRs.",
+  "description": "LangWatch tests agents with simulated users, and its Langy agent opens fix PRs. rightmodeler replays recorded steps on cheaper or newer models and opens model-only PRs.",
   "h1": "rightmodeler vs LangWatch",
-  "lede": "LangWatch tests your agent with simulated users, scores it offline and in production, and its Langy agent turns what it finds into Scenario tests and pull requests. rightmodeler proposes one change, the model each step calls, and only where the calls your agent already made show that a cheaper model holds up.",
+  "lede": "LangWatch tests your agent with simulated users, scores it offline and in production, and its Langy agent turns what it finds into Scenario tests and pull requests. rightmodeler proposes one change, the model each step calls, and only where the calls your agent already made show that a cheaper or newer model holds up.",
   "integrationSlug": "",
   "related": ["langsmith", "opik", "braintrust"],
   "cta": "github",
@@ -176,7 +176,7 @@
           "a": "Open core, per its docs. The platform is Apache 2.0 and self-hostable with Docker or Helm, with no volume cap on your own infrastructure; the client SDKs are MIT; and enterprise features such as SSO, custom RBAC roles, audit logs, and AI governance features such as anomaly rules and SIEM export sit under a separate enterprise license. Its Scenario testing framework is open source, and LangWatch Cloud has a free plan. The rightmodeler CLI is MIT-licensed."
         },
         {
-          "q": "Will a validation run always find a cheaper model?",
+          "q": "Will a validation run always find a cheaper or newer model?",
           "a": "No, and it is designed not to. A step family abstains when the evidence is thin or too many of its cases had to be left out, and no swap is proposed when no candidate clears the quality floor on held-out cases. A report that finds no swap to make is a valid result."
         }
       ]

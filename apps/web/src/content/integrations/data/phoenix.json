@@ -5,11 +5,11 @@
   "logo": "/integrations/logos/phoenix.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
-  "title": "Arize Phoenix integration: replay spans on cheaper models",
-  "description": "Export OpenInference spans from Phoenix: rightmodeler replays recorded steps on cheaper models and measures every output against what you accepted.",
+  "title": "Arize Phoenix integration: replay spans on cheaper or newer models",
+  "description": "Export OpenInference spans from Phoenix: rightmodeler replays recorded steps on cheaper or newer models and measures every output against what you accepted.",
   "h1": "rightmodeler + Arize Phoenix",
-  "lede": "Phoenix already records your agent as OpenInference spans: model, messages, token counts. rightmodeler replays recorded LLM spans through cheaper candidates and reports agreement, evidence, sample size, and abstentions per step family.",
-  "tldr": "rightmodeler reads Phoenix traces in their native OpenInference form with a dedicated adapter. It walks an OTLP file export down through resourceSpans and scopeSpans, keeps the spans whose openinference.span.kind is LLM, un-flattens the indexed dotted message keys back into ordered messages, and reads the model from llm.model_name with token counts from llm.token_count. Kept spans are then replayed against cheaper candidates and scored against the output you already shipped.",
+  "lede": "Phoenix already records your agent as OpenInference spans: model, messages, token counts. rightmodeler replays recorded LLM spans through cheaper or newer candidates and reports agreement, evidence, sample size, and abstentions per step family.",
+  "tldr": "rightmodeler reads Phoenix traces in their native OpenInference form with a dedicated adapter. It walks an OTLP file export down through resourceSpans and scopeSpans, keeps the spans whose openinference.span.kind is LLM, un-flattens the indexed dotted message keys back into ordered messages, and reads the model from llm.model_name with token counts from llm.token_count. Kept spans are then replayed against cheaper or newer candidates and scored against the output you already shipped.",
   "steps": [
     {
       "label": "01 · Export",
@@ -24,7 +24,7 @@
     {
       "label": "03 · Replay + judge",
       "title": "Replayed on your inputs, judged against your outputs",
-      "body": "Kept spans are replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind and never pooled across kinds."
+      "body": "Kept spans are replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind and never pooled across kinds."
     },
     {
       "label": "04 · Report + apply",
@@ -83,7 +83,7 @@
   "useCases": [
     {
       "title": "Right-size whatever OpenInference instruments",
-      "body": "Phoenix traces frameworks through OpenInference instrumentors, so whether the spans came from LlamaIndex, LangChain, or your own tracer, every LLM span lands as a step with its model, messages, and token counts, and the report shows which step families clear a swap to a cheaper model."
+      "body": "Phoenix traces frameworks through OpenInference instrumentors, so whether the spans came from LlamaIndex, LangChain, or your own tracer, every LLM span lands as a step with its model, messages, and token counts, and the report shows which step families clear a swap to a cheaper or newer model."
     },
     {
       "title": "Measure the candidate before Phoenix sees drift",
@@ -110,7 +110,7 @@
     },
     {
       "q": "Does rightmodeler replace Phoenix?",
-      "a": "No. Phoenix watches and evaluates your agent in production; rightmodeler runs after the fact, on exported spans, to measure cheaper candidates against accepted outputs. Different jobs, same traces."
+      "a": "No. Phoenix watches and evaluates your agent in production; rightmodeler runs after the fact, on exported spans, to measure cheaper or newer candidates against accepted outputs. Different jobs, same traces."
     },
     {
       "q": "Do I need an Arize account or API key?",
@@ -125,7 +125,7 @@
       "a": "Only during the run: step inputs go to candidate models, and recorded outputs go to the judge, through the endpoint you configured, under your own key, the same class of call your agent already makes. An external evaluator, if you name one, receives what it scores. There is no rightmodeler server and no account; the span files stay on disk."
     },
     {
-      "q": "Will it always find a cheaper model?",
+      "q": "Will it always find a cheaper or newer model?",
       "a": "No, and deliberately so. A family abstains when the evidence is thin or the excluded fraction runs over the ceiling, and nothing is proposed unless a candidate clears the quality floor on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],

@@ -13,7 +13,7 @@ const VEIL =
   "radial-gradient(130% 115% at 24% 30%, rgba(253,252,252,0.82) 0%, rgba(253,252,252,0.34) 46%, rgba(253,252,252,0) 74%)";
 
 const description =
-  "Notes from the rightmodeler team on the work in the loop: validating cheaper model swaps on your traces, what a swap has to clear, and what we changed our minds about.";
+  "Notes from the rightmodeler team on the work in the loop: validating cheaper or newer model swaps on your traces, what a swap has to clear, and what we changed our minds about.";
 const preview = socialImage(
   "/social/blog.png",
   "Notes on the work in the loop: the rightmodeler blog",

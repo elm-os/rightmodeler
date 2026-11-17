@@ -5,10 +5,10 @@
   "logo": "/integrations/logos/helicone.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
-  "title": "Helicone integration: replay requests on cheaper models",
-  "description": "Export Helicone request rows: rightmodeler replays recorded calls against cheaper candidates and scores each replay against the response you already shipped.",
+  "title": "Helicone integration: replay requests on cheaper or newer models",
+  "description": "Export Helicone request rows: rightmodeler replays recorded calls against cheaper or newer candidates and scores each replay against the response you already shipped.",
   "h1": "rightmodeler + Helicone",
-  "lede": "Helicone already stores the full request and response for every call it proxied. rightmodeler reads that export with a dedicated adapter, replays recorded calls against cheaper candidates, and reports the evidence per step family.",
+  "lede": "Helicone already stores the full request and response for every call it proxied. rightmodeler reads that export with a dedicated adapter, replays recorded calls against cheaper or newer candidates, and reports the evidence per step family.",
   "tldr": "rightmodeler has a dedicated Helicone adapter. It recognizes request rows by their request_id, response_id, and request_created_at keys, reads the model, messages, and tool definitions out of request_body, and takes response_body as the output you shipped. Rows carrying a Helicone-Session-Id property are grouped into one trajectory, so a multi-call agent run stays a single unit when the statistics are computed.",
   "steps": [
     {
@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Cheaper candidates, scored against your response",
-      "body": "Each recorded call with a plain-text conversation and no declared tools is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, scored against your response",
+      "body": "Each recorded call with a plain-text conversation and no declared tools is replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
@@ -83,7 +83,7 @@
   "useCases": [
     {
       "title": "Turn gateway logs into a swap decision",
-      "body": "Helicone records what every call cost and returned. rightmodeler adds the column the dashboard leaves open: which of those calls a cheaper model could have answered as well, with a verdict and evidence per step family."
+      "body": "Helicone records what every call cost and returned. rightmodeler adds the column the dashboard leaves open: which of those calls a cheaper or newer model could have answered as well, with a verdict and evidence per step family."
     },
     {
       "title": "Keep agent sessions intact in the statistics",
@@ -110,7 +110,7 @@
     },
     {
       "q": "Does rightmodeler replace Helicone?",
-      "a": "No. Helicone proxies, caches, and observes live traffic. rightmodeler runs offline on rows you exported and answers a different question: whether a cheaper model would have produced an equivalent response on the calls you actually made."
+      "a": "No. Helicone proxies, caches, and observes live traffic. rightmodeler runs offline on rows you exported and answers a different question: whether a cheaper or newer model would have produced an equivalent response on the calls you actually made."
     },
     {
       "q": "What happens to my Helicone sessions?",

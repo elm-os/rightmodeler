@@ -7,21 +7,21 @@
   "verdict": "complement",
   "verdictLabel": "Complement · the gateway executes, rightmodeler validates",
   "title": "rightmodeler vs Bifrost: the call vs the choice",
-  "description": "Bifrost executes your model calls with fallbacks, budgets and caching. rightmodeler reads its request logs and replays through it to validate cheaper models.",
+  "description": "Bifrost executes your model calls with fallbacks, budgets and caching. rightmodeler reads its request logs and replays through it to validate cheaper or newer models.",
   "h1": "rightmodeler vs Bifrost",
-  "lede": "Bifrost executes the model calls your code sends, with failover, budgets and caching around each one. rightmodeler validates whether a cheaper model can take each step: it reads Bifrost's own request logs, replays the steps through the same gateway, and, when a swap clears every gate, opens a draft pull request you review.",
+  "lede": "Bifrost executes the model calls your code sends, with failover, budgets and caching around each one. rightmodeler validates whether a cheaper or newer model can take each step: it reads Bifrost's own request logs, replays the steps through the same gateway, and, when a swap clears every gate, opens a draft pull request you review.",
   "integrationSlug": "bifrost",
   "related": ["portkey", "litellm", "openrouter"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Keep your gateway. Bifrost, Maxim's open-source AI gateway, is hired to execute requests: per its docs as of 2026-09-24, one OpenAI-compatible API in front of 20+ providers, with retries, fallbacks, load balancing, a semantic cache, and budgets set through virtual keys. rightmodeler is hired to validate whether a cheaper model could answer those requests as well. It reads the request logs Bifrost keeps, replays the recorded steps through cheaper candidates on the same gateway, judges every candidate against the output you accepted, and opens a draft pull request that changes only model identifiers once a swap clears every release gate. It never sits in your request path: Bifrost serves every production call before and after a validation run."
+      "body": "Keep your gateway. Bifrost, Maxim's open-source AI gateway, is hired to execute requests: per its docs as of 2026-09-24, one OpenAI-compatible API in front of 20+ providers, with retries, fallbacks, load balancing, a semantic cache, and budgets set through virtual keys. rightmodeler is hired to validate whether a cheaper or newer model could answer those requests as well. It reads the request logs Bifrost keeps, replays the recorded steps through cheaper or newer candidates on the same gateway, judges every candidate against the output you accepted, and opens a draft pull request that changes only model identifiers once a swap clears every release gate. It never sits in your request path: Bifrost serves every production call before and after a validation run."
     },
     {
       "type": "table",
       "heading": "Executing a request, validating a swap",
-      "intro": "Both tools touch the model name in a request. One carries it out; the other asks whether a cheaper one would hold up.",
+      "intro": "Both tools touch the model name in a request. One carries it out; the other asks whether a cheaper or newer one would hold up.",
       "caption": "bifrost vs rightmodeler",
       "leftLabel": "Bifrost",
       "rightLabel": "rightmodeler",
@@ -29,7 +29,7 @@
         {
           "dimension": "job",
           "theirs": "execute each request: route it, retry it, fall back, serve from cache, log it",
-          "ours": "validate whether a cheaper model can take each step of your agent"
+          "ours": "validate whether a cheaper or newer model can take each step of your agent"
         },
         {
           "dimension": "when it acts",
@@ -131,7 +131,7 @@
         {
           "scenario": "Bifrost's logs show one agent step running thousands of times a day on a frontier model, and you want to know whether a cheaper model would give answers you accept.",
           "winner": "ours",
-          "why": "No gateway setting answers that. rightmodeler replays that step's recorded inputs through cheaper candidates, judges each against the output you accepted, and reports agreement, sample size and abstentions; a swap is proposed only when a candidate clears your quality floor."
+          "why": "No gateway setting answers that. rightmodeler replays that step's recorded inputs through cheaper or newer candidates, judges each against the output you accepted, and reports agreement, sample size and abstentions; a swap is proposed only when a candidate clears your quality floor."
         },
         {
           "scenario": "You already run Bifrost with logging on and want the bill lower without changing how requests are served.",
@@ -186,7 +186,7 @@
       "items": [
         {
           "q": "Does rightmodeler replace Bifrost?",
-          "a": "No. Bifrost executes and governs your live traffic; rightmodeler validates cheaper models offline, on traffic already served, and it never sits in your request path. A validation run gives Bifrost more work, not less: its logs are the corpus, its gateway is the replay endpoint, and a merged swap keeps serving through it."
+          "a": "No. Bifrost executes and governs your live traffic; rightmodeler validates cheaper or newer models offline, on traffic already served, and it never sits in your request path. A validation run gives Bifrost more work, not less: its logs are the corpus, its gateway is the replay endpoint, and a merged swap keeps serving through it."
         },
         {
           "q": "Can rightmodeler read the logs Bifrost already keeps?",
@@ -201,7 +201,7 @@
           "a": "The open-source gateway: built and verified on transports/v2.2.1 (maximhq/bifrost:v2.2.1), pinned by digest. Pin the image, as the setup does."
         },
         {
-          "q": "Will rightmodeler always find a cheaper model?",
+          "q": "Will rightmodeler always find a cheaper or newer model?",
           "a": "No. Plenty of steps already run on the cheapest model that can do the work, and a candidate can fall short of the quality floor or leave too little evidence, which ends in an abstention. Every swap that is offered waits for a person to review and merge the pull request."
         }
       ]

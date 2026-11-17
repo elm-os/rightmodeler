@@ -33,7 +33,7 @@ Crucible is being built to read the traces your production AI systems already em
 - **Connected over MCP**
   Will read the traces you already have. No new SDK, no re-instrumentation.
 - **Continuously right-sized**
-  Will validate cheaper swaps as traces arrive, on top of the agent's schedule, with evidence and abstentions.
+  Will validate cheaper or newer model swaps as traces arrive, on top of the agent's schedule, with evidence and abstentions.
 
 ## Available today: the CLI and the agent
 
@@ -45,7 +45,7 @@ View on GitHub: ${REPO_URL}
 
 ### What is Crucible?
 
-Crucible is the analytics and optimization suite for production AI systems that rightmodeler is building. It is designed to show what every layer costs, how fast it runs, and where it fails, and to add continuous right-sizing on top of the self-hosted agent's schedule, validating swaps to cheaper models as new traces arrive. It will be a step toward production AI that maintains itself.
+Crucible is the analytics and optimization suite for production AI systems that rightmodeler is building. It is designed to show what every layer costs, how fast it runs, and where it fails, and to add continuous right-sizing on top of the self-hosted agent's schedule, validating swaps to cheaper or newer models as new traces arrive. It will be a step toward production AI that maintains itself.
 
 ### When can I use it?
 

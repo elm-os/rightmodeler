@@ -7,9 +7,9 @@
   "verdict": "complement",
   "verdictLabel": "Complement · your DeepEval suite gates the swap",
   "title": "rightmodeler vs DeepEval: eval framework vs swap validation",
-  "description": "DeepEval is an open-source eval framework, and Confident AI its platform. rightmodeler tests cheaper models per step on your traces; your DeepEval CI gates it.",
+  "description": "DeepEval is an open-source eval framework, and Confident AI its platform. rightmodeler tests cheaper or newer models per step on your traces; your DeepEval CI gates it.",
   "h1": "rightmodeler vs DeepEval",
-  "lede": "DeepEval, with Confident AI as its platform, gives you the parts of an evaluation practice: metrics, pytest-style tests, synthetic datasets, and production monitoring. rightmodeler runs one narrower workflow on the traces you already recorded: which steps can move to a cheaper model, with per-step evidence and a draft pull request.",
+  "lede": "DeepEval, with Confident AI as its platform, gives you the parts of an evaluation practice: metrics, pytest-style tests, synthetic datasets, and production monitoring. rightmodeler runs one narrower workflow on the traces you already recorded: which steps can move to a cheaper or newer model, with per-step evidence and a draft pull request.",
   "integrationSlug": "",
   "related": ["ragas", "promptfoo", "braintrust"],
   "cta": "github",
@@ -38,7 +38,7 @@
         {
           "dimension": "built for",
           "theirs": "evaluating LLM apps end to end: tests, metrics, datasets, and, on Confident AI, monitoring",
-          "ours": "one recurring question: whether each step of your agent can move to a cheaper model"
+          "ours": "one recurring question: whether each step of your agent can move to a cheaper or newer model"
         },
         {
           "dimension": "test cases",
@@ -202,7 +202,7 @@
         },
         {
           "q": "Does rightmodeler replace DeepEval or Confident AI?",
-          "a": "No. DeepEval and Confident AI test, monitor, and govern your agent, and your team works in them every day. rightmodeler is an offline validation framework for model swaps: it answers whether each step can move to a cheaper model. Not observability. Not a runtime gateway. Its output is a draft pull request your existing checks review."
+          "a": "No. DeepEval and Confident AI test, monitor, and govern your agent, and your team works in them every day. rightmodeler is an offline validation framework for model swaps: it answers whether each step can move to a cheaper or newer model. Not observability. Not a runtime gateway. Its output is a draft pull request your existing checks review."
         },
         {
           "q": "Is DeepEval open source, and what does Confident AI cost?",

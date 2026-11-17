@@ -364,7 +364,7 @@ export default async function VsDetailPage({
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
                     The CLI runs from npx, nothing to install, and validates
-                    cheaper models on your own traces.
+                    cheaper or newer models on your own traces.
                   </p>
                   <div className="mt-5 flex flex-wrap items-center gap-4">
                     <GithubButton />

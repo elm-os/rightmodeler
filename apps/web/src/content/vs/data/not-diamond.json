@@ -7,16 +7,16 @@
   "verdict": "competitor",
   "verdictLabel": "Different clock · prediction vs measurement",
   "title": "rightmodeler vs Not Diamond: measurement vs prediction",
-  "description": "Not Diamond predicts the best model per request, live. rightmodeler validates a cheaper pinned model per step, offline, on your traces. Different clocks.",
+  "description": "Not Diamond predicts the best model per request, live. rightmodeler validates a cheaper or newer pinned model per step, offline, on your traces. Different clocks.",
   "h1": "rightmodeler vs Not Diamond",
-  "lede": "Both refuse to be your gateway, from opposite ends. Not Diamond makes a live prediction and hands the call back to your provider; rightmodeler never sees a live request: it replays your accepted traces (the logged record of what your agent already did) offline, validates a cheaper pinned model per step, and hands your team a draft pull request to review.",
+  "lede": "Both refuse to be your gateway, from opposite ends. Not Diamond makes a live prediction and hands the call back to your provider; rightmodeler never sees a live request: it replays your accepted traces (the logged record of what your agent already did) offline, validates a cheaper or newer pinned model per step, and hands your team a draft pull request to review.",
   "integrationSlug": "",
   "related": ["openrouter", "martian", "litellm", "riften"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Different jobs on different clocks. Not Diamond is hired to route: a trained meta-model predicts, live, which model (and for coding agents, which reasoning effort) should take the next request or session step, then hands the call back to your own provider or gateway. rightmodeler is hired to validate: the free CLI replays your accepted agent traces through cheaper candidates offline, measures how well each one agrees with the output you shipped, and opens a draft pull request for each swap that clears every release gate, for your team to review and merge. Both refuse the gateway seat, from opposite ends: Not Diamond predicts and hands back; rightmodeler never sees a live request at all. A router picks a model per request at runtime; rightmodeler validates one pinned model per step, offline, before a person merges."
+      "body": "Different jobs on different clocks. Not Diamond is hired to route: a trained meta-model predicts, live, which model (and for coding agents, which reasoning effort) should take the next request or session step, then hands the call back to your own provider or gateway. rightmodeler is hired to validate: the free CLI replays your accepted agent traces through cheaper or newer candidates offline, measures how well each one agrees with the output you shipped, and opens a draft pull request for each swap that clears every release gate, for your team to review and merge. Both refuse the gateway seat, from opposite ends: Not Diamond predicts and hands back; rightmodeler never sees a live request at all. A router picks a model per request at runtime; rightmodeler validates one pinned model per step, offline, before a person merges."
     },
     {
       "type": "table",
@@ -104,7 +104,7 @@
       "items": [
         {
           "q": "Does rightmodeler replace Not Diamond?",
-          "a": "No, and the reverse is also false. Not Diamond predicts, live, which model should take the next request or session step. rightmodeler validates, offline, whether a cheaper pinned model can take each step of your stack, and a person merges every change. They answer different questions on different clocks."
+          "a": "No, and the reverse is also false. Not Diamond predicts, live, which model should take the next request or session step. rightmodeler validates, offline, whether a cheaper or newer pinned model can take each step of your stack, and a person merges every change. They answer different questions on different clocks."
         },
         {
           "q": "Does rightmodeler integrate with Not Diamond?",

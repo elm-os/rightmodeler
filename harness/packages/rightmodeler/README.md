@@ -1,6 +1,6 @@
 # rightmodeler CLI
 
-Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.
+Cheaper or newer model swaps for production AI, validated on your own traces and opened as draft PRs.
 
 rightmodeler takes the work out of the loop, not the judgment. It is a validation framework
 for model swaps: it reads the model calls your app already recorded, replays the recorded

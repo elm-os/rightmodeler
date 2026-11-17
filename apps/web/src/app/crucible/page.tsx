@@ -22,7 +22,7 @@ export const metadata: Metadata = pageMetadata({
 const FAQ: FaqItem[] = [
   {
     q: "What is Crucible?",
-    a: "Crucible is the analytics and optimization suite for production AI systems that rightmodeler is building. It is designed to show what every layer costs, how fast it runs, and where it fails, and to add continuous right-sizing on top of the self-hosted agent's schedule, validating swaps to cheaper models as new traces arrive. It will be a step toward production AI that maintains itself.",
+    a: "Crucible is the analytics and optimization suite for production AI systems that rightmodeler is building. It is designed to show what every layer costs, how fast it runs, and where it fails, and to add continuous right-sizing on top of the self-hosted agent's schedule, validating swaps to cheaper or newer models as new traces arrive. It will be a step toward production AI that maintains itself.",
   },
   {
     q: "When can I use it?",

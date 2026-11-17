@@ -97,7 +97,7 @@ jobs:
           key: rightmodeler-store-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: rightmodeler-store-
       - id: init
-        name: Validate swaps to cheaper models
+        name: Validate swaps to cheaper or newer models
         env:
           RIGHTMODELER_PROVIDER_BASE_URL: ${{ vars.RIGHTMODELER_PROVIDER_BASE_URL }}
           RIGHTMODELER_PROVIDER_API_KEY: ${{ secrets.RIGHTMODELER_PROVIDER_API_KEY }}

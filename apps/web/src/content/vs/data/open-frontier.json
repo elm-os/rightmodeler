@@ -7,16 +7,16 @@
   "verdict": "different-job",
   "verdictLabel": "Different job · a public scoreboard vs your traffic",
   "title": "rightmodeler vs The Open Frontier: scoreboard vs your traces",
-  "description": "The Open Frontier, built by Together AI, shows Artificial Analysis scores and prices for open models. rightmodeler validates cheaper models on your own traces.",
+  "description": "The Open Frontier, built by Together AI, shows Artificial Analysis scores and prices for open models. rightmodeler validates cheaper or newer models on your own traces.",
   "h1": "rightmodeler vs The Open Frontier",
-  "lede": "The Open Frontier is a free-to-read site, built by Together AI, that republishes Artificial Analysis scores and published prices for open models, use case by use case. rightmodeler reads no public scores: it replays your own recorded traces through cheaper models and reports, step by step, which ones held up.",
+  "lede": "The Open Frontier is a free-to-read site, built by Together AI, that republishes Artificial Analysis scores and published prices for open models, use case by use case. rightmodeler reads no public scores: it replays your own recorded traces through cheaper or newer models and reports, step by step, which ones held up.",
   "integrationSlug": "",
   "related": ["vals-ai", "openrouter", "not-diamond", "artificial-analysis"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Different jobs at different moments. The Open Frontier answers a market question: per its own pages, which open model looks best for a use case, what it costs, and how it compares with closed models, using Artificial Analysis scores and providers' published prices, refreshed daily by script. It says plainly that it grades nothing itself. rightmodeler answers a question about your stack: the free, MIT-licensed CLI replays your recorded traces through cheaper models from your provider's live catalog, grades each against the output you accepted, and turns a swap that clears every release gate into a draft pull request a person merges. Browse the boards to see which open models are worth a look; if your provider lists one that costs less than the model a step runs today, run a validation to learn whether it can take that step."
+      "body": "Different jobs at different moments. The Open Frontier answers a market question: per its own pages, which open model looks best for a use case, what it costs, and how it compares with closed models, using Artificial Analysis scores and providers' published prices, refreshed daily by script. It says plainly that it grades nothing itself. rightmodeler answers a question about your stack: the free, MIT-licensed CLI replays your recorded traces through cheaper or newer models from your provider's live catalog, grades each against the output you accepted, and turns a swap that clears every release gate into a draft pull request a person merges. Browse the boards to see which open models are worth a look; if your provider lists one that costs less than the model a step runs today, run a validation to learn whether it can take that step."
     },
     {
       "type": "prose",
@@ -40,7 +40,7 @@
         {
           "dimension": "question",
           "theirs": "which open model looks best for a use case, and what it costs",
-          "ours": "which steps of your agent a cheaper model can hold"
+          "ours": "which steps of your agent a cheaper or newer model can hold"
         },
         {
           "dimension": "scores",
@@ -82,7 +82,7 @@
         {
           "scenario": "Your agent has run in production on a closed frontier model for months, and you want to know which steps a cheaper model could take without changing what users get.",
           "winner": "ours",
-          "why": "An index averages public evaluations; your steps are your prompts and your accepted outputs. The CLI replays recorded steps through cheaper candidates, judges them against what you shipped, abstains where the evidence is thin, confirms multi-step swaps end to end in a sandbox, and proposes only model identifier changes, in a draft pull request a person merges."
+          "why": "An index averages public evaluations; your steps are your prompts and your accepted outputs. The CLI replays recorded steps through cheaper or newer candidates, judges them against what you shipped, abstains where the evidence is thin, confirms multi-step swaps end to end in a sandbox, and proposes only model identifier changes, in a draft pull request a person merges."
         },
         {
           "scenario": "An open model near the top of a board costs less than what one of your steps runs, and your provider lists it.",
@@ -151,7 +151,7 @@
         },
         {
           "q": "Does rightmodeler replace The Open Frontier?",
-          "a": "No. The Open Frontier is a map of the field: which open models score well on public evaluations and what they cost to run. rightmodeler is a check on your own agent: which of its steps a cheaper model can take without drifting from the outputs you accepted. Many teams will want the map first and the check second."
+          "a": "No. The Open Frontier is a map of the field: which open models score well on public evaluations and what they cost to run. rightmodeler is a check on your own agent: which of its steps a cheaper or newer model can take without drifting from the outputs you accepted. Many teams will want the map first and the check second."
         }
       ]
     }

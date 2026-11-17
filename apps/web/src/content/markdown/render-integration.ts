@@ -92,7 +92,7 @@ export function renderIntegrationMarkdown(data: IntegrationData): string {
     lines.push(
       "## Start with the traces you already have.",
       "",
-      `The CLI runs from npx, nothing to install, and validates cheaper models on your ${
+      `The CLI runs from npx, nothing to install, and validates cheaper or newer models on your ${
         data.reads.length > 0 ? `traces from ${data.name}` : "own traces"
       }.`,
       "",

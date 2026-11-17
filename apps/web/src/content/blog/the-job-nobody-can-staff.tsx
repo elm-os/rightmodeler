@@ -13,7 +13,7 @@ export const meta: PostMeta = {
   slug: "the-job-nobody-can-staff",
   title: "The job nobody can staff.",
   description:
-    "We think the human work in the loop is the bottleneck in maintaining software. Part three of the rightmodeler vision: why we start by validating cheaper model swaps.",
+    "We think the human work in the loop is the bottleneck in maintaining software. Part three of the rightmodeler vision: why we start by validating cheaper or newer model swaps.",
   excerpt:
     "Every few weeks a model ships, and someone has to notice it, replay it, grade it, and migrate it by hand. Part three of our vision: why that work belongs to software, what safe has to mean, and why the final yes stays with a person today.",
   kicker: "The vision · Part three",
@@ -136,8 +136,8 @@ export function Body() {
 
       <P>
         The second is what it does not claim. Agreement with what you shipped is
-        not correctness. The built-in judge can tell you that a cheaper model
-        matches what you accepted, never that either one is right: if an
+        not correctness. The built-in judge can tell you that a cheaper or newer
+        model matches what you accepted, never that either one is right: if an
         accepted output was wrong, a candidate that reproduces it passes.
       </P>
 
@@ -291,7 +291,7 @@ A swap is safe, in rightmodeler's terms, when it clears every release gate on yo
 
 Two parts of that sentence carry the weight. The first is abstention. Thin evidence means no swap, and the report names the reason instead of guessing. A tool that finds a swap every time is not measuring anything.
 
-The second is what it does not claim. Agreement with what you shipped is not correctness. The built-in judge can tell you that a cheaper model matches what you accepted, never that either one is right: if an accepted output was wrong, a candidate that reproduces it passes.
+The second is what it does not claim. Agreement with what you shipped is not correctness. The built-in judge can tell you that a cheaper or newer model matches what you accepted, never that either one is right: if an accepted output was wrong, a candidate that reproduces it passes.
 
 ## Where it starts
 

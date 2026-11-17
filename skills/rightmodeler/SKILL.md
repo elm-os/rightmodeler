@@ -2,14 +2,15 @@
 name: rightmodeler
 license: MIT
 description: >-
-  Validate swaps to cheaper models on recorded traces before they reach production.
-  Drive the installed rightmodeler TypeScript CLI through its resumable pipeline,
-  interpret its machine protocol, present per-family verdicts, and open a draft pull
-  request that changes only model identifiers when a swap clears every release gate.
-  Use when the user wants to validate or test a swap to a cheaper model before
-  production, check whether a cheaper model matches the outputs they accepted, cut
-  model spend, right-size models per task, benchmark cheaper model substitutions, or
-  analyze an agentic pipeline for cost optimization.
+  Validate swaps to cheaper or newer models on recorded traces before they reach
+  production. Drive the installed rightmodeler TypeScript CLI through its resumable
+  pipeline, interpret its machine protocol, present per-family verdicts, and open a
+  draft pull request that changes only model identifiers when a swap clears every
+  release gate.
+  Use when the user wants to validate or test a swap to a cheaper or newer model
+  before production, check whether a cheaper or newer model matches the outputs they
+  accepted, cut model spend, right-size models per task, benchmark cheaper or newer
+  model substitutions, or analyze an agentic pipeline for cost optimization.
 ---
 
 # rightmodeler TypeScript CLI runbook

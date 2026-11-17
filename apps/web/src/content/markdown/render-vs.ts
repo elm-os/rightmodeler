@@ -132,7 +132,7 @@ function cta(
   return [
     "## Start with the traces you already have.",
     "",
-    "The CLI runs from npx, nothing to install, and validates cheaper models on your own traces.",
+    "The CLI runs from npx, nothing to install, and validates cheaper or newer models on your own traces.",
     ...(links
       ? ["", `View on GitHub: ${links.repoUrl}`, "", `    ${links.runCommand}`]
       : []),

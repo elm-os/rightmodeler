@@ -8,7 +8,7 @@
   "title": "GitHub integration: model swaps as draft pull requests",
   "description": "rightmodeler apply opens a draft GitHub pull request that changes only model identifiers, carries the evidence and asks code owners to review. A person merges.",
   "h1": "rightmodeler + GitHub",
-  "lede": "When a swap to a cheaper model clears every release gate for a step, the change reaches GitHub as a draft pull request your team reviews like any other. It swaps model identifiers and nothing else, carries its evidence in the body, and asks the people who own the code to look.",
+  "lede": "When a swap to a cheaper or newer model clears every release gate for a step, the change reaches GitHub as a draft pull request your team reviews like any other. It swaps model identifiers and nothing else, carries its evidence in the body, and asks the people who own the code to look.",
   "tldr": "rightmodeler works with GitHub through apply, watch and rollback. apply opens a draft pull request that changes only model identifiers, with an evidence table in the body and reviewers taken from CODEOWNERS, then git blame. watch makes one pass over that pull request per run: it answers review questions with the stored evidence, marks families as needing new evidence when a reviewer requests changes or the base branch changes a swapped file, and closes the pull request only when the same check fails again on the same commit. rollback opens a draft that restores a merged swap. None of them merges anything.",
   "steps": [
     {

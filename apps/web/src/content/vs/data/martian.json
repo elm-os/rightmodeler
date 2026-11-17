@@ -7,16 +7,16 @@
   "verdict": "different-job",
   "verdictLabel": "Different job · complement at the gateway",
   "title": "rightmodeler vs Martian: per-step evidence vs access",
-  "description": "Martian is a research lab with a name-the-model gateway; its router is legacy. rightmodeler validates cheaper models per step, offline. Different jobs.",
+  "description": "Martian is a research lab with a name-the-model gateway; its router is legacy. rightmodeler validates cheaper or newer models per step, offline. Different jobs.",
   "h1": "rightmodeler vs Martian",
-  "lede": "Martian in 2026 is an interpretability research lab whose live product is a gateway: one key, a large catalog, and you name the model on every call. rightmodeler validates offline, on your own traces, whether a cheaper model can take each step, and opens a draft pull request when one clears every gate.",
+  "lede": "Martian in 2026 is an interpretability research lab whose live product is a gateway: one key, a large catalog, and you name the model on every call. rightmodeler validates offline, on your own traces, whether a cheaper or newer model can take each step, and opens a draft pull request when one clears every gate.",
   "integrationSlug": "",
   "related": ["openrouter", "not-diamond", "vercel-ai-gateway", "conifer"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Mostly a different job now. You hire Martian for access and understanding: a live gateway with one key to a 200+ model catalog, where you name the model yourself on every call, and an interpretability research program underneath. You hire the rightmodeler CLI, free on npm and GitHub, to answer one question with evidence, at every step of your stack: can a cheaper model take this step? It replays your recorded traces through cheaper candidates offline and reports what held up against the output you accepted. The per-request router Martian was famous for is legacy now, and the guaranteed cost cut in Martian's orbit belongs to affiliated Thesean's Ship (their claim, in beta). Where the two meet is the model string in your code: the Gateway carries it, and rightmodeler validates whether a cheaper one can replace it."
+      "body": "Mostly a different job now. You hire Martian for access and understanding: a live gateway with one key to a 200+ model catalog, where you name the model yourself on every call, and an interpretability research program underneath. You hire the rightmodeler CLI, free on npm and GitHub, to answer one question with evidence, at every step of your stack: can a cheaper or newer model take this step? It replays your recorded traces through cheaper or newer candidates offline and reports what held up against the output you accepted. The per-request router Martian was famous for is legacy now, and the guaranteed cost cut in Martian's orbit belongs to affiliated Thesean's Ship (their claim, in beta). Where the two meet is the model string in your code: the Gateway carries it, and rightmodeler validates whether a cheaper or newer one can replace it."
     },
     {
       "type": "prose",
@@ -49,7 +49,7 @@
         {
           "dimension": "who picks the model",
           "theirs": "you do, as a full creator/model-name string per call",
-          "ours": "rightmodeler validates cheaper models per step; a person merges every swap"
+          "ours": "rightmodeler validates cheaper or newer models per step; a person merges every swap"
         },
         {
           "dimension": "cost story",
@@ -81,12 +81,12 @@
         {
           "scenario": "You run a multi-layer agent pipeline, you suspect some layers are overpaying, and a cheaper model at an early layer could poison everything downstream.",
           "winner": "ours",
-          "why": "That is cascade risk (a swap that looks safe in isolation but degrades the work later steps do with its output). The CLI replays recorded steps on cheaper candidates, judges each against the output you accepted, abstains where the evidence is thin, and reports per-step evidence. A swap that feeds later model steps must also be confirmed end to end, by running your app on recorded cases in a sandbox, before it can become a draft pull request, and a person merges every swap."
+          "why": "That is cascade risk (a swap that looks safe in isolation but degrades the work later steps do with its output). The CLI replays recorded steps on cheaper or newer candidates, judges each against the output you accepted, abstains where the evidence is thin, and reports per-step evidence. A swap that feeds later model steps must also be confirmed end to end, by running your app on recorded cases in a sandbox, before it can become a draft pull request, and a person merges every swap."
         },
         {
           "scenario": "Your steps already call Martian's Gateway, and you want to know whether the model string each step names is the right one.",
           "winner": "both",
-          "why": "Keep the Gateway. It made model choice an explicit string per step, which is exactly the surface rightmodeler acts on: it validates, from your own traces, whether a cheaper model can replace each string, and the Gateway's catalog is a fine place for that swap to land. There is no shipped Martian integration; replays run through the provider you configure, and the change rightmodeler proposes is the model string itself."
+          "why": "Keep the Gateway. It made model choice an explicit string per step, which is exactly the surface rightmodeler acts on: it validates, from your own traces, whether a cheaper or newer model can replace each string, and the Gateway's catalog is a fine place for that swap to land. There is no shipped Martian integration; replays run through the provider you configure, and the change rightmodeler proposes is the model string itself."
         }
       ]
     },

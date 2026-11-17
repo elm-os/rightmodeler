@@ -13,7 +13,7 @@ import { SITE_URL } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "rightmodeler vs alternatives",
   description:
-    "rightmodeler validates swaps to cheaper models on your own traces. See where it ends and gateways, observability, evals, routers, benchmarks, and coding agents begin.",
+    "rightmodeler validates swaps to cheaper or newer models on your own traces. See where it ends and gateways, observability, evals, routers, benchmarks, and coding agents begin.",
   path: "/vs",
 });
 

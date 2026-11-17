@@ -7,7 +7,7 @@
   "verdict": "complement",
   "verdictLabel": "Complement · better context, then a right-sized model",
   "title": "rightmodeler vs Mirrors: the context vs the model",
-  "description": "Mirrors learns from your agent's past sessions and routes the right context at runtime. rightmodeler validates cheaper models per step. Two levers that stack.",
+  "description": "Mirrors learns from your agent's past sessions and routes the right context at runtime. rightmodeler validates cheaper or newer models per step. Two levers that stack.",
   "h1": "rightmodeler vs Mirrors",
   "lede": "Mirrors improves what your agent sees: it learns from past sessions and routes the right context into a conversation when it matters. rightmodeler leaves the context alone and changes one thing, the model each step calls: when a swap clears every gate, it opens a draft pull request you review.",
   "integrationSlug": "",
@@ -16,7 +16,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Complements, with one ordering rule. As of 2026-09-24, Mirrors, a Y Combinator Fall 2026 company, leads with dynamic context: per its homepage, it learns from your agent's successes and failures in recorded sessions, you write and review the guidance, Mirrors routes that guidance into a conversation when its conditions match, and it compares outcomes against stable holdout groups. rightmodeler, a free MIT-licensed CLI, works the other lever: it replays your recorded traces through cheaper models from your provider's live catalog, grades each against the output you accepted, and, when a swap clears every release gate, opens a draft pull request that changes only model identifiers. Better context and a right-sized model are different levers, so the two can stack. The rule: if a context change alters what a step receives, validate the model decision on traces recorded after that change."
+      "body": "Complements, with one ordering rule. As of 2026-09-24, Mirrors, a Y Combinator Fall 2026 company, leads with dynamic context: per its homepage, it learns from your agent's successes and failures in recorded sessions, you write and review the guidance, Mirrors routes that guidance into a conversation when its conditions match, and it compares outcomes against stable holdout groups. rightmodeler, a free MIT-licensed CLI, works the other lever: it replays your recorded traces through cheaper or newer models from your provider's live catalog, grades each against the output you accepted, and, when a swap clears every release gate, opens a draft pull request that changes only model identifiers. Better context and a right-sized model are different levers, so the two can stack. The rule: if a context change alters what a step receives, validate the model decision on traces recorded after that change."
     },
     {
       "type": "positioning",

@@ -7,16 +7,16 @@
   "verdict": "complement",
   "verdictLabel": "Complement · calibrating judges vs validating swaps",
   "title": "rightmodeler vs Modaic: calibrate a judge, or use one",
-  "description": "Modaic calibrates and aligns the models that make judgment calls. rightmodeler uses a judge to validate cheaper models per agent step, offline. They compose.",
+  "description": "Modaic calibrates and aligns the models that make judgment calls. rightmodeler uses a judge to validate cheaper or newer models per agent step, offline. They compose.",
   "h1": "rightmodeler vs Modaic",
-  "lede": "Modaic works on the judge itself: typed decisions, confidence scores, and expert feedback that refines its instructions. rightmodeler puts a judgment to one use: validating whether a cheaper model can take each step of your agent, measured offline against the outputs you accepted.",
+  "lede": "Modaic works on the judge itself: typed decisions, confidence scores, and expert feedback that refines its instructions. rightmodeler puts a judgment to one use: validating whether a cheaper or newer model can take each step of your agent, measured offline against the outputs you accepted.",
   "integrationSlug": "modaic",
   "related": ["braintrust", "promptfoo", "langsmith", "deepeval"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Complements, doing different jobs. You hire Modaic to make judgment-heavy decisions consistent: per its site, you define a decision, Modaic surfaces the cases its model is unsure about, experts give feedback, and alignment refines the model, with a confidence score on each decision to decide which ones a person should review. You hire rightmodeler, the free MIT-licensed CLI, for a question Modaic is not built to answer: whether a cheaper model can take each step of your agent. It replays your recorded traces through cheaper candidates offline, grades each one against the output you accepted, and reports reference agreement, sample size, and abstentions; a swap reaches your code only as a draft pull request a person reviews and merges. There is no Modaic integration today. One is planned against Modaic's hosted API, so that a judge you keep in your Modaic account can grade the replays, and it is waiting on Modaic confirming its canonical API; the integration page says exactly what exists and what does not."
+      "body": "Complements, doing different jobs. You hire Modaic to make judgment-heavy decisions consistent: per its site, you define a decision, Modaic surfaces the cases its model is unsure about, experts give feedback, and alignment refines the model, with a confidence score on each decision to decide which ones a person should review. You hire rightmodeler, the free MIT-licensed CLI, for a question Modaic is not built to answer: whether a cheaper or newer model can take each step of your agent. It replays your recorded traces through cheaper or newer candidates offline, grades each one against the output you accepted, and reports reference agreement, sample size, and abstentions; a swap reaches your code only as a draft pull request a person reviews and merges. There is no Modaic integration today. One is planned against Modaic's hosted API, so that a judge you keep in your Modaic account can grade the replays, and it is waiting on Modaic confirming its canonical API; the integration page says exactly what exists and what does not."
     },
     {
       "type": "positioning",
@@ -30,7 +30,7 @@
         ]
       },
       "right": {
-        "heading": "rightmodeler validates cheaper models step by step",
+        "heading": "rightmodeler validates cheaper or newer models step by step",
         "items": [
           "It reads the traces your agent already recorded, and the output you accepted at each step becomes the reference.",
           "It shortlists cheaper candidates from your provider's live catalog, replays the recorded steps through them, and grades every candidate against that reference.",
@@ -50,7 +50,7 @@
         {
           "dimension": "the decision",
           "theirs": "a judgment call you define: triage, moderation, an LLM judge's verdict",
-          "ours": "whether each step of your agent can run on a cheaper model"
+          "ours": "whether each step of your agent can run on a cheaper or newer model"
         },
         {
           "dimension": "runs",
@@ -92,7 +92,7 @@
         {
           "scenario": "Your agent has run in production for months with one expensive model on every step, and you want to know which steps a cheaper model can hold.",
           "winner": "ours",
-          "why": "Modaic's workflow starts from a decision you define, not from your agent's recorded steps. rightmodeler starts from the traces: it reruns the recorded steps on cheaper candidates, grades them against the answers you shipped, abstains where the evidence is thin, and, when you run apply, opens a draft pull request for your team to review."
+          "why": "Modaic's workflow starts from a decision you define, not from your agent's recorded steps. rightmodeler starts from the traces: it reruns the recorded steps on cheaper or newer candidates, grades them against the answers you shipped, abstains where the evidence is thin, and, when you run apply, opens a draft pull request for your team to review."
         },
         {
           "scenario": "Your team already writes its judgment calls as Modaic judges and wants rightmodeler's replays graded by one of them.",
@@ -145,7 +145,7 @@
       "items": [
         {
           "q": "Does rightmodeler replace Modaic?",
-          "a": "No. Modaic runs and calibrates the judgment calls your product makes, such as triage, moderation, or an LLM judge's verdict, and uses expert feedback to improve them. rightmodeler makes no production decisions. It validates, offline, whether a cheaper model can take each step of your agent, and every swap it proposes waits for a person to review and merge."
+          "a": "No. Modaic runs and calibrates the judgment calls your product makes, such as triage, moderation, or an LLM judge's verdict, and uses expert feedback to improve them. rightmodeler makes no production decisions. It validates, offline, whether a cheaper or newer model can take each step of your agent, and every swap it proposes waits for a person to review and merge."
         },
         {
           "q": "Does rightmodeler integrate with Modaic?",
@@ -156,7 +156,7 @@
           "a": "Because that is where Modaic's judging happens. Per its code, the open-source SDK requests Modaic's judge runs and confidence scores from Modaic's hosted service, and alignment runs only there; on its own, it is a DSPy program without those features. The trade is real: the integration will need a Modaic account and key, each graded case will go to Modaic's service, and Modaic's charges will sit outside rightmodeler's cost estimate and spend cap."
         },
         {
-          "q": "Can Modaic's confidence tell me a cheaper model is safe to swap in?",
+          "q": "Can Modaic's confidence tell me a cheaper or newer model is safe to swap in?",
           "a": "Not on its own. Modaic's own docs describe confidence as most useful as a ranking and thresholding signal, not a substitute for measuring agreement against labeled examples. rightmodeler's evidence is agreement with the outputs you accepted, with the sample size and any abstentions attached to each step."
         },
         {

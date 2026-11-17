@@ -7,16 +7,16 @@
   "verdict": "complement",
   "verdictLabel": "Complement · same credits, two jobs",
   "title": "rightmodeler vs Vercel AI Gateway: meter vs measure",
-  "description": "Vercel AI Gateway serves and meters live model calls. rightmodeler replays your traces to validate cheaper models first. Complement: same credits, two jobs.",
+  "description": "Vercel AI Gateway serves and meters live model calls. rightmodeler replays your traces to validate cheaper or newer models first. Complement: same credits, two jobs.",
   "h1": "rightmodeler vs Vercel AI Gateway",
-  "lede": "The Gateway sits in your request path and optimizes everything after the model name in the request. rightmodeler runs before any change: it replays the steps you already shipped to ask whether a cheaper model could take that name's place.",
+  "lede": "The Gateway sits in your request path and optimizes everything after the model name in the request. rightmodeler runs before any change: it replays the steps you already shipped to ask whether a cheaper or newer model could take that name's place.",
   "integrationSlug": "vercel-ai-gateway",
   "related": ["openrouter", "litellm", "not-diamond"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "You hire the Vercel AI Gateway to serve model traffic: one key to hundreds of models, automatic retries when a provider fails, and a live meter on every request's cost, latency, and tokens. You hire rightmodeler for the question that meter never asks: could a cheaper model do the job of the one named in each request? rightmodeler replays steps you already shipped through cheaper candidates, judges them against the output you accepted, reports the evidence, and opens a draft pull request when a swap clears every gate. The two compose: the Gateway optimizes everything after the model name; rightmodeler questions the name itself."
+      "body": "You hire the Vercel AI Gateway to serve model traffic: one key to hundreds of models, automatic retries when a provider fails, and a live meter on every request's cost, latency, and tokens. You hire rightmodeler for the question that meter never asks: could a cheaper or newer model do the job of the one named in each request? rightmodeler replays steps you already shipped through cheaper or newer candidates, judges them against the output you accepted, reports the evidence, and opens a draft pull request when a swap clears every gate. The two compose: the Gateway optimizes everything after the model name; rightmodeler questions the name itself."
     },
     {
       "type": "contrast",
@@ -31,7 +31,7 @@
       "right": {
         "heading": "With rightmodeler on top",
         "items": [
-          "Your shipped steps replay through cheaper candidates, offline, so production never sees an experiment.",
+          "Your shipped steps replay through cheaper or newer candidates, offline, so production never sees an experiment.",
           "A judge from a neutral third model family scores each replay against the output you accepted: reference evidence (agreement with what you shipped, not ground-truth correctness).",
           "A quality floor (a configurable minimum agreement score) guards every recommendation, and thin evidence ends in an abstention (no recommendation at all) instead of a guess."
         ]
@@ -63,7 +63,7 @@
         {
           "dimension": "can say",
           "theirs": "who spent what, and which provider served it",
-          "ours": "which steps could move to a cheaper model, with evidence, sample size, and abstentions"
+          "ours": "which steps could move to a cheaper or newer model, with evidence, sample size, and abstentions"
         },
         {
           "dimension": "can never say",
@@ -90,7 +90,7 @@
         {
           "scenario": "You already serve production through the Gateway and want the bill lower without breaking quality.",
           "winner": "both",
-          "why": "rightmodeler spends the Gateway credits you already fund, replays your real steps through cheaper candidates from the Gateway's live catalog, and a swap that clears every gate becomes a draft pull request that changes only model identifiers, still served through the Gateway once you merge it. Nothing about your runtime changes except the name."
+          "why": "rightmodeler spends the Gateway credits you already fund, replays your real steps through cheaper or newer candidates from the Gateway's live catalog, and a swap that clears every gate becomes a draft pull request that changes only model identifiers, still served through the Gateway once you merge it. Nothing about your runtime changes except the name."
         }
       ]
     },
@@ -154,22 +154,22 @@
       "items": [
         {
           "q": "Does rightmodeler replace Vercel AI Gateway?",
-          "a": "No. The Gateway serves and meters your live traffic; rightmodeler validates cheaper models on traces of traffic already served. Not observability. Not a runtime gateway. It never sits in your request path. A validation run actually gives the Gateway more work: replays run through it, and a merged swap keeps serving through it."
+          "a": "No. The Gateway serves and meters your live traffic; rightmodeler validates cheaper or newer models on traces of traffic already served. Not observability. Not a runtime gateway. It never sits in your request path. A validation run actually gives the Gateway more work: replays run through it, and a merged swap keeps serving through it."
         },
         {
           "q": "The Gateway already shows cost per model. Why replay anything?",
-          "a": "The dashboard tells you what each model spent, not whether a cheaper model would have produced the output you accepted. rightmodeler reruns those same steps on cheaper candidates and reports, per step, how closely each one matched what you shipped, with sample size and abstentions attached. The meter prices your model decision; it was never built to make it."
+          "a": "The dashboard tells you what each model spent, not whether a cheaper model would have produced the output you accepted. rightmodeler reruns those same steps on cheaper or newer candidates and reports, per step, how closely each one matched what you shipped, with sample size and abstentions attached. The meter prices your model decision; it was never built to make it."
         },
         {
           "q": "Can't I just sort providers by cost in the Gateway?",
-          "a": "Provider sorting changes who serves the model you named; it never changes the model. Budgets and routing act on the route and the cap, not on model choice or quality. Nothing in the Gateway scores output quality; asking whether a cheaper model would have sufficed is rightmodeler's whole job."
+          "a": "Provider sorting changes who serves the model you named; it never changes the model. Budgets and routing act on the route and the cap, not on model choice or quality. Nothing in the Gateway scores output quality; asking whether a cheaper or newer model would have sufficed is rightmodeler's whole job."
         },
         {
           "q": "Do I need a Gateway account to run rightmodeler?",
           "a": "No. The Gateway is one of the supported replay endpoints, not a requirement; rightmodeler can replay through another supported provider instead. But if you already fund Gateway credits, the same balance powers the replays, and the report stays a recommendation of a model, not a route."
         },
         {
-          "q": "Will rightmodeler always find a cheaper model?",
+          "q": "Will rightmodeler always find a cheaper or newer model?",
           "a": "No. Plenty of steps are already on the cheapest model that can do the work, and a candidate that survives the capability checks can still fall short of the quality floor, which ends with no recommendation, or leave the judge with too little evidence, which ends in an abstention. And a swap that clears every gate is only a draft pull request until a person merges it."
         }
       ]

@@ -50,12 +50,12 @@ A swap is safe, in rightmodeler's terms, when it clears every release gate on yo
 
 Thin evidence means abstain. A tool that finds a swap every time is not measuring anything.
 
-The section carries a figure of how a validation run decides: your traces come in, cheaper candidates replay, and two outcomes land on opposite branches.
+The section carries a figure of how a validation run decides: your traces come in, cheaper or newer candidates replay, and two outcomes land on opposite branches.
 
     your traces
       |
       v
-    replay cheaper candidates
+    replay cheaper or newer candidates
       |
       +--> clears every gate --> ✓ draft PR: gpt-5.4-mini
       |
@@ -85,7 +85,7 @@ See how it works: ${SITE_URL}/how-it-works
 
 ### What do you mean by the human in the loop?
 
-The hand work of keeping a production AI system on the right models: noticing a release, building a replay harness, grading outputs, writing it up, migrating, and doing it again every few weeks. For swaps to cheaper models, rightmodeler does that work, up to a draft pull request with the evidence attached. A person still sets the policy and gives the final yes.
+The hand work of keeping a production AI system on the right models: noticing a release, building a replay harness, grading outputs, writing it up, migrating, and doing it again every few weeks. For swaps to cheaper or newer models, rightmodeler does that work, up to a draft pull request with the evidence attached. A person still sets the policy and gives the final yes.
 
 ### What makes a model swap safe?
 
@@ -105,5 +105,5 @@ No. rightmodeler never merges, deploys, or swaps anything on its own, and the ag
 
 ### Where is this going?
 
-Toward autonomous self-maintenance and optimization for production AI systems, earned with evidence. Today that means validated swaps to cheaper models from the CLI and scheduled maintenance from the self-hosted agent. Crucible, in development, is planned to add cost, speed, and failures per layer.
+Toward autonomous self-maintenance and optimization for production AI systems, earned with evidence. Today that means validated swaps to cheaper or newer models from the CLI and scheduled maintenance from the self-hosted agent. Crucible, in development, is planned to add cost, speed, and failures per layer.
 `;

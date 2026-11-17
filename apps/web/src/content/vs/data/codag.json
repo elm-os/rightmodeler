@@ -7,7 +7,7 @@
   "verdict": "complement",
   "verdictLabel": "Complement · fewer tokens, then a cheaper model",
   "title": "rightmodeler vs Codag: fewer tokens vs a cheaper model",
-  "description": "Codag shrinks the tool output coding agents read and leaves the model alone. rightmodeler validates cheaper models for each step. They stack, in order.",
+  "description": "Codag shrinks the tool output coding agents read and leaves the model alone. rightmodeler validates cheaper or newer models for each step. They stack, in order.",
   "h1": "rightmodeler vs Codag",
   "lede": "Codag cuts what a coding agent reads: large tool results are reduced before the model sees them, and the model stays the same. rightmodeler leaves the input alone and works the other half of the bill: does each step need the model it pays for?",
   "integrationSlug": "",
@@ -16,7 +16,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Complements, with one ordering rule. You hire Codag to shrink the input: per its site, one setup command attaches it to Claude Code and Codex, and large eligible tool results (logs, test and build output, search results, file listings) are cut to the evidence the agent needs, while source code, diffs, and configuration pass through unchanged. Codag says it never changes your model, agent, or prompts. You hire rightmodeler, the MIT-licensed CLI, for the one thing Codag leaves alone: it replays your recorded traces through cheaper candidates offline, judges each against the output you accepted, and opens a draft pull request that changes only model identifiers when a swap clears every release gate. Fewer tokens and a lower price per token multiply, so the two can stack. The rule: if compression changes what the model reads, rebuild the evaluation corpus from post-compression traces before you make a model decision."
+      "body": "Complements, with one ordering rule. You hire Codag to shrink the input: per its site, one setup command attaches it to Claude Code and Codex, and large eligible tool results (logs, test and build output, search results, file listings) are cut to the evidence the agent needs, while source code, diffs, and configuration pass through unchanged. Codag says it never changes your model, agent, or prompts. You hire rightmodeler, the MIT-licensed CLI, for the one thing Codag leaves alone: it replays your recorded traces through cheaper or newer candidates offline, judges each against the output you accepted, and opens a draft pull request that changes only model identifiers when a swap clears every release gate. Fewer tokens and a lower price per token multiply, so the two can stack. The rule: if compression changes what the model reads, rebuild the evaluation corpus from post-compression traces before you make a model decision."
     },
     {
       "type": "positioning",

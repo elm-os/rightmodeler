@@ -5,7 +5,7 @@ export const meta: PostMeta = {
   slug: "why-we-built-rightmodeler",
   title: "We were picking models by vibes. Then the bill arrived.",
   description:
-    "We picked models by vibes and paid the frontier bill. The bottleneck was checking each model by hand, so we built rightmodeler to validate cheaper model swaps.",
+    "We picked models by vibes and paid the frontier bill. The bottleneck was checking each model by hand, so we built rightmodeler to validate cheaper or newer model swaps.",
   excerpt:
     "We shipped agentic systems for years while guessing which model belonged at which step. The bottleneck was the work of checking each cheaper model by hand. rightmodeler is that check, made properly.",
   kicker: "Founding story",
@@ -141,12 +141,12 @@ export function Body() {
       <P>
         rightmodeler is that check, built properly: a validation framework for
         model swaps. It reads the model calls your app already recorded and
-        replays the recorded steps on cheaper candidate models from your
-        provider’s live catalog. A judge from a different vendor, or your own
-        evaluator, grades every answer against the output you accepted, the one
-        you have already decided is good enough. It runs on your own traces, not
-        synthetic prompts, so the results reflect your actual workload and not a
-        general benchmark.
+        replays the recorded steps on cheaper or newer candidate models from
+        your provider’s live catalog. A judge from a different vendor, or your
+        own evaluator, grades every answer against the output you accepted, the
+        one you have already decided is good enough. It runs on your own traces,
+        not synthetic prompts, so the results reflect your actual workload and
+        not a general benchmark.
       </P>
 
       <P>
@@ -185,7 +185,8 @@ export function Body() {
         front of us, the call took minutes. Producing the evidence took days,
         every time, so most of the time nobody produced it, and a guess filled
         the gap. rightmodeler takes that work out of the loop, not the judgment,
-        starting with swaps to cheaper models. Today, the final yes stays yours.
+        starting with swaps to cheaper or newer models. Today, the final yes
+        stays yours.
       </P>
 
       <P>
@@ -244,7 +245,7 @@ We assumed this was a quirk of how we worked. It was not. As we talked to other 
 
 ## A pull request, not a gateway
 
-rightmodeler is that check, built properly: a validation framework for model swaps. It reads the model calls your app already recorded and replays the recorded steps on cheaper candidate models from your provider's live catalog. A judge from a different vendor, or your own evaluator, grades every answer against the output you accepted, the one you have already decided is good enough. It runs on your own traces, not synthetic prompts, so the results reflect your actual workload and not a general benchmark.
+rightmodeler is that check, built properly: a validation framework for model swaps. It reads the model calls your app already recorded and replays the recorded steps on cheaper or newer candidate models from your provider's live catalog. A judge from a different vendor, or your own evaluator, grades every answer against the output you accepted, the one you have already decided is good enough. It runs on your own traces, not synthetic prompts, so the results reflect your actual workload and not a general benchmark.
 
 A swap that clears every release gate becomes a draft pull request that changes only model identifiers, with the evidence attached. Everything runs offline, beside your app, on your machine or in CI. Nothing sits in your request path, routes your traffic, or adds a hop to a request. You read the evidence, and you decide whether the change merges.
 
@@ -254,7 +255,7 @@ The part we are most attached to is that it can say no. When the cheaper model's
 
 We spent years picking models by feel and calling it judgment. It was not judgment. It was a guess we had stopped noticing. The fix was never a better instinct. It was evidence drawn from traces we had already run, showing which candidates matched accepted outputs closely enough to review.
 
-Looking back, the guessing was a symptom. The bottleneck was always the human work in the loop, the work of evaluating every model change by hand: noticing the release, pulling real traces, building a replay, grading the outputs, writing it up so it survived review, migrating, and doing it all again when the next model shipped. With the evidence in front of us, the call took minutes. Producing the evidence took days, every time, so most of the time nobody produced it, and a guess filled the gap. rightmodeler takes that work out of the loop, not the judgment, starting with swaps to cheaper models. Today, the final yes stays yours.
+Looking back, the guessing was a symptom. The bottleneck was always the human work in the loop, the work of evaluating every model change by hand: noticing the release, pulling real traces, building a replay, grading the outputs, writing it up so it survived review, migrating, and doing it all again when the next model shipped. With the evidence in front of us, the call took minutes. Producing the evidence took days, every time, so most of the time nobody produced it, and a guess filled the gap. rightmodeler takes that work out of the loop, not the judgment, starting with swaps to cheaper or newer models. Today, the final yes stays yours.
 
 We think software should maintain itself, and that autonomy is earned with evidence. Validation on your own traces is how rightmodeler earns it: the first step toward a system that maintains itself inside the policy you set, reached one validated change at a time.
 

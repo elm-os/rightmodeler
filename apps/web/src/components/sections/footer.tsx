@@ -16,10 +16,10 @@ export function Footer() {
             Take the work out of the loop.
           </h2>
           <p className="mt-5 max-w-md text-body text-driftwood">
-            The CLI validates swaps to cheaper models on your traces, and the
-            self-hosted agent runs the maintenance loop on a schedule. Crucible,
-            in development, will add the instruments. Today, the final yes stays
-            yours.
+            The CLI validates swaps to cheaper or newer models on your traces,
+            and the self-hosted agent runs the maintenance loop on a schedule.
+            Crucible, in development, will add the instruments. Today, the final
+            yes stays yours.
           </p>
         </Reveal>
 

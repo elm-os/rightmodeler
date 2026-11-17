@@ -7,9 +7,9 @@
   "verdict": "complement",
   "verdictLabel": "Complement · your Langfuse scorers grade the swap",
   "title": "rightmodeler vs Langfuse: a platform and one decision",
-  "description": "Langfuse is an open-source AI engineering platform. rightmodeler reads its exports, tests cheaper models per step, and lets your Langfuse scorers grade them.",
+  "description": "Langfuse is an open-source AI engineering platform. rightmodeler reads its exports, tests cheaper or newer models per step, and lets your Langfuse scorers grade them.",
   "h1": "rightmodeler vs Langfuse",
-  "lede": "Langfuse traces, evaluates, and improves your agent in one open platform, including experiments that compare model changes on datasets you build. rightmodeler is a focused workflow for one change: it replays the generations Langfuse recorded on cheaper models and proposes only the swaps the evidence supports.",
+  "lede": "Langfuse traces, evaluates, and improves your agent in one open platform, including experiments that compare model changes on datasets you build. rightmodeler is a focused workflow for one change: it replays the generations Langfuse recorded on cheaper or newer models and proposes only the swaps the evidence supports.",
   "integrationSlug": "langfuse",
   "related": ["phoenix", "langsmith", "braintrust", "opik"],
   "cta": "github",
@@ -133,7 +133,7 @@
           "why": "Langfuse measures what each call cost; picking and trying the cheaper models is left to you. rightmodeler shortlists them from your provider's live catalog, replays them on the generations you export, judges each candidate against the output you accepted, and reports per step family which swaps hold up, with sample size and abstentions attached."
         },
         {
-          "scenario": "Your team already grades production with Langfuse evaluators and wants any cheaper model held to the same scorers before it ships.",
+          "scenario": "Your team already grades production with Langfuse evaluators and wants any cheaper or newer model held to the same scorers before it ships.",
           "winner": "both",
           "why": "Pass --evaluator langfuse and your evaluators, not a judge you did not write, grade the replays. rightmodeler export --to langfuse puts the trials and verdicts in a dataset your team reviews, and the model-only draft pull request goes through your normal code review."
         }
@@ -203,14 +203,14 @@
         },
         {
           "q": "Does rightmodeler replace Langfuse?",
-          "a": "No. Langfuse observes, scores, and experiments on your agent, and your team works in it every day. rightmodeler is an offline validation framework for model swaps: it answers whether each step can move to a cheaper model. Not observability. Not a runtime gateway. Results can go back to Langfuse with rightmodeler export --to langfuse."
+          "a": "No. Langfuse observes, scores, and experiments on your agent, and your team works in it every day. rightmodeler is an offline validation framework for model swaps: it answers whether each step can move to a cheaper or newer model. Not observability. Not a runtime gateway. Results can go back to Langfuse with rightmodeler export --to langfuse."
         },
         {
           "q": "Is Langfuse open source?",
           "a": "Yes. Per its self-hosting pricing page, the open-source edition is MIT-licensed and includes all core platform features, including observability, evaluation, prompt management, and datasets, with unlimited usage. A Self-Hosted Enterprise edition adds features and is bundled with ClickHouse Cloud, BYOC, or Private. The rightmodeler CLI is MIT-licensed too."
         },
         {
-          "q": "Will rightmodeler always find a cheaper model?",
+          "q": "Will rightmodeler always find a cheaper or newer model?",
           "a": "No, and it is designed not to. A family abstains when the evidence is thin or too many of its cases had to be left out, and gets no recommendation when no candidate clears the quality floor on held-out cases. A report that says every step already earns its model is a possible result."
         }
       ]

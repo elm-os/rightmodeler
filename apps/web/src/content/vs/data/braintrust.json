@@ -7,16 +7,16 @@
   "verdict": "complement",
   "verdictLabel": "Complement · your evals stay the bar",
   "title": "rightmodeler vs Braintrust: who sets the reference",
-  "description": "Braintrust holds your agent to evals you author. rightmodeler checks cheaper models against the outputs you shipped, step by step. They compose.",
+  "description": "Braintrust holds your agent to evals you author. rightmodeler checks cheaper or newer models against the outputs you shipped, step by step. They compose.",
   "h1": "rightmodeler vs Braintrust",
-  "lede": "Braintrust grades your agent against a bar you authored: datasets, scorers, rubrics. rightmodeler grades cheaper models against the outputs you accepted, and asks one question Braintrust does not: can a cheaper model take each step?",
+  "lede": "Braintrust grades your agent against a bar you authored: datasets, scorers, rubrics. rightmodeler grades cheaper or newer models against the outputs you accepted, and asks one question Braintrust does not: can a cheaper or newer model take each step?",
   "integrationSlug": "braintrust",
   "related": ["langsmith", "promptfoo", "litellm", "vals-ai"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Not competitors. Braintrust's job is grading: your agent, held to a bar you built from versioned datasets, scorers, and online scoring of live traffic. rightmodeler's job is one question that bar was never asked to answer: whether a cheaper model can take each step. The CLI, on npm and free on GitHub, reruns your real traces on cheaper candidates and scores every candidate against the output you accepted, reporting per step what held up, on how many samples, and where it declined to call a winner. Keep Braintrust. A swap that clears every release gate then faces one more: your eval suite."
+      "body": "Not competitors. Braintrust's job is grading: your agent, held to a bar you built from versioned datasets, scorers, and online scoring of live traffic. rightmodeler's job is one question that bar was never asked to answer: whether a cheaper or newer model can take each step. The CLI, on npm and free on GitHub, reruns your real traces on cheaper or newer candidates and scores every candidate against the output you accepted, reporting per step what held up, on how many samples, and where it declined to call a winner. Keep Braintrust. A swap that clears every release gate then faces one more: your eval suite."
     },
     {
       "type": "definitions",
@@ -67,7 +67,7 @@
         "heading": "A model change with rightmodeler on top",
         "items": [
           "The reference set already exists: the outputs your agent produced in the traces you fetched. No dataset to curate, no scorer to write.",
-          "Recorded steps are replayed through cheaper candidates and judged against the accepted output (by a cross-family judge, meaning one from a different model family than either model being compared, that grades both output orders, or by your own Braintrust scorers with --evaluator braintrust), guarded by the quality floor.",
+          "Recorded steps are replayed through cheaper or newer candidates and judged against the accepted output (by a cross-family judge, meaning one from a different model family than either model being compared, that grades both output orders, or by your own Braintrust scorers with --evaluator braintrust), guarded by the quality floor.",
           "You approve every swap yourself, thin evidence produces an abstention instead of a recommendation, and your Braintrust evals confirm the change before it ships."
         ]
       }
@@ -118,7 +118,7 @@
       "items": [
         {
           "q": "Is rightmodeler a replacement for Braintrust?",
-          "a": "No. Braintrust instruments your app, monitors production, and runs the eval lifecycle you built. rightmodeler is a validation framework for model swaps that answers one question those evals do not ask: can a cheaper model take each step? When rightmodeler proposes a swap, run it through your Braintrust suite before it ships; that is the point of keeping both."
+          "a": "No. Braintrust instruments your app, monitors production, and runs the eval lifecycle you built. rightmodeler is a validation framework for model swaps that answers one question those evals do not ask: can a cheaper or newer model take each step? When rightmodeler proposes a swap, run it through your Braintrust suite before it ships; that is the point of keeping both."
         },
         {
           "q": "Can rightmodeler read the traces I already have in Braintrust?",
@@ -126,7 +126,7 @@
         },
         {
           "q": "Braintrust can test new models too. Why add rightmodeler?",
-          "a": "Different reference. Braintrust measures a new model against datasets and scorers you author and maintain; rightmodeler judges candidates against the outputs you accepted, per step, with nothing to build first. If you maintain a strong suite, Braintrust's answer is real. rightmodeler adds per-step evidence of where a cheaper model matches your shipped work, and abstains where that evidence is thin."
+          "a": "Different reference. Braintrust measures a new model against datasets and scorers you author and maintain; rightmodeler judges candidates against the outputs you accepted, per step, with nothing to build first. If you maintain a strong suite, Braintrust's answer is real. rightmodeler adds per-step evidence of where a cheaper or newer model matches your shipped work, and abstains where that evidence is thin."
         },
         {
           "q": "Is rightmodeler an observability platform?",

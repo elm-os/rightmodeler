@@ -19,7 +19,7 @@ const OFFERINGS: Offering[] = [
     chip: "On npm now",
     strong: true,
     name: "rightmodeler CLI",
-    body: "The validation framework. Replay cheaper models on your traces; open a draft pull request when a swap clears every gate.",
+    body: "The validation framework. Replay cheaper or newer models on your traces; open a draft PR when a swap clears every gate.",
     cta: "See how it works",
     href: "/how-it-works",
     art: "/platform/skill.jpg",

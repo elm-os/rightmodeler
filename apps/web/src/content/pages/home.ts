@@ -1,5 +1,5 @@
 // Markdown twin of the / route (src/app/page.tsx and the hero, sources bar, thesis band, platform,
-// numbers band, testimonial band, and CTA band sections it composes). Keep the two in sync.
+// testimonial band, and CTA band sections it composes). Keep the two in sync.
 import { CASE_STUDIES } from "@/content/case-studies";
 import { ILLUSTRATIVE_SCORECARD, TRACE_SOURCES } from "@/lib/product-facts";
 import { REPO_URL, RUN_COMMAND } from "@/lib/site";
@@ -18,7 +18,7 @@ export const markdown = `# The human in the loop is the bottleneck.
 
 Toward production AI that maintains itself
 
-rightmodeler takes the work out of the loop, not the judgment. It validates cheaper models on your production traces against the outputs you accepted, and opens a draft pull request only when a swap clears every gate. Today, the final yes stays yours.
+rightmodeler takes the work out of the loop, not the judgment. It validates cheaper or newer models on your production traces against the outputs you accepted, and opens a draft pull request only when a swap clears every gate. Today, the final yes stays yours.
 
     ${RUN_COMMAND}
 
@@ -52,27 +52,31 @@ Why model swaps stall
 
 ## Model maintenance is a standing job.
 
-For a production AI system, a new model ships every few weeks, and each one has to be noticed, replayed on real traces, graded, written up, and migrated. That work, not the final call, is the bottleneck: the human in the loop spends days on it. Few teams can staff it, so model decisions get made one of four ways. In our view, none of them holds up.
+Every few weeks a new model restarts the manual check. Teams take four shortcuts. None holds up.
 
 ### Blind swaps fail quietly.
 
-A cheaper model drops into a step in thirty seconds. When it fails, nothing throws: the JSON still parses and is wrong on the edge cases. A user finds out first.
+Nothing throws. The JSON still parses and is wrong on the edge cases.
 
 ### Routers don't work in production.
 
-This is our opinion, for three reasons. A runtime router picks a model per request with a policy that was not validated on your workload. It adds a hop and a dependency to the request path. And the same input can take different models, so behavior is harder to reproduce, audit, and roll back. A gateway that serves the model you pin is a different thing.
+Our view: unvalidated on your workload, an extra hop, harder to reproduce.
 
 ### General benchmarks aren't your workload.
 
-A leaderboard ranks models on someone else's tasks. It can't tell you whether a cheaper model matches the outputs you already accepted, on your own prompts.
+A leaderboard ranks models on someone else's tasks, not your accepted outputs.
 
 ### Frontier everywhere costs too much.
 
-The most expensive model on every step feels safe. Then the bill compounds, call by call, on steps nobody has measured.
+It feels safe until the bill compounds on steps nobody has measured.
 
-What holds up: one pinned model per step, validated on your own traces and changed through code review.
+What holds up: one pinned model per step, validated on your own traces.
 
-A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin. We are building toward systems that maintain and optimize themselves, starting where the evidence can be checked.
+A swap is safe when it clears every release gate on your own traces.
+
+How the gates work: /how-it-works
+
+View on GitHub: ${REPO_URL}
 
 From validation to autonomy
 
@@ -82,7 +86,7 @@ From validation to autonomy
 
 On npm now
 
-The validation framework. Replay cheaper models on your traces; open a draft pull request when a swap clears every gate.
+The validation framework. Replay cheaper or newer models on your traces; open a draft PR when a swap clears every gate.
 
 See how it works: /how-it-works
 
@@ -101,18 +105,6 @@ In development
 The instruments, planned. Cost per layer, speed per step, failures as they happen, over MCP, never in the request path.
 
 Meet Crucible: /crucible
-
-The numbers
-
-## Real workloads, not leaderboards.
-
-${TRACE_SOURCES.length} trace formats autodetected into one per-step schema
-
-70.8% projected lower inference cost after right-sizing, B:Side
-
-100% quality held against shipped outputs, measured, B:Side
-
-53.3% projected faster responses on the same workloads, B:Side
 
 ## What teams say about rightmodeler.
 

@@ -9,7 +9,7 @@ See [Getting started](getting-started.md) for the shortest complete workflow and
 ```text
 Usage: rightmodeler [options] [command]
 
-Validate swaps to cheaper models on your own traces.
+Validate swaps to cheaper or newer models on your own traces.
 
 Options:
   -V, --version        output the version number

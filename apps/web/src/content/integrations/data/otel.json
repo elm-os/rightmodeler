@@ -5,11 +5,11 @@
   "logo": "/integrations/logos/otel.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
-  "title": "OTel GenAI integration: replay spans on cheaper models",
-  "description": "Point rightmodeler at OTLP span exports with gen_ai.* attributes. It replays recorded steps on cheaper models and measures agreement with accepted output.",
+  "title": "OTel GenAI integration: replay spans on cheaper or newer models",
+  "description": "Point rightmodeler at OTLP span exports with gen_ai.* attributes. It replays recorded steps on cheaper or newer models and measures agreement with accepted output.",
   "h1": "rightmodeler + OpenTelemetry",
-  "lede": "If your stack emits gen_ai.* spans, the inputs and accepted outputs already exist. rightmodeler reads OTel GenAI telemetry from any OTLP pipeline, no bespoke integration required, measures cheaper candidates against those outputs, and reports the evidence.",
-  "tldr": "rightmodeler reads OTLP span exports through a dedicated OTel GenAI adapter: any pipeline that emits gen_ai.* attributes, whatever framework or language produced it, folds into the same per-step schema. Spans are recognized by gen_ai.operation.name, grouped into trajectories by trace ID and ordered by start time, and read for model, messages, output, system instructions, and token usage. Recorded steps are then replayed against cheaper candidates and scored against the output you already shipped.",
+  "lede": "If your stack emits gen_ai.* spans, the inputs and accepted outputs already exist. rightmodeler reads OTel GenAI telemetry from any OTLP pipeline, no bespoke integration required, measures cheaper or newer candidates against those outputs, and reports the evidence.",
+  "tldr": "rightmodeler reads OTLP span exports through a dedicated OTel GenAI adapter: any pipeline that emits gen_ai.* attributes, whatever framework or language produced it, folds into the same per-step schema. Spans are recognized by gen_ai.operation.name, grouped into trajectories by trace ID and ordered by start time, and read for model, messages, output, system instructions, and token usage. Recorded steps are then replayed against cheaper or newer candidates and scored against the output you already shipped.",
   "steps": [
     {
       "label": "01 · Export",
@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Cheaper candidates, judged against shipped output",
-      "body": "Recorded steps are replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, judged against shipped output",
+      "body": "Recorded steps are replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
@@ -87,7 +87,7 @@
     },
     {
       "title": "Right-size a polyglot stack",
-      "body": "Services in different languages that share nothing but the semantic conventions fold into the same per-step schema, so a single validation run covers the Python agent and the TypeScript sidecar alike, and shows which step families in each clear a swap to a cheaper model."
+      "body": "Services in different languages that share nothing but the semantic conventions fold into the same per-step schema, so a single validation run covers the Python agent and the TypeScript sidecar alike, and shows which step families in each clear a swap to a cheaper or newer model."
     },
     {
       "title": "Name your own step families",
@@ -118,7 +118,7 @@
     },
     {
       "q": "Does rightmodeler replace my tracing backend?",
-      "a": "No. The backend watches production; rightmodeler runs offline on exported spans and answers a question dashboards leave open, whether a cheaper model would have produced equivalent output on the steps you actually ran. Keep both; they read the same telemetry."
+      "a": "No. The backend watches production; rightmodeler runs offline on exported spans and answers a question dashboards leave open, whether a cheaper or newer model would have produced equivalent output on the steps you actually ran. Keep both; they read the same telemetry."
     },
     {
       "q": "Does my span data leave my machine?",

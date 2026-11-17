@@ -57,7 +57,7 @@ export function organizationLd() {
     logo: `${SITE_URL}/icon.png`,
     email: CONTACT_EMAIL,
     description:
-      "rightmodeler is working toward production AI systems that maintain and optimize themselves, starting with an open-source framework that validates swaps to cheaper models on your own traces and opens each one that clears every release gate as a draft pull request.",
+      "rightmodeler is working toward production AI systems that maintain and optimize themselves, starting with an open-source framework that validates swaps to cheaper or newer models on your own traces and opens each one that clears every release gate as a draft pull request.",
     contactPoint: [
       {
         "@type": "ContactPoint",

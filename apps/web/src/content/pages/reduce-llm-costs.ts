@@ -7,7 +7,7 @@ export const markdown = `# Cut your agent's model bill without guessing.
 
 Use case · Reduce LLM costs
 
-Frontier everywhere costs too much: the most expensive model on every step feels safe until the bill compounds, call by call, on steps nobody has measured. rightmodeler validates cheaper models on your production traces and opens a draft pull request only where a swap clears every gate.
+Frontier everywhere costs too much: the most expensive model on every step feels safe until the bill compounds, call by call, on steps nobody has measured. rightmodeler validates cheaper or newer models on your production traces and opens a draft pull request only where a swap clears every gate.
 
 ## Before rightmodeler
 

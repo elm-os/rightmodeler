@@ -14,7 +14,7 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Glossary",
   description:
-    "Plain definitions for validating a swap to a cheaper model: release gates, the quality floor, held-out cases, abstention, cascade risk, and what safe means.",
+    "Plain definitions for validating a swap to a cheaper or newer model: release gates, the quality floor, held-out cases, abstention, cascade risk, and what safe means.",
   path: "/glossary",
   image: "/social/glossary.png",
 });
@@ -31,7 +31,7 @@ const TERMS: Term[] = [
   {
     term: "Safe model swap",
     slug: "safe-model-swap",
-    def: `rightmodeler validates only swaps to cheaper models. ${SAFE}`,
+    def: `rightmodeler validates only swaps to cheaper or newer models. ${SAFE}`,
   },
   {
     term: "Swap candidate",
@@ -66,7 +66,7 @@ const TERMS: Term[] = [
   {
     term: "Cascade risk",
     slug: "cascade-risk",
-    def: "The chance that swapping one step to a cheaper model degrades later steps that depend on it, common in tool and loop steps. When a step feeds later model steps, its swap counts only once it is confirmed end to end, judged on your app's final output rather than on the step alone.",
+    def: "The chance that swapping one step to a cheaper or newer model degrades later steps that depend on it, common in tool and loop steps. When a step feeds later model steps, its swap counts only once it is confirmed end to end, judged on your app's final output rather than on the step alone.",
   },
   {
     term: "End-to-end confirmation",
@@ -91,7 +91,7 @@ const TERMS: Term[] = [
   {
     term: "Reference evidence",
     slug: "reference-evidence",
-    def: "Grading a cheaper model's output against the output you already accepted for the same input, rather than against a gold answer. The production result is the reference, not ground truth, so a candidate that repeats a wrong accepted answer still agrees.",
+    def: "Grading a cheaper or newer model's output against the output you already accepted for the same input, rather than against a gold answer. The production result is the reference, not ground truth, so a candidate that repeats a wrong accepted answer still agrees.",
   },
   {
     term: "LLM-as-judge",
@@ -106,12 +106,12 @@ const TERMS: Term[] = [
   {
     term: "Swap validation",
     slug: "evidence-backed-model-downgrading",
-    def: "Testing a swap to a cheaper model on your own traces before anyone merges it. rightmodeler replays the recorded steps on cheaper candidate models, has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted, and opens a draft pull request only for a swap that clears every release gate.",
+    def: "Testing a swap to a cheaper or newer model on your own traces before anyone merges it. rightmodeler replays the recorded steps on cheaper or newer candidate models, has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted, and opens a draft pull request only for a swap that clears every release gate.",
   },
   {
     term: "Validation run",
     slug: "model-downgrade-audit",
-    def: "One pass of rightmodeler over your traces: it measures each cheaper candidate against the accepted output for the same input, reports the evidence and sample size, and records where it abstains.",
+    def: "One pass of rightmodeler over your traces: it measures each cheaper or newer candidate against the accepted output for the same input, reports the evidence and sample size, and records where it abstains.",
   },
   {
     term: "Runtime router",
@@ -131,7 +131,7 @@ const THEMES: {
 }[] = [
   {
     title: "The decision",
-    intro: "The words for a swap to a cheaper model.",
+    intro: "The words for a swap to a cheaper or newer model.",
     slugs: ["safe-model-swap", "swap-candidate", "model-downgrade"],
     art: "decision",
   },
@@ -411,7 +411,7 @@ export default function GlossaryPage() {
       <PageHero
         eyebrow="Glossary"
         title="The model-swap glossary"
-        lede="Plain definitions for the words rightmodeler uses to validate a swap to a cheaper model."
+        lede="Plain definitions for the words rightmodeler uses to validate a swap to a cheaper or newer model."
         gradient={false}
       />
 

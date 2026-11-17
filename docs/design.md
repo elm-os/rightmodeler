@@ -36,7 +36,7 @@ only in hand-written CSS (e.g. a keyframe or a custom easing).
 
 ## Color
 
-Nine tokens. Every one is a Tailwind color utility (`bg-`, `text-`, `border-`).
+Nine brand tokens, plus the six banner blues below. Every one is a Tailwind color utility (`bg-`, `text-`, `border-`).
 
 | Token / utility   | Hex       | Role                                                         | Semantic             |
 | ----------------- | --------- | ------------------------------------------------------------ | -------------------- |
@@ -63,6 +63,24 @@ Nine tokens. Every one is a Tailwind color utility (`bg-`, `text-`, `border-`).
   Communicate state through copy, weight, iconography, and surface — not hue.
 - Opacity modifiers work on the concrete colors (e.g. `bg-midnight-ink/5` for a
   faint wash), which is preferable to introducing a new gray.
+
+### Banner blues
+
+Owner-directed exception, decoration only. The "What holds up" banner that closes the home
+page's "Why model swaps stall" section (`apps/web/src/components/sections/thesis-band.tsx`)
+has a blue cloth gradient under static film grain, drawn by `.banner-field` and
+`.banner-grain` in `globals.css`. Its six colors are illustration-only tokens for that one
+background. They never appear on text, buttons, links, borders, or state, and nothing else
+on the site uses them. Copy and controls on the banner stay white and ink.
+
+| Token / utility   | Hex       | Role in the banner background           |
+| ----------------- | --------- | --------------------------------------- |
+| `banner-navy`     | `#0c1a40` | Ground, edges, the pool behind the copy |
+| `banner-royal`    | `#1c4aa8` | Mid field                               |
+| `banner-electric` | `#1466e0` | Saturated low light                     |
+| `banner-cyan`     | `#1fa2dc` | Bright pools on the flanks              |
+| `banner-sky`      | `#7fc6ea` | Highlights on the folds                 |
+| `banner-silver`   | `#c3c8e0` | Silvery lavender streaks                |
 
 ---
 

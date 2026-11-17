@@ -26,7 +26,7 @@ const SAFE =
 const FAQ: FaqItem[] = [
   {
     q: "What do you mean by the human in the loop?",
-    a: "The hand work of keeping a production AI system on the right models: noticing a release, building a replay harness, grading outputs, writing it up, migrating, and doing it again every few weeks. For swaps to cheaper models, rightmodeler does that work, up to a draft pull request with the evidence attached. A person still sets the policy and gives the final yes.",
+    a: "The hand work of keeping a production AI system on the right models: noticing a release, building a replay harness, grading outputs, writing it up, migrating, and doing it again every few weeks. For swaps to cheaper or newer models, rightmodeler does that work, up to a draft pull request with the evidence attached. A person still sets the policy and gives the final yes.",
   },
   {
     q: "What makes a model swap safe?",
@@ -46,7 +46,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Where is this going?",
-    a: "Toward autonomous self-maintenance and optimization for production AI systems, earned with evidence. Today that means validated swaps to cheaper models from the CLI and scheduled maintenance from the self-hosted agent. Crucible, in development, is planned to add cost, speed, and failures per layer.",
+    a: "Toward autonomous self-maintenance and optimization for production AI systems, earned with evidence. Today that means validated swaps to cheaper or newer models from the CLI and scheduled maintenance from the self-hosted agent. Crucible, in development, is planned to add cost, speed, and failures per layer.",
   },
 ];
 
@@ -178,29 +178,29 @@ function FlowMockup() {
         </text>
 
         <rect
-          x="119"
+          x="86"
           y="78"
-          width="242"
+          width="308"
           height="42"
           rx="21"
           className="fill-parchment-white stroke-ash-border"
           filter="url(#mf-node-shadow)"
         />
         <path
-          d="M139 94 h10 a4.5 4.5 0 0 1 0 9 h-7 m2.4 -2.4 -2.4 2.4 2.4 2.4"
+          d="M106 94 h10 a4.5 4.5 0 0 1 0 9 h-7 m2.4 -2.4 -2.4 2.4 2.4 2.4"
           className="stroke-driftwood"
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         <text
-          x="159"
+          x="126"
           y="104"
           className="fill-midnight-ink font-sans"
           fontSize="14"
           fontWeight="500"
         >
-          replay cheaper candidates
+          replay cheaper or newer candidates
         </text>
 
         <rect

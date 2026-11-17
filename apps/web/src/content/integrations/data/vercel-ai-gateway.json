@@ -6,7 +6,7 @@
   "category": "replay-engine",
   "categoryLabel": "Replay engine",
   "title": "Vercel AI Gateway integration: replay on your key",
-  "description": "Point rightmodeler at the Vercel AI Gateway: it finds cheaper candidates in the live catalog, replays real steps, judges quality, and records reported costs.",
+  "description": "Point rightmodeler at the Vercel AI Gateway: it finds cheaper or newer candidates in the live catalog, replays real steps, judges quality, and records reported costs.",
   "h1": "rightmodeler + Vercel AI Gateway",
   "lede": "The Vercel AI Gateway is one of the OpenAI-compatible routes rightmodeler replays through. Candidate calls and the judge run on your key, against models discovered from the Gateway's live catalog.",
   "tldr": "rightmodeler takes any OpenAI-compatible endpoint with --base-url and reads its key from the variable you name with --api-key-env. Against the Gateway that means GET /models supplies per-token pricing, context windows, and capability flags for the shortlist, POST /chat/completions runs the replays and the judge, and the cost reported on each response is recorded as billed, with catalog pricing used as a labelled estimate when none comes back.",

@@ -6,7 +6,7 @@ export const markdown = `# How rightmodeler works
 
 How it works
 
-rightmodeler's validation loop does the hand work of checking a cheaper model: replaying your traces, grading every answer, and writing up the evidence. Run it from your terminal, your coding agent, or on a schedule. Today, the final yes stays yours.
+rightmodeler's validation loop does the hand work of checking a cheaper or newer model: replaying your traces, grading every answer, and writing up the evidence. Run it from your terminal, your coding agent, or on a schedule. Today, the final yes stays yours.
 
 **Run it**
 
@@ -57,7 +57,7 @@ Clone the repo, build it, and run the agent on a long-lived Node 24 host with yo
 
 [Meet the agent](/agent)
 
-**TL;DR** rightmodeler validates cheaper models on the traces you already have. It replays the recorded steps on cheaper candidates and has a judge from a different vendor, or your own evaluator, grade every answer against **the outputs you accepted**. A swap becomes a draft pull request only when it clears every release gate; when the evidence is thin, it abstains.
+**TL;DR** rightmodeler validates cheaper or newer models on the traces you already have. It replays the recorded steps on cheaper or newer candidates and has a judge from a different vendor, or your own evaluator, grade every answer against **the outputs you accepted**. A swap becomes a draft pull request only when it clears every release gate; when the evidence is thin, it abstains.
 
 ## Where traces come from.
 
@@ -75,7 +75,7 @@ Point it at the traces you already emit. rightmodeler autodetects the format acr
 
 ## 02 Validate
 
-It replays the recorded steps on cheaper candidate models, and a judge from a different vendor, or your own evaluator, grades every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many. A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin.
+It replays the recorded steps on cheaper or newer candidate models, and a judge from a different vendor, or your own evaluator, grades every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many. A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin.
 
     checks shortlist screen · held-out lower bound vs quality floor · end-to-end confirmation  →  every gate cleared, or no swap
 
@@ -93,7 +93,7 @@ A judge from a different vendor scores both answer orders, or the evaluator you 
 
 ## Not observability. Not a runtime gateway.
 
-rightmodeler works offline on runs you already shipped. It validates cheaper models step by step against the outputs you accepted, and only a swap that clears every gate becomes a draft pull request, which changes model identifiers and nothing else and waits for you to review and merge. Your observability tool keeps recording, any gateway keeps serving live traffic, and rightmodeler never sits in the request path.
+rightmodeler works offline on runs you already shipped. It validates cheaper or newer models step by step against the outputs you accepted, and only a swap that clears every gate becomes a draft pull request, which changes model identifiers and nothing else and waits for you to review and merge. Your observability tool keeps recording, any gateway keeps serving live traffic, and rightmodeler never sits in the request path.
 
 [View on GitHub](${REPO_URL}) · [Crucible (in development)](/crucible)
 

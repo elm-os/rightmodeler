@@ -5,11 +5,11 @@
   "logo": "/integrations/logos/openai-sdk.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
-  "title": "OpenAI SDK integration: replay logs on cheaper models",
-  "description": "Point rightmodeler at your OpenAI SDK request log: it replays recorded calls through cheaper models and measures each output against what you accepted.",
+  "title": "OpenAI SDK integration: replay logs on cheaper or newer models",
+  "description": "Point rightmodeler at your OpenAI SDK request log: it replays recorded calls through cheaper or newer models and measures each output against what you accepted.",
   "h1": "rightmodeler + the OpenAI SDK",
-  "lede": "No tracing platform required. rightmodeler reads the request and response log your code already writes around the OpenAI SDK, measures cheaper candidates against accepted outputs, and reports the result call by call.",
-  "tldr": "rightmodeler reads per-line OpenAI SDK request and response dumps with a dedicated adapter: each logged call becomes a step, with no tracing platform in between. Lines are recognized by a messages array beside a response object carrying choices, grouped into trajectories by case_id and ordered by timestamp. Successful steps are replayed against cheaper candidates through the OpenAI-compatible endpoint you configure and scored against the answer you already shipped.",
+  "lede": "No tracing platform required. rightmodeler reads the request and response log your code already writes around the OpenAI SDK, measures cheaper or newer candidates against accepted outputs, and reports the result call by call.",
+  "tldr": "rightmodeler reads per-line OpenAI SDK request and response dumps with a dedicated adapter: each logged call becomes a step, with no tracing platform in between. Lines are recognized by a messages array beside a response object carrying choices, grouped into trajectories by case_id and ordered by timestamp. Successful steps are replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you configure and scored against the answer you already shipped.",
   "steps": [
     {
       "label": "01 · Log",
@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Cheaper candidates, judged against what you shipped",
-      "body": "Recorded steps are replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, judged against what you shipped",
+      "body": "Recorded steps are replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Confirm",
@@ -96,7 +96,7 @@
   "useCases": [
     {
       "title": "Validate swaps with no tracing platform",
-      "body": "You do not need LangSmith, Langfuse, or an OTel collector to validate a swap to a cheaper model. A plain JSONL log of your OpenAI SDK calls is enough for the full per-step treatment: replay, score, verdict, report, draft pull request."
+      "body": "You do not need LangSmith, Langfuse, or an OTel collector to validate a swap to a cheaper or newer model. A plain JSONL log of your OpenAI SDK calls is enough for the full per-step treatment: replay, score, verdict, report, draft pull request."
     },
     {
       "title": "Measure a candidate before you edit a model string",
@@ -130,7 +130,7 @@
     },
     {
       "q": "Does rightmodeler replace my observability setup?",
-      "a": "No. It runs offline, validating cheaper candidates against the outputs you accepted and reporting the evidence for each call. If you later adopt LangSmith, Langfuse, or OTel GenAI, rightmodeler reads those traces too, same CLI, different adapter."
+      "a": "No. It runs offline, validating cheaper or newer candidates against the outputs you accepted and reporting the evidence for each call. If you later adopt LangSmith, Langfuse, or OTel GenAI, rightmodeler reads those traces too, same CLI, different adapter."
     },
     {
       "q": "My code hardcodes the OpenAI client. How can it confirm end to end?",

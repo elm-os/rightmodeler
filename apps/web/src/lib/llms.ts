@@ -16,12 +16,12 @@ import {
 
 // The llms.txt blockquote. Stands alone: the thesis, what exists today, the human's part, and the
 // never-in-the-request-path caveat. It travels without the site, so it never says a bare "safe".
-const SUMMARY = `rightmodeler is working toward production AI systems that maintain and optimize themselves, starting with an open-source framework that validates swaps to cheaper models on your own traces and opens each one that clears every release gate as a draft pull request. We think the biggest bottleneck in maintaining software is the human in the loop: not the judgment, the work. We are solving it first for production AI systems, where a new model ships every few weeks and each one restarts the same manual job. The shortcuts teams take instead do not hold up. Blind swaps fail quietly. Routers don't work in production, in our opinion, because a runtime router picks a model per request with a policy that was not validated on your workload, adds a hop and a dependency to the request path, and can send the same input to different models, so behavior is harder to reproduce, audit and roll back; a gateway that serves the model you pin is a different thing. General benchmarks aren't your workload. Frontier everywhere costs too much. What holds up is one pinned model per step, validated on your own traces and changed through code review. The rightmodeler CLI (on npm as rightmodeler, MIT licensed; start with ${RUN_COMMAND} on the traces you already have) replays the recorded steps on cheaper candidate models from your provider's live catalog and has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many. A swap must clear every release gate: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin. A swap that clears every gate becomes a draft pull request that changes only model identifiers, with the evidence attached; watch follows it through review and CI, and rollback opens a pull request that restores the exact pre-swap files. A coding-agent skill drives the same CLI. rightmodeler agent (same repository, self-hosted today; the hosted version has a waitlist) is the maintenance loop, on a schedule: a weekly catalog and price check that flags cheaper new or repriced models, a daily drift check on new traces whose proposals a person approves, one regression replay for each merged swap set, and follow-up on swap pull requests as review and CI report back. On your word it replays new candidates; once a replay clears every gate, it opens the draft pull request. It never merges and carries no merge capability. rightmodeler takes the work out of the loop, not the judgment: today a person sets the policy, gives the agent the word before it replays a new candidate, and decides whether each draft pull request merges. Everything runs offline, beside your app, on your machine or in CI, never in the request path. Crucible, the planned analytics and optimization suite, is in development with a waitlist.`;
+const SUMMARY = `rightmodeler is working toward production AI systems that maintain and optimize themselves, starting with an open-source framework that validates swaps to cheaper or newer models on your own traces and opens each one that clears every release gate as a draft pull request. We think the biggest bottleneck in maintaining software is the human in the loop: not the judgment, the work. We are solving it first for production AI systems, where a new model ships every few weeks and each one restarts the same manual job. The shortcuts teams take instead do not hold up. Blind swaps fail quietly. Routers don't work in production, in our opinion, because a runtime router picks a model per request with a policy that was not validated on your workload, adds a hop and a dependency to the request path, and can send the same input to different models, so behavior is harder to reproduce, audit and roll back; a gateway that serves the model you pin is a different thing. General benchmarks aren't your workload. Frontier everywhere costs too much. What holds up is one pinned model per step, validated on your own traces and changed through code review. The rightmodeler CLI (on npm as rightmodeler, MIT licensed; start with ${RUN_COMMAND} on the traces you already have) replays the recorded steps on cheaper or newer candidate models from your provider's live catalog and has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many. A swap must clear every release gate: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin. A swap that clears every gate becomes a draft pull request that changes only model identifiers, with the evidence attached; watch follows it through review and CI, and rollback opens a pull request that restores the exact pre-swap files. A coding-agent skill drives the same CLI. rightmodeler agent (same repository, self-hosted today; the hosted version has a waitlist) is the maintenance loop, on a schedule: a weekly catalog and price check that flags cheaper new or repriced models, a daily drift check on new traces whose proposals a person approves, one regression replay for each merged swap set, and follow-up on swap pull requests as review and CI report back. On your word it replays new candidates; once a replay clears every gate, it opens the draft pull request. It never merges and carries no merge capability. rightmodeler takes the work out of the loop, not the judgment: today a person sets the policy, gives the agent the word before it replays a new candidate, and decides whether each draft pull request merges. Everything runs offline, beside your app, on your machine or in CI, never in the request path. Crucible, the planned analytics and optimization suite, is in development with a waitlist.`;
 
 // Product overview in Markdown for llms-context.txt (indented code block avoids backticks here).
 const OVERVIEW = `## What it is
 
-${SITE_NAME} is a validation framework for model swaps: it validates swaps to cheaper models on your production traces, the model calls your production app already recorded, and opens each one that clears every release gate as a draft pull request. It is built for production AI systems, and it is where we start toward production AI that maintains and optimizes itself.
+${SITE_NAME} is a validation framework for model swaps: it validates swaps to cheaper or newer models on your production traces, the model calls your production app already recorded, and opens each one that clears every release gate as a draft pull request. It is built for production AI systems, and it is where we start toward production AI that maintains and optimizes itself.
 
 ## Why it exists
 
@@ -74,13 +74,13 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/how-it-works",
     title: "How it works",
     description:
-      "Run rightmodeler from your terminal, coding agent, CI or the self-hosted agent. It validates cheaper models on your traces and opens a draft PR for review.",
+      "Run rightmodeler from your terminal, coding agent, CI or the self-hosted agent. It validates cheaper or newer models on your traces and opens a draft PR for review.",
   },
   {
     path: "/use-cases/reduce-llm-costs",
     title: "Reduce LLM costs",
     description:
-      "Frontier everywhere costs too much. rightmodeler validates cheaper models on your production traces and opens a draft PR when a swap clears every gate.",
+      "Frontier everywhere costs too much. rightmodeler validates cheaper or newer models on your production traces and opens a draft PR when a swap clears every gate.",
   },
   {
     path: "/case-study",
@@ -101,13 +101,13 @@ const PAGES: { path: string; title: string; description: string }[] = [
   {
     path: "/integrations",
     title: "Integrations",
-    description: `Everything the validation loop touches: the ${TRACE_SOURCES.length} trace formats rightmodeler reads, where cheaper candidates replay, what grades them, and where the pull request lands.`,
+    description: `Everything the validation loop touches: the ${TRACE_SOURCES.length} trace formats rightmodeler reads, where cheaper or newer candidates replay, what grades them, and where the pull request lands.`,
   },
   {
     path: "/vs",
     title: "rightmodeler vs alternatives",
     description:
-      "rightmodeler validates swaps to cheaper models on your own traces. See where it ends and gateways, observability, evals, routers, benchmarks, and coding agents begin.",
+      "rightmodeler validates swaps to cheaper or newer models on your own traces. See where it ends and gateways, observability, evals, routers, benchmarks, and coding agents begin.",
   },
   {
     path: "/manifesto",
@@ -119,7 +119,7 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/glossary",
     title: "Glossary",
     description:
-      "Plain definitions for validating a swap to a cheaper model: release gates, the quality floor, held-out cases, abstention, cascade risk, and what safe means.",
+      "Plain definitions for validating a swap to a cheaper or newer model: release gates, the quality floor, held-out cases, abstention, cascade risk, and what safe means.",
   },
   {
     path: "/agent",
@@ -137,7 +137,7 @@ const PAGES: { path: string; title: string; description: string }[] = [
     path: "/about",
     title: "About",
     description:
-      "rightmodeler is working toward production AI that maintains and optimizes itself, starting with open-source validation of cheaper model swaps on your traces.",
+      "rightmodeler is working toward production AI that maintains and optimizes itself, starting with open-source validation of cheaper or newer model swaps on your traces.",
   },
   {
     path: "/contact",
@@ -209,7 +209,7 @@ ${SITE_NAME} is an open-source developer tool from ELM-OS for teams running prod
 
 ## Product
 
-- [${SITE_NAME}](${SITE_URL}): Home. Why the human work in the loop is the bottleneck, how rightmodeler validates cheaper model swaps and opens draft pull requests, and the first command to run.
+- [${SITE_NAME}](${SITE_URL}): Home. Why the human work in the loop is the bottleneck, how rightmodeler validates cheaper or newer model swaps and opens draft pull requests, and the first command to run.
 - [GitHub repository](${REPO_URL}): Source code and the pipeline you run on your own traces. Open source under the MIT license.
 
 ## Developer resources

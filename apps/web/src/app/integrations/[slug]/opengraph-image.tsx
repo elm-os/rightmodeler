@@ -145,7 +145,7 @@ export default async function Image({
           color: DRIFTWOOD,
         }}
       >
-        Cheaper model swaps, validated on your traces.
+        Cheaper or newer model swaps, validated on your traces.
       </div>
 
       <div
