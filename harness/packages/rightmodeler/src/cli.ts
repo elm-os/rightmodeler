@@ -234,7 +234,7 @@ export function createProgram(
   };
   const program = new Command()
     .name("rightmodeler")
-    .description("Find and prove safe model substitutions.")
+    .description("Validate swaps to cheaper models on your own traces.")
     .addHelpText(
       "after",
       "\nExit codes are command-specific: apply uses 0 success, 1 refused, 2 needs a completed run, >=10 runtime error; rollback uses 0 success, 1 refused, >=10 runtime error; drift uses 0 success, 2 needs input, >=10 runtime error; watch uses 0 quiet, 1 actions taken, 2 lock held elsewhere (result on stdout) or needs a completed run (error on stderr), >=10 runtime error; pipeline commands use 0 no recommendation, 1 recommendation exists, 2 needs input, 3 budget, >=10 runtime error.\n",
@@ -509,7 +509,7 @@ export function createProgram(
 
   const apply = program
     .command("apply")
-    .description("open a draft pull request for proven model swaps")
+    .description("open a draft pull request for validated model swaps")
     .requiredOption("--owner <owner>", "GitHub repository owner")
     .option(
       "--github-repo <repo>",
