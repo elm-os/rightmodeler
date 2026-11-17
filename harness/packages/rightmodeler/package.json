@@ -1,7 +1,19 @@
 {
   "name": "@rightmodeler/cli",
   "version": "0.6.2",
-  "description": "Find and prove safe model substitutions from the agent traces you already have.",
+  "description": "Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.",
+  "keywords": [
+    "ai-agents",
+    "agent-evals",
+    "llm-evals",
+    "llm-as-a-judge",
+    "model-validation",
+    "cost-optimization",
+    "llmops",
+    "traces",
+    "production-ai",
+    "regression-testing"
+  ],
   "homepage": "https://www.rightmodeler.com",
   "type": "module",
   "bin": {

@@ -8,7 +8,7 @@
   "title": "Bifrost integration: replay and read its request logs",
   "description": "Replay and judge through the open-source Bifrost gateway and read its request logs as traces. An answer from another model or from its cache is never graded.",
   "h1": "rightmodeler + Bifrost",
-  "lede": "Bifrost is an Apache 2.0 AI gateway written in Go. Its open-source build can keep every call in a log store that rightmodeler reads as traces, and the same gateway can be the route the audit replays and judges through.",
+  "lede": "Bifrost is an Apache 2.0 AI gateway written in Go. Its open-source build can keep every call in a log store that rightmodeler reads as traces, and the same gateway can be the route rightmodeler replays and judges through.",
   "tldr": "rightmodeler reads Bifrost's request logs, exported from its management API, as one ordered run per session: the model your application asked for, the conversation as sent, the output, usage, cost, latency and retries. The same gateway is a replay route: model ids are <provider>/<upstream id>, the billed cost comes from usage.cost.total_cost, and --catalog-reference fills the pricing a custom provider does not list. Turn every compat flag off and configure no aliases for replay models; a response from another model, a semantic-cache hit, or a request the compat plugin changed is left out of the evidence instead of graded. Bifrost advertises sub-millisecond overhead and runs by other gateway makers measured milliseconds, so test it on your own traffic: rightmodeler records each replay's latency through your gateway. Verified on the open-source build, v2.2.1.",
   "steps": [
     {
@@ -111,7 +111,7 @@
   "useCases": [
     {
       "title": "Traces without instrumenting every app",
-      "body": "With logging on, every call through Bifrost lands in its log store as the application sent it, with cost and latency beside it. Export that store and the audit has its corpus, whatever language each service is written in."
+      "body": "With logging on, every call through Bifrost lands in its log store as the application sent it, with cost and latency beside it. Export that store and rightmodeler has its corpus, whatever language each service is written in."
     },
     {
       "title": "Keep fallback answers out of the corpus",

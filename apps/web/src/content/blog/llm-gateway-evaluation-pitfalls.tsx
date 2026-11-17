@@ -59,7 +59,7 @@ export function Body() {
         source, with the way to detect it and the fix.
       </P>
 
-      <H2>What an evaluation row has to prove</H2>
+      <H2>What an evaluation row has to show</H2>
 
       <P>
         Before a row can count toward a decision, three things must be true:
@@ -868,15 +868,18 @@ maximhq/bifrost:v2.2.1
       <H2>How rightmodeler applies these checks</H2>
 
       <P>
-        rightmodeler is an MIT-licensed CLI on npm (npx rightmodeler init) that
-        reads the traces you already export, replays recorded steps through
-        cheaper candidates from your provider&rsquo;s live catalog, and judges
-        them against the outputs your team already accepted, reporting reference
-        agreement, sample size and abstentions against a held-out quality floor.
-        It is never in the request path: its output is a draft pull request that
-        changes only model identifiers, for a human to review and merge. It
-        replays through any OpenAI-compatible base URL, including each gateway
-        above.
+        rightmodeler is a validation framework for model swaps: an MIT-licensed
+        CLI on npm (npx rightmodeler init) that reads the traces you already
+        export, replays recorded steps on cheaper candidate models from your
+        provider&rsquo;s live catalog, and has a judge from a different vendor,
+        or your own evaluator, grade every answer against the output your team
+        already accepted. It measures agreement at a statistical lower bound
+        against your quality floor on held-out cases, reports the sample size,
+        and abstains when the evidence is thin. It runs offline, never in the
+        request path: a swap that clears every release gate becomes a draft pull
+        request that changes only model identifiers, with the evidence attached,
+        for a person to review and merge or close. It replays through any
+        OpenAI-compatible base URL, including each gateway above.
       </P>
 
       <P>
@@ -931,7 +934,7 @@ You want to know whether a cheaper model can take over a step in your applicatio
 
 A gateway exists to keep production answering: it retries on another backend, maps one name to several deployments, serves repeats from a cache, and adjusts requests a provider cannot take. Each of those is a feature in production and a contamination in an evaluation, which makes one claim per row: this model, given this request, produced this output. This guide walks through the four ways a gateway breaks that claim: a fallback, an alias, a cached answer and a rewritten request. Each is shown on a response from [Portkey](https://github.com/Portkey-AI/gateway), [Bifrost](https://github.com/maximhq/bifrost) or [Agent Router](https://theagentrouter.ai/), formerly Envoy AI Gateway, captured from a running gateway or written from its pinned source, with the way to detect it and the fix.
 
-## What an evaluation row has to prove
+## What an evaluation row has to show
 
 Before a row can count toward a decision, three things must be true:
 
@@ -1145,7 +1148,7 @@ Bifrost's log store keeps the difference visible: a fallback attempt is its own 
 
 ## How rightmodeler applies these checks
 
-rightmodeler is an MIT-licensed CLI on npm (npx rightmodeler init) that reads the traces you already export, replays recorded steps through cheaper candidates from your provider's live catalog, and judges them against the outputs your team already accepted, reporting reference agreement, sample size and abstentions against a held-out quality floor. It is never in the request path: its output is a draft pull request that changes only model identifiers, for a human to review and merge. It replays through any OpenAI-compatible base URL, including each gateway above.
+rightmodeler is a validation framework for model swaps: an MIT-licensed CLI on npm (npx rightmodeler init) that reads the traces you already export, replays recorded steps on cheaper candidate models from your provider's live catalog, and has a judge from a different vendor, or your own evaluator, grade every answer against the output your team already accepted. It measures agreement at a statistical lower bound against your quality floor on held-out cases, reports the sample size, and abstains when the evidence is thin. It runs offline, never in the request path: a swap that clears every release gate becomes a draft pull request that changes only model identifiers, with the evidence attached, for a person to review and merge or close. It replays through any OpenAI-compatible base URL, including each gateway above.
 
 Every replayed and judge response goes through [the check in provenance.ts](https://github.com/elm-os/rightmodeler/blob/27e877e1bed77a6fcf6e8ae8a879ba995dfb0355/harness/packages/replay/src/provenance.ts#L67-L132) before it counts. A response that names another model, reports a cache hit or reports a changed request is recorded as substituted, never graded, and counted as attribution_substituted. If more than 5% of a family's replays are left out of the evidence, the family [abstains](https://www.rightmodeler.com/glossary#abstain) instead of deciding. A replay_responses_substituted warning names the requested and served models and the fix, and a judge that answers as another model is retired while the next-ranked judge takes over. The replay-safe setup for each gateway is on the [Portkey](https://www.rightmodeler.com/integrations/portkey), [Bifrost](https://www.rightmodeler.com/integrations/bifrost) and [Agent Router](https://www.rightmodeler.com/integrations/envoy-ai-gateway) integration pages, and the method is on [how it works](https://www.rightmodeler.com/how-it-works).
 

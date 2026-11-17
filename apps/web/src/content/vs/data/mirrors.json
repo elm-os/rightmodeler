@@ -5,18 +5,18 @@
   "logo": "/vs/logos/mirrors.svg",
   "category": "context",
   "verdict": "complement",
-  "verdictLabel": "Complement · better context, then the right model",
+  "verdictLabel": "Complement · better context, then a right-sized model",
   "title": "rightmodeler vs Mirrors: the context vs the model",
-  "description": "Mirrors learns from your agent's past sessions and routes the right context at runtime. rightmodeler checks which model each step needs. Two levers that stack.",
+  "description": "Mirrors learns from your agent's past sessions and routes the right context at runtime. rightmodeler validates cheaper models per step. Two levers that stack.",
   "h1": "rightmodeler vs Mirrors",
-  "lede": "Mirrors improves what your agent sees: it learns from past sessions and routes the right context into a conversation when it matters. rightmodeler leaves the context alone and changes one thing, the model each step calls, as a draft pull request you review.",
+  "lede": "Mirrors improves what your agent sees: it learns from past sessions and routes the right context into a conversation when it matters. rightmodeler leaves the context alone and changes one thing, the model each step calls: when a swap clears every gate, it opens a draft pull request you review.",
   "integrationSlug": "",
   "related": ["codag", "langsmith", "braintrust"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Complements, with one ordering rule. As of 2026-09-24, Mirrors, a Y Combinator Fall 2026 company, leads with dynamic context: per its homepage, it learns from your agent's successes and failures in recorded sessions, you write and review the guidance, Mirrors routes that guidance into a conversation when its conditions match, and it compares outcomes against stable holdout groups. rightmodeler, a free MIT-licensed CLI, works the other lever: it replays your recorded traces through cheaper models from your provider's live catalog, judges each against the output you accepted, and opens a draft pull request that changes only model identifiers. Better context and a right-sized model are different levers, so the two can stack. The rule: if a context change alters what a step receives, measure the model decision on traces recorded after that change."
+      "body": "Complements, with one ordering rule. As of 2026-09-24, Mirrors, a Y Combinator Fall 2026 company, leads with dynamic context: per its homepage, it learns from your agent's successes and failures in recorded sessions, you write and review the guidance, Mirrors routes that guidance into a conversation when its conditions match, and it compares outcomes against stable holdout groups. rightmodeler, a free MIT-licensed CLI, works the other lever: it replays your recorded traces through cheaper models from your provider's live catalog, grades each against the output you accepted, and, when a swap clears every release gate, opens a draft pull request that changes only model identifiers. Better context and a right-sized model are different levers, so the two can stack. The rule: if a context change alters what a step receives, validate the model decision on traces recorded after that change."
     },
     {
       "type": "positioning",
@@ -31,9 +31,9 @@
       "right": {
         "heading": "What rightmodeler changes",
         "items": [
-          "The model identifier, and only that. A swap reaches your code as a draft pull request whose diff may touch model identifiers only, and a human reviews and merges it.",
+          "The model identifier, and only that. A swap reaches your code as a draft pull request whose diff may touch model identifiers only, and a person reviews and merges it.",
           "Nothing at runtime. The CLI works offline on recorded traces and is never in the request path. There is no rightmodeler server, account, or telemetry.",
-          "Every recommendation carries reference agreement with the output you accepted, the sample size behind it, and any abstentions. A candidate must re-clear the quality floor on held-out cases, and a multi-step swap must be confirmed end to end before a pull request opens."
+          "Every recommendation carries reference agreement with the output you accepted, the sample size behind it, and any abstentions. A candidate must clear the quality floor on held-out cases, and a multi-step swap must be confirmed end to end in a sandbox before a pull request opens."
         ]
       }
     },
@@ -50,7 +50,7 @@
         {
           "scenario": "Your agent's outcomes are where you want them, but every step runs on a frontier model and the bill keeps growing.",
           "winner": "ours",
-          "why": "That is a model question, not a context question. rightmodeler replays each recorded step through cheaper candidates shortlisted from your provider's live catalog, judges them against the outputs you accepted, abstains where the evidence is thin, re-checks the quality floor on held-out cases, and hands you a draft pull request to review."
+          "why": "That is a model question, not a context question. rightmodeler replays the recorded steps through cheaper candidates shortlisted from your provider's live catalog, judges them against the outputs you accepted, abstains where the evidence is thin, holds a winner to the quality floor on held-out cases, and, when a swap clears every release gate, opens a draft pull request for you to review."
         },
         {
           "scenario": "You are rolling out Mirrors on a workflow and also want to right-size the models behind it.",
@@ -64,7 +64,7 @@
       "heading": "Order matters when they stack",
       "paragraphs": [
         "A rightmodeler verdict is evidence about one exact set of inputs: the recorded inputs of each step, and the outputs you accepted for them. Mirrors changes those inputs on purpose, in the sessions whose conditions match. A cheaper model that matched your accepted outputs without a routed lesson earned that verdict on a conversation production no longer sends, and the reverse can happen too: a small model that missed a step may hold it once the right guidance arrives.",
-        "So once a context change goes live, record fresh traces and run the audit on those before any model decision, and check that your traces record what the model actually received, routed context included. When a change is revised, expired, or rolled back, the inputs shift again, so rerun the audit on traces recorded after it. rightmodeler does not detect a context layer for you. The same care runs the other way: if you swap a model first, rerun the audit once a new context change is live."
+        "So once a context change goes live, record fresh traces and run rightmodeler on those before any model decision, and check that your traces record what the model actually received, routed context included. When a change is revised, expired, or rolled back, the inputs shift again, so rerun it on traces recorded after the change. rightmodeler does not detect a context layer for you. The same care runs the other way: if you swap a model first, run rightmodeler again once a new context change is live."
       ]
     },
     {
@@ -74,7 +74,7 @@
         "Mirrors works live, inside the conversation, and measures itself against holdout groups on an outcome you choose, such as successful resolution. rightmodeler works after the fact on recorded traces and never sees a live session, by design.",
         "Mirrors works on what a model swap does not touch: a missing instruction, a vague tool description, a loose input schema, a tool result the model misreads. rightmodeler changes which model reads the context and nothing else, so a mistake that comes from what the agent sees is outside its reach.",
         "rightmodeler replays plain-text steps. A recorded conversation that carries tool definitions or tool calls is left out of the replay sample, and a call site that needs tools or structured output is not replayed. Tool descriptions, schemas, and results, three of the things Mirrors edits, live in exactly those steps, so on a tool-heavy agent the two may work on different steps entirely.",
-        "rightmodeler's verdicts measure agreement with the output you shipped, not correctness, and where the evidence is thin the audit abstains instead of guessing."
+        "rightmodeler's verdicts measure agreement with the output you shipped, not ground-truth correctness, and where the evidence is thin it abstains instead of guessing."
       ]
     },
     {
@@ -87,27 +87,27 @@
         },
         {
           "term": "holdout group",
-          "def": "In Mirrors, sessions that do not receive a context change, kept stable so outcomes with and without it can be compared. rightmodeler holds cases out too: a candidate must clear the quality floor again on recorded cases it was not chosen on."
+          "def": "In Mirrors, sessions that do not receive a context change, kept stable so outcomes with and without it can be compared. rightmodeler holds cases out too: a candidate must clear the quality floor on recorded cases kept out of its shortlist screen."
         },
         {
           "term": "trace",
           "slug": "trace",
-          "def": "The recorded log of an agent run: each step's inputs, outputs, and tool calls. Both products start from it. If routed context enters a step, the trace should record it, or the audit replays a different input from the one the model saw."
+          "def": "The recorded log of an agent run: each step's inputs, outputs, and tool calls. Both products start from it. If routed context enters a step, the trace should record it, or rightmodeler replays a different input from the one the model saw."
         },
         {
           "term": "swap candidate",
           "slug": "swap-candidate",
-          "def": "A cheaper model whose output agrees closely enough with the accepted output to merit review. Evidence of agreement with shipped output, not proof of correctness."
+          "def": "A cheaper model whose output agrees closely enough with the accepted output to merit review. Evidence of agreement with shipped output, not ground-truth correctness."
         },
         {
           "term": "quality floor",
           "slug": "quality-floor",
-          "def": "The configurable minimum agreement score a candidate must clear, including on held-out cases, before the audit recommends it. Below it, the current model stays."
+          "def": "The configurable minimum that the statistical lower bound on a candidate's held-out agreement, adjusted for the number of candidates, must reach before rightmodeler recommends it. Below it, the current model stays."
         },
         {
           "term": "abstain",
           "slug": "abstain",
-          "def": "What the audit does when a step's evidence is too thin: it recommends nothing rather than guessing, and names the reason."
+          "def": "What rightmodeler does when a step's evidence is too thin: it recommends nothing rather than guessing, and names the reason."
         }
       ]
     },
@@ -120,7 +120,7 @@
         },
         {
           "q": "Can I run both on the same agent?",
-          "a": "Yes, and the order matters. Put the context change live, record fresh traces, then run the audit on those, so candidates are judged on the inputs the model actually receives. If a model swap came first, rerun the audit after a context change goes live, because the step's inputs changed. rightmodeler has no Mirrors integration; the two never talk to each other."
+          "a": "Yes, and the order matters. Put the context change live, record fresh traces, then run rightmodeler on those, so candidates are judged on the inputs the model actually receives. If a model swap came first, run rightmodeler again after a context change goes live, because the step's inputs changed. rightmodeler has no Mirrors integration; the two never talk to each other."
         },
         {
           "q": "Is Mirrors still a staging environment for agents?",
@@ -128,7 +128,7 @@
         },
         {
           "q": "What does each one need to start?",
-          "a": "Per its site, Mirrors asks you to bring exported traces from a workflow you want to improve, plus any outcome labels or customer feedback you already collect; it is working with early design partners, you start by talking to the founders, and pricing is discussed for your use case. rightmodeler needs exported traces, the repository your agent lives in, and a key for an OpenAI-compatible provider, and npx rightmodeler init runs the audit on your machine."
+          "a": "Per its site, Mirrors asks you to bring exported traces from a workflow you want to improve, plus any outcome labels or customer feedback you already collect; it is working with early design partners, you start by talking to the founders, and pricing is discussed for your use case. rightmodeler needs exported traces, the repository your agent lives in, and a key for an OpenAI-compatible provider or a signed-in claude or codex CLI, and npx rightmodeler init runs a validation on your machine."
         },
         {
           "q": "Where does my data go?",

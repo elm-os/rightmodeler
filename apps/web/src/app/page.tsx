@@ -9,6 +9,7 @@ import { NumbersBand } from "@/components/sections/numbers-band";
 import { Platform } from "@/components/sections/platform";
 import { SourcesBar } from "@/components/sections/sources-bar";
 import { TestimonialBand } from "@/components/sections/testimonial-band";
+import { ThesisBand } from "@/components/sections/thesis-band";
 import {
   alternatesFor,
   DEFAULT_SOCIAL_IMAGE,
@@ -25,11 +26,13 @@ import {
   SITE_URL,
 } from "@/lib/site";
 
+// Canonical strings from docs/positioning.md. The hero h1 is an opinion and never a title here.
+const title = "rightmodeler: cheaper model swaps, validated on your traces";
 const description =
-  "Measure candidate models against outputs you accepted, review the evidence, sample size, and abstentions, then ship approved model changes as pull requests.";
+  "The bottleneck is the human work in the loop. rightmodeler validates cheaper models on your production traces and opens a draft pull request for your review.";
 const preview = socialImage(
   DEFAULT_SOCIAL_IMAGE,
-  "Keep your agents on the right model: rightmodeler",
+  "Take the work out of the loop: rightmodeler",
 );
 const websiteLd = {
   "@context": "https://schema.org",
@@ -43,7 +46,9 @@ const softwareLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: SITE_NAME,
-  description,
+  // The one-liner: it describes the software, where the page description argues the thesis.
+  description:
+    "Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.",
   applicationCategory: "DeveloperApplication",
   operatingSystem: "macOS, Linux, Windows",
   softwareRequirements: "Node.js 24 or newer",
@@ -64,13 +69,11 @@ const softwareLd = {
 };
 
 export const metadata: Metadata = {
-  title: {
-    absolute: "rightmodeler: measure candidates against what you shipped",
-  },
+  title: { absolute: title },
   description,
   alternates: alternatesFor("/"),
   openGraph: {
-    title: "rightmodeler",
+    title,
     description,
     url: "https://www.rightmodeler.com",
     siteName: "rightmodeler",
@@ -80,7 +83,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "rightmodeler",
+    title,
     description,
     images: [preview],
   },
@@ -99,6 +102,11 @@ export default function Home() {
         <div className="mx-auto max-w-6xl border-x border-ash-border">
           <Hero />
           <SourcesBar />
+        </div>
+        <div aria-hidden className="h-px w-full bg-ash-border" />
+        {/* The thesis closer defines "safe", so it must sit directly above Platform's h2. */}
+        <div className="mx-auto max-w-6xl border-x border-ash-border">
+          <ThesisBand />
         </div>
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">

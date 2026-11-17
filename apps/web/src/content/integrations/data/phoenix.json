@@ -6,10 +6,10 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "Arize Phoenix integration: replay spans on cheaper models",
-  "description": "Export OpenInference spans from Phoenix: rightmodeler replays each step on cheaper models and measures every output against what you accepted.",
+  "description": "Export OpenInference spans from Phoenix: rightmodeler replays recorded steps on cheaper models and measures every output against what you accepted.",
   "h1": "rightmodeler + Arize Phoenix",
-  "lede": "Phoenix already records your agent as OpenInference spans: model, messages, token counts. rightmodeler replays those spans through cheaper candidates and reports agreement, evidence, sample size, and abstentions per step family.",
-  "tldr": "rightmodeler reads Phoenix traces in their native OpenInference form with a dedicated adapter. It walks an OTLP file export down through resourceSpans and scopeSpans, keeps the spans whose openinference.span.kind is LLM, un-flattens the indexed dotted message keys back into ordered messages, and reads the model from llm.model_name with token counts from llm.token_count. Each kept span is then replayed against cheaper candidates and scored against the output you already shipped.",
+  "lede": "Phoenix already records your agent as OpenInference spans: model, messages, token counts. rightmodeler replays recorded LLM spans through cheaper candidates and reports agreement, evidence, sample size, and abstentions per step family.",
+  "tldr": "rightmodeler reads Phoenix traces in their native OpenInference form with a dedicated adapter. It walks an OTLP file export down through resourceSpans and scopeSpans, keeps the spans whose openinference.span.kind is LLM, un-flattens the indexed dotted message keys back into ordered messages, and reads the model from llm.model_name with token counts from llm.token_count. Kept spans are then replayed against cheaper candidates and scored against the output you already shipped.",
   "steps": [
     {
       "label": "01 · Export",
@@ -24,16 +24,16 @@
     {
       "label": "03 · Replay + judge",
       "title": "Replayed on your inputs, judged against your outputs",
-      "body": "Each kept span is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts are confidence lower bounds kept separate per evaluator kind and never pooled across kinds."
+      "body": "Kept spans are replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind and never pooled across kinds."
     },
     {
       "label": "04 · Report + apply",
       "title": "A per-step report, then a pull request",
-      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback restores the pre-apply files, refusing unless every restored digest matches."
+      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI, and rollback opens another pull request that restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
-    "intro": "Nothing to install: npx runs the published CLI. Hand it an exported span file. Nothing connects to your Phoenix instance; the audit runs offline on the spans you already collected, against whichever replay endpoint you configure.",
+    "intro": "Nothing to install: npx runs the published CLI. Hand it an exported span file. Nothing connects to your Phoenix instance; rightmodeler runs offline on the spans you already collected, against whichever replay endpoint you configure.",
     "commands": [
       {
         "comment": "# preview the pipeline against your spans, without spending",
@@ -83,7 +83,7 @@
   "useCases": [
     {
       "title": "Right-size whatever OpenInference instruments",
-      "body": "Phoenix traces frameworks through OpenInference instrumentors, so whether the spans came from LlamaIndex, LangChain, or your own tracer, every LLM span lands as a step with its model, messages, and token counts, and the audit shows which step families genuinely need the model they are on."
+      "body": "Phoenix traces frameworks through OpenInference instrumentors, so whether the spans came from LlamaIndex, LangChain, or your own tracer, every LLM span lands as a step with its model, messages, and token counts, and the report shows which step families clear a swap to a cheaper model."
     },
     {
       "title": "Measure the candidate before Phoenix sees drift",
@@ -91,11 +91,12 @@
     },
     {
       "title": "Keep sessions intact in the statistics",
-      "body": "A span's session.id becomes its trajectory, and trajectories are the clustering unit for the intervals. A five-span agent run over twenty sessions is resampled as twenty units rather than a hundred independent trials, which keeps the confidence bounds honest."
+      "body": "A span's session.id becomes its trajectory, and trajectories are the clustering unit for the intervals. A five-span agent run over twenty sessions is resampled as twenty units rather than a hundred independent trials, which keeps the lower bounds honest."
     }
   ],
   "limits": [
     "Only spans whose openinference.span.kind is LLM become steps. Chain, tool, and retriever spans are read for detection, then dropped with a recorded reason rather than replayed.",
+    "Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the recorded_messages_not_replayable warning says how many.",
     "It reads span files on disk, OTLP JSON or JSONL with OpenInference attributes. It does not connect to a running Phoenix instance, poll its API, or watch new traces arrive.",
     "The integration is with the OpenInference span format, not with Arize: no account connection and no keys exchanged. Spans that use gen_ai.* attributes instead are picked up by the separate OTel GenAI adapter.",
     "OpenInference spans carry no cost, so historical spend is not read from them. Candidate calls are priced from what your replay endpoint reports and marked as an estimate when the provider returns none.",
@@ -113,7 +114,7 @@
     },
     {
       "q": "Do I need an Arize account or API key?",
-      "a": "No. The integration is with the OpenInference span format itself, so it makes no difference where your Phoenix instance runs: export the spans and hand over the file. The only credential the audit needs is the key for the replay endpoint you configure."
+      "a": "No. The integration is with the OpenInference span format itself, so it makes no difference where your Phoenix instance runs: export the spans and hand over the file. The only credential rightmodeler needs is the key for the replay endpoint you configure."
     },
     {
       "q": "Why do my spans have keys like llm.input_messages.0.message.role?",
@@ -121,11 +122,11 @@
     },
     {
       "q": "Does my span data leave my machine?",
-      "a": "Only during replay: step inputs go to candidate models through the endpoint you configured, under your own key, the same class of call your agent already makes. There is no rightmodeler server and no account; the span files stay on disk."
+      "a": "Only during the run: step inputs go to candidate models, and recorded outputs go to the judge, through the endpoint you configured, under your own key, the same class of call your agent already makes. An external evaluator, if you name one, receives what it scores. There is no rightmodeler server and no account; the span files stay on disk."
     },
     {
       "q": "Will it always find a cheaper model?",
-      "a": "No, and deliberately so. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor again on held-out cases. A tool that always finds a swap is not measuring anything."
+      "a": "No, and deliberately so. A family abstains when the evidence is thin or the excluded fraction runs over the ceiling, and nothing is proposed unless a candidate clears the quality floor on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],
   "related": ["otel", "langsmith", "weave"],

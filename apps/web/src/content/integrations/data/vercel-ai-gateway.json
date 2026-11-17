@@ -53,7 +53,7 @@
   "detection": "",
   "useCases": [
     {
-      "title": "Audit on the route you already fund",
+      "title": "Validate on the route you already fund",
       "body": "If your team already has Gateway credits, the same account can fund candidate replays and judge calls, and estimate tells you roughly what the run will draw down before it starts."
     },
     {
@@ -73,9 +73,9 @@
     "Replay and judge calls spend your Gateway credits. estimate projects the spend from catalog prices and the corpus first, and --max-cost-usd caps the run, but the evidence is produced with real billable calls.",
     "Cost is only as good as what the response reports. When the Gateway returns no cost for a call, rightmodeler falls back to token usage and catalog pricing and labels that amount an estimate rather than presenting it as billed.",
     "A model the catalog publishes with no pricing cannot be shortlisted, and a step whose current model is missing from the catalog abstains rather than being compared against a guess.",
-    "A cheaper candidate is not automatically a recommendation. Capabilities are filtered first, thin or inconsistent evidence ends in abstention, and the winner has to clear the quality floor again on held-out cases.",
+    "A cheaper candidate is not automatically a recommendation. Capabilities are filtered first, a case whose position-swapped verdicts disagree counts as a failure, thin evidence ends in abstention, and the winner has to clear the quality floor on held-out cases.",
     "One replay endpoint is configured per run. The Gateway, OpenRouter, and a LiteLLM proxy are all OpenAI-compatible routes rightmodeler accepts; it does not mix keys within a run.",
-    "rightmodeler is an offline report on traces you provide, never a runtime gateway or a hop in your production request path. Replay inputs still leave your machine for the Gateway when the audit calls a model."
+    "rightmodeler runs offline on traces you provide and is never a runtime gateway or a hop in your production request path. Step inputs and recorded outputs still leave your machine for the Gateway when a validation run calls a model."
   ],
   "faq": [
     {
@@ -83,7 +83,7 @@
       "a": "Only if you choose it as the replay route. rightmodeler takes whatever OpenAI-compatible base URL you pass, so OpenRouter or your own LiteLLM proxy work the same way. What it always needs is a catalog at /models and a chat endpoint at /chat/completions."
     },
     {
-      "q": "Why route the audit through the Gateway?",
+      "q": "Why replay through the Gateway?",
       "a": "It gives rightmodeler one OpenAI-compatible route plus a live model catalog with pricing, context windows, and capability tags. That is enough to shortlist cheaper capable models, replay them, and choose a judge from a neutral family without a fixed model list."
     },
     {
@@ -96,11 +96,11 @@
     },
     {
       "q": "Does my trace data leave my machine?",
-      "a": "The audit and report run locally, but the recorded step inputs used for replays and judging are sent to the Gateway with your key. There is no rightmodeler server, and the audit adds nothing to your production request path."
+      "a": "rightmodeler and its report run locally, but recorded step inputs go to candidate models, and recorded outputs go to the judge, through the Gateway with your key. An external evaluator, if you name one, receives what it scores. There is no rightmodeler server, and nothing is added to your production request path."
     },
     {
       "q": "If I approve a swap, must I keep using the Gateway?",
-      "a": "No. The pull request changes a model identifier, not a route. The Gateway is the test bench for this audit; you can serve an approved model through whichever provider or gateway fits your application."
+      "a": "No. The pull request changes a model identifier, not a route. The Gateway is the test bench for the replays; you can serve an approved model through whichever provider or gateway fits your application."
     }
   ],
   "related": ["openrouter", "litellm", "otel"],

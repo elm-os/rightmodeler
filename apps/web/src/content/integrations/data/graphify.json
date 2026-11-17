@@ -66,15 +66,15 @@
     },
     {
       "title": "Find model calls the scanner did not match",
-      "body": "Unconfirmed imports list files that import a model SDK where the scanner found no call site, such as a wrapper module. Nothing in them was evaluated; if one calls a model you want audited, add a --matchers rule and rerun."
+      "body": "Unconfirmed imports list files that import a model SDK where the scanner found no call site, such as a wrapper module. Nothing in them was evaluated; if one makes a model call you want validated, add a --matchers rule and rerun."
     },
     {
-      "title": "Add context without re-running the audit",
+      "title": "Add context without re-running the validation",
       "body": "The flag only changes the report stage, so adding a graph to a finished run renders the section without repeating scan, replay, or any other evidence stage. The scanner ignores graphify-out/, so building or rebuilding the graph leaves finished stages current."
     }
   ],
   "limits": [
-    "Graph edges are static structure. They are never replay trials, runtime proof, or quality evidence, and the flag never changes a stage before the report, a verdict, a release gate, confirmation, the proposed swap, its digest, or who is asked to review.",
+    "Graph edges are static structure. They are never replay trials, runtime measurements, or quality evidence, and the flag never changes a stage before the report, a verdict, a release gate, confirmation, the proposed swap, its digest, or who is asked to review.",
     "INFERRED and AMBIGUOUS findings were resolved by inference or are uncertain, and are marked verify. A multi-hop finding carries its weakest hop, so a single inferred edge anywhere in the chain labels the whole finding.",
     "A graph built at a different commit than the scan is shown file-level only: enclosing symbols and callers are hidden until you rebuild with graphify update . at the scanned commit.",
     "An unusable graph, such as a missing file, a file that is not a Graphify graph, one too large for Node.js to read, or one built from another repository, produces a warning and a section that says why it is not shown, and the rest of the report is unchanged. Edges and nodes whose shape this version does not read are ignored and counted in the section.",

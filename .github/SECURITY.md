@@ -18,14 +18,16 @@ Please give us reasonable time to ship a fix before disclosing publicly.
 
 ## Supported versions
 
-rightmodeler ships from `main`. Fixes land there, and the skill is re-installed from
-source, so `main` is the only supported version.
+The rightmodeler CLI is published as versioned releases on npm. Fixes land on `main` and
+go out in the next release, so the latest release published on npm and `main` are the
+only supported versions. The skill installs from this repository; re-install it to pick up
+changes.
 
 ## Scope
 
 **In scope**
 
-- The skill runtime in `skills/rightmodeler`
+- The coding-agent skill in `skills/rightmodeler`
 - The TypeScript CLI and harness in `harness`
 - The schemas in `packages/contracts`
 - www.rightmodeler.com and its API routes in `apps/web`
@@ -39,9 +41,11 @@ source, so `main` is the only supported version.
 
 ## How rightmodeler handles your credentials
 
-Worth knowing before you test: the skill reads provider keys from your process
-environment or a project `.env` in your own repo tree. It never asks you to send a key
+Worth knowing before you test: the CLI reads a provider key from the environment
+variable you name (`RIGHTMODELER_API_KEY` by default), and never takes the key as an
+argument, prompts for it or loads it from a `.env` file. It never asks you to send a key
 value, never writes one for you, and never transmits one anywhere except to the
-provider you configured. It runs offline against traces you already have and never sits
+provider you configured (on a cloud Mode B backend, by way of the sandbox platform's
+egress firewall). It runs offline against traces you already have and never sits
 in your request path. If you find behavior that contradicts any of this, treat it as a
 security issue and report it.

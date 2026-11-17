@@ -50,7 +50,8 @@ async function loadPlates(): Promise<ShapeMask[] | null> {
   }
 }
 
-// The percentages are quoted verbatim from content/case-studies.ts; the captions stay generic.
+// The percentages are quoted verbatim from the B:Side case study, each with the study's own hedge:
+// cost and speed are projected per 20 queries there, and only the pass rate is measured.
 const STATS: { value: string; caption: string }[] = [
   {
     value: `${TRACE_SOURCES.length}`,
@@ -58,15 +59,15 @@ const STATS: { value: string; caption: string }[] = [
   },
   {
     value: "70.8%",
-    caption: "lower inference cost after right-sizing",
+    caption: "projected lower inference cost after right-sizing, B:Side",
   },
   {
     value: "100%",
-    caption: "quality held against shipped outputs",
+    caption: "quality held against shipped outputs, measured, B:Side",
   },
   {
     value: "53.3%",
-    caption: "faster responses on the same workloads",
+    caption: "projected faster responses on the same workloads, B:Side",
   },
 ];
 
@@ -296,7 +297,7 @@ export function NumbersBand() {
             The numbers
           </p>
           <h2 className="mt-3 max-w-2xl font-display text-heading text-balance text-midnight-ink sm:text-heading-lg">
-            What the replays showed
+            Real workloads, not leaderboards.
           </h2>
         </Reveal>
 

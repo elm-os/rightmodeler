@@ -7,16 +7,16 @@
   "verdict": "different-job",
   "verdictLabel": "Different job · live routing vs tested defaults",
   "title": "rightmodeler vs Conifer: route live or test first",
-  "description": "Conifer routes coding-agent turns live across cloud and local models. rightmodeler tests your app's model defaults on your traces before any change ships.",
+  "description": "Conifer routes coding-agent turns live across cloud and local models. rightmodeler validates a cheaper pinned model per step, offline, before a person merges.",
   "h1": "rightmodeler vs Conifer",
-  "lede": "When you let it, Conifer handles the model, provider, and cache for each turn as it arrives, and can keep easy turns on your own machine. rightmodeler never sees a live request: it tests the model your application names at each step against outputs you already accepted, and proposes a change only when the evidence holds.",
+  "lede": "When you let it, Conifer handles the model, provider, and cache for each turn as it arrives, and can keep easy turns on your own machine. rightmodeler never sees a live request: it tests cheaper alternatives to the model your application names at each step against outputs you already accepted, and proposes a change only when a swap clears every release gate.",
   "integrationSlug": "",
   "related": ["riften", "openrouter", "not-diamond"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Mostly different jobs. You hire Conifer to run the traffic: per its site as of 2026-09-22, one key and one endpoint in front of frontier and open-weights models, a router that picks the model for a turn when you send auto, balanced, or best, provider failover, prompt-cache management, a cost receipt on every response, and a free CLI engine that runs open-weights models on your own Apple Silicon or Windows machine. Its docs call the gateway the product, and much of what it builds on top is for coding harnesses: Palm, in beta, switches models inside a running Claude Code or Codex session. You hire rightmodeler to settle the defaults your application names in code: the MIT-licensed CLI replays your recorded traces through cheaper candidates, judges each against the output you accepted, and proposes the winners as a draft pull request that changes only model identifiers. Where the two meet is a named model id: Conifer serves the id you name, exactly, and the audit tells you what that id should be."
+      "body": "Mostly different jobs. You hire Conifer to run the traffic: per its site as of 2026-09-22, one key and one endpoint in front of frontier and open-weights models, a router that picks the model for a turn when you send auto, balanced, or best, provider failover, prompt-cache management, a cost receipt on every response, and a free CLI engine that runs open-weights models on your own Apple Silicon or Windows machine. Its docs call the gateway the product, and much of what it builds on top is for coding harnesses: Palm, in beta, switches models inside a running Claude Code or Codex session. You hire rightmodeler to validate cheaper replacements for the defaults your application names in code: the MIT-licensed CLI replays your recorded traces through cheaper candidates, judges each against the output you accepted, and proposes the winners as a draft pull request that changes only model identifiers. Where the two meet is a named model id: Conifer serves the id you name, exactly, and rightmodeler tells you whether a cheaper id holds up in its place."
     },
     {
       "type": "positioning",
@@ -28,10 +28,10 @@
         ]
       },
       "right": {
-        "heading": "rightmodeler decides before a change ships",
+        "heading": "rightmodeler validates before a person merges",
         "items": [
-          "An offline audit of traces you already recorded. It shortlists cheaper models from your configured provider's live catalog, replays each step's real inputs through them, and judges every candidate against the output you accepted.",
-          "A candidate must clear the quality floor, then clear it again on held-out cases, and multi-step swaps are confirmed end to end. The result is a draft pull request that changes only model identifiers, and a human merges it or does not."
+          "Offline validation on traces you already recorded. It shortlists cheaper models from your configured provider's live catalog, replays the recorded inputs through them, and judges every candidate against the output you accepted.",
+          "A candidate must pass a shortlist screen, then clear the quality floor on held-out cases, and swaps that feed later model steps are confirmed end to end in a sandbox. The result is a draft pull request that changes only model identifiers, and a human merges it or does not."
         ]
       }
     },
@@ -41,7 +41,7 @@
       "intro": "The line that matters here is who owns the call.",
       "paragraphs": [
         "A coding harness such as Claude Code or Codex calls models on a developer's behalf, turn by turn, and the right model can change from one turn to the next. That is the call Conifer is built around. Stable, in early access, brings /model, /harness, and /reviewer into the agent you already use; Palm, in beta, pauses and resumes Conifer routing and switches models mid-session without a restart; Parallax has models from other labs review a finished session and sends the findings it proves as pull requests.",
-        "An application's own call is different. Your product sends the same step, with the same prompt template, to the model named in your code, on every request, for every customer. Changing that name is a product decision with consequences downstream, and it deserves evidence from that step's real traffic before it ships. That is the call rightmodeler audits. It can also read Claude Code and Codex session files as traces, but it never switches a model inside a live session.",
+        "An application's own call is different. Your product sends the same step, with the same prompt template, to the model named in your code, on every request, for every customer. Changing that name is a product decision with consequences downstream, and it deserves evidence from that step's real traffic before it ships. That is the call rightmodeler validates. It can also read Claude Code and Codex session files as traces, but it never switches a model inside a live session.",
         "Credit where due. Conifer runs models, and rightmodeler runs none. Its vision page says its own inference engine ran ahead of llama.cpp and MLX on decode, prefill, and time to first token on the same hardware (their benchmark). Cloud tokens bill at the model's own rate with nothing on top, bring-your-own-key traffic carries a 0% fee, and every buffered response carries its exact settled cost. Per its privacy policy, a turn that runs locally transmits nothing.",
         "Read the savings figures as theirs. Conifer's SDK README reports that on held-out task families (n = 4,171) its balanced router matched the best single frontier model within the noise on accuracy at two thirds of that model's cost, and says plainly that it does not beat that model on accuracy. Its YC listing advertises larger cuts to token spend that do not appear on conifer.build as of 2026-09-22. Weigh them as you would any number, ours included: against your own traffic."
       ]
@@ -59,12 +59,12 @@
         {
           "scenario": "Your product calls one model at a fixed step on every request, and you want to know whether a cheaper model holds up before you change that default.",
           "winner": "ours",
-          "why": "The audit replays that step's recorded inputs through cheaper candidates from your provider's live catalog, judges each against the output you accepted, re-clears the quality floor on held-out cases, and hands you a draft pull request that changes only the model identifier. A router picks again on every turn; a default is a decision you make once, on evidence, and review."
+          "why": "rightmodeler replays that step's recorded inputs through cheaper candidates from your provider's live catalog, judges each against the output you accepted, requires a winner to clear the quality floor on held-out cases, and hands you a draft pull request that changes only the model identifier. A router picks again on every turn; a default is a decision you make once, on evidence, and review."
         },
         {
           "scenario": "Your application already calls Conifer's gateway by named model id, and you want to know whether each id is the right one.",
           "winner": "both",
-          "why": "Keep the gateway. A named id is served as named, with a cost receipt, so the id in your code is exactly the surface an audit can act on. The report tells you, from your own traces, what each id should be, and an approved change lands in the same call through the same gateway. There is no Conifer integration today; the audit reads your traces and replays through the provider you configure."
+          "why": "Keep the gateway. A named id is served as named, with a cost receipt, so the id in your code is exactly the surface rightmodeler can act on. The report tells you, from your own traces, which ids can move to a cheaper model, and a merged change lands in the same call through the same gateway. There is no Conifer integration today; rightmodeler reads your traces and replays through the provider you configure."
         }
       ]
     },
@@ -74,22 +74,22 @@
       "terms": [
         {
           "term": "trace",
-          "def": "The recorded, step-by-step log of a real run: prompts, outputs, tool calls, costs. The audit reads traces from your own logging or session files, never from a live request.",
+          "def": "The recorded, step-by-step log of a real run: prompts, outputs, tool calls, costs. rightmodeler reads traces from your own logging or session files, never from a live request.",
           "slug": "trace"
         },
         {
           "term": "reference evidence",
-          "def": "The output you accepted in production, used as the reference each candidate is judged against. Agreement with it is evidence, not proof of correctness: the production result is the reference, not ground truth.",
+          "def": "The output you accepted in production, used as the reference each candidate is judged against. Evidence of agreement with shipped output, not ground-truth correctness.",
           "slug": "reference-evidence"
         },
         {
           "term": "quality floor",
-          "def": "The minimum agreement a candidate must clear before the audit recommends a swap; a winner has to clear it again on held-out cases.",
+          "def": "The minimum agreement a candidate must clear on held-out cases before rightmodeler recommends a swap.",
           "slug": "quality-floor"
         },
         {
           "term": "abstain",
-          "def": "What the audit does when a step's evidence is too thin to support a recommendation: it says so, names the reason, and recommends nothing.",
+          "def": "What rightmodeler does when a step's evidence is too thin to support a recommendation: it says so, names the reason, and recommends nothing.",
           "slug": "abstain"
         }
       ]
@@ -99,11 +99,11 @@
       "items": [
         {
           "q": "Does rightmodeler replace Conifer?",
-          "a": "No. Conifer is runtime infrastructure: it carries requests, fails over between providers, manages the prompt cache, and can run models on your own machine. rightmodeler carries no requests and runs no models. If your application calls Conifer by named model id, keep it there; an approved swap changes the id your code sends, and Conifer serves the new id as named."
+          "a": "No. Conifer is runtime infrastructure: it carries requests, fails over between providers, manages the prompt cache, and can run models on your own machine. rightmodeler carries no requests and runs no models. If your application calls Conifer by named model id, keep it there; a merged swap changes the id your code sends, and Conifer serves the new id as named."
         },
         {
           "q": "Conifer's router already picks a model. Why test a default?",
-          "a": "The router picks per turn when you send auto, balanced, or best, and per its SDK README it returns the pick and up to three fallbacks, never the scores behind them. That suits a developer's session, where the next turn may need a different model. A fixed step in your product is better served by a default chosen on evidence you can inspect: agreement with the output you accepted, the number of trials behind it, a worst-case bound, and an abstention when the evidence is thin."
+          "a": "The router picks per turn when you send auto, balanced, or best, and per its SDK README it returns the pick and up to three fallbacks, never the scores behind them. That suits a developer's session, where the next turn may need a different model. For a fixed step in your product, rightmodeler validates a cheaper pinned model offline, before a person merges, and shows the evidence: agreement with the output you accepted, the number of trials behind it, a worst-case bound, and an abstention when the evidence is thin."
         },
         {
           "q": "Is Conifer open source?",
@@ -114,8 +114,8 @@
           "a": "Not for local turns: per its docs and privacy policy, a request to a local model never leaves the machine. Cloud turns go to the serving endpoint chosen for that turn; Conifer says it does not log prompts or responses and keeps metering records such as model, token counts, and cost. Usage metadata is on by default with an opt-out, and prompt samples stay off unless you turn them on. rightmodeler has no server, no account, and no telemetry."
         },
         {
-          "q": "Can rightmodeler audit my coding-agent sessions?",
-          "a": "It reads Claude Code and Codex session files as traces, but the audit is built for the model calls your own code makes: replay needs plain-text model call sites in the repository it scans, and an approved swap lands as a change to a model identifier in that code. It cannot act inside a running session; switching models mid-session is what Conifer's Palm is for."
+          "q": "Can rightmodeler work from my coding-agent sessions?",
+          "a": "It reads Claude Code and Codex session files as traces, but validation is built for the model calls your own code makes: replay needs plain-text model call sites in the repository it scans, and a swap lands as a draft pull request that changes a model identifier in that code. It cannot act inside a running session; switching models mid-session is what Conifer's Palm is for."
         }
       ]
     }

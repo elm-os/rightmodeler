@@ -1,7 +1,8 @@
 "use client";
 
 // The model pair and the 85% are factual: OpenAI list prices as of July 2026.
-// Quality, latency and trace-count figures are illustrative, and the title bar stamps them as such.
+// Quality, cost-per-case and trace-count figures are illustrative, and the title bar stamps them as such.
+// The cost/case row mirrors the evidence table's per-case cost columns; the evidence has no latency comparison.
 
 import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
@@ -94,11 +95,11 @@ export function AgentPrCard() {
             <span className="text-midnight-ink">
               {ILLUSTRATIVE_SCORECARD.approved}
             </span>{" "}
-            vs {ILLUSTRATIVE_SCORECARD.shipped} shipped · floor{" "}
-            {ILLUSTRATIVE_SCORECARD.floor} · medium
+            · floor {ILLUSTRATIVE_SCORECARD.floor}
           </Row>
-          <Row label="p95 latency">
-            <span className="text-midnight-ink">-38%</span> vs current
+          <Row label="cost/case">
+            <span className="text-midnight-ink">$0.0420 → $0.0066</span> ·
+            -84.3%
           </Row>
           <Row label="list price">
             <span className="text-midnight-ink">$5.00 → $0.75</span> in ·{" "}

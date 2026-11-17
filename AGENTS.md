@@ -9,6 +9,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # rightmodeler
 
 - Keep docs in `docs/`, not at the repo root.
+- Read `docs/positioning.md` before writing product copy anywhere: the site, READMEs, packaged docs, the skill, package metadata.
 - Do not run the dev server unless explicitly asked.
 - Use `pnpm` for repo-level and JavaScript or TypeScript work.
 - Prefer root `pnpm` commands for shared lifecycle tasks: `format`, `check`, `lint`, `build`, `check-types`.

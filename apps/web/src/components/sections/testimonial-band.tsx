@@ -44,7 +44,7 @@ export function TestimonialBand() {
       }}
     >
       <div className="px-6 pt-12 pb-6 sm:px-10 sm:pt-14 sm:pb-8">
-        <h2 className="sr-only">What teams measured with rightmodeler</h2>
+        <h2 className="sr-only">What teams say about rightmodeler.</h2>
         {/* Fixed-height stage so the two quotes swap without the page reflowing. */}
         <Reveal>
           <figure className="mx-auto flex min-h-[17rem] max-w-4xl flex-col items-center justify-center text-center sm:min-h-[15rem]">

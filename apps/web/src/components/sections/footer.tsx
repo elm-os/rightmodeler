@@ -13,12 +13,13 @@ export function Footer() {
       <div className="mx-auto w-full max-w-4xl">
         <Reveal className="border-t border-ash-border pt-8">
           <h2 className="max-w-xl text-balance font-display text-heading text-midnight-ink sm:text-heading-lg lg:text-display">
-            Every model decision, measured and reviewable.
+            Take the work out of the loop.
           </h2>
           <p className="mt-5 max-w-md text-body text-driftwood">
-            The CLI measures candidates on your traces today. The self-hosted
-            agent opens the evidence as a pull request. Crucible, in
-            development, will keep watch.
+            The CLI validates swaps to cheaper models on your traces, and the
+            self-hosted agent runs the maintenance loop on a schedule. Crucible,
+            in development, will add the instruments. Today, the final yes stays
+            yours.
           </p>
         </Reveal>
 

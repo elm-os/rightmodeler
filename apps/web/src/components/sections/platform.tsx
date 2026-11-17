@@ -19,8 +19,8 @@ const OFFERINGS: Offering[] = [
     chip: "On npm now",
     strong: true,
     name: "rightmodeler CLI",
-    body: "The audit. Replay your traces through cheaper models and ship approved swaps as a pull request, evidence attached. Your coding agent can drive it through the skill.",
-    cta: "Run the audit",
+    body: "The validation framework. Replay cheaper models on your traces; open a draft pull request when a swap clears every gate.",
+    cta: "See how it works",
     href: "/how-it-works",
     art: "/platform/skill.jpg",
   },
@@ -28,7 +28,7 @@ const OFFERINGS: Offering[] = [
     chip: "Self-host today",
     strong: true,
     name: "rightmodeler agent",
-    body: "The autopilot. A new model ships; give the word and your repo gets a pull request with the evidence attached. Migrations become code review.",
+    body: "The maintenance loop. Weekly it flags cheaper models; on your word it replays one and drafts a PR if it clears. It never merges.",
     cta: "Meet the agent",
     href: "/agent",
     art: "/platform/agent.svg",
@@ -37,7 +37,7 @@ const OFFERINGS: Offering[] = [
     chip: "In development",
     strong: false,
     name: "Crucible",
-    body: "The instruments. Cost per layer, speed per step, failures as they happen, and a stack that stays right-sized.",
+    body: "The instruments, planned. Cost per layer, speed per step, failures as they happen, over MCP, never in the request path.",
     cta: "Meet Crucible",
     href: "/crucible",
     art: "/platform/crucible.jpg",
@@ -77,8 +77,9 @@ function OfferingCard({ offering }: { offering: Offering }) {
         <h3 className="mt-4 block font-sans text-heading-sm text-midnight-ink">
           {offering.name}
         </h3>
-        {/* Reserve four body lines at desktop so the three CTA arrows sit on one line. */}
-        <span className="mt-2 block text-body text-driftwood md:min-h-24">
+        {/* Reserve seven body lines at md and four from lg, so the chips and names line up
+            across the row. */}
+        <span className="mt-2 block text-body text-driftwood md:min-h-42 lg:min-h-24">
           {offering.body}
         </span>
         <span className="mt-4 inline-flex items-center gap-2 text-body text-midnight-ink">
@@ -114,10 +115,11 @@ export function Platform() {
       <div className="px-4 py-16 sm:px-6 sm:py-24">
         <Reveal>
           <p className="font-mono text-caption uppercase text-fog">
-            The platform
+            From validation to autonomy
           </p>
+          {/* "Safe" is defined by the ThesisBand closer directly above this section. */}
           <h2 className="mt-4 max-w-2xl font-display text-heading text-balance text-midnight-ink sm:text-heading-lg">
-            See everything. Measure candidates. Review the pull request.
+            It starts with safe model swaps.
           </h2>
         </Reveal>
 

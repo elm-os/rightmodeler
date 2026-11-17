@@ -453,7 +453,7 @@ describe.skipIf(linuxRunnerOnly)("exit mapping", () => {
     expect(result.code, diagnostic(result)).toBe(0);
     expect(result.outputs).toEqual({ recommendation: "true" });
     expect(result.stdout).toContain(
-      "::notice title=rightmodeler::A proven swap is ready.",
+      "::notice title=rightmodeler::A swap that cleared every gate is ready.",
     );
     expect(result.stdout).toContain(
       "::warning title=rightmodeler external_evaluator_unreachable::50%25 of cases%0Awere not graded\n",

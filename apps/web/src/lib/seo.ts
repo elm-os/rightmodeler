@@ -57,7 +57,7 @@ export function organizationLd() {
     logo: `${SITE_URL}/icon.png`,
     email: CONTACT_EMAIL,
     description:
-      "rightmodeler measures candidate models against accepted outputs on real traces, opens evidence-backed model-change pull requests, and is building Crucible to watch every layer.",
+      "rightmodeler is working toward production AI systems that maintain and optimize themselves, starting with an open-source framework that validates swaps to cheaper models on your own traces and opens each one that clears every release gate as a draft pull request.",
     contactPoint: [
       {
         "@type": "ContactPoint",
@@ -120,7 +120,7 @@ export function pageMetadata({
   const branded = `${title} · ${SITE_NAME}`;
   const imageAlt =
     image === DEFAULT_SOCIAL_IMAGE
-      ? "Keep your agents on the right model: rightmodeler"
+      ? "Take the work out of the loop: rightmodeler"
       : `${branded} social preview`;
   const images =
     image === null ? {} : { images: [socialImage(image, imageAlt)] };

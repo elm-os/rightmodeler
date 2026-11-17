@@ -6,7 +6,7 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
   "title": "LangSmith integration: replay traces on cheaper models",
-  "description": "Export a LangSmith run tree: rightmodeler replays each step through cheaper models and measures every output against what you accepted.",
+  "description": "Export a LangSmith run tree: rightmodeler replays recorded steps on cheaper models and measures every output against what you accepted.",
   "h1": "rightmodeler + LangSmith",
   "lede": "Your LangSmith traces already hold the inputs and accepted outputs. rightmodeler replays them through cheaper models and reports candidate agreement, evidence, sample size, and abstentions step by step, scored by LangSmith itself when you point it there.",
   "tldr": "rightmodeler has a dedicated LangSmith adapter. It recognizes exported runs by their trace_id, run_type, and dotted_order keys, maps the runs whose run_type is llm, and takes the model from extra.metadata.ls_model_name with messages from inputs.messages and the answer from outputs. LangSmith can also be the evaluator: pass --evaluator langsmith with a dataset and scorer names, and the built-in judge is used only when nothing better is reachable.",
@@ -24,16 +24,16 @@
     {
       "label": "03 · Replay + score",
       "title": "Cheaper candidates, judged against what you shipped",
-      "body": "Each kept run is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator langsmith, your own scorers grade the replays against the named dataset and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, two temperature-zero calls with the reference and candidate positions swapped. Verdicts are confidence lower bounds kept separate per evaluator kind."
+      "body": "Each kept run with a plain-text conversation is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator langsmith, your own scorers grade the replays against the named dataset and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
       "title": "A per-step report, then a pull request",
-      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason rather than a recommendation. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI and review comments, and rollback restores the pre-apply files, refusing unless every restored digest matches."
+      "body": "The run writes report.md with a verdict per step family, rightmodeler report --output json prints the full JSON report from the local store, and --output jsonl streams events as the run works. Thin evidence produces an abstention with a named reason rather than a recommendation. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, watch reconciles it against CI and review comments, and rollback opens another pull request that restores the pre-apply files, refusing unless every restored digest matches."
     }
   ],
   "setup": {
-    "intro": "Nothing to install: npx runs the published CLI. Point it at an exported run tree. The audit reads the file offline; your LangSmith key is needed only if you choose LangSmith as the evaluator or import one of its datasets.",
+    "intro": "Nothing to install: npx runs the published CLI. Point it at an exported run tree. rightmodeler reads the file offline; your LangSmith key is needed only if you choose LangSmith as the evaluator or import one of its datasets.",
     "commands": [
       {
         "comment": "# preview the pipeline against the export, without spending",
@@ -83,15 +83,15 @@
   "useCases": [
     {
       "title": "Right-size a LangGraph agent",
-      "body": "LangGraph runs are recorded as LangSmith runs, so each node that calls a model lands as its own step and groups into a step family by name. The audit shows which families genuinely need a frontier model and which are paying for capability they never use."
+      "body": "LangGraph runs are recorded as LangSmith runs, so each node that calls a model lands as its own step and groups into a step family by name. rightmodeler shows which families clear every release gate on a cheaper model, and which have no validated swap yet."
     },
     {
-      "title": "Score the audit with the evaluators you already wrote",
+      "title": "Score the replays with the evaluators you already wrote",
       "body": "Pass --evaluator langsmith with the dataset and scorer names you already use, and those scorers decide whether a candidate passed rather than a judge model you did not write. Metric names, rubric versions, and the provider's own pass decision are kept on each assessment."
     },
     {
       "title": "Build the corpus from a curated dataset",
-      "body": "rightmodeler corpus import --from langsmith:dataset builds the replay corpus from a curated dataset instead of raw runs. Curated references are usually human-verified, and reference correctness caps every number downstream, so a verified corpus raises what the audit can prove."
+      "body": "rightmodeler corpus import --from langsmith:dataset builds the replay corpus from a curated dataset instead of raw runs. Curated references are usually human-verified, and reference correctness caps every number downstream, so a verified corpus raises the ceiling on what a validation run can show."
     },
     {
       "title": "Measure a candidate before you change a model",
@@ -101,10 +101,11 @@
   "limits": [
     "Only runs whose run_type is llm become steps. Chain, tool, and retriever runs are read for detection, then dropped with a recorded reason rather than replayed.",
     "An llm run has to carry both inputs and outputs, and a model in extra.metadata.ls_model_name or extra.invocation_params.model. A run missing either is dropped with its reason instead of guessed at.",
+    "Runs whose recorded conversation contains tool calls are read but not replayed yet: replay resends conversations as text, so those cases are left out with a recorded_messages_not_replayable warning.",
     "It reads exported run trees as JSON or JSONL files. It does not connect to your LangSmith account, poll projects, or watch new runs; the evaluator and corpus-import paths are the only ones that call LangSmith, and only when you ask for them.",
     "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
-    "Selection is split-corpus. Candidates are shortlisted on one half of the cases, and the winner has to clear the configured quality floor again on held-out cases against a multiplicity-corrected lower bound.",
-    "It is a report, not a runtime gateway. LangSmith keeps observing your agent; rightmodeler never sits in the request path."
+    "Selection is split-corpus. Candidates are shortlisted on one half of the cases, and the winner has to clear the configured quality floor on held-out cases against a multiplicity-corrected lower bound.",
+    "It is not a runtime gateway. LangSmith keeps observing your agent; rightmodeler never sits in the request path."
   ],
   "faq": [
     {
@@ -117,19 +118,19 @@
     },
     {
       "q": "Does it work with LangGraph?",
-      "a": "Yes. LangGraph runs are recorded as LangSmith runs, and every node that calls a model becomes a step grouped by its run name. Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in, so cascade effects surface before you swap."
+      "a": "Yes. LangGraph runs are recorded as LangSmith runs, and every node that calls a model becomes a step grouped by its run name. Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in, which needs a --modeb-config file, so cascade effects surface before you swap."
     },
     {
       "q": "Which candidate models does it try?",
-      "a": "Models from the live catalog of whichever OpenAI-compatible endpoint you pass with --base-url: cheaper than the incumbent, capable of what the step needs and, by default, released in the last 90 days; models you name with --candidate are tried instead, whatever their release date. Zero-priced models are left out unless you pass --include-free, and the built-in judge is chosen from a family that is neither the candidate's nor the reference's."
+      "a": "Models from the live catalog of whichever OpenAI-compatible endpoint you pass with --base-url: cheaper than the incumbent, capable of what the step needs and, by default, released in the last 90 days; models you name with --candidate are tried instead, whatever their release date, but they too must be cheaper than the incumbent. Zero-priced models are left out unless you pass --include-free, and the built-in judge is chosen from a family that is neither the candidate's nor the reference's."
     },
     {
       "q": "Does my trace data leave my machine?",
-      "a": "Replays send step inputs to candidate models through the endpoint you configured, under your own key, the same shape of call your agent already makes. There is no rightmodeler server, and LangSmith is contacted only by the evaluator or corpus-import commands when you choose them."
+      "a": "Replays send step inputs to candidate models through the endpoint you configured, under your own key, the same shape of call your agent already makes, and the built-in judge receives the recorded and candidate outputs through the same endpoint. There is no rightmodeler server, and LangSmith is contacted only by the evaluator or corpus-import commands when you choose them."
     },
     {
       "q": "Will it always find savings?",
-      "a": "No, and that is deliberate. A family abstains when the evidence is thin, when the excluded fraction runs over the ceiling, or when no candidate clears the quality floor again on held-out cases. A tool that always finds a swap is not measuring anything."
+      "a": "No, and that is deliberate. A family abstains when the evidence is thin or the excluded fraction runs over the ceiling, and nothing is proposed unless a candidate clears the quality floor on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],
   "related": ["langfuse", "phoenix", "weave"],

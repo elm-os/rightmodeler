@@ -7,7 +7,7 @@
   "verdict": "complement",
   "verdictLabel": "Complement · their test sets, your traces",
   "title": "rightmodeler vs Vals AI: benchmarks vs your own traces",
-  "description": "Vals AI scores models on expert-built benchmarks with private test sets and open-sources its eval tooling. rightmodeler tests cheaper models on your traces.",
+  "description": "Vals AI scores models on expert-built benchmarks with private test sets and open-sources its eval tooling. rightmodeler validates cheaper models on your traces.",
   "h1": "rightmodeler vs Vals AI",
   "lede": "Vals AI measures models on expert-built tasks nobody can train on, and open-sources the tooling it runs them with. rightmodeler measures cheaper models against the outputs your own agent already shipped, step by step.",
   "integrationSlug": "",
@@ -21,7 +21,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Complements that measure different things. As of 2026-09-22, Vals AI calls itself the independent evaluator of artificial intelligence: per its site, it builds benchmarks with domain experts in finance, law, coding, healthcare, and more, runs all of its own evaluations, and keeps the scored test set of each proprietary benchmark private so it cannot leak into training data. It has also open-sourced the tooling behind those runs, including Valkyrie (AGPL-3.0), which you can self-host in your own AWS account. rightmodeler, a free MIT-licensed CLI, asks a narrower question about the agent you already run: which steps could a cheaper model hold? It replays your recorded traces through cheaper candidates from your provider's live catalog, judges each against the output you accepted, and turns an approved swap into a draft pull request a human merges. Read Vals to pick a strong model before you have traffic; run the audit once you do."
+      "body": "Complements that measure different things. As of 2026-09-22, Vals AI calls itself the independent evaluator of artificial intelligence: per its site, it builds benchmarks with domain experts in finance, law, coding, healthcare, and more, runs all of its own evaluations, and keeps the scored test set of each proprietary benchmark private so it cannot leak into training data. It has also open-sourced the tooling behind those runs, including Valkyrie (AGPL-3.0), which you can self-host in your own AWS account. rightmodeler, a free MIT-licensed CLI, asks a narrower question about the agent you already run: which steps could a cheaper model hold? It replays your recorded traces through cheaper candidates from your provider's live catalog, judges each against the output you accepted, and turns the swaps that clear every gate into a draft pull request a human merges. Read Vals to pick a strong model before you have traffic; run rightmodeler once you do."
     },
     {
       "type": "positioning",
@@ -39,8 +39,8 @@
         "items": [
           "No benchmark to choose or build: the reference for each step is the output your agent already produced and you accepted.",
           "Candidates are models from your configured provider's live catalog that cost less than the one each step runs today.",
-          "Each verdict carries reference agreement, sample size, and abstentions, and a candidate must clear the quality floor again on held-out cases before it is recommended.",
-          "An approved swap becomes a draft pull request that changes only model identifiers; a human reviews and merges it."
+          "Each verdict carries reference agreement, sample size, and abstentions, and a candidate must clear the quality floor on held-out cases before it is recommended.",
+          "A swap that clears every release gate goes into a draft pull request that changes only model identifiers; a human reviews and merges it."
         ]
       }
     },
@@ -75,7 +75,7 @@
         {
           "dimension": "output",
           "theirs": "leaderboards and model reports with error bars",
-          "ours": "a per-step report and, once you approve, a draft pull request"
+          "ours": "a per-step report and, when a swap clears every gate, a draft pull request"
         },
         {
           "dimension": "license",
@@ -92,12 +92,12 @@
         {
           "scenario": "You are building a tax-research agent, nothing has shipped, and you need a first model.",
           "winner": "theirs",
-          "why": "With no production traffic there are no traces to replay, so the audit has nothing to say yet. Vals's Tax Agent Bench ranks models on research-grade US corporate tax questions, graded against rubrics written by tax professionals per its benchmark page, and per its README the open-source harness runs its public sample questions against a model you pick, on your own machine, with no Vals account needed."
+          "why": "With no production traffic there are no traces to replay, so rightmodeler has nothing to say yet. Vals's Tax Agent Bench ranks models on research-grade US corporate tax questions, graded against rubrics written by tax professionals per its benchmark page, and per its README the open-source harness runs its public sample questions against a model you pick, on your own machine, with no Vals account needed."
         },
         {
           "scenario": "Your support agent has run on one frontier model for months, and the bill keeps growing.",
           "winner": "ours",
-          "why": "A leaderboard rank says how a model does on someone else's tasks; it cannot say whether the third step of your pipeline, on your prompts, holds up on a cheaper model. The CLI replays your recorded steps through cheaper candidates, judges each against the output you accepted, abstains where the sample is too small, re-checks the quality floor on held-out cases, and confirms multi-step swaps end to end before it recommends anything."
+          "why": "A leaderboard rank says how a model does on someone else's tasks; it cannot say whether the third step of your pipeline, on your prompts, holds up on a cheaper model. The CLI replays your recorded steps through cheaper candidates, judges each against the output you accepted, abstains where the sample is too small, holds the winner to the quality floor on held-out cases, and confirms multi-step swaps end to end in a sandbox before it recommends anything."
         },
         {
           "scenario": "A cheaper model climbs a Vals leaderboard in your domain, and your provider serves it.",
@@ -128,7 +128,7 @@
         "rightmodeler publishes no benchmark and no leaderboard, and it has no expert-built test set. It cannot tell you how a model handles tasks your agent has never seen; Vals's private, expert-written benchmarks exist for exactly that.",
         "It needs recorded traces. Before launch, or when you move into a new domain, it has nothing to measure, and a public benchmark is the better evidence.",
         "Its verdicts measure agreement with the output you shipped, not correctness. Vals grades against expert answers and rubrics; rightmodeler's reference is your own accepted output, which is evidence, not ground truth.",
-        "Vals evaluates models, agents and scaffolds such as Claude Code and Codex, and whole products, per its methodology. rightmodeler judges a single decision: which model runs each step. It never changes prompts or scaffolds."
+        "Vals evaluates models, agents and scaffolds such as Claude Code and Codex, and whole products, per its methodology. rightmodeler validates a single decision: whether a cheaper model can run each step. It never changes prompts or scaffolds."
       ]
     },
     {
@@ -147,17 +147,17 @@
         {
           "term": "reference evidence",
           "slug": "reference-evidence",
-          "def": "Agreement between a cheaper candidate's answer and the output you accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness."
+          "def": "Agreement between a cheaper candidate's answer and the output you accepted for that exact step. Evidence of agreement with shipped output, not ground-truth correctness."
         },
         {
           "term": "quality floor",
           "slug": "quality-floor",
-          "def": "The configurable minimum a candidate's worst-case agreement must clear, on the cases it was chosen on and again on held-out cases, before the audit recommends it."
+          "def": "The configurable minimum a candidate's worst-case agreement must clear on held-out cases, adjusted for the number of candidates, before rightmodeler recommends it."
         },
         {
           "term": "abstain",
           "slug": "abstain",
-          "def": "What the audit does when a step's sample is too small or its evidence incomplete: it recommends nothing rather than guessing."
+          "def": "What rightmodeler does when a step's sample is too small or its evidence incomplete: it recommends nothing rather than guessing."
         }
       ]
     },
@@ -166,7 +166,7 @@
       "items": [
         {
           "q": "Does rightmodeler replace Vals AI?",
-          "a": "No. Vals measures how models perform on expert-built tasks across a field, which is the right evidence for choosing a model before you have traffic or for comparing vendors. rightmodeler measures whether a cheaper model can reproduce the outputs your own agent already shipped, step by step. Use Vals to choose; use the audit to right-size what you run."
+          "a": "No. Vals measures how models perform on expert-built tasks across a field, which is the right evidence for choosing a model before you have traffic or for comparing vendors. rightmodeler measures whether a cheaper model can reproduce the outputs your own agent already shipped, step by step. Use Vals to choose; use rightmodeler to right-size what you run."
         },
         {
           "q": "Can I run Vals AI's evaluations myself?",

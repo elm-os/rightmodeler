@@ -1,6 +1,6 @@
 # Exit codes
 
-Rightmodeler reserves exit codes `0` through `3` for machine-readable outcomes. Runtime and command-line failures use `10` or greater.
+rightmodeler reserves exit codes `0` through `3` for machine-readable outcomes. Runtime and command-line failures use `10` or greater.
 
 ## Pipeline commands
 

@@ -8,9 +8,9 @@ Legal
 
 Short, and the plain-English summary matches the letter.
 
-Last updated September 22, 2026
+Last updated November 16, 2026
 
-Browse freely, the pre-release products may change, and every figure on this site is an illustrative example. The details follow.
+Browse freely, the pre-release products may change, and the figures on this site are illustrative examples, except the customer results in our case studies. The details follow.
 
 ## Agreement
 
@@ -18,7 +18,7 @@ By using www.rightmodeler.com (the site), operated by rightmodeler, an ELM-OS pr
 
 ## The service
 
-The site describes the rightmodeler CLI, rightmodeler agent, and Crucible, and offers early-access waitlists and a feedback form. Products described as in development, coming soon, or in early access are pre-release: their features, availability, and pricing may change or be withdrawn without notice, and joining a waitlist does not guarantee access.
+The site describes the rightmodeler CLI, rightmodeler agent, and Crucible, and offers waitlists and a feedback form. Products described as in development, coming soon, or in early access are pre-release: their features, availability, and pricing may change or be withdrawn without notice, and joining a waitlist does not guarantee access.
 
 ## The software
 
@@ -26,7 +26,7 @@ rightmodeler is open source. The code is distributed through its [GitHub reposit
 
 ## Illustrative figures
 
-Savings percentages, quality scores, latency deltas, and similar numbers shown on this site are illustrative examples, labeled as such. They are not measurements of your workload and not a promise of results. What you can actually save is exactly what the tool exists to measure, on your own traces.
+Savings percentages, quality scores, latency deltas, and similar numbers shown on this site are illustrative examples, labeled as such. The exceptions are the customer results in our case studies, which come from those customers' engagements and are labeled measured, modeled or projected. None of them is a measurement of your workload or a promise of results. What you can actually save is exactly what the tool exists to measure, on your own traces.
 
 ## Acceptable use
 

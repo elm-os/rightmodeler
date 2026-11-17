@@ -8,7 +8,7 @@
   "title": "LiteLLM integration: replay through your own proxy",
   "description": "Point rightmodeler at a LiteLLM proxy as its replay route: candidate calls and the judge run through the gateway you already operate, on your own keys.",
   "h1": "rightmodeler + LiteLLM",
-  "lede": "If a LiteLLM proxy already fronts your model traffic, it can be the route the audit replays through. rightmodeler needs an OpenAI-compatible base URL and the name of the variable holding its key, and your proxy is exactly that.",
+  "lede": "If a LiteLLM proxy already fronts your model traffic, it can be the route rightmodeler replays through. rightmodeler needs an OpenAI-compatible base URL and the name of the variable holding its key, and your proxy is exactly that.",
   "tldr": "rightmodeler talks to whatever OpenAI-compatible endpoint you name with --base-url, reading the key from the variable you name with --api-key-env, so a LiteLLM proxy is a first-class replay route: GET /models lists the candidates and POST /chat/completions runs the replays and the judge. LiteLLM's /v1/models lists model ids only, so pass --catalog-reference with the upstream's public model list for price, context window, and capabilities, and name each model group by its upstream id so the entries join; when no model is priced after the join, rightmodeler reads per-token costs from the proxy's GET /model/info.",
   "steps": [
     {
@@ -33,7 +33,7 @@
     }
   ],
   "setup": {
-    "intro": "There is nothing to install into your app. If you already run a LiteLLM proxy, the audit can use it as the replay route; if you do not, any other OpenAI-compatible endpoint works the same way.",
+    "intro": "There is nothing to install into your app. If you already run a LiteLLM proxy, rightmodeler can use it as the replay route; if you do not, any other OpenAI-compatible endpoint works the same way.",
     "commands": [
       {
         "comment": "# start (or reuse) the gateway you already operate",
@@ -54,7 +54,7 @@
   "useCases": [
     {
       "title": "Reuse the gateway you already run",
-      "body": "If LiteLLM already fronts your model traffic, the audit does not need a second account or a second key. The same virtual key, budgets, and provider routing you already configured apply to the replay and judge calls too."
+      "body": "If LiteLLM already fronts your model traffic, rightmodeler does not need a second account or a second key. The same virtual key, budgets, and provider routing you already configured apply to the replay and judge calls too."
     },
     {
       "title": "Keep replay traffic inside your own perimeter",
@@ -67,7 +67,7 @@
   ],
   "limits": [
     "rightmodeler has no LiteLLM log adapter. Proxy logs are not a supported trace format; if you want traces from that traffic, export OpenTelemetry GenAI spans and use the OTel adapter, or log OpenAI SDK calls in the JSONL shape that adapter reads.",
-    "The shortlist needs a price and a context window for every candidate. LiteLLM's /v1/models carries neither, and GET /model/info supplies per-token prices and output ceilings but not context windows, so a run without --catalog-reference finds no qualifying candidates; the audit will not compare models on a price or a context window it had to invent. Name model groups by their upstream ids so the reference can match them.",
+    "The shortlist needs a price and a context window for every candidate. LiteLLM's /v1/models carries neither, and GET /model/info supplies per-token prices and output ceilings but not context windows, so a run without --catalog-reference finds no qualifying candidates; rightmodeler will not compare models on a price or a context window it had to invent. Name model groups by their upstream ids so the reference can match them.",
     "Cost comes from what the response body reports. A proxy that returns no cost field leaves rightmodeler computing the amount from catalog prices and token counts, and the ledger labels that figure an estimate.",
     "One replay endpoint is configured per run. A LiteLLM proxy, OpenRouter, and the Vercel AI Gateway are all OpenAI-compatible routes rightmodeler accepts; it does not mix keys within a run.",
     "Replays are not bit-exact, even at a fixed temperature. Repeated cases are read as a distribution and the release decision binds on a worst-case lower bound rather than a single sample.",
@@ -88,11 +88,11 @@
     },
     {
       "q": "Does rightmodeler replace LiteLLM?",
-      "a": "No, they do different jobs. LiteLLM routes live traffic; rightmodeler is an offline audit that borrows a route during replay and never sits in your request path. If a LiteLLM gateway already fronts your traffic, keep it."
+      "a": "No, they do different jobs. LiteLLM routes live traffic; rightmodeler validates offline, borrows a route during replay, and never sits in your request path. If a LiteLLM gateway already fronts your traffic, keep it."
     },
     {
       "q": "How does the end-to-end confirmation swap the model?",
-      "a": "Not through your proxy config. Confirmation runs your pipeline in a container and routes its model calls through rightmodeler's own metered proxy, which applies the swap per step, charges every attempt, and fails closed on a request that arrives without correlation metadata rather than guessing which step it belonged to."
+      "a": "Not through your proxy config. Confirmation runs your pipeline in a container and sends its model calls through rightmodeler's own metered proxy, which applies the swap per step, charges every attempt, and fails closed on a request that arrives without correlation metadata rather than guessing which step it belonged to."
     },
     {
       "q": "Will the end-to-end pass always confirm a swap?",

@@ -4,95 +4,175 @@ import { PageHero } from "@/components/sections/page-hero";
 import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { Reveal } from "@/components/reveal";
-import { ILLUSTRATIVE_SCORECARD } from "@/lib/product-facts";
+import {
+  DEFAULT_QUALITY_FLOOR,
+  ILLUSTRATIVE_SCORECARD,
+} from "@/lib/product-facts";
 import { SITE_URL } from "@/lib/site";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
   title: "Glossary",
   description:
-    "Plain definitions for model downgrading, quality floors, cascade risk, abstention, reference evidence, LLM-as-judge, and other rightmodeler terms.",
+    "Plain definitions for validating a swap to a cheaper model: release gates, the quality floor, held-out cases, abstention, cascade risk, and what safe means.",
   path: "/glossary",
   image: "/social/glossary.png",
 });
 
-// Each term is anchor-linkable (#slug) so it can be cited directly.
-const TERMS: { term: string; slug: string; def: string }[] = [
+// The canonical definition from docs/positioning.md: reuse it verbatim wherever safe is defined.
+const SAFE =
+  "A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin.";
+
+type Term = { term: string; slug: string; def: string };
+
+// Each term is anchor-linkable (#slug) so it can be cited directly. /vs pages and blog posts link
+// these slugs, so never rename or remove one: recast the term and its definition instead.
+const TERMS: Term[] = [
   {
-    term: "Evidence-backed model downgrading",
-    slug: "evidence-backed-model-downgrading",
-    def: "Reviewing a step for a cheaper model after measuring candidate output against the output you accepted for the same input. The decision rests on reference agreement, evidence, and sample size, not a benchmark or a hunch.",
-  },
-  {
-    term: "Model downgrade audit",
-    slug: "model-downgrade-audit",
-    def: "A pass over your traces that measures each cheaper candidate against the accepted output for the same input, reports the evidence and sample size, and records where it abstains.",
+    term: "Safe model swap",
+    slug: "safe-model-swap",
+    def: `rightmodeler validates only swaps to cheaper models. ${SAFE}`,
   },
   {
     term: "Swap candidate",
     slug: "swap-candidate",
-    def: "A cheaper model whose output agrees closely enough with the accepted reference to merit review. This is evidence of agreement with shipped output, not proof of correctness.",
+    def: "A cheaper model shortlisted for one step, from your provider's live catalog or named with --candidate, and replayed on that step's recorded inputs. It must cost less than the recorded model, even when you name it. Clearing every gate is evidence of agreement with what you shipped, not ground-truth correctness.",
+  },
+  {
+    term: "Model downgrade",
+    slug: "model-downgrade",
+    def: "Another name for a swap to a cheaper model. rightmodeler says swap, because downgrade presumes the quality loss that the release gates test for.",
+  },
+  {
+    term: "Release gate",
+    slug: "release-gate",
+    def: "A check every swap must pass before it becomes a draft pull request: agreement, at a statistical lower bound, that reaches your quality floor on held-out cases, enough answered calls, and end-to-end confirmation for a step that feeds later model steps.",
   },
   {
     term: "Quality floor",
     slug: "quality-floor",
-    def: `The minimum reference-agreement score a candidate must clear to be recommended; below it, the current model stays. rightmodeler's default is ${ILLUSTRATIVE_SCORECARD.floor}, and it's configurable.`,
+    def: `The agreement a candidate must reach on held-out cases, at a statistical lower bound, to be recommended; below it, the current model stays. The default is ${DEFAULT_QUALITY_FLOOR}, and a policy file can set it above 0.8 and below 1.`,
+  },
+  {
+    term: "Statistical lower bound",
+    slug: "statistical-lower-bound",
+    def: "The low end of a 95% interval around a measured agreement rate. rightmodeler compares the bound, not the raw rate, with your floor, so a small sample has to do better to clear it. There are no confidence tiers.",
+  },
+  {
+    term: "Held-out cases",
+    slug: "held-out-cases",
+    def: "Recorded cases kept out of the shortlist screen. rightmodeler splits your cases into a shortlist half, which only screens candidates on their pass rate, and a held-out half. Only the cheapest candidate that passes the screen is replayed on the held-out half, where its lower bound has to reach your quality floor, adjusted for how many candidates competed.",
   },
   {
     term: "Cascade risk",
     slug: "cascade-risk",
-    def: "The chance that downgrading one step degrades later steps that depend on it, common in tool and loop steps. It's flagged so a local win doesn't cause a downstream regression.",
+    def: "The chance that swapping one step to a cheaper model degrades later steps that depend on it, common in tool and loop steps. When a step feeds later model steps, its swap counts only once it is confirmed end to end, judged on your app's final output rather than on the step alone.",
+  },
+  {
+    term: "End-to-end confirmation",
+    slug: "end-to-end-confirmation",
+    def: "Running your own app on recorded cases in a sandbox, apart from production, with the cheaper candidate in place on the swapped steps, then judging the app's final output against the recorded one. A swap whose step feeds later model steps needs it: without it, the swap is reported as unconfirmed and no pull request opens. If the run traces a failure to the swap, the swap is rejected; if it cannot tell, rightmodeler abstains. The CLI docs and the --modeb-config flag call this Mode B, and it needs step headers in your app. The sandbox keeps your model key out but has ordinary network access, so point your app's tools at test fixtures, not production services.",
   },
   {
     term: "Abstain",
     slug: "abstain",
-    def: "The audit's decision to make no recommendation when the evidence or sample is too weak to support one. A tool that always finds savings isn't measuring anything.",
-  },
-  {
-    term: "Reference evidence",
-    slug: "reference-evidence",
-    def: "Grading a cheaper model's output against the output you already accepted for the same input, rather than against a gold answer. The production result is the reference, not ground truth.",
-  },
-  {
-    term: "LLM-as-judge",
-    slug: "llm-as-judge",
-    def: "Using a separate model, from a different family than either compared model, to score agreement between two outputs, so nothing grades its own work.",
+    def: "rightmodeler's decision to make no recommendation when the evidence or sample is too thin to support one, with a named reason, such as too few review trials. The current model stays. A tool that always finds savings isn't measuring anything.",
   },
   {
     term: "Trace",
     slug: "trace",
     def: "The recorded steps of an agent run: the models called, their inputs, and their outputs. rightmodeler ingests traces you already emit and folds them into one per-step schema.",
   },
+  {
+    term: "Production traces",
+    slug: "production-traces",
+    def: "The model calls your production app already recorded, through a tracing platform, OpenTelemetry, or gateway logs. rightmodeler validates on them offline and never on live traffic. Claude Code sessions on disk work too; Codex sessions are read, but a Codex turn with a user message is left out of the replay sample today. Both are traces you already have, not production traces.",
+  },
+  {
+    term: "Reference evidence",
+    slug: "reference-evidence",
+    def: "Grading a cheaper model's output against the output you already accepted for the same input, rather than against a gold answer. The production result is the reference, not ground truth, so a candidate that repeats a wrong accepted answer still agrees.",
+  },
+  {
+    term: "LLM-as-judge",
+    slug: "llm-as-judge",
+    def: "Using a separate model, from a different family than either compared model, to score agreement between two outputs, so nothing grades its own work. rightmodeler's judge reads both answer orders and passes a case only when both agree, and your own evaluator can grade instead.",
+  },
+  {
+    term: "Human in the loop",
+    slug: "human-in-the-loop",
+    def: "In machine learning the phrase often means people labeling data or reviewing outputs. In rightmodeler's usage it is the hand work that comes back each time a model ships: noticing it, pulling real traces, building a replay, grading the outputs, writing it up so it survives review, and migrating. rightmodeler takes the work out of the loop, not the judgment; today, the final yes stays yours.",
+  },
+  {
+    term: "Swap validation",
+    slug: "evidence-backed-model-downgrading",
+    def: "Testing a swap to a cheaper model on your own traces before anyone merges it. rightmodeler replays the recorded steps on cheaper candidate models, has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted, and opens a draft pull request only for a swap that clears every release gate.",
+  },
+  {
+    term: "Validation run",
+    slug: "model-downgrade-audit",
+    def: "One pass of rightmodeler over your traces: it measures each cheaper candidate against the accepted output for the same input, reports the evidence and sample size, and records where it abstains.",
+  },
+  {
+    term: "Runtime router",
+    slug: "runtime-router",
+    def: "A service in the request path that picks a model for each request at runtime. rightmodeler is not one: it validates one pinned model per step, offline, before a person merges the change. A gateway that serves the model you pin is a different thing, and rightmodeler can replay through one.",
+  },
 ];
 
 const byIdSlug = (slug: string) => TERMS.find((t) => t.slug === slug)!;
 
-const THEMES: { title: string; intro: string; slugs: string[] }[] = [
+// `art` picks the panel beside a theme's terms; a theme without one sets its terms there instead.
+const THEMES: {
+  title: string;
+  intro: string;
+  slugs: string[];
+  art?: "decision" | "floor" | "evidence";
+}[] = [
   {
     title: "The decision",
-    intro: "The words for reviewing a candidate swap.",
-    slugs: [
-      "evidence-backed-model-downgrading",
-      "model-downgrade-audit",
-      "swap-candidate",
-    ],
+    intro: "The words for a swap to a cheaper model.",
+    slugs: ["safe-model-swap", "swap-candidate", "model-downgrade"],
+    art: "decision",
+  },
+  {
+    title: "The gates",
+    intro: "What a swap has to clear.",
+    slugs: ["release-gate", "quality-floor", "statistical-lower-bound"],
+    art: "floor",
   },
   {
     title: "The guardrails",
-    intro: "Where the audit stops.",
-    slugs: ["quality-floor", "cascade-risk", "abstain"],
+    intro: "What stops a lucky or local win from becoming a pull request.",
+    slugs: [
+      "held-out-cases",
+      "cascade-risk",
+      "end-to-end-confirmation",
+      "abstain",
+    ],
   },
   {
     title: "The evidence",
     intro: "What gets measured, and by whom.",
-    slugs: ["trace", "reference-evidence", "llm-as-judge"],
+    slugs: ["trace", "production-traces", "reference-evidence", "llm-as-judge"],
+    art: "evidence",
+  },
+  {
+    title: "The loop",
+    intro: "The work in the loop, who does it, and where it runs.",
+    slugs: [
+      "human-in-the-loop",
+      "evidence-backed-model-downgrading",
+      "model-downgrade-audit",
+      "runtime-router",
+    ],
   },
 ];
 
 const definedTermSetLd = {
   "@context": "https://schema.org",
   "@type": "DefinedTermSet",
-  name: "The model-downgrade glossary",
+  name: "The model-swap glossary",
   url: `${SITE_URL}/glossary`,
   hasDefinedTerm: TERMS.map((t) => ({
     "@type": "DefinedTerm",
@@ -102,6 +182,21 @@ const definedTermSetLd = {
     inDefinedTermSet: `${SITE_URL}/glossary`,
   })),
 };
+
+function TermList({ terms, className }: { terms: Term[]; className?: string }) {
+  return (
+    <dl className={`space-y-8 ${className ?? ""}`}>
+      {terms.map((t) => (
+        <div key={t.slug} id={t.slug} className="scroll-mt-24">
+          <dt className="font-sans text-body font-medium text-midnight-ink">
+            {t.term}
+          </dt>
+          <dd className="mt-1 text-body text-driftwood">{t.def}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 // Every line is kept short enough that the card never scrolls sideways.
 function CodeCard({ children }: { children: React.ReactNode }) {
@@ -167,9 +262,6 @@ function FloorArtifact() {
       className="absolute inset-0 h-full w-full"
       aria-hidden
     >
-      <text x="24" y="28" className="fill-fog font-mono" fontSize="14">
-        {ILLUSTRATIVE_SCORECARD.label} scores
-      </text>
       <defs>
         <filter
           id="floor-pill-shadow"
@@ -283,35 +375,29 @@ function EvidenceArtifact() {
   return (
     <CodeCard>
       <Ln>
-        <C>{"// rightmodeler.config.ts"}</C>
+        <C>{`// the evidence · ${ILLUSTRATIVE_SCORECARD.label}`}</C>
       </Ln>
       <Ln />
-      <Ln>{"export default audit({"}</Ln>
       <Ln>
-        {"  traces: "}
-        <V>{'"./traces/*.jsonl"'}</V>
-        {",  "}
-        <C>{"// 214 runs"}</C>
+        <C>{"traces     "}</C>
+        <V>214 recorded runs</V>
       </Ln>
       <Ln>
-        {"  reference: "}
-        <V>{'"shipped"'}</V>
-        {",  "}
-        <C>{"// as shipped"}</C>
+        <C>{"reference  "}</C>
+        <V>the outputs you accepted</V>
       </Ln>
       <Ln>
-        {"  judge: "}
-        <V>{'"cross-family"'}</V>
-        {",  "}
-        <C>{"// no self-grade"}</C>
+        <C>{"judge      "}</C>
+        <V>a different vendor</V>
       </Ln>
       <Ln>
-        {"  abstain: "}
-        <V>{'"weak-evidence"'}</V>
-        {",  "}
-        <C>{"// say no"}</C>
+        {"           "}
+        <V>or your own evaluator</V>
       </Ln>
-      <Ln>{"});"}</Ln>
+      <Ln>
+        <C>{"if thin    "}</C>
+        <V>abstain</V>
+      </Ln>
     </CodeCard>
   );
 }
@@ -324,8 +410,8 @@ export default function GlossaryPage() {
 
       <PageHero
         eyebrow="Glossary"
-        title="The model-downgrade glossary"
-        lede="Plain definitions for the words rightmodeler uses."
+        title="The model-swap glossary"
+        lede="Plain definitions for the words rightmodeler uses to validate a swap to a cheaper model."
         gradient={false}
       />
 
@@ -355,32 +441,32 @@ export default function GlossaryPage() {
                     <p className="mt-3 max-w-md text-subheading text-driftwood">
                       {theme.intro}
                     </p>
-                    <dl className="mt-10 space-y-8 sm:mt-14">
-                      {terms.map((t) => (
-                        <div key={t.slug} id={t.slug} className="scroll-mt-24">
-                          <dt className="font-sans text-body font-medium text-midnight-ink">
-                            {t.term}
-                          </dt>
-                          <dd className="mt-1 text-body text-driftwood">
-                            {t.def}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
+                    {theme.art && (
+                      <TermList terms={terms} className="mt-10 sm:mt-14" />
+                    )}
                   </Reveal>
                 </div>
 
-                {theme.title === "The guardrails" ? (
+                {theme.art === "floor" ? (
                   <div className="relative min-h-72 overflow-hidden border-t border-ash-border lg:min-h-0 lg:border-t-0">
                     <FloorArtifact />
+                    {/* HTML, not SVG text: the SVG crops with slice, which cut the stamp at most widths. */}
+                    <p
+                      aria-hidden
+                      className="absolute left-6 top-5 font-mono text-caption text-fog"
+                    >
+                      {ILLUSTRATIVE_SCORECARD.label} scores
+                    </p>
                   </div>
                 ) : (
                   <div className="border-t border-ash-border p-6 sm:p-10 lg:border-t-0 lg:p-12">
                     <Reveal delay={0.06} className="h-full w-full">
-                      {theme.title === "The decision" ? (
+                      {theme.art === "decision" ? (
                         <DecisionArtifact />
-                      ) : (
+                      ) : theme.art === "evidence" ? (
                         <EvidenceArtifact />
+                      ) : (
+                        <TermList terms={terms} />
                       )}
                     </Reveal>
                   </div>

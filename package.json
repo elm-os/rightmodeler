@@ -1,7 +1,7 @@
 {
   "name": "rightmodeler",
   "private": true,
-  "description": "Replay real agent traces through cheaper models to prove which swaps are safe.",
+  "description": "Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.",
   "license": "MIT",
   "homepage": "https://www.rightmodeler.com",
   "repository": {
@@ -11,10 +11,14 @@
   "keywords": [
     "ai-agents",
     "agent-evals",
-    "cost-optimization",
     "llm-evals",
-    "model-routing",
-    "traces"
+    "llm-as-a-judge",
+    "model-validation",
+    "cost-optimization",
+    "llmops",
+    "traces",
+    "production-ai",
+    "regression-testing"
   ],
   "packageManager": "pnpm@11.7.0",
   "scripts": {

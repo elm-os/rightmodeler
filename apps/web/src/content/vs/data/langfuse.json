@@ -16,7 +16,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Complement, with a working integration. As of 2026-09-24, Langfuse describes itself as an open-source AI engineering platform: tracing, online and offline evaluations, datasets and experiments, prompt management, and cost analytics in one place. It joined ClickHouse, per its announcement of 2026-01-16, and stays open source. rightmodeler, a free MIT-licensed CLI, does one job on top of it: it reads the generations Langfuse recorded, shortlists cheaper models from your provider's live catalog, replays each step on its recorded inputs, and judges every candidate against the output you accepted, reporting agreement, sample size, and abstentions per step. Your Langfuse scorers can do the grading, the results can go back into a Langfuse dataset, and a swap that clears every gate becomes a draft pull request that changes model identifiers only, for a person to merge."
+      "body": "Complement, with a working integration. As of 2026-09-24, Langfuse describes itself as an open-source AI engineering platform: tracing, online and offline evaluations, datasets and experiments, prompt management, and cost analytics in one place. It joined ClickHouse, per its announcement of 2026-01-16, and stays open source. rightmodeler, a free MIT-licensed CLI, does one job on top of it: it reads the generations Langfuse recorded, shortlists cheaper models from your provider's live catalog, replays the recorded steps on them, and judges every candidate against the output you accepted, reporting agreement, sample size, and abstentions per step. Your Langfuse scorers can do the grading, the results can go back into a Langfuse dataset, and a swap that clears every gate becomes a draft pull request that changes model identifiers only, for a person to merge."
     },
     {
       "type": "positioning",
@@ -33,8 +33,8 @@
         "heading": "rightmodeler: one model-substitution workflow",
         "items": [
           "Starts from the generations you already recorded. There is no dataset to curate first: the output you accepted at each step is the reference.",
-          "Shortlists cheaper candidates from your configured provider's live catalog and replays every step family on its recorded inputs.",
-          "Reports reference agreement, sample size, and abstentions per step. A swap must clear the quality floor again on held-out cases, and multi-step swaps are confirmed end to end.",
+          "Shortlists cheaper candidates from your configured provider's live catalog and replays the recorded steps on them.",
+          "Reports reference agreement, sample size, and abstentions per step. A swap must clear the quality floor on held-out cases, and swaps that feed later model steps are confirmed end to end in a sandbox.",
           "Ends in a draft pull request that changes model identifiers and nothing else. It never edits prompts, and a person reviews and merges."
         ]
       }
@@ -88,7 +88,7 @@
       "type": "prose",
       "heading": "Can you use both? Yes, and Langfuse stays where it is",
       "paragraphs": [
-        "Nothing about your Langfuse setup changes. Your SDKs and integrations keep sending traces, your evaluators keep scoring production, and your prompts stay in prompt management. rightmodeler never sits in the request path and needs no new instrumentation.",
+        "Nothing about your Langfuse setup changes. Your SDKs and integrations keep sending traces, your evaluators keep scoring production, and your prompts stay in prompt management. rightmodeler never sits in the request path and needs no new tracing instrumentation.",
         "rightmodeler works from a file you export, and calls Langfuse only when you ask it to: as the evaluator, to import a curated dataset with rightmodeler corpus import --from langfuse:<dataset>, or to send results back with rightmodeler export --to langfuse. Each of those uses Langfuse's public API with your project keys.",
         "The division of work stays clean. Langfuse is where your team watches, grades, and experiments. rightmodeler brings a per-step answer to whether each step needs the model it pays for, and hands the change to your normal code review."
       ]
@@ -99,7 +99,7 @@
       "intro": "Three commands from the integration guide. Your Langfuse keys are used for the export you run and, when you choose them, for grading and reporting back.",
       "paragraphs": [
         "Export. Pull observations from Langfuse's public API with your project keys and save the data array as JSON, or take a JSONL batch export from blob storage. The CLI recognizes the file by its trace_id, parent_observation_id, and type keys and turns every GENERATION observation into a step: provided_model_name is the model, input.messages and output are the conversation, and generations that share a prompt name, or else a name, form one step family.",
-        "Replay and grade. Each step is replayed on cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, on your own key. With --evaluator langfuse, rightmodeler sends each replayed output to your Langfuse project as an experiment item, with the output you accepted as the expected output, and reads back the scores your Langfuse evaluators write under the names you pass with --evaluator-scorer. Their pass decisions feed the release gate. If Langfuse cannot be reached, the run warns and the built-in judge grades instead.",
+        "Replay and grade. Plain-text steps are replayed on cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, on your own key. With --evaluator langfuse, rightmodeler sends each replayed output to your Langfuse project as an experiment item, with the output you accepted as the expected output, and reads back the scores your Langfuse evaluators write under the names you pass with --evaluator-scorer. Their pass decisions feed the release gate. If Langfuse cannot be reached, the run warns and the built-in judge grades instead.",
         "Decide and report back. The run writes report.md with a verdict per step family, and an abstention with its reason wherever the evidence is thin. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else. rightmodeler export --to langfuse posts the trials and verdicts to the Langfuse dataset you name, with a score for every assessment and a verdict score for every step family, so the evidence sits beside the experiments your team already reviews."
       ],
       "commands": [
@@ -130,7 +130,7 @@
         {
           "scenario": "Langfuse's cost dashboard shows one agent's spend climbing across a dozen generation names, and nobody can say which of those steps need the model they run on.",
           "winner": "ours",
-          "why": "Langfuse measures what each call cost; picking and trying the cheaper models is left to you. rightmodeler shortlists them from your provider's live catalog, replays every step on the generations you export, judges each candidate against the output you accepted, and reports per step family which swaps hold up, with sample size and abstentions attached."
+          "why": "Langfuse measures what each call cost; picking and trying the cheaper models is left to you. rightmodeler shortlists them from your provider's live catalog, replays them on the generations you export, judges each candidate against the output you accepted, and reports per step family which swaps hold up, with sample size and abstentions attached."
         },
         {
           "scenario": "Your team already grades production with Langfuse evaluators and wants any cheaper model held to the same scorers before it ships.",
@@ -147,7 +147,7 @@
         "Langfuse can answer a model question itself. Its experiments run a candidate model on a dataset and compare score, cost, and latency against a baseline. If you already curate that dataset and know which model to try, that answer is real. What rightmodeler adds is a shortlist you did not have to pick, per-step verdicts on your recorded traffic, and a pull request.",
         "Prompt management, versioned datasets, and CI gating belong to Langfuse, and rightmodeler ships none of them. It changes the model a step calls; it does not rewrite prompts or context.",
         "Langfuse's open-source edition is MIT-licensed, with every core feature and unlimited usage when you self-host, per its pricing page, and the whole Langfuse team joined ClickHouse to keep building it, per its announcement. rightmodeler is a free MIT-licensed CLI, not a place your team's traces live.",
-        "And the audit's verdicts say only what they measure: agreement with the output you shipped, which is evidence, not proof of correctness. Where the evidence runs thin, the audit abstains instead of recommending."
+        "And rightmodeler's verdicts say only what they measure: agreement with the output you shipped, not ground-truth correctness. Where the evidence runs thin, rightmodeler abstains instead of recommending."
       ]
     },
     {
@@ -157,7 +157,7 @@
         {
           "term": "trace",
           "slug": "trace",
-          "def": "The record of what your agent did: every model call with its inputs and outputs. In Langfuse a trace holds observations, and its GENERATION observations are the model calls the audit replays."
+          "def": "The record of what your agent did: every model call with its inputs and outputs. In Langfuse a trace holds observations, and its GENERATION observations are the model calls rightmodeler replays."
         },
         {
           "term": "swap candidate",
@@ -167,22 +167,22 @@
         {
           "term": "reference evidence",
           "slug": "reference-evidence",
-          "def": "Scores measured against the output you actually accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness: the production result is the reference, not ground truth."
+          "def": "Scores measured against the output you actually accepted for that exact step. Evidence of agreement with shipped output, not ground-truth correctness: the production result is the reference."
         },
         {
           "term": "quality floor",
           "slug": "quality-floor",
-          "def": "The minimum agreement a candidate must clear, and clear again on held-out cases, before the audit recommends a swap. It is configurable, and anything below it is a no."
+          "def": "The minimum agreement a candidate must clear on held-out cases before rightmodeler recommends a swap. It is configurable, and anything below it is a no."
         },
         {
           "term": "cascade risk",
           "slug": "cascade-risk",
-          "def": "The chance that a cheaper model at one step quietly degrades the later steps that build on its output. Swaps that could cascade are confirmed by running the pipeline end to end."
+          "def": "The chance that a cheaper model at one step quietly degrades the later steps that build on its output. Swaps that could cascade are confirmed by running your app end to end in a sandbox."
         },
         {
           "term": "abstain",
           "slug": "abstain",
-          "def": "The audit's decision to recommend nothing for a step family when the sample is small or the evidence is mixed, with the reason named. The current model stays."
+          "def": "rightmodeler's decision to recommend nothing for a step family when the sample is small or the evidence incomplete, with the reason named. The current model stays."
         }
       ]
     },
@@ -203,15 +203,15 @@
         },
         {
           "q": "Does rightmodeler replace Langfuse?",
-          "a": "No. Langfuse observes, scores, and experiments on your agent, and your team works in it every day. rightmodeler is an offline workflow for one decision: which model each step should call. Not observability. Not a runtime gateway. Results can go back to Langfuse with rightmodeler export --to langfuse."
+          "a": "No. Langfuse observes, scores, and experiments on your agent, and your team works in it every day. rightmodeler is an offline validation framework for model swaps: it answers whether each step can move to a cheaper model. Not observability. Not a runtime gateway. Results can go back to Langfuse with rightmodeler export --to langfuse."
         },
         {
           "q": "Is Langfuse open source?",
           "a": "Yes. Per its self-hosting pricing page, the open-source edition is MIT-licensed and includes all core platform features, including observability, evaluation, prompt management, and datasets, with unlimited usage. A Self-Hosted Enterprise edition adds features and is bundled with ClickHouse Cloud, BYOC, or Private. The rightmodeler CLI is MIT-licensed too."
         },
         {
-          "q": "Will the audit always find a cheaper model?",
-          "a": "No, and it is designed not to. A family abstains when the evidence is thin, when too many of its cases had to be left out, or when no candidate clears the quality floor again on held-out cases. A report that says every step already earns its model is a possible result."
+          "q": "Will rightmodeler always find a cheaper model?",
+          "a": "No, and it is designed not to. A family abstains when the evidence is thin or too many of its cases had to be left out, and gets no recommendation when no candidate clears the quality floor on held-out cases. A report that says every step already earns its model is a possible result."
         }
       ]
     }

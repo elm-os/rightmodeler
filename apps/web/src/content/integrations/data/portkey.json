@@ -8,7 +8,7 @@
   "title": "Portkey integration: replay through your own gateway",
   "description": "Replay and judge through the open-source Portkey gateway: request headers pick the upstream, and an answer from another model or a cache is never graded.",
   "h1": "rightmodeler + Portkey",
-  "lede": "If the open-source Portkey gateway already fronts your model calls, it can be the route rightmodeler replays and judges through. Portkey picks the upstream from request headers, so the audit needs the gateway's base URL and the headers Portkey reads, passed with --header.",
+  "lede": "If the open-source Portkey gateway already fronts your model calls, it can be the route rightmodeler replays and judges through. Portkey picks the upstream from request headers, so rightmodeler needs the gateway's base URL and the headers Portkey reads, passed with --header.",
   "tldr": "rightmodeler replays through any OpenAI-compatible base URL, and the MIT-licensed Portkey gateway is one: pass --base-url http://127.0.0.1:8787/v1, the upstream's key with --api-key-env, and x-portkey-provider: openai plus x-portkey-custom-host with --header. The catalog, the billed cost of each call, and rate-limit and credit errors come from the upstream through Portkey unchanged. rightmodeler sends no Portkey config, so fallbacks, retries, load balancing, caching and guardrail hooks stay off for replays, and a replayed response that names another model, reports a cache hit, or shows that a hook changed the request is left out of the evidence instead of graded. Verified on 1.15.2, the latest open-source tag as of 2026-09-23. Portkey keeps no traces rightmodeler can read, so it is a replay route only.",
   "steps": [
     {
@@ -57,15 +57,15 @@
   "detection": "",
   "useCases": [
     {
-      "title": "Audit through the gateway you already host",
-      "body": "If Portkey already fronts your model traffic, the audit runs through the same gateway on the same upstream key. There is no second account to open and nothing new to operate."
+      "title": "Validate through the gateway you already host",
+      "body": "If Portkey already fronts your model traffic, the replays run through the same gateway on the same upstream key. There is no second account to open and nothing new to operate."
     },
     {
       "title": "Switch upstreams with a header",
       "body": "Because Portkey routes each request by its headers, the same gateway can replay against Vercel AI Gateway, OpenRouter or your own LiteLLM proxy by changing x-portkey-custom-host. The shortlist comes from whichever upstream's catalog Portkey passes through."
     },
     {
-      "title": "Keep Portkey's routing out of the evidence",
+      "title": "Keep fallbacks, retries and caching out of the evidence",
       "body": "Your production configs may fall back, retry or cache. Replays carry no config, so none of that runs for them, and if a config you pass does answer with another model or from its cache, the response is left out and named, so a fallback's output never passes as the candidate's."
     }
   ],

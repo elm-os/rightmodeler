@@ -9,14 +9,14 @@
   "title": "rightmodeler vs Braintrust: who sets the reference",
   "description": "Braintrust holds your agent to evals you author. rightmodeler checks cheaper models against the outputs you shipped, step by step. They compose.",
   "h1": "rightmodeler vs Braintrust",
-  "lede": "Braintrust grades your agent against a bar you authored: datasets, scorers, rubrics. rightmodeler grades cheaper models against the outputs you accepted, and asks one question Braintrust does not: which model belongs at each step?",
+  "lede": "Braintrust grades your agent against a bar you authored: datasets, scorers, rubrics. rightmodeler grades cheaper models against the outputs you accepted, and asks one question Braintrust does not: can a cheaper model take each step?",
   "integrationSlug": "braintrust",
   "related": ["langsmith", "promptfoo", "litellm", "vals-ai"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Not competitors. Braintrust's job is grading: your agent, held to a bar you built from versioned datasets, scorers, and online scoring of live traffic. rightmodeler's job is one decision that bar was never asked to make: which model belongs at each step. The CLI, on npm and free on GitHub, reruns your real traces on cheaper candidates and scores every candidate against the output you accepted, reporting per step what held up, on how many samples, and where it declined to call a winner. Keep Braintrust. An approved swap then has one more gate to clear: your eval suite."
+      "body": "Not competitors. Braintrust's job is grading: your agent, held to a bar you built from versioned datasets, scorers, and online scoring of live traffic. rightmodeler's job is one question that bar was never asked to answer: whether a cheaper model can take each step. The CLI, on npm and free on GitHub, reruns your real traces on cheaper candidates and scores every candidate against the output you accepted, reporting per step what held up, on how many samples, and where it declined to call a winner. Keep Braintrust. A swap that clears every release gate then faces one more: your eval suite."
     },
     {
       "type": "definitions",
@@ -26,7 +26,7 @@
         {
           "term": "trace",
           "slug": "trace",
-          "def": "The step-by-step log your agent already produced: each model call with its inputs, outputs, and tool calls. Braintrust logs these today; the audit reads them from exported files."
+          "def": "The step-by-step log your agent already produced: each model call with its inputs, outputs, and tool calls. Braintrust logs these today; rightmodeler reads them from exported files."
         },
         {
           "term": "authored bar",
@@ -39,17 +39,17 @@
         {
           "term": "reference evidence",
           "slug": "reference-evidence",
-          "def": "Per-step agreement between a cheaper candidate and the accepted output. Evidence of agreement with shipped output, not proof of correctness; the production result is the reference, not ground truth."
+          "def": "Per-step agreement between a cheaper candidate and the accepted output. Evidence of agreement with shipped output, not ground-truth correctness; the production result is the reference."
         },
         {
           "term": "quality floor",
           "slug": "quality-floor",
-          "def": "The minimum agreement score a candidate must clear before the audit will recommend a swap. The floor is configurable; below it, no recommendation."
+          "def": "The minimum agreement score a candidate must clear before rightmodeler will recommend a swap. The floor is configurable; below it, no recommendation."
         },
         {
           "term": "abstain",
           "slug": "abstain",
-          "def": "The audit's refusal to call a winner when evidence is thin: too small a sample, or no reliable way to check. Abstentions are reported next to every recommendation."
+          "def": "rightmodeler's refusal to call a winner when evidence is thin: too small a sample, or no reliable way to check. Abstentions are reported next to every recommendation."
         }
       ]
     },
@@ -67,7 +67,7 @@
         "heading": "A model change with rightmodeler on top",
         "items": [
           "The reference set already exists: the outputs your agent produced in the traces you fetched. No dataset to curate, no scorer to write.",
-          "Each step is replayed through cheaper candidates and judged against the accepted output (by a cross-family judge, meaning one from a different model family than either model being compared, that grades both output orders, or by your own Braintrust scorers with --evaluator braintrust), guarded by the quality floor.",
+          "Recorded steps are replayed through cheaper candidates and judged against the accepted output (by a cross-family judge, meaning one from a different model family than either model being compared, that grades both output orders, or by your own Braintrust scorers with --evaluator braintrust), guarded by the quality floor.",
           "You approve every swap yourself, thin evidence produces an abstention instead of a recommendation, and your Braintrust evals confirm the change before it ships."
         ]
       }
@@ -80,7 +80,7 @@
         {
           "scenario": "You need to know within the hour that tonight's deploy started degrading answer quality in production.",
           "winner": "theirs",
-          "why": "Braintrust's online scoring evaluates production traces automatically as they are logged, with quality gates and alerts on drops. rightmodeler is an offline report on files you fetched; it has no live monitoring seat, by design."
+          "why": "Braintrust's online scoring evaluates production traces automatically as they are logged, with quality gates and alerts on drops. rightmodeler validates offline, on files you fetched; it has no live monitoring seat, by design."
         },
         {
           "scenario": "Every eval in your suite is green, yet the monthly inference invoice keeps climbing, and the suite has no opinion on which steps are overpaying.",
@@ -90,7 +90,7 @@
         {
           "scenario": "A new frontier model just launched and you want to know what it does to your agent.",
           "winner": "both",
-          "why": "Braintrust's Loop and playground can test the new model against the datasets and scorers you maintain, measured against your defined bar. rightmodeler replays it against your shipped outputs step by step and tells you where it earns its price. Different evidence, and both are legitimate."
+          "why": "Braintrust's Loop and playground can test the new model against the datasets and scorers you maintain, measured against your defined bar. rightmodeler tests it only where it costs less than the model a step runs today: name it with --candidate and it replays those steps against your shipped outputs and tells you where it holds up. Where the new model costs more, the question stays with Braintrust. Different evidence, and both are legitimate."
         }
       ]
     },
@@ -99,8 +99,8 @@
       "heading": "rightmodeler runs on the traces Braintrust already logs",
       "intro": "No re-instrumentation, no new telemetry, no abandoning your stack.",
       "paragraphs": [
-        "If Braintrust logs your agent today, the input to an audit already exists. You export rows you already have, save the files to disk, and run the CLI on them. The audit never touches your Braintrust account. It runs on the files you already exported, and replays go through your selected replay provider on your own key. Nothing runs on our side: no server, no account, no telemetry. The integration page covers the export and field-mapping details.",
-        "Braintrust stays on production duty throughout. The division of labor is clean: rightmodeler proposes the swap with the evidence attached, and validation stays with the eval suite you already trust. The report recommends a model, not a route, and you tip the scale."
+        "If Braintrust logs your agent today, the input to a validation run already exists. You export rows you already have, save the files to disk, and run the CLI on them. The run reads the files you already exported, and replays go through your selected replay provider on your own key; rightmodeler calls your Braintrust account only when you ask it to, with --evaluator braintrust so your own scorers grade the replays, or to import a dataset or send results back. Nothing runs on our side: no server, no account, no telemetry. The integration page covers the export and field-mapping details.",
+        "Braintrust stays on production duty throughout. The division of labor is clean: rightmodeler validates the swap on your traces and proposes it with the evidence attached, and the eval suite you already trust stays a bar it must clear before anyone merges. The report recommends one pinned model per step, and today the final yes stays yours."
       ]
     },
     {
@@ -109,32 +109,32 @@
       "paragraphs": [
         "Braintrust watches production continuously: scalable trace ingestion, live monitoring, online scoring, and alerts. rightmodeler works after the fact, on exported files, and will never tell you something broke an hour ago, by design.",
         "Braintrust owns the whole eval lifecycle: versioned datasets, code and LLM scorers, immutable experiments, human review queues, and CI quality gates. rightmodeler ships none of that. It answers one question and expects your eval suite to remain the bar.",
-        "Braintrust is enterprise observability infrastructure: SOC 2 Type II, hybrid deployment, granular permissions, and Brainstore, a database built for querying traces at terabyte scale. rightmodeler's CLI is a free report run locally against exported files, not a place your team's traces live.",
-        "And the audit's verdicts carry their own hedge: they report how closely a candidate tracked the output you shipped, which is not the same thing as being right. Where the evidence runs thin, the audit files an abstention instead of an opinion."
+        "Braintrust is enterprise observability infrastructure: SOC 2 Type II, hybrid deployment, granular permissions, and Brainstore, a database built for querying traces at terabyte scale. rightmodeler's CLI is free, runs locally against exported files, and is not a place your team's traces live.",
+        "And rightmodeler's verdicts carry their own hedge: they report how closely a candidate tracked the output you shipped, which is not the same thing as being right. Where the evidence runs thin, rightmodeler files an abstention instead of an opinion."
       ]
     },
     {
       "type": "faq",
       "items": [
         {
-          "q": "Is the audit a replacement for Braintrust?",
-          "a": "No. Braintrust instruments your app, monitors production, and runs the eval lifecycle you built. rightmodeler is a report that answers one question those evals do not ask: which model belongs at each step? When the audit proposes a swap, run it through your Braintrust suite before it ships; that is the point of keeping both."
+          "q": "Is rightmodeler a replacement for Braintrust?",
+          "a": "No. Braintrust instruments your app, monitors production, and runs the eval lifecycle you built. rightmodeler is a validation framework for model swaps that answers one question those evals do not ask: can a cheaper model take each step? When rightmodeler proposes a swap, run it through your Braintrust suite before it ships; that is the point of keeping both."
         },
         {
           "q": "Can rightmodeler read the traces I already have in Braintrust?",
-          "a": "Yes. A shipped integration reads exported Braintrust rows: you fetch them with your own key, save the files, and the audit runs on them offline. The integration page walks through the export and what gets mapped."
+          "a": "Yes. A shipped integration reads exported Braintrust rows: you fetch them with your own key, save the files, and rightmodeler runs on them offline. The integration page walks through the export and what gets mapped."
         },
         {
           "q": "Braintrust can test new models too. Why add rightmodeler?",
-          "a": "Different reference. Braintrust measures a new model against datasets and scorers you author and maintain; rightmodeler judges candidates against the outputs you accepted, per step, with nothing to build first. If you maintain a strong suite, Braintrust's answer is real. The audit adds per-step evidence of where a cheaper model matches your shipped work, and abstains where that evidence is thin."
+          "a": "Different reference. Braintrust measures a new model against datasets and scorers you author and maintain; rightmodeler judges candidates against the outputs you accepted, per step, with nothing to build first. If you maintain a strong suite, Braintrust's answer is real. rightmodeler adds per-step evidence of where a cheaper model matches your shipped work, and abstains where that evidence is thin."
         },
         {
           "q": "Is rightmodeler an observability platform?",
-          "a": "Not observability. Not a runtime gateway. It never sits in your request path, needs no instrumentation, and keeps no copy of your traces. It is a report you run on your own files; Braintrust remains where your traces live and where production is watched."
+          "a": "Not observability. Not a runtime gateway. It never sits in your request path, adds no tracing of its own, and there is no rightmodeler server holding your traces. It runs offline on your own files; Braintrust remains where your traces live and where production is watched."
         },
         {
-          "q": "Does the audit's judge replace my Braintrust scorers?",
-          "a": "No. Your scorers grade your agent against criteria you authored; that remains the bar. The audit's built-in judge comes from a model family neither the candidate nor the current model belongs to and grades both output orders; --evaluator braintrust lets your own scorers grade the replays instead. Either way, the verdicts are always agreement with shipped output, not proof of correctness."
+          "q": "Does rightmodeler's judge replace my Braintrust scorers?",
+          "a": "No. Your scorers grade your agent against criteria you authored; that remains the bar. rightmodeler's built-in judge comes from a model family neither the candidate nor the current model belongs to and grades both output orders; --evaluator braintrust lets your own scorers grade the replays instead. Either way, the verdicts are always agreement with shipped output, not ground-truth correctness."
         }
       ]
     }

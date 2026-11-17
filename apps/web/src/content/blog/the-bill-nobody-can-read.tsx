@@ -5,7 +5,7 @@ export const meta: PostMeta = {
   slug: "the-bill-nobody-can-read",
   title: "The bill nobody can read.",
   description:
-    "Why your agent bill has no line items, and what to do about it. Part one of the rightmodeler vision: Crucible for AI agent analytics and optimization.",
+    "Why your agent bill has no line items, and what to do about it. Part one of the rightmodeler vision: Crucible, the planned analytics and optimization suite.",
   excerpt:
     "An agent feature ships, the invoice arrives as one number, and nobody can say which layer spent it. Part one of our vision: giving agents the instruments every other system already has.",
   kicker: "The vision · Part one",
@@ -97,33 +97,59 @@ export function Body() {
       <H2>Crucible</H2>
 
       <P>
-        <A href="/crucible">Crucible</A> is that instrument panel. It connects
-        over MCP to the tracing you already emit, no new SDK, no
-        re-instrumentation, and it never sits in your request path. It watches
-        passively: cost per layer, speed per step, failed tool calls, silent
+        <A href="/crucible">Crucible</A> is the instrument panel we are building
+        for the layer that thinks. It is designed to connect over MCP to the
+        tracing you already emit, with no new SDK and no re-instrumentation, and
+        it will never sit in your request path. Reading those traces passively,
+        it will show cost per layer, speed per step, failed tool calls, silent
         retries, and quality regressions as they happen.
       </P>
 
       <P>
-        And it does one thing a dashboard cannot. Crucible runs the rightmodeler
-        measurement loop continuously, the same replay-and-judge engine you can{" "}
-        <A href="https://github.com/elm-os/rightmodeler">run by hand today</A>.
-        So when it finds a layer overpaying for its work, it does not just chart
-        the problem. It measures cheaper candidates against accepted outputs and
-        reports the evidence, sample size, and abstentions.
+        And it is designed to do one thing a dashboard cannot. When it finds a
+        layer overpaying for its work, it will not just chart the problem. It
+        will run the rightmodeler validation loop on that step: replay it on
+        cheaper candidate models, grade every answer against the output you
+        accepted, and report the evidence, the sample size, and every
+        abstention.
       </P>
 
       <P>
-        Seeing is the foundation. It makes model changes reviewable: once you
-        can see every layer and inspect candidate agreement with accepted
-        outputs, the decision arrives with evidence instead of a guess. What
-        happens when a brand-new model ships on a Tuesday, and why that should
-        end as a pull request in your repo, is{" "}
-        <A href="/blog/the-tuesday-problem">part two</A>.
+        That loop does not wait for Crucible. You can{" "}
+        <A href="https://github.com/elm-os/rightmodeler">
+          run it by hand today
+        </A>{" "}
+        with the rightmodeler CLI, on the traces you already have, and{" "}
+        <A href="/agent">the self-hosted agent</A> already runs the maintenance
+        loop on a schedule: it rechecks the catalog weekly for cheaper new or
+        repriced models and, on your word, replays them. Either way, a swap that
+        clears every gate becomes a draft pull request that changes only model
+        identifiers, for a person to review and merge. Crucible will add the
+        instruments, and run that loop continuously where they point.
       </P>
 
       <P>
-        Crucible is in early access. Join the waitlist on{" "}
+        Seeing is the foundation, because you cannot maintain what you cannot
+        see. But seeing is not the bottleneck, and neither is the decision: with
+        the evidence in hand, an engineer makes the call in minutes. What takes
+        days is the work before it: pulling real traces, building a replay,
+        grading the outputs, writing it up so it survives review, migrating, and
+        doing it all again when the next model ships. We think that work is the
+        biggest bottleneck in maintaining software. rightmodeler takes it out of
+        the loop, not the judgment, starting with swaps to cheaper models.
+        Today, the final yes stays yours.
+      </P>
+
+      <P>
+        What happens when a brand-new model ships on a Tuesday, and why that
+        should end as a pull request in your repo, is{" "}
+        <A href="/blog/the-tuesday-problem">part two</A>. Why the work in the
+        loop belongs to software, and why rightmodeler starts by validating
+        model swaps, is <A href="/blog/the-job-nobody-can-staff">part three</A>.
+      </P>
+
+      <P>
+        Crucible is in development. Join the waitlist on{" "}
         <A href="/crucible">the Crucible page</A> and we will send one note when
         it opens.
       </P>
@@ -156,11 +182,15 @@ None of this is exotic. It is the ordinary decency we already extend to database
 
 ## Crucible
 
-[Crucible](https://www.rightmodeler.com/crucible) is that instrument panel. It connects over MCP to the tracing you already emit, no new SDK, no re-instrumentation, and it never sits in your request path. It watches passively: cost per layer, speed per step, failed tool calls, silent retries, and quality regressions as they happen.
+[Crucible](https://www.rightmodeler.com/crucible) is the instrument panel we are building for the layer that thinks. It is designed to connect over MCP to the tracing you already emit, with no new SDK and no re-instrumentation, and it will never sit in your request path. Reading those traces passively, it will show cost per layer, speed per step, failed tool calls, silent retries, and quality regressions as they happen.
 
-And it does one thing a dashboard cannot. Crucible runs the rightmodeler measurement loop continuously, the same replay-and-judge engine you can [run by hand today](https://github.com/elm-os/rightmodeler). So when it finds a layer overpaying for its work, it does not just chart the problem. It measures cheaper candidates against accepted outputs and reports the evidence, sample size, and abstentions.
+And it is designed to do one thing a dashboard cannot. When it finds a layer overpaying for its work, it will not just chart the problem. It will run the rightmodeler validation loop on that step: replay it on cheaper candidate models, grade every answer against the output you accepted, and report the evidence, the sample size, and every abstention.
 
-Seeing is the foundation. It makes model changes reviewable: once you can see every layer and inspect candidate agreement with accepted outputs, the decision arrives with evidence instead of a guess. What happens when a brand-new model ships on a Tuesday, and why that should end as a pull request in your repo, is [part two](https://www.rightmodeler.com/blog/the-tuesday-problem).
+That loop does not wait for Crucible. You can [run it by hand today](https://github.com/elm-os/rightmodeler) with the rightmodeler CLI, on the traces you already have, and [the self-hosted agent](https://www.rightmodeler.com/agent) already runs the maintenance loop on a schedule: it rechecks the catalog weekly for cheaper new or repriced models and, on your word, replays them. Either way, a swap that clears every gate becomes a draft pull request that changes only model identifiers, for a person to review and merge. Crucible will add the instruments, and run that loop continuously where they point.
 
-Crucible is in early access. Join the waitlist on [the Crucible page](https://www.rightmodeler.com/crucible) and we will send one note when it opens.
+Seeing is the foundation, because you cannot maintain what you cannot see. But seeing is not the bottleneck, and neither is the decision: with the evidence in hand, an engineer makes the call in minutes. What takes days is the work before it: pulling real traces, building a replay, grading the outputs, writing it up so it survives review, migrating, and doing it all again when the next model ships. We think that work is the biggest bottleneck in maintaining software. rightmodeler takes it out of the loop, not the judgment, starting with swaps to cheaper models. Today, the final yes stays yours.
+
+What happens when a brand-new model ships on a Tuesday, and why that should end as a pull request in your repo, is [part two](https://www.rightmodeler.com/blog/the-tuesday-problem). Why the work in the loop belongs to software, and why rightmodeler starts by validating model swaps, is [part three](https://www.rightmodeler.com/blog/the-job-nobody-can-staff).
+
+Crucible is in development. Join the waitlist on [the Crucible page](https://www.rightmodeler.com/crucible) and we will send one note when it opens.
 `;

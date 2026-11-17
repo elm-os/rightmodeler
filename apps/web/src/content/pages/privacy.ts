@@ -8,7 +8,7 @@ Legal
 
 What this site collects (very little), how it is used, and the choices you have.
 
-Last updated October 12, 2026
+Last updated November 16, 2026
 
 The short version: we collect almost nothing, what you hand us stays with the team, and every list we run is one email away from removal.
 
@@ -25,7 +25,7 @@ Two kinds of information, both small.
 
 ## How we use it
 
-- To send you the early-access note you asked for when you joined a waitlist.
+- To send you the note you asked for when you joined a waitlist.
 - To read, and usually answer, the feedback you send us.
 - To understand which pages are useful so we can improve the site.
 

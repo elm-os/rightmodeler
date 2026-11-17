@@ -1,5 +1,7 @@
 # rightmodeler agent
 
+rightmodeler agent is the maintenance loop, on a schedule, running the rightmodeler CLI on one long-lived host you operate: a weekly catalog and price check that flags cheaper new or repriced models, a daily drift check on new traces whose proposals a person approves, one regression replay for each merged swap set, and follow-up on swap pull requests as review and CI report back. On your word it replays new candidates; once a replay clears every release gate, it opens a draft pull request with the evidence attached. It never merges: a person gives the word for each new candidate, and a person merges.
+
 The offline build, discovery, and eval path requires no GitHub App or model credentials. Missing runtime configuration makes schedules log a skip instead of starting partial work.
 
 ## Model
@@ -19,7 +21,7 @@ The mounted GitHub tools read `GITHUB_TOKEN` for outbound API calls. The GitHub 
 Schedules use these shared variables:
 
 - `RIGHTMODELER_REPO`, with optional `RIGHTMODELER_STORE`
-- `RIGHTMODELER_TRACES`, `RIGHTMODELER_PROVIDER_BASE_URL`, and optional `RIGHTMODELER_API_KEY_ENV`, `RIGHTMODELER_MAX_COST_USD`, `RIGHTMODELER_MODEB_CONFIG`. `RIGHTMODELER_MAX_COST_USD` bounds `price-decay` and `approved-regression`; when unset, the weekly regression replay runs uncapped
+- `RIGHTMODELER_TRACES`, `RIGHTMODELER_PROVIDER_BASE_URL`, and optional `RIGHTMODELER_API_KEY_ENV`, `RIGHTMODELER_MAX_COST_USD`, `RIGHTMODELER_MODEB_CONFIG`. `RIGHTMODELER_MAX_COST_USD` bounds `price-decay` and `approved-regression`; when unset, the regression replay runs uncapped
 - `RIGHTMODELER_GITHUB_OWNER`, `RIGHTMODELER_GITHUB_REPO`, `RIGHTMODELER_GITHUB_REPORT_ISSUE`, and `RIGHTMODELER_GITHUB_INSTALLATION_ID`
 - `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` for scheduled GitHub delivery
 - Optional `RIGHTMODELER_GITHUB_API_BASE_URL` and `RIGHTMODELER_GITHUB_TOKEN_ENV` for `pr-watch`; with `RIGHTMODELER_GITHUB_OWNER`, these also default `open_swap_pr` and webhook-triggered watches. The variable named by `RIGHTMODELER_GITHUB_TOKEN_ENV` must contain the GitHub token. Watched pull requests are derived from the append-only lifecycle store

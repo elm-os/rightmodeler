@@ -122,7 +122,7 @@ export function RouteRows({
           className="grid h-9 items-center gap-x-3 border-b border-ash-border px-4 font-mono text-caption text-fog"
           style={{ gridTemplateColumns: ROUTE_GRID }}
         >
-          <span>route</span>
+          <span>model</span>
           <span>covers</span>
         </div>
         <div className="divide-y divide-ash-border">

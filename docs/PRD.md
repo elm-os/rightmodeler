@@ -1,56 +1,117 @@
-# Cheaper Models Recommendation Report PRD
+# Product Requirements: Validated Swaps to Cheaper Models
 
-Written before the TypeScript harness. Where this document and
-`harness/docs/Architecture.md` disagree, Architecture.md is the design of record.
+Sections 1 to 5 follow [positioning.md](positioning.md). The requirements from section 6 on were
+written before the TypeScript harness; where they and `harness/docs/Architecture.md` disagree,
+Architecture.md is the design of record.
 
 ## 1. Summary
 
-Engineering teams often default to frontier AI models for agentic or LLM-powered workflows because they do not have reliable evidence that cheaper models can complete their specific tasks. This product generates a recommendation report from historical agent/model runs, identifying where cheaper models can replace expensive frontier models while preserving task quality.
+We think the biggest bottleneck in maintaining software is the human in the loop: not the
+judgment, the work. We are solving it first for production AI systems.
 
-The first product is a report, not a runtime gateway. It proves value using the team's own historical data before asking them to route live traffic through a new system.
+The first product is a validation framework for model swaps. It validates swaps to cheaper models
+on your production traces and opens each one that clears every release gate as a draft pull
+request that changes only model identifiers, with the evidence attached. rightmodeler takes the
+work out of the loop, not the judgment: today, the final yes stays yours.
+
+The direction is autonomous self-maintenance and optimization of production AI systems, reached
+one validated change at a time.
 
 ## 2. Target User
 
 Primary user:
 
-- Team lead or engineering manager responsible for AI model quality, reliability, and spend.
+- The engineer or team lead who owns a production AI system and answers for its model quality,
+  reliability and spend.
 
 Secondary users:
 
-- Developers who provide logs, prompts, task outputs, and acceptance signals.
-- AI platform or infrastructure engineers who may later implement model routing based on the report.
+- Developers whose app already records its model calls, and who review the draft pull requests.
+- Platform engineers who run the CLI in CI or self-host the agent.
 
 ## 3. Problem
 
-Teams lack a trustworthy way to answer:
+For a production AI system, a new model ships every few weeks, and each one restarts the same
+manual job: notice it, pull real traces, build a replay, grade the outputs, write it up so it
+survives review, migrate, and do it again. That work, not the final call, is the bottleneck, and
+few teams can staff it. The shortcuts teams take instead do not hold up:
 
-- Which tasks actually require frontier models?
-- Which cheaper models can handle specific task families?
-- How much money can we save without materially reducing task success?
-- What evidence supports each model substitution?
+1. **Blind swaps fail quietly.** A cheaper model drops into a step in thirty seconds. When it
+   fails, nothing throws: the JSON still parses and is wrong on the edge cases.
+2. **Routers don't work in production.** Our opinion, for three reasons: a runtime router picks a
+   model per request with a policy that was not validated on your workload; it adds a hop and a
+   dependency to the request path; and the same input can take different models, so behavior is
+   harder to reproduce, audit and roll back. A gateway that serves the model you pin is a
+   different thing.
+3. **General benchmarks aren't your workload.** A leaderboard ranks models on someone else's
+   tasks. It cannot tell you whether a cheaper model matches the outputs you already accepted.
+4. **Frontier everywhere costs too much.** The most expensive model on every step feels safe
+   until the bill compounds, call by call, on steps nobody has measured.
 
-Generic public benchmarks are insufficient because they do not reflect the team's actual prompts, tools, success criteria, data distribution, or workflows.
+What holds up: one pinned model per step, validated on your own traces and changed through code
+review.
 
 ## 4. Product Goal
 
-Generate an evidence-backed report that recommends cheaper model substitutions by task family.
+Take the work out of the loop, not the judgment, and earn each step of autonomy with evidence,
+starting with validated swaps to cheaper models.
 
-Example recommendation:
+The rightmodeler CLI reads the model calls your app already recorded, replays the recorded steps
+on cheaper candidate models from your provider's live catalog, and has a judge from a different
+vendor, or your own evaluator, grade every answer against the output you accepted. Replay sends
+recorded text conversations: cases whose conversation carries tool calls, tool definitions or
+non-text parts are left out of the replay sample today, and the run says how many. A swap that
+clears every release gate becomes a draft pull request that changes only model identifiers, with
+the evidence attached.
 
-> For PR summary tasks, replace Model A with Model B. Estimated cost reduction: 72%. Confidence: medium. Evidence: 18 historical runs, 12 reference comparisons, 6 LLM-judge evaluations, no deterministic checks available.
+A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces:
+agreement with the outputs you accepted, at a statistical lower bound that reaches your quality
+floor on held-out cases, with swaps that feed later model steps confirmed end to end in a
+sandbox. rightmodeler measures agreement with what you shipped, not ground-truth
+correctness, and abstains when the evidence is thin.
+
+The rightmodeler agent, self-hosted today, runs the maintenance loop on a schedule: a weekly
+catalog and price check that flags cheaper new or repriced models, a daily drift check on new
+traces whose proposals a person approves, one regression replay for each merged swap set, and
+follow-up on swap pull requests as review and CI report back. On your word it replays new
+candidates; once a replay clears every gate, it opens the draft pull request. It never merges.
+
+A person still sets the policy (the quality floor, which models are allowed, an optional spend
+cap), gives the agent the word before it replays a new candidate, and merges the swaps they
+accept. Rolling back is one command that opens another pull request. That is deliberate:
+autonomy is earned with evidence, and validation is how rightmodeler earns it. The direction is a
+system that maintains itself inside the policy you set.
+
+Illustrative example:
+
+> For the PR summary step, a draft pull request that changes Model A to the cheaper Model B and
+> nothing else. Its body carries the evidence: the decision, the evaluator kinds, the cascade
+> check, the worst-case lower bound that cleared the quality floor, the cost per replayed case for
+> both models, the caps and the case IDs.
 
 ## 5. Non-Goals
 
-MVP will not:
+rightmodeler does not:
 
-- Route production traffic.
-- Act as a live AI gateway.
+- Route traffic or produce a routing policy. It validates one pinned model per step, offline,
+  before a person merges, and never sits in the request path.
+- Run on, watch or shadow live production traffic. It validates on the calls your app already
+  recorded and runs end-to-end confirmation in a sandbox, apart from your production deployment.
+  The sandbox keeps your model key out but has ordinary network access, so your app's tools should
+  point at test fixtures, not production services.
+- Claim ground-truth correctness or guarantee quality. It measures agreement with the outputs you
+  accepted.
 - Fine-tune models.
-- Guarantee correctness for safety-critical tasks.
-- Replace human review for high-risk recommendations.
-- Depend only on public benchmarks.
+- Treat general benchmarks or public leaderboards as evidence about your workload.
 
-Future versions may include a model gateway/router once teams trust the recommendation methodology.
+Not in scope today:
+
+- Merging, deploying or swapping a model on its own. Only a person merges.
+- Validating upgrades, a model at the same price, or a move off a retired model. Candidates must
+  cost less than the recorded model, even when named with `--candidate`.
+- Tuning reasoning effort, prompts or retries.
+- Ranking candidates on your own token mix, measuring savings after merge, latency budgets, or
+  latency comparisons with the current model.
 
 ## 6. Inputs
 
@@ -112,7 +173,7 @@ Each task family should include:
 
 ## 9. Evaluation Methodology
 
-The framework must not treat LLM-as-judge as the default evaluator. It should choose the strongest available evaluator per task family.
+The framework must not treat LLM-as-judge as the default evaluator. It should choose the strongest available evaluator per task family (superseded: with no evaluator configured, a judge from a different vendor grades each answer against the accepted output in both answer orders, and a configured evaluator replaces it; see `harness/docs/Architecture.md` sections 10 and 13).
 
 Evaluation priority:
 
@@ -134,10 +195,10 @@ Examples:
 - Lint succeeds.
 - JSON schema is valid.
 - Required fields are present.
-- Tool calls are valid.
+- Tool calls are valid (superseded: see 9.3).
 - API calls follow constraints.
 - No runtime errors.
-- Latency and retry counts are within threshold.
+- Latency and retry counts are within threshold (superseded: no release gate covers latency or retries, and the evidence reports only the winning candidate's p50 latency; see `harness/docs/Architecture.md` section 18).
 
 This evidence type should produce the highest-confidence recommendations.
 
@@ -154,7 +215,7 @@ This is stronger than asking an LLM judge whether an output is good in isolation
 
 ### 9.3 Agent Trajectory Evaluation
 
-For agent logs, evaluate more than the final output.
+For agent logs, evaluate more than the final output (superseded: replay resends each recorded conversation as text; a case whose conversation carries tool calls, tool definitions or non-text parts, or that comes from a call site that needs tools or structured output, is left out of the replay sample, and Mode B confirmation judges only the app's final output; see `harness/packages/rightmodeler/docs/getting-started.md`).
 
 Signals may include:
 
@@ -205,7 +266,7 @@ Candidate selection factors:
 - Context window.
 - Tool-use support.
 - Structured output support.
-- Latency.
+- Latency (superseded: the shortlist filters on capability, price and release date, never on latency; see `harness/docs/Architecture.md` section 4).
 - Provider availability.
 - Customer allowlist or vendor constraints.
 - Historical model used.
@@ -245,6 +306,12 @@ Each recommendation must include:
 
 ## 12. Confidence Scoring
 
+Superseded: the harness has no confidence bands, and this note covers every mention of
+confidence in this document. The shortlist half only screens candidates; a swap clears only when
+its 95% statistical lower bound on held-out cases, adjusted for the number of candidates, reaches
+the quality floor, and the harness abstains with a named reason when the evidence is thin. See
+`harness/docs/Architecture.md` section 7.
+
 Confidence should be derived from:
 
 - Number of historical examples.
@@ -281,8 +348,10 @@ MVP must support:
 
 Possible follow-on products:
 
-- Runtime AI gateway/router.
-- Policy-based routing by task family.
+- Runtime AI gateway/router (dropped: rightmodeler validates one pinned model per step, offline,
+  before a person merges, and never sits in the request path; see [positioning.md](positioning.md)).
+- Policy-based routing by task family (dropped: rightmodeler produces no routing policy, only
+  draft pull requests that change model identifiers).
 - Continuous eval monitoring.
 - Regression alerts when cheaper model quality drops.
 - Human review workflow for approving task families and recommendations (superseded: decision 7

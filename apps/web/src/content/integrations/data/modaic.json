@@ -9,12 +9,12 @@
   "description": "Not built yet: a planned rightmodeler evaluator will let a judge in your Modaic account grade replays via Modaic's hosted API. What works now, what is planned.",
   "h1": "rightmodeler + Modaic",
   "lede": "Modaic helps teams make judgment calls consistent, with a confidence score on each decision and alignment from expert feedback. A planned rightmodeler evaluator will let a judge you keep in Modaic grade the replayed candidates through Modaic's hosted API. It is not available yet.",
-  "tldr": "Not available yet. rightmodeler has no Modaic integration today, and none of the steps below exist in the CLI. The plan calls Modaic's hosted API with your own Modaic account, because that is where Modaic's judges, confidence scores, and alignment run; its open-source SDK cannot run them on your machine. Building is waiting on Modaic confirming its canonical API. Until then, run Modaic alongside rightmodeler and grade the replays with the built-in judge or with Braintrust, Langfuse, or LangSmith through --evaluator.",
+  "tldr": "Not available yet. rightmodeler has no Modaic integration today, and none of the steps below exist in the CLI. The plan calls Modaic's hosted API with your own Modaic account, because that is where Modaic's judges, confidence scores, and alignment run; its open-source SDK cannot run them on your machine. Building is waiting on Modaic confirming its canonical API. Until then, run Modaic alongside rightmodeler and grade the replays with the built-in judge or with Braintrust, Langfuse, LangSmith, or promptfoo through --evaluator.",
   "steps": [
     {
       "label": "01 · Define",
       "title": "You will keep the judge in Modaic",
-      "body": "Planned: you will define and align the judge in your Modaic account, the way Modaic works today, and pin the exact version the audit should use."
+      "body": "Planned: you will define and align the judge in your Modaic account, the way Modaic works today, and pin the exact version a validation run should use."
     },
     {
       "label": "02 · Replay",
@@ -29,7 +29,7 @@
     {
       "label": "04 · Gate",
       "title": "The same gates will decide",
-      "body": "Planned: the scores will face the release gates every evaluator faces today. A missing score or an incomplete cell will count against the candidate instead of being filled in, the winner will still have to clear the quality floor again on held-out cases, and the reference audit stays in force. rightmodeler apply will still open a draft pull request that a human reviews."
+      "body": "Planned: the scores will face the release gates every evaluator faces today. A missing score or an incomplete cell will count against the candidate instead of being filled in, and the winner will still have to clear the quality floor on held-out cases. rightmodeler apply will still open a draft pull request that a human reviews."
     }
   ],
   "setup": {
@@ -49,12 +49,12 @@
   "detection": "",
   "useCases": [
     {
-      "title": "Grade the audit with a judge your team already aligned",
-      "body": "Once the integration exists, a team that keeps its judgment calls in Modaic will be able to point the audit at one of those judges instead of the judge rightmodeler picks. Until then the built-in judge, or an evaluator you already run, grades the replays."
+      "title": "Grade the replays with a judge your team already aligned",
+      "body": "Once the integration exists, a team that keeps its judgment calls in Modaic will be able to grade the replays with one of those judges instead of the judge rightmodeler picks. Until then the built-in judge, or an evaluator you already run, grades the replays."
     },
     {
       "title": "Keep Modaic on its own job today",
-      "body": "No wiring is needed to use both. Modaic keeps making and calibrating the decisions your product runs; rightmodeler audits, offline, which model each step of your agent needs, and proposes swaps as draft pull requests."
+      "body": "No wiring is needed to use both. Modaic keeps making and calibrating the decisions your product runs; rightmodeler validates swaps to cheaper models for each step of your agent, offline, and opens each one that clears every release gate as a draft pull request."
     },
     {
       "title": "See which judge graded a swap",
@@ -65,13 +65,13 @@
     "There is no Modaic integration today. The CLI has no Modaic evaluator and no Modaic code, and the steps above describe planned behavior only. The setup commands are the exception: they use options that work today.",
     "The integration will need a Modaic account and key, and each graded case will go to Modaic's hosted service. Modaic's judges, confidence scores, and alignment run only there, so there is no local or open-source Modaic path.",
     "Modaic's charges will sit outside rightmodeler's cost estimate and spend cap. Budget for them in your Modaic plan.",
-    "Any judge is a model grading a model. The reference audit, the sample-size minimums, and abstentions stay in force, and a pass means agreement with the output you shipped, not proof that either answer was correct.",
+    "Any judge is a model grading a model. The sample-size minimums and abstentions stay in force, and a pass means agreement with the output you shipped, not ground-truth correctness.",
     "There is no release date. Building waits on Modaic confirming its canonical API, and the design may change."
   ],
   "faq": [
     {
       "q": "Can I use Modaic with rightmodeler today?",
-      "a": "Side by side, yes; as an evaluator, no. The CLI has no Modaic evaluator yet. Modaic can keep running the decisions it calibrates while rightmodeler audits your agent's models offline. To grade replays today, use the built-in judge or pass --evaluator braintrust, langfuse, or langsmith."
+      "a": "Side by side, yes; as an evaluator, no. The CLI has no Modaic evaluator yet. Modaic can keep running the decisions it calibrates while rightmodeler validates cheaper models for your agent offline. To grade replays today, use the built-in judge or pass --evaluator braintrust, langfuse, langsmith, or promptfoo."
     },
     {
       "q": "Why Modaic's hosted API and not its open-source SDK?",

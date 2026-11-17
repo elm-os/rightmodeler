@@ -2,7 +2,8 @@
 
 ## Product
 
-- [Product requirements](PRD.md)
+- [Positioning](positioning.md)
+- [Product requirements: validated swaps to cheaper models](PRD.md)
 - [Design system](design.md)
 
 ## Engineering

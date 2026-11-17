@@ -7,7 +7,7 @@ export const markdown = `# Cut your agent's model bill without guessing.
 
 Use case · Reduce LLM costs
 
-Measure cheaper candidates against outputs you accepted, then review the evidence, sample size, and abstentions before you change a model.
+Frontier everywhere costs too much: the most expensive model on every step feels safe until the bill compounds, call by call, on steps nobody has measured. rightmodeler validates cheaper models on your production traces and opens a draft pull request only where a swap clears every gate.
 
 ## Before rightmodeler
 
@@ -19,15 +19,15 @@ Measure cheaper candidates against outputs you accepted, then review the evidenc
 
 ## With rightmodeler
 
-- Every step is audited on your own traces, with candidate agreement measured per step.
-- Candidates are judged against the output you accepted, with a reference-agreement floor.
-- The report has line items: save, quality, evidence, and confidence for every call.
+- Steps are validated on your own traces, with candidate agreement measured per step.
+- Only cheaper models are candidates, each judged against the output you accepted and held to your quality floor.
+- The report has line items: save, quality, evidence, and sample size for every step.
 - One command on the traces you already have. No new SDK, nothing in your request path.
-- Weak evidence means abstain: the frontier model stays exactly where it earns its price.
+- Thin evidence means abstain: the frontier model stays exactly where it earns its price.
 
-## Run the audit today
+## Run a validation today.
 
-One command runs the audit, nothing to install. The report runs on the traces you already have and hands you recommendations with their evidence.
+One command, nothing to install, on the traces you already have. Validation is what makes a saving worth taking: rightmodeler abstains where the evidence is thin and opens a draft pull request only for a swap that clears every gate.
 
 View on GitHub: ${REPO_URL}
 
@@ -47,39 +47,38 @@ The per-step report shown on the card, mid-scroll. The figures are stamped illus
     auth_code_edit                abstain · thin evidence
     stays on gpt-5.6
 
-## Then make it continuous
+## Then put it on a schedule.
 
-Self-host the agent today and it rechecks prices on a schedule, then opens evidence-backed model-change pull requests once you give the word; the hosted version has a waitlist. Crucible, which will keep every layer watched, is in development.
+Run the same validation weekly in CI with the GitHub Actions recipe in the docs, or self-host the agent: it checks the catalog every week for cheaper new or repriced models, and on your word it replays a new candidate and opens each swap that clears every gate as a draft pull request. The hosted agent has a waitlist. Crucible, in development, will add the instruments: cost per layer, speed per step and failures as they happen.
 
 - [Meet the agent](/agent)
 - [Meet Crucible](/crucible)
 
-The audit as configuration, as shown on the card:
+A release policy as shown on the card, stamped illustrative:
 
-    // rightmodeler.config.ts
+    // policy.json · ${ILLUSTRATIVE_SCORECARD.label}
 
-    export default audit({
-      traces: "./traces/*.jsonl",
-      reference: "shipped",
-      floor: ${ILLUSTRATIVE_SCORECARD.floor},
-      judge: "cross-family",
-    });
+    {
+      "qualityFloor": ${ILLUSTRATIVE_SCORECARD.floor},
+      "shortlistTop": 3,
+      "denyModels": ["llama-4-nano"]
+    }
 
 ## Frequently asked questions
 
 ### Will cutting cost hurt quality?
 
-The audit does not establish ground-truth quality. It measures each candidate against the output you accepted, reports the evidence and sample size, and abstains when they are weak. You review that evidence before changing a model.
+rightmodeler does not establish ground-truth quality. A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin. You review that evidence in a draft pull request before any model changes.
 
 ### How much can I save?
 
-It depends on your traces: which steps are over-provisioned, and how cheap a model still clears your quality floor. rightmodeler measures it on your own runs rather than quoting a benchmark; the figures on this page are an illustrative example, not measured results.
+It depends on your traces: which steps are over-provisioned, and how cheap a model still clears your quality floor. rightmodeler measures it on your own runs rather than quoting a general benchmark; the figures on this page are an illustrative example, not measured results.
 
 ### Do I have to switch models everywhere?
 
-No. The audit is per step, not all-or-nothing. Approve one recommendation and leave the rest on the current model.
+No. Validation is per step, not all-or-nothing. Only a step whose cheaper candidate clears every gate gets a draft pull request; every other step stays on its current model.
 
 ### Do I need new instrumentation?
 
-No. rightmodeler reads the traces you already emit across ${TRACE_SOURCES.length} formats, folds them into one per-step schema, and runs offline. Nothing sits in your request path.
+Not to validate a step. rightmodeler reads the traces you already emit across ${TRACE_SOURCES.length} formats, folds them into one per-step schema, and runs offline. Nothing sits in your request path. Only end-to-end confirmation, for a step that feeds later model steps, needs your app to tag each model call with its step.
 `;

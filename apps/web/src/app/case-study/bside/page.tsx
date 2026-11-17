@@ -107,7 +107,7 @@ const POLICY = [
   { route: "luna · low", covers: "quick responses, follow-ups, summaries" },
   { route: "luna · medium", covers: "document extraction and vision" },
   { route: "luna · high", covers: "Business Wiki and failure recovery" },
-  { route: "luna · xhigh", covers: "grounded research, the only xhigh route" },
+  { route: "luna · xhigh", covers: "grounded research, the only xhigh layer" },
   { route: "terra · high", covers: "orchestration, validation, repair" },
   { route: "sol", covers: "reserved for demanding fallbacks" },
 ];
@@ -257,13 +257,13 @@ export default function BsideCaseStudyPage() {
             rightmodeler evaluated AI Assist as 11 distinct workloads rather
             than one generic AI request. Each layer was benchmarked on its own
             traces and matched to the cheapest model and reasoning effort that
-            held its quality bar. The resulting policy:
+            held its quality bar. The resulting assignment:
           </P>
         </Prose>
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
-            title="rightmodeler · routing policy · ai assist"
+            title="ai assist · per-layer model assignment"
             meta="baseline: terra · xhigh everywhere"
           >
             <RouteRows rows={POLICY} />
@@ -272,12 +272,12 @@ export default function BsideCaseStudyPage() {
 
         <Prose>
           <P>
-            The shape of the policy tells the story. Most of the traffic moves
-            to Luna. Terra stays only where it earns its price: orchestration,
-            validation, and repair, the layers where a wrong answer is
-            expensive. xhigh reasoning survives in exactly one place, grounded
-            research, where reasoning depth is the product itself. And Sol waits
-            in reserve for the rare fallback that genuinely needs it.
+            The shape of the assignment tells the story. Most of the traffic
+            moves to Luna. Terra stays only where it earns its price:
+            orchestration, validation, and repair, the layers where a wrong
+            answer is expensive. xhigh reasoning survives in exactly one place,
+            grounded research, where reasoning depth is the product itself. And
+            Sol waits in reserve for the rare fallback that genuinely needs it.
           </P>
 
           <H2>Projected results</H2>
@@ -291,7 +291,7 @@ export default function BsideCaseStudyPage() {
 
         <Reveal className="mx-auto my-8 max-w-2xl px-6 sm:my-10 sm:px-8">
           <Artifact
-            title="rightmodeler · ai assist evaluation"
+            title="ai assist · evaluation"
             meta="per 20 queries · 11 workloads"
             footer="modeled from actual benchmark traces · current OpenAI pricing · observed xhigh uplift from grounded research"
           >
@@ -398,9 +398,9 @@ export default function BsideCaseStudyPage() {
         <Prose>
           <P>
             The row that matters most is the one that did not move. The baseline
-            assumed a 100% quality pass rate; the right-sized policy measured
-            100% on the same benchmark. Cheaper and faster only count if quality
-            holds.
+            assumed a 100% quality pass rate; the right-sized assignment
+            measured 100% on the same benchmark. Cheaper and faster only count
+            if quality holds.
           </P>
           <PullQuote>
             The savings are only real because quality held: 100% measured, not
@@ -440,10 +440,13 @@ export default function BsideCaseStudyPage() {
             margin recovered.
           </P>
           <P>
-            This is what rightmodeler produces: not a cheaper model, a policy.
-            Eleven workloads, each on the smallest model and reasoning effort
-            that met its configured benchmark bar, with Terra and Sol kept for
-            the work that deserves them.
+            This is what the engagement produced: not one cheaper model
+            everywhere, but a model for each workload. Eleven workloads, each on
+            the smallest model and reasoning effort that met its configured
+            benchmark bar, with Terra and Sol kept for the work that deserves
+            them. The rightmodeler CLI validates swaps to cheaper models;
+            reasoning-effort settings and upgrades to pricier models are outside
+            what it validates today.
           </P>
           <PullQuote>&ldquo;{study.testimonial.quote}&rdquo;</PullQuote>
           <P>

@@ -24,10 +24,14 @@ import { RUN_COMMAND, SKILL_COMMAND } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "How it works",
   description:
-    "Run rightmodeler from your terminal, your coding agent, scheduled CI, or a self-hosted agent. It measures cheaper candidates against outputs you accepted and reports the evidence.",
+    "Run rightmodeler from your terminal, coding agent, CI or the self-hosted agent. It validates cheaper models on your traces and opens a draft PR for review.",
   path: "/how-it-works",
   image: "/social/how-it-works.png",
 });
+
+// The canonical definition from docs/positioning.md: reuse it verbatim wherever safe is defined.
+const SAFE =
+  "A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin.";
 
 const STEPS: {
   n: string;
@@ -45,24 +49,24 @@ const STEPS: {
   },
   {
     n: "02",
-    name: "Measure",
-    body: "It replays each step through cheaper candidates on your real inputs and measures every output against what you accepted. Each candidate gets a cost delta, reference-agreement score, and evidence count, and it abstains when the evidence is weak.",
-    label: "scores",
-    line: "cost · agreement · evidence count  →  recommendation + confidence · abstain on thin evidence",
+    name: "Validate",
+    body: `It replays the recorded steps on cheaper candidate models, and a judge from a different vendor, or your own evaluator, grades every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many. ${SAFE}`,
+    label: "checks",
+    line: "shortlist screen · held-out lower bound vs quality floor · end-to-end confirmation  →  every gate cleared, or no swap",
   },
   {
     n: "03",
     name: "Review",
-    body: "You review the plan, and the CLI ships only the swaps you approve as a pull request with the evidence attached. It then watches CI on that PR, and if you change your mind, one command opens the pull request that restores the exact pre-swap state. Never a live intercept. You decide what to change, and when.",
+    body: "A swap that clears every gate becomes a draft pull request that changes only model identifiers, with the evidence attached, and you review it like any other change. The watch command follows it through review and CI, and if you change your mind after merging, one command opens the pull request that restores the exact pre-swap files. Never a live intercept. Today, the final yes stays yours.",
     label: "applies",
-    line: "approved swaps arrive as a pull request · watch reconciles CI · rollback restores byte-exact",
+    line: "cleared swaps arrive as a draft pull request · watch follows review and CI · rollback opens a byte-exact restore",
   },
 ];
 
 const FAQ: FaqItem[] = [
   {
     q: "What do I need to run it?",
-    a: "Node 24 or newer, and the traces your AI tools already write. If you use Claude Code or Codex in your project, init finds their traces automatically. A provider key is only needed when you replay, and `npx rightmodeler estimate --base-url <provider>/v1` projects that spend first with zero paid calls.",
+    a: 'Node 24 or newer, and the traces your AI tools already write. If you use Claude Code or Codex in your project, init finds their traces automatically. A provider key is only needed when you replay, and "npx rightmodeler estimate --base-url <provider>/v1" projects that spend first with zero paid calls.',
   },
   {
     q: "Which traces are supported?",
@@ -70,7 +74,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Does it touch production?",
-    a: "No. rightmodeler replays your past traces offline and produces a report plus a repo edit. It never sits in your request path, routes live traffic, or adds latency. It is not a runtime gateway.",
+    a: "No. It is built for production AI systems and validates on the traces your app already recorded, but it runs offline beside your app, on your machine or in CI, and produces a report, plus a draft pull request when a swap clears every gate. It never sits in your request path, routes live traffic, or adds latency; it is not a runtime gateway. Swaps that feed later model steps are confirmed by running your app in a sandbox, apart from production. That sandbox has ordinary network access, so point your app's tools at test fixtures, not production services.",
   },
   {
     q: "Do you store my data?",
@@ -78,15 +82,15 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Can I use my existing eval framework?",
-    a: "Yes. Braintrust, Langfuse, LangSmith, and promptfoo can score the replays instead of the built-in judge, and a reachable configured evaluator is always preferred. You can also build the case set from a curated dataset you already maintain, which raises how much the audit can certify, and push trials and verdicts back to your platform when the run completes.",
+    a: "Yes. Braintrust, Langfuse, LangSmith, and promptfoo can score the replays instead of the built-in judge, and a reachable configured evaluator is always preferred. You can also build the case set from a curated dataset you already maintain, and push trials and verdicts back to Braintrust or Langfuse when the run completes.",
   },
   {
     q: "Can my coding agent run it?",
-    a: "Yes. One install adds a runbook that Claude Code and Codex-class agents follow to drive the whole loop: plan preview, staged runs with resumable boundaries, and an apply dry run before anything ships. The runbook drives the same CLI through npx.",
+    a: "Yes. One install adds a runbook that Claude Code and Codex-class agents follow to drive the whole loop: plan preview, staged runs with resumable boundaries, and an apply dry run before any pull request opens. The runbook drives the same CLI through npx.",
   },
 ];
 
-// The first-run transcript: every line is real 0.2.0 output.
+// The first-run transcript, abridged: prompts are the current strings in harness/packages/rightmodeler/src/guidance.ts.
 const Ln = ({ children }: { children?: React.ReactNode }) =>
   children ? (
     <div className="text-driftwood">{children}</div>
@@ -106,7 +110,22 @@ function FirstRunTranscript() {
       <div className="rounded-xl border border-ash-border bg-parchment-white p-5 sm:p-7">
         <div className="space-y-1.5 font-mono text-[12px] sm:text-[13px]">
           <Ln>
-            <Quiet>$</Quiet> <Ink>npx rightmodeler init</Ink>
+            <Quiet>$</Quiet> <Ink>{RUN_COMMAND}</Ink>
+          </Ln>
+          <Ln />
+          <Ln>
+            How should rightmodeler call models? Replay sends your recorded
+            calls to cheaper models, and a judge model from another vendor
+            grades each answer.
+          </Ln>
+          <Ln>
+            <Ink>1.</Ink> My plans, through the CLIs signed in on this machine
+          </Ln>
+          <Ln>
+            <Ink>2.</Ink> An API key for a model provider or gateway
+          </Ln>
+          <Ln>
+            Choose <Ink>[1]</Ink>:
           </Ln>
           <Ln />
           <Ln>Found trace files:</Ln>
@@ -128,14 +147,6 @@ function FirstRunTranscript() {
           <Ln>
             shortlist: <Ink>completed</Ink>
           </Ln>
-          <Ln />
-          <Ln>
-            <Quiet>
-              Replay calls cheaper models through any OpenAI-compatible
-              endpoint, such as OpenRouter or the Vercel AI Gateway.
-            </Quiet>
-          </Ln>
-          <Ln>Provider base URL:</Ln>
         </div>
       </div>
 
@@ -201,7 +212,7 @@ export default function HowItWorksPage() {
       <PageHero
         eyebrow="How it works"
         title="How rightmodeler works"
-        lede="Run it from your terminal, your coding agent, or on autopilot. The same loop everywhere, measured on the traces you already have."
+        lede="rightmodeler's validation loop does the hand work of checking a cheaper model: replaying your traces, grading every answer, and writing up the evidence. Run it from your terminal, your coding agent, or on a schedule. Today, the final yes stays yours."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
@@ -243,7 +254,7 @@ export default function HowItWorksPage() {
               <RunModeCard
                 Icon={AgentSparkIcon}
                 name="From your coding agent"
-                body="One install gives Claude Code and Codex-class agents the runbook to drive the whole loop: plan preview, staged runs, boundary resumes, and an apply dry run before anything ships."
+                body="One install gives Claude Code and Codex-class agents the runbook to drive the whole loop: plan preview, staged runs, boundary resumes, and an apply dry run before any pull request opens."
               >
                 <div className="rounded-xl border border-ash-border bg-parchment-white p-4 sm:p-5">
                   <CommandBlock
@@ -258,7 +269,7 @@ export default function HowItWorksPage() {
               <RunModeCard
                 Icon={ScheduleIcon}
                 name="In CI, on a schedule"
-                body="The same command runs unattended. Every event streams as JSON lines, and the exit code is the verdict, so a weekly job can audit, stop at a named boundary, and resume."
+                body="The same command runs unattended. Every event streams as JSON lines, and the exit code is the verdict, so a weekly job can validate, stop at a named boundary, and resume."
               >
                 <p className="border-t border-ash-border pt-3 font-mono text-[13px] text-driftwood">
                   <span className="text-fog">exits </span>0 no recommendation ·
@@ -271,8 +282,8 @@ export default function HowItWorksPage() {
               <RunModeCard
                 Icon={ServerRackIcon}
                 grain="/how-it-works/autopilot-grain.jpg"
-                name="On autopilot, self-hosted"
-                body="Clone the repo, build it, and run the agent on a long-lived Node 24 host with your own GitHub App and model credentials. It rechecks prices and drift on a schedule; once you give the word, it replays and opens each swap that clears every gate as a draft pull request, evidence attached. The hosted version has a waitlist."
+                name="On a schedule, self-hosted"
+                body="Clone the repo, build it, and run the agent on a long-lived Node 24 host with your own GitHub App and model credentials. It runs a weekly catalog and price check that flags cheaper new or repriced models, a daily drift check on new traces whose proposals a person approves, and one regression replay for each merged swap set. On your word it replays a new candidate, and once the replay clears every gate it opens the draft pull request. It never merges. The hosted version has a waitlist."
               >
                 <Link
                   href="/agent"
@@ -293,13 +304,15 @@ export default function HowItWorksPage() {
         <div className="mx-auto max-w-3xl px-6 py-16 sm:px-10 sm:py-20">
           <Reveal>
             <Tldr>
-              rightmodeler replays your real agent traces through cheaper
-              models, judges each output against{" "}
+              rightmodeler validates cheaper models on the traces you already
+              have. It replays the recorded steps on cheaper candidates and has
+              a judge from a different vendor, or your own evaluator, grade
+              every answer against{" "}
               <span className="text-midnight-ink">
-                what you already shipped
+                the outputs you accepted
               </span>
-              , then reports the evidence, sample size, and abstentions for your
-              review.
+              . A swap becomes a draft pull request only when it clears every
+              release gate; when the evidence is thin, it abstains.
             </Tldr>
           </Reveal>
 
@@ -374,7 +387,7 @@ export default function HowItWorksPage() {
                 <span aria-hidden className="h-px w-3 bg-ash-border" />
               </span>
               <p className="font-mono text-caption text-fog">
-                out ▸ signed report
+                out ▸ report · draft pull request
               </p>
             </div>
           </div>
@@ -384,19 +397,22 @@ export default function HowItWorksPage() {
             className="mt-12 border-t border-ash-border pt-8"
           >
             <p className="font-display text-heading-sm text-midnight-ink">
-              How to read confidence.
+              How to read the evidence.
             </p>
             <p className="mt-2 max-w-xl text-body text-driftwood">
-              A cross-family judge scores both output orders, or the evaluator
-              you name grades the replays: Braintrust, Langfuse, LangSmith, or
-              promptfoo, whose assertions can be deterministic checks such as
-              is-json or regex. Every rate is a statistical lower bound, not a
-              point estimate, and a shortlist winner must clear your quality
-              floor again on held-out cases before it is recommended. Evidence
-              counts show what earned the confidence band, and the evidence type
-              limits how high that band can go. Confidence applies only to the
-              prompt, inputs, and runs evaluated. It measures agreement with
-              what you shipped, not proof of correctness.
+              A judge from a different vendor scores both answer orders, or the
+              evaluator you name grades the replays: Braintrust, Langfuse,
+              LangSmith, or promptfoo, whose assertions can be deterministic
+              checks such as is-json or regex. The shortlist half only screens
+              candidates on their pass rate; the cheapest one that passes is
+              replayed on held-out cases, where a 95% statistical lower bound on
+              its agreement, not a point estimate, must reach your quality
+              floor, adjusted for how many candidates competed. Failed and
+              excluded cases count against the candidate. There are no
+              confidence tiers: the sample size shows how much evidence stands
+              behind each result. The evidence applies only to the prompts,
+              inputs, and runs evaluated. It measures agreement with what you
+              shipped, not ground-truth correctness.
             </p>
           </Reveal>
 
@@ -406,11 +422,11 @@ export default function HowItWorksPage() {
             </p>
             <p className="mt-2 max-w-xl text-body text-driftwood">
               rightmodeler works offline on runs you already shipped. It
-              measures cheaper candidates step by step against the outputs you
+              validates cheaper models step by step against the outputs you
               accepted, and only a swap that clears every gate becomes a draft
               pull request, which changes model identifiers and nothing else and
               waits for you to review and merge. Your observability tool keeps
-              recording, any gateway keeps routing live traffic, and
+              recording, any gateway keeps serving live traffic, and
               rightmodeler never sits in the request path.
             </p>
           </Reveal>

@@ -2,12 +2,14 @@
 name: rightmodeler
 license: MIT
 description: >-
-  Find where an agent pipeline can swap frontier models for cheaper ones without
-  losing quality. Drive the installed rightmodeler TypeScript CLI through its
-  resumable pipeline, interpret its machine protocol, present per-family verdicts,
-  and open a reviewed model-swap pull request when the evidence supports one. Use
-  when the user wants to cut model spend, right-size models per task, benchmark
-  cheaper model substitutions, or analyze an agentic pipeline for cost optimization.
+  Validate swaps to cheaper models on recorded traces before they reach production.
+  Drive the installed rightmodeler TypeScript CLI through its resumable pipeline,
+  interpret its machine protocol, present per-family verdicts, and open a draft pull
+  request that changes only model identifiers when a swap clears every release gate.
+  Use when the user wants to validate or test a swap to a cheaper model before
+  production, check whether a cheaper model matches the outputs they accepted, cut
+  model spend, right-size models per task, benchmark cheaper model substitutions, or
+  analyze an agentic pipeline for cost optimization.
 ---
 
 # rightmodeler TypeScript CLI runbook
@@ -40,7 +42,7 @@ Ask only for inputs that are not already known:
 - The repository root.
 - The trace file path. Interactive `init` and `estimate` can discover supported
   local, Claude Code, and Codex files, but agent and other non-interactive runs
-  should keep passing `--traces` explicitly for deterministic operation.
+  should keep passing `--traces` explicitly, so each run reads the trace the user approved.
 - The goal and stopping stage. Use `report` for a complete recommendation run.
 - How to call models. By default, an API route: the OpenAI-compatible provider base URL and
   the name of the environment variable that already contains its API key. A plan route runs
@@ -382,7 +384,7 @@ Treat family verdicts as the decision unit. Do not promote a single successful c
 into a family recommendation. Exit 0 can still contain useful rejects and
 abstentions; present them instead of saying that nothing happened.
 
-## 9. Apply and watch a proven swap
+## 9. Apply and watch a validated swap
 
 Only proceed when the complete result has an effective recommendation. `apply`
 runs the machine gates and opens a draft pull request. It does not merge.

@@ -2,16 +2,35 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 
-rightmodeler finds the steps in your AI agent where a cheaper model can do the job,
-and proves it from your own traces. It reads the model calls your app already
-recorded, replays each step on cheaper models from your provider's live catalog, and
-has a judge model from a different vendor grade every answer against the output you
-accepted. When a swap clears every gate, `rightmodeler apply` opens a draft pull
-request that changes only the model identifier, for you to review and merge.
+Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.
 
-It runs beside your app, on your machine or in CI, never in your app's request path.
-It is open source under the MIT license, with no rightmodeler account, no hosted
-service and no telemetry.
+We think the biggest bottleneck in maintaining software is the human in the loop: not the
+judgment, the work. In a production AI system a new model ships every few weeks, and each
+one restarts the same manual job: notice it, pull real traces, build a replay, grade the
+outputs, write it up so it survives review, migrate, and do it again. rightmodeler takes
+the work out of the loop, not the judgment; today, the final yes stays yours. The usual
+shortcuts, such as blind swaps or general benchmarks, do not hold up. What holds up is
+one pinned model per step, validated on your own traces and changed through code review.
+We start with validation because autonomy is earned with evidence: the direction
+is production AI that maintains and optimizes itself inside the policy you set, reached
+one validated change at a time. The [manifesto](https://www.rightmodeler.com/manifesto)
+makes the full argument.
+
+rightmodeler is a validation framework for model swaps. It reads the model calls your app
+already recorded, replays the recorded steps on cheaper candidate models from your
+provider's live catalog, and has a judge from a different vendor, or your own evaluator,
+grade every answer against the output you accepted. Replay sends recorded text
+conversations: cases whose conversation carries tool calls, tool definitions or non-text
+parts are left out of the replay sample today, and the run says how many. It abstains
+when the evidence is thin. When a swap clears every release gate, `rightmodeler apply`
+opens a draft pull request that changes only model identifiers, with the evidence
+attached, for you to review and merge.
+
+It runs offline beside your app, on your machine or in CI, never in your app's request
+path. It is open source under the MIT license, with no rightmodeler account, no
+rightmodeler server and no telemetry. The [self-hosted agent](#self-hosted-agent) runs the
+maintenance loop on a schedule, and [Crucible](https://www.rightmodeler.com/crucible), the
+planned analytics and optimization suite, is in development with a waitlist.
 
 > [!IMPORTANT]
 > **`RIGHTMODELER_API_KEY` is not a rightmodeler key.** rightmodeler has no accounts
@@ -183,14 +202,14 @@ rightmodeler groups the traced calls into families, the calls that do one job su
 summarizing an article. `report.md` has one row per family and the evidence behind
 each decision, which is one of:
 
-| Decision                  | Meaning                                                                                                                                           |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `recommend`               | The cheaper model cleared every release gate on the shortlist and held-out cases, and needed no confirmation or passed it. `apply` acts on these. |
-| `recommend (gated)`       | The verdict favored the swap, but held-out selection or a release gate failed.                                                                    |
-| `recommend (unconfirmed)` | The step feeds a later model-written step, so the swap waits for [Mode B confirmation](#mode-b-confirmation).                                     |
-| `reject`                  | An unsafe substitution was seen, or Mode B traced a downstream failure to the swap.                                                               |
-| `abstain`                 | The evidence is too thin or unusable. The report names the reason.                                                                                |
-| `inconclusive`            | The evidence is complete, but the cheaper model's worst-case quality or availability falls short, so the swap is not proven safe.                 |
+| Decision                  | Meaning                                                                                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `recommend`               | The cheaper model cleared every release gate on held-out cases, and needed no confirmation or passed it. `apply` acts on these.                      |
+| `recommend (gated)`       | The verdict favored the swap, but held-out selection or a release gate failed.                                                                       |
+| `recommend (unconfirmed)` | The step feeds a later model-written step, so the swap waits for [Mode B confirmation](#mode-b-confirmation).                                        |
+| `reject`                  | [Mode B confirmation](#mode-b-confirmation) traced a downstream failure to the swap.                                                                 |
+| `abstain`                 | The evidence is too thin or unusable. The report names the reason.                                                                                   |
+| `inconclusive`            | The evidence is complete, but the cheaper model's worst-case quality falls short of the quality floor, so the swap does not clear the release gates. |
 
 For scripts, `--output json` or `jsonl` ends with one result object holding the
 verdicts and the report path, `npx rightmodeler report --output json` prints the full
@@ -208,7 +227,7 @@ input and 3 that it hit the spend cap; `npx rightmodeler docs exit-codes` has th
 - **Replay and Mode B confirmation:** the scrubbed recorded conversations, and the
   judge's inputs (the task, the recorded output and the candidate's), go to your
   endpoint, or on a plan route to that vendor through its CLI. During Mode B, your
-  app's model calls go there too.
+  app's model calls go there too, and its other calls go wherever your app sends them.
 - **Feedback through the coding-agent skill:** nothing unless you say yes. The agent
   first shows you the exact text it would send to rightmodeler.com, which the skill
   limits to what happened, the agent's name, the CLI version, the command, the exit
@@ -255,10 +274,12 @@ the installed version, and the integrations hub has a page for each CI recipe.
 
 A swap whose output feeds a later model-written step can break that step even when its
 own answers pass. Such a family stays `recommend (unconfirmed)`, and `apply` skips it,
-until Mode B confirms it: it runs your app on recorded cases in an isolated sandbox (a
+until Mode B confirms it: it runs your app on recorded cases in a sandbox (a
 Docker container by default) with the candidate model in place and judges the final
-output. Pass `--modeb-config <file.json>`; your real key never enters the sandbox.
-`npx rightmodeler docs modeb` prints the config, the runtime contract and its backends.
+output. Pass `--modeb-config <file.json>`; your real key never enters the sandbox. The
+sandbox has ordinary network access, so point your app's tools at test fixtures, not
+production services. `npx rightmodeler docs modeb` prints the config, the runtime
+contract and its backends.
 
 ## Docs
 
@@ -287,10 +308,25 @@ value and never merges.
 
 ## Self-hosted agent
 
-[harness/apps/agent](harness/apps/agent/README.md) is an agent built on the same CLI:
-it runs the CLI on schedules and answers collaborators' mentions through a GitHub App.
-It is not on npm; build it from a clone and run it on one long-lived host, as its
-README describes.
+[rightmodeler agent](harness/apps/agent/README.md), in this repository, is the
+maintenance loop on a schedule, built on the same CLI. It runs a weekly catalog and price
+check that flags cheaper new or repriced models, a daily drift check on new traces whose
+proposals a person approves, and one regression replay for each merged swap set, and it
+follows up on swap pull requests as review and CI report back. On your word it replays a
+new candidate; once a replay clears every gate, it opens the draft pull request with the
+evidence attached. It never merges and carries no merge capability. Collaborators can also
+hand it work by mentioning its GitHub App.
+
+A person sets the policy (the quality floor, which models are allowed, an optional spend
+cap), gives the word before a new candidate replays, and decides whether each draft pull
+request merges. A watch pass can close a swap pull request whose CI failure repeats, and
+each merged swap set gets its one regression replay without a fresh word. Rolling back is
+one `rightmodeler rollback` command, run by a person, that opens the pull request
+restoring the exact pre-swap files.
+
+The agent is self-hosted today; the hosted version has a
+[waitlist](https://www.rightmodeler.com/agent). It is not on npm: build it from a clone
+and run it on one long-lived host, as its README describes.
 
 ## Contributing
 

@@ -5,11 +5,17 @@ import * as llmCostOptimizationTools from "@/content/blog/llm-cost-optimization-
 import * as llmGatewayEvaluationPitfalls from "@/content/blog/llm-gateway-evaluation-pitfalls";
 import * as nobodyCanPredictTheBill from "@/content/blog/nobody-can-predict-the-bill";
 import * as theBillNobodyCanRead from "@/content/blog/the-bill-nobody-can-read";
+import * as theJobNobodyCanStaff from "@/content/blog/the-job-nobody-can-staff";
 import * as theTuesdayProblem from "@/content/blog/the-tuesday-problem";
 import * as whyWeBuiltRightmodeler from "@/content/blog/why-we-built-rightmodeler";
 
-// The two vision posts share a date; the stable sort keeps this order (part one above part two).
+// Parts one and two of the vision share a date; the stable sort keeps this order (part one above part two).
 const posts: Post[] = [
+  {
+    meta: theJobNobodyCanStaff.meta,
+    Body: theJobNobodyCanStaff.Body,
+    markdown: theJobNobodyCanStaff.markdown,
+  },
   {
     meta: llmCostOptimizationTools.meta,
     Body: llmCostOptimizationTools.Body,

@@ -477,26 +477,29 @@ export function Body() {
         Both tools will show you which steps dominate the bill. The next
         question is whether each of those steps needs the model it runs on.
         Langfuse experiments can answer that on a curated dataset with
-        evaluators you configure. The other route is the production traffic you
-        have already recorded, judged against the outputs your team already
-        accepted.
+        evaluators you configure. The other route is a replay of the production
+        traces you have already recorded, judged against the outputs your team
+        already accepted.
       </P>
 
       <P>
         That is the job{" "}
         <A href="https://github.com/elm-os/rightmodeler">rightmodeler</A> does.
-        It is an MIT-licensed command-line tool that reads exported traces,
-        replays recorded model calls through cheaper candidates from your
-        provider&rsquo;s live model catalog, and judges every candidate against
-        the output you shipped. The evidence rules are strict on purpose: a step
+        Its MIT-licensed CLI is a validation framework for model swaps: it reads
+        exported traces, replays recorded model calls through cheaper candidates
+        from your provider&rsquo;s live model catalog, and has a judge from a
+        different vendor, or your own evaluator, grade every answer against the
+        output you accepted. The evidence rules are strict on purpose: a step
         family needs at least 10 assessed executions, two distinct step IDs, and
         five distinct trajectories, and below any of those it{" "}
         <A href="/glossary#abstain">abstains</A> with a named reason. Candidates
-        are shortlisted on one half of the cases and must clear the{" "}
-        <A href="/glossary#quality-floor">quality floor</A> again on held-out
-        cases. When a family clears every gate, rightmodeler opens a draft pull
-        request that changes model identifiers and nothing else, for a person to
-        review and merge. It never sits in your request path.
+        are shortlisted on one half of the cases, and agreement must then reach
+        your <A href="/glossary#quality-floor">quality floor</A> at a
+        statistical lower bound on held-out cases. When a family clears every
+        gate, rightmodeler opens a draft pull request that changes model
+        identifiers and nothing else, with the evidence attached, for a person
+        to review and merge. It runs offline, beside your app, and never sits in
+        your request path.
       </P>
 
       <P>
@@ -634,9 +637,9 @@ Helicone exposes a REST API to query requests, with bodies included when you ask
 
 ## Once you know which calls cost the most
 
-Both tools will show you which steps dominate the bill. The next question is whether each of those steps needs the model it runs on. Langfuse experiments can answer that on a curated dataset with evaluators you configure. The other route is the production traffic you have already recorded, judged against the outputs your team already accepted.
+Both tools will show you which steps dominate the bill. The next question is whether each of those steps needs the model it runs on. Langfuse experiments can answer that on a curated dataset with evaluators you configure. The other route is a replay of the production traces you have already recorded, judged against the outputs your team already accepted.
 
-That is the job [rightmodeler](https://github.com/elm-os/rightmodeler) does. It is an MIT-licensed command-line tool that reads exported traces, replays recorded model calls through cheaper candidates from your provider's live model catalog, and judges every candidate against the output you shipped. The evidence rules are strict on purpose: a step family needs at least 10 assessed executions, two distinct step IDs, and five distinct trajectories, and below any of those it [abstains](https://www.rightmodeler.com/glossary#abstain) with a named reason. Candidates are shortlisted on one half of the cases and must clear the [quality floor](https://www.rightmodeler.com/glossary#quality-floor) again on held-out cases. When a family clears every gate, rightmodeler opens a draft pull request that changes model identifiers and nothing else, for a person to review and merge. It never sits in your request path.
+That is the job [rightmodeler](https://github.com/elm-os/rightmodeler) does. Its MIT-licensed CLI is a validation framework for model swaps: it reads exported traces, replays recorded model calls through cheaper candidates from your provider's live model catalog, and has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted. The evidence rules are strict on purpose: a step family needs at least 10 assessed executions, two distinct step IDs, and five distinct trajectories, and below any of those it [abstains](https://www.rightmodeler.com/glossary#abstain) with a named reason. Candidates are shortlisted on one half of the cases, and agreement must then reach your [quality floor](https://www.rightmodeler.com/glossary#quality-floor) at a statistical lower bound on held-out cases. When a family clears every gate, rightmodeler opens a draft pull request that changes model identifiers and nothing else, with the evidence attached, for a person to review and merge. It runs offline, beside your app, and never sits in your request path.
 
 It has dedicated adapters for both tools. From Langfuse, export observations and rightmodeler replays the GENERATION records; pass --evaluator langfuse and your own Langfuse scorers grade the replays, and the results can go back into a Langfuse dataset. From Helicone, export request rows with their bodies included; rows that share a Helicone-Session-Id become one trajectory, so a multi-call agent run counts as one unit in the statistics rather than many. A plan mode previews the pipeline without spending anything, and a cost cap bounds replay spend. The exact export and run commands are in the [Langfuse integration guide](https://www.rightmodeler.com/integrations/langfuse) and the [Helicone integration guide](https://www.rightmodeler.com/integrations/helicone).
 

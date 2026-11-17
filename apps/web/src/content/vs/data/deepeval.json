@@ -6,7 +6,7 @@
   "category": "evals",
   "verdict": "complement",
   "verdictLabel": "Complement · your DeepEval suite gates the swap",
-  "title": "rightmodeler vs DeepEval: eval framework vs model audit",
+  "title": "rightmodeler vs DeepEval: eval framework vs swap validation",
   "description": "DeepEval is an open-source eval framework, and Confident AI its platform. rightmodeler tests cheaper models per step on your traces; your DeepEval CI gates it.",
   "h1": "rightmodeler vs DeepEval",
   "lede": "DeepEval, with Confident AI as its platform, gives you the parts of an evaluation practice: metrics, pytest-style tests, synthetic datasets, and production monitoring. rightmodeler runs one narrower workflow on the traces you already recorded: which steps can move to a cheaper model, with per-step evidence and a draft pull request.",
@@ -16,7 +16,7 @@
   "blocks": [
     {
       "type": "tldr",
-      "body": "Complement, with a clean handoff. As of 2026-09-24, DeepEval describes itself as an open-source LLM evaluation framework: pytest-style unit tests for LLM outputs, 50+ ready-to-use metrics per its docs, synthetic datasets, and end-to-end, trajectory, and component-level evals that run in your own environment. Confident AI, the company that builds DeepEval, sells the platform around it: shared test reports, regression tracking across runs, tracing with online evals, dataset management, red teaming, and governance. rightmodeler, a free MIT-licensed CLI, does one narrower job: it reads the traces your agent already recorded, shortlists cheaper models from your provider's live catalog, replays each step, judges every candidate against the output you accepted, and opens a draft pull request that changes model identifiers only. rightmodeler has no dedicated integration with either product. The handoff is your CI: the draft pull request goes through your deepeval test run job, or Confident AI's PR Eval Gate, like any other change before a person merges it."
+      "body": "Complement, with a clean handoff. As of 2026-09-24, DeepEval describes itself as an open-source LLM evaluation framework: pytest-style unit tests for LLM outputs, 50+ ready-to-use metrics per its docs, synthetic datasets, and end-to-end, trajectory, and component-level evals that run in your own environment. Confident AI, the company that builds DeepEval, sells the platform around it: shared test reports, regression tracking across runs, tracing with online evals, dataset management, red teaming, and governance. rightmodeler, a free MIT-licensed CLI, does one narrower job: it reads the traces your agent already recorded, shortlists cheaper models from your provider's live catalog, replays the recorded steps on them, judges every candidate against the output you accepted, and, for each swap that clears every release gate, opens a draft pull request that changes model identifiers only. rightmodeler has no dedicated integration with either product. The handoff is your CI: the draft pull request goes through your deepeval test run job, or Confident AI's PR Eval Gate, like any other change before a person merges it."
     },
     {
       "type": "prose",
@@ -38,7 +38,7 @@
         {
           "dimension": "built for",
           "theirs": "evaluating LLM apps end to end: tests, metrics, datasets, and, on Confident AI, monitoring",
-          "ours": "one recurring decision: which model each step of your agent should call"
+          "ours": "one recurring question: whether each step of your agent can move to a cheaper model"
         },
         {
           "dimension": "test cases",
@@ -53,7 +53,7 @@
         {
           "dimension": "trying another model",
           "theirs": "you set the model, rerun the same goldens, and compare test runs or pick a winner with Arena G-Eval",
-          "ours": "cheaper candidates shortlisted from your provider's live catalog and replayed on every step family"
+          "ours": "cheaper candidates shortlisted from your provider's live catalog and replayed on your recorded steps"
         },
         {
           "dimension": "grading",
@@ -63,7 +63,7 @@
         {
           "dimension": "verdict",
           "theirs": "pass or fail per test case; deepeval test run exits non-zero on a failure",
-          "ours": "a recommendation or an abstention per step family, with sample size, re-cleared on held-out cases"
+          "ours": "a recommendation, held to the quality floor on held-out cases, or an abstention per step family, with sample size"
         },
         {
           "dimension": "the change",
@@ -81,7 +81,7 @@
       "type": "prose",
       "heading": "Can you use both? Yes, and the handoff is your CI",
       "paragraphs": [
-        "Nothing about your DeepEval setup changes. Your tests, metrics, and goldens stay where they are, Confident AI, if you use it, keeps tracing and scoring production, and rightmodeler never sits in the request path or asks for new instrumentation. There is no dedicated integration between them, and the workflow below needs none.",
+        "Nothing about your DeepEval setup changes. Your tests, metrics, and goldens stay where they are, Confident AI, if you use it, keeps tracing and scoring production, and rightmodeler never sits in the request path or asks for new tracing instrumentation. There is no dedicated integration between them, and the workflow below needs none.",
         "The two meet in two places. On the way in, rightmodeler reads traces from files, and an OpenTelemetry pipeline that already feeds Confident AI can write those files too. On the way out, rightmodeler's change is an ordinary draft pull request, so whatever your repository runs on pull requests, DeepEval tests or Confident AI's PR Eval Gate, runs on it before anyone merges."
       ]
     },
@@ -91,7 +91,7 @@
       "intro": "Four commands, run from your repository. Nothing connects to Confident AI; your DeepEval checks run where they already run.",
       "paragraphs": [
         "Traces in. Confident AI's trace-broadcasting docs show an OpenTelemetry Collector sending every span to Confident AI and to a second destination. Make that second destination a file exporter and the spans land on disk as OTLP JSON. rightmodeler reads the file when the spans carry OpenTelemetry GenAI attributes with the messages captured, or OpenInference attributes; Confident AI's OTEL server ingests both conventions natively, per its docs.",
-        "The audit. The preview spends nothing. The full run shortlists cheaper models from your provider's live catalog, replays each step family through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, on your own key, judges every replay against the output you accepted, and writes report.md with a verdict or a named abstention per step family.",
+        "The validation run. The preview spends nothing. The full run shortlists cheaper models from your provider's live catalog, replays the recorded steps through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, on your own key, judges every replay against the output you accepted, and writes report.md with a verdict or a named abstention per step family.",
         "Through your checks. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers only and carries an evidence table. A workflow that runs deepeval test run on pull requests, the setup DeepEval's CI/CD docs show, holds the swap to your suite; Confident AI's PR Eval Gate posts its check run the same way. rightmodeler watch comments once when a check fails and closes the pull request if a check with the same name fails again under a new run on the same head commit. A person reviews and merges; the CLI never does."
       ],
       "commands": [
@@ -126,7 +126,7 @@
         {
           "scenario": "Your DeepEval suite is green, your agent has run in production for months, and every step still calls the frontier model you launched with. Nobody can say which steps need it.",
           "winner": "ours",
-          "why": "A green suite says the agent clears your bar; it does not try cheaper models step by step. rightmodeler shortlists them from your provider's live catalog, replays every step family on the traces you recorded, judges each candidate against the output you accepted, and reports sample size and abstentions, then opens a pull request only for the swaps that clear every gate."
+          "why": "A green suite says the agent clears your bar; it does not try cheaper models step by step. rightmodeler shortlists them from your provider's live catalog, replays them on the steps you recorded, judges each candidate against the output you accepted, and reports sample size and abstentions, then opens a pull request only for the swaps that clear every gate."
         },
         {
           "scenario": "Your team's rule is that nothing merges without passing the DeepEval suite, and you want the model bill down without breaking that rule.",
@@ -143,7 +143,7 @@
         "DeepEval works before launch. It can build goldens from your documents when no traffic exists, while rightmodeler needs recorded traces and has nothing to say about an agent that has not run.",
         "Confident AI watches production: online evals on every trace, span, and thread, drift detection, alerting, red teaming, and governance, with self-hosting on Enterprise plans. rightmodeler works after the fact on exported files and has no live view, by design.",
         "rightmodeler replays plain-text steps. A recorded case whose conversation carries tool calls, tool definitions, or non-text parts is left out of the replay sample, and a call site that needs tools or structured output is not replayed. DeepEval's agentic metrics, such as Tool Correctness and Argument Correctness, score exactly those steps.",
-        "And the audit's verdicts say only what they measure: agreement with the output you shipped, which is evidence, not proof of correctness. Where the evidence runs thin, the audit abstains instead of recommending."
+        "And rightmodeler's verdicts say only what they measure: agreement with the output you shipped, not ground-truth correctness. Where the evidence runs thin, rightmodeler abstains instead of recommending."
       ]
     },
     {
@@ -167,17 +167,17 @@
         {
           "term": "reference evidence",
           "slug": "reference-evidence",
-          "def": "Scores measured against the output you actually accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness: the production result is the reference, not ground truth."
+          "def": "Scores measured against the output you actually accepted for that exact step. Evidence of agreement with shipped output, not ground-truth correctness: the production result is the reference."
         },
         {
           "term": "quality floor",
           "slug": "quality-floor",
-          "def": "The minimum agreement a candidate must clear, and clear again on held-out cases, before the audit recommends a swap. It is configurable, and anything below it is a no."
+          "def": "The minimum agreement a candidate must clear on held-out cases before rightmodeler recommends a swap. It is configurable, and anything below it is a no."
         },
         {
           "term": "abstain",
           "slug": "abstain",
-          "def": "The audit's decision to recommend nothing for a step family when the sample is small or the evidence is mixed, with the reason named. The current model stays."
+          "def": "rightmodeler's decision to recommend nothing for a step family when the sample is small or the evidence incomplete, with the reason named. The current model stays."
         }
       ]
     },
@@ -202,7 +202,7 @@
         },
         {
           "q": "Does rightmodeler replace DeepEval or Confident AI?",
-          "a": "No. DeepEval and Confident AI test, monitor, and govern your agent, and your team works in them every day. rightmodeler is an offline workflow for one decision: which model each step should call. Not observability. Not a runtime gateway. Its output is a pull request your existing checks review."
+          "a": "No. DeepEval and Confident AI test, monitor, and govern your agent, and your team works in them every day. rightmodeler is an offline validation framework for model swaps: it answers whether each step can move to a cheaper model. Not observability. Not a runtime gateway. Its output is a draft pull request your existing checks review."
         },
         {
           "q": "Is DeepEval open source, and what does Confident AI cost?",

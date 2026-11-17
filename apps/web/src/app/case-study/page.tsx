@@ -4,13 +4,14 @@ import { CaseStudyCard } from "@/components/case-study/artifacts";
 import { JsonLd } from "@/components/json-ld";
 import { Reveal } from "@/components/reveal";
 import { CASE_STUDIES } from "@/content/case-studies";
+import { CASE_STUDY_HUB } from "@/content/markdown/render-hub";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Case studies",
   description:
-    "Two per-workload routing studies with modeled savings; B:Side also reports a measured 100% pass rate on a 20-query benchmark.",
+    "Two studies of per-workload model assignment: projected savings and a measured 100% pass rate on a 20-query benchmark at B:Side, and modeled savings at iAM360.",
   path: "/case-study",
 });
 
@@ -34,16 +35,13 @@ export default function CaseStudiesPage() {
       <div className="px-6 pt-16 pb-16 sm:px-8 sm:pt-24 sm:pb-20">
         <Reveal className="mx-auto max-w-2xl">
           <p className="font-mono text-caption text-fog uppercase">
-            Case studies
+            {CASE_STUDY_HUB.eyebrow}
           </p>
           <h1 className="mt-5 font-display text-heading-lg text-balance text-midnight-ink sm:text-display">
-            What right-sizing actually saves.
+            {CASE_STUDY_HUB.title}
           </h1>
           <p className="mt-6 text-subheading text-driftwood">
-            Both studies report modeled savings from per-workload routing.
-            B:Side also reports a measured 100% pass rate on its 20-query
-            benchmark; iAM360 reports its routing and validation procedure
-            without a measured quality result.
+            {CASE_STUDY_HUB.lede}
           </p>
         </Reveal>
 

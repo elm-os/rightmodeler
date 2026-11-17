@@ -9,14 +9,14 @@
   "title": "rightmodeler vs Artificial Analysis: benchmark vs PR",
   "description": "Artificial Analysis's Optima ranks models on a benchmark built from your own tasks. rightmodeler tests cheaper models at each call site and opens a draft PR.",
   "h1": "rightmodeler vs Artificial Analysis",
-  "lede": "Optima, from Artificial Analysis, turns your tasks, files, or traces into a custom benchmark and ranks models on it by score, cost per task, and time per task. rightmodeler starts from the call sites in your code: it replays each recorded step through cheaper models and proposes a swap as a draft pull request you review.",
+  "lede": "Optima, from Artificial Analysis, turns your tasks, files, or traces into a custom benchmark and ranks models on it by score, cost per task, and time per task. rightmodeler starts from the call sites in your code: it replays the recorded steps through cheaper models and, when a swap clears every gate, opens a draft pull request you review.",
   "integrationSlug": "",
   "related": ["open-frontier", "vals-ai", "braintrust"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Competitors on one question, answered in different units. Artificial Analysis, which calls itself the independent benchmarking company for AI, launched Optima on 2026-08-13. As of 2026-09-24, per its pages, you build a benchmark from your own files or a Hugging Face dataset, from traces imported from platforms such as Arize, Braintrust, and Langfuse, from a coding-agent session, or from a description of your use case, then run it across leading models and compare score, cost per task, and time per task. Its launch article says Optima lets you find an equally performant alternative to your current setup at 10x lower cost or time per task, which is the question rightmodeler asks too. The difference is where the answer lands. Optima ranks models on the tasks and trajectories you bring. rightmodeler, a free MIT-licensed CLI, ties each recorded step to the call site in your code it came from, replays that exact step through cheaper models from your provider's live catalog, judges each against the output you already shipped, and turns an approved swap into a draft pull request that changes only model identifiers, for a human to merge."
+      "body": "Competitors on one question, answered in different units. Artificial Analysis, which calls itself the independent benchmarking company for AI, launched Optima on 2026-08-13. As of 2026-09-24, per its pages, you build a benchmark from your own files or a Hugging Face dataset, from traces imported from platforms such as Arize, Braintrust, and Langfuse, from a coding-agent session, or from a description of your use case, then run it across leading models and compare score, cost per task, and time per task. Its launch article says Optima lets you find an equally performant alternative to your current setup at 10x lower cost or time per task, which is the question rightmodeler asks too. The difference is where the answer lands. Optima ranks models on the tasks and trajectories you bring. rightmodeler, a free MIT-licensed CLI, ties recorded steps to the call sites in your code they came from, replays them there through cheaper models from your provider's live catalog, judges each candidate against the output you already shipped, and turns each swap that clears every release gate into a draft pull request that changes only model identifiers, for a human to merge."
     },
     {
       "type": "positioning",
@@ -34,8 +34,8 @@
         "items": [
           "Starts from traces you export, including Langfuse, Braintrust, LangSmith, and OpenInference, and the repository that produced them. Each traced case is tied to the call site in your code it came from and replayed only there; a case that cannot be tied to a single call site is left out of the replay sample.",
           "Candidates are models from your configured provider's live catalog that cost less than the one a step runs today.",
-          "Each candidate is judged against the output you already accepted for that exact step. Verdicts carry reference agreement, sample size, and abstentions, and a winner must clear the quality floor again on held-out cases.",
-          "A multi-step swap must be confirmed end to end before a pull request opens, and an approved swap becomes a draft pull request that changes only model identifiers; a human reviews and merges it."
+          "Each candidate is judged against the output you already accepted for that exact step. Verdicts carry reference agreement, sample size, and abstentions, and a winner must clear the quality floor on held-out cases.",
+          "A swap that feeds later model steps must be confirmed end to end in a sandbox before a pull request opens, and a swap that clears every release gate becomes a draft pull request that changes only model identifiers; a human reviews and merges it."
         ]
       }
     },
@@ -70,12 +70,12 @@
         {
           "dimension": "grading",
           "theirs": "rubric criteria, or a pairwise judge panel you calibrate",
-          "ours": "agreement with the output you accepted, with abstentions and a held-out re-check"
+          "ours": "agreement with the output you accepted, with abstentions and a held-out test against the quality floor"
         },
         {
           "dimension": "output",
           "theirs": "a leaderboard with cost and time per task",
-          "ours": "a per-step report and, once you approve, a draft pull request"
+          "ours": "a per-step report and, for each swap that clears every gate, a draft pull request"
         },
         {
           "dimension": "where it runs",
@@ -97,12 +97,12 @@
         {
           "scenario": "Your agent has run in production on a frontier model for months, and you want each step that can hold a cheaper model changed in code, as a diff your team reviews.",
           "winner": "ours",
-          "why": "A leaderboard ranks models on the benchmark; turning it into a change at each call site is a separate step. rightmodeler binds each traced step to the call site it came from, replays that exact step through cheaper candidates, judges them against what you shipped, abstains where the sample is too small, re-checks the quality floor on held-out cases, confirms multi-step swaps end to end, and opens a draft pull request that changes only model identifiers."
+          "why": "A leaderboard ranks models on the benchmark; turning it into a change at each call site is a separate step. rightmodeler binds recorded steps to the call sites they came from, replays them there through cheaper candidates, judges each candidate against what you shipped, abstains where the sample is too small, requires a winner to clear the quality floor on held-out cases, confirms swaps that feed later model steps end to end in a sandbox, and opens a draft pull request that changes only model identifiers."
         },
         {
           "scenario": "A cheaper model scores near the top of your Optima benchmark, and your provider serves it.",
           "winner": "both",
-          "why": "Optima tells you it does your kind of task well. Name its ID with --candidate and the CLI tests it at each call site your traces came from, whatever its release date, as long as it costs less than the model a step runs today. One is evidence about the task; the other is evidence about each line of code that would change."
+          "why": "Optima tells you it does your kind of task well. Name its ID with --candidate and the CLI tests it at the call sites your traces came from, whatever its release date, as long as it costs less than the model a step runs today. One is evidence about the task; the other is evidence about each line of code that would change."
         }
       ]
     },
@@ -128,7 +128,7 @@
         "Optima grades work rightmodeler does not replay. Its agentic tasks run models with tools in a sandbox and score the files they hand in, and its interaction tasks simulate whole conversations with different kinds of users. rightmodeler resends each recorded conversation as text: a conversation that carries tool definitions or tool calls is left out of the replay sample, and a call site that needs tools or structured output ends with no verdict.",
         "Optima works before you have traffic. Describe the work and attach a few examples, and its build agent drafts the tasks and rubrics with you. rightmodeler needs recorded traces and has nothing to say about a step that has not run.",
         "Optima looks across the field, so it can tell you when a stronger model is worth paying for. rightmodeler only tests models cheaper than what a step runs today, and only ones your configured provider lists.",
-        "Optima's grading handles tasks with no single right answer: a judge panel you calibrate compares two responses head to head. rightmodeler's reference is the output you shipped, so its verdicts measure agreement with that output, which is evidence, not proof of correctness."
+        "Optima's grading handles tasks with no single right answer: a judge panel you calibrate compares two responses head to head. rightmodeler's reference is the output you shipped, so its verdicts measure agreement with that output, not ground-truth correctness."
       ]
     },
     {
@@ -151,17 +151,17 @@
         {
           "term": "reference evidence",
           "slug": "reference-evidence",
-          "def": "Agreement between a cheaper candidate's answer and the output you accepted for that exact step. Evidence of agreement with shipped output, not proof of correctness."
+          "def": "Agreement between a cheaper candidate's answer and the output you accepted for that exact step. Evidence of agreement with shipped output, not ground-truth correctness."
         },
         {
           "term": "quality floor",
           "slug": "quality-floor",
-          "def": "The configurable minimum a candidate's worst-case agreement must clear, on the cases it was chosen on and again on held-out cases, before the audit recommends it."
+          "def": "The configurable minimum a candidate's worst-case agreement must clear on held-out cases, adjusted for the number of candidates, before rightmodeler recommends it."
         },
         {
           "term": "abstain",
           "slug": "abstain",
-          "def": "What the audit does when a step's sample is too small or its evidence incomplete: it recommends nothing rather than guessing."
+          "def": "What rightmodeler does when a step's sample is too small or its evidence incomplete: it recommends nothing rather than guessing."
         }
       ]
     },
@@ -170,7 +170,7 @@
       "items": [
         {
           "q": "Is Optima a competitor to rightmodeler?",
-          "a": "On one question, yes: both look for a cheaper model that holds up on your own work, and Artificial Analysis's launch article says Optima lets you find an equally performant alternative to your current setup at 10x lower cost or time per task. They answer it in different units. Optima ranks models on a benchmark you build; rightmodeler decides per call site in your code and hands you the change as a draft pull request. You can use Optima to shortlist and rightmodeler to decide each call site."
+          "a": "On one question, yes: both look for a cheaper model that holds up on your own work, and Artificial Analysis's launch article says Optima lets you find an equally performant alternative to your current setup at 10x lower cost or time per task. They answer it in different units. Optima ranks models on a benchmark you build; rightmodeler validates cheaper models per call site in your code and hands you the change as a draft pull request. You can use Optima to shortlist and rightmodeler to validate each call site."
         },
         {
           "q": "Can both start from the same traces?",

@@ -13,10 +13,14 @@ import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "Reduce LLM costs",
   description:
-    "Cut your agent's model bill without guessing. rightmodeler measures cheaper candidates against accepted outputs, then reports the evidence and abstentions.",
+    "Frontier everywhere costs too much. rightmodeler validates cheaper models on your production traces and opens a draft PR when a swap clears every gate.",
   path: "/use-cases/reduce-llm-costs",
   image: "/social/reduce-llm-costs.png",
 });
+
+// The canonical definition from docs/positioning.md: reuse it verbatim wherever safe is defined.
+const SAFE =
+  "A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin.";
 
 const BEFORE: string[] = [
   "Every step runs the frontier model, because nobody has measured a cheaper candidate on accepted outputs.",
@@ -27,29 +31,29 @@ const BEFORE: string[] = [
 ];
 
 const AFTER: string[] = [
-  "Every step is audited on your own traces, with candidate agreement measured per step.",
-  "Candidates are judged against the output you accepted, with a reference-agreement floor.",
-  "The report has line items: save, quality, evidence, and confidence for every call.",
+  "Steps are validated on your own traces, with candidate agreement measured per step.",
+  "Only cheaper models are candidates, each judged against the output you accepted and held to your quality floor.",
+  "The report has line items: save, quality, evidence, and sample size for every step.",
   "One command on the traces you already have. No new SDK, nothing in your request path.",
-  "Weak evidence means abstain: the frontier model stays exactly where it earns its price.",
+  "Thin evidence means abstain: the frontier model stays exactly where it earns its price.",
 ];
 
 const FAQ: { q: string; a: string }[] = [
   {
     q: "Will cutting cost hurt quality?",
-    a: "The audit does not establish ground-truth quality. It measures each candidate against the output you accepted, reports the evidence and sample size, and abstains when they are weak. You review that evidence before changing a model.",
+    a: `rightmodeler does not establish ground-truth quality. ${SAFE} You review that evidence in a draft pull request before any model changes.`,
   },
   {
     q: "How much can I save?",
-    a: "It depends on your traces: which steps are over-provisioned, and how cheap a model still clears your quality floor. rightmodeler measures it on your own runs rather than quoting a benchmark; the figures on this page are an illustrative example, not measured results.",
+    a: "It depends on your traces: which steps are over-provisioned, and how cheap a model still clears your quality floor. rightmodeler measures it on your own runs rather than quoting a general benchmark; the figures on this page are an illustrative example, not measured results.",
   },
   {
     q: "Do I have to switch models everywhere?",
-    a: "No. The audit is per step, not all-or-nothing. Approve one recommendation and leave the rest on the current model.",
+    a: "No. Validation is per step, not all-or-nothing. Only a step whose cheaper candidate clears every gate gets a draft pull request; every other step stays on its current model.",
   },
   {
     q: "Do I need new instrumentation?",
-    a: `No. rightmodeler reads the traces you already emit across ${TRACE_SOURCES.length} formats, folds them into one per-step schema, and runs offline. Nothing sits in your request path.`,
+    a: `Not to validate a step. rightmodeler reads the traces you already emit across ${TRACE_SOURCES.length} formats, folds them into one per-step schema, and runs offline. Nothing sits in your request path. Only end-to-end confirmation, for a step that feeds later model steps, needs your app to tag each model call with its step.`,
   },
 ];
 
@@ -140,31 +144,26 @@ function ConfigMockup() {
       >
         <div className="space-y-1 font-mono text-[12px]">
           <Ln>
-            <C>{"// rightmodeler.config.ts"}</C>
+            <C>{`// policy.json · ${ILLUSTRATIVE_SCORECARD.label}`}</C>
           </Ln>
           <div aria-hidden className="h-3" />
-          <Ln>{"export default audit({"}</Ln>
+          <Ln>{"{"}</Ln>
           <Ln>
-            {"  traces: "}
-            <V>{'"./traces/*.jsonl"'}</V>
-            {","}
-          </Ln>
-          <Ln>
-            {"  reference: "}
-            <V>{'"shipped"'}</V>
-            {","}
-          </Ln>
-          <Ln>
-            {"  floor: "}
+            {'  "qualityFloor": '}
             <V>{ILLUSTRATIVE_SCORECARD.floor}</V>
             {","}
           </Ln>
           <Ln>
-            {"  judge: "}
-            <V>{'"cross-family"'}</V>
+            {'  "shortlistTop": '}
+            <V>3</V>
             {","}
           </Ln>
-          <Ln>{"});"}</Ln>
+          <Ln>
+            {'  "denyModels": ['}
+            <V>{'"llama-4-nano"'}</V>
+            {"]"}
+          </Ln>
+          <Ln>{"}"}</Ln>
         </div>
       </div>
     </div>
@@ -189,7 +188,7 @@ export default function ReduceLlmCostsPage() {
       <PageHero
         eyebrow="Use case · Reduce LLM costs"
         title="Cut your agent's model bill without guessing."
-        lede="Measure cheaper candidates against outputs you accepted, then review the evidence, sample size, and abstentions before you change a model."
+        lede="Frontier everywhere costs too much: the most expensive model on every step feels safe until the bill compounds, call by call, on steps nobody has measured. rightmodeler validates cheaper models on your production traces and opens a draft pull request only where a swap clears every gate."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
@@ -261,12 +260,13 @@ export default function ReduceLlmCostsPage() {
                 />
                 <div className="p-6 sm:p-7">
                   <h2 className="font-sans text-heading-sm text-midnight-ink">
-                    Run the audit today
+                    Run a validation today.
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
-                    One command runs the audit, nothing to install. The report
-                    runs on the traces you already have and hands you
-                    recommendations with their evidence.
+                    One command, nothing to install, on the traces you already
+                    have. Validation is what makes a saving worth taking:
+                    rightmodeler abstains where the evidence is thin and opens a
+                    draft pull request only for a swap that clears every gate.
                   </p>
                   <div className="mt-5">
                     <GithubButton />
@@ -282,14 +282,17 @@ export default function ReduceLlmCostsPage() {
               <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-ash-border bg-warm-sand">
                 <div className="p-6 sm:p-7">
                   <h2 className="font-sans text-heading-sm text-midnight-ink">
-                    Then make it continuous
+                    Then put it on a schedule.
                   </h2>
                   <p className="mt-2 max-w-md text-body text-driftwood">
-                    Self-host the agent today and it rechecks prices on a
-                    schedule, then opens evidence-backed model-change pull
-                    requests once you give the word; the hosted version has a
-                    waitlist. Crucible, which will keep every layer watched, is
-                    in development.
+                    Run the same validation weekly in CI with the GitHub Actions
+                    recipe in the docs, or self-host the agent: it checks the
+                    catalog every week for cheaper new or repriced models, and
+                    on your word it replays a new candidate and opens each swap
+                    that clears every gate as a draft pull request. The hosted
+                    agent has a waitlist. Crucible, in development, will add the
+                    instruments: cost per layer, speed per step and failures as
+                    they happen.
                   </p>
                   <div className="mt-5 flex flex-wrap gap-2.5">
                     <Link href="/agent" className={pillPrimary}>

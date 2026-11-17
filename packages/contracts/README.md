@@ -1,7 +1,7 @@
 # contracts
 
-JSON Schema contracts shared between the TypeScript workspace and the Python
-pipeline.
+JSON Schema contracts that the TypeScript harness validates its artifacts
+against (see `harness/packages/rightmodeler/src/contract-validation.ts`).
 
 Schema versions are monotonically increasing decimal strings (`"1"`, `"2"`,
 and so on). Increment the version for any change that can alter validation or

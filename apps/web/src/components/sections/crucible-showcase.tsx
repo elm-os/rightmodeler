@@ -23,36 +23,38 @@ type TabDef = {
 
 const COST: Feature = {
   title: "Cost, by layer",
-  caption: "One invoice becomes a map: spend per agent, per step, per model.",
+  caption:
+    "One invoice will become a map: spend per agent, per step, per model.",
   img: "/crucible/cost.jpg",
 };
 const SPEED: Feature = {
   title: "Speed, by step",
   caption:
-    "p50 and p95 per step, so the slow layer stops hiding in an aggregate.",
+    "p50 and p95 per step, so the slow layer will stop hiding in an aggregate.",
   img: "/crucible/speed.jpg",
 };
 const FAILURES: Feature = {
   title: "Failures, as they happen",
   caption:
-    "Failed tools, silent retries, and quality regressions surface in a passive feed.",
+    "Failed tools, silent retries, and quality regressions will surface in a passive feed.",
   img: "/crucible/failures.jpg",
 };
 const RIGHTSIZED: Feature = {
   title: "Continuously right-sized",
   caption:
-    "Every new trace is audited as it arrives, and each audit reports its own evidence, sample size, and abstentions.",
+    "Will validate cheaper swaps as traces arrive, on top of the agent's schedule, with evidence and abstentions.",
   img: "/crucible/rightsized.jpg",
 };
 const MCP: Feature = {
   title: "Connected over MCP",
   caption:
-    "Reads the traces you already have. No new SDK, no re-instrumentation.",
+    "Will read the traces you already have. No new SDK, no re-instrumentation.",
   img: "/crucible/mcp.jpg",
 };
 const KEYS: Feature = {
-  title: "Your keys, your routes",
-  caption: "BYO keys, or route through OpenRouter, the AI Gateway, or LiteLLM.",
+  title: "Your keys, your gateway",
+  caption:
+    "Will replay on your keys, direct or via OpenRouter, the Vercel AI Gateway, or LiteLLM.",
   img: "/crucible/keys.jpg",
 };
 
@@ -104,8 +106,8 @@ function FeatureCard({ feature, tall }: { feature: Feature; tall: boolean }) {
         fill
         sizes={
           tall
-            ? "(min-width: 1024px) 480px, (min-width: 768px) 42vw, 92vw"
-            : "(min-width: 1024px) 320px, (min-width: 768px) 28vw, 92vw"
+            ? "(min-width: 1024px) 480px, 92vw"
+            : "(min-width: 1024px) 320px, 92vw"
         }
         className="object-cover"
       />
@@ -249,7 +251,7 @@ export function CrucibleShowcase() {
             initial="enter"
             animate="visible"
             exit="exit"
-            className="relative z-10 flex flex-col gap-4 sm:gap-5 md:grid md:grid-cols-[1fr_1.5fr_1fr] md:items-start"
+            className="relative z-10 flex flex-col gap-4 sm:gap-5 lg:grid lg:grid-cols-[1fr_1.5fr_1fr] lg:items-start"
           >
             {tab.columns.map((slots, col) => (
               <div key={col} className="flex flex-col gap-4 sm:gap-5">
@@ -266,7 +268,7 @@ export function CrucibleShowcase() {
                       key={`tile-${i}`}
                       variants={itemVariants}
                       aria-hidden
-                      className={`hidden aspect-square w-1/2 rounded-2xl border border-ash-border bg-warm-sand md:block ${
+                      className={`hidden aspect-square w-1/2 rounded-2xl border border-ash-border bg-warm-sand lg:block ${
                         slot.align === "end" ? "self-end" : "self-start"
                       }`}
                     />
