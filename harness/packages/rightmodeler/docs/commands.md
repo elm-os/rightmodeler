@@ -9,7 +9,7 @@ See [Getting started](getting-started.md) for the shortest complete workflow and
 ```text
 Usage: rightmodeler [options] [command]
 
-Find and prove safe model substitutions.
+Validate swaps to cheaper models on your own traces.
 
 Options:
   -V, --version        output the version number
@@ -33,7 +33,7 @@ Commands:
   corpus [options]     build or import the replay corpus
   export [options]     export trials and verdicts to an evaluation provider
   audit                manage the reference audit
-  apply [options]      open a draft pull request for proven model swaps
+  apply [options]      open a draft pull request for validated model swaps
   rollback [options]   open a draft pull request restoring a prior model swap
   drift [options]      detect drift against the active replay corpus
   watch [options]      reconcile one open model-swap pull request
@@ -648,7 +648,7 @@ Options:
 ```text
 Usage: rightmodeler apply [options]
 
-open a draft pull request for proven model swaps
+open a draft pull request for validated model swaps
 
 Options:
   --owner <owner>            GitHub repository owner
