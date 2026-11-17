@@ -2,6 +2,9 @@ name: ci
 
 on:
   push:
+    # Branches only, so a tag push does not start this workflow. release.yml builds and checks
+    # the CLI on every v* tag, and the tagged commit has normally passed this workflow on main.
+    branches: ["**"]
   pull_request:
 
 permissions:
@@ -73,15 +76,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up pnpm
-        # Same as the ci job: the version comes from the packageManager field only.
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
       - name: Set up Node.js
+        # No pnpm store cache here: on Windows, restoring it takes longer than the install it saves.
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          cache: pnpm
+
+      - name: Set up pnpm
+        # The version comes from the packageManager field only, as in the ci job. npm installs that
+        # exact version. pnpm/action-setup installs its own bootstrap pnpm first and then
+        # self-updates to this version, which takes about 20s on Windows.
+        run: npm install --global --no-audit --no-fund (node -p "require('./package.json').packageManager")
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -89,9 +94,16 @@ jobs:
       - name: Check
         # pnpm runs package scripts through cmd.exe. Drop Git's Unix tools from PATH so a script
         # that needs rm or bash fails here as it would on a stock Windows machine.
+        # TEMP defaults to C:, where the tests' temp files are much slower to create than on D:,
+        # the drive that holds the workspace and runner.temp. TEMP gets its own folder there, apart
+        # from the runner's own files. promptfoo-cross-drive.test.ts points TEMP back at C: to keep
+        # covering a workspace and a TEMP on different drives.
         shell: pwsh
         run: |
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Git\\(usr\\|mingw64\\)?bin\\?$' }) -join ';'
+          $env:TEMP = Join-Path $env:RUNNER_TEMP 't'
+          $env:TMP = $env:TEMP
+          New-Item -ItemType Directory -Force $env:TEMP | Out-Null
           pnpm check
 
       - name: Refuse a CLI bundle that differs from the Windows build
