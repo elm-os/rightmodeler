@@ -9,7 +9,7 @@
   "title": "rightmodeler vs Mirrors: the context vs the model",
   "description": "Mirrors learns from your agent's past sessions and routes the right context at runtime. rightmodeler validates cheaper models per step. Two levers that stack.",
   "h1": "rightmodeler vs Mirrors",
-  "lede": "Mirrors improves what your agent sees: it learns from past sessions and routes the right context into a conversation when it matters. rightmodeler leaves the context alone and changes one thing, the model each step calls, as a draft pull request you review.",
+  "lede": "Mirrors improves what your agent sees: it learns from past sessions and routes the right context into a conversation when it matters. rightmodeler leaves the context alone and changes one thing, the model each step calls: when a swap clears every gate, it opens a draft pull request you review.",
   "integrationSlug": "",
   "related": ["codag", "langsmith", "braintrust"],
   "cta": "github",

@@ -73,7 +73,7 @@ export default function TermsPage() {
             Savings percentages, quality scores, latency deltas, and similar
             numbers shown on this site are illustrative examples, labeled as
             such. The exceptions are the customer results in our case studies,
-            which come from those customers' engagements and are labeled
+            which come from those customers&rsquo; engagements and are labeled
             measured, modeled or projected. None of them is a measurement of
             your workload or a promise of results. What you can actually save is
             exactly what the tool exists to measure, on your own traces.

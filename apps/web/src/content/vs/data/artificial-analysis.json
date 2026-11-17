@@ -9,7 +9,7 @@
   "title": "rightmodeler vs Artificial Analysis: benchmark vs PR",
   "description": "Artificial Analysis's Optima ranks models on a benchmark built from your own tasks. rightmodeler tests cheaper models at each call site and opens a draft PR.",
   "h1": "rightmodeler vs Artificial Analysis",
-  "lede": "Optima, from Artificial Analysis, turns your tasks, files, or traces into a custom benchmark and ranks models on it by score, cost per task, and time per task. rightmodeler starts from the call sites in your code: it replays the recorded steps through cheaper models and proposes a swap as a draft pull request you review.",
+  "lede": "Optima, from Artificial Analysis, turns your tasks, files, or traces into a custom benchmark and ranks models on it by score, cost per task, and time per task. rightmodeler starts from the call sites in your code: it replays the recorded steps through cheaper models and, when a swap clears every gate, opens a draft pull request you review.",
   "integrationSlug": "",
   "related": ["open-frontier", "vals-ai", "braintrust"],
   "cta": "github",
