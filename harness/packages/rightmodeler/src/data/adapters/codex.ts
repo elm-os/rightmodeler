@@ -91,7 +91,8 @@ function textMessage(role: string, content: unknown[]) {
   };
 }
 
-function adaptWithReport(records: unknown): TraceAdaptResult {
+// Records are numbered from first, the rollout's place in a trace directory read as one stream.
+function adaptWithReport(records: unknown, first = 0): TraceAdaptResult {
   const source = recordList(records, format, "Codex rollout");
   const droppedRecords: DroppedTraceRecord[] = [];
   const turns = new Map<string, TurnState>();
@@ -100,7 +101,8 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
   let activeTurn: TurnState | undefined;
   let cumulativeUsage: Usage | undefined;
 
-  for (const [recordIndex, candidate] of source.entries()) {
+  for (const [index, candidate] of source.entries()) {
+    const recordIndex = first + index;
     if (!isRecord(candidate) || !isRecord(candidate.payload)) {
       droppedRecords.push({
         recordIndex,
@@ -313,6 +315,28 @@ function adaptWithReport(records: unknown): TraceAdaptResult {
   return { runs, droppedRecords };
 }
 
+// One rollout file is one thread. Codex copies a parent thread's session_meta and token counts,
+// and can copy its turn contexts, into a forked or child thread's own file, so a session_meta
+// inside a file cannot start a new run: each file is adapted on its own. A session found in more
+// than one file is read from the first: a .jsonl sorts before its .jsonl.zst copy, and Codex
+// reads the .jsonl when both exist.
+function adaptFiles(files: readonly unknown[][]): TraceAdaptResult {
+  const runs: NormalizedRun[] = [];
+  const droppedRecords: DroppedTraceRecord[] = [];
+  let first = 0;
+  for (const records of files) {
+    const result = adaptWithReport(records, first);
+    first += records.length;
+    runs.push(
+      ...result.runs.filter(
+        ({ traceId }) => !runs.some((run) => run.traceId === traceId),
+      ),
+    );
+    droppedRecords.push(...result.droppedRecords);
+  }
+  return { runs, droppedRecords };
+}
+
 export const codexAdapter: NamedTraceAdapter = {
   name: format,
   detect: confidence,
@@ -324,4 +348,5 @@ export const codexAdapter: NamedTraceAdapter = {
     return strictRuns(format, result);
   },
   adaptWithReport,
+  adaptFiles,
 };
