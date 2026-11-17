@@ -15,7 +15,7 @@ import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { zstdCompressSync } from "node:zlib";
 
-import { FsStore } from "@rightmodeler/core";
+import { FsStore, setupStateKey } from "@rightmodeler/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -25,6 +25,8 @@ import {
   pipelineArgv,
   type PipelineCommandOptions,
 } from "./cli.js";
+import { codexAdapter, parseTraceRecords } from "./data/adapters.js";
+import type { NormalizedRun } from "./data/normalized-run.js";
 import { saveModelRoute, type ModelRoute } from "./pipeline.js";
 import type { CliIo } from "./protocol.js";
 import { codexRollout } from "./test-utils/codex-rollout.js";
@@ -36,6 +38,48 @@ const temporaryDirectories: string[] = [];
 const validTracePath = fileURLToPath(
   new URL("../../../fixtures/traces/otel-genai.json", import.meta.url),
 );
+// One turn whose running token total stays below the totals in codex.jsonl, so a turn that took
+// codex.jsonl's last total as its baseline would read as zero usage.
+const secondCodexSession = [
+  {
+    type: "session_meta",
+    payload: {
+      id: "cx-session-2",
+      cwd: "/unused",
+      cli_version: "0.50.0",
+      model_provider: "openai",
+    },
+  },
+  {
+    type: "turn_context",
+    payload: { turn_id: "cx-turn-3", model: "gpt-5.1-codex" },
+  },
+  {
+    type: "response_item",
+    payload: {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Is order ORD-909 ready?" }],
+    },
+  },
+  {
+    type: "response_item",
+    payload: {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Order ORD-909 is ready." }],
+    },
+  },
+  {
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: { total_token_usage: { input_tokens: 1200, output_tokens: 80 } },
+    },
+  },
+]
+  .map((record) => JSON.stringify(record))
+  .join("\n");
 const emptyCodexSession = [
   JSON.stringify({
     type: "session_meta",
@@ -978,6 +1022,131 @@ describe("CLI needs-input errors", () => {
   });
 });
 
+describe("CLI Codex trace directories", () => {
+  async function ingestDirectory(
+    { repo, homeDir, root }: { repo: string; homeDir: string; root: string },
+    files: Record<string, string | Buffer>,
+  ) {
+    const traces = join(root, "codex-traces");
+    await mkdir(traces);
+    await Promise.all(
+      Object.entries(files).map(([name, content]) =>
+        writeFile(join(traces, name), content),
+      ),
+    );
+    const captured = captureIo();
+    const code = await executeCli(
+      [
+        "--output",
+        "json",
+        "init",
+        "--yes",
+        "--through",
+        "ingest",
+        "--traces",
+        traces,
+        "--repo",
+        repo,
+      ],
+      captured.io,
+      runtime(homeDir, "", undefined).runtime,
+    );
+    return {
+      code,
+      stderr: captured.stderr(),
+      runs: code === 0 ? await ingestedRuns(repo) : [],
+    };
+  }
+
+  it("reads each Codex rollout in a trace directory as its own run", async () => {
+    const project = await fixture();
+    const result = await ingestDirectory(project, {
+      "a.jsonl": await codexRollout(resolve(project.repo)),
+      "b.jsonl": secondCodexSession,
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(
+      result.runs.map(({ traceId, steps }) => ({
+        traceId,
+        usage: steps.map(({ usage }) => usage),
+      })),
+    ).toEqual([
+      {
+        traceId: "cx-session-1",
+        usage: [
+          { inputTokens: 19256, outputTokens: 527 },
+          { inputTokens: 21954, outputTokens: 563 },
+        ],
+      },
+      {
+        traceId: "cx-session-2",
+        usage: [{ inputTokens: 1200, outputTokens: 80 }],
+      },
+    ]);
+  });
+
+  it("reads a plain and a compressed Codex rollout in one directory as two runs", async () => {
+    const project = await fixture();
+    const result = await ingestDirectory(project, {
+      "a.jsonl": await codexRollout(resolve(project.repo)),
+      "b.jsonl.zst": zstdCompressSync(secondCodexSession),
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.runs.map(({ traceId }) => traceId)).toEqual([
+      "cx-session-1",
+      "cx-session-2",
+    ]);
+  });
+
+  it("skips a Codex rollout with no model calls in a trace directory", async () => {
+    const project = await fixture();
+    const result = await ingestDirectory(project, {
+      "a.jsonl": emptyCodexSession,
+      "b.jsonl": await codexRollout(resolve(project.repo)),
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.runs.map(({ traceId }) => traceId)).toEqual(["cx-session-1"]);
+  });
+
+  it("reads a rollout saved as both .jsonl and .jsonl.zst like the single file", async () => {
+    const project = await fixture();
+    const rollout = await codexRollout(resolve(project.repo));
+    const result = await ingestDirectory(project, {
+      "rollout.jsonl": rollout,
+      "rollout.jsonl.zst": zstdCompressSync(rollout),
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.runs).toEqual(
+      codexAdapter.adaptWithReport(parseTraceRecords(rollout)).runs,
+    );
+  });
+
+  it("numbers a dropped record by its place across the directory's files", async () => {
+    const project = await fixture();
+    const result = await ingestDirectory(project, {
+      "a.jsonl": await codexRollout(resolve(project.repo)),
+      "b.jsonl": [
+        secondCodexSession,
+        JSON.stringify({
+          type: "turn_context",
+          payload: { turn_id: "cx-turn-4" },
+        }),
+      ].join("\n"),
+    });
+
+    expect(result.code).toBe(10);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      code: "runtime_error",
+      message:
+        "codex dropped 1 unmappable record(s): record 25: Codex record 25 model must be a non-empty string",
+    });
+  });
+});
+
 describe("CLI model routes", () => {
   it("refuses route combinations that cannot run, and accepts --evaluator with --judge-route", async () => {
     const { repo, homeDir, root } = await fixture();
@@ -1299,6 +1468,20 @@ async function savedRoute(repo: string): Promise<string | null> {
     modelRouteKey,
   );
   return entry === null ? null : Buffer.from(entry.body).toString("utf8");
+}
+
+async function ingestedRuns(repo: string): Promise<NormalizedRun[]> {
+  const store = new FsStore(join(repo, ".rightmodeler"));
+  const text = async (key: string) =>
+    Buffer.from((await store.get(key))!.body).toString("utf8");
+  const state = JSON.parse(await text(setupStateKey("project"))) as {
+    stages: { ingest: { outputKey: string } };
+  };
+  return (
+    JSON.parse(await text(state.stages.ingest.outputKey)) as {
+      runs: NormalizedRun[];
+    }
+  ).runs;
 }
 
 async function storeText(repo: string): Promise<string> {

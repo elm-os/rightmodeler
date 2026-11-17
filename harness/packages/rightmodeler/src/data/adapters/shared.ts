@@ -47,6 +47,9 @@ export interface NamedTraceAdapter {
   detect(sample: unknown): number;
   adapt(records: unknown): NormalizedRun[];
   adaptWithReport(records: unknown): TraceAdaptResult;
+  // Adapts each file of a trace directory on its own, for a format whose records do not say which
+  // file's run they belong to. Without it, a directory's files are adapted as one stream.
+  adaptFiles?(files: readonly unknown[][]): TraceAdaptResult;
 }
 
 export interface DetectionCandidate {

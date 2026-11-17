@@ -2879,9 +2879,9 @@ async function executeIngest(
   const names = [...new Set(detected.map(({ name }) => name))];
   if (names.length > 1) throw mixedTraceFormats(names);
   const adapter = detected[0]!;
-  const result = adapter.adaptWithReport(
-    texts.flatMap((text) => parseTraceRecords(text)),
-  );
+  const files = texts.map((text) => parseTraceRecords(text));
+  const result =
+    adapter.adaptFiles?.(files) ?? adapter.adaptWithReport(files.flat());
   const runs = strictRuns(adapter.name, result);
   const excluded = excludedStepsWarning(result);
   if (excluded !== undefined) {

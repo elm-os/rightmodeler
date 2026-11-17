@@ -35777,7 +35777,7 @@ function textMessage(role, content) {
     )
   };
 }
-function adaptWithReport4(records) {
+function adaptWithReport4(records, first = 0) {
   const source = recordList(records, format5, "Codex rollout");
   const droppedRecords = [];
   const turns = /* @__PURE__ */ new Map();
@@ -35785,7 +35785,8 @@ function adaptWithReport4(records) {
   let traceId;
   let activeTurn;
   let cumulativeUsage;
-  for (const [recordIndex, candidate] of source.entries()) {
+  for (const [index, candidate] of source.entries()) {
+    const recordIndex = first + index;
     if (!isRecord(candidate) || !isRecord(candidate.payload)) {
       droppedRecords.push({
         recordIndex,
@@ -35968,6 +35969,22 @@ function adaptWithReport4(records) {
   }
   return { runs, droppedRecords };
 }
+function adaptFiles(files) {
+  const runs = [];
+  const droppedRecords = [];
+  let first = 0;
+  for (const records of files) {
+    const result2 = adaptWithReport4(records, first);
+    first += records.length;
+    runs.push(
+      ...result2.runs.filter(
+        ({ traceId }) => !runs.some((run) => run.traceId === traceId)
+      )
+    );
+    droppedRecords.push(...result2.droppedRecords);
+  }
+  return { runs, droppedRecords };
+}
 var codexAdapter = {
   name: format5,
   detect: confidence4,
@@ -35978,7 +35995,8 @@ var codexAdapter = {
     }
     return strictRuns(format5, result2);
   },
-  adaptWithReport: adaptWithReport4
+  adaptWithReport: adaptWithReport4,
+  adaptFiles
 };
 
 // src/data/adapters/helicone.ts
@@ -47850,9 +47868,8 @@ async function executeIngest(context2, inputDigestValue) {
   const names = [...new Set(detected.map(({ name }) => name))];
   if (names.length > 1) throw mixedTraceFormats(names);
   const adapter = detected[0];
-  const result2 = adapter.adaptWithReport(
-    texts.flatMap((text) => parseTraceRecords(text))
-  );
+  const files = texts.map((text) => parseTraceRecords(text));
+  const result2 = adapter.adaptFiles?.(files) ?? adapter.adaptWithReport(files.flat());
   const runs = strictRuns(adapter.name, result2);
   const excluded = excludedStepsWarning(result2);
   if (excluded !== void 0) {
