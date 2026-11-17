@@ -476,9 +476,12 @@ async function realModeBContext(
       ),
       modeB: {
         input: {
-          executor: createDockerExecutor({
-            maxBytesPerNamespace: 16 * 1024 * 1024,
-          }),
+          // No orphan sweep: at this short timeout it would reap the live containers of the CLI
+          // e2e, which turbo runs alongside this suite.
+          executor: {
+            ...createDockerExecutor({ maxBytesPerNamespace: 16 * 1024 * 1024 }),
+            reapOrphans: undefined,
+          },
           egress: {
             providerId: "stub-provider",
             providerBaseUrl: `http://127.0.0.1:${stub.port}`,

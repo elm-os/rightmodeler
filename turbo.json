@@ -26,7 +26,7 @@
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/harness/fixtures/**"]
     },
     "@rightmodeler/cli#check": {
-      "dependsOn": ["build", "^build", "^check"],
+      "dependsOn": ["build", "^build", "@rightmodeler/executor#check"],
       "env": ["RIGHTMODELER_SKIP_DOCKER"],
       "inputs": [
         "$TURBO_DEFAULT$",

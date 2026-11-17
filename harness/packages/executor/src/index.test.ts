@@ -733,6 +733,8 @@ while True:
         await docker(["inspect", "--format", "{{.State.Status}}", unlabeled]),
       ).toBe("running");
 
+      // This reaps every executor container on the host, so turbo.json runs this suite before
+      // the replay and CLI suites.
       await executor.reapOrphans({ olderThanMs: 0 });
 
       await expect(docker(["inspect", orphan])).rejects.toThrow(
