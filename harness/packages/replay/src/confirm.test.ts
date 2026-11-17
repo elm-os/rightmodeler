@@ -624,7 +624,7 @@ describe.skipIf(skipDocker)("confirmSwapSet", () => {
     expect(second).toEqual(first);
     expect(await cascadeFindings(context.store)).toHaveLength(1);
     expect(runner.calls()).toBe(first.runSetsUsed);
-  }, 15_000);
+  });
 
   it("uses the release policy quality floor for run-set outcomes", async () => {
     const runner = fakeRunner(() => false);
