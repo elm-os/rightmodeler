@@ -35,11 +35,6 @@
         "$TURBO_ROOT$/skills/rightmodeler/**"
       ]
     },
-    "@rightmodeler/agent#check": {
-      "dependsOn": ["build", "^build"],
-      "env": ["RIGHTMODELER_SKIP_DOCKER"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/harness/fixtures/**"]
-    },
     "check-types": {
       "dependsOn": ["^build"]
     },
