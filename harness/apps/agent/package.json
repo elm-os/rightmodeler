@@ -5,7 +5,7 @@
   "description": "The rightmodeler maintenance loop on a schedule: on your word it validates cheaper model swaps and opens a draft pull request for each one that clears every gate. It never merges.",
   "scripts": {
     "build": "eve build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node node_modules/@typescript/native/bin/tsc --noEmit",
     "info": "eve info",
     "eval:list": "eve eval --list",
     "eval": "node scripts/eval.mjs",
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
+    "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "^5.9.3"
   }
 }
