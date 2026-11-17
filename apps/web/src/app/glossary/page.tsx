@@ -86,7 +86,7 @@ const TERMS: Term[] = [
   {
     term: "Production traces",
     slug: "production-traces",
-    def: "The model calls your production app already recorded, through a tracing platform, OpenTelemetry, or gateway logs. rightmodeler validates on them offline and never on live traffic. Claude Code sessions on disk work too; Codex sessions are read, but a Codex turn with a user message is left out of the replay sample today. Both are traces you already have, not production traces.",
+    def: "The model calls your production app already recorded, through a tracing platform, OpenTelemetry, or gateway logs. rightmodeler validates on them offline and never on live traffic. Claude Code sessions on disk work too; Codex sessions are read, but only a Codex turn that called no tools can enter the replay sample today. Both are traces you already have, not production traces.",
   },
   {
     term: "Reference evidence",

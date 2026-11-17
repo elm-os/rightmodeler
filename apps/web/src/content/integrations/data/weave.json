@@ -5,10 +5,10 @@
   "logo": "/integrations/logos/weave.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
-  "title": "W&B Weave integration: replay calls on cheaper models",
-  "description": "Export W&B Weave calls: rightmodeler replays recorded calls against cheaper candidates and scores each replay against the output you already shipped.",
+  "title": "W&B Weave integration: replay calls on cheaper or newer models",
+  "description": "Export W&B Weave calls: rightmodeler replays recorded calls against cheaper or newer candidates and scores each replay against the output you already shipped.",
   "h1": "rightmodeler + W&B Weave",
-  "lede": "Weave already records every op call your agent made, with its inputs, its output, and its token summary. rightmodeler reads those calls with a dedicated adapter, replays the recorded model calls against cheaper candidates, and reports the evidence per step family.",
+  "lede": "Weave already records every op call your agent made, with its inputs, its output, and its token summary. rightmodeler reads those calls with a dedicated adapter, replays the recorded model calls against cheaper or newer candidates, and reports the evidence per step family.",
   "tldr": "rightmodeler has a dedicated Weave adapter. It recognizes call rows by their id, trace_id, op_name, and started_at keys, takes the model and messages from inputs, reads the output field as the answer you shipped, and pulls token counts out of the per-model usage map in summary. Calls sharing a trace_id become one trajectory, so a multi-step op chain stays a single unit in the statistics.",
   "steps": [
     {
@@ -19,12 +19,12 @@
     {
       "label": "02 · Ingest",
       "title": "Autodetected, then mapped field by field",
-      "body": "The adapter recognizes the format from id, trace_id, op_name, started_at, and an inputs object. It reads the model from inputs.model, takes messages from inputs.messages, appends inputs.tools whenever that list is present, and reads token counts from summary.usage keyed by that model. display_name, or op_name when there is none, names the step family."
+      "body": "The adapter recognizes the format from id, trace_id, op_name, started_at, and an inputs object. It reads the model from inputs.model, takes messages from inputs.messages, appends inputs.tools whenever that list is non-empty, and reads token counts from summary.usage keyed by that model. display_name, or op_name when there is none, names the step family."
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Cheaper candidates, scored against your output",
-      "body": "Each recorded call with a plain-text conversation and no inputs.tools list is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, scored against your output",
+      "body": "Each recorded call with a plain-text conversation and an empty or missing inputs.tools list is replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
@@ -101,7 +101,7 @@
   "limits": [
     "It reads exported calls on disk, JSON or JSONL. It does not connect to your Weave project, poll its API, or watch new calls arrive.",
     "Only calls that recorded a model and messages under inputs can be replayed. Ops that wrap non-model work are read and then dropped with a recorded reason rather than counted as steps.",
-    "A call with an inputs.tools list, even an empty one, or whose recorded conversation carries tool calls or non-text parts, is read but not replayed yet: replay sends recorded text conversations, so those cases are left out of the replay sample, and the recorded_messages_not_replayable warning says how many.",
+    "A call with a non-empty inputs.tools list, or whose recorded conversation carries tool calls or non-text parts, is read but not replayed yet: replay sends recorded text conversations, so those cases are left out of the replay sample, and the recorded_messages_not_replayable warning says how many.",
     "Token usage comes from the summary.usage entry for the call's own model. Calls whose summary carries no usage for that model fall back to the first usage entry present, and a call with none records zero.",
     "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
     "Steps whose output can feed later model-authored steps are confirmed by running your pipeline in a container with the candidate swapped in. That needs a --modeb-config file naming the image and the step map; without it the recommendation is reported as unconfirmed.",
@@ -114,7 +114,7 @@
     },
     {
       "q": "Does rightmodeler replace my Weave evaluations?",
-      "a": "No. Weave evaluations measure whether your agent clears a bar you defined. rightmodeler measures whether a cheaper model matches the output you already shipped, step family by step family. A proposed swap is exactly the change worth running your Weave evaluations against before it ships."
+      "a": "No. Weave evaluations measure whether your agent clears a bar you defined. rightmodeler measures whether a cheaper or newer model matches the output you already shipped, step family by step family. A proposed swap is exactly the change worth running your Weave evaluations against before it ships."
     },
     {
       "q": "Do I need a Weights & Biases account to run rightmodeler?",
@@ -129,7 +129,7 @@
       "a": "Only during the run: recorded inputs go to candidate models, and recorded responses go to the judge, through the endpoint you configured, under your own key. An external evaluator, if you name one, receives what it scores. There is no rightmodeler server and no account; the export file and the report stay on your disk."
     },
     {
-      "q": "Will it always find a cheaper model?",
+      "q": "Will it always find a cheaper or newer model?",
       "a": "No, and that is the point. A family abstains when the evidence is thin or the excluded fraction runs over the ceiling, and nothing is proposed unless a candidate clears the quality floor on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],

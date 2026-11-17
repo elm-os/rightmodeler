@@ -6,10 +6,10 @@
   "category": "trace-source",
   "categoryLabel": "Trace source · replay route",
   "title": "Codex CLI integration: read your rollouts as traces",
-  "description": "Run rightmodeler on the Codex rollouts already on disk: it reads each session as a trace. Replaying Codex turns on cheaper models is not supported yet.",
+  "description": "Run rightmodeler on the Codex rollouts on disk: it reads each session as a trace. Only turns that called no tools can be replayed on cheaper or newer models.",
   "h1": "rightmodeler + Codex CLI",
-  "lede": "Codex CLI already writes every session to disk as a rollout log. rightmodeler reads those files where they sit and folds each one into turns with their own model and token usage. Replay cannot send Codex's recorded user messages yet, so today those turns are read but not replayed.",
-  "tldr": "rightmodeler ingests Codex CLI rollout logs straight from ~/.codex/sessions with a dedicated adapter, no export step, because the JSONL files are already on your machine. The adapter keys on the session_meta record, takes the model from each turn_context, gathers that turn's user messages and assistant output from the response_item records, and derives per-turn usage from the token_count events. Codex records those user messages as input_text blocks, which replay cannot send yet, so today each such turn is read but left out of the replay sample.",
+  "lede": "Codex CLI already writes every session to disk as a rollout log. rightmodeler reads those files where they sit and folds each one into turns with their own model and token usage. A turn that called no tools can enter the replay sample, sent with only that turn's user messages; a turn that called tools, as most coding turns do, is read but left out.",
+  "tldr": "rightmodeler ingests Codex CLI rollout logs straight from ~/.codex/sessions with a dedicated adapter, no export step, because the JSONL files are already on your machine. The adapter keys on the session_meta record, takes the model from each turn_context, gathers that turn's user messages and assistant output from the response_item records, and derives per-turn usage from the token_count events. A turn that called no tools can enter the replay sample, sent with only that turn's user messages and judged against the answer Codex recorded; a turn that called any tool, as most coding turns do, is left out with a tool-call reason.",
   "steps": [
     {
       "label": "01 · Locate",
@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Read, but not replayed yet",
-      "body": "Replay cannot send a Codex turn with a user message yet, so those turns are left out of the replay sample. Cases that replay can send go to cheaper candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route codex-login, the codex CLI you are signed in to, on your ChatGPT plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, choosing a judge from a vendor that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Turns without tool calls, judged against what you accepted",
+      "body": "A turn that called no tools can enter the replay sample. Replay sends only that turn's user messages: no developer messages, no session base_instructions, and no earlier turns, so a turn that depends on earlier context is judged without it. A turn that called any tool, as most coding turns do, is left out of the replay sample with a tool-call reason. Cases that replay can send go to cheaper or newer candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route codex-login, the codex CLI you are signed in to, on your ChatGPT plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, choosing a judge from a vendor that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
@@ -108,7 +108,9 @@
   ],
   "limits": [
     "It reads rollout files from disk. It does not hook into Codex, watch live sessions, or change your Codex configuration; acting on the report stays your move.",
-    "Codex records each user turn as input_text blocks, which replay cannot send yet, so today a Codex turn with a user message is read but left out of the replay sample with a recorded_messages_not_replayable warning.",
+    "A replayed Codex turn sends only that turn's user messages. Developer messages, the session's base_instructions, and earlier turns are not sent, so a turn that depends on earlier context is judged without it.",
+    "A turn that called any tool, as most coding turns do, is read but not replayed: replay does not send tool calls yet, so those turns are left out of the replay sample with a tool-call reason, and the recorded_messages_not_replayable warning says how many.",
+    "A user message that carries anything other than text, such as an image, is kept as recorded, so its turn is left out of the replay sample even when it called no tools.",
     "Replay needs plain-text model call sites in the repository it scans; session files are read as traces, and rightmodeler is built for the model calls your own code makes.",
     "A turn needs a turn_context with a model, and a response item needs a turn to attach to. Items that arrive before any turn context, or with an unrecognized payload type, are dropped with a recorded reason rather than guessed at.",
     "Turns that produced no assistant output are left out entirely, so a session of interrupted turns can yield fewer steps than it appears to contain.",
@@ -141,7 +143,7 @@
     },
     {
       "q": "What about turns where Codex ran commands or edited files?",
-      "a": "Those tool calls and their outputs are read as part of the turn's recorded output rather than stripped away. Replay cannot send a Codex turn with a user message yet, so today those turns are left out of the replay sample and nothing scores them."
+      "a": "Those tool calls and their outputs are read as part of the turn's recorded output rather than stripped away. Replay does not send tool calls yet, so a turn that called any tool, as most coding turns do, is left out of the replay sample with a tool-call reason, and nothing scores it. Only turns that called no tools can be replayed."
     }
   ],
   "related": ["claude-code", "openai-sdk", "openrouter"],

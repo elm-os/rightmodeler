@@ -5,10 +5,10 @@
   "logo": "/integrations/logos/langfuse.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
-  "title": "Langfuse integration: measure cheaper models on real traces",
-  "description": "Export Langfuse observations to disk and rightmodeler replays recorded steps on cheaper models, judging every candidate against the output you already shipped.",
+  "title": "Langfuse integration: cheaper or newer models on real traces",
+  "description": "Export Langfuse observations to disk and rightmodeler replays recorded steps on cheaper or newer models, judging every candidate against the output you shipped.",
   "h1": "rightmodeler + Langfuse",
-  "lede": "Langfuse already records what every generation cost and produced. rightmodeler replays recorded generations through cheaper models and reports agreement, evidence, sample size, and abstentions step by step, scored by Langfuse itself when you point it there.",
+  "lede": "Langfuse already records what every generation cost and produced. rightmodeler replays recorded generations through cheaper or newer models and reports agreement, evidence, sample size, and abstentions step by step, scored by Langfuse itself when you point it there.",
   "tldr": "rightmodeler has a dedicated Langfuse adapter. It recognizes observation exports by their trace_id, parent_observation_id, and type keys, maps the observations whose type is GENERATION, and reads provided_model_name, input.messages, output, tool calls, and usage_details per record. Langfuse can also be the evaluator: pass --evaluator langfuse and your own scorers grade the replays, with the built-in judge used only when nothing better is reachable.",
   "steps": [
     {
@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + score",
-      "title": "Cheaper candidates, scored against what shipped",
-      "body": "Kept generations with a plain-text conversation and no tool_definitions field are replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator langfuse, your own scorers grade the replays and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, which makes two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, scored against what shipped",
+      "body": "Kept generations with a plain-text conversation and no tool_definitions field are replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. An empty tool_definitions object or list counts as no field unless the row recorded tool_calls. With --evaluator langfuse, your own scorers grade the replays and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, which makes two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
@@ -99,13 +99,13 @@
     },
     {
       "title": "Screen a swap before any production trial",
-      "body": "Instead of canarying a cheaper model behind a flag and watching dashboards, replay last month's observations and read the per-step verdicts first, judged against outputs your users already accepted."
+      "body": "Instead of canarying a cheaper or newer model behind a flag and watching dashboards, replay last month's observations and read the per-step verdicts first, judged against outputs your users already accepted."
     }
   ],
   "limits": [
     "Only observations whose type is GENERATION become steps. Spans, tools, agents, and chains are read for detection, then dropped with a recorded reason rather than replayed.",
     "The model has to arrive in provided_model_name. An observation that records it somewhere else is dropped with its reason instead of being guessed at.",
-    "A generation whose row carries a tool_definitions field, even an empty one, or whose recorded conversation contains tool calls, is read but not replayed yet: replay resends conversations as text, so those cases are left out with a recorded_messages_not_replayable warning.",
+    "A generation whose row carries a tool_definitions field, or whose recorded conversation contains tool calls, is read but not replayed yet: replay resends conversations as text, so those cases are left out with a recorded_messages_not_replayable warning. An empty tool_definitions object or list does not count unless the row also recorded tool_calls.",
     "It reads exported files, JSON or JSONL on disk. It does not connect to your Langfuse project, poll the API, or watch new traces arrive; the evaluator, corpus import, and export paths are the only ones that call Langfuse, and only when you ask for them.",
     "Langfuse cost and score fields are not used as evidence. Candidate calls are priced from what your replay endpoint reports, and marked as an estimate when the provider returns no cost.",
     "Evidence minimums are per evaluator kind: at least 10 assessed executions, at least two distinct step IDs, and at least five distinct trajectories. Below any of those the family abstains with a named reason instead of recommending.",
@@ -126,7 +126,7 @@
     },
     {
       "q": "Does rightmodeler replace Langfuse?",
-      "a": "No. Langfuse observes, scores, and debugs your agent in production; rightmodeler runs offline, validating cheaper candidates against the outputs you accepted and reporting the evidence. Results can be pushed back with rightmodeler export --to langfuse."
+      "a": "No. Langfuse observes, scores, and debugs your agent in production; rightmodeler runs offline, validating cheaper or newer candidates against the outputs you accepted and reporting the evidence. Results can be pushed back with rightmodeler export --to langfuse."
     },
     {
       "q": "Does my trace data leave my machine?",
