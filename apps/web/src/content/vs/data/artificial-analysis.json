@@ -7,16 +7,16 @@
   "verdict": "competitor",
   "verdictLabel": "Competitor · a leaderboard vs a pull request",
   "title": "rightmodeler vs Artificial Analysis: benchmark vs PR",
-  "description": "Artificial Analysis's Optima ranks models on a benchmark built from your own tasks. rightmodeler tests cheaper models at each call site and opens a draft PR.",
+  "description": "Artificial Analysis's Optima ranks models on a benchmark built from your own tasks. rightmodeler tests cheaper or newer models at each call site and opens a draft PR.",
   "h1": "rightmodeler vs Artificial Analysis",
-  "lede": "Optima, from Artificial Analysis, turns your tasks, files, or traces into a custom benchmark and ranks models on it by score, cost per task, and time per task. rightmodeler starts from the call sites in your code: it replays the recorded steps through cheaper models and, when a swap clears every gate, opens a draft pull request you review.",
+  "lede": "Optima, from Artificial Analysis, turns your tasks, files, or traces into a custom benchmark and ranks models on it by score, cost per task, and time per task. rightmodeler starts from the call sites in your code: it replays the recorded steps through cheaper or newer models and, when a swap clears every gate, opens a draft pull request you review.",
   "integrationSlug": "",
   "related": ["open-frontier", "vals-ai", "braintrust"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Competitors on one question, answered in different units. Artificial Analysis, which calls itself the independent benchmarking company for AI, launched Optima on 2026-08-13. As of 2026-09-24, per its pages, you build a benchmark from your own files or a Hugging Face dataset, from traces imported from platforms such as Arize, Braintrust, and Langfuse, from a coding-agent session, or from a description of your use case, then run it across leading models and compare score, cost per task, and time per task. Its launch article says Optima lets you find an equally performant alternative to your current setup at 10x lower cost or time per task, which is the question rightmodeler asks too. The difference is where the answer lands. Optima ranks models on the tasks and trajectories you bring. rightmodeler, a free MIT-licensed CLI, ties recorded steps to the call sites in your code they came from, replays them there through cheaper models from your provider's live catalog, judges each candidate against the output you already shipped, and turns each swap that clears every release gate into a draft pull request that changes only model identifiers, for a human to merge."
+      "body": "Competitors on one question, answered in different units. Artificial Analysis, which calls itself the independent benchmarking company for AI, launched Optima on 2026-08-13. As of 2026-09-24, per its pages, you build a benchmark from your own files or a Hugging Face dataset, from traces imported from platforms such as Arize, Braintrust, and Langfuse, from a coding-agent session, or from a description of your use case, then run it across leading models and compare score, cost per task, and time per task. Its launch article says Optima lets you find an equally performant alternative to your current setup at 10x lower cost or time per task, which is the question rightmodeler asks too. The difference is where the answer lands. Optima ranks models on the tasks and trajectories you bring. rightmodeler, a free MIT-licensed CLI, ties recorded steps to the call sites in your code they came from, replays them there through cheaper or newer models from your provider's live catalog, judges each candidate against the output you already shipped, and turns each swap that clears every release gate into a draft pull request that changes only model identifiers, for a human to merge."
     },
     {
       "type": "positioning",
@@ -50,7 +50,7 @@
         {
           "dimension": "question",
           "theirs": "the best model for your task, or an equally performant one at lower cost or time",
-          "ours": "which call sites in your code can move to a cheaper model"
+          "ours": "which call sites in your code can move to a cheaper or newer model"
         },
         {
           "dimension": "starting point",
@@ -97,7 +97,7 @@
         {
           "scenario": "Your agent has run in production on a frontier model for months, and you want each step that can hold a cheaper model changed in code, as a diff your team reviews.",
           "winner": "ours",
-          "why": "A leaderboard ranks models on the benchmark; turning it into a change at each call site is a separate step. rightmodeler binds recorded steps to the call sites they came from, replays them there through cheaper candidates, judges each candidate against what you shipped, abstains where the sample is too small, requires a winner to clear the quality floor on held-out cases, confirms swaps that feed later model steps end to end in a sandbox, and opens a draft pull request that changes only model identifiers."
+          "why": "A leaderboard ranks models on the benchmark; turning it into a change at each call site is a separate step. rightmodeler binds recorded steps to the call sites they came from, replays them there through cheaper or newer candidates, judges each candidate against what you shipped, abstains where the sample is too small, requires a winner to clear the quality floor on held-out cases, confirms swaps that feed later model steps end to end in a sandbox, and opens a draft pull request that changes only model identifiers."
         },
         {
           "scenario": "A cheaper model scores near the top of your Optima benchmark, and your provider serves it.",
@@ -170,7 +170,7 @@
       "items": [
         {
           "q": "Is Optima a competitor to rightmodeler?",
-          "a": "On one question, yes: both look for a cheaper model that holds up on your own work, and Artificial Analysis's launch article says Optima lets you find an equally performant alternative to your current setup at 10x lower cost or time per task. They answer it in different units. Optima ranks models on a benchmark you build; rightmodeler validates cheaper models per call site in your code and hands you the change as a draft pull request. You can use Optima to shortlist and rightmodeler to validate each call site."
+          "a": "On one question, yes: both look for a cheaper model that holds up on your own work, and Artificial Analysis's launch article says Optima lets you find an equally performant alternative to your current setup at 10x lower cost or time per task. They answer it in different units. Optima ranks models on a benchmark you build; rightmodeler validates cheaper or newer models per call site in your code and hands you the change as a draft pull request. You can use Optima to shortlist and rightmodeler to validate each call site."
         },
         {
           "q": "Can both start from the same traces?",

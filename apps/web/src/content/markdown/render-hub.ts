@@ -13,13 +13,13 @@ type HubBand = { title: string; intro: string; categories: string[] };
 export const BLOG_HUB: Hub = {
   eyebrow: "The rightmodeler blog",
   title: "Notes on the work in the loop.",
-  lede: "How rightmodeler validates swaps to cheaper models on your own traces, what safe has to mean, and what we changed our minds about.",
+  lede: "How rightmodeler validates swaps to cheaper or newer models on your own traces, what safe has to mean, and what we changed our minds about.",
 };
 
 export const VS_HUB: Hub & { bands: HubBand[] } = {
   eyebrow: "Comparisons",
   title: "Different question, different tool.",
-  lede: "rightmodeler is a validation framework for model swaps: it replays your own traces on cheaper models, offline, grades each answer against the output you accepted, and opens a draft pull request when a swap clears every gate, for a person to review and merge. Gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, benchmarks, and coding agents each answer a different question; rightmodeler reads traces from some and replays through others. Each page draws the line.",
+  lede: "rightmodeler is a validation framework for model swaps: it replays your own traces on cheaper or newer models, offline, grades each answer against the output you accepted, and opens a draft pull request when a swap clears every gate, for a person to review and merge. Gateways, observability platforms, eval frameworks, routers, spend meters, context layers, model trainers, benchmarks, and coding agents each answer a different question; rightmodeler reads traces from some and replays through others. Each page draws the line.",
   bands: [
     {
       title: "The rails",
@@ -30,7 +30,7 @@ export const VS_HUB: Hub & { bands: HubBand[] } = {
     {
       title: "The observers",
       intro:
-        "They trace, evaluate, and improve your agent where it runs. rightmodeler reads the traces most of them keep and validates, step by step, whether a cheaper model holds up.",
+        "They trace, evaluate, and improve your agent where it runs. rightmodeler reads the traces most of them keep and validates, step by step, whether a cheaper or newer model holds up.",
       categories: ["observability"],
     },
     {
@@ -54,25 +54,25 @@ export const VS_HUB: Hub & { bands: HubBand[] } = {
     {
       title: "The coaches",
       intro:
-        "They improve what your agent sees at runtime, with context learned from its past runs. rightmodeler validates which cheaper model each step can call, not what it sees.",
+        "They improve what your agent sees at runtime, with context learned from its past runs. rightmodeler validates which cheaper or newer model each step can call, not what it sees.",
       categories: ["context"],
     },
     {
       title: "The trainers",
       intro:
-        "They train a custom model on your data. rightmodeler validates cheaper models you can already call, step by step, against the outputs you accepted.",
+        "They train a custom model on your data. rightmodeler validates cheaper or newer models you can already call, step by step, against the outputs you accepted.",
       categories: ["training"],
     },
     {
       title: "The scorekeepers",
       intro:
-        "They rank models on benchmark test sets, shared or your own. rightmodeler validates cheaper models for the steps in your code, on your own traces, and only a swap that clears every gate becomes a draft pull request you review.",
+        "They rank models on benchmark test sets, shared or your own. rightmodeler validates cheaper or newer models for the steps in your code, on your own traces, and only a swap that clears every gate becomes a draft pull request you review.",
       categories: ["benchmarks"],
     },
     {
       title: "The engineers",
       intro:
-        "They write the code change themselves, from a logged error, a ticket, or a review comment. rightmodeler proposes one kind of change: a cheaper model for a step, validated on your traces first.",
+        "They write the code change themselves, from a logged error, a ticket, or a review comment. rightmodeler proposes one kind of change: a cheaper or newer model for a step, validated on your traces first.",
       categories: ["coding"],
     },
   ],
@@ -81,7 +81,7 @@ export const VS_HUB: Hub & { bands: HubBand[] } = {
 export const INTEGRATIONS_HUB: Hub & { bands: HubBand[] } = {
   eyebrow: "Integrations",
   title: "Works with the traces you already have.",
-  lede: "Everything the validation loop touches: where your traces come from, where cheaper candidates replay, what grades the replays, and where a swap that clears every gate becomes a draft pull request. No new SDK, and it all runs offline, beside your app, never in your request path.",
+  lede: "Everything the validation loop touches: where your traces come from, where cheaper or newer candidates replay, what grades the replays, and where a swap that clears every gate becomes a draft pull request. No new SDK, and it all runs offline, beside your app, never in your request path.",
   bands: [
     {
       title: "Reads your traces",

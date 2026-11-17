@@ -5,10 +5,10 @@
   "logo": "/integrations/logos/braintrust.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
-  "title": "Braintrust integration: replay spans on cheaper models",
-  "description": "Fetch Braintrust span rows: rightmodeler replays recorded steps on cheaper models and measures every candidate against the output you accepted.",
+  "title": "Braintrust integration: replay spans on cheaper or newer models",
+  "description": "Fetch Braintrust span rows: rightmodeler replays recorded steps on cheaper or newer models and measures every candidate against the output you accepted.",
   "h1": "rightmodeler + Braintrust",
-  "lede": "Braintrust scores your agent against your evals. rightmodeler puts the same span rows to a different test: which steps survive on a cheaper model, judged against the outputs you already shipped, and scored by Braintrust itself when you point it there.",
+  "lede": "Braintrust scores your agent against your evals. rightmodeler puts the same span rows to a different test: which steps survive on a cheaper or newer model, judged against the outputs you already shipped, and scored by Braintrust itself when you point it there.",
   "tldr": "rightmodeler has a dedicated Braintrust adapter. It recognizes span rows by their span_id, root_span_id, and span_attributes keys, maps the rows whose span_attributes.type is llm, and takes the model from metadata.model with token counts from metrics. Braintrust can also be the evaluator: pass --evaluator braintrust with a project id and scorer names and your own scorers grade the replays, with the built-in judge used only when nothing better is reachable.",
   "steps": [
     {
@@ -95,7 +95,7 @@
     },
     {
       "title": "Turn a finished experiment into a swap decision",
-      "body": "Fetch the span rows from an experiment you already ran and replay its llm spans against cheaper candidates. The next model decision starts from evidence you already paid to generate."
+      "body": "Fetch the span rows from an experiment you already ran and replay its llm spans against cheaper or newer candidates. The next model decision starts from evidence you already paid to generate."
     }
   ],
   "limits": [
@@ -114,7 +114,7 @@
     },
     {
       "q": "Does rightmodeler replace my Braintrust evals?",
-      "a": "No, and it can run on top of them. Evals measure whether your agent clears a bar you defined; rightmodeler measures whether a cheaper model matches what you already shipped. With --evaluator braintrust your scorers are what decides, so the two answers are produced by the same rubric."
+      "a": "No, and it can run on top of them. Evals measure whether your agent clears a bar you defined; rightmodeler measures whether a cheaper or newer model matches what you already shipped. With --evaluator braintrust your scorers are what decides, so the two answers are produced by the same rubric."
     },
     {
       "q": "How do I make Braintrust the evaluator?",

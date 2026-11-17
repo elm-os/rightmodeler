@@ -5,7 +5,6 @@ import { CtaBand } from "@/components/sections/cta-band";
 import { Footer } from "@/components/sections/footer";
 import { Hero } from "@/components/sections/hero";
 import { Nav } from "@/components/sections/nav";
-import { NumbersBand } from "@/components/sections/numbers-band";
 import { Platform } from "@/components/sections/platform";
 import { SourcesBar } from "@/components/sections/sources-bar";
 import { TestimonialBand } from "@/components/sections/testimonial-band";
@@ -27,9 +26,9 @@ import {
 } from "@/lib/site";
 
 // Canonical strings from docs/positioning.md. The hero h1 is an opinion and never a title here.
-const title = "rightmodeler: cheaper model swaps, validated on your traces";
+const title = "rightmodeler: cheaper or newer model swaps, validated on your traces";
 const description =
-  "The bottleneck is the human work in the loop. rightmodeler validates cheaper models on your production traces and opens a draft pull request for your review.";
+  "The bottleneck is the human work in the loop. rightmodeler validates cheaper or newer models on your traces and opens a draft pull request for your review.";
 const preview = socialImage(
   DEFAULT_SOCIAL_IMAGE,
   "Take the work out of the loop: rightmodeler",
@@ -111,10 +110,6 @@ export default function Home() {
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">
           <Platform />
-        </div>
-        <div aria-hidden className="h-px w-full bg-ash-border" />
-        <div className="mx-auto max-w-6xl border-x border-ash-border">
-          <NumbersBand />
         </div>
         <div aria-hidden className="h-px w-full bg-ash-border" />
         <div className="mx-auto max-w-6xl border-x border-ash-border">

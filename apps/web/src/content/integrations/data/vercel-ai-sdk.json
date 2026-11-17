@@ -5,11 +5,11 @@
   "logo": "/integrations/logos/vercel-ai-sdk.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
-  "title": "Vercel AI SDK integration: replay on cheaper models",
-  "description": "Export Vercel AI SDK spans: rightmodeler binds each functionId to its call sites, replays text calls on cheaper models, and judges them against your output.",
+  "title": "Vercel AI SDK integration: replay on cheaper or newer models",
+  "description": "Export Vercel AI SDK spans: rightmodeler binds each functionId to its call sites, replays text calls on cheaper or newer models, and judges them against your output.",
   "h1": "rightmodeler + Vercel AI SDK",
-  "lede": "With telemetry on, the AI SDK records each generateText and streamText call as OpenTelemetry spans. rightmodeler reads those spans in either telemetry dialect, ties each functionId to the call sites that produced it, and measures cheaper models against the outputs you shipped, call site by call site.",
-  "tldr": "rightmodeler has a dedicated AI SDK reader for the ai.* spans that AI SDK 5 and 6 emit with experimental_telemetry and AI SDK 7 emits through LegacyOpenTelemetry, and it reads the GenAI semantic-convention spans of AI SDK 7's OpenTelemetry integration through its OTel GenAI reader, counting each model call once. The telemetry functionId becomes the step family, and the scanner records the same literal functionId on every generateText, streamText, generateObject and streamObject call it finds, so a family binds to exactly those call sites. Plain text call sites are replayed against cheaper candidates; call sites that need tools or structured output are left out with a named warning instead of being replayed.",
+  "lede": "With telemetry on, the AI SDK records each generateText and streamText call as OpenTelemetry spans. rightmodeler reads those spans in either telemetry dialect, ties each functionId to the call sites that produced it, and measures cheaper or newer models against the outputs you shipped, call site by call site.",
+  "tldr": "rightmodeler has a dedicated AI SDK reader for the ai.* spans that AI SDK 5 and 6 emit with experimental_telemetry and AI SDK 7 emits through LegacyOpenTelemetry, and it reads the GenAI semantic-convention spans of AI SDK 7's OpenTelemetry integration through its OTel GenAI reader, counting each model call once. The telemetry functionId becomes the step family, and the scanner records the same literal functionId on every generateText, streamText, generateObject and streamObject call it finds, so a family binds to exactly those call sites. Plain text call sites are replayed against cheaper or newer candidates; call sites that need tools or structured output are left out with a named warning instead of being replayed.",
   "steps": [
     {
       "label": "01 · Instrument",

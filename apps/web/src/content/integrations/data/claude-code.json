@@ -5,11 +5,11 @@
   "logo": "/integrations/logos/claude-code.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · replay route",
-  "title": "Claude Code integration: replay sessions on cheaper models",
-  "description": "Point rightmodeler at ~/.claude/projects: it reads your sessions as traces and measures cheaper models against the output you accepted, step by step.",
+  "title": "Claude Code integration: replay sessions on cheaper or newer models",
+  "description": "Point rightmodeler at ~/.claude/projects: it reads your sessions as traces and measures cheaper or newer models against the output you accepted, step by step.",
   "h1": "rightmodeler + Claude Code",
   "lede": "rightmodeler runs inside the tool that wrote the traces. Claude Code already keeps every session on disk, so a validation run starts with no export step, no SDK, and no re-instrumentation.",
-  "tldr": "Claude Code writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter recognizes the transcript by its type, sessionId, uuid, parentUuid, and message keys, joins the rows of one assistant message back together, walks parentUuid up to collect the user turns that prompted it, and folds each assistant message into a step with its own token usage. Steps prompted by plain text are then replayed against cheaper candidates and scored against the answer you accepted.",
+  "tldr": "Claude Code writes every session to ~/.claude/projects as JSONL, so there is no export step at all. A dedicated adapter recognizes the transcript by its type, sessionId, uuid, parentUuid, and message keys, joins the rows of one assistant message back together, walks parentUuid up to collect the user turns that prompted it, and folds each assistant message into a step with its own token usage. Steps prompted by plain text are then replayed against cheaper or newer candidates and scored against the answer you accepted.",
   "steps": [
     {
       "label": "01 · Locate",

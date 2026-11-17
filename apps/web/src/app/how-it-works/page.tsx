@@ -24,7 +24,7 @@ import { RUN_COMMAND, SKILL_COMMAND } from "@/lib/site";
 export const metadata: Metadata = pageMetadata({
   title: "How it works",
   description:
-    "Run rightmodeler from your terminal, coding agent, CI or the self-hosted agent. It validates cheaper models on your traces and opens a draft PR for review.",
+    "Run rightmodeler from your terminal, coding agent, CI or the self-hosted agent. It validates cheaper or newer models on your traces and opens a draft PR for review.",
   path: "/how-it-works",
   image: "/social/how-it-works.png",
 });
@@ -50,7 +50,7 @@ const STEPS: {
   {
     n: "02",
     name: "Validate",
-    body: `It replays the recorded steps on cheaper candidate models, and a judge from a different vendor, or your own evaluator, grades every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many. ${SAFE}`,
+    body: `It replays the recorded steps on cheaper or newer candidate models, and a judge from a different vendor, or your own evaluator, grades every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many. ${SAFE}`,
     label: "checks",
     line: "shortlist screen · held-out lower bound vs quality floor · end-to-end confirmation  →  every gate cleared, or no swap",
   },
@@ -212,7 +212,7 @@ export default function HowItWorksPage() {
       <PageHero
         eyebrow="How it works"
         title="How rightmodeler works"
-        lede="rightmodeler's validation loop does the hand work of checking a cheaper model: replaying your traces, grading every answer, and writing up the evidence. Run it from your terminal, your coding agent, or on a schedule. Today, the final yes stays yours."
+        lede="rightmodeler's validation loop does the hand work of checking a cheaper or newer model: replaying your traces, grading every answer, and writing up the evidence. Run it from your terminal, your coding agent, or on a schedule. Today, the final yes stays yours."
       />
 
       <div aria-hidden className="h-px w-full bg-ash-border" />
@@ -304,10 +304,10 @@ export default function HowItWorksPage() {
         <div className="mx-auto max-w-3xl px-6 py-16 sm:px-10 sm:py-20">
           <Reveal>
             <Tldr>
-              rightmodeler validates cheaper models on the traces you already
-              have. It replays the recorded steps on cheaper candidates and has
-              a judge from a different vendor, or your own evaluator, grade
-              every answer against{" "}
+              rightmodeler validates cheaper or newer models on the traces you
+              already have. It replays the recorded steps on cheaper or newer
+              candidates and has a judge from a different vendor, or your own
+              evaluator, grade every answer against{" "}
               <span className="text-midnight-ink">
                 the outputs you accepted
               </span>
@@ -422,11 +422,11 @@ export default function HowItWorksPage() {
             </p>
             <p className="mt-2 max-w-xl text-body text-driftwood">
               rightmodeler works offline on runs you already shipped. It
-              validates cheaper models step by step against the outputs you
-              accepted, and only a swap that clears every gate becomes a draft
-              pull request, which changes model identifiers and nothing else and
-              waits for you to review and merge. Your observability tool keeps
-              recording, any gateway keeps serving live traffic, and
+              validates cheaper or newer models step by step against the outputs
+              you accepted, and only a swap that clears every gate becomes a
+              draft pull request, which changes model identifiers and nothing
+              else and waits for you to review and merge. Your observability
+              tool keeps recording, any gateway keeps serving live traffic, and
               rightmodeler never sits in the request path.
             </p>
           </Reveal>

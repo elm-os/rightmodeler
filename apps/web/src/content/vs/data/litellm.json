@@ -7,16 +7,16 @@
   "verdict": "complement",
   "verdictLabel": "Complement · different clock, same stack",
   "title": "rightmodeler vs LiteLLM: request path vs offline validation",
-  "description": "LiteLLM runs your request path: one API, budgets, fallbacks. rightmodeler replays your traces offline to validate cheaper models for each step. Keep both.",
+  "description": "LiteLLM runs your request path: one API, budgets, fallbacks. rightmodeler replays your traces offline to validate cheaper or newer models for each step. Keep both.",
   "h1": "rightmodeler vs LiteLLM",
-  "lede": "LiteLLM decides in the milliseconds before each call; rightmodeler validates after the run, replaying the steps you already shipped on cheaper models and grading them against the outputs you accepted. Keep the proxy: rightmodeler can replay through it, on your own keys and budgets.",
+  "lede": "LiteLLM decides in the milliseconds before each call; rightmodeler validates after the run, replaying the steps you already shipped on cheaper or newer models and grading them against the outputs you accepted. Keep the proxy: rightmodeler can replay through it, on your own keys and budgets.",
   "integrationSlug": "litellm",
   "related": ["openrouter", "vercel-ai-gateway", "not-diamond", "bifrost"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Keep your proxy. LiteLLM is hired to run the request path: one OpenAI-compatible API in front of the model catalog, budgets that hard-stop overruns, retries and fallbacks when a provider degrades. rightmodeler is hired for a different job on a different clock: after the fact, it replays the agent traces (the recorded runs) you already shipped through cheaper models and reports, step by step, which swaps clear every release gate; each one that does becomes a draft pull request a person merges. Nothing about it touches your request path: the evidence is something you review, not a hop your traffic takes. And the proxy you already run can be rightmodeler's replay route: candidate and judge calls go through it, on your own keys and budgets."
+      "body": "Keep your proxy. LiteLLM is hired to run the request path: one OpenAI-compatible API in front of the model catalog, budgets that hard-stop overruns, retries and fallbacks when a provider degrades. rightmodeler is hired for a different job on a different clock: after the fact, it replays the agent traces (the recorded runs) you already shipped through cheaper or newer models and reports, step by step, which swaps clear every release gate; each one that does becomes a draft pull request a person merges. Nothing about it touches your request path: the evidence is something you review, not a hop your traffic takes. And the proxy you already run can be rightmodeler's replay route: candidate and judge calls go through it, on your own keys and budgets."
     },
     {
       "type": "stack",
@@ -47,7 +47,7 @@
       "right": {
         "heading": "With rightmodeler on top",
         "items": [
-          "Traces of the same calls become validation input: the steps you already paid for, rerun on cheaper candidates through your proxy and scored against the answers you accepted.",
+          "Traces of the same calls become validation input: the steps you already paid for, rerun on cheaper or newer candidates through your proxy and scored against the answers you accepted.",
           "Every recommendation carries reference evidence (agreement with the output you shipped, not ground-truth correctness), a sample size, and abstentions (steps where rightmodeler declines to rule because the evidence is thin).",
           "Each swap that clears every gate arrives as a draft pull request that changes a model identifier, not a route, and a person merges it: serve the new model through the proxy you already run."
         ]
@@ -66,12 +66,12 @@
         {
           "scenario": "Your LiteLLM spend logs show the agent's bill doubled, and you want to know which of its steps could run on a cheaper model without losing quality.",
           "winner": "ours",
-          "why": "Budgets cap the bill; they do not right-size it. rightmodeler replays your real traces through cheaper candidates and judges each step against the output you accepted, reporting agreement, sample size, and abstentions for every step. No gateway setting answers this question."
+          "why": "Budgets cap the bill; they do not right-size it. rightmodeler replays your real traces through cheaper or newer candidates and judges each step against the output you accepted, reporting agreement, sample size, and abstentions for every step. No gateway setting answers this question."
         },
         {
           "scenario": "You already run a LiteLLM proxy, and your application's model calls are already traced with OpenTelemetry.",
           "winner": "both",
-          "why": "The traces are the evidence and the proxy is the route. rightmodeler reads GenAI spans that carry message content, replays recorded steps through cheaper candidates on the same proxy, and judges them against the outputs you shipped. The gateway that runs your traffic carries the replays that right-size it."
+          "why": "The traces are the evidence and the proxy is the route. rightmodeler reads GenAI spans that carry message content, replays recorded steps through cheaper or newer candidates on the same proxy, and judges them against the outputs you shipped. The gateway that runs your traffic carries the replays that right-size it."
         }
       ]
     },
@@ -125,7 +125,7 @@
       "items": [
         {
           "q": "Do I drop LiteLLM once rightmodeler is running?",
-          "a": "No. LiteLLM runs your request path; rightmodeler works offline and validates, step by step, whether a cheaper model can take over. Its draft pull request changes model identifiers, never routes, and a person merges it; the new model is then served through the proxy you already run. Crucible, the analytics and optimization suite in development, is designed to connect over MCP and stay out of the request path, so the proxy keeps that job too."
+          "a": "No. LiteLLM runs your request path; rightmodeler works offline and validates, step by step, whether a cheaper or newer model can take over. Its draft pull request changes model identifiers, never routes, and a person merges it; the new model is then served through the proxy you already run. Crucible, the analytics and optimization suite in development, is designed to connect over MCP and stay out of the request path, so the proxy keeps that job too."
         },
         {
           "q": "LiteLLM's auto-router already picks models per request. Why measure offline?",

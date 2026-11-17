@@ -36,8 +36,14 @@ itself". Never describe rightmodeler as autonomous or self-maintaining in the pr
 
 ## What rightmodeler is today
 
-A validation framework for model swaps: it validates swaps to cheaper models on your production
-traces and opens each one that clears every release gate as a draft pull request.
+A validation framework for model swaps: it validates swaps to cheaper or newer models on your
+production traces and opens each one that clears every release gate as a draft pull request.
+
+The positioning says rightmodeler validates "cheaper or newer" models. Newer means a newer model
+at the same price or cheaper, or faster, or smarter. The CLI today tests only models that cost
+less than the recorded one and ranks newer ones first; support for the rest ships in a later
+release. Text that states the mechanism (the shortlist price filter, `--candidate` models that
+cost less, refusal reasons, estimates, gates) stays exact and keeps "cheaper".
 
 - **rightmodeler CLI** (on npm as `rightmodeler`, MIT). Reads the model calls your app already
   recorded, replays the recorded steps on cheaper candidate models from your provider's live
@@ -113,33 +119,34 @@ fresh word.
 4. **Safe.** Safe is the sentence above, never a guarantee. Strings that travel alone (the
    one-liner, meta titles, card footers, alt text) say "validated", not a bare "safe".
 5. **Scope.** Candidates must cost less than the recorded model, even when named. Every string
-   that says what gets validated says "cheaper": the one-liner, meta title and description, card
-   footer, organization description and llms summary. Upgrades, same-price successors and moves
-   off retired models are not validated today.
+   that says what gets validated says "cheaper or newer": the one-liner, meta title and
+   description, card footer, organization description and llms summary. Support for newer models
+   that do not cost less ships in a later release; until then, mechanism text keeps "cheaper".
 
 ## Canonical strings
 
-| Surface                                               | Text                                                                                                                                                                                                                                                                    |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Home eyebrow                                          | Toward production AI that maintains itself                                                                                                                                                                                                                              |
-| Home h1                                               | The human in the loop is the bottleneck.                                                                                                                                                                                                                                |
-| Home subhead                                          | rightmodeler takes the work out of the loop, not the judgment. It validates cheaper models on your production traces against the outputs you accepted, and opens a draft pull request only when a swap clears every gate. Today, the final yes stays yours.             |
-| Home meta title                                       | rightmodeler: cheaper model swaps, validated on your traces                                                                                                                                                                                                             |
-| Home meta description                                 | The bottleneck is the human work in the loop. rightmodeler validates cheaper models on your production traces and opens a draft pull request for your review.                                                                                                           |
-| One-liner (GitHub, npm and root package descriptions) | Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.                                                                                                                                                                            |
-| Organization description                              | rightmodeler is working toward production AI systems that maintain and optimize themselves, starting with an open-source framework that validates swaps to cheaper models on your own traces and opens each one that clears every release gate as a draft pull request. |
-| Home thesis section                                   | Eyebrow "Why model swaps stall", h2 "Model maintenance is a standing job.", the four failures above as h3s                                                                                                                                                              |
-| Home platform section                                 | Eyebrow "From validation to autonomy", h2 "It starts with safe model swaps." (directly under the thesis section, whose closer defines safe)                                                                                                                             |
-| Home CTA band                                         | Start with the traces you already have.                                                                                                                                                                                                                                 |
-| Hero ledger label                                     | rightmodeler · per-step swap validation                                                                                                                                                                                                                                 |
-| Manifesto h1                                          | Software should maintain itself.                                                                                                                                                                                                                                        |
-| Agent page h1                                         | Stop re-checking models by hand.                                                                                                                                                                                                                                        |
-| About subhead                                         | Working toward production AI that maintains and optimizes itself, starting with validated model swaps.                                                                                                                                                                  |
-| Mission                                               | Production AI systems that maintain and optimize themselves, earning each step of autonomy with evidence.                                                                                                                                                               |
-| Social card footer                                    | Cheaper model swaps, validated on your traces.                                                                                                                                                                                                                          |
-| Default social card headline                          | Take the work out of the loop.                                                                                                                                                                                                                                          |
-| Default social preview alt text                       | Take the work out of the loop: rightmodeler                                                                                                                                                                                                                             |
-| Repository topics and npm keywords                    | ai-agents, agent-evals, llm-evals, llm-as-a-judge, model-validation, cost-optimization, llmops, traces, production-ai, regression-testing                                                                                                                               |
+| Surface                                               | Text                                                                                                                                                                                                                                                                             |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Home eyebrow                                          | Toward production AI that maintains itself                                                                                                                                                                                                                                       |
+| Home h1                                               | The human in the loop is the bottleneck.                                                                                                                                                                                                                                         |
+| Home subhead                                          | rightmodeler takes the work out of the loop, not the judgment. It validates cheaper or newer models on your production traces against the outputs you accepted, and opens a draft pull request only when a swap clears every gate. Today, the final yes stays yours.             |
+| Home meta title                                       | rightmodeler: cheaper or newer model swaps, validated on your traces                                                                                                                                                                                                             |
+| Home meta description                                 | The bottleneck is the human work in the loop. rightmodeler validates cheaper or newer models on your traces and opens a draft pull request for your review.                                                                                                                      |
+| One-liner (GitHub, npm and root package descriptions) | Cheaper or newer model swaps for production AI, validated on your own traces and opened as draft PRs.                                                                                                                                                                            |
+| Organization description                              | rightmodeler is working toward production AI systems that maintain and optimize themselves, starting with an open-source framework that validates swaps to cheaper or newer models on your own traces and opens each one that clears every release gate as a draft pull request. |
+| Home thesis section                                   | Eyebrow "Why model swaps stall", h2 "Model maintenance is a standing job.", the four failures above as h3s                                                                                                                                                                       |
+| Home thesis closer                                    | The safe sentence, or the short form "A swap is safe when it clears every release gate on your own traces." with a link to /how-it-works, where the full sentence appears. It is the one exception to reusing the safe sentence verbatim.                                        |
+| Home platform section                                 | Eyebrow "From validation to autonomy", h2 "It starts with safe model swaps." (directly under the thesis section, whose closer defines safe)                                                                                                                                      |
+| Home CTA band                                         | Start with the traces you already have.                                                                                                                                                                                                                                          |
+| Hero ledger label                                     | rightmodeler · per-step swap validation                                                                                                                                                                                                                                          |
+| Manifesto h1                                          | Software should maintain itself.                                                                                                                                                                                                                                                 |
+| Agent page h1                                         | Stop re-checking models by hand.                                                                                                                                                                                                                                                 |
+| About subhead                                         | Working toward production AI that maintains and optimizes itself, starting with validated model swaps.                                                                                                                                                                           |
+| Mission                                               | Production AI systems that maintain and optimize themselves, earning each step of autonomy with evidence.                                                                                                                                                                        |
+| Social card footer                                    | Cheaper or newer model swaps, validated on your traces.                                                                                                                                                                                                                          |
+| Default social card headline                          | Take the work out of the loop.                                                                                                                                                                                                                                                   |
+| Default social preview alt text                       | Take the work out of the loop: rightmodeler                                                                                                                                                                                                                                      |
+| Repository topics and npm keywords                    | ai-agents, agent-evals, llm-evals, llm-as-a-judge, model-validation, cost-optimization, llmops, traces, production-ai, regression-testing                                                                                                                                        |
 
 The hero h1 is an opinion. It never travels without the subhead, and it is never reused as a
 post title, a card or a meta title.
@@ -148,7 +155,7 @@ post title, a card or a meta title.
 
 Use: the work in the loop; takes the work out of the loop, not the judgment; the final yes;
 validate, validation, validation framework for model swaps; release gate, quality floor,
-statistical lower bound, held-out cases; abstain; cheaper candidate models; a judge from a
+statistical lower bound, held-out cases; abstain; cheaper or newer candidate models; a judge from a
 different vendor, or your own evaluator; agreement with the outputs you accepted; draft pull
 request that changes only model identifiers; production traces; offline, never in the request
 path; confirmed end to end in a sandbox; one pinned model per step; the maintenance
@@ -173,12 +180,11 @@ loop, on a schedule (the agent); on your word (the agent, for new candidates).
 | precision routing, routing policy (in our own voice)       | per-workload model assignments (quotes and case-study facts stay verbatim)        |
 | multi-agent LLM systems (as the audience), the model layer | production AI systems                                                             |
 | medium confidence, confidence tiers                        | a statistical lower bound (there are no confidence tiers)                         |
-| every model swap, any new model, migrations in general     | swaps to cheaper models                                                           |
+| every model swap, any new model, migrations in general     | swaps to cheaper or newer models                                                  |
 | guaranteed, proven correct, zero risk, always safe         | cleared every release gate; agreement with what you shipped                       |
 
 ## Claims we never make
 
-- That rightmodeler validates upgrades, a model at the same price, or a move off a retired model.
 - That it merges, deploys, changes production or swaps models on its own, or that it is fully
   autonomous today.
 - That it routes traffic, is a router or produces a routing policy.

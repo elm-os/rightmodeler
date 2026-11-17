@@ -7,7 +7,7 @@ export const meta: PostMeta = {
   description:
     "Why evaluating every new model becomes a project nobody budgets. Part two of the rightmodeler vision: take the work out of the loop, not the judgment.",
   excerpt:
-    "The group chat asks: are we switching? And everyone goes quiet. Part two of our vision: take the work out of the loop, not the judgment, and let each cheaper model swap arrive as a draft pull request with the evidence attached.",
+    "The group chat asks: are we switching? And everyone goes quiet. Part two of our vision: take the work out of the loop, not the judgment, and let each cheaper or newer model swap arrive as a draft pull request with the evidence attached.",
   kicker: "The vision · Part two",
   date: "2026-07-10",
   readingMinutes: 6,
@@ -93,7 +93,7 @@ export function Body() {
         forever. rightmodeler takes that work out of the loop, not the judgment.
       </P>
 
-      <H2>A cheaper model swap should be a pull request</H2>
+      <H2>A cheaper or newer model swap should be a pull request</H2>
 
       <P>
         So here is the shape of it. <A href="/agent">rightmodeler agent</A> runs
@@ -201,7 +201,7 @@ Engineers are not bad at the judgment part. Given the replays, the scores, and t
 
 Put plainly, we think the biggest bottleneck in maintaining software is the human in the loop: not the judgment, the work. The work is everything before the call: noticing the release, building the replay, grading the outputs, writing it up, and migrating, every few weeks, forever. rightmodeler takes that work out of the loop, not the judgment.
 
-## A cheaper model swap should be a pull request
+## A cheaper or newer model swap should be a pull request
 
 So here is the shape of it. [rightmodeler agent](https://www.rightmodeler.com/agent) runs a weekly catalog and price check that flags cheaper new or repriced models for the steps in your stack. On your word, it replays those candidates on your recorded traces, offline, and a judge from a different vendor, or your own evaluator, grades every answer against the output you already accepted. It works inside the policy you set: your quality floor, the shortlist size, the models it may and may not try, and an optional spend cap.
 

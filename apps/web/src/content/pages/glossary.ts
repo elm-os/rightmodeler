@@ -9,15 +9,15 @@ export const markdown = `# The model-swap glossary
 
 Glossary
 
-Plain definitions for the words rightmodeler uses to validate a swap to a cheaper model.
+Plain definitions for the words rightmodeler uses to validate a swap to a cheaper or newer model.
 
 ## The decision
 
-The words for a swap to a cheaper model.
+The words for a swap to a cheaper or newer model.
 
 ### Safe model swap
 
-rightmodeler validates only swaps to cheaper models. A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin.
+rightmodeler validates only swaps to cheaper or newer models. A swap is safe, in rightmodeler's terms, when it clears every release gate on your own traces: agreement with the outputs you accepted, at a statistical lower bound that reaches your quality floor on held-out cases, with swaps that feed later model steps confirmed end to end in a sandbox. rightmodeler measures agreement with what you shipped, not ground-truth correctness, and abstains when the evidence is thin.
 
 ### Swap candidate
 
@@ -69,7 +69,7 @@ Recorded cases kept out of the shortlist screen. rightmodeler splits your cases 
 
 ### Cascade risk
 
-The chance that swapping one step to a cheaper model degrades later steps that depend on it, common in tool and loop steps. When a step feeds later model steps, its swap counts only once it is confirmed end to end, judged on your app's final output rather than on the step alone.
+The chance that swapping one step to a cheaper or newer model degrades later steps that depend on it, common in tool and loop steps. When a step feeds later model steps, its swap counts only once it is confirmed end to end, judged on your app's final output rather than on the step alone.
 
 ### End-to-end confirmation
 
@@ -93,7 +93,7 @@ The model calls your production app already recorded, through a tracing platform
 
 ### Reference evidence
 
-Grading a cheaper model's output against the output you already accepted for the same input, rather than against a gold answer. The production result is the reference, not ground truth, so a candidate that repeats a wrong accepted answer still agrees.
+Grading a cheaper or newer model's output against the output you already accepted for the same input, rather than against a gold answer. The production result is the reference, not ground truth, so a candidate that repeats a wrong accepted answer still agrees.
 
 ### LLM-as-judge
 
@@ -119,11 +119,11 @@ In machine learning the phrase often means people labeling data or reviewing out
 
 ### Swap validation
 
-Testing a swap to a cheaper model on your own traces before anyone merges it. rightmodeler replays the recorded steps on cheaper candidate models, has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted, and opens a draft pull request only for a swap that clears every release gate.
+Testing a swap to a cheaper or newer model on your own traces before anyone merges it. rightmodeler replays the recorded steps on cheaper or newer candidate models, has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted, and opens a draft pull request only for a swap that clears every release gate.
 
 ### Validation run
 
-One pass of rightmodeler over your traces: it measures each cheaper candidate against the accepted output for the same input, reports the evidence and sample size, and records where it abstains.
+One pass of rightmodeler over your traces: it measures each cheaper or newer candidate against the accepted output for the same input, reports the evidence and sample size, and records where it abstains.
 
 ### Runtime router
 

@@ -1,6 +1,6 @@
 # Getting started
 
-rightmodeler validates swaps to cheaper models on recorded model calls. It replays the recorded steps on cheaper candidate models, has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted, and writes a report with a verdict for each family. Recorded cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample (see [Run the complete pipeline](#run-the-complete-pipeline)). A swap that clears every release gate can become a draft pull request that changes only model identifiers, as the [GitHub guide](github.md) describes. Published on npm as `rightmodeler`.
+rightmodeler validates swaps to cheaper or newer models on recorded model calls. It replays the recorded steps on cheaper or newer candidate models, has a judge from a different vendor, or your own evaluator, grade every answer against the output you accepted, and writes a report with a verdict for each family. Recorded cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample (see [Run the complete pipeline](#run-the-complete-pipeline)). A swap that clears every release gate can become a draft pull request that changes only model identifiers, as the [GitHub guide](github.md) describes. Published on npm as `rightmodeler`.
 
 ## Requirements
 

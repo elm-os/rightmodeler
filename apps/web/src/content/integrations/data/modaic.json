@@ -54,7 +54,7 @@
     },
     {
       "title": "Keep Modaic on its own job today",
-      "body": "No wiring is needed to use both. Modaic keeps making and calibrating the decisions your product runs; rightmodeler validates swaps to cheaper models for each step of your agent, offline, and opens each one that clears every release gate as a draft pull request."
+      "body": "No wiring is needed to use both. Modaic keeps making and calibrating the decisions your product runs; rightmodeler validates swaps to cheaper or newer models for each step of your agent, offline, and opens each one that clears every release gate as a draft pull request."
     },
     {
       "title": "See which judge graded a swap",
@@ -71,7 +71,7 @@
   "faq": [
     {
       "q": "Can I use Modaic with rightmodeler today?",
-      "a": "Side by side, yes; as an evaluator, no. The CLI has no Modaic evaluator yet. Modaic can keep running the decisions it calibrates while rightmodeler validates cheaper models for your agent offline. To grade replays today, use the built-in judge or pass --evaluator braintrust, langfuse, langsmith, or promptfoo."
+      "a": "Side by side, yes; as an evaluator, no. The CLI has no Modaic evaluator yet. Modaic can keep running the decisions it calibrates while rightmodeler validates cheaper or newer models for your agent offline. To grade replays today, use the built-in judge or pass --evaluator braintrust, langfuse, langsmith, or promptfoo."
     },
     {
       "q": "Why Modaic's hosted API and not its open-source SDK?",

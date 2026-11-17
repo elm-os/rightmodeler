@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 
-Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.
+Cheaper or newer model swaps for production AI, validated on your own traces and opened as draft PRs.
 
 We think the biggest bottleneck in maintaining software is the human in the loop: not the
 judgment, the work. In a production AI system a new model ships every few weeks, and each
@@ -17,9 +17,9 @@ one validated change at a time. The [manifesto](https://www.rightmodeler.com/man
 makes the full argument.
 
 rightmodeler is a validation framework for model swaps. It reads the model calls your app
-already recorded, replays the recorded steps on cheaper candidate models from your
-provider's live catalog, and has a judge from a different vendor, or your own evaluator,
-grade every answer against the output you accepted. Replay sends recorded text
+already recorded, replays the recorded steps on cheaper or newer candidate models from
+your provider's live catalog, and has a judge from a different vendor, or your own
+evaluator, grade every answer against the output you accepted. Replay sends recorded text
 conversations: cases whose conversation carries tool calls, tool definitions or non-text
 parts are left out of the replay sample today, and the run says how many. It abstains
 when the evidence is thin. When a swap clears every release gate, `rightmodeler apply`

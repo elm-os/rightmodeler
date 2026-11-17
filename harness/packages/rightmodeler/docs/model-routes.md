@@ -1,6 +1,6 @@
 # Model routes
 
-Replay sends each recorded request to cheaper candidate models, and the built-in judge grades every answer against the recorded one. Candidates and the judge each run on a route: an API endpoint with a key, or a plan you are signed in to on this machine through its command-line tool.
+Replay sends each recorded request to cheaper or newer candidate models, and the built-in judge grades every answer against the recorded one. Candidates and the judge each run on a route: an API endpoint with a key, or a plan you are signed in to on this machine through its command-line tool.
 
 ## Routes
 

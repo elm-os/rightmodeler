@@ -136,8 +136,8 @@ export function Body() {
         grading the outputs, writing it up so it survives review, migrating, and
         doing it all again when the next model ships. We think that work is the
         biggest bottleneck in maintaining software. rightmodeler takes it out of
-        the loop, not the judgment, starting with swaps to cheaper models.
-        Today, the final yes stays yours.
+        the loop, not the judgment, starting with swaps to cheaper or newer
+        models. Today, the final yes stays yours.
       </P>
 
       <P>
@@ -188,7 +188,7 @@ And it is designed to do one thing a dashboard cannot. When it finds a layer ove
 
 That loop does not wait for Crucible. You can [run it by hand today](https://github.com/elm-os/rightmodeler) with the rightmodeler CLI, on the traces you already have, and [the self-hosted agent](https://www.rightmodeler.com/agent) already runs the maintenance loop on a schedule: it rechecks the catalog weekly for cheaper new or repriced models and, on your word, replays them. Either way, a swap that clears every gate becomes a draft pull request that changes only model identifiers, for a person to review and merge. Crucible will add the instruments, and run that loop continuously where they point.
 
-Seeing is the foundation, because you cannot maintain what you cannot see. But seeing is not the bottleneck, and neither is the decision: with the evidence in hand, an engineer makes the call in minutes. What takes days is the work before it: pulling real traces, building a replay, grading the outputs, writing it up so it survives review, migrating, and doing it all again when the next model ships. We think that work is the biggest bottleneck in maintaining software. rightmodeler takes it out of the loop, not the judgment, starting with swaps to cheaper models. Today, the final yes stays yours.
+Seeing is the foundation, because you cannot maintain what you cannot see. But seeing is not the bottleneck, and neither is the decision: with the evidence in hand, an engineer makes the call in minutes. What takes days is the work before it: pulling real traces, building a replay, grading the outputs, writing it up so it survives review, migrating, and doing it all again when the next model ships. We think that work is the biggest bottleneck in maintaining software. rightmodeler takes it out of the loop, not the judgment, starting with swaps to cheaper or newer models. Today, the final yes stays yours.
 
 What happens when a brand-new model ships on a Tuesday, and why that should end as a pull request in your repo, is [part two](https://www.rightmodeler.com/blog/the-tuesday-problem). Why the work in the loop belongs to software, and why rightmodeler starts by validating model swaps, is [part three](https://www.rightmodeler.com/blog/the-job-nobody-can-staff).
 

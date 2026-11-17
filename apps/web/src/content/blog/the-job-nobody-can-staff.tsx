@@ -13,7 +13,7 @@ export const meta: PostMeta = {
   slug: "the-job-nobody-can-staff",
   title: "The job nobody can staff.",
   description:
-    "We think the human work in the loop is the bottleneck in maintaining software. Part three of the rightmodeler vision: why we start by validating cheaper model swaps.",
+    "We think the human work in the loop is the bottleneck in maintaining software. Part three of the rightmodeler vision: why we start by validating cheaper or newer model swaps.",
   excerpt:
     "Every few weeks a model ships, and someone has to notice it, replay it, grade it, and migrate it by hand. Part three of our vision: why that work belongs to software, what safe has to mean, and why the final yes stays with a person today.",
   kicker: "The vision · Part three",
@@ -136,8 +136,8 @@ export function Body() {
 
       <P>
         The second is what it does not claim. Agreement with what you shipped is
-        not correctness. The built-in judge can tell you that a cheaper model
-        matches what you accepted, never that either one is right: if an
+        not correctness. The built-in judge can tell you that a cheaper or newer
+        model matches what you accepted, never that either one is right: if an
         accepted output was wrong, a candidate that reproduces it passes.
       </P>
 
@@ -153,15 +153,15 @@ export function Body() {
         The <A href="/how-it-works">rightmodeler CLI</A> is that check: a
         validation framework for model swaps, MIT-licensed and on npm. It reads
         the model calls your app already recorded and replays the recorded
-        steps, offline, on cheaper candidate models from your provider&rsquo;s
-        live catalog: by default up to three released in the last 90 days, or
-        models you name with --candidate that cost less. Upgrades, same-price
-        successors and moves off retired models are not validated today. A judge
-        from a different vendor, or your own evaluator, grades every answer
-        against the output you accepted. Replay sends recorded text
-        conversations: cases whose conversation carries tool calls, tool
-        definitions or non-text parts are left out of the replay sample today,
-        and the run says how many.
+        steps, offline, on cheaper or newer candidate models from your
+        provider&rsquo;s live catalog: by default up to three released in the
+        last 90 days, or models you name with --candidate that cost less.
+        Upgrades, same-price successors and moves off retired models are not
+        validated today. A judge from a different vendor, or your own evaluator,
+        grades every answer against the output you accepted. Replay sends
+        recorded text conversations: cases whose conversation carries tool
+        calls, tool definitions or non-text parts are left out of the replay
+        sample today, and the run says how many.
       </P>
 
       <P>
@@ -291,13 +291,13 @@ A swap is safe, in rightmodeler's terms, when it clears every release gate on yo
 
 Two parts of that sentence carry the weight. The first is abstention. Thin evidence means no swap, and the report names the reason instead of guessing. A tool that finds a swap every time is not measuring anything.
 
-The second is what it does not claim. Agreement with what you shipped is not correctness. The built-in judge can tell you that a cheaper model matches what you accepted, never that either one is right: if an accepted output was wrong, a candidate that reproduces it passes.
+The second is what it does not claim. Agreement with what you shipped is not correctness. The built-in judge can tell you that a cheaper or newer model matches what you accepted, never that either one is right: if an accepted output was wrong, a candidate that reproduces it passes.
 
 ## Where it starts
 
 Validation comes first because everything after it depends on it. A system that changes models without a check that can say no is a blind swap on a schedule.
 
-The [rightmodeler CLI](https://www.rightmodeler.com/how-it-works) is that check: a validation framework for model swaps, MIT-licensed and on npm. It reads the model calls your app already recorded and replays the recorded steps, offline, on cheaper candidate models from your provider's live catalog: by default up to three released in the last 90 days, or models you name with --candidate that cost less. Upgrades, same-price successors and moves off retired models are not validated today. A judge from a different vendor, or your own evaluator, grades every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many.
+The [rightmodeler CLI](https://www.rightmodeler.com/how-it-works) is that check: a validation framework for model swaps, MIT-licensed and on npm. It reads the model calls your app already recorded and replays the recorded steps, offline, on cheaper or newer candidate models from your provider's live catalog: by default up to three released in the last 90 days, or models you name with --candidate that cost less. Upgrades, same-price successors and moves off retired models are not validated today. A judge from a different vendor, or your own evaluator, grades every answer against the output you accepted. Replay sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or non-text parts are left out of the replay sample today, and the run says how many.
 
 A swap that clears every gate becomes a draft pull request that changes only model identifiers, with the evidence attached. The watch command follows that pull request through review and CI, and the rollback command opens a pull request that restores the exact pre-swap files. A coding-agent skill drives the same CLI.
 

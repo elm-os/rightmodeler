@@ -7,16 +7,16 @@
   "verdict": "different-job",
   "verdictLabel": "Different job · live routing vs tested defaults",
   "title": "rightmodeler vs Conifer: route live or test first",
-  "description": "Conifer routes coding-agent turns live across cloud and local models. rightmodeler validates a cheaper pinned model per step, offline, before a person merges.",
+  "description": "Conifer routes coding-agent turns live across cloud and local models. rightmodeler validates a cheaper or newer pinned model per step, offline, before a person merges.",
   "h1": "rightmodeler vs Conifer",
-  "lede": "When you let it, Conifer handles the model, provider, and cache for each turn as it arrives, and can keep easy turns on your own machine. rightmodeler never sees a live request: it tests cheaper alternatives to the model your application names at each step against outputs you already accepted, and proposes a change only when a swap clears every release gate.",
+  "lede": "When you let it, Conifer handles the model, provider, and cache for each turn as it arrives, and can keep easy turns on your own machine. rightmodeler never sees a live request: it tests cheaper or newer alternatives to the model your application names at each step against outputs you already accepted, and proposes a change only when a swap clears every release gate.",
   "integrationSlug": "",
   "related": ["riften", "openrouter", "not-diamond"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Mostly different jobs. You hire Conifer to run the traffic: per its site as of 2026-09-22, one key and one endpoint in front of frontier and open-weights models, a router that picks the model for a turn when you send auto, balanced, or best, provider failover, prompt-cache management, a cost receipt on every response, and a free CLI engine that runs open-weights models on your own Apple Silicon or Windows machine. Its docs call the gateway the product, and much of what it builds on top is for coding harnesses: Palm, in beta, switches models inside a running Claude Code or Codex session. You hire rightmodeler to validate cheaper replacements for the defaults your application names in code: the MIT-licensed CLI replays your recorded traces through cheaper candidates, judges each against the output you accepted, and proposes the winners as a draft pull request that changes only model identifiers. Where the two meet is a named model id: Conifer serves the id you name, exactly, and rightmodeler tells you whether a cheaper id holds up in its place."
+      "body": "Mostly different jobs. You hire Conifer to run the traffic: per its site as of 2026-09-22, one key and one endpoint in front of frontier and open-weights models, a router that picks the model for a turn when you send auto, balanced, or best, provider failover, prompt-cache management, a cost receipt on every response, and a free CLI engine that runs open-weights models on your own Apple Silicon or Windows machine. Its docs call the gateway the product, and much of what it builds on top is for coding harnesses: Palm, in beta, switches models inside a running Claude Code or Codex session. You hire rightmodeler to validate cheaper or newer replacements for the defaults your application names in code: the MIT-licensed CLI replays your recorded traces through cheaper or newer candidates, judges each against the output you accepted, and proposes the winners as a draft pull request that changes only model identifiers. Where the two meet is a named model id: Conifer serves the id you name, exactly, and rightmodeler tells you whether a cheaper or newer id holds up in its place."
     },
     {
       "type": "positioning",
@@ -59,12 +59,12 @@
         {
           "scenario": "Your product calls one model at a fixed step on every request, and you want to know whether a cheaper model holds up before you change that default.",
           "winner": "ours",
-          "why": "rightmodeler replays that step's recorded inputs through cheaper candidates from your provider's live catalog, judges each against the output you accepted, requires a winner to clear the quality floor on held-out cases, and hands you a draft pull request that changes only the model identifier. A router picks again on every turn; a default is a decision you make once, on evidence, and review."
+          "why": "rightmodeler replays that step's recorded inputs through cheaper or newer candidates from your provider's live catalog, judges each against the output you accepted, requires a winner to clear the quality floor on held-out cases, and hands you a draft pull request that changes only the model identifier. A router picks again on every turn; a default is a decision you make once, on evidence, and review."
         },
         {
           "scenario": "Your application already calls Conifer's gateway by named model id, and you want to know whether each id is the right one.",
           "winner": "both",
-          "why": "Keep the gateway. A named id is served as named, with a cost receipt, so the id in your code is exactly the surface rightmodeler can act on. The report tells you, from your own traces, which ids can move to a cheaper model, and a merged change lands in the same call through the same gateway. There is no Conifer integration today; rightmodeler reads your traces and replays through the provider you configure."
+          "why": "Keep the gateway. A named id is served as named, with a cost receipt, so the id in your code is exactly the surface rightmodeler can act on. The report tells you, from your own traces, which ids can move to a cheaper or newer model, and a merged change lands in the same call through the same gateway. There is no Conifer integration today; rightmodeler reads your traces and replays through the provider you configure."
         }
       ]
     },
@@ -103,7 +103,7 @@
         },
         {
           "q": "Conifer's router already picks a model. Why test a default?",
-          "a": "The router picks per turn when you send auto, balanced, or best, and per its SDK README it returns the pick and up to three fallbacks, never the scores behind them. That suits a developer's session, where the next turn may need a different model. For a fixed step in your product, rightmodeler validates a cheaper pinned model offline, before a person merges, and shows the evidence: agreement with the output you accepted, the number of trials behind it, a worst-case bound, and an abstention when the evidence is thin."
+          "a": "The router picks per turn when you send auto, balanced, or best, and per its SDK README it returns the pick and up to three fallbacks, never the scores behind them. That suits a developer's session, where the next turn may need a different model. For a fixed step in your product, rightmodeler validates a cheaper or newer pinned model offline, before a person merges, and shows the evidence: agreement with the output you accepted, the number of trials behind it, a worst-case bound, and an abstention when the evidence is thin."
         },
         {
           "q": "Is Conifer open source?",

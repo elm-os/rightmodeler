@@ -290,12 +290,12 @@ export default async function IntegrationPage({
                     {data.reads.length > 0 ? (
                       <>
                         The CLI runs from npx, nothing to install, and validates
-                        cheaper models on your traces from {data.name}.
+                        cheaper or newer models on your traces from {data.name}.
                       </>
                     ) : (
                       <>
                         The CLI runs from npx, nothing to install, and validates
-                        cheaper models on your own traces.
+                        cheaper or newer models on your own traces.
                       </>
                     )}
                   </p>

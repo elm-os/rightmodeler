@@ -2,7 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: Documentation
     url: https://www.rightmodeler.com/how-it-works
-    about: How rightmodeler validates cheaper model swaps on your traces and opens draft pull requests for the ones that clear every gate.
+    about: How rightmodeler validates cheaper or newer model swaps on your traces and opens draft pull requests for the ones that clear every gate.
   - name: Send feedback
     url: https://www.rightmodeler.com/feedback
     about: Product feedback, questions, and anything that is not a bug or a feature request.

@@ -10,14 +10,14 @@ import { breadcrumbLd, organizationLd, pageMetadata } from "@/lib/seo";
 export const metadata: Metadata = pageMetadata({
   title: "About",
   description:
-    "rightmodeler is working toward production AI that maintains and optimizes itself, starting with open-source validation of cheaper model swaps on your traces.",
+    "rightmodeler is working toward production AI that maintains and optimizes itself, starting with open-source validation of cheaper or newer model swaps on your traces.",
   path: "/about",
 });
 
 const FAQ: FaqItem[] = [
   {
     q: "What is rightmodeler?",
-    a: "An open-source project from ELM-OS, working toward production AI systems that maintain and optimize themselves. It starts with a validation framework for model swaps: the rightmodeler CLI validates swaps to cheaper models on your production traces and opens each one that clears every release gate as a draft pull request that changes only model identifiers, for a person to review and merge.",
+    a: "An open-source project from ELM-OS, working toward production AI systems that maintain and optimize themselves. It starts with a validation framework for model swaps: the rightmodeler CLI validates swaps to cheaper or newer models on your production traces and opens each one that clears every release gate as a draft pull request that changes only model identifiers, for a person to review and merge.",
   },
   {
     q: "Is it open source?",
@@ -25,7 +25,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How is it different from observability or a gateway?",
-    a: "It answers a narrower question: whether a cheaper model agrees with the outputs you accepted, step by step. Observability records what your app did, and a gateway serves the model you pin. rightmodeler reads the traces you already export, so your observability tool stays in place, and it can replay candidates through your gateway. It runs offline and never sits in your request path. A swap that clears every release gate becomes a draft pull request that changes only model identifiers, for a person to review and merge.",
+    a: "It answers a narrower question: whether a cheaper or newer model agrees with the outputs you accepted, step by step. Observability records what your app did, and a gateway serves the model you pin. rightmodeler reads the traces you already export, so your observability tool stays in place, and it can replay candidates through your gateway. It runs offline and never sits in your request path. A swap that clears every release gate becomes a draft pull request that changes only model identifiers, for a person to review and merge.",
   },
 ];
 
@@ -59,11 +59,11 @@ export default function AboutPage() {
           <p className="text-body text-driftwood">
             So we started with a validation framework for model swaps. The
             rightmodeler CLI reads the model calls your app already recorded,
-            replays the recorded steps on cheaper candidate models, and has a
-            judge from a different vendor, or your own evaluator, grade every
-            answer against the output you accepted. A swap that clears every
-            release gate becomes a draft pull request that changes only model
-            identifiers, with the evidence attached.
+            replays the recorded steps on cheaper or newer candidate models, and
+            has a judge from a different vendor, or your own evaluator, grade
+            every answer against the output you accepted. A swap that clears
+            every release gate becomes a draft pull request that changes only
+            model identifiers, with the evidence attached.
           </p>
           <p className="text-body text-driftwood">
             A swap is safe, in rightmodeler&rsquo;s terms, when it clears every

@@ -162,9 +162,9 @@ export function Body() {
         framework for model swaps, an MIT-licensed CLI (npx rightmodeler init)
         that reads <A href="/integrations">the traces you already export</A>{" "}
         from tools such as Langfuse, Helicone or OpenTelemetry, resends recorded
-        conversations to cheaper candidates from your provider&rsquo;s live
-        model catalog, and has a judge from outside both model families, or your
-        own evaluator, grade each output against the one you accepted. The
+        conversations to cheaper or newer candidates from your provider&rsquo;s
+        live model catalog, and has a judge from outside both model families, or
+        your own evaluator, grade each output against the one you accepted. The
         report gives each step family&rsquo;s pass count out of its trials, a
         worst-case bound, and an abstention reason wherever the evidence is too
         thin to recommend. A candidate chosen on one part of your traces must
@@ -607,7 +607,7 @@ Prerequisites: step-level traces with each call's inputs and the outputs your te
 
 What it trades away: one model per step, chosen in advance, so it cannot adapt to a hard request inside an easy step. The accepted output is a [reference, not ground truth](https://www.rightmodeler.com/glossary#reference-evidence), so agreement means the candidate matches what you shipped. And models and prices keep changing, so the measurement has to be repeatable.
 
-This is the approach rightmodeler is built for. It is a validation framework for model swaps, an MIT-licensed CLI (npx rightmodeler init) that reads [the traces you already export](https://www.rightmodeler.com/integrations) from tools such as Langfuse, Helicone or OpenTelemetry, resends recorded conversations to cheaper candidates from your provider's live model catalog, and has a judge from outside both model families, or your own evaluator, grade each output against the one you accepted. The report gives each step family's pass count out of its trials, a worst-case bound, and an abstention reason wherever the evidence is too thin to recommend. A candidate chosen on one part of your traces must then clear your quality floor on a held-out part, and swaps that feed later model steps must be confirmed end to end in a sandbox. Each swap that clears every release gate becomes a draft pull request that changes only model identifiers, with the evidence attached, and a person reviews and merges it. Unlike a router, which chooses a model per request at runtime, rightmodeler validates one pinned model per step, offline, and never sits in your request path.
+This is the approach rightmodeler is built for. It is a validation framework for model swaps, an MIT-licensed CLI (npx rightmodeler init) that reads [the traces you already export](https://www.rightmodeler.com/integrations) from tools such as Langfuse, Helicone or OpenTelemetry, resends recorded conversations to cheaper or newer candidates from your provider's live model catalog, and has a judge from outside both model families, or your own evaluator, grade each output against the one you accepted. The report gives each step family's pass count out of its trials, a worst-case bound, and an abstention reason wherever the evidence is too thin to recommend. A candidate chosen on one part of your traces must then clear your quality floor on a held-out part, and swaps that feed later model steps must be confirmed end to end in a sandbox. Each swap that clears every release gate becomes a draft pull request that changes only model identifiers, with the evidence attached, and a person reviews and merges it. Unlike a router, which chooses a model per request at runtime, rightmodeler validates one pinned model per step, offline, and never sits in your request path.
 
 For what this kind of evidence looks like on a real system, the [B:Side Assist case study](https://www.rightmodeler.com/case-study/bside) follows 11 AI workloads from a single model and reasoning setting to a per-workload model assignment: a projected 70.8% lower inference cost, with the quality pass rate measured at 100% on a 20-query benchmark against the outputs B:Side had accepted. The [reduce LLM costs](https://www.rightmodeler.com/use-cases/reduce-llm-costs) page covers the workflow end to end.
 

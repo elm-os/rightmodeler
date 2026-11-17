@@ -7,16 +7,16 @@
   "verdict": "different-job",
   "verdictLabel": "Different job · own a model vs right-size what you rent",
   "title": "rightmodeler vs ThirdBrain Labs: right-size or own",
-  "description": "ThirdBrain Labs helps domain experts train models they own. rightmodeler validates cheaper rented models per step on your traces. Adjacent, not a replacement.",
+  "description": "ThirdBrain Labs helps domain experts train models they own. rightmodeler validates cheaper or newer rented models per step on your traces. Adjacent, not a replacement.",
   "h1": "rightmodeler vs ThirdBrain Labs",
-  "lede": "ThirdBrain Labs helps domain experts train models they own, pitched as a way off rented black-box APIs. rightmodeler stays with the models you rent and checks, step by step against the outputs you accepted, which cheaper one each step actually needs.",
+  "lede": "ThirdBrain Labs helps domain experts train models they own, pitched as a way off rented black-box APIs. rightmodeler stays with the models you rent and checks, step by step against the outputs you accepted, which cheaper or newer one each step actually needs.",
   "integrationSlug": "",
   "related": ["agnost-ai", "riften", "modaic"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "An adjacent alternative, not a drop-in replacement. ThirdBrain Labs, from a16z speedrun's cohort 006, helps domain experts train custom models and own them. Per its site, it captures training signals from expert work inside your workflow and trains and deploys domain-specific models; its speedrun profile calls this end-to-end post-training infrastructure applied on top of base models. rightmodeler keeps you on the models you already rent and makes each one earn its place: the MIT-licensed CLI replays the traces you already recorded through cheaper models your provider already serves, judges each against the output you accepted, and, when a swap clears every gate, opens a draft pull request that changes only model identifiers. One path ends in weights you own and have to serve and keep current. The other ends in a reviewed change to a model identifier."
+      "body": "An adjacent alternative, not a drop-in replacement. ThirdBrain Labs, from a16z speedrun's cohort 006, helps domain experts train custom models and own them. Per its site, it captures training signals from expert work inside your workflow and trains and deploys domain-specific models; its speedrun profile calls this end-to-end post-training infrastructure applied on top of base models. rightmodeler keeps you on the models you already rent and makes each one earn its place: the MIT-licensed CLI replays the traces you already recorded through cheaper or newer models your provider already serves, judges each against the output you accepted, and, when a swap clears every gate, opens a draft pull request that changes only model identifiers. One path ends in weights you own and have to serve and keep current. The other ends in a reviewed change to a model identifier."
     },
     {
       "type": "positioning",
@@ -31,7 +31,7 @@
         "heading": "rightmodeler: right-size what you rent",
         "items": [
           "Starts from traces: the steps your agent already ran, with the outputs you already accepted as the reference. No new data to collect and no training set to build.",
-          "Ends in a reviewed pull request: a cheaper model your provider already serves, recommended per step only after it clears every release gate, held-out cases included, with abstentions wherever the evidence is thin."
+          "Ends in a reviewed pull request: a cheaper or newer model your provider already serves, recommended per step only after it clears every release gate, held-out cases included, with abstentions wherever the evidence is thin."
         ]
       }
     },
@@ -61,12 +61,12 @@
         {
           "dimension": "deployment",
           "theirs": "train and deploy in weeks, not months (their claim); hosting details are not published",
-          "ours": "nothing new to deploy; the cheaper model is one your provider already serves"
+          "ours": "nothing new to deploy; the cheaper or newer model is one your provider already serves"
         },
         {
           "dimension": "rented APIs",
           "theirs": "built to remove the dependency, per its site",
-          "ours": "kept; rightmodeler validates which cheaper rented model each step can use"
+          "ours": "kept; rightmodeler validates which cheaper or newer rented model each step can use"
         },
         {
           "dimension": "how to start",
@@ -141,11 +141,11 @@
       "items": [
         {
           "q": "Is ThirdBrain Labs a replacement for rightmodeler?",
-          "a": "No, and the reverse holds too. ThirdBrain Labs builds models you own from domain expertise; rightmodeler validates which cheaper rented model each step of your agent can use. They sit side by side in a decision about model spend, but neither does the other's job, and neither drops into the other's place."
+          "a": "No, and the reverse holds too. ThirdBrain Labs builds models you own from domain expertise; rightmodeler validates which cheaper or newer rented model each step of your agent can use. They sit side by side in a decision about model spend, but neither does the other's job, and neither drops into the other's place."
         },
         {
           "q": "Should we train our own model or move to a cheaper existing one?",
-          "a": "Measure before you train. A validation run shows, per step, whether a cheaper model your provider already serves agrees with the outputs you accepted, with sample sizes and abstentions attached. Where one does, a swap is the smaller change. Where none clears the quality floor, a specialized model is worth pricing out, along with the hosting, evaluation, and retraining it brings."
+          "a": "Measure before you train. A validation run shows, per step, whether a cheaper or newer model your provider already serves agrees with the outputs you accepted, with sample sizes and abstentions attached. Where one does, a swap is the smaller change. Where none clears the quality floor, a specialized model is worth pricing out, along with the hosting, evaluation, and retraining it brings."
         },
         {
           "q": "Does rightmodeler train, fine-tune, or distill models?",

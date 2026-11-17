@@ -8,7 +8,7 @@
   "title": "GitHub Actions integration: a tested validation workflow",
   "description": "A tested GitHub Actions workflow runs rightmodeler every week, opens the draft pull request only when a person dispatches apply, and watches it on GITHUB_TOKEN.",
   "h1": "rightmodeler + GitHub Actions",
-  "lede": "The CLI ships a tested workflow for GitHub Actions. It validates cheaper models on your committed traces on a schedule, opens the draft pull request only when a person asks for it, and keeps that pull request reconciled, all on the job's own GITHUB_TOKEN with no GitHub App and no personal access token.",
+  "lede": "The CLI ships a tested workflow for GitHub Actions. It validates cheaper or newer models on your committed traces on a schedule, opens the draft pull request only when a person asks for it, and keeps that pull request reconciled, all on the job's own GITHUB_TOKEN with no GitHub App and no personal access token.",
   "tldr": "rightmodeler docs github-actions prints a workflow pinned to the release you run. Its init job runs every Monday and on pushes to main that change traces/, its apply job runs only when a person dispatches the workflow with command=apply, and its watch job reconciles each swap pull request every 6 hours. Every job uses the built-in GITHUB_TOKEN with only the permissions its command needs, keeps the store in the Actions cache, and reads each command's exit code for what it means, so a found swap or a held lock never shows up as a failed run. Dispatched init, apply and watch runs were verified live.",
   "steps": [
     {

@@ -7,9 +7,9 @@
   "verdict": "different-job",
   "verdictLabel": "Different job · a toolkit you assemble vs a finished workflow",
   "title": "rightmodeler vs Ragas: a toolkit vs a finished workflow",
-  "description": "Ragas gives you metrics, test data generation, and experiments to assemble your own evals. rightmodeler is one finished workflow for validating cheaper models.",
+  "description": "Ragas gives you metrics, test data generation, and experiments to assemble your own evals. rightmodeler is one finished workflow for validating cheaper or newer models.",
   "h1": "rightmodeler vs Ragas",
-  "lede": "Ragas is an open-source toolkit for building your own evaluation workflow: metrics, synthetic test data, and experiments you wire together in Python. rightmodeler is one workflow already assembled for one question: which steps of your agent can move to a cheaper model, validated on the traces you recorded.",
+  "lede": "Ragas is an open-source toolkit for building your own evaluation workflow: metrics, synthetic test data, and experiments you wire together in Python. rightmodeler is one workflow already assembled for one question: which steps of your agent can move to a cheaper or newer model, validated on the traces you recorded.",
   "integrationSlug": "",
   "related": ["deepeval", "promptfoo", "langfuse"],
   "cta": "github",
@@ -32,7 +32,7 @@
       "right": {
         "heading": "Run rightmodeler",
         "items": [
-          "The question is narrow and recurring: can each step of an agent that already runs in production move to a cheaper model?",
+          "The question is narrow and recurring: can each step of an agent that already runs in production move to a cheaper or newer model?",
           "You want the test set to be the traffic you already recorded, with the output you accepted as the reference, instead of a dataset you build first.",
           "You want cheaper candidates picked for you from your provider's live catalog, sample size and abstentions reported with every verdict, and any recommendation held to the quality floor on held-out cases.",
           "You want the result as a draft pull request that changes model identifiers only, for a person to review and merge."
@@ -42,7 +42,7 @@
     {
       "type": "table",
       "heading": "How they differ",
-      "intro": "Both can answer whether a cheaper model holds up. Here is who does which part of the work.",
+      "intro": "Both can answer whether a cheaper or newer model holds up. Here is who does which part of the work.",
       "caption": "ragas vs rightmodeler",
       "leftLabel": "Ragas",
       "rightLabel": "rightmodeler",
@@ -50,7 +50,7 @@
         {
           "dimension": "what you get",
           "theirs": "a Python library and CLI of evaluation parts: metrics, datasets, experiments, and test set generators",
-          "ours": "one finished workflow: validating swaps to cheaper models"
+          "ours": "one finished workflow: validating swaps to cheaper or newer models"
         },
         {
           "dimension": "test cases",
@@ -185,7 +185,7 @@
       "items": [
         {
           "q": "Can Ragas compare models?",
-          "a": "Yes, per its docs. Its Evaluate a New LLM guide runs a baseline and a candidate model over the same dataset as experiments, combines the results into one CSV, and tells you to weigh accuracy against cost and latency before you switch. You choose the candidate, supply or generate the dataset, and define the metric. rightmodeler does those steps for swaps to cheaper models, from your recorded traces, across the plain-text cases of every step family, and opens a model-only draft pull request for the swaps that clear every gate."
+          "a": "Yes, per its docs. Its Evaluate a New LLM guide runs a baseline and a candidate model over the same dataset as experiments, combines the results into one CSV, and tells you to weigh accuracy against cost and latency before you switch. You choose the candidate, supply or generate the dataset, and define the metric. rightmodeler does those steps for swaps to cheaper or newer models, from your recorded traces, across the plain-text cases of every step family, and opens a model-only draft pull request for the swaps that clear every gate."
         },
         {
           "q": "Can Ragas metrics grade rightmodeler's replays?",
@@ -201,7 +201,7 @@
         },
         {
           "q": "Does rightmodeler replace Ragas?",
-          "a": "No. Ragas is where you design and run your own evaluations, and it covers retrieval, grounding, test data, and judge alignment, which rightmodeler does not. rightmodeler is an offline workflow for one question: which steps can move to a cheaper model. Not observability. Not a runtime gateway."
+          "a": "No. Ragas is where you design and run your own evaluations, and it covers retrieval, grounding, test data, and judge alignment, which rightmodeler does not. rightmodeler is an offline workflow for one question: which steps can move to a cheaper or newer model. Not observability. Not a runtime gateway."
         }
       ]
     }

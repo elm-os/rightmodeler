@@ -13,7 +13,7 @@ import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Integrations",
-  description: `Everything the validation loop touches: the ${TRACE_SOURCES.length} trace formats rightmodeler reads, where cheaper candidates replay, what grades them, and where the pull request lands.`,
+  description: `Everything the validation loop touches: the ${TRACE_SOURCES.length} trace formats rightmodeler reads, where cheaper or newer candidates replay, what grades them, and where the pull request lands.`,
   path: "/integrations",
   image: "/social/integrations.png",
 });

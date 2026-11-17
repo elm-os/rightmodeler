@@ -7,9 +7,9 @@
   "verdict": "different-job",
   "verdictLabel": "Different job · code changes vs model choice",
   "title": "rightmodeler vs Jardinero: code fixes vs model choice",
-  "description": "Jardinero, a self-hosted AI engineer, fixes logged errors, implements tickets, and tends pull requests. rightmodeler validates cheaper models for your app.",
+  "description": "Jardinero, a self-hosted AI engineer, fixes logged errors, implements tickets, and tends pull requests. rightmodeler validates cheaper or newer models for your app.",
   "h1": "rightmodeler vs Jardinero",
-  "lede": "Jardinero is an always-on AI engineer you host yourself: it reads your production logs, implements the tickets you assign, and keeps pull requests moving, each in a throwaway sandbox. rightmodeler settles one narrower question with evidence: can a cheaper model take this step of your own AI product without losing what you accepted?",
+  "lede": "Jardinero is an always-on AI engineer you host yourself: it reads your production logs, implements the tickets you assign, and keeps pull requests moving, each in a throwaway sandbox. rightmodeler settles one narrower question with evidence: can a cheaper or newer model take this step of your own AI product without losing what you accepted?",
   "integrationSlug": "",
   "related": ["langsmith", "langwatch", "mentlio"],
   "cta": "github",
@@ -45,7 +45,7 @@
         {
           "dimension": "question answered",
           "theirs": "what is broken or asked for, and which code change resolves it",
-          "ours": "whether a cheaper model holds up at each step"
+          "ours": "whether a cheaper or newer model holds up at each step"
         },
         {
           "dimension": "who does the work",
@@ -97,7 +97,7 @@
         {
           "scenario": "Your product's agent pins a frontier model on every step. The bill keeps climbing, and nobody can say which steps need that model.",
           "winner": "ours",
-          "why": "rightmodeler replays the recorded steps through cheaper candidates from your provider's live catalog, judges them against the outputs you accepted, requires a winner to clear the quality floor on held-out cases, and abstains where the evidence is thin. The change arrives as a draft pull request that touches model identifiers only."
+          "why": "rightmodeler replays the recorded steps through cheaper or newer candidates from your provider's live catalog, judges them against the outputs you accepted, requires a winner to clear the quality floor on held-out cases, and abstains where the evidence is thin. The change arrives as a draft pull request that touches model identifiers only."
         },
         {
           "scenario": "You ship an AI product from a repository Jardinero already tends.",

@@ -8,7 +8,7 @@
   "title": "Vercel Sandbox integration: confirm swaps in the cloud",
   "description": "Run rightmodeler's confirm stage in Vercel Sandbox: each case runs your app in a fresh microVM in your Vercel project, and the model key never enters it.",
   "h1": "rightmodeler + Vercel Sandbox",
-  "lede": "Some swaps have to be confirmed end to end, by running your own pipeline with the cheaper model in place. The cloud backend runs each of those cases in a short-lived Vercel Sandbox microVM in your own Vercel project instead of a local Docker container.",
+  "lede": "Some swaps have to be confirmed end to end, by running your own pipeline with the cheaper or newer model in place. The cloud backend runs each of those cases in a short-lived Vercel Sandbox microVM in your own Vercel project instead of a local Docker container.",
   "tldr": "Vercel Sandbox is where rightmodeler's confirm stage can run your app, not a replay route. Set \"backend\": \"cloud\" in the --modeb-config file and each confirmation case runs in a fresh, non-persistent Vercel Sandbox microVM that is deleted after the case. The model credential named by --api-key-env is attached by the sandbox platform's egress firewall and never enters the VM, a metering proxy inside the sandbox records every model call against the run's budget, and every case is judged on the machine running rightmodeler, never in the sandbox. It is separate from the Vercel AI Gateway. Verified live: three smoke runs of the confirmation driver passed in real Vercel Sandbox microVMs through the Vercel AI Gateway, at $0.000005 each.",
   "steps": [
     {

@@ -42,7 +42,7 @@ const FAILURES: Feature = {
 const RIGHTSIZED: Feature = {
   title: "Continuously right-sized",
   caption:
-    "Will validate cheaper swaps as traces arrive, on top of the agent's schedule, with evidence and abstentions.",
+    "Will validate cheaper or newer model swaps as traces arrive, on top of the agent's schedule, with evidence and abstentions.",
   img: "/crucible/rightsized.jpg",
 };
 const MCP: Feature = {

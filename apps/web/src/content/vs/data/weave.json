@@ -7,16 +7,16 @@
   "verdict": "complement",
   "verdictLabel": "Complement · Weave evaluates, rightmodeler right-sizes",
   "title": "rightmodeler vs W&B Weave: agent evals vs model swaps",
-  "description": "W&B Weave traces, scores, and monitors production agents. rightmodeler validates cheaper models on the calls Weave recorded and opens draft PRs you review.",
+  "description": "W&B Weave traces, scores, and monitors production agents. rightmodeler validates cheaper or newer models on the calls Weave recorded and opens draft PRs you review.",
   "h1": "rightmodeler vs W&B Weave",
-  "lede": "W&B Weave traces your agent in production, scores it with signals and evaluations you configure, and lets you try other models in its Playground. rightmodeler reads the calls Weave already recorded and settles one narrower question with evidence: which steps can move to a cheaper model?",
+  "lede": "W&B Weave traces your agent in production, scores it with signals and evaluations you configure, and lets you try other models in its Playground. rightmodeler reads the calls Weave already recorded and settles one narrower question with evidence: which steps can move to a cheaper or newer model?",
   "integrationSlug": "weave",
   "related": ["braintrust", "langsmith", "phoenix", "langwatch"],
   "cta": "github",
   "blocks": [
     {
       "type": "tldr",
-      "body": "Complements, working on the same calls. You hire W&B Weave to see and improve an agent in production: as of 2026-09-24, its site describes end-to-end observability of agent sessions, out-of-the-box signals that surface failure modes, a flexible evaluation framework to prevent regressions, guardrails, and a Playground for testing new models against production traces. You hire rightmodeler, a free MIT-licensed CLI, for model right-sizing: its dedicated Weave adapter reads the calls you export, replays the recorded calls through cheaper candidates from your provider's live catalog, judges them against the output you already shipped, and reports agreement, sample size, and abstentions per step family. When a swap clears every gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, for a human to review and merge. Keep Weave where production is watched; your Weave evaluations are the right last check on any swap."
+      "body": "Complements, working on the same calls. You hire W&B Weave to see and improve an agent in production: as of 2026-09-24, its site describes end-to-end observability of agent sessions, out-of-the-box signals that surface failure modes, a flexible evaluation framework to prevent regressions, guardrails, and a Playground for testing new models against production traces. You hire rightmodeler, a free MIT-licensed CLI, for model right-sizing: its dedicated Weave adapter reads the calls you export, replays the recorded calls through cheaper or newer candidates from your provider's live catalog, judges them against the output you already shipped, and reports agreement, sample size, and abstentions per step family. When a swap clears every gate, rightmodeler apply opens a draft pull request that changes model identifiers and nothing else, for a human to review and merge. Keep Weave where production is watched; your Weave evaluations are the right last check on any swap."
     },
     {
       "type": "table",
@@ -29,7 +29,7 @@
         {
           "dimension": "job",
           "theirs": "observe, evaluate, and improve agents and LLM apps in production",
-          "ours": "validate whether each step can move to a cheaper model, with evidence"
+          "ours": "validate whether each step can move to a cheaper or newer model, with evidence"
         },
         {
           "dimension": "starting point",
@@ -44,7 +44,7 @@
         {
           "dimension": "trying another model",
           "theirs": "Playground and Evaluation Playground, side by side, on the prompts, traces, or dataset you pick",
-          "ours": "the recorded calls of a step family replayed on cheaper candidates from your provider's live catalog"
+          "ours": "the recorded calls of a step family replayed on cheaper or newer candidates from your provider's live catalog"
         },
         {
           "dimension": "verdict",
@@ -121,7 +121,7 @@
       "heading": "The honest part",
       "paragraphs": [
         "Weave watches production continuously. Tracing, preset and custom signals, and alerts tell you what an agent is doing now, and guardrails can block or modify an output before it reaches a user, per its docs. rightmodeler works after the fact on exported files and will never tell you that something broke an hour ago.",
-        "Weave owns the evaluation workflow: versioned datasets, scorers you write or pick from its built-in set, evaluation comparisons, leaderboards, human feedback, and annotation queues. rightmodeler ships none of that. It answers one question, whether each step can move to a cheaper model, and expects your Weave evaluations to remain the bar.",
+        "Weave owns the evaluation workflow: versioned datasets, scorers you write or pick from its built-in set, evaluation comparisons, leaderboards, human feedback, and annotation queues. rightmodeler ships none of that. It answers one question, whether each step can move to a cheaper or newer model, and expects your Weave evaluations to remain the bar.",
         "Weave also covers ground rightmodeler never touches: prompt and model versioning, a Playground for exploring prompts, coding agents that iterate through W&B's skills and MCP server, and hosting on W&B's multi-tenant cloud, a dedicated cloud, or a self-managed instance, per its docs. rightmodeler changes the model a step calls; it does not rewrite prompts, context, or code.",
         "And rightmodeler's verdicts carry their own limit: they measure how closely a candidate tracked the output you shipped, which is evidence of agreement, not ground-truth correctness. Where the sample is thin, the family abstains with a named reason instead of recommending."
       ]
@@ -166,11 +166,11 @@
       "items": [
         {
           "q": "Does rightmodeler replace W&B Weave?",
-          "a": "No. Weave traces, evaluates, and monitors your agent, and guards its outputs in production. rightmodeler validates cheaper models on calls Weave already recorded, and it answers one question Weave's evaluations do not ask: which steps can move to a cheaper model. A swap it proposes is the change to run through your Weave evaluations before you merge it."
+          "a": "No. Weave traces, evaluates, and monitors your agent, and guards its outputs in production. rightmodeler validates cheaper or newer models on calls Weave already recorded, and it answers one question Weave's evaluations do not ask: which steps can move to a cheaper or newer model. A swap it proposes is the change to run through your Weave evaluations before you merge it."
         },
         {
           "q": "Weave's Playground can already compare models. Why run rightmodeler?",
-          "a": "Different evidence. The Playground and the Evaluation Playground compare models on the prompts, traces, or dataset you choose, graded by you or by an LLM judge you configure, per Weave's docs. rightmodeler replays the recorded calls of a step family on cheaper candidates, judges each against the output you shipped, reports sample size and abstentions, and holds the winner to the quality floor on held-out cases before it recommends a swap."
+          "a": "Different evidence. The Playground and the Evaluation Playground compare models on the prompts, traces, or dataset you choose, graded by you or by an LLM judge you configure, per Weave's docs. rightmodeler replays the recorded calls of a step family on cheaper or newer candidates, judges each against the output you shipped, reports sample size and abstentions, and holds the winner to the quality floor on held-out cases before it recommends a swap."
         },
         {
           "q": "How do I get my calls out of Weave?",

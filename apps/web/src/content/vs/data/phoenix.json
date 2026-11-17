@@ -7,9 +7,9 @@
   "verdict": "complement",
   "verdictLabel": "Complement · experiments vs model maintenance",
   "title": "rightmodeler vs Arize Phoenix: the whole swap validation",
-  "description": "Arize Phoenix replays spans and compares models side by side. rightmodeler validates cheaper models on the spans you export and opens a draft PR you merge.",
+  "description": "Arize Phoenix replays spans and compares models side by side. rightmodeler validates cheaper or newer models on the spans you export and opens a draft PR you merge.",
   "h1": "rightmodeler vs Arize Phoenix",
-  "lede": "Phoenix is an open environment for tracing, evaluating, and experimenting, and it can already replay a recorded span on another model. rightmodeler runs one validation as a routine on the spans Phoenix records: which steps can move to a cheaper model, with per-step evidence and a draft pull request.",
+  "lede": "Phoenix is an open environment for tracing, evaluating, and experimenting, and it can already replay a recorded span on another model. rightmodeler runs one validation as a routine on the spans Phoenix records: which steps can move to a cheaper or newer model, with per-step evidence and a draft pull request.",
   "integrationSlug": "phoenix",
   "related": ["langfuse", "langsmith", "braintrust"],
   "cta": "github",
@@ -29,7 +29,7 @@
         {
           "dimension": "built for",
           "theirs": "tracing, evaluation, prompt engineering, and experiments in one environment",
-          "ours": "one recurring job: validating which steps of your agent can move to a cheaper model"
+          "ours": "one recurring job: validating which steps of your agent can move to a cheaper or newer model"
         },
         {
           "dimension": "replay",
@@ -182,7 +182,7 @@
         },
         {
           "q": "Does rightmodeler replace Phoenix?",
-          "a": "No. Phoenix is where you trace, evaluate, and experiment. rightmodeler runs after the fact on exported spans, validates which steps can move to a cheaper model, and hands the swaps that clear every gate to code review as a draft pull request. Not observability. Not a runtime gateway."
+          "a": "No. Phoenix is where you trace, evaluate, and experiment. rightmodeler runs after the fact on exported spans, validates which steps can move to a cheaper or newer model, and hands the swaps that clear every gate to code review as a draft pull request. Not observability. Not a runtime gateway."
         },
         {
           "q": "Is Phoenix open source?",

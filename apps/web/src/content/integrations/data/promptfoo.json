@@ -6,9 +6,9 @@
   "category": "evaluator",
   "categoryLabel": "Evaluator · your assertions",
   "title": "promptfoo integration: grade replays with assertions",
-  "description": "Grade rightmodeler replays with promptfoo: your assertions and named metrics decide which cheaper candidates pass, run locally on the real promptfoo CLI.",
+  "description": "Grade rightmodeler replays with promptfoo: your assertions and named metrics decide which cheaper or newer candidates pass, run locally on the real promptfoo CLI.",
   "h1": "rightmodeler + promptfoo",
-  "lede": "Your promptfoo assertions already say what a good output looks like. rightmodeler can hand them every candidate output from a replay, so the checks your team maintains, not a judge model you did not write, decide which cheaper models pass.",
+  "lede": "Your promptfoo assertions already say what a good output looks like. rightmodeler can hand them every candidate output from a replay, so the checks your team maintains, not a judge model you did not write, decide which cheaper or newer models pass.",
   "tldr": "promptfoo is a rightmodeler evaluator. Pass --evaluator promptfoo with your assertions file as --evaluator-config and an --evaluator-scorer for each named metric you want graded, and rightmodeler runs the real promptfoo CLI on your machine against each batch of candidate outputs. A metric passes only when every assertion carrying it passes, and that decision feeds the release gates. promptfoo sees candidate outputs only, never the input or the output you shipped. A case promptfoo could not grade, or whose output it changed before grading, is recorded absent with a named reason and never counts as a pass. Editing the assertions re-grades the stored outputs without calling a candidate model again. Verified against promptfoo 0.123.1.",
   "steps": [
     {
@@ -54,11 +54,11 @@
   "useCases": [
     {
       "title": "Let the checks you already maintain decide",
-      "body": "If your team keeps promptfoo assertions for required fields, banned phrasing, or tone, the same file can decide whether a cheaper candidate passed. The pass decision comes from rules you wrote and can read, rather than from a judge model rightmodeler picked."
+      "body": "If your team keeps promptfoo assertions for required fields, banned phrasing, or tone, the same file can decide whether a cheaper or newer candidate passed. The pass decision comes from rules you wrote and can read, rather than from a judge model rightmodeler picked."
     },
     {
       "title": "Hold structured steps to an exact format",
-      "body": "Deterministic assertions such as is-json or regex give a plain pass or fail for every output. A cheaper model that drops a field or breaks the format fails the metric outright, with no model opinion involved in the grade."
+      "body": "Deterministic assertions such as is-json or regex give a plain pass or fail for every output. A cheaper or newer model that drops a field or breaks the format fails the metric outright, with no model opinion involved in the grade."
     },
     {
       "title": "Tighten the rubric without paying for replays again",

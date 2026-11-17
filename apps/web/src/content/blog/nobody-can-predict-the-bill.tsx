@@ -184,11 +184,11 @@ export function Body() {
       <P>
         It would be dishonest to write all that up without naming the part that
         is inconvenient for us. rightmodeler validates model swaps by replaying
-        your recorded traces on cheaper candidate models and measuring agreement
-        with the outputs you already accepted. The variance finding applies to
-        that too. A single replay of a single trace is one draw from a
-        distribution this paper shows to be wide and lopsided. One replay tells
-        you very little.
+        your recorded traces on cheaper or newer candidate models and measuring
+        agreement with the outputs you already accepted. The variance finding
+        applies to that too. A single replay of a single trace is one draw from
+        a distribution this paper shows to be wide and lopsided. One replay
+        tells you very little.
       </P>
 
       <P>
@@ -282,7 +282,7 @@ That one result is what makes choosing the model for each step a real lever inst
 
 ## Where this cuts against us
 
-It would be dishonest to write all that up without naming the part that is inconvenient for us. rightmodeler validates model swaps by replaying your recorded traces on cheaper candidate models and measuring agreement with the outputs you already accepted. The variance finding applies to that too. A single replay of a single trace is one draw from a distribution this paper shows to be wide and lopsided. One replay tells you very little.
+It would be dishonest to write all that up without naming the part that is inconvenient for us. rightmodeler validates model swaps by replaying your recorded traces on cheaper or newer candidate models and measuring agreement with the outputs you already accepted. The variance finding applies to that too. A single replay of a single trace is one draw from a distribution this paper shows to be wide and lopsided. One replay tells you very little.
 
 That is why a swap counts only when the statistical lower bound on agreement, not the average, reaches your quality floor, on held-out cases the candidate was not chosen on. It is also why the tool reports sample size beside every recommendation, and why it abstains rather than guessing when the evidence under a step is thin. A tool that always finds you a saving is not measuring anything. We cannot make agent cost predictable. Neither can anyone else, which is rather the point. What we can do is stop asking anybody to forecast it.
 

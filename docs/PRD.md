@@ -1,4 +1,4 @@
-# Product Requirements: Validated Swaps to Cheaper Models
+# Product Requirements: Validated Swaps to Cheaper or Newer Models
 
 Sections 1 to 5 follow [positioning.md](positioning.md). The requirements from section 6 on were
 written before the TypeScript harness; where they and `harness/docs/Architecture.md` disagree,
@@ -9,8 +9,8 @@ Architecture.md is the design of record.
 We think the biggest bottleneck in maintaining software is the human in the loop: not the
 judgment, the work. We are solving it first for production AI systems.
 
-The first product is a validation framework for model swaps. It validates swaps to cheaper models
-on your production traces and opens each one that clears every release gate as a draft pull
+The first product is a validation framework for model swaps. It validates swaps to cheaper or newer
+models on your production traces and opens each one that clears every release gate as a draft pull
 request that changes only model identifiers, with the evidence attached. rightmodeler takes the
 work out of the loop, not the judgment: today, the final yes stays yours.
 
@@ -54,12 +54,12 @@ review.
 ## 4. Product Goal
 
 Take the work out of the loop, not the judgment, and earn each step of autonomy with evidence,
-starting with validated swaps to cheaper models.
+starting with validated swaps to cheaper or newer models.
 
 The rightmodeler CLI reads the model calls your app already recorded, replays the recorded steps
-on cheaper candidate models from your provider's live catalog, and has a judge from a different
-vendor, or your own evaluator, grade every answer against the output you accepted. Replay sends
-recorded text conversations: cases whose conversation carries tool calls, tool definitions or
+on cheaper or newer candidate models from your provider's live catalog, and has a judge from a
+different vendor, or your own evaluator, grade every answer against the output you accepted. Replay
+sends recorded text conversations: cases whose conversation carries tool calls, tool definitions or
 non-text parts are left out of the replay sample today, and the run says how many. A swap that
 clears every release gate becomes a draft pull request that changes only model identifiers, with
 the evidence attached.
@@ -107,8 +107,8 @@ rightmodeler does not:
 Not in scope today:
 
 - Merging, deploying or swapping a model on its own. Only a person merges.
-- Validating upgrades, a model at the same price, or a move off a retired model. Candidates must
-  cost less than the recorded model, even when named with `--candidate`.
+- Validating newer models that do not cost less than the recorded model; support ships in a later
+  release. Candidates must cost less than the recorded model, even when named with `--candidate`.
 - Tuning reasoning effort, prompts or retries.
 - Ranking candidates on your own token mix, measuring savings after merge, latency budgets, or
   latency comparisons with the current model.
