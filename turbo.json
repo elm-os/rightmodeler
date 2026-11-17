@@ -45,7 +45,8 @@
         "$TURBO_ROOT$/harness/docs/parity.md",
         "$TURBO_ROOT$/harness/fixtures/**",
         "$TURBO_ROOT$/harness/tsconfig.base.json",
-        "$TURBO_ROOT$/skills/rightmodeler/**"
+        "$TURBO_ROOT$/skills/rightmodeler/SKILL.md",
+        "$TURBO_ROOT$/skills/rightmodeler/reference/**"
       ]
     },
     "check-types": {
