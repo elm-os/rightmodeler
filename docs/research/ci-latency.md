@@ -246,7 +246,9 @@ fresh folder in the default TEMP on the system drive, runs the promptfoo stub on
 assertions, and checks that the model outputs were written under the assertions' `.rightmodeler`
 folder through a relative path and then removed. It skips when both are on one drive. With
 `scratchParent` patched to always return TEMP, it fails with the old symptom: the stub cannot open
-a model-outputs path joined across drives.
+a model-outputs path joined across drives. It finds the default TEMP from the home directory:
+turbo's strict environment mode does not pass `LOCALAPPDATA` to tasks, and a first version that
+read it skipped in CI.
 
 ### pnpm from npm on Windows
 

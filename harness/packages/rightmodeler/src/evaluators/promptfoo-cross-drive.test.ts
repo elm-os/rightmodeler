@@ -6,6 +6,7 @@ import {
   rm,
   stat,
 } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve, sep, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,14 +27,11 @@ const assertionsPath = fileURLToPath(
 // promptfoo reads the model outputs from a path relative to its working directory, and Windows
 // has no relative path from one drive to another. CI keeps TEMP on the workspace's drive, so this
 // test rebuilds the split layout explicitly: Windows' default TEMP on the system drive, the
-// assertions in a checkout on another drive. It skips when both are on one drive.
-const systemTemp =
-  process.env.LOCALAPPDATA === undefined
-    ? undefined
-    : join(process.env.LOCALAPPDATA, "Temp");
+// assertions in a checkout on another drive. It skips when both are on one drive. The default
+// TEMP comes from the home directory because turbo's strict environment mode drops LOCALAPPDATA.
+const systemTemp = join(homedir(), "AppData", "Local", "Temp");
 const crossDrive =
   process.platform === "win32" &&
-  systemTemp !== undefined &&
   win32.parse(systemTemp).root.toLowerCase() !==
     win32.parse(assertionsPath).root.toLowerCase();
 
@@ -41,7 +39,7 @@ it.skipIf(!crossDrive)(
   "on Windows, keeps the model outputs on the assertions' drive when TEMP is on another drive",
   async () => {
     const temp = await mkdtemp(
-      join(systemTemp!, "rightmodeler-promptfoo-cross-drive-"),
+      join(systemTemp, "rightmodeler-promptfoo-cross-drive-"),
     );
     const recordPath = join(temp, "record.json");
     vi.stubEnv("TEMP", temp);
