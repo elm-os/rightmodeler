@@ -102,6 +102,11 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # Temporary A/B: TEMP on the runner's default C: drive against runner.temp on D:.
+        temp: [default, runner]
     env:
       RIGHTMODELER_SKIP_DOCKER: "1"
     steps:
@@ -129,6 +134,7 @@ jobs:
         shell: pwsh
         run: |
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Git\\(usr\\|mingw64\\)?bin\\?$' }) -join ';'
+          if ('${{ matrix.temp }}' -eq 'runner') { $env:TEMP = $env:RUNNER_TEMP; $env:TMP = $env:RUNNER_TEMP }
           pnpm check
 
       - name: Refuse a CLI bundle that differs from the Windows build
