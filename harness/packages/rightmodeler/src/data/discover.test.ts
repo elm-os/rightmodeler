@@ -8,9 +8,11 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { zstdCompressSync } from "node:zlib";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { codexRollout } from "../test-utils/codex-rollout.js";
 import { discoverTraces, sanitizeClaudeProjectPath } from "./discover.js";
 
 const temporaryDirectories: string[] = [];
@@ -40,6 +42,22 @@ const codexSession = (cwd: string): string =>
       payload: { turn_id: "turn-1", model: "acme/large-1" },
     }),
   ].join("\n");
+
+// Pads a rollout to exactly `bytes` with short event lines, as a long Codex session writes them.
+function paddedRollout(rollout: string, bytes: number): string {
+  const event = (text: string): string =>
+    `${JSON.stringify({ type: "event_msg", payload: { type: "agent_reasoning", text } })}\n`;
+  const filler = event("filler");
+  const padded =
+    rollout +
+    filler.repeat(
+      Math.floor((bytes - Buffer.byteLength(rollout)) / filler.length) - 2,
+    );
+  return (
+    padded +
+    event("x".repeat(bytes - Buffer.byteLength(padded) - event("").length))
+  );
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -253,6 +271,65 @@ describe("trace discovery", () => {
       { path: matching, format: "codex", approximateRecords: 2 },
     ]);
   });
+
+  it("finds compressed Codex rollouts whose session metadata cwd matches the repo", async () => {
+    const { root, repo, homeDir } = await fixtureRoot("codex-zst");
+    const sessions = join(homeDir, ".codex", "sessions", "2026", "08", "15");
+    await mkdir(sessions, { recursive: true });
+    const rollout = await codexRollout(resolve(repo));
+    const matching = join(sessions, "rollout-matching.jsonl.zst");
+    await Promise.all([
+      writeFile(matching, zstdCompressSync(rollout)),
+      writeFile(
+        join(sessions, "rollout-other.jsonl.zst"),
+        zstdCompressSync(await codexRollout(resolve(root, "other"))),
+      ),
+    ]);
+
+    expect(await discoverTraces({ repo, homeDir })).toMatchObject([
+      {
+        path: matching,
+        format: "codex",
+        approximateRecords: rollout.trimEnd().split("\n").length,
+      },
+    ]);
+  });
+
+  it.each([
+    { bytes: 65_791, sizeFlag: 1, singleSegment: true },
+    { bytes: 200_000, sizeFlag: 2, singleSegment: true },
+    { bytes: 3_000_000, sizeFlag: 2, singleSegment: false },
+  ])(
+    "estimates a $bytes-byte compressed rollout like its plain copy",
+    async ({ bytes, sizeFlag, singleSegment }) => {
+      const { repo, homeDir } = await fixtureRoot("codex-zst-head");
+      const sessions = join(homeDir, ".codex", "sessions", "2026", "08", "15");
+      await mkdir(sessions, { recursive: true });
+      const rollout = paddedRollout(await codexRollout(resolve(repo)), bytes);
+      const compressed = zstdCompressSync(rollout);
+      // Byte 4 of a zstd frame sets the width of the size field and whether a window byte
+      // precedes it, so these cases cover each layout a rollout over 64 KiB can use.
+      expect(compressed[4]! >> 6).toBe(sizeFlag);
+      expect((compressed[4]! & 0x20) !== 0).toBe(singleSegment);
+      const plainPath = join(sessions, "rollout-plain.jsonl");
+      const compressedPath = join(sessions, "rollout-compressed.jsonl.zst");
+      await Promise.all([
+        writeFile(plainPath, rollout),
+        writeFile(compressedPath, compressed),
+      ]);
+
+      const candidates = await discoverTraces({ repo, homeDir });
+      const plain = candidates.find(({ path }) => path === plainPath);
+
+      expect(plain).toMatchObject({ format: "codex" });
+      expect(
+        candidates.find(({ path }) => path === compressedPath),
+      ).toMatchObject({
+        format: "codex",
+        approximateRecords: plain!.approximateRecords,
+      });
+    },
+  );
 
   it.runIf(process.platform === "win32")(
     "finds a Codex session that spells the repo path in another letter case",

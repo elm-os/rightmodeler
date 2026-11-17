@@ -36,7 +36,8 @@ and saves the answer as the next default, which `--yes` applies without asking.
 
 rightmodeler checks conventional local trace files, Claude Code transcripts for
 the repository, and Codex sessions whose recorded working directory matches the
-repository. In an interactive terminal it lists matches newest-first with an
+repository, including sessions Codex has compressed to `.jsonl.zst`. In an
+interactive terminal it lists matches newest-first with an
 approximate model-call count. If nothing is found, it explains how to produce or
 export a trace and asks for a path. Leaving the answer empty, pressing Ctrl-C or
 Ctrl-D, or closing standard input stops cleanly with exit code `2` and a remedy
@@ -54,7 +55,7 @@ npx rightmodeler init --plan --output json --repo /path/to/repository
 npx rightmodeler init --through corpus --traces /path/to/traces.json --output json --repo /path/to/repository
 ```
 
-`--traces` accepts a single file or a directory. A directory is read non-recursively as its `.json` and `.jsonl` files in name order; every file must use the same trace format.
+`--traces` accepts a single file or a directory. A directory is read non-recursively as its `.json`, `.jsonl` and `.jsonl.zst` files in name order; every file must use the same trace format.
 
 Each family is replayed only against the call sites its own traces came from. Traced cases that cannot be tied to one such call site, because several call sites use the traced model or none matches it, are left out of the replay sample with a `family_cases_left_out` warning. A family with no case left abstains before any spend with `ambiguous_call_site_binding` or `unmatched_call_site_binding`. The AI SDK telemetry `functionId` (see below) is the way to tie an AI SDK call site to its family.
 

@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { zstdCompressSync } from "node:zlib";
 
 import { FsStore } from "@rightmodeler/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -26,6 +27,7 @@ import {
 } from "./cli.js";
 import { saveModelRoute, type ModelRoute } from "./pipeline.js";
 import type { CliIo } from "./protocol.js";
+import { codexRollout } from "./test-utils/codex-rollout.js";
 import { hermeticPath, linkFakeCli } from "./test-utils/fake-cli.js";
 import { makeGitFixture } from "./test-utils/git-fixture.js";
 import { promptAnswers } from "./test-utils/prompt-answers.js";
@@ -487,6 +489,30 @@ describe("CLI trace guidance wiring", () => {
     expect(resumed.stdout()).toContain(`Resuming the ingested trace: ${older}`);
     expect(resumed.stdout()).not.toContain("Using trace file:");
   });
+
+  it("ingests a compressed Codex rollout that discovery found", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rightmodeler-cli-codex-zst-"));
+    temporaryDirectories.push(root);
+    const repo = await makeGitFixture(root);
+    const homeDir = join(root, "home");
+    const sessions = join(homeDir, ".codex", "sessions", "2026", "08", "14");
+    await mkdir(sessions, { recursive: true });
+    const rollout = join(sessions, "rollout-2026-08-14T12-00-00.jsonl.zst");
+    await writeFile(
+      rollout,
+      zstdCompressSync(await codexRollout(resolve(repo))),
+    );
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        ["init", "--yes", "--through", "ingest", "--repo", repo],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(0);
+    expect(captured.stdout()).toContain(`Using trace file: ${rollout}`);
+  });
 });
 
 describe("CLI exit codes", () => {
@@ -881,6 +907,36 @@ describe("CLI needs-input errors", () => {
     expect(JSON.parse(captured.stderr())).toMatchObject({
       code: "empty_traces_directory",
     });
+  });
+
+  it("ingests a compressed rollout from a trace directory", async () => {
+    const { repo, homeDir, root } = await fixture();
+    const traces = join(root, "codex-traces");
+    await mkdir(traces);
+    await writeFile(
+      join(traces, "rollout.jsonl.zst"),
+      zstdCompressSync(await codexRollout(resolve(repo))),
+    );
+    const captured = captureIo();
+
+    expect(
+      await executeCli(
+        [
+          "--output",
+          "json",
+          "init",
+          "--through",
+          "ingest",
+          "--traces",
+          traces,
+          "--repo",
+          repo,
+        ],
+        captured.io,
+        runtime(homeDir, "", undefined).runtime,
+      ),
+    ).toBe(0);
+    expect(captured.stderr()).toBe("");
   });
 
   it("reports missing drift traces as a needs-input error", async () => {

@@ -1,6 +1,14 @@
-import { open, readdir, realpath, stat } from "node:fs/promises";
+import {
+  open,
+  readdir,
+  realpath,
+  stat,
+  type FileHandle,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { pipeline } from "node:stream";
+import { createZstdDecompress } from "node:zlib";
 
 import { compareText } from "@rightmodeler/core";
 
@@ -37,6 +45,13 @@ interface CandidateFile {
 interface DetectionHead {
   readonly text: string;
   readonly approximateRecords: number;
+}
+
+interface FileHead {
+  readonly bytes: Buffer;
+  readonly complete: boolean;
+  // Bytes in the whole file's content, which scales the record estimate.
+  readonly size: number;
 }
 
 export async function discoverTraces(
@@ -98,10 +113,11 @@ async function candidateFiles(
     )
   ).sort(compareText);
   const codexPaths = (
-    await jsonFiles(join(homeDir, ".codex", "sessions"), true)
-  )
-    .filter((path) => path.endsWith(".jsonl"))
-    .sort((left, right) => compareText(right, left));
+    await jsonFiles(join(homeDir, ".codex", "sessions"), true, [
+      ".jsonl",
+      ".jsonl.zst",
+    ])
+  ).sort((left, right) => compareText(right, left));
   const sources = [
     {
       source: "local" as const,
@@ -239,7 +255,11 @@ async function localCandidatePaths(repo: string): Promise<string[]> {
   ]);
 }
 
-async function jsonFiles(root: string, recursive: boolean): Promise<string[]> {
+async function jsonFiles(
+  root: string,
+  recursive: boolean,
+  suffixes = [".json", ".jsonl"],
+): Promise<string[]> {
   let entries;
   try {
     entries = await readdir(root, { recursive, withFileTypes: true });
@@ -250,7 +270,7 @@ async function jsonFiles(root: string, recursive: boolean): Promise<string[]> {
     .filter(
       (entry) =>
         entry.isFile() &&
-        (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl")),
+        suffixes.some((suffix) => entry.name.endsWith(suffix)),
     )
     .map((entry) => join(entry.parentPath, entry.name));
 }
@@ -268,10 +288,11 @@ async function detectionHead(
 ): Promise<DetectionHead> {
   const handle = await open(path, "r");
   try {
-    const buffer = Buffer.alloc(Math.min(MAX_READ_BYTES, fileSize));
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    const raw = decodeText(buffer.subarray(0, bytesRead));
-    const complete = bytesRead === fileSize;
+    const { bytes, complete, size } = path.endsWith(".jsonl.zst")
+      ? await compressedHead(handle)
+      : await plainHead(handle, fileSize);
+    const bytesRead = bytes.length;
+    const raw = decodeText(bytes);
     const parsed = complete ? parseWholeJson(raw) : undefined;
     if (parsed !== undefined) {
       const records = Array.isArray(parsed) ? parsed : [parsed];
@@ -289,7 +310,7 @@ async function detectionHead(
         approximateRecords: approximateRecordCount(
           records.length,
           bytesRead,
-          fileSize,
+          size,
         ),
       };
     }
@@ -302,15 +323,65 @@ async function detectionHead(
       .filter((line) => line.trim() !== "");
     return {
       text: lines.slice(0, MAX_SAMPLE_RECORDS).join("\n"),
-      approximateRecords: approximateRecordCount(
-        lines.length,
-        bytesRead,
-        fileSize,
-      ),
+      approximateRecords: approximateRecordCount(lines.length, bytesRead, size),
     };
   } finally {
     await handle.close();
   }
+}
+
+async function plainHead(
+  handle: FileHandle,
+  fileSize: number,
+): Promise<FileHead> {
+  const buffer = Buffer.alloc(Math.min(MAX_READ_BYTES, fileSize));
+  const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+  return {
+    bytes: buffer.subarray(0, bytesRead),
+    complete: bytesRead === fileSize,
+    size: fileSize,
+  };
+}
+
+// Codex stores a compressed rollout as one zstd frame. Only the head is decompressed, so
+// a small file cannot expand in memory, and the frame header gives the size of the rest.
+async function compressedHead(handle: FileHandle): Promise<FileHead> {
+  // Errors from either stream surface through the loop. The handle stays open for the header
+  // read below, and detectionHead closes it.
+  const decompressed = pipeline(
+    handle.createReadStream({ start: 0, autoClose: false }),
+    createZstdDecompress(),
+    () => {},
+  ) as AsyncIterable<Buffer>;
+  const chunks: Buffer[] = [];
+  let length = 0;
+  for await (const chunk of decompressed) {
+    chunks.push(chunk);
+    length += chunk.length;
+    if (length > MAX_READ_BYTES) break;
+  }
+  const bytes = Buffer.concat(chunks).subarray(0, MAX_READ_BYTES);
+  if (length <= MAX_READ_BYTES) return { bytes, complete: true, size: length };
+  const header = Buffer.alloc(18);
+  await handle.read(header, 0, header.length, 0);
+  return {
+    bytes,
+    complete: false,
+    size: frameContentSize(header) ?? bytes.length,
+  };
+}
+
+// RFC 8878, section 3.1.1.1. A frame holding more than the 64 KiB head records its size in a
+// 2-byte field, offset by 256, or a 4-byte one. Without either, the estimate counts only the
+// records it read.
+function frameContentSize(header: Buffer): number | undefined {
+  if (header.readUInt32LE(0) !== 0xfd2fb528) return undefined;
+  const descriptor = header[4]!;
+  const offset =
+    ((descriptor & 0x20) === 0 ? 6 : 5) + [0, 1, 2, 4][descriptor & 0x03]!;
+  if (descriptor >> 6 === 1) return header.readUInt16LE(offset) + 256;
+  if (descriptor >> 6 === 2) return header.readUInt32LE(offset);
+  return undefined;
 }
 
 function leadingArrayRecords(text: string, limit: number): unknown[] {

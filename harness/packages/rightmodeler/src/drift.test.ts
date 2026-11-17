@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { zstdCompressSync } from "node:zlib";
 
 import {
   canonicalJson,
@@ -337,6 +338,37 @@ describe("drift service", () => {
         traces: partiallyInvalid,
       }),
     ).rejects.toThrow("dropped 1 unmappable record");
+  });
+
+  it("reads a compressed trace batch", async () => {
+    const fixture = await createFixture([
+      traceRecord({
+        caseId: "trajectory-a",
+        family: "support",
+        model: "acme/large-1",
+      }),
+    ]);
+    const traces = join(fixture.root, "candidate.jsonl.zst");
+    await writeFile(
+      traces,
+      zstdCompressSync(
+        traceText([
+          traceRecord({
+            caseId: "trajectory-a",
+            family: "support",
+            model: "acme/small-1",
+          }),
+        ]),
+      ),
+    );
+
+    const result = await runDrift({
+      repo: fixture.repo,
+      store: fixture.storeRoot,
+      traces,
+    });
+
+    expect(result.proposal.signals).toContain("model");
   });
 
   it("names a malformed active corpus pointer", async () => {
