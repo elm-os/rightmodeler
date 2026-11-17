@@ -51817,7 +51817,7 @@ function rollbackSwaps(options) {
 }
 
 // src/version.ts
-var version2 = true ? "0.6.2" : JSON.parse(
+var version2 = true ? "0.6.3" : JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8")
 ).version;
 
