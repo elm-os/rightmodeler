@@ -3,6 +3,7 @@
     "declaration": true,
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "skipLibCheck": true,
     "strict": true,
     "target": "ES2022",
     "types": ["node"]
