@@ -13,22 +13,23 @@ file, `harness/packages/rightmodeler/src/e2e.test.ts`, is 83% of that job. No co
 change touches that; splitting the file does, and it is the first of the larger items below.
 This branch takes the smaller changes the measurements support:
 
-- **The agent check runs alongside the CLI suite** (`harness/apps/agent/turbo.json`). The serial
-  tail after `cli:check` fell from a median 41s on Windows and 21s on Linux to 0s in every branch
-  run.
 - **No duplicate type check** (five `check` scripts). The CLI suite starts 8 to 9s sooner.
 - **No `ci` run for tag pushes.** A release tag no longer reruns a full Linux and Windows run
   (median 24m38s of wall time over the last three tags) on a commit `main` has normally checked
   already.
-- **Windows TEMP on D:.** In two same-run pairs the CLI suite did 27% and 28% less work per unit
-  of runner speed; on comparable runners it finished 4m12s sooner.
+- **Windows TEMP on D:**, in a folder of its own inside `runner.temp`. In two same-run pairs the
+  CLI suite did 27% and 28% less work per unit of runner speed; on comparable runners it finished
+  4m12s sooner.
 - **pnpm from npm on Windows.** 7 to 10s instead of a 22s median.
 - **No pnpm store cache on Windows.** setup-node takes 4 to 6s instead of 18s, and no 13s cache
   save follows a miss.
 
-On Windows, checkout, Node.js, pnpm and install now take 28 to 40s instead of 58s. One proposed
-change was measured and dropped: a BuildKit layer cache for the Mode B fixture image took 19s and
-31s warm, and 44s and 68s cold, against 28s without it.
+On Windows, checkout, Node.js, pnpm and install now take 28 to 40s instead of 58s; with the 8 to
+9s type check and the TEMP change, that is what this branch saves on the critical path. Two
+proposed changes were measured and dropped. Running the agent check alongside the CLI suite
+removed a 41s Windows tail, but a Windows run failed at the moment the overlap it creates ends.
+A BuildKit layer cache for the Mode B fixture image took 19s and 31s warm, and 44s and 68s cold,
+against 28s without it.
 
 ## Method
 
@@ -129,9 +130,9 @@ bundle check 1s, post steps 3s
 
 The `pull_request` run ends a median 4m19s before the push run's `windows` job, and the Linux
 `ci` job about 4.5 minutes before it. Before this branch, Linux savings shortened runner time but
-not the wall time a developer waits. With it, the two jobs are close: in the final run below,
+not the wall time a developer waits. With it, the two jobs are close: in run 43993344295 below,
 `ci` finished at 15m46s and `windows` at 12m36s, so the Linux job, with its 384s Mode B test, can
-now be the last to finish.
+be the last to finish.
 
 ## What this branch changes
 
@@ -141,7 +142,9 @@ The measured commit (`6890fd1`) ran as push run 43987351219 and pull_request run
 each twice (attempt 1, then a rerun). In that commit the `windows` job ran as two legs on the
 same code, one with TEMP on C: (the runner default) and one with TEMP on `runner.temp` (D:), and
 a scratch workflow (run 43987351424, four attempts) timed four ways to install pnpm on Windows.
-The final commit removes both. Every job of every attempt passed.
+The final commit removes both. Every job of every attempt passed. These runs also carried the
+agent-check change described under "Dropped" below, which took 21s off Linux and 41s off Windows;
+without it, the Windows totals here would be about 41s higher.
 
 Absolute job times are not a fair before and after. Recent `main` and branch runs on this code
 (runs 259 to 273, the same 786 tests) had medians of 13m14s for `ci` and 18m11s for `windows`,
@@ -149,56 +152,26 @@ against 18m58s and 23m24s in the baseline window: runner speed varies a lot from
 effects below are therefore read from task offsets, same-run pairs and individual steps, and the
 job totals are given only for completeness.
 
-| step or point                         | baseline median   | branch runs                 |
-| ------------------------------------- | ----------------- | --------------------------- |
-| Windows: set up pnpm                  | 22s               | 9s, 7s, 9s, 10s             |
-| Windows: set up Node.js               | 18s               | 5s, 4s, 6s, 4s              |
-| Windows: install                      | 12s (cache hit)   | 15s, 12s, 17s, 20s          |
-| Windows: post steps                   | 3s; 13s on a miss | 3s, 2s, 2s, 2s              |
-| Windows: checkout to install, summed  | 58s               | 36s, 28s, 39s, 40s          |
-| tail after `cli:check`, Linux         | 21s               | 0s in all four Linux jobs   |
-| tail after `cli:check`, Windows       | 41s               | 0s in all four Windows jobs |
-| CLI `tsc` before vitest               | 8s Linux, 9s Win  | 0 to 1s in all eight        |
-| `pnpm check`, ci                      | 18m06s            | 11m31s, 11m47s              |
-| `pnpm check`, Windows TEMP on C:      | 22m20s            | 17m36s, 14m54s              |
-| `pnpm check`, Windows TEMP on D:      | 22m20s            | 13m22s, 15m47s              |
-| job total, ci                         | 18m58s            | 13m28s, 12m38s              |
-| job total, Windows TEMP on D: (final) | 23m24s            | 14m05s, 16m33s              |
+| step or point                        | baseline median   | branch runs          |
+| ------------------------------------ | ----------------- | -------------------- |
+| Windows: set up pnpm                 | 22s               | 9s, 7s, 9s, 10s      |
+| Windows: set up Node.js              | 18s               | 5s, 4s, 6s, 4s       |
+| Windows: install                     | 12s (cache hit)   | 15s, 12s, 17s, 20s   |
+| Windows: post steps                  | 3s; 13s on a miss | 3s, 2s, 2s, 2s       |
+| Windows: checkout to install, summed | 58s               | 36s, 28s, 39s, 40s   |
+| CLI `tsc` before vitest              | 8s Linux, 9s Win  | 0 to 1s in all eight |
+| `pnpm check`, ci                     | 18m06s            | 11m31s, 11m47s       |
+| `pnpm check`, Windows TEMP on C:     | 22m20s            | 17m36s, 14m54s       |
+| `pnpm check`, Windows TEMP on D:     | 22m20s            | 13m22s, 15m47s       |
+| job total, ci                        | 18m58s            | 13m28s, 12m38s       |
+| job total, Windows TEMP on D:        | 23m24s            | 14m05s, 16m33s       |
 
 Windows rows list attempt 1 and attempt 2 of the C: leg, then of the D: leg, where both legs ran.
 
-The final configuration then ran on commit `04f8120`, as push run 43993344295 and as
-pull_request run 43993353474, and passed: `windows` took 12m36s, with 33s from checkout to
-install, a 1s CLI `tsc` gap, a 0s tail and `bundle.test.ts` at 26.2s; `ci` took 15m46s and
-`unprivileged-artifacts` 13m14s. Its Check step's environment showed TEMP and TMP as
-`D:\a\_temp`.
-
-### The agent check alongside the CLI suite
-
-`@rightmodeler/agent#check` reached `@rightmodeler/cli#check` only through the generic `check`
-task's `^check`. A package configuration, `harness/apps/agent/turbo.json`, extends the root and
-sets only `"check": { "dependsOn": ["build", "^build"] }`. `turbo run check --dry=json` differs
-from `main` in one edge, `agent#check` no longer depends on `cli#check`, and in the new file
-counting as one more input of the agent's tasks. Its `env`, `inputs`, `outputs` and cache settings
-resolve as before.
-
-A root `package#task` entry would also have worked, but it replaces the generic task instead of
-merging with it, so it would have to copy `check`'s `env` and `inputs` and would miss later
-changes to them. A dry run with a dummy variable added to `check`'s `env` and a dummy glob added
-to its `inputs` shows the difference: through the package configuration both reach `agent#check`;
-through a root `@rightmodeler/agent#check` entry neither does, while `core#check` gets both.
-
-The agent still waits for `cli:build`. During the CLI suite, `bundle.test.ts` runs `pnpm pack`,
-whose `prepack` reruns `build.mjs`; that script builds into `dist-bundle.staging` and renames each
-file into `dist-bundle`, and the CLI's own `runbook` and `github-actions-doc` tests already spawn
-`dist-bundle/cli.js` while that happens. The evals use their own temporary store, an ephemeral
-stub-provider port and Mode A only, so they start no Docker containers and are untouched by the
-Mode B reaping described under item 4 below.
-
-Overlapped, the agent check takes longer: 28s to 36s on Linux (21s to 23s before) and 59s to
-1m26s on Windows (41s before); the evals themselves took 13s to 17s and 38s to 60s, against a
-120s per-eval timeout. agent:check now finishes 1m16s to 2m46s into turbo, while the CLI suite
-runs.
+Without the measurement legs, and still with the agent-check change and TEMP on `runner.temp`
+itself, the workflow ran on commit `04f8120`, as push run 43993344295 and as pull_request run
+43993353474, and passed: `windows` took 12m36s, with 33s from checkout to install, a 1s CLI
+`tsc` gap and `bundle.test.ts` at 26.2s; `ci` took 15m46s and `unprivileged-artifacts` 13m14s.
 
 ### No duplicate type check
 
@@ -237,6 +210,10 @@ work than the C: leg. The files that gain most create temporary git repositories
 packages: `apply/diff.test.ts` went from 15.1s to 0.6s in attempt 1. The scratch workflow points
 the same way: pnpm/action-setup's `npm ci` of its 891-file bootstrap took 19s into
 `C:\Users\runneradmin\setup-pnpm` and 4s into `D:\a\_temp\setup-pnpm`.
+
+The Check step points TEMP and TMP at `t`, a folder it creates inside `runner.temp`, rather than at
+`runner.temp` itself, where the runner keeps its step scripts and `_runner_file_commands`: test
+files never share a folder with the runner's own.
 
 With both on D:, the e2e tests that pass the repository's promptfoo fixture to the CLI no longer
 take the cross-drive branch of the promptfoo scratch folder (`scratchParent` in
@@ -277,6 +254,25 @@ hit, restoring the 200 MB store took most of setup-node's 18s (tar extraction al
 run 257), and install took 12s; on a miss, install took 18.5s and the post step spent 13.5s
 saving the cache. Without the cache, setup-node took 4 to 6s and install 12 to 20s. Every Windows
 run now downloads its packages from the npm registry; the Linux jobs keep the cache.
+
+### Dropped: the agent check alongside the CLI suite
+
+`@rightmodeler/agent#check` reaches `@rightmodeler/cli#check` only through the generic `check`
+task's `^check`, so the agent typecheck and evals run after the whole CLI suite: a median tail of
+41s on Windows and 21s on Linux. A package configuration, `harness/apps/agent/turbo.json`
+extending the root with only `"check": { "dependsOn": ["build", "^build"] }`, removed that edge;
+in every run that passed with it, the tail was 0s. (A root `package#task` entry would also remove
+the edge, but it replaces the generic task, so it would not follow later changes to `check`'s
+`env` and `inputs`; a dry run with dummy values added to both showed the package configuration
+inheriting them and the root entry not.)
+
+It was dropped after one Windows failure (push run 44003494385, attempt 2). The first
+`evaluator-regrade.test.ts` test, started about 02:53:01, hung for 9.7s and ended with "not a git
+repository", and every later `git init` there failed in about 47ms. The agent eval printed
+"Completed in 1m 9s" at 02:53:10, so the git failures bunch up at the agent eval's shutdown (the
+eve dev host and nitro teardown), and the overlap is what puts that shutdown next to the CLI
+tests; Post Checkout failed in the same run. With the change gone, `agent#check` again waits for
+`cli#check`, and its task graph matches `main` in a dry run.
 
 ### Dropped: a BuildKit layer cache for the Mode B fixture image
 
