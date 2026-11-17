@@ -46,7 +46,7 @@ Use `--output json` for one result object or `--output jsonl` for stage events f
 - `ambiguous_trace_format` (exit `2`): pass a trace file that unambiguously matches one supported format.
 - `budget_cap_refusal` (exit `3`): the run reached the cost boundary; raise `--max-cost-usd` to the cap named in the remedy and rerun.
 - `coverage_gate_failed` (exit `2`): add matcher coverage for the listed AI dependency surfaces, or pass `--matchers <file>` with declarative matchers that close them.
-- `empty_traces_directory` (exit `2`): point `--traces` at a directory containing `.json` or `.jsonl` trace files, or at a single trace file.
+- `empty_traces_directory` (exit `2`): point `--traces` at a directory containing `.json`, `.jsonl` or `.jsonl.zst` trace files, or at a single trace file.
 - `git_repository_has_no_commits` (exit `2`): create the first commit, then rerun the command.
 - `invalid_catalog_reference` (exit `2`): pass `--catalog-reference` an http(s) URL or a readable file that returns an OpenAI-compatible `/models` document, or remove it, then rerun.
 - `invalid_matchers_file` (exit `2`): fix the listed matcher definitions in the `--matchers` file and rerun.

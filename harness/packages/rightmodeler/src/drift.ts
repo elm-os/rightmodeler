@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import {
@@ -37,6 +37,7 @@ import {
   detectFormat,
   excludedStepsWarning,
   parseTraceRecords,
+  readTraceFile,
   refreshCorpusVersionId,
   scrubRuns,
   strictRuns,
@@ -269,7 +270,7 @@ export async function runDrift(
 ): Promise<RunDriftResult> {
   const { store, storeRoot } = context(options);
   const parent = await loadActiveCorpus(store);
-  const traceText = decodeText(await readFile(resolve(options.traces)));
+  const traceText = decodeText(await readTraceFile(resolve(options.traces)));
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
   const result = adaptWithReport(adapter, records);

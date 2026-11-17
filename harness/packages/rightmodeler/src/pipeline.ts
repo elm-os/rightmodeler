@@ -115,6 +115,7 @@ import {
   FormatDetectionError,
   normalizedRunSchema,
   parseTraceRecords,
+  readTraceFile,
   referenceCeilings,
   scrubRuns,
   strictRuns,
@@ -2565,7 +2566,7 @@ function emptyTracesDirectory(path: string): ProtocolError {
   return new ProtocolError({
     exitCode: 2,
     code: "empty_traces_directory",
-    message: `Trace input directory has no .json or .jsonl files: ${path}`,
+    message: `Trace input directory has no .json, .jsonl or .jsonl.zst files: ${path}`,
     remedy:
       "Point --traces at a directory containing trace files, or at a single trace file.",
   });
@@ -2767,17 +2768,19 @@ async function readTraceInput(path: string): Promise<readonly Buffer[]> {
     if (!isMissing(error)) throw error;
     throw missingTraceInput(path);
   }
-  if (!metadata.isDirectory()) return [await readFile(path)];
+  if (!metadata.isDirectory()) return [await readTraceFile(path)];
   const names = (await readdir(path, { withFileTypes: true }))
     .filter(
       (entry) =>
         entry.isFile() &&
-        (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl")),
+        (entry.name.endsWith(".json") ||
+          entry.name.endsWith(".jsonl") ||
+          entry.name.endsWith(".jsonl.zst")),
     )
     .map(({ name }) => name)
     .sort();
   if (names.length === 0) throw emptyTracesDirectory(path);
-  return Promise.all(names.map((name) => readFile(join(path, name))));
+  return Promise.all(names.map((name) => readTraceFile(join(path, name))));
 }
 
 async function executeStage(

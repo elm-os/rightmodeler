@@ -3844,11 +3844,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants2) {
+      optimizeNames(names, constants3) {
         if (!names[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants2);
+          this.rhs = optimizeExpr(this.rhs, names, constants3);
         return this;
       }
       get names() {
@@ -3865,10 +3865,10 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants2) {
+      optimizeNames(names, constants3) {
         if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants2);
+        this.rhs = optimizeExpr(this.rhs, names, constants3);
         return this;
       }
       get names() {
@@ -3929,8 +3929,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants2) {
-        this.code = optimizeExpr(this.code, names, constants2);
+      optimizeNames(names, constants3) {
+        this.code = optimizeExpr(this.code, names, constants3);
         return this;
       }
       get names() {
@@ -3959,12 +3959,12 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants2) {
+      optimizeNames(names, constants3) {
         const { nodes } = this;
         let i = nodes.length;
         while (i--) {
           const n = nodes[i];
-          if (n.optimizeNames(names, constants2))
+          if (n.optimizeNames(names, constants3))
             continue;
           subtractNames(names, n.names);
           nodes.splice(i, 1);
@@ -4017,12 +4017,12 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants2) {
+      optimizeNames(names, constants3) {
         var _a3;
-        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants2);
-        if (!(super.optimizeNames(names, constants2) || this.else))
+        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants3);
+        if (!(super.optimizeNames(names, constants3) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants2);
+        this.condition = optimizeExpr(this.condition, names, constants3);
         return this;
       }
       get names() {
@@ -4045,10 +4045,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants2) {
-        if (!super.optimizeNames(names, constants2))
+      optimizeNames(names, constants3) {
+        if (!super.optimizeNames(names, constants3))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants2);
+        this.iteration = optimizeExpr(this.iteration, names, constants3);
         return this;
       }
       get names() {
@@ -4084,10 +4084,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants2) {
-        if (!super.optimizeNames(names, constants2))
+      optimizeNames(names, constants3) {
+        if (!super.optimizeNames(names, constants3))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants2);
+        this.iterable = optimizeExpr(this.iterable, names, constants3);
         return this;
       }
       get names() {
@@ -4129,11 +4129,11 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants2) {
+      optimizeNames(names, constants3) {
         var _a3, _b;
-        super.optimizeNames(names, constants2);
-        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants2);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants2);
+        super.optimizeNames(names, constants3);
+        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants3);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants3);
         return this;
       }
       get names() {
@@ -4434,7 +4434,7 @@ var require_codegen = __commonJS({
     function addExprNames(names, from) {
       return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
     }
-    function optimizeExpr(expr, names, constants2) {
+    function optimizeExpr(expr, names, constants3) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -4449,14 +4449,14 @@ var require_codegen = __commonJS({
         return items;
       }, []));
       function replaceName(n) {
-        const c = constants2[n.str];
+        const c = constants3[n.str];
         if (c === void 0 || names[n.str] !== 1)
           return n;
         delete names[n.str];
         return c;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants2[c.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants3[c.str] !== void 0);
       }
     }
     function subtractNames(names, from) {
@@ -37057,10 +37057,28 @@ async function writeCorpus(store, projectId3, corpus) {
 }
 
 // src/data/decode.ts
+import { constants } from "node:buffer";
+import { readFile as readFile6 } from "node:fs/promises";
+import { zstdDecompressSync } from "node:zlib";
 function decodeText(bytes) {
   return new TextDecoder(
     bytes[0] === 255 && bytes[1] === 254 ? "utf-16le" : "utf-8"
   ).decode(bytes);
+}
+async function readTraceFile(path, limit = constants.MAX_STRING_LENGTH) {
+  const bytes = await readFile6(path);
+  if (!path.endsWith(".jsonl.zst")) return bytes;
+  try {
+    return zstdDecompressSync(bytes, { maxOutputLength: limit });
+  } catch (error51) {
+    if (error51.code !== "ERR_BUFFER_TOO_LARGE") {
+      throw error51;
+    }
+    throw new TraceParseError(
+      `Trace input decompresses to more than ${limit} bytes, the longest string Node.js can hold: ${path}`,
+      { cause: error51 }
+    );
+  }
 }
 
 // src/data/scrub.ts
@@ -37133,14 +37151,14 @@ function scrubRuns(runs) {
 // src/apply/orchestrator.ts
 import { execFile as execFile5 } from "node:child_process";
 import { createHash as createHash7 } from "node:crypto";
-import { readFile as readFile10 } from "node:fs/promises";
+import { readFile as readFile11 } from "node:fs/promises";
 import { join as join15 } from "node:path";
 import { promisify as promisify4 } from "node:util";
 
 // src/code-graph/graph.ts
-import { constants } from "node:buffer";
+import { constants as constants2 } from "node:buffer";
 import { createHash as createHash5 } from "node:crypto";
-import { readFile as readFile6, stat as stat3 } from "node:fs/promises";
+import { readFile as readFile7, stat as stat3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute2, relative as relative4, sep as sep4 } from "node:path";
 var provenanceRank = {
   AMBIGUOUS: 0,
@@ -37180,8 +37198,8 @@ var edgeSchema = external_exports.looseObject({
 async function graphFileDigest(path) {
   try {
     const { size } = await stat3(path);
-    if (size > constants.MAX_STRING_LENGTH) return `too-large:${size}`;
-    return createHash5("sha256").update(await readFile6(path)).digest("hex");
+    if (size > constants2.MAX_STRING_LENGTH) return `too-large:${size}`;
+    return createHash5("sha256").update(await readFile7(path)).digest("hex");
   } catch {
     return "unreadable";
   }
@@ -37209,18 +37227,18 @@ async function loadCodeGraph(path, repoDir) {
   } catch (error51) {
     return unreadable(error51);
   }
-  if (size > constants.MAX_STRING_LENGTH) {
+  if (size > constants2.MAX_STRING_LENGTH) {
     return {
       displayPath,
       issue: {
         code: "code_graph_too_large",
-        message: `The code graph at ${displayPath} is ${size} bytes, over the ${constants.MAX_STRING_LENGTH}-byte limit Node.js can read. Code context is omitted. Narrow the graph with a .graphifyignore and rebuild it with \`graphify update .\`.`
+        message: `The code graph at ${displayPath} is ${size} bytes, over the ${constants2.MAX_STRING_LENGTH}-byte limit Node.js can read. Code context is omitted. Narrow the graph with a .graphifyignore and rebuild it with \`graphify update .\`.`
       }
     };
   }
   let bytes;
   try {
-    bytes = await readFile6(path);
+    bytes = await readFile7(path);
   } catch (error51) {
     return unreadable(error51);
   }
@@ -37385,7 +37403,7 @@ function blastRadius({
 
 // src/enrich/conventions.ts
 import { execFile as execFile2 } from "node:child_process";
-import { access, readFile as readFile7 } from "node:fs/promises";
+import { access, readFile as readFile8 } from "node:fs/promises";
 import { dirname as dirname4, join as join11, relative as relative5, resolve as resolve5 } from "node:path";
 import { promisify as promisify2 } from "node:util";
 
@@ -37476,7 +37494,7 @@ async function captureInstructionFiles(repoDir) {
   async function capture(path, depth, stack, includedFrom) {
     let content;
     try {
-      content = await readFile7(join11(repoDir, path), "utf8");
+      content = await readFile8(join11(repoDir, path), "utf8");
     } catch {
       warn(
         includedFrom === void 0 ? { name: "instruction_file_unreadable", path } : {
@@ -37515,7 +37533,7 @@ async function captureInstructionFiles(repoDir) {
 }
 async function readFirst(repoDir, candidates) {
   const path = await existingPath(repoDir, candidates);
-  return path === null ? null : readFile7(join11(repoDir, path), "utf8");
+  return path === null ? null : readFile8(join11(repoDir, path), "utf8");
 }
 async function detectFormatter(repoDir) {
   const prettier = await existingPath(repoDir, prettierConfigs);
@@ -37524,7 +37542,7 @@ async function detectFormatter(repoDir) {
   if (ruff !== null) return { kind: "ruff", configPath: ruff };
   const pyproject = await existingPath(repoDir, ["pyproject.toml"]);
   if (pyproject !== null && /^\s*\[tool\.ruff(?:\.[^\]]+)?\]\s*$/m.test(
-    await readFile7(join11(repoDir, pyproject), "utf8")
+    await readFile8(join11(repoDir, pyproject), "utf8")
   )) {
     return { kind: "ruff", configPath: pyproject };
   }
@@ -37596,7 +37614,7 @@ async function captureConventions({
 
 // src/enrich/owners.ts
 import { execFile as execFile3 } from "node:child_process";
-import { access as access2, readFile as readFile8 } from "node:fs/promises";
+import { access as access2, readFile as readFile9 } from "node:fs/promises";
 import { isAbsolute as isAbsolute3, join as join12, relative as relative6 } from "node:path";
 import { promisify as promisify3 } from "node:util";
 var execFileAsync3 = promisify3(execFile3);
@@ -37724,7 +37742,7 @@ async function resolveOwners({
 }) {
   const codeownersPath = await findCodeowners(repoDir);
   const rules = codeownersPath === null ? [] : parseCodeowners(
-    await readFile8(join12(repoDir, codeownersPath), "utf8")
+    await readFile9(join12(repoDir, codeownersPath), "utf8")
   ).map((rule) => ({
     ...rule,
     matcher: codeownersRegex(rule.pattern)
@@ -40004,16 +40022,16 @@ function locateReplacement(content, candidate, request) {
     return null;
   }
   if (callOffset === null) return null;
-  const constants2 = constantSpans(
+  const constants3 = constantSpans(
     content,
     candidate.modelId,
     request.fromModel,
     callOffset,
     candidate.slug.startsWith("py-")
   );
-  if (constants2 === null) return null;
+  if (constants3 === null) return null;
   return {
-    ...constants2[0],
+    ...constants3[0],
     from: request.fromModel,
     to: request.toModel
   };
@@ -40388,7 +40406,7 @@ function lintSwapDiff({
 // src/apply/format.ts
 import { execFile as execFile4 } from "node:child_process";
 import { existsSync, readFileSync as readFileSync6, writeFileSync } from "node:fs";
-import { mkdtemp as mkdtemp3, readFile as readFile9, rm as rm3 } from "node:fs/promises";
+import { mkdtemp as mkdtemp3, readFile as readFile10, rm as rm3 } from "node:fs/promises";
 import { basename as basename3, dirname as dirname5, join as join14 } from "node:path";
 function pinnedPrettierVersion(repoDir) {
   const pnpmLock = join14(repoDir, "pnpm-lock.yaml");
@@ -40540,7 +40558,7 @@ async function formatWithHostFormatter({
         repoDir,
         file2.after
       );
-      const formatted = stdout === null ? await readFile9(temporaryPath, "utf8") : stdout;
+      const formatted = stdout === null ? await readFile10(temporaryPath, "utf8") : stdout;
       const touchedLines = new Set(file2.hunks.map(({ line }) => line));
       const conflictLine = firstOutsideTouchedLine(
         file2.after,
@@ -40966,7 +40984,7 @@ async function staleDigestPaths(repoDir, swaps) {
     ([left], [right]) => compareText(left, right)
   )) {
     try {
-      const content = (await readFile10(join15(repoDir, path), "utf8")).replaceAll(
+      const content = (await readFile11(join15(repoDir, path), "utf8")).replaceAll(
         "\r\n",
         "\n"
       );
@@ -41656,7 +41674,7 @@ function requireStep(stepsById, stepId) {
 }
 
 // src/drift.ts
-import { mkdir as mkdir4, readFile as readFile11, writeFile as writeFile6 } from "node:fs/promises";
+import { mkdir as mkdir4, writeFile as writeFile6 } from "node:fs/promises";
 import { dirname as dirname6, join as join17, resolve as resolve7 } from "node:path";
 
 // src/state.ts
@@ -41870,7 +41888,7 @@ async function readCorpusVersion(options, corpusVersionId) {
 async function runDrift(options) {
   const { store, storeRoot } = context(options);
   const parent = await loadActiveCorpus(store);
-  const traceText = decodeText(await readFile11(resolve7(options.traces)));
+  const traceText = decodeText(await readTraceFile(resolve7(options.traces)));
   const records = parseTraceRecords(traceText);
   const adapter = detectFormat(traceText, traceAdapters);
   const result2 = adaptWithReport(adapter, records);
@@ -47590,7 +47608,7 @@ function emptyTracesDirectory(path) {
   return new ProtocolError({
     exitCode: 2,
     code: "empty_traces_directory",
-    message: `Trace input directory has no .json or .jsonl files: ${path}`,
+    message: `Trace input directory has no .json, .jsonl or .jsonl.zst files: ${path}`,
     remedy: "Point --traces at a directory containing trace files, or at a single trace file."
   });
 }
@@ -47746,12 +47764,12 @@ async function readTraceInput(path) {
     if (!isMissing2(error51)) throw error51;
     throw missingTraceInput(path);
   }
-  if (!metadata.isDirectory()) return [await readFile13(path)];
+  if (!metadata.isDirectory()) return [await readTraceFile(path)];
   const names = (await readdir4(path, { withFileTypes: true })).filter(
-    (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
+    (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl") || entry.name.endsWith(".jsonl.zst"))
   ).map(({ name }) => name).sort();
   if (names.length === 0) throw emptyTracesDirectory(path);
-  return Promise.all(names.map((name) => readFile13(join19(path, name))));
+  return Promise.all(names.map((name) => readTraceFile(join19(path, name))));
 }
 async function executeStage(stage, context2, inputDigestValue, runId) {
   switch (stage) {
@@ -51012,9 +51030,16 @@ function applySwaps2(options) {
 }
 
 // src/data/discover.ts
-import { open, readdir as readdir5, realpath as realpath4, stat as stat5 } from "node:fs/promises";
+import {
+  open,
+  readdir as readdir5,
+  realpath as realpath4,
+  stat as stat5
+} from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
 import { isAbsolute as isAbsolute5, join as join20, relative as relative10, resolve as resolve12 } from "node:path";
+import { pipeline } from "node:stream";
+import { createZstdDecompress } from "node:zlib";
 var MAX_FILES = 50;
 var MAX_CODEX_EXAMINED = 300;
 var MAX_READ_BYTES = 64 * 1024;
@@ -51063,7 +51088,10 @@ async function candidateFiles(repo, homeDir) {
     ),
     false
   )).sort(compareText);
-  const codexPaths = (await jsonFiles(join20(homeDir, ".codex", "sessions"), true)).filter((path) => path.endsWith(".jsonl")).sort((left, right) => compareText(right, left));
+  const codexPaths = (await jsonFiles(join20(homeDir, ".codex", "sessions"), true, [
+    ".jsonl",
+    ".jsonl.zst"
+  ])).sort((left, right) => compareText(right, left));
   const sources = [
     {
       source: "local",
@@ -51169,7 +51197,7 @@ async function localCandidatePaths(repo) {
     ...topLevel
   ]);
 }
-async function jsonFiles(root, recursive) {
+async function jsonFiles(root, recursive, suffixes = [".json", ".jsonl"]) {
   let entries;
   try {
     entries = await readdir5(root, { recursive, withFileTypes: true });
@@ -51177,7 +51205,7 @@ async function jsonFiles(root, recursive) {
     return [];
   }
   return entries.filter(
-    (entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))
+    (entry) => entry.isFile() && suffixes.some((suffix) => entry.name.endsWith(suffix))
   ).map((entry) => join20(entry.parentPath, entry.name));
 }
 function isWithin(root, path) {
@@ -51187,10 +51215,9 @@ function isWithin(root, path) {
 async function detectionHead(path, fileSize) {
   const handle = await open(path, "r");
   try {
-    const buffer = Buffer.alloc(Math.min(MAX_READ_BYTES, fileSize));
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    const raw = decodeText(buffer.subarray(0, bytesRead));
-    const complete = bytesRead === fileSize;
+    const { bytes, complete, size } = path.endsWith(".jsonl.zst") ? await compressedHead(handle) : await plainHead(handle, fileSize);
+    const bytesRead = bytes.length;
+    const raw = decodeText(bytes);
     const parsed2 = complete ? parseWholeJson(raw) : void 0;
     if (parsed2 !== void 0) {
       const records = Array.isArray(parsed2) ? parsed2 : [parsed2];
@@ -51207,7 +51234,7 @@ async function detectionHead(path, fileSize) {
         approximateRecords: approximateRecordCount(
           records.length,
           bytesRead,
-          fileSize
+          size
         )
       };
     }
@@ -51215,15 +51242,52 @@ async function detectionHead(path, fileSize) {
     const lines = completeText.split(/\r?\n/).filter((line) => line.trim() !== "");
     return {
       text: lines.slice(0, MAX_SAMPLE_RECORDS).join("\n"),
-      approximateRecords: approximateRecordCount(
-        lines.length,
-        bytesRead,
-        fileSize
-      )
+      approximateRecords: approximateRecordCount(lines.length, bytesRead, size)
     };
   } finally {
     await handle.close();
   }
+}
+async function plainHead(handle, fileSize) {
+  const buffer = Buffer.alloc(Math.min(MAX_READ_BYTES, fileSize));
+  const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+  return {
+    bytes: buffer.subarray(0, bytesRead),
+    complete: bytesRead === fileSize,
+    size: fileSize
+  };
+}
+async function compressedHead(handle) {
+  const decompressed = pipeline(
+    handle.createReadStream({ start: 0, autoClose: false }),
+    createZstdDecompress(),
+    () => {
+    }
+  );
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of decompressed) {
+    chunks.push(chunk);
+    length += chunk.length;
+    if (length > MAX_READ_BYTES) break;
+  }
+  const bytes = Buffer.concat(chunks).subarray(0, MAX_READ_BYTES);
+  if (length <= MAX_READ_BYTES) return { bytes, complete: true, size: length };
+  const header2 = Buffer.alloc(18);
+  await handle.read(header2, 0, header2.length, 0);
+  return {
+    bytes,
+    complete: false,
+    size: frameContentSize(header2) ?? bytes.length
+  };
+}
+function frameContentSize(header2) {
+  if (header2.readUInt32LE(0) !== 4247762216) return void 0;
+  const descriptor = header2[4];
+  const offset = ((descriptor & 32) === 0 ? 6 : 5) + [0, 1, 2, 4][descriptor & 3];
+  if (descriptor >> 6 === 1) return header2.readUInt16LE(offset) + 256;
+  if (descriptor >> 6 === 2) return header2.readUInt32LE(offset);
+  return void 0;
 }
 function leadingArrayRecords(text, limit) {
   const records = [];
