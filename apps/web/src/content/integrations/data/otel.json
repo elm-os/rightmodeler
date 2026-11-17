@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Cheaper candidates, judged against shipped output",
-      "body": "Recorded steps are replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, judged against shipped output",
+      "body": "Recorded steps are replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped, choosing a judge from a family that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",

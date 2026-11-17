@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Cheaper candidates, scored against your response",
-      "body": "Each recorded call with a plain-text conversation and no declared tools is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, scored against your response",
+      "body": "Each recorded call with a plain-text conversation and no declared tools is replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",

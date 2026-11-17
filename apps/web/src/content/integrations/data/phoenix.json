@@ -24,7 +24,7 @@
     {
       "label": "03 · Replay + judge",
       "title": "Replayed on your inputs, judged against your outputs",
-      "body": "Kept spans are replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind and never pooled across kinds."
+      "body": "Kept spans are replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind and never pooled across kinds."
     },
     {
       "label": "04 · Report + apply",
@@ -125,7 +125,7 @@
       "a": "Only during the run: step inputs go to candidate models, and recorded outputs go to the judge, through the endpoint you configured, under your own key, the same class of call your agent already makes. An external evaluator, if you name one, receives what it scores. There is no rightmodeler server and no account; the span files stay on disk."
     },
     {
-      "q": "Will it always find a cheaper model?",
+      "q": "Will it always find a cheaper or newer model?",
       "a": "No, and deliberately so. A family abstains when the evidence is thin or the excluded fraction runs over the ceiling, and nothing is proposed unless a candidate clears the quality floor on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],

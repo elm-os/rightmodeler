@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + score",
-      "title": "Cheaper candidates, judged against what you shipped",
-      "body": "Each kept run with a plain-text conversation is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator langsmith, your own scorers grade the replays against the named dataset and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, judged against what you shipped",
+      "body": "Each kept run with a plain-text conversation is replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator langsmith, your own scorers grade the replays against the named dataset and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",

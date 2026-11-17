@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Cheaper candidates, judged against what you accepted",
-      "body": "Each step prompted by plain text is replayed against cheaper candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route claude-login, the claude CLI you are signed in to, on your Claude plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, picking a judge from a vendor that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, judged against what you accepted",
+      "body": "Each step prompted by plain text is replayed against cheaper or newer candidates through the route you choose: the OpenAI-compatible endpoint you name with --base-url and --api-key-env, or, with --route claude-login, the claude CLI you are signed in to, on your Claude plan. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two calls with the reference and candidate positions swapped, at temperature zero on an API route, picking a judge from a vendor that is neither the candidate's nor the reference's. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",

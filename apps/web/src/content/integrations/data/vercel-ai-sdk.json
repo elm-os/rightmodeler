@@ -29,7 +29,7 @@
     {
       "label": "04 · Replay + report",
       "title": "Evidence per call site, a pull request on those call sites",
-      "body": "Cases from plain text call sites replay against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, and are judged against the recorded output. Cases from call sites that need tools or structured output are left out with a family_cases_left_out warning, and a family whose traced cases all come from such call sites abstains with bound_call_sites_not_replayable before any spend. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers on its bound call sites and nothing else."
+      "body": "Cases from plain text call sites replay against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, and are judged against the recorded output. Cases from call sites that need tools or structured output are left out with a family_cases_left_out warning, and a family whose traced cases all come from such call sites abstains with bound_call_sites_not_replayable before any spend. When a family clears every release gate, rightmodeler apply opens a draft pull request that changes model identifiers on its bound call sites and nothing else."
     }
   ],
   "setup": {

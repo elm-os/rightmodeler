@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + score",
-      "title": "Cheaper candidates, graded by your own scorers",
-      "body": "Each kept step with a plain-text conversation is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator braintrust, your project's scorers grade the replays and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, which makes two temperature-zero calls with the reference and candidate positions swapped. Verdicts stay separate per evaluator kind and are never pooled."
+      "title": "Cheaper or newer candidates, graded by your own scorers",
+      "body": "Each kept step with a plain-text conversation is replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env. With --evaluator braintrust, your project's scorers grade the replays and their pass decisions feed the release gate; without a reachable evaluator the run warns and falls back to the built-in judge, which makes two temperature-zero calls with the reference and candidate positions swapped. Verdicts stay separate per evaluator kind and are never pooled."
     },
     {
       "label": "04 · Report + apply",
