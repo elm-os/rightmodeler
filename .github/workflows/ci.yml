@@ -14,6 +14,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Turbo may reuse check results across runs, never builds (see "Build without the cache").
+  # main executes every task and writes turbo's cache (local:w); every other run (branch or pull
+  # request) reads main's newest results and writes only on its own runner (local:rw).
+  # Only main saves the cache.
+  TURBO_CACHE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'local:w' || 'local:rw' }}
+
 jobs:
   ci:
     # A branch push already checks same-repository changes; pull_request CI is for forks.
@@ -51,11 +58,26 @@ jobs:
           RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
           DOCKERFILE
 
+      - name: Restore check results from main
+        if: env.TURBO_CACHE == 'local:rw'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+
+      - name: Build without the cache
+        # Every build executes here and overwrites any cached copy, so Check reuses fresh outputs.
+        # main skips this step because local:w already executes every build inside Check.
+        if: env.TURBO_CACHE == 'local:rw'
+        run: pnpm exec turbo run build --force
+
       - name: Check
         run: pnpm check
 
       - name: Refuse a stale committed CLI bundle
-        # Check built the CLI, so the committed bundle must equal that build byte for byte.
+        # CI builds the CLI fresh, never from a cache, so the committed bundle must equal that build
+        # byte for byte.
         run: |
           stale="$(git status --porcelain -- harness/packages/rightmodeler/dist-bundle)"
           if [ -n "${stale}" ]; then
@@ -63,6 +85,14 @@ jobs:
             echo "harness/packages/rightmodeler/dist-bundle differs from a fresh build. Run pnpm exec turbo run build --filter=@rightmodeler/cli and commit the result." >&2
             exit 1
           fi
+
+      - name: Save check results for other runs
+        # Last, so only a green main run seeds the cache that branch and pull-request runs restore.
+        if: env.TURBO_CACHE == 'local:w'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
 
   windows:
     # Native Windows, without Docker: hosted Windows runners run only Windows containers, so
@@ -91,6 +121,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Restore check results from main
+        if: env.TURBO_CACHE == 'local:rw'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+
+      - name: Build without the cache
+        # Same as the ci job, under the same PATH as Check below.
+        if: env.TURBO_CACHE == 'local:rw'
+        shell: pwsh
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\Git\\(usr\\|mingw64\\)?bin\\?$' }) -join ';'
+          pnpm exec turbo run build --force
+
       - name: Check
         # pnpm runs package scripts through cmd.exe. Drop Git's Unix tools from PATH so a script
         # that needs rm or bash fails here as it would on a stock Windows machine.
@@ -115,6 +161,14 @@ jobs:
             Write-Error "harness/packages/rightmodeler/dist-bundle differs from a fresh Windows build."
             exit 1
           }
+
+      - name: Save check results for other runs
+        # Same as the ci job.
+        if: env.TURBO_CACHE == 'local:w'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
 
   unprivileged-artifacts:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -150,6 +204,19 @@ jobs:
           COPY requirements.txt /tmp/requirements.txt
           RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
           DOCKERFILE
+
+      - name: Restore check results from main
+        if: env.TURBO_CACHE == 'local:rw'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+
+      - name: Build without the cache
+        # Same as the ci job.
+        if: env.TURBO_CACHE == 'local:rw'
+        run: pnpm exec turbo run build --force
 
       - name: Check
         run: pnpm check
