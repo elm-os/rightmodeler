@@ -43,7 +43,7 @@
     "prepack": "pnpm run bundle",
     "parity": "pnpm run build && vitest run src/parity.test.ts",
     "check-types": "tsc --noEmit",
-    "check": "tsc --noEmit && vitest run"
+    "check": "vitest run"
   },
   "devDependencies": {
     "@repo/contracts": "workspace:*",
