@@ -1,6 +1,13 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
+  "globalDependencies": [
+    ".github/workflows/ci.yml",
+    ".npmrc",
+    "package.json",
+    "pnpm-workspace.yaml"
+  ],
+  "globalEnv": ["RUNNER_OS"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -22,17 +29,24 @@
     },
     "check": {
       "dependsOn": ["build", "^build", "^check"],
-      "env": ["RIGHTMODELER_SKIP_DOCKER"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/harness/fixtures/**"]
+      "env": ["CI", "RIGHTMODELER_SKIP_DOCKER"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/harness/fixtures/**",
+        "$TURBO_ROOT$/harness/tsconfig.base.json"
+      ]
     },
     "@rightmodeler/cli#check": {
       "dependsOn": ["build", "^build", "@rightmodeler/executor#check"],
-      "env": ["RIGHTMODELER_SKIP_DOCKER"],
+      "env": ["CI", "RIGHTMODELER_SKIP_DOCKER"],
       "inputs": [
         "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/LICENSE",
         "$TURBO_ROOT$/harness/docs/parity.md",
         "$TURBO_ROOT$/harness/fixtures/**",
-        "$TURBO_ROOT$/skills/rightmodeler/**"
+        "$TURBO_ROOT$/harness/tsconfig.base.json",
+        "$TURBO_ROOT$/skills/rightmodeler/SKILL.md",
+        "$TURBO_ROOT$/skills/rightmodeler/reference/**"
       ]
     },
     "check-types": {
