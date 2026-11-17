@@ -13,8 +13,9 @@ file, `harness/packages/rightmodeler/src/e2e.test.ts`, is 83% of that job. No co
 change touches that; splitting the file does, and it is the first of the larger items below.
 This branch takes the smaller changes the measurements support:
 
-- **The agent check runs alongside the CLI suite** (`turbo.json`). The serial tail after
-  `cli:check` fell from a median 41s on Windows and 21s on Linux to 0s in all eight branch runs.
+- **The agent check runs alongside the CLI suite** (`harness/apps/agent/turbo.json`). The serial
+  tail after `cli:check` fell from a median 41s on Windows and 21s on Linux to 0s in every branch
+  run.
 - **No duplicate type check** (five `check` scripts). The CLI suite starts 8 to 9s sooner.
 - **No `ci` run for tag pushes.** A release tag no longer reruns a full Linux and Windows run
   (median 24m38s of wall time over the last three tags) on a commit `main` has normally checked
@@ -175,10 +176,17 @@ install, a 1s CLI `tsc` gap, a 0s tail and `bundle.test.ts` at 26.2s; `ci` took 
 ### The agent check alongside the CLI suite
 
 `@rightmodeler/agent#check` reached `@rightmodeler/cli#check` only through the generic `check`
-task's `^check`. A root `package#task` entry replaces the generic task rather than merging with
-it, so the new entry carries the generic `env` and `inputs` and drops only `^check`.
-`turbo run check --dry=json` differs from `main` in one edge: `agent#check` no longer depends on
-`cli#check`. Its `env`, `inputs`, `outputs` and cache settings resolve as before.
+task's `^check`. A package configuration, `harness/apps/agent/turbo.json`, extends the root and
+sets only `"check": { "dependsOn": ["build", "^build"] }`. `turbo run check --dry=json` differs
+from `main` in one edge, `agent#check` no longer depends on `cli#check`, and in the new file
+counting as one more input of the agent's tasks. Its `env`, `inputs`, `outputs` and cache settings
+resolve as before.
+
+A root `package#task` entry would also have worked, but it replaces the generic task instead of
+merging with it, so it would have to copy `check`'s `env` and `inputs` and would miss later
+changes to them. A dry run with a dummy variable added to `check`'s `env` and a dummy glob added
+to its `inputs` shows the difference: through the package configuration both reach `agent#check`;
+through a root `@rightmodeler/agent#check` entry neither does, while `core#check` gets both.
 
 The agent still waits for `cli:build`. During the CLI suite, `bundle.test.ts` runs `pnpm pack`,
 whose `prepack` reruns `build.mjs`; that script builds into `dist-bundle.staging` and renames each
@@ -191,12 +199,6 @@ Overlapped, the agent check takes longer: 28s to 36s on Linux (21s to 23s before
 1m26s on Windows (41s before); the evals themselves took 13s to 17s and 38s to 60s, against a
 120s per-eval timeout. agent:check now finishes 1m16s to 2m46s into turbo, while the CLI suite
 runs.
-
-A root `package#task` entry does not follow later changes to `check`, the same as the existing
-`@rightmodeler/cli#check` entry: a change to `check`'s `env` or `inputs` must be copied to both. A
-package configuration, `harness/apps/agent/turbo.json` extending the root with only
-`"check": { "dependsOn": ["build", "^build"] }`, resolves to the same task graph in a dry run
-and would inherit such changes.
 
 ### No duplicate type check
 
@@ -238,7 +240,13 @@ the same way: pnpm/action-setup's `npm ci` of its 891-file bootstrap took 19s in
 
 With both on D:, the e2e tests that pass the repository's promptfoo fixture to the CLI no longer
 take the cross-drive branch of the promptfoo scratch folder (`scratchParent` in
-`evaluators/promptfoo.ts`); its unit test still covers both branches.
+`evaluators/promptfoo.ts`), which is where a real bug was once found. A dedicated test,
+`evaluators/promptfoo-cross-drive.test.ts`, restores that coverage. On Windows it points TEMP at a
+fresh folder in the default TEMP on the system drive, runs the promptfoo stub on the repository's
+assertions, and checks that the model outputs were written under the assertions' `.rightmodeler`
+folder through a relative path and then removed. It skips when both are on one drive. With
+`scratchParent` patched to always return TEMP, it fails with the old symptom: the stub cannot open
+a model-outputs path joined across drives.
 
 ### pnpm from npm on Windows
 
