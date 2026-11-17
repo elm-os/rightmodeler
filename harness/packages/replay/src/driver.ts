@@ -484,9 +484,9 @@ export async function replayModeA(
               contextTokens: estimateInputTokens(request.messages),
               maxOutputTokens: judge.maxOutputTokens,
               pricing: judge.pricing,
+              signal: retirement,
             },
             activeRefunds,
-            retirement,
           );
           if (retirement.aborted) {
             await reservation.refund(0);

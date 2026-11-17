@@ -34,6 +34,9 @@ export interface ReserveExecutionInput {
   contextTokens: number;
   maxOutputTokens: number;
   pricing: ModelPricing;
+  // Cancels the call: every ledger read after it refuses the reservation, including the
+  // re-read that retries a write another writer committed first.
+  signal?: AbortSignal;
 }
 
 export interface BudgetReservation {
@@ -84,11 +87,10 @@ export async function reserveWhenFree(
   budget: Budget,
   input: ReserveExecutionInput,
   inFlight: ReadonlySet<Promise<void>>,
-  signal?: AbortSignal,
 ): Promise<BudgetReservation> {
   let retryMs = 25;
   for (;;) {
-    signal?.throwIfAborted();
+    input.signal?.throwIfAborted();
     try {
       return await budget.reserveExecution(input);
     } catch (error) {
@@ -305,6 +307,7 @@ export function createBudget(options: CreateBudgetOptions): Budget {
 
     for (;;) {
       const current = await load(true);
+      input.signal?.throwIfAborted();
       const requiredCapUsd = roundUsd(current.ledger.spentUsd + worstCaseUsd);
       const capacityRequiredUsd = roundUsd(
         requiredCapUsd + reservedTotal(current.ledger),

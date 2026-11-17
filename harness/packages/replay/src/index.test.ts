@@ -2457,6 +2457,36 @@ describe("budget reservation", () => {
       budget.reserveExecution(worstCase(0.7)),
     ).resolves.toMatchObject({ reservedUsd: 0.7 });
   });
+
+  it("never grants a reservation cancelled while it retries a conflicting write", async () => {
+    const retired = new Error("judge retired");
+    const cancel = new AbortController();
+    let conflicted = false;
+    const budget = createBudget({
+      store: {
+        get: (key) => store.get(key),
+        list: (prefix) => store.list(prefix),
+        putImmutable: (key, body) => store.putImmutable(key, body),
+        compareAndSwap: async (key, expectedVersion, body, fenceToken) => {
+          if (conflicted) {
+            return store.compareAndSwap(key, expectedVersion, body, fenceToken);
+          }
+          // Another writer commits first, and the call is cancelled before the retry.
+          conflicted = true;
+          cancel.abort(retired);
+          return false;
+        },
+      },
+      projectId,
+      runId,
+      authorizedTotalUsd: 1,
+    });
+
+    await expect(
+      budget.reserveExecution({ ...worstCase(0.1), signal: cancel.signal }),
+    ).rejects.toBe(retired);
+    expect((await budget.state()).reservedUsd).toBe(0);
+  });
 });
 
 describe("shortlist", () => {
@@ -3595,10 +3625,16 @@ describe("Mode A replay", () => {
   it("judges executions concurrently", async () => {
     let inFlight = 0;
     let maxInFlight = 0;
+    let releaseJudges = (): void => undefined;
+    const judgesOverlap = new Promise<void>((resolve) => {
+      releaseJudges = resolve;
+    });
+    // One execution's judging is two calls, so a third call in flight is a second execution's.
     const slowJudge: JudgeChat = async () => {
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (inFlight > 2) releaseJudges();
+      await judgesOverlap;
       inFlight -= 1;
       return judgeReply(
         JSON.stringify({
@@ -4372,6 +4408,10 @@ describe("Mode A replay", () => {
       supportsStructuredOutput: false,
     };
     let providerCalls = 0;
+    let releaseSlowCalls = (): void => undefined;
+    const failureSettled = new Promise<void>((resolve) => {
+      releaseSlowCalls = resolve;
+    });
     const settlingProvider: ProviderClient = {
       providerId: "settling-provider",
       listModels: async () => [candidate],
@@ -4380,7 +4420,7 @@ describe("Mode A replay", () => {
         if (request.messages.at(-1)?.content === "boom") {
           throw new Error("store exploded");
         }
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await failureSettled;
         const response = {
           content: "candidate output",
           usage: { inputTokens: 1, outputTokens: 1 },
@@ -4391,12 +4431,27 @@ describe("Mode A replay", () => {
         return response;
       },
     };
-    const budget = createBudget({
+    const inner = createBudget({
       store,
       projectId,
       runId,
       authorizedTotalUsd: 1,
     });
+    // The failing cell's refund is the last step before its worker records the failure, and
+    // the other cell's call stays in flight until then.
+    const budget: Budget = {
+      ...inner,
+      reserveExecution: async (request) => {
+        const reservation = await inner.reserveExecution(request);
+        return {
+          ...reservation,
+          refund: async (actualCostUsd) => {
+            await reservation.refund(actualCostUsd);
+            releaseSlowCalls();
+          },
+        };
+      },
+    };
     const cases = ["boom", "slow-1", "slow-2", "slow-3"].map((content, index) =>
       recordedCase({
         caseId: `case-${index + 1}`,
@@ -4803,12 +4858,17 @@ describe("Mode A replay", () => {
     const gate = new Promise<void>((resolve) => {
       releaseGate = resolve;
     });
+    let reservationRecorded = (): void => undefined;
+    const gatedReservation = new Promise<void>((resolve) => {
+      reservationRecorded = resolve;
+    });
     let judgeReservations = 0;
     let gatedGranted = false;
 
     await run(
       [recordedCase()],
       async (request) => {
+        if (request.model === "zeta/judge-1") await gatedReservation;
         const response = await providerJudge(request);
         if (request.model === "zeta/judge-1") setTimeout(releaseGate, 20);
         return response;
@@ -4836,8 +4896,10 @@ describe("Mode A replay", () => {
             reservation.maxOutputTokens ===
               unpricedJudgeLimits.maxOutputTokens && ++judgeReservations === 2;
           if (!gated) return budget.reserveExecution(reservation);
-          await gate;
+          // The ledger records it before the retirement, and the grant arrives after it.
           const granted = await budget.reserveExecution(reservation);
+          reservationRecorded();
+          await gate;
           gatedGranted = true;
           return granted;
         },
