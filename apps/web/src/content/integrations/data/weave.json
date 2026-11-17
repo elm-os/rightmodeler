@@ -5,10 +5,10 @@
   "logo": "/integrations/logos/weave.svg",
   "category": "trace-source",
   "categoryLabel": "Trace source · dedicated adapter",
-  "title": "W&B Weave integration: replay calls on cheaper models",
-  "description": "Export W&B Weave calls: rightmodeler replays recorded calls against cheaper candidates and scores each replay against the output you already shipped.",
+  "title": "W&B Weave integration: replay calls on cheaper or newer models",
+  "description": "Export W&B Weave calls: rightmodeler replays recorded calls against cheaper or newer candidates and scores each replay against the output you already shipped.",
   "h1": "rightmodeler + W&B Weave",
-  "lede": "Weave already records every op call your agent made, with its inputs, its output, and its token summary. rightmodeler reads those calls with a dedicated adapter, replays the recorded model calls against cheaper candidates, and reports the evidence per step family.",
+  "lede": "Weave already records every op call your agent made, with its inputs, its output, and its token summary. rightmodeler reads those calls with a dedicated adapter, replays the recorded model calls against cheaper or newer candidates, and reports the evidence per step family.",
   "tldr": "rightmodeler has a dedicated Weave adapter. It recognizes call rows by their id, trace_id, op_name, and started_at keys, takes the model and messages from inputs, reads the output field as the answer you shipped, and pulls token counts out of the per-model usage map in summary. Calls sharing a trace_id become one trajectory, so a multi-step op chain stays a single unit in the statistics.",
   "steps": [
     {
@@ -23,8 +23,8 @@
     },
     {
       "label": "03 · Replay + judge",
-      "title": "Cheaper candidates, scored against your output",
-      "body": "Each recorded call with a plain-text conversation and an empty or missing inputs.tools list is replayed against cheaper candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
+      "title": "Cheaper or newer candidates, scored against your output",
+      "body": "Each recorded call with a plain-text conversation and an empty or missing inputs.tools list is replayed against cheaper or newer candidates through the OpenAI-compatible endpoint you name with --base-url and --api-key-env, so OpenRouter, the Vercel AI Gateway, or a LiteLLM proxy all work unchanged. A configured external evaluator scores the outputs when it is reachable; otherwise the built-in judge runs two temperature-zero calls with the reference and candidate positions swapped. Verdicts rest on statistical lower bounds kept separate per evaluator kind."
     },
     {
       "label": "04 · Report + apply",
@@ -114,7 +114,7 @@
     },
     {
       "q": "Does rightmodeler replace my Weave evaluations?",
-      "a": "No. Weave evaluations measure whether your agent clears a bar you defined. rightmodeler measures whether a cheaper model matches the output you already shipped, step family by step family. A proposed swap is exactly the change worth running your Weave evaluations against before it ships."
+      "a": "No. Weave evaluations measure whether your agent clears a bar you defined. rightmodeler measures whether a cheaper or newer model matches the output you already shipped, step family by step family. A proposed swap is exactly the change worth running your Weave evaluations against before it ships."
     },
     {
       "q": "Do I need a Weights & Biases account to run rightmodeler?",
@@ -129,7 +129,7 @@
       "a": "Only during the run: recorded inputs go to candidate models, and recorded responses go to the judge, through the endpoint you configured, under your own key. An external evaluator, if you name one, receives what it scores. There is no rightmodeler server and no account; the export file and the report stay on your disk."
     },
     {
-      "q": "Will it always find a cheaper model?",
+      "q": "Will it always find a cheaper or newer model?",
       "a": "No, and that is the point. A family abstains when the evidence is thin or the excluded fraction runs over the ceiling, and nothing is proposed unless a candidate clears the quality floor on held-out cases. A tool that always finds a swap is not measuring anything."
     }
   ],
