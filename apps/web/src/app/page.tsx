@@ -26,7 +26,8 @@ import {
 } from "@/lib/site";
 
 // Canonical strings from docs/positioning.md. The hero h1 is an opinion and never a title here.
-const title = "rightmodeler: cheaper or newer model swaps, validated on your traces";
+const title =
+  "rightmodeler: cheaper or newer model swaps, validated on your traces";
 const description =
   "The bottleneck is the human work in the loop. rightmodeler validates cheaper or newer models on your traces and opens a draft pull request for your review.";
 const preview = socialImage(
@@ -47,7 +48,7 @@ const softwareLd = {
   name: SITE_NAME,
   // The one-liner: it describes the software, where the page description argues the thesis.
   description:
-    "Cheaper model swaps for production AI, validated on your own traces and opened as draft PRs.",
+    "Cheaper or newer model swaps for production AI, validated on your own traces and opened as draft PRs.",
   applicationCategory: "DeveloperApplication",
   operatingSystem: "macOS, Linux, Windows",
   softwareRequirements: "Node.js 24 or newer",
