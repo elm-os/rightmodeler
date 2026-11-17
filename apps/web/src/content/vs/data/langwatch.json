@@ -176,7 +176,7 @@
           "a": "Open core, per its docs. The platform is Apache 2.0 and self-hostable with Docker or Helm, with no volume cap on your own infrastructure; the client SDKs are MIT; and enterprise features such as SSO, custom RBAC roles, audit logs, and AI governance features such as anomaly rules and SIEM export sit under a separate enterprise license. Its Scenario testing framework is open source, and LangWatch Cloud has a free plan. The rightmodeler CLI is MIT-licensed."
         },
         {
-          "q": "Will a validation run always find a cheaper model?",
+          "q": "Will a validation run always find a cheaper or newer model?",
           "a": "No, and it is designed not to. A step family abstains when the evidence is thin or too many of its cases had to be left out, and no swap is proposed when no candidate clears the quality floor on held-out cases. A report that finds no swap to make is a valid result."
         }
       ]

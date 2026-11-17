@@ -201,7 +201,7 @@
           "a": "The open-source gateway: built and verified on transports/v2.2.1 (maximhq/bifrost:v2.2.1), pinned by digest. Pin the image, as the setup does."
         },
         {
-          "q": "Will rightmodeler always find a cheaper model?",
+          "q": "Will rightmodeler always find a cheaper or newer model?",
           "a": "No. Plenty of steps already run on the cheapest model that can do the work, and a candidate can fall short of the quality floor or leave too little evidence, which ends in an abstention. Every swap that is offered waits for a person to review and merge the pull request."
         }
       ]

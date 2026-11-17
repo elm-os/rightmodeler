@@ -210,7 +210,7 @@
           "a": "Yes. Per its self-hosting pricing page, the open-source edition is MIT-licensed and includes all core platform features, including observability, evaluation, prompt management, and datasets, with unlimited usage. A Self-Hosted Enterprise edition adds features and is bundled with ClickHouse Cloud, BYOC, or Private. The rightmodeler CLI is MIT-licensed too."
         },
         {
-          "q": "Will rightmodeler always find a cheaper model?",
+          "q": "Will rightmodeler always find a cheaper or newer model?",
           "a": "No, and it is designed not to. A family abstains when the evidence is thin or too many of its cases had to be left out, and gets no recommendation when no candidate clears the quality floor on held-out cases. A report that says every step already earns its model is a possible result."
         }
       ]

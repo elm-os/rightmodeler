@@ -189,7 +189,7 @@
           "a": "Arize describes Phoenix as its open-source platform: free to self-host, with no Phoenix feature gated behind its commercial product, per its docs. The code is on GitHub under the Elastic License 2.0. Arize AX is Arize's separate managed platform. The rightmodeler CLI is MIT-licensed."
         },
         {
-          "q": "Will rightmodeler always find a cheaper model?",
+          "q": "Will rightmodeler always find a cheaper or newer model?",
           "a": "No, and it is designed not to. A family abstains when the evidence is thin or too many of its cases had to be left out, and gets no recommendation when no candidate clears the quality floor on held-out cases. A report that says every step already earns its model is a possible result."
         }
       ]

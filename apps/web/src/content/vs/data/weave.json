@@ -185,7 +185,7 @@
           "a": "No. This page compares rightmodeler with W&B Weave, the Weights & Biases product for tracing and evaluating agents and LLM applications. The rest of the W&B platform, such as experiment tracking, sweeps, and the model registry, serves model training work and sits outside this comparison."
         },
         {
-          "q": "Will rightmodeler always find a cheaper model?",
+          "q": "Will rightmodeler always find a cheaper or newer model?",
           "a": "No, and that is the point. A family abstains when the evidence is thin or the excluded fraction runs over the ceiling, and gets no recommendation when no candidate clears the quality floor on held-out cases. A report that says your current models already earn their cost is a valid result."
         }
       ]

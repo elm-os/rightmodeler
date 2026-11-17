@@ -174,7 +174,7 @@
           "a": "Yes. Per its repository, Opik is licensed under Apache 2.0, and its server, web application, and core observability and evaluation features can be self-hosted without a commercial license, with Docker Compose for local use or a Helm chart on Kubernetes. As of 2026-09-24, Comet's pricing page lists a free cloud plan with 25k spans a month, a Pro plan at $19 a month, and custom Enterprise plans. The rightmodeler CLI is MIT-licensed."
         },
         {
-          "q": "Will rightmodeler always find a cheaper model?",
+          "q": "Will rightmodeler always find a cheaper or newer model?",
           "a": "No, and it is designed not to. A step family abstains when the evidence is thin or too many of its cases had to be left out, and gets no recommendation when no candidate clears the quality floor on held-out cases. A report that says your current models already earn their cost is a valid result."
         }
       ]
