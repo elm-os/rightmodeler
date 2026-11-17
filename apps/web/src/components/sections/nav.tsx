@@ -28,7 +28,9 @@ export function Nav({ homeHref = "#top" }: { homeHref?: string }) {
           <span className="wordmark">rightmodeler</span>
         </Link>
 
-        <div className="flex items-center gap-6 sm:gap-8">
+        {/* The install command joins at md, which leaves 768px no room to spare at 32px
+            gaps, so the gaps tighten until lg. */}
+        <div className="flex items-center gap-6 sm:gap-8 md:gap-6 lg:gap-8">
           {/* "How it works" stays in the footer: adding it here would wrap the masthead. */}
           <Link
             href="/agent"
