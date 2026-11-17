@@ -12,7 +12,7 @@ export function decodeText(bytes: Uint8Array): string {
   ).decode(bytes);
 }
 
-// Codex compresses older session rollouts to .jsonl.zst. decodeText turns a trace into one
+// Codex can store a session rollout compressed as .jsonl.zst. decodeText turns a trace into one
 // string, so decompression stops at the longest string Node.js can hold, and a small file
 // cannot expand without bound in memory.
 export async function readTraceFile(

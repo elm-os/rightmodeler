@@ -343,7 +343,7 @@ async function plainHead(
   };
 }
 
-// Codex compresses older session rollouts to one zstd frame. Only the head is decompressed, so
+// Codex stores a compressed rollout as one zstd frame. Only the head is decompressed, so
 // a small file cannot expand in memory, and the frame header gives the size of the rest.
 async function compressedHead(handle: FileHandle): Promise<FileHead> {
   // Errors from either stream surface through the loop. The handle stays open for the header
