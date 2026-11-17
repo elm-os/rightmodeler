@@ -366,7 +366,9 @@ async function createContext(
     stepRecords: steps(),
     cases: selectedCases,
     swapPolicy: { lookup: "acme/small-1" },
-    executor,
+    // No orphan sweep: at these short timeouts it would reap the live containers of the CLI
+    // e2e, which turbo runs alongside this suite.
+    executor: { ...executor, reapOrphans: undefined },
     egress: {
       providerId: "stub-provider",
       providerBaseUrl: `http://127.0.0.1:${stub.port}`,
