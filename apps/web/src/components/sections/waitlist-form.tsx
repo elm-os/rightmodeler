@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export type WaitlistProduct = "crucible" | "agent";
+export type WaitlistProduct = "agent";
 
 type State =
   | { status: "idle" }
@@ -10,11 +10,7 @@ type State =
   | { status: "success" }
   | { status: "error"; message: string };
 
-export function WaitlistForm({
-  product = "crucible",
-}: {
-  product?: WaitlistProduct;
-}) {
+export function WaitlistForm({ product }: { product: WaitlistProduct }) {
   const [state, setState] = useState<State>({ status: "idle" });
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {

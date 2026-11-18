@@ -49,7 +49,7 @@ The per-step report shown on the card, mid-scroll. The figures are stamped illus
 
 ## Then put it on a schedule.
 
-Run the same validation weekly in CI with the GitHub Actions recipe in the docs, or self-host the agent: it checks the catalog every week for cheaper new or repriced models, and on your word it replays a new candidate and opens each swap that clears every gate as a draft pull request. The hosted agent has a waitlist. Crucible, in development, will add the instruments: cost per layer, speed per step and failures as they happen.
+Run the same validation weekly in CI with the GitHub Actions recipe in the docs, or self-host the agent: it checks the catalog every week for cheaper new or repriced models, and on your word it replays a new candidate and opens each swap that clears every gate as a draft pull request. The hosted agent has a waitlist. Crucible, in development, is planned as open-source, self-hosted observability for AI agents and MCP servers, including cost and latency.
 
 - [Meet the agent](/agent)
 - [Meet Crucible](/crucible)

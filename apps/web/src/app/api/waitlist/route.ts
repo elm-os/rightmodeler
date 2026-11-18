@@ -25,6 +25,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request." }, { status: 400 });
   }
 
+  // Only the hosted agent has a waitlist; a form left open on the old Crucible page lands here.
+  if (product !== "agent") {
+    return Response.json(
+      { error: "This waitlist is closed." },
+      { status: 400 },
+    );
+  }
+
   if (typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
     return Response.json(
       { error: "Enter a valid email address." },
@@ -45,19 +53,14 @@ export async function POST(request: Request) {
   const submittedAt = new Date().toISOString();
   const resend = new Resend(apiKey);
 
-  // Lenient: a missing or unknown product falls back to Crucible, so older clients keep working.
-  const which =
-    product === "agent" ? ("agent" as const) : ("crucible" as const);
-  const label = which === "agent" ? "rightmodeler agent" : "Crucible";
-
   // The template is called as a function (Resend renders it) so this stays a route.ts with no JSX.
   const { error } = await resend.emails.send({
     from: FROM,
     to: RECIPIENTS,
     replyTo: clean,
-    subject: `New ${label} waitlist signup: ${clean}`,
-    react: WaitlistNotification({ email: clean, submittedAt, product: which }),
-    text: `New ${label} waitlist signup: ${clean}\nSubmitted ${submittedAt} · www.rightmodeler.com/${which}`,
+    subject: `New rightmodeler agent waitlist signup: ${clean}`,
+    react: WaitlistNotification({ email: clean, submittedAt }),
+    text: `New rightmodeler agent waitlist signup: ${clean}\nSubmitted ${submittedAt} · www.rightmodeler.com/agent`,
   });
 
   if (error) {

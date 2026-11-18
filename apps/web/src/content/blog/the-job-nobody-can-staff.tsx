@@ -185,16 +185,16 @@ export function Body() {
       </P>
 
       <P>
-        Everything runs offline, beside your app, on your machine or in CI.
-        Nothing sits in the request path, there is no rightmodeler server, and
-        there is no telemetry.
+        The CLI and the agent run offline, beside your app, on your machine or
+        in CI. Nothing sits in the request path, there is no rightmodeler
+        server, and there is no telemetry.
       </P>
 
       <P>
-        Crucible, the planned analytics and optimization suite, is in
-        development, with a waitlist. It is designed to show cost per layer,
-        speed per step, and failures as they happen, connected over MCP and
-        never in the request path.
+        Crucible is being built in the open, in its own MIT-licensed repository:
+        self-hosted observability and analytics for AI agents and MCP servers,
+        planned as one Rust binary that will ingest OpenTelemetry. rightmodeler
+        will replay Crucible traces to validate cheaper or newer models.
       </P>
 
       <H2>Why the final yes stays with a person today</H2>
@@ -228,8 +228,9 @@ export function Body() {
         We think software should maintain itself, and we are working toward
         production AI that maintains and optimizes itself inside the policy you
         set, reached one validated change at a time. The self-hosted agent
-        already runs part of that loop on a schedule. Crucible will add the
-        instruments, because you cannot maintain what you cannot see.
+        already runs part of that loop on a schedule. Crucible, which we are
+        building in the open, will show what your agents and MCP servers do,
+        because you cannot maintain what you cannot see.
       </P>
 
       <P>
@@ -303,9 +304,9 @@ A swap that clears every gate becomes a draft pull request that changes only mod
 
 [rightmodeler agent](https://www.rightmodeler.com/agent) is the maintenance loop, on a schedule. It lives in the same repository, and you can self-host it today; the hosted version has a waitlist. It runs a weekly catalog and price check that flags cheaper new or repriced models, a daily drift check on new traces whose proposals a person approves, and one regression replay for each merged swap set, and it follows up on swap pull requests as review and CI report back. On your word it replays new candidates, and once a replay clears every gate, it opens the draft pull request. It never merges and carries no merge capability.
 
-Everything runs offline, beside your app, on your machine or in CI. Nothing sits in the request path, there is no rightmodeler server, and there is no telemetry.
+The CLI and the agent run offline, beside your app, on your machine or in CI. Nothing sits in the request path, there is no rightmodeler server, and there is no telemetry.
 
-Crucible, the planned analytics and optimization suite, is in development, with a waitlist. It is designed to show cost per layer, speed per step, and failures as they happen, connected over MCP and never in the request path.
+Crucible is being built in the open, in its own MIT-licensed repository: self-hosted observability and analytics for AI agents and MCP servers, planned as one Rust binary that will ingest OpenTelemetry. rightmodeler will replay Crucible traces to validate cheaper or newer models.
 
 ## Why the final yes stays with a person today
 
@@ -317,7 +318,7 @@ Keeping the final yes with a person is deliberate. We are not asking anyone to t
 
 ## Where it goes
 
-We think software should maintain itself, and we are working toward production AI that maintains and optimizes itself inside the policy you set, reached one validated change at a time. The self-hosted agent already runs part of that loop on a schedule. Crucible will add the instruments, because you cannot maintain what you cannot see.
+We think software should maintain itself, and we are working toward production AI that maintains and optimizes itself inside the policy you set, reached one validated change at a time. The self-hosted agent already runs part of that loop on a schedule. Crucible, which we are building in the open, will show what your agents and MCP servers do, because you cannot maintain what you cannot see.
 
 That is a direction, not a dated roadmap. Each step past today has to be earned the way a swap is earned now: with evidence a person can check, inside the policy that person set.
 

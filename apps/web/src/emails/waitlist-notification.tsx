@@ -13,21 +13,16 @@ import {
 interface WaitlistNotificationProps {
   email: string;
   submittedAt: string;
-  product?: "crucible" | "agent";
 }
 
 export function WaitlistNotification({
   email,
   submittedAt,
-  product = "crucible",
 }: WaitlistNotificationProps) {
-  const label = product === "agent" ? "rightmodeler agent" : "Crucible";
   return (
     <Html lang="en">
       <Head />
-      <Preview>
-        New {label} waitlist signup: {email}
-      </Preview>
+      <Preview>New rightmodeler agent waitlist signup: {email}</Preview>
       <Body
         style={{
           backgroundColor: "#fdfcfc",
@@ -49,7 +44,7 @@ export function WaitlistNotification({
               margin: "0 0 8px",
             }}
           >
-            {label} waitlist
+            rightmodeler agent waitlist
           </Text>
           <Heading
             style={{ fontSize: "18px", fontWeight: 600, margin: "0 0 12px" }}
@@ -62,7 +57,7 @@ export function WaitlistNotification({
             {email}
           </Text>
           <Text style={{ fontSize: "12px", margin: 0, color: "#a59f97" }}>
-            Submitted {submittedAt} · www.rightmodeler.com/{product}
+            Submitted {submittedAt} · www.rightmodeler.com/agent
           </Text>
         </Container>
       </Body>

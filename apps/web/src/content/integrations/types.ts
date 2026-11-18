@@ -35,6 +35,6 @@ export type IntegrationData = {
   limits: string[];
   faq: { q: string; a: string }[];
   related: string[];
-  /** CTA variant. One of: "github" (live skill install) | "crucible" (waitlist). */
+  /** CTA variant. Only "github" (live skill install). */
   cta: string;
 };

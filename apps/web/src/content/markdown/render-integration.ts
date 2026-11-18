@@ -1,7 +1,7 @@
 // Mirrors app/integrations/[slug]/page.tsx section for section: keep the two in step.
 
 import type { IntegrationData } from "@/content/integrations/types";
-import { REPO_URL, RUN_COMMAND, SITE_URL, SKILL_COMMAND } from "@/lib/site";
+import { REPO_URL, RUN_COMMAND, SKILL_COMMAND } from "@/lib/site";
 
 // A <placeholder> in prose parses as an HTML tag and drops out of the rendered twin; code lines stay literal.
 const prose = (text: string) => text.replace(/</g, "\\<");
@@ -80,27 +80,17 @@ export function renderIntegrationMarkdown(data: IntegrationData): string {
       lines.push(`### ${prose(entry.q)}`, "", prose(entry.a), "");
   }
 
-  if (data.cta === "crucible") {
-    lines.push(
-      "## Crucible will add the instruments.",
-      "",
-      "The self-hosted rightmodeler agent runs the maintenance loop on a schedule today. Crucible, the analytics and optimization suite in development, is designed to track cost per layer, speed per step, and failures as they happen.",
-      "",
-      `Join the Crucible waitlist: ${SITE_URL}/crucible`,
-    );
-  } else {
-    lines.push(
-      "## Start with the traces you already have.",
-      "",
-      `The CLI runs from npx, nothing to install, and validates cheaper or newer models on your ${
-        data.reads.length > 0 ? `traces from ${data.name}` : "own traces"
-      }.`,
-      "",
-      `View on GitHub: ${REPO_URL}`,
-      "",
-      `    ${RUN_COMMAND}`,
-    );
-  }
+  lines.push(
+    "## Start with the traces you already have.",
+    "",
+    `The CLI runs from npx, nothing to install, and validates cheaper or newer models on your ${
+      data.reads.length > 0 ? `traces from ${data.name}` : "own traces"
+    }.`,
+    "",
+    `View on GitHub: ${REPO_URL}`,
+    "",
+    `    ${RUN_COMMAND}`,
+  );
 
   return lines
     .join("\n")

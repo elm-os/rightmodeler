@@ -102,7 +102,7 @@ Meet the agent: /agent
 
 In development
 
-The instruments, planned. Cost per layer, speed per step, failures as they happen, over MCP, never in the request path.
+Observability, planned. Open-source and self-hosted, for AI agents and MCP servers, built in the open on GitHub.
 
 Meet Crucible: /crucible
 

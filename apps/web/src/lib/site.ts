@@ -23,6 +23,7 @@ export function docsFileUrl(name: string): string {
 }
 
 export const GITHUB_ORG_URL = "https://github.com/elm-os";
+export const CRUCIBLE_REPO_URL = "https://github.com/elm-os/crucible";
 export const LINKEDIN_URL = "https://www.linkedin.com/company/rightmodeler";
 export const X_URL = "https://x.com/rightmodeler";
 export const REDDIT_URL = "https://www.reddit.com/user/rightmodeler/";

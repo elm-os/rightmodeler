@@ -57,7 +57,7 @@
       "type": "array",
       "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
     },
-    "cta": { "enum": ["github", "crucible"] },
+    "cta": { "enum": ["github"] },
     "blocks": {
       "type": "array",
       "minItems": 1,

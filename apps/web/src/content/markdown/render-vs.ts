@@ -116,19 +116,8 @@ function block(
 
 // Mirrors the band that closes every comparison page; the button and command come in from the caller.
 function cta(
-  data: VsPageData,
-  siteUrl: string,
   links: { runCommand: string; repoUrl: string } | undefined,
 ): string[] {
-  if (data.cta === "crucible") {
-    return [
-      "## Crucible will add the instruments.",
-      "",
-      "The self-hosted rightmodeler agent runs the maintenance loop on a schedule today. Crucible, the analytics and optimization suite in development, is designed to track cost per layer, speed per step, and failures as they happen.",
-      "",
-      `Join the Crucible waitlist: ${siteUrl}/crucible`,
-    ];
-  }
   return [
     "## Start with the traces you already have.",
     "",
@@ -162,7 +151,7 @@ export function renderVsMarkdown(
     : undefined;
   for (const entry of data.blocks)
     lines.push(...block(entry, data.name, setupGuide, siteUrl));
-  lines.push("", ...cta(data, siteUrl, links));
+  lines.push("", ...cta(links));
   return lines
     .map((line) => (line.startsWith("    ") ? line : prose(line)))
     .join("\n")
