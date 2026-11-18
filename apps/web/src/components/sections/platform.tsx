@@ -37,7 +37,7 @@ const OFFERINGS: Offering[] = [
     chip: "In development",
     strong: false,
     name: "Crucible",
-    body: "The instruments, planned. Cost per layer, speed per step, failures as they happen, over MCP, never in the request path.",
+    body: "Observability, planned. Open-source and self-hosted, for AI agents and MCP servers, built in the open on GitHub.",
     cta: "Meet Crucible",
     href: "/crucible",
     art: "/platform/crucible.jpg",

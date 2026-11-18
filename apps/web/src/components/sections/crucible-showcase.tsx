@@ -21,71 +21,70 @@ type TabDef = {
   columns: Slot[][];
 };
 
-const COST: Feature = {
-  title: "Cost, by layer",
+const TRACES: Feature = {
+  title: "Traces and sessions",
   caption:
-    "One invoice will become a map: spend per agent, per step, per model.",
+    "Will show traces, spans, sessions and users, with full-text search across them.",
   img: "/crucible/cost.jpg",
 };
-const SPEED: Feature = {
-  title: "Speed, by step",
-  caption:
-    "p50 and p95 per step, so the slow layer will stop hiding in an aggregate.",
+const COST: Feature = {
+  title: "Cost and latency",
+  caption: "Will show the cost and latency of every trace.",
   img: "/crucible/speed.jpg",
 };
-const FAILURES: Feature = {
-  title: "Failures, as they happen",
+const MCP: Feature = {
+  title: "MCP analytics",
   caption:
-    "Failed tools, silent retries, and quality regressions will surface in a passive feed.",
+    "Will report tool calls, error classes, latency percentiles and clients for each MCP server, and compare deploys.",
   img: "/crucible/failures.jpg",
 };
-const RIGHTSIZED: Feature = {
-  title: "Continuously right-sized",
+const ALERTS: Feature = {
+  title: "Alerts and dashboards",
   caption:
-    "Will validate cheaper or newer model swaps as traces arrive, on top of the agent's schedule, with evidence and abstentions.",
+    "Will send alerts to Slack, email and webhooks, with custom dashboards and a guardrailed, read-only SQL workspace.",
   img: "/crucible/rightsized.jpg",
 };
-const MCP: Feature = {
-  title: "Connected over MCP",
+const INSTRUMENTATION: Feature = {
+  title: "Instrumented your way",
   caption:
-    "Will read the traces you already have. No new SDK, no re-instrumentation.",
+    "Will take OTLP from any OpenTelemetry SDK, from thin SDKs for TypeScript, Python, Go and Rust, or from an opt-in MCP proxy that needs no code changes.",
   img: "/crucible/mcp.jpg",
 };
-const KEYS: Feature = {
-  title: "Your keys, your gateway",
+const SELF_HOSTED: Feature = {
+  title: "Yours to run",
   caption:
-    "Will replay on your keys, direct or via OpenRouter, the Vercel AI Gateway, or LiteLLM.",
+    "Will be self-hosted only, with retention and deletion, and organizations, projects, roles and API keys.",
   img: "/crucible/keys.jpg",
 };
 
 // [card, tile] facing [tile, card] is what staggers the wall; the second tab mirrors the first.
 const TABS: TabDef[] = [
   {
-    id: "instruments",
-    label: "The instruments",
+    id: "show",
+    label: "What it will show",
     columns: [
       [
-        { kind: "card", feature: COST },
+        { kind: "card", feature: TRACES },
         { kind: "tile", align: "end" },
       ],
-      [{ kind: "card", feature: SPEED }],
+      [{ kind: "card", feature: COST }],
       [
         { kind: "tile", align: "start" },
-        { kind: "card", feature: FAILURES },
+        { kind: "card", feature: MCP },
       ],
     ],
   },
   {
-    id: "always-on",
-    label: "Always on",
+    id: "run",
+    label: "How it will run",
     columns: [
       [
         { kind: "tile", align: "end" },
-        { kind: "card", feature: KEYS },
+        { kind: "card", feature: SELF_HOSTED },
       ],
-      [{ kind: "card", feature: MCP }],
+      [{ kind: "card", feature: INSTRUMENTATION }],
       [
-        { kind: "card", feature: RIGHTSIZED },
+        { kind: "card", feature: ALERTS },
         { kind: "tile", align: "start" },
       ],
     ],

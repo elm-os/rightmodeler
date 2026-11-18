@@ -44,10 +44,6 @@ export async function generateMetadata({
   });
 }
 
-// Same ink pill as the use-cases CTA cards: page-local by house convention.
-const pillPrimary =
-  "inline-flex items-center justify-center rounded-xl bg-midnight-ink px-5 py-3 text-body font-medium text-parchment-white transition-transform duration-150 ease-out-strong active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white";
-
 const rule = <div aria-hidden className="h-px w-full bg-ash-border" />;
 
 // First rows drop their top padding to top-align with the heading.
@@ -340,38 +336,17 @@ export default async function VsDetailPage({
         <div className="px-4 py-14 sm:px-6 sm:py-16">
           <Reveal>
             <div className="rounded-2xl border border-ash-border bg-warm-sand p-6 sm:p-10">
-              {data.cta === "crucible" ? (
-                <>
-                  <h2 className="font-sans text-heading-sm text-midnight-ink">
-                    Crucible will add the instruments.
-                  </h2>
-                  <p className="mt-2 max-w-md text-body text-driftwood">
-                    The self-hosted rightmodeler agent runs the maintenance loop
-                    on a schedule today. Crucible, the analytics and
-                    optimization suite in development, is designed to track cost
-                    per layer, speed per step, and failures as they happen.
-                  </p>
-                  <div className="mt-5">
-                    <Link href="/crucible" className={pillPrimary}>
-                      Join the Crucible waitlist
-                    </Link>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h2 className="font-sans text-heading-sm text-midnight-ink">
-                    Start with the traces you already have.
-                  </h2>
-                  <p className="mt-2 max-w-md text-body text-driftwood">
-                    The CLI runs from npx, nothing to install, and validates
-                    cheaper or newer models on your own traces.
-                  </p>
-                  <div className="mt-5 flex flex-wrap items-center gap-4">
-                    <GithubButton />
-                    <CopyCommand command={RUN_COMMAND} />
-                  </div>
-                </>
-              )}
+              <h2 className="font-sans text-heading-sm text-midnight-ink">
+                Start with the traces you already have.
+              </h2>
+              <p className="mt-2 max-w-md text-body text-driftwood">
+                The CLI runs from npx, nothing to install, and validates cheaper
+                or newer models on your own traces.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-4">
+                <GithubButton />
+                <CopyCommand command={RUN_COMMAND} />
+              </div>
             </div>
           </Reveal>
         </div>

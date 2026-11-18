@@ -18,8 +18,8 @@ export function Footer() {
           <p className="mt-5 max-w-md text-body text-driftwood">
             The CLI validates swaps to cheaper or newer models on your traces,
             and the self-hosted agent runs the maintenance loop on a schedule.
-            Crucible, in development, will add the instruments. Today, the final
-            yes stays yours.
+            Crucible, open-source observability for agents and MCP servers, is
+            in development. Today, the final yes stays yours.
           </p>
         </Reveal>
 

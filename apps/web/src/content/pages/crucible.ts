@@ -1,61 +1,75 @@
 // Markdown twin of the /crucible route (src/app/crucible/page.tsx, plus the feature wall in
 // src/components/sections/crucible-showcase.tsx). Keep this file in sync with those pages.
 
-import { REPO_URL } from "@/lib/site";
+import { CRUCIBLE_REPO_URL, REPO_URL } from "@/lib/site";
 
-export const markdown = `# Crucible: every layer will be measured and right-sized.
+export const markdown = `# Crucible: open-source observability for AI agents and MCP servers.
 
-In development · by rightmodeler
+In development · built in the open
 
-The analytics and optimization suite we are building for production AI systems: what every layer costs, how fast it runs, and where it fails. Software cannot maintain what it cannot see. The self-hosted agent runs the maintenance loop on a schedule today; Crucible will add the instruments.
+Self-hosted observability and analytics, MIT licensed. It is designed for agents only, MCP servers only, or both, with an agent's tool calls linked to the server-side MCP spans. Nothing is released yet.
 
-Join the waitlist with your email address. One note when it opens, no spam.
+Follow Crucible on GitHub: ${CRUCIBLE_REPO_URL}
+
+Star or watch the repository to follow development.
 
 ## TL;DR
 
-Crucible is being built to read the traces your production AI systems already emit: cost per layer, speed per step, **failures as they happen**. It will run the rightmodeler validation loop continuously, on top of the self-hosted agent's schedule, so the step behind a cost spike comes with measured evidence for a cheaper model it could run on.
+Crucible is being built as one Rust binary. It will ingest OpenTelemetry (OTLP over HTTP and gRPC) and serve a REST API, a web UI and an MCP server, so **coding agents will be able to query their own traces**. Telemetry will be stored in ClickHouse, self-hosted or ClickHouse Cloud, your choice, and Postgres will be the control plane.
 
 ## What Crucible will give you
 
-### The instruments
+### What it will show
 
-- **Cost, by layer**
-  One invoice will become a map: spend per agent, per step, per model.
-- **Speed, by step**
-  p50 and p95 per step, so the slow layer will stop hiding in an aggregate.
-- **Failures, as they happen**
-  Failed tools, silent retries, and quality regressions will surface in a passive feed.
+- **Traces and sessions**
+  Will show traces, spans, sessions and users, with full-text search across them.
+- **Cost and latency**
+  Will show the cost and latency of every trace.
+- **MCP analytics**
+  Will report tool calls, error classes, latency percentiles and clients for each MCP server, and compare deploys.
 
-### Always on
+### How it will run
 
-- **Your keys, your gateway**
-  Will replay on your keys, direct or via OpenRouter, the Vercel AI Gateway, or LiteLLM.
-- **Connected over MCP**
-  Will read the traces you already have. No new SDK, no re-instrumentation.
-- **Continuously right-sized**
-  Will validate cheaper or newer model swaps as traces arrive, on top of the agent's schedule, with evidence and abstentions.
+- **Yours to run**
+  Will be self-hosted only, with retention and deletion, and organizations, projects, roles and API keys.
+- **Instrumented your way**
+  Will take OTLP from any OpenTelemetry SDK, from thin SDKs for TypeScript, Python, Go and Rust, or from an opt-in MCP proxy that needs no code changes.
+- **Alerts and dashboards**
+  Will send alerts to Slack, email and webhooks, with custom dashboards and a guardrailed, read-only SQL workspace.
 
 ## Available today: the CLI and the agent
 
-Crucible itself is in development. The validation framework it will build on, the rightmodeler CLI, is on npm now, and the self-hosted agent runs it on a schedule today.
+Crucible itself is in development. rightmodeler will replay Crucible traces to validate cheaper or newer models, and agents will be able to ask Crucible about their runs over MCP. The rightmodeler CLI is on npm now, and the self-hosted agent runs it on a schedule today.
 
-View on GitHub: ${REPO_URL}
+rightmodeler on GitHub: ${REPO_URL}
 
 ## FAQ
 
 ### What is Crucible?
 
-Crucible is the analytics and optimization suite for production AI systems that rightmodeler is building. It is designed to show what every layer costs, how fast it runs, and where it fails, and to add continuous right-sizing on top of the self-hosted agent's schedule, validating swaps to cheaper or newer models as new traces arrive. It will be a step toward production AI that maintains itself.
+An open-source, self-hosted observability and analytics platform for AI agents and MCP servers, being built in the open on GitHub under the MIT license. It is planned as one Rust binary that will ingest OpenTelemetry and serve a REST API, a web UI and an MCP server. Nothing is released yet.
 
 ### When can I use it?
 
-Not yet. Crucible is in development; join the waitlist and we will send one note when it opens. Today you can run the rightmodeler CLI from npm and self-host the agent, which runs the maintenance loop on a schedule and replays new candidates on your word.
+Not yet. Crucible is in development and nothing has shipped; star or watch the repository on GitHub to follow along. Today you can run the rightmodeler CLI from npm and self-host the agent, which runs the maintenance loop on a schedule and replays new candidates on your word.
 
-### How does it connect?
+### How will I send it data?
 
-It is designed to connect over MCP, using the tracing you already emit, with no new SDK. You will keep your own API keys, and its replays will be able to go through OpenRouter, the Vercel AI Gateway, or LiteLLM.
+Three ways are planned: OTLP over HTTP or gRPC from any OpenTelemetry SDK; thin SDKs for TypeScript, Python, Go and Rust, with agent helpers and an MCP server wrapper; and an opt-in proxy that instruments an MCP server with no code changes and forwards bytes unchanged.
 
-### Is it a gateway?
+### Is it for agents or for MCP servers?
 
-No. Crucible is designed to read your traces passively and never sit in your request path. Your traffic keeps flowing through your own keys and providers; Crucible will read the traces it leaves, measure, and report.
+Either, or both. It is designed for agents only, for MCP servers only, or for both together, with an agent's tool calls linked to the server-side MCP spans.
+
+### Where will my data live?
+
+On infrastructure you run: Crucible is self-hosted only. Telemetry will be stored in ClickHouse, self-hosted or ClickHouse Cloud, your choice, and Postgres will be the control plane.
+
+### How will it work with rightmodeler?
+
+rightmodeler will replay Crucible traces, through a Crucible export adapter, to validate cheaper or newer models against the outputs you accepted. Coding agents will also be able to ask Crucible about their runs through its MCP server.
+
+### How is it being built?
+
+In the open, with durability and correctness as design goals: a span will be acknowledged only after it is durable on disk, and the system will be tested with deterministic simulation and formal models.
 `;

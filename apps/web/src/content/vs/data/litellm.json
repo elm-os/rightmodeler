@@ -125,7 +125,7 @@
       "items": [
         {
           "q": "Do I drop LiteLLM once rightmodeler is running?",
-          "a": "No. LiteLLM runs your request path; rightmodeler works offline and validates, step by step, whether a cheaper or newer model can take over. Its draft pull request changes model identifiers, never routes, and a person merges it; the new model is then served through the proxy you already run. Crucible, the analytics and optimization suite in development, is designed to connect over MCP and stay out of the request path, so the proxy keeps that job too."
+          "a": "No. LiteLLM runs your request path; rightmodeler works offline and validates, step by step, whether a cheaper or newer model can take over. Its draft pull request changes model identifiers, never routes, and a person merges it; the new model is then served through the proxy you already run."
         },
         {
           "q": "LiteLLM's auto-router already picks models per request. Why measure offline?",
