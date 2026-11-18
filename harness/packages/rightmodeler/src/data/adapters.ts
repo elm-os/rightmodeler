@@ -34,6 +34,7 @@ import { bifrostAdapter } from "./adapters/bifrost.js";
 import { braintrustAdapter } from "./adapters/braintrust.js";
 import { claudeCodeAdapter } from "./adapters/claude-code.js";
 import { codexAdapter } from "./adapters/codex.js";
+import { crucibleAdapter } from "./adapters/crucible.js";
 import { heliconeAdapter } from "./adapters/helicone.js";
 import { langfuseAdapter } from "./adapters/langfuse.js";
 import { langsmithAdapter } from "./adapters/langsmith.js";
@@ -46,6 +47,7 @@ export { bifrostAdapter } from "./adapters/bifrost.js";
 export { braintrustAdapter } from "./adapters/braintrust.js";
 export { claudeCodeAdapter } from "./adapters/claude-code.js";
 export { codexAdapter } from "./adapters/codex.js";
+export { crucibleAdapter } from "./adapters/crucible.js";
 export { heliconeAdapter } from "./adapters/helicone.js";
 export { langfuseAdapter } from "./adapters/langfuse.js";
 export { langsmithAdapter } from "./adapters/langsmith.js";
@@ -451,4 +453,5 @@ export const traceAdapters = [
   claudeCodeAdapter,
   codexAdapter,
   bifrostAdapter,
+  crucibleAdapter,
 ] as const satisfies readonly NamedTraceAdapter[];

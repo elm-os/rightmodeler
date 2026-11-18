@@ -16,7 +16,8 @@ export type TraceFormat =
   | "weave"
   | "claude-code"
   | "codex"
-  | "bifrost";
+  | "bifrost"
+  | "crucible";
 
 export interface DroppedTraceRecord {
   recordIndex: number;
@@ -28,7 +29,8 @@ export type TraceExclusionReason =
   | "call_failed"
   | "replay_traffic"
   | "content_hidden"
-  | "fallback_answer";
+  | "fallback_answer"
+  | "content_truncated";
 
 export interface ExcludedTraceStep {
   recordIndex: number;
@@ -305,6 +307,8 @@ const exclusionMeanings: Record<TraceExclusionReason, string> = {
   content_hidden: "the gateway did not record the prompt or the output",
   fallback_answer:
     "answered by a configured fallback, not the model the application asked for",
+  content_truncated:
+    "the trace store cut the prompt or the output at its size limit",
 };
 
 export function excludedStepsWarning(
