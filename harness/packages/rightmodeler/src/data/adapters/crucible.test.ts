@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import { toWireMessages } from "@rightmodeler/replay";
 import { describe, expect, it } from "vitest";
 
 import { crucibleAdapter, parseTraceRecords } from "../adapters.js";
@@ -63,6 +64,23 @@ describe("Crucible span export", () => {
         durationMs: (generations[index]!.duration_us as number) / 1000,
       });
     });
+  });
+
+  it("sends a text-only call to replay and keeps a call that offered tools out", async () => {
+    const replayed = await record("708192a3b4c5d6e7");
+    const [textOnly] = crucibleAdapter.adapt([
+      withSpan(replayed, { attributes: {} }),
+    ])[0]!.steps;
+    const [offeredTools] = crucibleAdapter
+      .adapt(await records())
+      .find(({ traceId }) => traceId === trace("601"))!.steps;
+
+    expect(toWireMessages(textOnly!.messages)).toEqual([
+      { role: "user", content: "Summarize: the parcel left the depot." },
+    ]);
+    expect(() => toWireMessages(offeredTools!.messages)).toThrow(
+      "role is unsupported",
+    );
   });
 
   it("leaves cut, failed and replay calls out by name", async () => {
