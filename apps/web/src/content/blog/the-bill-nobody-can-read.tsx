@@ -108,12 +108,12 @@ export function Body() {
       </P>
 
       <P>
-        And what it records will not stop at a chart. rightmodeler will replay
-        Crucible traces to validate cheaper or newer models on the steps behind
-        the bill, grading every answer against the output you accepted and
-        reporting the evidence, the sample size, and every abstention. Your
-        coding agents will be able to ask Crucible about their own runs over
-        MCP.
+        And what it records will not stop at a chart. Your coding agents will be
+        able to ask Crucible about their own runs over MCP, and rightmodeler
+        will feed Crucible traces into its validation loop: replay the steps
+        behind the bill to validate cheaper or newer models, grade every answer
+        against the output you accepted, and report the evidence, the sample
+        size, and every abstention.
       </P>
 
       <P>
@@ -186,7 +186,7 @@ None of this is exotic. It is the ordinary decency we already extend to database
 
 [Crucible](https://www.rightmodeler.com/crucible) is the instrument panel we are building for the layer that thinks: open-source, self-hosted observability and analytics for AI agents and MCP servers, developed in the open under the MIT license. It is designed to take OpenTelemetry from any SDK you already run, with thin SDKs for TypeScript, Python, Go and Rust and an opt-in proxy that instruments an MCP server with no code changes. It will show traces, sessions, cost and latency, break MCP tool calls down by error class, and send alerts to Slack, email and webhooks.
 
-And what it records will not stop at a chart. rightmodeler will replay Crucible traces to validate cheaper or newer models on the steps behind the bill, grading every answer against the output you accepted and reporting the evidence, the sample size, and every abstention. Your coding agents will be able to ask Crucible about their own runs over MCP.
+And what it records will not stop at a chart. Your coding agents will be able to ask Crucible about their own runs over MCP, and rightmodeler will feed Crucible traces into its validation loop: replay the steps behind the bill to validate cheaper or newer models, grade every answer against the output you accepted, and report the evidence, the sample size, and every abstention.
 
 That loop does not wait for Crucible. You can [run it by hand today](https://github.com/elm-os/rightmodeler) with the rightmodeler CLI, on the traces you already have, and [the self-hosted agent](https://www.rightmodeler.com/agent) already runs the maintenance loop on a schedule: it rechecks the catalog weekly for cheaper new or repriced models and, on your word, replays them. Either way, a swap that clears every gate becomes a draft pull request that changes only model identifiers, for a person to review and merge.
 

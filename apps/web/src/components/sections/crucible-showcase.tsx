@@ -29,8 +29,7 @@ const TRACES: Feature = {
 };
 const COST: Feature = {
   title: "Cost and latency",
-  caption:
-    "Will put cost and latency on every trace, so a slow or expensive step will not hide in an aggregate.",
+  caption: "Will show the cost and latency of every trace.",
   img: "/crucible/speed.jpg",
 };
 const MCP: Feature = {

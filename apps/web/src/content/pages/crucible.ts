@@ -24,7 +24,7 @@ Crucible is being built as one Rust binary. It will ingest OpenTelemetry (OTLP o
 - **Traces and sessions**
   Will show traces, spans, sessions and users, with full-text search across them.
 - **Cost and latency**
-  Will put cost and latency on every trace, so a slow or expensive step will not hide in an aggregate.
+  Will show the cost and latency of every trace.
 - **MCP analytics**
   Will report tool calls, error classes, latency percentiles and clients for each MCP server, and compare deploys.
 
