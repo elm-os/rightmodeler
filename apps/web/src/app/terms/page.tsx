@@ -31,7 +31,7 @@ export default function TermsPage() {
       <section className="bg-parchment-white py-16 sm:py-20">
         <Prose>
           <p className="font-mono text-caption uppercase text-fog">
-            Last updated November 17, 2026
+            Last updated November 16, 2026
           </p>
 
           <Lead>
@@ -50,7 +50,7 @@ export default function TermsPage() {
           <H2>The service</H2>
           <P>
             The site describes the rightmodeler CLI, rightmodeler agent, and
-            Crucible, and offers a waitlist and a feedback form. Products
+            Crucible, and offers waitlists and a feedback form. Products
             described as in development, coming soon, or in early access are
             pre-release: their features, availability, and pricing may change or
             be withdrawn without notice, and joining a waitlist does not

@@ -8,7 +8,7 @@ Legal
 
 Short, and the plain-English summary matches the letter.
 
-Last updated November 17, 2026
+Last updated November 16, 2026
 
 Browse freely, the pre-release products may change, and the figures on this site are illustrative examples, except the customer results in our case studies. The details follow.
 
@@ -18,7 +18,7 @@ By using www.rightmodeler.com (the site), operated by rightmodeler, an ELM-OS pr
 
 ## The service
 
-The site describes the rightmodeler CLI, rightmodeler agent, and Crucible, and offers a waitlist and a feedback form. Products described as in development, coming soon, or in early access are pre-release: their features, availability, and pricing may change or be withdrawn without notice, and joining a waitlist does not guarantee access.
+The site describes the rightmodeler CLI, rightmodeler agent, and Crucible, and offers waitlists and a feedback form. Products described as in development, coming soon, or in early access are pre-release: their features, availability, and pricing may change or be withdrawn without notice, and joining a waitlist does not guarantee access.
 
 ## The software
 
