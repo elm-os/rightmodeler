@@ -11,6 +11,7 @@ import {
   braintrustAdapter,
   claudeCodeAdapter,
   codexAdapter,
+  crucibleAdapter,
   detectFormat,
   heliconeAdapter,
   langfuseAdapter,
@@ -377,6 +378,41 @@ const fixtures: FixtureCase[] = [
     },
     withoutUsage: (record) => without(record, "token_usage"),
   },
+  {
+    format: "crucible",
+    filename: "crucible.jsonl",
+    adapter: crucibleAdapter,
+    traceId: "c3a1e2f4b5d6478990a1b2c3d4e5f601",
+    model: "acme/large-1",
+    trajectoryIds: ["cr-session-1", "cr-session-1"],
+    usage: [
+      { inputTokens: 27, outputTokens: 11 },
+      { inputTokens: 38, outputTokens: 9 },
+    ],
+    malformedRecord: {
+      schema: "crucible.span/1",
+      span: {
+        trace_id: "c3a1e2f4b5d6478990a1b2c3d4e5f6ff",
+        span_id: "8192a3b4c5d6e7f8",
+        observation_type: "generation",
+        status_code: "ok",
+        model_requested: "",
+        model_response: "",
+        io_shape: "genai_messages",
+        input: [],
+        output: [],
+        finish_reasons: ["stop"],
+        truncated_fields: [],
+      },
+      facts: [],
+    },
+    // An export always carries the token scalars, 0 without provided usage, so only the usage
+    // map says whether the source counted tokens.
+    withoutUsage: (record) => ({
+      ...record,
+      span: { ...(record.span as Record<string, unknown>), usage: {} },
+    }),
+  },
 ];
 
 async function fixtureText(filename: string): Promise<string> {
@@ -387,7 +423,7 @@ async function fixtureText(filename: string): Promise<string> {
 }
 
 describe("trace adapter conformance", () => {
-  it("runs the 12 adapter by 12 fixture detection matrix", async () => {
+  it("runs the 13 adapter by 13 fixture detection matrix", async () => {
     expect(traceAdapters).toHaveLength(fixtures.length);
     for (const fixture of fixtures) {
       const text = await fixtureText(fixture.filename);

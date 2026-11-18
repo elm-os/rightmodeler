@@ -32,10 +32,12 @@ interface RowAdapterOptions {
   format: TraceFormat;
   label: string;
   detect(sample: unknown): number;
+  // An empty list reports the record as dropped. null skips a record that is not a model call, for
+  // a format whose exports also hold other spans.
   mapRecord(
     record: Record<string, unknown>,
     recordIndex: number,
-  ): Array<MappedTraceStep | ExcludedTraceEntry>;
+  ): Array<MappedTraceStep | ExcludedTraceEntry> | null;
 }
 
 function buildRuns(
@@ -90,6 +92,7 @@ export function createRowAdapter(
       }
       try {
         const entries = options.mapRecord(candidate, recordIndex);
+        if (entries === null) continue;
         if (entries.length === 0) {
           droppedRecords.push({
             recordIndex,

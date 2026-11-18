@@ -500,6 +500,7 @@ function formatName(format: TraceFormat): string {
     "claude-code": "Claude Code session",
     codex: "Codex session",
     bifrost: "Bifrost log export",
+    crucible: "Crucible export",
   };
   return names[format];
 }
