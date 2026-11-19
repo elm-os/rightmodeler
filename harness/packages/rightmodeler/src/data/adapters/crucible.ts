@@ -50,8 +50,10 @@ function spanBody(span: Record<string, unknown>, field: string): unknown {
   return isCut(span, field) ? span[field] : jsonEncodedValue(span[field]);
 }
 
-// An indexed_messages body holds each message under its index.
+// An indexed_messages body comes from flattened, indexed message keys. Crucible stores it rebuilt as the
+// message array, in index order; a body that holds each message under its index is read in index order too.
 function messagesByIndex(value: unknown): unknown[] | undefined {
+  if (Array.isArray(value)) return [...value];
   if (
     !isRecord(value) ||
     !Object.keys(value).every((key) => /^\d+$/.test(key))
@@ -114,7 +116,7 @@ export const crucibleAdapter = createRowAdapter({
     const indexedInput = indexed ? messagesByIndex(input) : undefined;
     if (indexed && indexedInput === undefined) {
       throw new Error(
-        `${label} input must be an object keyed by message index`,
+        `${label} input must be a message array or an object keyed by message index`,
       );
     }
     const messages =

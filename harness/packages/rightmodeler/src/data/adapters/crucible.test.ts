@@ -134,6 +134,27 @@ describe("Crucible span export", () => {
     expect(unindexedOutput?.output).toBe("refund");
   });
 
+  it("reads an indexed body that Crucible stored as the message array", async () => {
+    const triage = await record("4d5e6f708192a3b4");
+    const input = triage.span.input as Record<string, unknown>;
+    const output = triage.span.output as Record<string, unknown>;
+    const result = crucibleAdapter.adaptWithReport([
+      withSpan(triage, {
+        input: [input["0"], input["1"]],
+        output: [output["0"]],
+      }),
+      withSpan(triage, { input: "refund" }),
+    ]);
+
+    expect(result.runs[0]?.steps[0]).toMatchObject({
+      messages: [input["0"], input["1"]],
+      output: [output["0"]],
+    });
+    expect(result.droppedRecords.map(({ reason }) => reason)).toEqual([
+      "Crucible record 2 input must be a message array or an object keyed by message index",
+    ]);
+  });
+
   it("reads an unfinished stream, unrecorded content and an unpriced call", async () => {
     const triage = await record("4d5e6f708192a3b4");
     const result = crucibleAdapter.adaptWithReport([
