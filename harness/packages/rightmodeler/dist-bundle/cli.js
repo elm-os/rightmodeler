@@ -36028,6 +36028,7 @@ function spanBody(span, field) {
   return isCut(span, field) ? span[field] : jsonEncodedValue(span[field]);
 }
 function messagesByIndex(value) {
+  if (Array.isArray(value)) return [...value];
   if (!isRecord(value) || !Object.keys(value).every((key) => /^\d+$/.test(key))) {
     return void 0;
   }
@@ -36076,7 +36077,7 @@ var crucibleAdapter = createRowAdapter({
     const indexedInput = indexed ? messagesByIndex(input) : void 0;
     if (indexed && indexedInput === void 0) {
       throw new Error(
-        `${label2} input must be an object keyed by message index`
+        `${label2} input must be a message array or an object keyed by message index`
       );
     }
     const messages = indexedInput ?? (span.io_shape === "genai_messages" && Array.isArray(input) ? [...input] : isRecord(input) && Array.isArray(input.messages) ? [...input.messages] : [input]);
