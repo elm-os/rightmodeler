@@ -36,13 +36,13 @@ const COST: Feature = {
 const MCP: Feature = {
   title: "MCP servers",
   caption:
-    "Every MCP call recorded with its method, tool, error class and latency, and linked to the agent's tool call through trace context.",
+    "Every MCP call recorded and linked to the agent's tool call through trace context, with analytics by server, tool, error, client, user, session and deploy, for the server or the client side.",
   img: "/crucible/failures.jpg",
 };
 const ALERTS: Feature = {
   title: "Alerts, SQL and exports",
   caption:
-    "Alerts to Slack, email and signed webhooks, a read-only SQL workspace isolated by ClickHouse itself, and trace exports.",
+    "Alerts on span and MCP call measures to Slack, email and signed webhooks, a read-only SQL workspace isolated by ClickHouse itself, and trace exports.",
   img: "/crucible/rightsized.jpg",
 };
 const INSTRUMENTATION: Feature = {
