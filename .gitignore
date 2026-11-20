@@ -30,3 +30,23 @@ advisor-plans/
 tasks/
 .vercel
 harness/packages/rightmodeler/dist-bundle.staging/
+
+# The local pitch deck folder, and private keys such as a GitHub App's .pem
+/docs/pitch/
+*.pem
+
+# Left behind when a test run is interrupted: e2e fixture copies, Mode B and executor scratch
+/harness/fixtures/.rightmodeler-*/
+/harness/packages/executor/src/.docker*/
+
+# Tarball from a manual pnpm pack of the CLI
+/harness/packages/rightmodeler/*.tgz
+
+# Local logs and personal Claude Code instructions
+*.log
+CLAUDE.local.md
+
+# Windows: Explorer files, and the file a cmd-style "> nul" redirect leaves in Git Bash
+Thumbs.db
+desktop.ini
+nul
