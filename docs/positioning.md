@@ -77,9 +77,9 @@ cost less, refusal reasons, estimates, gates) stays exact and keeps "cheaper".
     and Rust (agent helpers plus an MCP server wrapper, in the repository); and a proxy that records
     an MCP server's calls with no code changes and forwards its traffic unchanged.
   - What it does: traces, spans, sessions and users, with a timeline and an agent graph; cost,
-    tokens and latency; full-text search; MCP call records; alerts to Slack, email and signed
-    webhooks; a read-only SQL workspace isolated by ClickHouse; exports; retention and deletion
-    requests; organizations, projects, roles and API keys.
+    tokens and latency, with dashboards to chart them; full-text search; MCP call records; alerts
+    to Slack, email and signed webhooks; a read-only SQL workspace isolated by ClickHouse; exports;
+    retention and deletion requests; organizations, projects, roles and API keys.
   - How it is built, as mechanisms: a span is acknowledged only after it is written to a write-ahead
     log and synced; each batch reaches ClickHouse with a deduplication token, so a retry never
     stores a span twice; under load it answers 429 or 503 with Retry-After. It is tested with
