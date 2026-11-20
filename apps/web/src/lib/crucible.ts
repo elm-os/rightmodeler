@@ -3,8 +3,12 @@
 
 import { CRUCIBLE_REPO_URL } from "@/lib/site";
 
-export const CRUCIBLE_DOWNLOAD_COMMAND =
-  "curl -fsSLO https://raw.githubusercontent.com/elm-os/crucible/main/deploy/compose/compose.yaml";
+// The Crucible release the quickstart's Compose file comes from. Bump it with each Crucible release: a Compose file
+// pinned to a release uses only the settings that release knows, and newer images stay compatible with it. Prose on
+// the site names no version, so only this constant changes.
+export const CRUCIBLE_RELEASE_TAG = "v0.1.0";
+
+export const CRUCIBLE_DOWNLOAD_COMMAND = `curl -fsSLO https://raw.githubusercontent.com/elm-os/crucible/${CRUCIBLE_RELEASE_TAG}/deploy/compose/compose.yaml`;
 
 // String.raw keeps printf's \n escape as typed. One argument per line keeps every token short, so
 // the command wraps at spaces on a phone.
