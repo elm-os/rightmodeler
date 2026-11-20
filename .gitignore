@@ -1,5 +1,5 @@
 .rightmodeler/
-.agents/skills/rightmodeler/
+.agents/
 .next/
 .turbo/
 .vercel/
@@ -9,7 +9,7 @@ build/
 coverage/
 .ruff_cache/
 .venv/
-.claude/skills/rightmodeler/
+.claude/
 __pycache__/
 *.pyc
 outputs/
