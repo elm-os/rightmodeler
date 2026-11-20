@@ -191,10 +191,10 @@ export function Body() {
       </P>
 
       <P>
-        Crucible is being built in the open, in its own MIT-licensed repository:
-        self-hosted observability and analytics for AI agents and MCP servers,
-        planned as one Rust binary that will ingest OpenTelemetry. rightmodeler
-        will replay Crucible traces to validate cheaper or newer models.
+        Crucible lives in its own MIT-licensed repository: self-hosted
+        observability and analytics for AI agents and MCP servers, one Rust
+        binary that ingests OpenTelemetry. rightmodeler replays Crucible traces
+        to validate cheaper or newer models.
       </P>
 
       <H2>Why the final yes stays with a person today</H2>
@@ -228,9 +228,9 @@ export function Body() {
         We think software should maintain itself, and we are working toward
         production AI that maintains and optimizes itself inside the policy you
         set, reached one validated change at a time. The self-hosted agent
-        already runs part of that loop on a schedule. Crucible, which we are
-        building in the open, will show what your agents and MCP servers do,
-        because you cannot maintain what you cannot see.
+        already runs part of that loop on a schedule, and Crucible shows what
+        your agents and MCP servers do, because you cannot maintain what you
+        cannot see.
       </P>
 
       <P>
@@ -306,7 +306,7 @@ A swap that clears every gate becomes a draft pull request that changes only mod
 
 The CLI and the agent run offline, beside your app, on your machine or in CI. Nothing sits in the request path, there is no rightmodeler server, and there is no telemetry.
 
-Crucible is being built in the open, in its own MIT-licensed repository: self-hosted observability and analytics for AI agents and MCP servers, planned as one Rust binary that will ingest OpenTelemetry. rightmodeler will replay Crucible traces to validate cheaper or newer models.
+Crucible lives in its own MIT-licensed repository: self-hosted observability and analytics for AI agents and MCP servers, one Rust binary that ingests OpenTelemetry. rightmodeler replays Crucible traces to validate cheaper or newer models.
 
 ## Why the final yes stays with a person today
 
@@ -318,7 +318,7 @@ Keeping the final yes with a person is deliberate. We are not asking anyone to t
 
 ## Where it goes
 
-We think software should maintain itself, and we are working toward production AI that maintains and optimizes itself inside the policy you set, reached one validated change at a time. The self-hosted agent already runs part of that loop on a schedule. Crucible, which we are building in the open, will show what your agents and MCP servers do, because you cannot maintain what you cannot see.
+We think software should maintain itself, and we are working toward production AI that maintains and optimizes itself inside the policy you set, reached one validated change at a time. The self-hosted agent already runs part of that loop on a schedule, and Crucible shows what your agents and MCP servers do, because you cannot maintain what you cannot see.
 
 That is a direction, not a dated roadmap. Each step past today has to be earned the way a swap is earned now: with evidence a person can check, inside the policy that person set.
 

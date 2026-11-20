@@ -5,7 +5,7 @@
 - Source: local Wayfinder planning map under `tasks/wayfinder/`
 - Implementation tracker: local `tasks/implementation-tickets.md`
 - Superseded in part: the managed, hosted Crucible this spec refers to is not the current plan.
-  Crucible is now planned as open-source, self-hosted observability and analytics for AI agents
+  Crucible is now open-source, self-hosted observability and analytics for AI agents
   and MCP servers, self-hosted only; see [positioning](../positioning.md). The references below
   are kept as written for the record.
 

@@ -197,7 +197,10 @@ export default function AgentPage() {
             <RelatedLinks
               links={[
                 { href: "/how-it-works", label: "How the validation works" },
-                { href: "/crucible", label: "Crucible, in development" },
+                {
+                  href: "/crucible",
+                  label: "Crucible, observability for agents and MCP servers",
+                },
                 {
                   href: "/blog/the-tuesday-problem",
                   label: "Read the vision: the Tuesday problem",

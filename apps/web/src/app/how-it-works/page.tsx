@@ -440,7 +440,7 @@ export default function HowItWorksPage() {
               href="/crucible"
               className="text-body text-midnight-ink underline decoration-ash-border decoration-1 underline-offset-4 transition-colors duration-150 ease-out hover:decoration-midnight-ink focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white"
             >
-              Crucible (in development)
+              Crucible, open-source observability
             </Link>
           </Reveal>
 

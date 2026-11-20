@@ -97,27 +97,27 @@ export function Body() {
       <H2>Crucible</H2>
 
       <P>
-        <A href="/crucible">Crucible</A> is the instrument panel we are building
-        for the layer that thinks: open-source, self-hosted observability and
-        analytics for AI agents and MCP servers, developed in the open under the
-        MIT license. It is designed to take OpenTelemetry from any SDK you
-        already run, with thin SDKs for TypeScript, Python, Go and Rust and an
-        opt-in proxy that instruments an MCP server with no code changes. It
-        will show traces, sessions, cost and latency, break MCP tool calls down
-        by error class, and send alerts to Slack, email and webhooks.
+        <A href="/crucible">Crucible</A> is the instrument panel we built for
+        the layer that thinks: open-source, self-hosted observability and
+        analytics for AI agents and MCP servers, under the MIT license. It takes
+        OpenTelemetry from any SDK you already run, with thin SDKs for
+        TypeScript, Python, Go and Rust and an opt-in proxy that instruments an
+        MCP server with no code changes. It shows traces, sessions, cost and
+        latency, records every MCP tool call with its error class, and sends
+        alerts to Slack, email and webhooks.
       </P>
 
       <P>
-        And what it records will not stop at a chart. Your coding agents will be
-        able to ask Crucible about their own runs over MCP, and rightmodeler
-        will feed Crucible traces into its validation loop: replay the steps
-        behind the bill to validate cheaper or newer models, grade every answer
-        against the output you accepted, and report the evidence, the sample
-        size, and every abstention.
+        And what it records does not stop at a chart. Your coding agents can ask
+        Crucible about their own runs over MCP, and rightmodeler feeds Crucible
+        traces into its validation loop: replay the steps behind the bill to
+        validate cheaper or newer models, grade every answer against the output
+        you accepted, and report the evidence, the sample size, and every
+        abstention.
       </P>
 
       <P>
-        That loop does not wait for Crucible. You can{" "}
+        That loop does not need Crucible. You can{" "}
         <A href="https://github.com/elm-os/rightmodeler">
           run it by hand today
         </A>{" "}
@@ -150,10 +150,9 @@ export function Body() {
       </P>
 
       <P>
-        Crucible is in development. Follow it{" "}
-        <A href="https://github.com/elm-os/crucible">on GitHub</A>, where it is
-        being built in the open, or read more on{" "}
-        <A href="/crucible">the Crucible page</A>.
+        Crucible is open source. Get it{" "}
+        <A href="https://github.com/elm-os/crucible">on GitHub</A>, or read more
+        on <A href="/crucible">the Crucible page</A>.
       </P>
     </Prose>
   );
@@ -184,15 +183,15 @@ None of this is exotic. It is the ordinary decency we already extend to database
 
 ## Crucible
 
-[Crucible](https://www.rightmodeler.com/crucible) is the instrument panel we are building for the layer that thinks: open-source, self-hosted observability and analytics for AI agents and MCP servers, developed in the open under the MIT license. It is designed to take OpenTelemetry from any SDK you already run, with thin SDKs for TypeScript, Python, Go and Rust and an opt-in proxy that instruments an MCP server with no code changes. It will show traces, sessions, cost and latency, break MCP tool calls down by error class, and send alerts to Slack, email and webhooks.
+[Crucible](https://www.rightmodeler.com/crucible) is the instrument panel we built for the layer that thinks: open-source, self-hosted observability and analytics for AI agents and MCP servers, under the MIT license. It takes OpenTelemetry from any SDK you already run, with thin SDKs for TypeScript, Python, Go and Rust and an opt-in proxy that instruments an MCP server with no code changes. It shows traces, sessions, cost and latency, records every MCP tool call with its error class, and sends alerts to Slack, email and webhooks.
 
-And what it records will not stop at a chart. Your coding agents will be able to ask Crucible about their own runs over MCP, and rightmodeler will feed Crucible traces into its validation loop: replay the steps behind the bill to validate cheaper or newer models, grade every answer against the output you accepted, and report the evidence, the sample size, and every abstention.
+And what it records does not stop at a chart. Your coding agents can ask Crucible about their own runs over MCP, and rightmodeler feeds Crucible traces into its validation loop: replay the steps behind the bill to validate cheaper or newer models, grade every answer against the output you accepted, and report the evidence, the sample size, and every abstention.
 
-That loop does not wait for Crucible. You can [run it by hand today](https://github.com/elm-os/rightmodeler) with the rightmodeler CLI, on the traces you already have, and [the self-hosted agent](https://www.rightmodeler.com/agent) already runs the maintenance loop on a schedule: it rechecks the catalog weekly for cheaper new or repriced models and, on your word, replays them. Either way, a swap that clears every gate becomes a draft pull request that changes only model identifiers, for a person to review and merge.
+That loop does not need Crucible. You can [run it by hand today](https://github.com/elm-os/rightmodeler) with the rightmodeler CLI, on the traces you already have, and [the self-hosted agent](https://www.rightmodeler.com/agent) already runs the maintenance loop on a schedule: it rechecks the catalog weekly for cheaper new or repriced models and, on your word, replays them. Either way, a swap that clears every gate becomes a draft pull request that changes only model identifiers, for a person to review and merge.
 
 Seeing is the foundation, because you cannot maintain what you cannot see. But seeing is not the bottleneck, and neither is the decision: with the evidence in hand, an engineer makes the call in minutes. What takes days is the work before it: pulling real traces, building a replay, grading the outputs, writing it up so it survives review, migrating, and doing it all again when the next model ships. We think that work is the biggest bottleneck in maintaining software. rightmodeler takes it out of the loop, not the judgment, starting with swaps to cheaper or newer models. Today, the final yes stays yours.
 
 What happens when a brand-new model ships on a Tuesday, and why that should end as a pull request in your repo, is [part two](https://www.rightmodeler.com/blog/the-tuesday-problem). Why the work in the loop belongs to software, and why rightmodeler starts by validating model swaps, is [part three](https://www.rightmodeler.com/blog/the-job-nobody-can-staff).
 
-Crucible is in development. Follow it [on GitHub](https://github.com/elm-os/crucible), where it is being built in the open, or read more on [the Crucible page](https://www.rightmodeler.com/crucible).
+Crucible is open source. Get it [on GitHub](https://github.com/elm-os/crucible), or read more on [the Crucible page](https://www.rightmodeler.com/crucible).
 `;

@@ -24,36 +24,37 @@ type TabDef = {
 const TRACES: Feature = {
   title: "Traces and sessions",
   caption:
-    "Will show traces, spans, sessions and users, with full-text search across them.",
+    "Traces, spans, sessions and users, with a timeline, an agent graph and full-text search.",
   img: "/crucible/cost.jpg",
 };
 const COST: Feature = {
   title: "Cost and latency",
-  caption: "Will show the cost and latency of every trace.",
+  caption:
+    "The cost, tokens and latency of every trace and span, with p50 to p99 latency.",
   img: "/crucible/speed.jpg",
 };
 const MCP: Feature = {
-  title: "MCP analytics",
+  title: "MCP servers",
   caption:
-    "Will report tool calls, error classes, latency percentiles and clients for each MCP server, and compare deploys.",
+    "Every MCP call recorded with its method, tool, error class and latency, and linked to the agent's tool call through trace context.",
   img: "/crucible/failures.jpg",
 };
 const ALERTS: Feature = {
-  title: "Alerts and dashboards",
+  title: "Alerts, SQL and exports",
   caption:
-    "Will send alerts to Slack, email and webhooks, with custom dashboards and a guardrailed, read-only SQL workspace.",
+    "Alerts to Slack, email and signed webhooks, a read-only SQL workspace isolated by ClickHouse itself, and trace exports.",
   img: "/crucible/rightsized.jpg",
 };
 const INSTRUMENTATION: Feature = {
   title: "Instrumented your way",
   caption:
-    "Will take OTLP from any OpenTelemetry SDK, from thin SDKs for TypeScript, Python, Go and Rust, or from an opt-in MCP proxy that needs no code changes.",
+    "OpenTelemetry from any SDK or instrumentation library, Crucible's SDKs for TypeScript, Python, Go and Rust, or an MCP proxy that needs no code changes.",
   img: "/crucible/mcp.jpg",
 };
 const SELF_HOSTED: Feature = {
   title: "Yours to run",
   caption:
-    "Will be self-hosted only, with retention and deletion, and organizations, projects, roles and API keys.",
+    "Self-hosted, with organizations, projects, roles and API keys, retention settings and deletion requests.",
   img: "/crucible/keys.jpg",
 };
 
@@ -61,7 +62,7 @@ const SELF_HOSTED: Feature = {
 const TABS: TabDef[] = [
   {
     id: "show",
-    label: "What it will show",
+    label: "What it shows",
     columns: [
       [
         { kind: "card", feature: TRACES },
@@ -76,7 +77,7 @@ const TABS: TabDef[] = [
   },
   {
     id: "run",
-    label: "How it will run",
+    label: "How it runs",
     columns: [
       [
         { kind: "tile", align: "end" },
@@ -187,7 +188,7 @@ export function CrucibleShowcase() {
 
   return (
     <div>
-      <h2 className="sr-only">What Crucible will give you</h2>
+      <h2 className="sr-only">What Crucible gives you</h2>
 
       <div className="flex justify-center">
         <div

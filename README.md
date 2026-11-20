@@ -29,9 +29,9 @@ attached, for you to review and merge.
 It runs offline beside your app, on your machine or in CI, never in your app's request
 path. It is open source under the MIT license, with no rightmodeler account, no
 rightmodeler server and no telemetry. The [self-hosted agent](#self-hosted-agent) runs the
-maintenance loop on a schedule. [Crucible](https://github.com/elm-os/crucible), open-source,
-self-hosted observability and analytics for AI agents and MCP servers, is being built in
-the open, and rightmodeler will replay its traces to validate cheaper or newer models.
+maintenance loop on a schedule. [Crucible](https://github.com/elm-os/crucible) adds open-source,
+self-hosted observability and analytics for AI agents and MCP servers, and rightmodeler
+replays its traces to validate cheaper or newer models.
 
 > [!IMPORTANT]
 > **`RIGHTMODELER_API_KEY` is not a rightmodeler key.** rightmodeler has no accounts

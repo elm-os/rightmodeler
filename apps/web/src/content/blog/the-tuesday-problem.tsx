@@ -166,10 +166,8 @@ export function Body() {
       <P>
         This is part two of the vision. Part one is about seeing: why your agent
         bill has no line items, and what{" "}
-        <A href="/blog/the-bill-nobody-can-read">
-          Crucible is being built to do about it
-        </A>
-        . Part three,{" "}
+        <A href="/blog/the-bill-nobody-can-read">Crucible does about it</A>.
+        Part three,{" "}
         <A href="/blog/the-job-nobody-can-staff">The job nobody can staff</A>,
         is about the work itself: why it is the bottleneck, what safe has to
         mean, and where all of this goes.
@@ -219,5 +217,5 @@ For now, rightmodeler validates swaps to cheaper models only; an upgrade, or a m
 
 Next Tuesday, when the group chat asks whether you are switching, nobody has to find two spare days. Give the agent the word, and the answer comes back as a draft pull request with the receipts attached, or as a report that says why not. Today, the final yes stays yours.
 
-This is part two of the vision. Part one is about seeing: why your agent bill has no line items, and what [Crucible is being built to do about it](https://www.rightmodeler.com/blog/the-bill-nobody-can-read). Part three, [The job nobody can staff](https://www.rightmodeler.com/blog/the-job-nobody-can-staff), is about the work itself: why it is the bottleneck, what safe has to mean, and where all of this goes.
+This is part two of the vision. Part one is about seeing: why your agent bill has no line items, and what [Crucible does about it](https://www.rightmodeler.com/blog/the-bill-nobody-can-read). Part three, [The job nobody can staff](https://www.rightmodeler.com/blog/the-job-nobody-can-staff), is about the work itself: why it is the bottleneck, what safe has to mean, and where all of this goes.
 `;
