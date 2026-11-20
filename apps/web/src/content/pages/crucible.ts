@@ -2,7 +2,7 @@
 // src/components/sections/crucible-showcase.tsx). Keep this file in sync with those pages.
 
 import {
-  CRUCIBLE_BUILD_COMMAND,
+  CRUCIBLE_DOWNLOAD_COMMAND,
   CRUCIBLE_QUICKSTART_URL,
   CRUCIBLE_SEND_COMMAND,
   CRUCIBLE_SETUP_COMMAND,
@@ -101,13 +101,13 @@ Get started
 
 ## Run it on your own machine.
 
-All you need is Docker. Build the image from the repository, start it with a bundled ClickHouse and Postgres, and send your first trace.
+All you need is Docker. Download the Compose file, start Crucible with a bundled ClickHouse and Postgres, and send your first trace.
 
-### 01 Build the image
+### 01 Get the Compose file
 
-Needs Docker; the first build compiles Crucible from source.
+Needs Docker; the Compose file runs the published Crucible image.
 
-    ${CRUCIBLE_BUILD_COMMAND}
+    ${CRUCIBLE_DOWNLOAD_COMMAND}
 
 ### 02 Start the stack
 
@@ -150,6 +150,10 @@ Open-source, self-hosted observability and analytics for AI agents and MCP serve
 
 Send OTLP traces over HTTP, as protobuf or JSON, or over gRPC, from any OpenTelemetry SDK or exporter. Spans from OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI are mapped as they arrive. Crucible's SDKs for TypeScript, Python, Go and Rust, in the repository's sdk folder, add agent helpers and an MCP server wrapper, and the MCP proxy records an MCP server's calls with no code changes and forwards its traffic unchanged.
 
+### How do I install it?
+
+With Docker: the Compose file runs the published Crucible image, for amd64 and arm64, beside a bundled ClickHouse and Postgres. Or install the crucible binary from the GitHub release with its shell or PowerShell installer. The durability described below holds on Linux and macOS; the Windows binary is for development.
+
 ### Is it for agents or for MCP servers?
 
 Either, or both. Use it for agents only, for MCP servers only, or for both together, with an agent's tool calls linked to the server-side MCP spans through trace context.
@@ -172,5 +176,5 @@ crucible export writes your traces as OpenTelemetry JSON, and the rightmodeler C
 
 ### Is there a hosted version?
 
-No. Crucible is self-hosted only: you run it, with your own ClickHouse and Postgres, wherever you run Docker.
+No. Crucible is self-hosted only: you run it, with your own ClickHouse and Postgres, wherever you run Docker or its binary.
 `;
