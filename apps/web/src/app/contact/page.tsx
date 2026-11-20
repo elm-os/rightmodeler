@@ -52,7 +52,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How do I stay in the loop?",
-    a: `Watch the repository for releases, or follow the accounts linked above. Crucible is being built in the open at ${CRUCIBLE_REPO_URL}, so watch that repository to follow it. The waitlist for the hosted agent sends one note when it opens, and nothing else.`,
+    a: `Watch the repository for releases, or follow the accounts linked above. Crucible is open source at ${CRUCIBLE_REPO_URL}; watch that repository to follow its changes. The waitlist for the hosted agent sends one note when it opens, and nothing else.`,
   },
 ];
 

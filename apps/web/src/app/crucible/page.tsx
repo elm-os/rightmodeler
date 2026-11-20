@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CommandBlock } from "@/components/command-block";
 import { JsonLd } from "@/components/json-ld";
 import { CrucibleShowcase } from "@/components/sections/crucible-showcase";
 import { Faq, type FaqItem } from "@/components/sections/faq";
@@ -8,47 +9,154 @@ import { PageShell } from "@/components/sections/page-shell";
 import { RelatedLinks } from "@/components/sections/related-links";
 import { Tldr } from "@/components/sections/tldr";
 import { Reveal } from "@/components/reveal";
+import {
+  CRUCIBLE_BUILD_COMMAND,
+  CRUCIBLE_QUICKSTART_URL,
+  CRUCIBLE_SEND_COMMAND,
+  CRUCIBLE_SETUP_COMMAND,
+  CRUCIBLE_START_COMMAND,
+} from "@/lib/crucible";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 import { CRUCIBLE_REPO_URL } from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
-  title: "Crucible: open-source agent and MCP observability (in development)",
+  title: "Crucible: open-source agent and MCP observability",
   description:
-    "Crucible is being built as open-source, self-hosted observability and analytics for AI agents and MCP servers: one Rust binary that will ingest OpenTelemetry.",
+    "Crucible is open-source, self-hosted observability and analytics for AI agents and MCP servers: one Rust binary, built for speed and throughput, that ingests OpenTelemetry traces.",
   path: "/crucible",
   image: "/social/crucible.png",
 });
 
+const STEPS = [
+  {
+    name: "Send",
+    body: "Your agents and MCP servers send OpenTelemetry traces over HTTP or gRPC: from any OpenTelemetry SDK, from instrumentation such as OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI, from Crucible's SDKs, or through the MCP proxy, which records an MCP server's calls with no code changes.",
+  },
+  {
+    name: "Write ahead",
+    body: "Crucible validates each request in a single pass over its bytes, then appends it to a write-ahead log. Concurrent requests share one fsync, and your app gets its acknowledgment only once its spans are on disk.",
+  },
+  {
+    name: "Store once",
+    body: "A shipper batches spans into ClickHouse in its native column format, compressed. Each insert carries a token from its place in the log, so a retry after a timeout or a crash never stores a span twice.",
+  },
+  {
+    name: "Read",
+    body: "Recent spans sit in an in-memory index, so a trace can be read as soon as it is acknowledged. The web UI, the REST API, the SQL workspace and the MCP server read the same data, and alerts and exports run on it.",
+  },
+];
+
+const STACK = [
+  "One Rust binary",
+  "OpenTelemetry traces",
+  "ClickHouse 26.3 or newer",
+  "Postgres 15 or newer",
+];
+
+const HOT_PATH = [
+  {
+    key: "parse",
+    value: "one pass over the request bytes, no copies, no allocation",
+  },
+  { key: "commit", value: "group commit: concurrent requests share one fsync" },
+  {
+    key: "encode",
+    value: "ClickHouse's native column format, LZ4, built in process",
+  },
+  {
+    key: "insert",
+    value: "one insert per batch and partition, resent byte for byte",
+  },
+  {
+    key: "memory",
+    value: "fixed byte budgets, then 429 or 503 with Retry-After",
+  },
+  {
+    key: "build",
+    value: "opt-level 3, thin LTO, one codegen unit, mimalloc",
+  },
+];
+
+const REASONS = [
+  {
+    title: "Every acknowledged span is on disk.",
+    body: "Crucible acknowledges a request only after its spans are written to the log and synced, and a batch that ClickHouse never confirmed is sent again after a crash with the same token, so it lands once. We test this with deterministic simulation that injects disk, network, ClickHouse and crash faults, swarm testing across configurations, a formal model of the ingest protocol, and machine-checked proofs of the log format.",
+  },
+  {
+    title: "Both sides of the tool call.",
+    body: "When an agent's MCP client passes trace context with each request, as Crucible's SDKs do, the agent's tool call and the server's span of it land in one trace. A slow or failing tool shows up where the agent felt it.",
+  },
+  {
+    title: "Yours to run.",
+    body: "Crucible is open source under the MIT license and runs on infrastructure you control: your traces stay in your ClickHouse, and your accounts, projects and keys in your Postgres.",
+  },
+];
+
+const START = [
+  {
+    name: "Build the image",
+    comment: "# needs Docker; the first build compiles Crucible from source",
+    command: CRUCIBLE_BUILD_COMMAND,
+  },
+  {
+    name: "Start the stack",
+    comment:
+      "# in bash or zsh: writes three secrets to .env, then starts ClickHouse, Postgres and Crucible",
+    command: CRUCIBLE_START_COMMAND,
+  },
+  {
+    name: "Create your organization",
+    comment: "# prints the one-time setup link",
+    command: CRUCIBLE_SETUP_COMMAND,
+    after:
+      "Open the printed /setup/ link on http://127.0.0.1:8080, create your organization and its owner, then create an API key under Settings, then API keys.",
+  },
+  {
+    name: "Send traces",
+    comment: "# point any OpenTelemetry exporter at Crucible",
+    command: CRUCIBLE_SEND_COMMAND,
+    after:
+      "Your traces appear at http://127.0.0.1:8080/traces/ as soon as Crucible acknowledges them.",
+  },
+];
+
 const FAQ: FaqItem[] = [
   {
     q: "What is Crucible?",
-    a: "An open-source, self-hosted observability and analytics platform for AI agents and MCP servers, being built in the open on GitHub under the MIT license. It is planned as one Rust binary that will ingest OpenTelemetry and serve a REST API, a web UI and an MCP server. Nothing is released yet.",
+    a: "Open-source, self-hosted observability and analytics for AI agents and MCP servers, under the MIT license. It is one Rust binary that ingests OpenTelemetry traces and serves a web UI, a REST API and an MCP server, with ClickHouse for telemetry and Postgres for the control plane.",
   },
   {
-    q: "When can I use it?",
-    a: "Not yet. Crucible is in development and nothing has shipped; star or watch the repository on GitHub to follow along. Today you can run the rightmodeler CLI from npm and self-host the agent, which runs the maintenance loop on a schedule and replays new candidates on your word.",
-  },
-  {
-    q: "How will I send it data?",
-    a: "Three ways are planned: OTLP over HTTP or gRPC from any OpenTelemetry SDK; thin SDKs for TypeScript, Python, Go and Rust, with agent helpers and an MCP server wrapper; and an opt-in proxy that instruments an MCP server with no code changes and forwards bytes unchanged.",
+    q: "How do I send it data?",
+    a: "Send OTLP traces over HTTP, as protobuf or JSON, or over gRPC, from any OpenTelemetry SDK or exporter. Spans from OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI are mapped as they arrive. Crucible's SDKs for TypeScript, Python, Go and Rust, in the repository's sdk folder, add agent helpers and an MCP server wrapper, and the MCP proxy records an MCP server's calls with no code changes and forwards its traffic unchanged.",
   },
   {
     q: "Is it for agents or for MCP servers?",
-    a: "Either, or both. It is designed for agents only, for MCP servers only, or for both together, with an agent's tool calls linked to the server-side MCP spans.",
+    a: "Either, or both. Use it for agents only, for MCP servers only, or for both together, with an agent's tool calls linked to the server-side MCP spans through trace context.",
   },
   {
-    q: "Where will my data live?",
-    a: "On infrastructure you run: Crucible is self-hosted only. Telemetry will be stored in ClickHouse, self-hosted or ClickHouse Cloud, your choice, and Postgres will be the control plane.",
+    q: "Where does my data live?",
+    a: "On infrastructure you run. Crucible is self-hosted only: telemetry goes to a single-node ClickHouse, version 26.3 or newer, and accounts, projects and keys go to Postgres 15 or newer. The Docker Compose stack bundles both.",
   },
   {
-    q: "How will it work with rightmodeler?",
-    a: "rightmodeler will replay Crucible traces, through a Crucible export adapter, to validate cheaper or newer models against the outputs you accepted. Coding agents will also be able to ask Crucible about their runs through its MCP server.",
+    q: "Why Rust?",
+    a: "For speed, throughput and predictable memory. Crucible parses OTLP without copying it, shares each fsync across concurrent requests, writes ClickHouse's native column format itself and holds memory inside fixed budgets, with no garbage collector pausing ingest. It all runs as one binary next to ClickHouse and Postgres.",
   },
   {
-    q: "How is it being built?",
-    a: "In the open, with durability and correctness as design goals: a span will be acknowledged only after it is durable on disk, and the system will be tested with deterministic simulation and formal models.",
+    q: "How does it avoid losing spans?",
+    a: "It acknowledges a request only after its spans are written to a write-ahead log and synced to disk, and each batch reaches ClickHouse with a deduplication token, so a retry never stores a span twice. When it is saturated, it answers 429 or 503 with Retry-After instead of dropping data. We test this with deterministic simulation that injects faults, swarm testing, a formal model of the ingest protocol and proofs of the log format.",
+  },
+  {
+    q: "How does it work with rightmodeler?",
+    a: "crucible export writes your traces as OpenTelemetry JSON, and the rightmodeler CLI replays them to validate cheaper or newer models against the outputs you accepted. Crucible does not run the validation loop or swap models. Coding agents can also ask Crucible about their runs through its MCP server, whose tools list and search traces, read spans and payloads, and create exports.",
+  },
+  {
+    q: "Is there a hosted version?",
+    a: "No. Crucible is self-hosted only: you run it, with your own ClickHouse and Postgres, wherever you run Docker.",
   },
 ];
+
+const linkClass =
+  "text-body text-midnight-ink underline decoration-ash-border decoration-1 underline-offset-4 transition-colors duration-150 ease-out hover:decoration-midnight-ink focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white";
 
 export default function CruciblePage() {
   return (
@@ -56,18 +164,15 @@ export default function CruciblePage() {
       <JsonLd data={breadcrumbLd("Crucible", "/crucible")} />
 
       <PageHero
-        eyebrow="In development · built in the open"
+        eyebrow="Open source · Self-hosted"
         title="Crucible: open-source observability for AI agents and MCP servers."
-        lede="Self-hosted observability and analytics, MIT licensed. It is designed for agents only, MCP servers only, or both, with an agent's tool calls linked to the server-side MCP spans. Nothing is released yet."
+        lede="Built in Rust and engineered for speed and throughput. Use it for agents, for MCP servers, or both, with an agent's tool calls linked to the server-side MCP spans."
       >
-        <div className="max-w-md">
-          <GithubButton
-            href={CRUCIBLE_REPO_URL}
-            label="Follow Crucible on GitHub"
-          />
-          <p className="mt-3 font-mono text-caption text-fog">
-            Star or watch the repository to follow development.
-          </p>
+        <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+          <GithubButton href={CRUCIBLE_REPO_URL} label="Crucible on GitHub" />
+          <a href="#get-started" className={linkClass}>
+            Get started
+          </a>
         </div>
       </PageHero>
 
@@ -77,15 +182,15 @@ export default function CruciblePage() {
         <div className="mx-auto max-w-3xl px-6 pt-16 sm:px-10 sm:pt-20">
           <Reveal>
             <Tldr>
-              Crucible is being built as one Rust binary. It will ingest
-              OpenTelemetry (OTLP over HTTP and gRPC) and serve a REST API, a
-              web UI and an MCP server, so{" "}
+              Crucible is one Rust binary. It ingests OpenTelemetry traces over
+              HTTP and gRPC, writes every request to disk before it acknowledges
+              it, and stores telemetry in ClickHouse, with Postgres as the
+              control plane. It serves a web UI, a REST API and an MCP server,
+              so{" "}
               <span className="text-midnight-ink">
-                coding agents will be able to query their own traces
+                coding agents can query their own traces
               </span>
-              . Telemetry will be stored in ClickHouse, self-hosted or
-              ClickHouse Cloud, your choice, and Postgres will be the control
-              plane.
+              .
             </Tldr>
           </Reveal>
         </div>
@@ -95,19 +200,214 @@ export default function CruciblePage() {
             <CrucibleShowcase />
           </Reveal>
         </div>
+      </section>
 
-        <div className="mx-auto max-w-3xl px-6 pb-16 sm:px-10 sm:pb-20">
-          <Reveal delay={0.1}>
+      <div aria-hidden className="h-px w-full bg-ash-border" />
+
+      <section
+        id="how-it-works"
+        aria-labelledby="crucible-how"
+        className="scroll-mt-20 bg-parchment-white"
+      >
+        <div className="px-4 py-14 sm:px-6 sm:py-20">
+          <Reveal>
+            <p className="font-mono text-caption uppercase text-fog">
+              How it works
+            </p>
+            <h2
+              id="crucible-how"
+              className="mt-4 max-w-2xl font-display text-heading text-balance text-midnight-ink sm:text-heading-lg"
+            >
+              One binary, from span to screen.
+            </h2>
+            <p className="mt-4 max-w-2xl text-body text-driftwood">
+              Crucible runs beside ClickHouse and Postgres, and every span takes
+              the same four steps through it.
+            </p>
+          </Reveal>
+
+          <ol className="mt-8 grid gap-4 sm:mt-10 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
+            {STEPS.map((step, i) => (
+              <li key={step.name} className="h-full">
+                <Reveal delay={0.06 * i} className="h-full">
+                  <div className="flex h-full flex-col rounded-2xl border border-ash-border bg-warm-sand p-5 sm:p-6">
+                    <span className="font-mono text-caption text-fog">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <h3 className="mt-6 font-sans text-heading-sm text-midnight-ink">
+                      {step.name}
+                    </h3>
+                    <p className="mt-2 text-body text-driftwood">{step.body}</p>
+                  </div>
+                </Reveal>
+              </li>
+            ))}
+          </ol>
+
+          <Reveal delay={0.1} className="mt-6">
+            <ul className="flex flex-wrap gap-2">
+              {STACK.map((chip) => (
+                <li
+                  key={chip}
+                  className="inline-flex items-center rounded-md border border-ash-border bg-parchment-white px-3 py-1.5 font-mono text-caption text-driftwood"
+                >
+                  {chip}
+                </li>
+              ))}
+            </ul>
+          </Reveal>
+        </div>
+      </section>
+
+      <div aria-hidden className="h-px w-full bg-ash-border" />
+
+      <section
+        id="why"
+        aria-labelledby="crucible-why"
+        className="scroll-mt-20 bg-parchment-white"
+      >
+        <div className="mx-auto max-w-3xl px-6 py-16 sm:px-10 sm:py-20">
+          <Reveal className="max-w-xl">
+            <p className="font-mono text-caption uppercase text-fog">
+              Why we built it
+            </p>
+            <h2
+              id="crucible-why"
+              className="mt-4 font-display text-heading text-balance text-midnight-ink sm:text-heading-lg"
+            >
+              You cannot maintain what you cannot see.
+            </h2>
+            <p className="mt-4 text-body text-driftwood">
+              rightmodeler takes the work out of the loop, not the judgment, and
+              that work starts with seeing what your production AI systems do:
+              every model call, what it cost, how long it took, and every MCP
+              tool it reached. We built Crucible to be that instrument panel,
+              and to keep up with the traffic agents produce.
+            </p>
+          </Reveal>
+
+          <Reveal delay={0.06} className="mt-12">
+            <h3 className="font-sans text-heading-sm text-midnight-ink">
+              Built in Rust, for speed and throughput.
+            </h3>
+            <p className="mt-2 text-body text-driftwood">
+              Agent traffic is heavy: long prompts, large tool payloads, and
+              bursts of spans when agents fan out. Crucible is written in Rust
+              with no unsafe code, and its ingest path is built to do as little
+              work per span as it can.
+            </p>
+            <div className="mt-5 overflow-x-auto rounded-lg border border-ash-border bg-midnight-ink/5 p-4">
+              <div className="flex min-w-max flex-col gap-y-2 font-mono text-[13px] sm:min-w-0">
+                {HOT_PATH.map((row) => (
+                  <div key={row.key} className="flex gap-x-3">
+                    <span className="w-16 shrink-0 text-fog">{row.key}</span>
+                    <span className="min-w-0 text-driftwood">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p className="mt-2 font-mono text-caption text-fog">
+              the ingest path, as built
+            </p>
+          </Reveal>
+
+          <ul className="mt-10 divide-y divide-ash-border border-y border-ash-border">
+            {REASONS.map((reason, i) => (
+              <li key={reason.title} className="py-5">
+                <Reveal delay={0.06 * i}>
+                  <h3 className="font-sans text-heading-sm text-midnight-ink">
+                    {reason.title}
+                  </h3>
+                  <p className="mt-1 text-body text-driftwood">{reason.body}</p>
+                </Reveal>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <div aria-hidden className="h-px w-full bg-ash-border" />
+
+      <section
+        id="get-started"
+        aria-labelledby="crucible-start"
+        className="scroll-mt-20 bg-parchment-white"
+      >
+        <div className="mx-auto max-w-3xl px-6 py-16 sm:px-10 sm:py-20">
+          <Reveal className="max-w-xl">
+            <p className="font-mono text-caption uppercase text-fog">
+              Get started
+            </p>
+            <h2
+              id="crucible-start"
+              className="mt-4 font-display text-heading text-balance text-midnight-ink sm:text-heading-lg"
+            >
+              Run it on your own machine.
+            </h2>
+            <p className="mt-4 text-body text-driftwood">
+              All you need is Docker. Build the image from the repository, start
+              it with a bundled ClickHouse and Postgres, and send your first
+              trace.
+            </p>
+          </Reveal>
+
+          <ol className="mt-10 flex flex-col gap-4 sm:gap-5">
+            {START.map((step, i) => (
+              <li key={step.name}>
+                <Reveal delay={0.06 * i}>
+                  <div className="rounded-2xl border border-ash-border bg-warm-sand p-5 sm:p-6">
+                    <div className="flex items-baseline gap-3">
+                      <span className="font-mono text-caption text-fog">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <h3 className="font-sans text-heading-sm text-midnight-ink">
+                        {step.name}
+                      </h3>
+                    </div>
+                    <div className="mt-4 rounded-xl border border-ash-border bg-parchment-white p-4 sm:p-5">
+                      <CommandBlock
+                        comment={step.comment}
+                        command={step.command}
+                      />
+                    </div>
+                    {step.after && (
+                      <p className="mt-4 text-body text-driftwood">
+                        {step.after}
+                      </p>
+                    )}
+                  </div>
+                </Reveal>
+              </li>
+            ))}
+          </ol>
+
+          <Reveal delay={0.1} className="mt-8">
+            <p className="max-w-xl text-body text-driftwood">
+              The quickstart in the Crucible docs walks through each step in
+              more detail.
+            </p>
+            <a
+              href={CRUCIBLE_QUICKSTART_URL}
+              className={`mt-3 inline-block ${linkClass}`}
+            >
+              Read the quickstart
+            </a>
+          </Reveal>
+
+          <Reveal delay={0.1} className="mt-16">
             <div className="rounded-2xl border border-ash-border bg-warm-sand p-6 sm:p-8">
               <p className="font-mono text-caption uppercase text-fog">
-                Available today: the CLI and the agent
+                Works with rightmodeler
               </p>
               <p className="mt-3 max-w-xl text-body text-driftwood">
-                Crucible itself is in development. rightmodeler will replay
-                Crucible traces to validate cheaper or newer models, and agents
-                will be able to ask Crucible about their runs over MCP. The
-                rightmodeler CLI is on npm now, and the self-hosted agent runs
-                it on a schedule today.
+                <span className="font-mono text-[13px] text-midnight-ink">
+                  crucible export
+                </span>{" "}
+                writes your traces as OpenTelemetry JSON, and the rightmodeler
+                CLI replays them to validate cheaper or newer models against the
+                outputs you accepted. Crucible does not run the validation loop
+                itself. Coding agents can also ask Crucible about their runs
+                through its MCP server.
               </p>
               <div className="mt-6">
                 <GithubButton label="rightmodeler on GitHub" />
@@ -123,7 +423,10 @@ export default function CruciblePage() {
                   href: "/agent",
                   label: "rightmodeler agent, the maintenance loop",
                 },
-                { href: "/manifesto", label: "Read the manifesto" },
+                {
+                  href: "/blog/the-bill-nobody-can-read",
+                  label: "The bill nobody can read",
+                },
               ]}
             />
           </div>

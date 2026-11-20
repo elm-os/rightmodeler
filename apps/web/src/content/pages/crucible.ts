@@ -1,45 +1,142 @@
 // Markdown twin of the /crucible route (src/app/crucible/page.tsx, plus the feature wall in
 // src/components/sections/crucible-showcase.tsx). Keep this file in sync with those pages.
 
+import {
+  CRUCIBLE_BUILD_COMMAND,
+  CRUCIBLE_QUICKSTART_URL,
+  CRUCIBLE_SEND_COMMAND,
+  CRUCIBLE_SETUP_COMMAND,
+  CRUCIBLE_START_COMMAND,
+} from "@/lib/crucible";
 import { CRUCIBLE_REPO_URL, REPO_URL } from "@/lib/site";
 
 export const markdown = `# Crucible: open-source observability for AI agents and MCP servers.
 
-In development · built in the open
+Open source · Self-hosted
 
-Self-hosted observability and analytics, MIT licensed. It is designed for agents only, MCP servers only, or both, with an agent's tool calls linked to the server-side MCP spans. Nothing is released yet.
+Built in Rust and engineered for speed and throughput. Use it for agents, for MCP servers, or both, with an agent's tool calls linked to the server-side MCP spans.
 
-Follow Crucible on GitHub: ${CRUCIBLE_REPO_URL}
-
-Star or watch the repository to follow development.
+Crucible on GitHub: ${CRUCIBLE_REPO_URL}
 
 ## TL;DR
 
-Crucible is being built as one Rust binary. It will ingest OpenTelemetry (OTLP over HTTP and gRPC) and serve a REST API, a web UI and an MCP server, so **coding agents will be able to query their own traces**. Telemetry will be stored in ClickHouse, self-hosted or ClickHouse Cloud, your choice, and Postgres will be the control plane.
+Crucible is one Rust binary. It ingests OpenTelemetry traces over HTTP and gRPC, writes every request to disk before it acknowledges it, and stores telemetry in ClickHouse, with Postgres as the control plane. It serves a web UI, a REST API and an MCP server, so **coding agents can query their own traces**.
 
-## What Crucible will give you
+## What Crucible gives you
 
-### What it will show
+### What it shows
 
 - **Traces and sessions**
-  Will show traces, spans, sessions and users, with full-text search across them.
+  Traces, spans, sessions and users, with a timeline, an agent graph and full-text search.
 - **Cost and latency**
-  Will show the cost and latency of every trace.
-- **MCP analytics**
-  Will report tool calls, error classes, latency percentiles and clients for each MCP server, and compare deploys.
+  The cost, tokens and latency of every trace and span, with p50 to p99 latency.
+- **MCP servers**
+  Every MCP call recorded with its method, tool, error class and latency, and linked to the agent's tool call through trace context.
 
-### How it will run
+### How it runs
 
 - **Yours to run**
-  Will be self-hosted only, with retention and deletion, and organizations, projects, roles and API keys.
+  Self-hosted, with organizations, projects, roles and API keys, retention settings and deletion requests.
 - **Instrumented your way**
-  Will take OTLP from any OpenTelemetry SDK, from thin SDKs for TypeScript, Python, Go and Rust, or from an opt-in MCP proxy that needs no code changes.
-- **Alerts and dashboards**
-  Will send alerts to Slack, email and webhooks, with custom dashboards and a guardrailed, read-only SQL workspace.
+  OpenTelemetry from any SDK or instrumentation library, Crucible's SDKs for TypeScript, Python, Go and Rust, or an MCP proxy that needs no code changes.
+- **Alerts, SQL and exports**
+  Alerts to Slack, email and signed webhooks, a read-only SQL workspace isolated by ClickHouse itself, and trace exports.
 
-## Available today: the CLI and the agent
+How it works
 
-Crucible itself is in development. rightmodeler will replay Crucible traces to validate cheaper or newer models, and agents will be able to ask Crucible about their runs over MCP. The rightmodeler CLI is on npm now, and the self-hosted agent runs it on a schedule today.
+## One binary, from span to screen.
+
+Crucible runs beside ClickHouse and Postgres, and every span takes the same four steps through it.
+
+### 01 Send
+
+Your agents and MCP servers send OpenTelemetry traces over HTTP or gRPC: from any OpenTelemetry SDK, from instrumentation such as OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI, from Crucible's SDKs, or through the MCP proxy, which records an MCP server's calls with no code changes.
+
+### 02 Write ahead
+
+Crucible validates each request in a single pass over its bytes, then appends it to a write-ahead log. Concurrent requests share one fsync, and your app gets its acknowledgment only once its spans are on disk.
+
+### 03 Store once
+
+A shipper batches spans into ClickHouse in its native column format, compressed. Each insert carries a token from its place in the log, so a retry after a timeout or a crash never stores a span twice.
+
+### 04 Read
+
+Recent spans sit in an in-memory index, so a trace can be read as soon as it is acknowledged. The web UI, the REST API, the SQL workspace and the MCP server read the same data, and alerts and exports run on it.
+
+The stack: One Rust binary · OpenTelemetry traces · ClickHouse 26.3 or newer · Postgres 15 or newer
+
+Why we built it
+
+## You cannot maintain what you cannot see.
+
+rightmodeler takes the work out of the loop, not the judgment, and that work starts with seeing what your production AI systems do: every model call, what it cost, how long it took, and every MCP tool it reached. We built Crucible to be that instrument panel, and to keep up with the traffic agents produce.
+
+### Built in Rust, for speed and throughput.
+
+Agent traffic is heavy: long prompts, large tool payloads, and bursts of spans when agents fan out. Crucible is written in Rust with no unsafe code, and its ingest path is built to do as little work per span as it can.
+
+The ingest path, as built:
+
+- **parse**: one pass over the request bytes, no copies, no allocation
+- **commit**: group commit: concurrent requests share one fsync
+- **encode**: ClickHouse's native column format, LZ4, built in process
+- **insert**: one insert per batch and partition, resent byte for byte
+- **memory**: fixed byte budgets, then 429 or 503 with Retry-After
+- **build**: opt-level 3, thin LTO, one codegen unit, mimalloc
+
+### Every acknowledged span is on disk.
+
+Crucible acknowledges a request only after its spans are written to the log and synced, and a batch that ClickHouse never confirmed is sent again after a crash with the same token, so it lands once. We test this with deterministic simulation that injects disk, network, ClickHouse and crash faults, swarm testing across configurations, a formal model of the ingest protocol, and machine-checked proofs of the log format.
+
+### Both sides of the tool call.
+
+When an agent's MCP client passes trace context with each request, as Crucible's SDKs do, the agent's tool call and the server's span of it land in one trace. A slow or failing tool shows up where the agent felt it.
+
+### Yours to run.
+
+Crucible is open source under the MIT license and runs on infrastructure you control: your traces stay in your ClickHouse, and your accounts, projects and keys in your Postgres.
+
+Get started
+
+## Run it on your own machine.
+
+All you need is Docker. Build the image from the repository, start it with a bundled ClickHouse and Postgres, and send your first trace.
+
+### 01 Build the image
+
+Needs Docker; the first build compiles Crucible from source.
+
+    ${CRUCIBLE_BUILD_COMMAND}
+
+### 02 Start the stack
+
+In bash or zsh: writes three secrets to .env, then starts ClickHouse, Postgres and Crucible.
+
+    ${CRUCIBLE_START_COMMAND}
+
+### 03 Create your organization
+
+Prints the one-time setup link.
+
+    ${CRUCIBLE_SETUP_COMMAND}
+
+Open the printed /setup/ link on http://127.0.0.1:8080, create your organization and its owner, then create an API key under Settings, then API keys.
+
+### 04 Send traces
+
+Point any OpenTelemetry exporter at Crucible.
+
+    ${CRUCIBLE_SEND_COMMAND}
+
+Your traces appear at http://127.0.0.1:8080/traces/ as soon as Crucible acknowledges them.
+
+The quickstart in the Crucible docs walks through each step in more detail: ${CRUCIBLE_QUICKSTART_URL}
+
+Works with rightmodeler
+
+
+crucible export writes your traces as OpenTelemetry JSON, and the rightmodeler CLI replays them to validate cheaper or newer models against the outputs you accepted. Crucible does not run the validation loop itself. Coding agents can also ask Crucible about their runs through its MCP server.
 
 rightmodeler on GitHub: ${REPO_URL}
 
@@ -47,29 +144,33 @@ rightmodeler on GitHub: ${REPO_URL}
 
 ### What is Crucible?
 
-An open-source, self-hosted observability and analytics platform for AI agents and MCP servers, being built in the open on GitHub under the MIT license. It is planned as one Rust binary that will ingest OpenTelemetry and serve a REST API, a web UI and an MCP server. Nothing is released yet.
+Open-source, self-hosted observability and analytics for AI agents and MCP servers, under the MIT license. It is one Rust binary that ingests OpenTelemetry traces and serves a web UI, a REST API and an MCP server, with ClickHouse for telemetry and Postgres for the control plane.
 
-### When can I use it?
+### How do I send it data?
 
-Not yet. Crucible is in development and nothing has shipped; star or watch the repository on GitHub to follow along. Today you can run the rightmodeler CLI from npm and self-host the agent, which runs the maintenance loop on a schedule and replays new candidates on your word.
-
-### How will I send it data?
-
-Three ways are planned: OTLP over HTTP or gRPC from any OpenTelemetry SDK; thin SDKs for TypeScript, Python, Go and Rust, with agent helpers and an MCP server wrapper; and an opt-in proxy that instruments an MCP server with no code changes and forwards bytes unchanged.
+Send OTLP traces over HTTP, as protobuf or JSON, or over gRPC, from any OpenTelemetry SDK or exporter. Spans from OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI are mapped as they arrive. Crucible's SDKs for TypeScript, Python, Go and Rust, in the repository's sdk folder, add agent helpers and an MCP server wrapper, and the MCP proxy records an MCP server's calls with no code changes and forwards its traffic unchanged.
 
 ### Is it for agents or for MCP servers?
 
-Either, or both. It is designed for agents only, for MCP servers only, or for both together, with an agent's tool calls linked to the server-side MCP spans.
+Either, or both. Use it for agents only, for MCP servers only, or for both together, with an agent's tool calls linked to the server-side MCP spans through trace context.
 
-### Where will my data live?
+### Where does my data live?
 
-On infrastructure you run: Crucible is self-hosted only. Telemetry will be stored in ClickHouse, self-hosted or ClickHouse Cloud, your choice, and Postgres will be the control plane.
+On infrastructure you run. Crucible is self-hosted only: telemetry goes to a single-node ClickHouse, version 26.3 or newer, and accounts, projects and keys go to Postgres 15 or newer. The Docker Compose stack bundles both.
 
-### How will it work with rightmodeler?
+### Why Rust?
 
-rightmodeler will replay Crucible traces, through a Crucible export adapter, to validate cheaper or newer models against the outputs you accepted. Coding agents will also be able to ask Crucible about their runs through its MCP server.
+For speed, throughput and predictable memory. Crucible parses OTLP without copying it, shares each fsync across concurrent requests, writes ClickHouse's native column format itself and holds memory inside fixed budgets, with no garbage collector pausing ingest. It all runs as one binary next to ClickHouse and Postgres.
 
-### How is it being built?
+### How does it avoid losing spans?
 
-In the open, with durability and correctness as design goals: a span will be acknowledged only after it is durable on disk, and the system will be tested with deterministic simulation and formal models.
+It acknowledges a request only after its spans are written to a write-ahead log and synced to disk, and each batch reaches ClickHouse with a deduplication token, so a retry never stores a span twice. When it is saturated, it answers 429 or 503 with Retry-After instead of dropping data. We test this with deterministic simulation that injects faults, swarm testing, a formal model of the ingest protocol and proofs of the log format.
+
+### How does it work with rightmodeler?
+
+crucible export writes your traces as OpenTelemetry JSON, and the rightmodeler CLI replays them to validate cheaper or newer models against the outputs you accepted. Crucible does not run the validation loop or swap models. Coding agents can also ask Crucible about their runs through its MCP server, whose tools list and search traces, read spans and payloads, and create exports.
+
+### Is there a hosted version?
+
+No. Crucible is self-hosted only: you run it, with your own ClickHouse and Postgres, wherever you run Docker.
 `;

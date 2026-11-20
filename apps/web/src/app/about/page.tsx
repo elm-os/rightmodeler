@@ -21,7 +21,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Is it open source?",
-    a: "Yes, MIT licensed. The rightmodeler CLI and rightmodeler agent are both in the public GitHub repo, free to run, fork, and modify. The CLI is on npm today. The agent is self-hosted today: you clone and build it, then run it on a long-lived Node 24 host with your own GitHub App and model credentials. A hosted version of the agent has a waitlist. Crucible, open-source observability and analytics for AI agents and MCP servers, is being built in the open in its own MIT-licensed repository.",
+    a: "Yes, MIT licensed. The rightmodeler CLI and rightmodeler agent are both in the public GitHub repo, free to run, fork, and modify. The CLI is on npm today. The agent is self-hosted today: you clone and build it, then run it on a long-lived Node 24 host with your own GitHub App and model credentials. A hosted version of the agent has a waitlist. Crucible, open-source observability and analytics for AI agents and MCP servers, is in its own MIT-licensed repository, and you host it yourself.",
   },
   {
     q: "How is it different from observability or a gateway?",
@@ -95,11 +95,11 @@ export default function AboutPage() {
             The CLI is on npm today. rightmodeler agent, the maintenance loop on
             a schedule, is in the same MIT-licensed repo, and you can self-host
             it today; a hosted version has a waitlist. Crucible, open-source
-            observability and analytics for AI agents and MCP servers, is being
-            built in the open in its own repository. The CLI and the agent run
-            offline, beside your app: the CLI on your machine or in CI, the
-            agent on a host you run. Nothing sits in your request path, and
-            there is no rightmodeler server and no telemetry.
+            observability and analytics for AI agents and MCP servers, lives in
+            its own repository and runs on infrastructure you host. The CLI and
+            the agent run offline, beside your app: the CLI on your machine or
+            in CI, the agent on a host you run. Nothing sits in your request
+            path, and there is no rightmodeler server and no telemetry.
           </p>
 
           <div className="pt-2">

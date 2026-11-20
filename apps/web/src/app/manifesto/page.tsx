@@ -46,7 +46,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Where is this going?",
-    a: "Toward autonomous self-maintenance and optimization for production AI systems, earned with evidence. Today that means validated swaps to cheaper or newer models from the CLI and scheduled maintenance from the self-hosted agent. Crucible, in development, is planned as open-source, self-hosted observability for AI agents and MCP servers, and rightmodeler will replay its traces.",
+    a: "Toward autonomous self-maintenance and optimization for production AI systems, earned with evidence. Today that means validated swaps to cheaper or newer models from the CLI and scheduled maintenance from the self-hosted agent. Crucible adds open-source, self-hosted observability for AI agents and MCP servers, and rightmodeler replays its traces.",
   },
 ];
 
@@ -475,7 +475,10 @@ export default function ManifestoPage() {
               links={[
                 { href: "/how-it-works", label: "How it works" },
                 { href: "/agent", label: "rightmodeler agent" },
-                { href: "/crucible", label: "Crucible (in development)" },
+                {
+                  href: "/crucible",
+                  label: "Crucible, open-source observability",
+                },
                 { href: "/glossary", label: "Glossary" },
               ]}
             />

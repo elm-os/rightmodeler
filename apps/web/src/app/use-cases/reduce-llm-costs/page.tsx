@@ -290,9 +290,9 @@ export default function ReduceLlmCostsPage() {
                     catalog every week for cheaper new or repriced models, and
                     on your word it replays a new candidate and opens each swap
                     that clears every gate as a draft pull request. The hosted
-                    agent has a waitlist. Crucible, in development, is planned
-                    as open-source, self-hosted observability for AI agents and
-                    MCP servers, including cost and latency.
+                    agent has a waitlist. Crucible adds open-source, self-hosted
+                    observability for AI agents and MCP servers, including cost
+                    and latency.
                   </p>
                   <div className="mt-5 flex flex-wrap gap-2.5">
                     <Link href="/agent" className={pillPrimary}>

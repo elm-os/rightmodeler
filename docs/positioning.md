@@ -61,35 +61,38 @@ cost less, refusal reasons, estimates, gates) stays exact and keeps "cheaper".
   approves, one regression replay for each merged swap set, and follow-up on swap pull requests
   as review and CI report back. On your word it replays new candidates; once a replay clears
   every gate, it opens the draft pull request. It never merges and carries no merge capability.
-- **Crucible** (in development, nothing released; open source under the MIT license, built in
-  the open at [github.com/elm-os/crucible](https://github.com/elm-os/crucible)). Planned
-  open-source, self-hosted observability and analytics for AI agents and MCP servers. Always in
-  planned tense ("being built", "designed to", "will"); ruling 6 covers the rest.
+- **Crucible** (open source under the MIT license at
+  [github.com/elm-os/crucible](https://github.com/elm-os/crucible)). Open-source, self-hosted
+  observability and analytics for AI agents and MCP servers, built in Rust and engineered for speed
+  and throughput. It is a released product: write about it in the present tense, and describe only
+  what Crucible's main branch does. Ruling 6 covers the rest.
   - Three ways to use it: agents only; MCP servers only; or both, with an agent's tool calls
-    linked to the server-side MCP spans.
-  - One Rust binary that will ingest OpenTelemetry (OTLP over HTTP and gRPC) and serve a REST
-    API, a web UI and an MCP server, so coding agents will be able to query their traces.
-    Telemetry will be stored in ClickHouse, self-hosted or ClickHouse Cloud, the operator's
-    choice; Postgres will be the control plane.
-  - Instrumentation: OTLP from any OpenTelemetry SDK; thin SDKs for TypeScript, Python, Go and
-    Rust (agent helpers plus an MCP server wrapper); and an opt-in proxy that instruments an MCP
-    server with no code changes and forwards bytes unchanged.
-  - Planned for the first release: traces, spans, sessions and users; cost and latency;
-    full-text search; MCP analytics (tool calls, error classes, latency percentiles, clients,
-    deploy comparison); alerts to Slack, email and webhooks; custom dashboards; retention and
-    deletion; a guardrailed, read-only SQL workspace; organizations, projects, roles and API
-    keys.
-  - Durability and correctness are design goals, stated as plans: a span will be acknowledged
-    only after it is durable on disk, and the system will be tested with deterministic
-    simulation and formal models.
-  - With rightmodeler: rightmodeler will replay Crucible traces (a Crucible export adapter) to
-    validate cheaper or newer models, and agents will be able to ask Crucible about their runs
-    over MCP.
+    linked to the server-side MCP spans through trace context.
+  - One Rust binary that ingests OpenTelemetry traces (OTLP over HTTP and gRPC) and serves a web
+    UI, a REST API and an MCP server that coding agents query. Telemetry is stored in a single-node
+    ClickHouse (26.3 or newer); Postgres (15 or newer) is the control plane. It runs in Docker with a
+    bundled ClickHouse and Postgres, from an image built from the repository.
+  - Instrumentation: OTLP from any OpenTelemetry SDK; spans from OpenInference, OpenLLMetry, the
+    Vercel AI SDK, MLflow and Pydantic AI, mapped as they arrive; SDKs for TypeScript, Python, Go
+    and Rust (agent helpers plus an MCP server wrapper, in the repository); and a proxy that records
+    an MCP server's calls with no code changes and forwards its traffic unchanged.
+  - What it does: traces, spans, sessions and users, with a timeline and an agent graph; cost,
+    tokens and latency; full-text search; MCP call records; alerts to Slack, email and signed
+    webhooks; a read-only SQL workspace isolated by ClickHouse; exports; retention and deletion
+    requests; organizations, projects, roles and API keys.
+  - How it is built, as mechanisms: a span is acknowledged only after it is written to a write-ahead
+    log and synced; each batch reaches ClickHouse with a deduplication token, so a retry never
+    stores a span twice; under load it answers 429 or 503 with Retry-After. It is tested with
+    deterministic simulation, swarm testing, a formal model of the ingest protocol and proofs of
+    the log format.
+  - With rightmodeler: crucible export writes OpenTelemetry JSON that the rightmodeler CLI replays
+    to validate cheaper or newer models, and coding agents ask Crucible about their runs over its
+    MCP server.
 
 The CLI and the agent run offline, beside your app, on your machine or in CI. Neither sits in
 the request path, and there is no rightmodeler server and no telemetry. Crucible is different by
-design: it will be a server you host that receives your telemetry, with an opt-in proxy in front
-of an MCP server.
+design: it is a server you host that receives your telemetry, with an opt-in proxy in front of an
+MCP server.
 
 "Production traces" means the model calls your production app recorded (tracing platforms,
 OpenTelemetry, gateway logs). When `init` picks up Claude Code or Codex sessions on disk, or a
@@ -145,15 +148,19 @@ fresh word.
    that says what gets validated says "cheaper or newer": the one-liner, meta title and
    description, card footer, organization description and llms summary. Support for newer models
    that do not cost less ships in a later release; until then, mechanism text keeps "cheaper".
-6. **Crucible.** Describe Crucible on its own terms, in planned tense, with nothing claimed as
-   shipped. It is self-hosted only: no hosted service, pricing, availability dates, performance
-   numbers or customers. Never compare it with other products, and never say or imply that it
-   was copied from, based on, ported from or a remake of anything. Its call to action is the
-   GitHub repository (star or watch it to follow development), never a sign-up or a waitlist.
-   Durability and correctness are design goals, never guarantees. The rightmodeler link runs one
-   way: rightmodeler will replay Crucible traces, and Crucible does not run the validation loop
-   or swap models. What this file says about the CLI and the agent (offline, never in the
-   request path, no server, no telemetry, no simulation) does not describe Crucible.
+6. **Crucible.** Describe Crucible on its own terms, as a released product, in the present tense:
+   never "in development", "planned", "coming soon", "being built" or "preview", and never a
+   waitlist. Claim only what Crucible's main branch does; leave out what it does not do yet rather
+   than labelling it planned, and add it when it ships. It is self-hosted only: no hosted service,
+   pricing, performance numbers or customers. "Built in Rust and engineered for speed and
+   throughput" is the speed claim; back it with mechanisms, never with numbers or comparisons.
+   Never compare it with other products, and never say or imply that it was copied from, based
+   on, ported from or a remake of anything. Its call to action is the GitHub repository and the
+   quickstart, never a sign-up. Durability and correctness are mechanisms and tests, never
+   guarantees. The rightmodeler link runs one way: rightmodeler replays Crucible traces, and
+   Crucible does not run the validation loop or swap models. What this file says about the CLI and
+   the agent (offline, never in the request path, no server, no telemetry, no simulation) does not
+   describe Crucible.
 
 ## Canonical strings
 
@@ -174,7 +181,7 @@ fresh word.
 | Manifesto h1                                          | Software should maintain itself.                                                                                                                                                                                                                                                 |
 | Agent page h1                                         | Stop re-checking models by hand.                                                                                                                                                                                                                                                 |
 | Crucible page h1                                      | Crucible: open-source observability for AI agents and MCP servers.                                                                                                                                                                                                               |
-| Crucible one-liner                                    | Open-source, self-hosted observability and analytics for AI agents and MCP servers. Where it travels alone, add its status: in development.                                                                                                                                      |
+| Crucible one-liner                                    | Open-source, self-hosted observability and analytics for AI agents and MCP servers.                                                                                                                                                                                              |
 | About subhead                                         | Working toward production AI that maintains and optimizes itself, starting with validated model swaps.                                                                                                                                                                           |
 | Mission                                               | Production AI systems that maintain and optimize themselves, earning each step of autonomy with evidence.                                                                                                                                                                        |
 | Social card footer                                    | Cheaper or newer model swaps, validated on your traces.                                                                                                                                                                                                                          |
@@ -196,37 +203,38 @@ path; confirmed end to end in a sandbox; one pinned model per step; the maintena
 loop, on a schedule (the agent); on your word (the agent, for new candidates).
 
 For Crucible: open-source, self-hosted observability and analytics for AI agents and MCP
-servers; being built in the open; planned, designed to, will; agents only, MCP servers only, or
-both; follow it on GitHub.
+servers; built in Rust and engineered for speed and throughput; agents only, MCP servers only, or
+both; Crucible on GitHub; the quickstart.
 
-| Retire                                                     | Use instead                                                                       |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Right Modeler, Rightmodeler (in prose)                     | rightmodeler, always lowercase                                                    |
-| prove, proof, proven                                       | validate, evidence, measured                                                      |
-| proof loop, proof engine                                   | validation loop, validation engine                                                |
-| evidence-backed model downgrading (as a category)          | validated model swaps, swap validation                                            |
-| downgrade                                                  | a swap to a cheaper model (the glossary keeps "model downgrade" as a synonym)     |
-| the audit, run the audit (as the CLI's name)               | the validation framework, a validation run                                        |
-| autopilot, autonomous agent (present tense)                | the agent, the maintenance loop, on a schedule                                    |
-| ship, ship approved swaps (what rightmodeler does)         | open a draft pull request for each swap that clears every gate                    |
-| reverses, undo, every swap is reversible                   | one command opens the pull request that restores the exact pre-swap files         |
-| watches approved swaps for drift                           | regression-tests each merged swap set once; watches new traces for drift          |
-| watches every release                                      | rechecks the catalog weekly for cheaper new or repriced models                    |
-| continuous with Crucible next                              | the self-hosted agent runs on a schedule today                                    |
-| analytics and optimization suite (Crucible)                | self-hosted observability and analytics for AI agents and MCP servers             |
-| cost per layer, speed per step, failures as they happen    | the planned first-release list above (cost and latency, MCP analytics, alerts)    |
-| connected over MCP, no new SDK (Crucible)                  | ingests OpenTelemetry; agents will query it over its MCP server                   |
-| never in the request path (Crucible)                       | name the opt-in proxy, which sits in front of an MCP server                       |
-| continuously right-sized, runs the validation loop         | rightmodeler will replay Crucible traces to validate cheaper or newer models      |
-| Crucible will add the instruments                          | Crucible, open-source observability for AI agents and MCP servers, in development |
-| Crucible waitlist, join the waitlist (Crucible)            | follow Crucible on GitHub: star or watch the repository                           |
-| Mode B (in marketing copy)                                 | confirmed end to end in a sandbox (CLI docs keep "Mode B")                        |
-| benchmarks (bare, as the failure)                          | general benchmarks, public leaderboards                                           |
-| precision routing, routing policy (in our own voice)       | per-workload model assignments (quotes and case-study facts stay verbatim)        |
-| multi-agent LLM systems (as the audience), the model layer | production AI systems                                                             |
-| medium confidence, confidence tiers                        | a statistical lower bound (there are no confidence tiers)                         |
-| every model swap, any new model, migrations in general     | swaps to cheaper or newer models                                                  |
-| guaranteed, proven correct, zero risk, always safe         | cleared every release gate; agreement with what you shipped                       |
+| Retire                                                       | Use instead                                                                   |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Right Modeler, Rightmodeler (in prose)                       | rightmodeler, always lowercase                                                |
+| prove, proof, proven                                         | validate, evidence, measured                                                  |
+| proof loop, proof engine                                     | validation loop, validation engine                                            |
+| evidence-backed model downgrading (as a category)            | validated model swaps, swap validation                                        |
+| downgrade                                                    | a swap to a cheaper model (the glossary keeps "model downgrade" as a synonym) |
+| the audit, run the audit (as the CLI's name)                 | the validation framework, a validation run                                    |
+| autopilot, autonomous agent (present tense)                  | the agent, the maintenance loop, on a schedule                                |
+| ship, ship approved swaps (what rightmodeler does)           | open a draft pull request for each swap that clears every gate                |
+| reverses, undo, every swap is reversible                     | one command opens the pull request that restores the exact pre-swap files     |
+| watches approved swaps for drift                             | regression-tests each merged swap set once; watches new traces for drift      |
+| watches every release                                        | rechecks the catalog weekly for cheaper new or repriced models                |
+| continuous with Crucible next                                | the self-hosted agent runs on a schedule today                                |
+| analytics and optimization suite (Crucible)                  | self-hosted observability and analytics for AI agents and MCP servers         |
+| cost per layer, speed per step, failures as they happen      | the list above (cost and latency, MCP call records, alerts)                   |
+| connected over MCP, no new SDK (Crucible)                    | ingests OpenTelemetry; agents query it over its MCP server                    |
+| never in the request path (Crucible)                         | name the opt-in proxy, which sits in front of an MCP server                   |
+| continuously right-sized, runs the validation loop           | rightmodeler replays Crucible traces to validate cheaper or newer models      |
+| Crucible will add the instruments                            | Crucible, open-source observability for AI agents and MCP servers             |
+| Crucible waitlist, join the waitlist (Crucible)              | Crucible on GitHub, and the quickstart                                        |
+| in development, planned, coming soon, being built (Crucible) | the present tense, for what Crucible's main branch does                       |
+| Mode B (in marketing copy)                                   | confirmed end to end in a sandbox (CLI docs keep "Mode B")                    |
+| benchmarks (bare, as the failure)                            | general benchmarks, public leaderboards                                       |
+| precision routing, routing policy (in our own voice)         | per-workload model assignments (quotes and case-study facts stay verbatim)    |
+| multi-agent LLM systems (as the audience), the model layer   | production AI systems                                                         |
+| medium confidence, confidence tiers                          | a statistical lower bound (there are no confidence tiers)                     |
+| every model swap, any new model, migrations in general       | swaps to cheaper or newer models                                              |
+| guaranteed, proven correct, zero risk, always safe           | cleared every release gate; agreement with what you shipped                   |
 
 ## Claims we never make
 
@@ -242,11 +250,13 @@ both; follow it on GitHub.
 - Automatic rollback, or continuous re-validation of approved swaps.
 - Policy settings beyond the quality floor, shortlist size, model allow and deny lists, an
   optional spend cap and the evaluator choice.
-- That the hosted agent or Crucible is available or in early access, or Crucible in the present
-  tense.
-- Crucible performance numbers, customers, availability dates or pricing, a hosted Crucible, a
-  comparison of Crucible with other products, or that Crucible was copied from, based on or
-  remade from anything.
+- That the hosted agent is available or in early access.
+- That Crucible is in development, a preview, planned or coming soon.
+- Crucible features its main branch does not have: MCP analytics pages, custom dashboards,
+  ClickHouse Cloud or clustered ClickHouse, OTLP logs or metrics, media storage, or prebuilt
+  images, binaries or registry packages. Add each when it ships.
+- Crucible performance numbers, customers or pricing, a hosted Crucible, a comparison of Crucible
+  with other products, or that Crucible was copied from, based on or remade from anything.
 - That it tunes reasoning effort, prompts or retries.
 - That replay covers tool calls or tool definitions, or that it validates "with your tools": recorded
   conversations with tool calls are left out of the replay sample today.

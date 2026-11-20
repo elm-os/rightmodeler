@@ -95,7 +95,7 @@ A judge from a different vendor scores both answer orders, or the evaluator you 
 
 rightmodeler works offline on runs you already shipped. It validates cheaper or newer models step by step against the outputs you accepted, and only a swap that clears every gate becomes a draft pull request, which changes model identifiers and nothing else and waits for you to review and merge. Your observability tool keeps recording, any gateway keeps serving live traffic, and rightmodeler never sits in the request path.
 
-[View on GitHub](${REPO_URL}) · [Crucible (in development)](/crucible)
+[View on GitHub](${REPO_URL}) · [Crucible, open-source observability](/crucible)
 
 ## FAQ
 

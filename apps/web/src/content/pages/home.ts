@@ -100,9 +100,9 @@ Meet the agent: /agent
 
 ### Crucible
 
-In development
+Open source
 
-Observability, planned. Open-source and self-hosted, for AI agents and MCP servers, built in the open on GitHub.
+Observability for AI agents and MCP servers. Open source and self-hosted, built in Rust for speed and throughput.
 
 Meet Crucible: /crucible
 

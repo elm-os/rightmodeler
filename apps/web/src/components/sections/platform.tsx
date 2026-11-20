@@ -34,10 +34,10 @@ const OFFERINGS: Offering[] = [
     art: "/platform/agent.svg",
   },
   {
-    chip: "In development",
-    strong: false,
+    chip: "Open source",
+    strong: true,
     name: "Crucible",
-    body: "Observability, planned. Open-source and self-hosted, for AI agents and MCP servers, built in the open on GitHub.",
+    body: "Observability for AI agents and MCP servers. Open source and self-hosted, built in Rust for speed and throughput.",
     cta: "Meet Crucible",
     href: "/crucible",
     art: "/platform/crucible.jpg",
