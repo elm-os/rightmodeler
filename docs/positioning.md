@@ -77,9 +77,13 @@ cost less, refusal reasons, estimates, gates) stays exact and keeps "cheaper".
     and Rust (agent helpers plus an MCP server wrapper, in the repository); and a proxy that records
     an MCP server's calls with no code changes and forwards its traffic unchanged.
   - What it does: traces, spans, sessions and users, with a timeline and an agent graph; cost,
-    tokens and latency, with dashboards to chart them; full-text search; MCP call records; alerts
-    to Slack, email and signed webhooks; a read-only SQL workspace isolated by ClickHouse; exports;
-    retention and deletion requests; organizations, projects, roles and API keys.
+    tokens and latency, with dashboards to chart them; full-text search; MCP call records; MCP
+    analytics (servers, tools, errors, clients, users, sessions, operations, deploys and deploy
+    comparison, for the server or the client side, with p50, p90 and p99 latency and caller faults
+    counted apart, and analytics tools on its MCP server); alerts on span and MCP call measures (MCP
+    calls, error rate, error count and latency percentiles) to Slack, email and signed webhooks; a
+    read-only SQL workspace isolated by ClickHouse; exports; retention and deletion requests;
+    organizations, projects, roles and API keys.
   - How it is built, as mechanisms: a span is acknowledged only after it is written to a write-ahead
     log and synced; each batch reaches ClickHouse with a deduplication token, so a retry never
     stores a span twice; under load it answers 429 or 503 with Retry-After. It is tested with
@@ -252,11 +256,12 @@ both; Crucible on GitHub; the quickstart.
   optional spend cap and the evaluator choice.
 - That the hosted agent is available or in early access.
 - That Crucible is in development, a preview, planned or coming soon.
-- Crucible features its main branch does not have: MCP analytics pages, custom dashboards,
-  ClickHouse Cloud or clustered ClickHouse, OTLP logs or metrics, media storage, or prebuilt
-  images, binaries or registry packages. Add each when it ships.
-- Crucible performance numbers, customers or pricing, a hosted Crucible, a comparison of Crucible
-  with other products, or that Crucible was copied from, based on or remade from anything.
+- Crucible features its main branch does not have: ClickHouse Cloud or clustered ClickHouse,
+  OTLP logs or metrics, media storage, or prebuilt images, binaries or registry packages. Add each
+  when it ships.
+- Crucible performance numbers, including how fast MCP analytics answers over long windows,
+  customers or pricing, a hosted Crucible, a comparison of Crucible with other products, or that
+  Crucible was copied from, based on or remade from anything.
 - That it tunes reasoning effort, prompts or retries.
 - That replay covers tool calls or tool definitions, or that it validates "with your tools": recorded
   conversations with tool calls are left out of the replay sample today.
