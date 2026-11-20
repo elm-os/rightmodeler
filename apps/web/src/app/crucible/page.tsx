@@ -96,7 +96,7 @@ const START = [
   {
     name: "Get the Compose file",
     comment:
-      "# needs Docker; the Compose file runs the published Crucible image",
+      "# needs Docker; makes a crucible folder for the Compose file, which runs the published Crucible image",
     command: CRUCIBLE_DOWNLOAD_COMMAND,
   },
   {

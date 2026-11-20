@@ -105,7 +105,7 @@ All you need is Docker. Download the Compose file, start Crucible with a bundled
 
 ### 01 Get the Compose file
 
-Needs Docker; the Compose file runs the published Crucible image.
+Needs Docker; makes a crucible folder for the Compose file, which runs the published Crucible image.
 
     ${CRUCIBLE_DOWNLOAD_COMMAND}
 
