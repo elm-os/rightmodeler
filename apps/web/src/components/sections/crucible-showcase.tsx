@@ -54,7 +54,7 @@ const INSTRUMENTATION: Feature = {
 const SELF_HOSTED: Feature = {
   title: "Yours to run",
   caption:
-    "Self-hosted, with organizations, projects, roles and API keys, retention settings and deletion requests.",
+    "Self-hosted, with organizations, projects, roles and API keys, retention settings, deletion requests and optional media storage on S3-compatible object storage.",
   img: "/crucible/keys.jpg",
 };
 

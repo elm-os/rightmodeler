@@ -83,7 +83,8 @@ cost less, refusal reasons, estimates, gates) stays exact and keeps "cheaper".
     counted apart, and analytics tools on its MCP server); alerts on span and MCP call measures (MCP
     calls, error rate, error count and latency percentiles) to Slack, email and signed webhooks; a
     read-only SQL workspace isolated by ClickHouse; exports; retention and deletion requests;
-    organizations, projects, roles and API keys.
+    optional media storage (images, audio, video and files on S3-compatible object storage, inline
+    without it); organizations, projects, roles and API keys.
   - How it is built, as mechanisms: a span is acknowledged only after it is written to a write-ahead
     log and synced; each batch reaches ClickHouse with a deduplication token, so a retry never
     stores a span twice; under load it answers 429 or 503 with Retry-After. It is tested with
@@ -257,8 +258,7 @@ both; Crucible on GitHub; the quickstart.
 - That the hosted agent is available or in early access.
 - That Crucible is in development, a preview, planned or coming soon.
 - Crucible features its main branch does not have: ClickHouse Cloud or clustered ClickHouse,
-  OTLP logs or metrics, media storage, or prebuilt images, binaries or registry packages. Add each
-  when it ships.
+  OTLP logs or metrics, or prebuilt images, binaries or registry packages. Add each when it ships.
 - Crucible performance numbers, including how fast MCP analytics answers over long windows,
   customers or pricing, a hosted Crucible, a comparison of Crucible with other products, or that
   Crucible was copied from, based on or remade from anything.
