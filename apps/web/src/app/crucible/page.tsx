@@ -30,7 +30,7 @@ export const metadata: Metadata = pageMetadata({
 const STEPS = [
   {
     name: "Send",
-    body: "Your agents and MCP servers send OpenTelemetry traces over HTTP or gRPC: from any OpenTelemetry SDK, from instrumentation such as OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI, from Crucible's SDKs, or through the MCP proxy, which records an MCP server's calls with no code changes.",
+    body: "Your agents and MCP servers send OpenTelemetry traces over HTTP or gRPC, from any OpenTelemetry SDK or instrumentation library, from Crucible's SDKs, or through the MCP proxy, which needs no code changes.",
   },
   {
     name: "Write ahead",

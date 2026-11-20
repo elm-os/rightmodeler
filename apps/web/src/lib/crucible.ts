@@ -5,8 +5,9 @@ import { CRUCIBLE_REPO_URL } from "@/lib/site";
 
 export const CRUCIBLE_BUILD_COMMAND = `git clone ${CRUCIBLE_REPO_URL}.git && cd crucible && docker build -f deploy/docker/Dockerfile -t crucible:dev .`;
 
-// String.raw keeps printf's \n escapes as typed.
-export const CRUCIBLE_START_COMMAND = String.raw`cd deploy/compose && printf 'CLICKHOUSE_PASSWORD=%s\nPOSTGRES_PASSWORD=%s\nCRUCIBLE_MASTER_KEY=%s\nCRUCIBLE_IMAGE=crucible:dev\n' "$(openssl rand -hex 16)" "$(openssl rand -hex 16)" "$(openssl rand -hex 32)" > .env && docker compose up -d --wait`;
+// String.raw keeps printf's \n escape as typed. One argument per line keeps every token short, so
+// the command wraps at spaces on a phone.
+export const CRUCIBLE_START_COMMAND = String.raw`cd deploy/compose && printf '%s\n' "CLICKHOUSE_PASSWORD=$(openssl rand -hex 16)" "POSTGRES_PASSWORD=$(openssl rand -hex 16)" "CRUCIBLE_MASTER_KEY=$(openssl rand -hex 32)" CRUCIBLE_IMAGE=crucible:dev > .env && docker compose up -d --wait`;
 
 export const CRUCIBLE_SETUP_COMMAND =
   "docker compose logs crucible | grep 'setup/?token='";

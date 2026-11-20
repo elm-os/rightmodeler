@@ -50,7 +50,7 @@ Crucible runs beside ClickHouse and Postgres, and every span takes the same four
 
 ### 01 Send
 
-Your agents and MCP servers send OpenTelemetry traces over HTTP or gRPC: from any OpenTelemetry SDK, from instrumentation such as OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI, from Crucible's SDKs, or through the MCP proxy, which records an MCP server's calls with no code changes.
+Your agents and MCP servers send OpenTelemetry traces over HTTP or gRPC, from any OpenTelemetry SDK or instrumentation library, from Crucible's SDKs, or through the MCP proxy, which needs no code changes.
 
 ### 02 Write ahead
 
