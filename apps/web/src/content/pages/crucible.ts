@@ -36,7 +36,7 @@ Crucible is one Rust binary. It ingests OpenTelemetry traces over HTTP and gRPC,
 ### How it runs
 
 - **Yours to run**
-  Self-hosted, with organizations, projects, roles and API keys, retention settings and deletion requests.
+  Self-hosted, with organizations, projects, roles and API keys, retention settings, deletion requests and optional media storage on S3-compatible object storage.
 - **Instrumented your way**
   OpenTelemetry from any SDK or instrumentation library, Crucible's SDKs for TypeScript, Python, Go and Rust, or an MCP proxy that needs no code changes.
 - **Alerts, SQL and exports**
