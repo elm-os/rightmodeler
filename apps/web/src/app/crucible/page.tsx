@@ -151,7 +151,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How does it work with rightmodeler?",
-    a: "crucible export writes your traces as OpenTelemetry JSON, and the rightmodeler CLI replays them to validate cheaper or newer models against the outputs you accepted. Crucible does not run the validation loop or swap models. Coding agents can also ask Crucible about their runs through its MCP server, whose tools list and search traces, read spans and payloads, and create exports.",
+    a: "crucible export writes your traces as OpenTelemetry JSON, and the rightmodeler CLI replays them to validate cheaper or newer models against the outputs you accepted. Crucible does not run the validation loop or swap models. Coding agents can also ask Crucible about their runs through its MCP server, whose tools list and search traces, read spans and payloads, report MCP server analytics and create exports.",
   },
   {
     q: "Is there a hosted version?",

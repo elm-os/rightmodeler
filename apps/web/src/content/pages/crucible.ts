@@ -31,16 +31,16 @@ Crucible is one Rust binary. It ingests OpenTelemetry traces over HTTP and gRPC,
 - **Cost and latency**
   The cost, tokens and latency of every trace and span, with p50 to p99 latency and dashboards to chart them.
 - **MCP servers**
-  Every MCP call recorded with its method, tool, error class and latency, and linked to the agent's tool call through trace context.
+  Every MCP call recorded and linked to the agent's tool call through trace context, with analytics by server, tool, error, client, user, session and deploy, for the server or the client side.
 
 ### How it runs
 
 - **Yours to run**
-  Self-hosted, with organizations, projects, roles and API keys, retention settings and deletion requests.
+  Self-hosted, with organizations, projects, roles and API keys, retention settings, deletion requests and optional media storage on S3-compatible object storage.
 - **Instrumented your way**
   OpenTelemetry from any SDK or instrumentation library, Crucible's SDKs for TypeScript, Python, Go and Rust, or an MCP proxy that needs no code changes.
 - **Alerts, SQL and exports**
-  Alerts to Slack, email and signed webhooks, a read-only SQL workspace isolated by ClickHouse itself, and trace exports.
+  Alerts on span and MCP call measures to Slack, email and signed webhooks, a read-only SQL workspace isolated by ClickHouse itself, and trace exports.
 
 How it works
 
@@ -172,7 +172,7 @@ It acknowledges a request only after its spans are written to a write-ahead log 
 
 ### How does it work with rightmodeler?
 
-crucible export writes your traces as OpenTelemetry JSON, and the rightmodeler CLI replays them to validate cheaper or newer models against the outputs you accepted. Crucible does not run the validation loop or swap models. Coding agents can also ask Crucible about their runs through its MCP server, whose tools list and search traces, read spans and payloads, and create exports.
+crucible export writes your traces as OpenTelemetry JSON, and the rightmodeler CLI replays them to validate cheaper or newer models against the outputs you accepted. Crucible does not run the validation loop or swap models. Coding agents can also ask Crucible about their runs through its MCP server, whose tools list and search traces, read spans and payloads, report MCP server analytics and create exports.
 
 ### Is there a hosted version?
 
