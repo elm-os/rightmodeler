@@ -10,7 +10,7 @@ import { RelatedLinks } from "@/components/sections/related-links";
 import { Tldr } from "@/components/sections/tldr";
 import { Reveal } from "@/components/reveal";
 import {
-  CRUCIBLE_BUILD_COMMAND,
+  CRUCIBLE_DOWNLOAD_COMMAND,
   CRUCIBLE_QUICKSTART_URL,
   CRUCIBLE_SEND_COMMAND,
   CRUCIBLE_SETUP_COMMAND,
@@ -94,9 +94,10 @@ const REASONS = [
 
 const START = [
   {
-    name: "Build the image",
-    comment: "# needs Docker; the first build compiles Crucible from source",
-    command: CRUCIBLE_BUILD_COMMAND,
+    name: "Get the Compose file",
+    comment:
+      "# needs Docker; the Compose file runs the published Crucible image",
+    command: CRUCIBLE_DOWNLOAD_COMMAND,
   },
   {
     name: "Start the stack",
@@ -130,6 +131,10 @@ const FAQ: FaqItem[] = [
     a: "Send OTLP traces over HTTP, as protobuf or JSON, or over gRPC, from any OpenTelemetry SDK or exporter. Spans from OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI are mapped as they arrive. Crucible's SDKs for TypeScript, Python, Go and Rust, in the repository's sdk folder, add agent helpers and an MCP server wrapper, and the MCP proxy records an MCP server's calls with no code changes and forwards its traffic unchanged.",
   },
   {
+    q: "How do I install it?",
+    a: "With Docker: the Compose file runs the published Crucible image, for amd64 and arm64, beside a bundled ClickHouse and Postgres. Or install the crucible binary from the GitHub release with its shell or PowerShell installer. The durability described below holds on Linux and macOS; the Windows binary is for development.",
+  },
+  {
     q: "Is it for agents or for MCP servers?",
     a: "Either, or both. Use it for agents only, for MCP servers only, or for both together, with an agent's tool calls linked to the server-side MCP spans through trace context.",
   },
@@ -151,7 +156,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Is there a hosted version?",
-    a: "No. Crucible is self-hosted only: you run it, with your own ClickHouse and Postgres, wherever you run Docker.",
+    a: "No. Crucible is self-hosted only: you run it, with your own ClickHouse and Postgres, wherever you run Docker or its binary.",
   },
 ];
 
@@ -345,9 +350,8 @@ export default function CruciblePage() {
               Run it on your own machine.
             </h2>
             <p className="mt-4 text-body text-driftwood">
-              All you need is Docker. Build the image from the repository, start
-              it with a bundled ClickHouse and Postgres, and send your first
-              trace.
+              All you need is Docker. Download the Compose file, start Crucible
+              with a bundled ClickHouse and Postgres, and send your first trace.
             </p>
           </Reveal>
 

@@ -71,7 +71,8 @@ cost less, refusal reasons, estimates, gates) stays exact and keeps "cheaper".
   - One Rust binary that ingests OpenTelemetry traces (OTLP over HTTP and gRPC) and serves a web
     UI, a REST API and an MCP server that coding agents query. Telemetry is stored in a single-node
     ClickHouse (26.3 or newer); Postgres (15 or newer) is the control plane. It runs in Docker with a
-    bundled ClickHouse and Postgres, from an image built from the repository.
+    bundled ClickHouse and Postgres, from the published image, or as a binary installed from the
+    GitHub release; durability holds on Linux and macOS, and the Windows binary is for development.
   - Instrumentation: OTLP from any OpenTelemetry SDK; spans from OpenInference, OpenLLMetry, the
     Vercel AI SDK, MLflow and Pydantic AI, mapped as they arrive; SDKs for TypeScript, Python, Go
     and Rust (agent helpers plus an MCP server wrapper, in the repository); and a proxy that records
@@ -258,7 +259,7 @@ both; Crucible on GitHub; the quickstart.
 - That the hosted agent is available or in early access.
 - That Crucible is in development, a preview, planned or coming soon.
 - Crucible features its main branch does not have: ClickHouse Cloud or clustered ClickHouse,
-  OTLP logs or metrics, or prebuilt images, binaries or registry packages. Add each when it ships.
+  OTLP logs or metrics, or registry packages. Add each when it ships.
 - Crucible performance numbers, including how fast MCP analytics answers over long windows,
   customers or pricing, a hosted Crucible, a comparison of Crucible with other products, or that
   Crucible was copied from, based on or remade from anything.

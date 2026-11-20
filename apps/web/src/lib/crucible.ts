@@ -3,11 +3,16 @@
 
 import { CRUCIBLE_REPO_URL } from "@/lib/site";
 
-export const CRUCIBLE_BUILD_COMMAND = `git clone ${CRUCIBLE_REPO_URL}.git && cd crucible && docker build -f deploy/docker/Dockerfile -t crucible:dev .`;
+// The Crucible release the quickstart's Compose file comes from. Bump it with each Crucible release: a Compose file
+// pinned to a release uses only the settings that release knows, and newer images stay compatible with it. Prose on
+// the site names no version, so only this constant changes.
+export const CRUCIBLE_RELEASE_TAG = "v0.1.0";
+
+export const CRUCIBLE_DOWNLOAD_COMMAND = `curl -fsSLO https://raw.githubusercontent.com/elm-os/crucible/${CRUCIBLE_RELEASE_TAG}/deploy/compose/compose.yaml`;
 
 // String.raw keeps printf's \n escape as typed. One argument per line keeps every token short, so
 // the command wraps at spaces on a phone.
-export const CRUCIBLE_START_COMMAND = String.raw`cd deploy/compose && printf '%s\n' "CLICKHOUSE_PASSWORD=$(openssl rand -hex 16)" "POSTGRES_PASSWORD=$(openssl rand -hex 16)" "CRUCIBLE_MASTER_KEY=$(openssl rand -hex 32)" CRUCIBLE_IMAGE=crucible:dev > .env && docker compose up -d --wait`;
+export const CRUCIBLE_START_COMMAND = String.raw`printf '%s\n' "CLICKHOUSE_PASSWORD=$(openssl rand -hex 16)" "POSTGRES_PASSWORD=$(openssl rand -hex 16)" "CRUCIBLE_MASTER_KEY=$(openssl rand -hex 32)" > .env && docker compose up -d --wait`;
 
 export const CRUCIBLE_SETUP_COMMAND =
   "docker compose logs crucible | grep 'setup/?token='";
