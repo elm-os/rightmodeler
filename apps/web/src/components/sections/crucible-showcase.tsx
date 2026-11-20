@@ -30,7 +30,7 @@ const TRACES: Feature = {
 const COST: Feature = {
   title: "Cost and latency",
   caption:
-    "The cost, tokens and latency of every trace and span, with p50 to p99 latency.",
+    "The cost, tokens and latency of every trace and span, with p50 to p99 latency and dashboards to chart them.",
   img: "/crucible/speed.jpg",
 };
 const MCP: Feature = {

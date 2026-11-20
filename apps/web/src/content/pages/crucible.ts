@@ -29,7 +29,7 @@ Crucible is one Rust binary. It ingests OpenTelemetry traces over HTTP and gRPC,
 - **Traces and sessions**
   Traces, spans, sessions and users, with a timeline, an agent graph and full-text search.
 - **Cost and latency**
-  The cost, tokens and latency of every trace and span, with p50 to p99 latency.
+  The cost, tokens and latency of every trace and span, with p50 to p99 latency and dashboards to chart them.
 - **MCP servers**
   Every MCP call recorded with its method, tool, error class and latency, and linked to the agent's tool call through trace context.
 
