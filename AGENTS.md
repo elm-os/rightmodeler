@@ -15,7 +15,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Prefer root `pnpm` commands for shared lifecycle tasks: `format`, `check`, `lint`, `build`, `check-types`.
 - Keep app-specific runtime commands local to the owning app or run them via `pnpm --filter`.
 - Treat `packages/contracts` and `.rightmodeler/` as the current pipeline contract boundary.
-- Edit `skills/rightmodeler` as the canonical skill source. `.agents/skills/` and `.claude/skills/` are generated install targets.
+- Edit `skills/rightmodeler` as the canonical skill source; it is the only skill committed here. `.agents/` and `.claude/` are gitignored: they hold the generated install targets and any locally installed skills.
 - Run `pnpm format` and `pnpm check` after changes.
 
 ## Web
@@ -29,6 +29,14 @@ and motion decision from its tokens.
 - Use the design skills for UI work: `frontend-design` for visual direction,
   `emil-design-eng` for interaction/motion craft, `review-animations` to audit
   motion, and `animation-vocabulary` to name a motion effect you can describe.
+- The design skills are installed locally, never committed (git ignores `.claude/` and
+  `skills-lock.json`). In a fresh checkout or worktree, install them before UI work:
+
+  ```sh
+  npx skills add anthropics/skills -s frontend-design -a claude-code -y
+  npx skills add emilkowalski/skills -s emil-design-eng -s review-animations -s animation-vocabulary -a claude-code -y
+  ```
+
 - Colors: use the brand color utilities (`bg-parchment-white`, `bg-warm-sand`,
   `text-midnight-ink`, `text-driftwood`, `text-fog`, `border-ash-border`, …).
   The UI is monochrome — the accent hues (`void-violet`, `ember-orange`) are
