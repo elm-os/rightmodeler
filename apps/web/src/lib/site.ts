@@ -24,6 +24,9 @@ export function docsFileUrl(name: string): string {
 
 export const GITHUB_ORG_URL = "https://github.com/elm-os";
 export const CRUCIBLE_REPO_URL = "https://github.com/elm-os/crucible";
+export const CRUCIBLE_DISCUSSIONS_QA_URL = `${CRUCIBLE_REPO_URL}/discussions/categories/q-a`;
+export const CRUCIBLE_DISCUSSIONS_IDEAS_URL = `${CRUCIBLE_REPO_URL}/discussions/categories/ideas`;
+export const CRUCIBLE_ISSUES_NEW_URL = `${CRUCIBLE_REPO_URL}/issues/new/choose`;
 export const LINKEDIN_URL = "https://www.linkedin.com/company/rightmodeler";
 export const X_URL = "https://x.com/rightmodeler";
 export const REDDIT_URL = "https://www.reddit.com/user/rightmodeler/";
