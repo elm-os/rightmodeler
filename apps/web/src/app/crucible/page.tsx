@@ -17,7 +17,12 @@ import {
   CRUCIBLE_START_COMMAND,
 } from "@/lib/crucible";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
-import { CRUCIBLE_REPO_URL } from "@/lib/site";
+import {
+  CRUCIBLE_DISCUSSIONS_IDEAS_URL,
+  CRUCIBLE_DISCUSSIONS_QA_URL,
+  CRUCIBLE_ISSUES_NEW_URL,
+  CRUCIBLE_REPO_URL,
+} from "@/lib/site";
 
 export const metadata: Metadata = pageMetadata({
   title: "Crucible: open-source agent and MCP observability",
@@ -396,6 +401,24 @@ export default function CruciblePage() {
             >
               Read the quickstart
             </a>
+          </Reveal>
+
+          <Reveal delay={0.1} className="mt-8">
+            <p className="max-w-xl text-body text-driftwood">
+              Questions and feedback: ask in{" "}
+              <a href={CRUCIBLE_DISCUSSIONS_QA_URL} className={linkClass}>
+                Q&amp;A
+              </a>{" "}
+              and share ideas in{" "}
+              <a href={CRUCIBLE_DISCUSSIONS_IDEAS_URL} className={linkClass}>
+                Ideas
+              </a>{" "}
+              on GitHub Discussions, and report bugs in{" "}
+              <a href={CRUCIBLE_ISSUES_NEW_URL} className={linkClass}>
+                GitHub issues
+              </a>
+              .
+            </p>
           </Reveal>
 
           <Reveal delay={0.1} className="mt-16">

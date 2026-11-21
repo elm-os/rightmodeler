@@ -8,7 +8,13 @@ import {
   CRUCIBLE_SETUP_COMMAND,
   CRUCIBLE_START_COMMAND,
 } from "@/lib/crucible";
-import { CRUCIBLE_REPO_URL, REPO_URL } from "@/lib/site";
+import {
+  CRUCIBLE_DISCUSSIONS_IDEAS_URL,
+  CRUCIBLE_DISCUSSIONS_QA_URL,
+  CRUCIBLE_ISSUES_NEW_URL,
+  CRUCIBLE_REPO_URL,
+  REPO_URL,
+} from "@/lib/site";
 
 export const markdown = `# Crucible: open-source observability for AI agents and MCP servers.
 
@@ -132,6 +138,8 @@ Point any OpenTelemetry exporter at Crucible.
 Your traces appear at http://127.0.0.1:8080/traces/ as soon as Crucible acknowledges them.
 
 The quickstart in the Crucible docs walks through each step in more detail: ${CRUCIBLE_QUICKSTART_URL}
+
+Questions and feedback: ask in Q&A (${CRUCIBLE_DISCUSSIONS_QA_URL}) and share ideas in Ideas (${CRUCIBLE_DISCUSSIONS_IDEAS_URL}) on GitHub Discussions, and report bugs in GitHub issues (${CRUCIBLE_ISSUES_NEW_URL}).
 
 Works with rightmodeler
 

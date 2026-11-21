@@ -4,6 +4,9 @@ import { getAllIntegrations } from "@/content/integrations";
 import { getAllComparisons } from "@/content/vs";
 import { TRACE_SOURCES } from "@/lib/product-facts";
 import {
+  CRUCIBLE_DISCUSSIONS_IDEAS_URL,
+  CRUCIBLE_DISCUSSIONS_QA_URL,
+  CRUCIBLE_ISSUES_NEW_URL,
   CRUCIBLE_REPO_URL,
   DOCS_URL,
   docsFileUrl,
@@ -53,6 +56,8 @@ It is one Rust binary that ingests OpenTelemetry traces (OTLP over HTTP and gRPC
 It covers traces, spans, sessions and users, with a timeline and an agent graph; cost, tokens and latency, with dashboards to chart them; full-text search; MCP call records and MCP analytics by server, tool, error, client, user, session and deploy, with p50, p90 and p99 latency and caller faults counted apart; alerts on span and MCP call measures to Slack, email and signed webhooks; a read-only SQL workspace isolated by ClickHouse; exports; retention and deletion requests; optional media storage on S3-compatible object storage; and organizations, projects, roles and API keys. Crucible acknowledges a span only after it is written to a write-ahead log and synced to disk, sends each batch to ClickHouse with a deduplication token so a retry never stores a span twice, and is tested with deterministic simulation and formal models. Crucible is self-hosted only: it runs in Docker from the published image with a bundled ClickHouse and Postgres, or as a binary installed from the GitHub release, and its durability holds on Linux and macOS (the Windows binary is for development).
 
 crucible export writes traces as OpenTelemetry JSON, which the rightmodeler CLI replays to validate cheaper or newer models, and coding agents can ask Crucible about their runs over its MCP server.
+
+Questions about Crucible go to the Q&A of its GitHub Discussions (${CRUCIBLE_DISCUSSIONS_QA_URL}), ideas to Ideas (${CRUCIBLE_DISCUSSIONS_IDEAS_URL}), and bugs to its GitHub issues (${CRUCIBLE_ISSUES_NEW_URL}).
 
 ## What safe means
 
