@@ -168,7 +168,7 @@ Either, or both. Use it for agents only, for MCP servers only, or for both toget
 
 ### Where does my data live?
 
-On infrastructure you run. Crucible is self-hosted only: telemetry goes to a single-node ClickHouse, version 26.3 or newer, and accounts, projects and keys go to Postgres 15 or newer. The Docker Compose stack bundles both.
+On infrastructure you run. Crucible is self-hosted only: telemetry goes to ClickHouse 26.3 or newer, on a single server or a self-hosted cluster of replicas coordinated by ClickHouse Keeper, and accounts, projects and keys go to Postgres 15 or newer. The Docker Compose stack bundles both.
 
 ### Why Rust?
 
