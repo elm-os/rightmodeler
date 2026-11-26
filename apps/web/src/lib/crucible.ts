@@ -6,7 +6,7 @@ import { CRUCIBLE_REPO_URL } from "@/lib/site";
 // The Crucible release the quickstart's Compose file comes from. Bump it with each Crucible release: a Compose file
 // pinned to a release uses only the settings that release knows, and newer images stay compatible with it. Prose on
 // the site names no version, so only this constant changes.
-export const CRUCIBLE_RELEASE_TAG = "v0.1.2";
+export const CRUCIBLE_RELEASE_TAG = "v0.1.3";
 
 export const CRUCIBLE_DOWNLOAD_COMMAND = `mkdir crucible && cd crucible && curl -fsSLO https://raw.githubusercontent.com/elm-os/crucible/${CRUCIBLE_RELEASE_TAG}/deploy/compose/compose.yaml`;
 
