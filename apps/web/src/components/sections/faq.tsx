@@ -1,8 +1,9 @@
 // No accordion JS: every answer ships in the initial HTML for search and AI crawlers.
 
+import type { ReactNode } from "react";
 import { Reveal } from "@/components/reveal";
 
-export type FaqItem = { q: string; a: string };
+export type FaqItem = { q: string; a: ReactNode };
 
 export function Faq({
   items,

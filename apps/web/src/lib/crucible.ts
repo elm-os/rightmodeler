@@ -17,6 +17,21 @@ export const CRUCIBLE_START_COMMAND = String.raw`printf '%s\n' "CLICKHOUSE_PASSW
 export const CRUCIBLE_SETUP_COMMAND =
   "docker compose logs crucible | grep 'setup/?token='";
 
-export const CRUCIBLE_SEND_COMMAND = `export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <your secret key>"`;
+// The variables for traces only: an app's metrics and logs keep their own exporter, and the key goes with traces alone.
+export const CRUCIBLE_SEND_COMMAND = `export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4318/v1/traces OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Bearer%20<your secret key>"`;
+
+// Crucible's SDK guides, linked from the page and its twin.
+export const CRUCIBLE_SDK_GUIDES = [
+  {
+    name: "TypeScript",
+    url: `${CRUCIBLE_REPO_URL}/blob/main/docs/guides/sdk-typescript.md`,
+  },
+  {
+    name: "Python",
+    url: `${CRUCIBLE_REPO_URL}/blob/main/docs/guides/sdk-python.md`,
+  },
+  { name: "Go", url: `${CRUCIBLE_REPO_URL}/blob/main/docs/guides/sdk-go.md` },
+  { name: "Rust", url: `${CRUCIBLE_REPO_URL}/blob/main/sdk/rust/README.md` },
+];
 
 export const CRUCIBLE_QUICKSTART_URL = `${CRUCIBLE_REPO_URL}/blob/main/docs/self-hosting/quickstart.md`;
