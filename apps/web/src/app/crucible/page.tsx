@@ -145,7 +145,7 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "Where does my data live?",
-    a: "On infrastructure you run. Crucible is self-hosted only: telemetry goes to a single-node ClickHouse, version 26.3 or newer, and accounts, projects and keys go to Postgres 15 or newer. The Docker Compose stack bundles both.",
+    a: "On infrastructure you run. Crucible is self-hosted only: telemetry goes to ClickHouse 26.3 or newer, on a single server or a self-hosted cluster of replicas coordinated by ClickHouse Keeper, and accounts, projects and keys go to Postgres 15 or newer. The Docker Compose stack bundles both.",
   },
   {
     q: "Why Rust?",
