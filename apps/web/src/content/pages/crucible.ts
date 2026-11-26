@@ -4,6 +4,7 @@
 import {
   CRUCIBLE_DOWNLOAD_COMMAND,
   CRUCIBLE_QUICKSTART_URL,
+  CRUCIBLE_SDK_GUIDES,
   CRUCIBLE_SEND_COMMAND,
   CRUCIBLE_SETUP_COMMAND,
   CRUCIBLE_START_COMMAND,
@@ -15,6 +16,13 @@ import {
   CRUCIBLE_REPO_URL,
   REPO_URL,
 } from "@/lib/site";
+
+// The four SDK guides as Markdown links, in a sentence: TypeScript, Python, Go and Rust.
+const sdkGuideLinks = CRUCIBLE_SDK_GUIDES.map(
+  (sdk) => `[${sdk.name}](${sdk.url})`,
+)
+  .join(", ")
+  .replace(/, (?=[^,]*$)/, " and ");
 
 export const markdown = `# Crucible: open-source observability for AI agents and MCP servers.
 
@@ -107,7 +115,7 @@ Get started
 
 ## Run it on your own machine.
 
-All you need is Docker. Download the Compose file, start Crucible with a bundled ClickHouse and Postgres, and send your first trace.
+You need Docker, plus curl and openssl in a POSIX shell (Git Bash or WSL on Windows). Download the Compose file, start Crucible with a bundled ClickHouse and Postgres, and send your first trace.
 
 ### 01 Get the Compose file
 
@@ -135,7 +143,7 @@ Point any OpenTelemetry exporter at Crucible.
 
     ${CRUCIBLE_SEND_COMMAND}
 
-Your traces appear at http://127.0.0.1:8080/traces/ as soon as Crucible acknowledges them.
+Your traces appear at http://127.0.0.1:8080/traces/ as soon as Crucible acknowledges them. These variables cover traces only, which is all Crucible takes, so metrics and logs stay where they go today. Crucible's SDKs for ${sdkGuideLinks} send the same OTLP and add helpers for agents and MCP servers.
 
 The quickstart in the Crucible docs walks through each step in more detail: ${CRUCIBLE_QUICKSTART_URL}
 
@@ -156,7 +164,7 @@ Open-source, self-hosted observability and analytics for AI agents and MCP serve
 
 ### How do I send it data?
 
-Send OTLP traces over HTTP, as protobuf or JSON, or over gRPC, from any OpenTelemetry SDK or exporter. Spans from OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI are mapped as they arrive. Crucible's SDKs for TypeScript, Python, Go and Rust, in the repository's sdk folder, add agent helpers and an MCP server wrapper, and the MCP proxy records an MCP server's calls with no code changes and forwards its traffic unchanged.
+Send OTLP traces over HTTP, as protobuf or JSON, or over gRPC, from any OpenTelemetry SDK or exporter. Spans from OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI are mapped as they arrive. Crucible's SDKs for ${sdkGuideLinks} add agent helpers and an MCP server wrapper, and the MCP proxy records an MCP server's calls with no code changes and forwards its traffic unchanged.
 
 ### How do I install it?
 

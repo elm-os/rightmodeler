@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Fragment } from "react";
 import { CommandBlock } from "@/components/command-block";
 import { JsonLd } from "@/components/json-ld";
 import { CrucibleShowcase } from "@/components/sections/crucible-showcase";
@@ -12,6 +13,7 @@ import { Reveal } from "@/components/reveal";
 import {
   CRUCIBLE_DOWNLOAD_COMMAND,
   CRUCIBLE_QUICKSTART_URL,
+  CRUCIBLE_SDK_GUIDES,
   CRUCIBLE_SEND_COMMAND,
   CRUCIBLE_SETUP_COMMAND,
   CRUCIBLE_START_COMMAND,
@@ -121,8 +123,15 @@ const START = [
     name: "Send traces",
     comment: "# point any OpenTelemetry exporter at Crucible",
     command: CRUCIBLE_SEND_COMMAND,
-    after:
-      "Your traces appear at http://127.0.0.1:8080/traces/ as soon as Crucible acknowledges them.",
+    after: (
+      <>
+        Your traces appear at http://127.0.0.1:8080/traces/ as soon as Crucible
+        acknowledges them. These variables cover traces only, which is all
+        Crucible takes, so metrics and logs stay where they go today.
+        Crucible&apos;s SDKs for <SdkGuideLinks /> send the same OTLP and add
+        helpers for agents and MCP servers.
+      </>
+    ),
   },
 ];
 
@@ -133,7 +142,16 @@ const FAQ: FaqItem[] = [
   },
   {
     q: "How do I send it data?",
-    a: "Send OTLP traces over HTTP, as protobuf or JSON, or over gRPC, from any OpenTelemetry SDK or exporter. Spans from OpenInference, OpenLLMetry, the Vercel AI SDK, MLflow and Pydantic AI are mapped as they arrive. Crucible's SDKs for TypeScript, Python, Go and Rust, in the repository's sdk folder, add agent helpers and an MCP server wrapper, and the MCP proxy records an MCP server's calls with no code changes and forwards its traffic unchanged.",
+    a: (
+      <>
+        Send OTLP traces over HTTP, as protobuf or JSON, or over gRPC, from any
+        OpenTelemetry SDK or exporter. Spans from OpenInference, OpenLLMetry,
+        the Vercel AI SDK, MLflow and Pydantic AI are mapped as they arrive.
+        Crucible&apos;s SDKs for <SdkGuideLinks /> add agent helpers and an MCP
+        server wrapper, and the MCP proxy records an MCP server&apos;s calls
+        with no code changes and forwards its traffic unchanged.
+      </>
+    ),
   },
   {
     q: "How do I install it?",
@@ -164,6 +182,18 @@ const FAQ: FaqItem[] = [
     a: "No. Crucible is self-hosted only: you run it, with your own ClickHouse and Postgres, wherever you run Docker or its binary.",
   },
 ];
+
+// The four SDK guides as links, in a sentence: TypeScript, Python, Go and Rust.
+function SdkGuideLinks() {
+  return CRUCIBLE_SDK_GUIDES.map((sdk, i) => (
+    <Fragment key={sdk.name}>
+      {i === 0 ? "" : i === CRUCIBLE_SDK_GUIDES.length - 1 ? " and " : ", "}
+      <a href={sdk.url} className={linkClass}>
+        {sdk.name}
+      </a>
+    </Fragment>
+  ));
+}
 
 const linkClass =
   "text-body text-midnight-ink underline decoration-ash-border decoration-1 underline-offset-4 transition-colors duration-150 ease-out hover:decoration-midnight-ink focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-midnight-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-parchment-white";
@@ -355,8 +385,9 @@ export default function CruciblePage() {
               Run it on your own machine.
             </h2>
             <p className="mt-4 text-body text-driftwood">
-              All you need is Docker. Download the Compose file, start Crucible
-              with a bundled ClickHouse and Postgres, and send your first trace.
+              You need Docker, plus curl and openssl in a POSIX shell (Git Bash
+              or WSL on Windows). Download the Compose file, start Crucible with
+              a bundled ClickHouse and Postgres, and send your first trace.
             </p>
           </Reveal>
 
