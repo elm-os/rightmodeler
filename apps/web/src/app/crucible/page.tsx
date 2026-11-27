@@ -109,7 +109,7 @@ const START = [
   {
     name: "Start the stack",
     comment:
-      "# in bash or zsh: writes three secrets to .env, then starts ClickHouse, Postgres and Crucible",
+      "# in bash or zsh: writes three secrets and the release's image to .env, then starts ClickHouse, Postgres and Crucible",
     command: CRUCIBLE_START_COMMAND,
   },
   {
