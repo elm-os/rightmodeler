@@ -125,7 +125,7 @@ Needs Docker; makes a crucible folder for the Compose file, which runs the publi
 
 ### 02 Start the stack
 
-In bash or zsh: writes three secrets to .env, then starts ClickHouse, Postgres and Crucible.
+In bash or zsh: writes three secrets and the release's image to .env, then starts ClickHouse, Postgres and Crucible.
 
     ${CRUCIBLE_START_COMMAND}
 
